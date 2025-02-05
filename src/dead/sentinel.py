@@ -31,7 +31,7 @@ class Env(Sentinel, str):
 
 # TODO: dataclass?
 class UpstreamAsset(RunnableSentinel, Generic[T]):
-    # Hack to make UpstreamAsset's instance type to be T
+    # Forces an UpstreamAsset's instance type to be T
     def __new__(
         cls,
         name: str,

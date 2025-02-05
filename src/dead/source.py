@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from functools import partial
 from inspect import signature
 from typing import Any, overload
@@ -11,24 +12,17 @@ from dead.io import IO
 from dead.sentinel import RunnableSentinel, Sentinel
 
 
+@dataclass
 class Source(ABC):
+    # Should be kept at the top to avoid race conditions in __setattr__
+    _assets: dict[str, Asset] = field(default_factory=dict, init=False)
+
     name: str
-    _io: dict[str, IO]
-    default_io_key: str | None
-    auto_asset_deps: bool
+    io: dict[str, IO] = field(default_factory=dict)
+    default_io_key: str | None = None
+    auto_asset_deps: bool = True
 
-    def __init__(
-        self,
-        name: str,
-        io: dict[str, IO] | None = None,
-        default_io_key: str | None = None,
-        auto_asset_deps: bool = True,
-    ) -> None:
-        self.name = name
-        self._io = io or {}
-        self.default_io_key = default_io_key
-        self.auto_asset_deps = auto_asset_deps
-
+    def __post_init__(self) -> None:
         self._build_assets()
 
     def __call__(
@@ -47,7 +41,43 @@ class Source(ABC):
         return source
 
     def __getattr__(self, name: str) -> Asset:
+        """
+        Custom __getattr__ method to retrieve an attribute by name.
+
+        This method is intended to force the type checker to recognize attributes as instances of the Asset class.
+        However, it should not affect the type of the attributes explicitly defined in the Source class.
+        """
         return super().__getattribute__(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """
+        Custom `__setattr__` method to handle setting attributes on the object.
+
+        This method ensures that certain attributes are handled in a specific way:
+        - Prevents overwriting existing assets by raising an AttributeError if an attempt is made to set an attribute
+          that already exists in `_assets`.
+        - Propagates specific properties (defined in `asset_properties`) to all assets in `_assets` if they are not
+          already set.
+        """
+
+        # Since _assets is accessed here in the __setattr__ method, we need to handle it separately
+        # to avoid recursion with __getattr__ when _assets is not yet initialized.
+        if name == "_assets":
+            super().__setattr__(name, value)
+            return
+
+        # Prevent overwriting the assets
+        if name in self._assets:
+            raise AttributeError(f"Asset {name} is read-only")
+
+        # Properties that should be propagated to the assets
+        asset_properties = ["io", "default_io_key"]
+        if name in asset_properties:
+            for asset in self._assets.values():
+                if not getattr(asset, name):
+                    setattr(asset, name, value)
+
+        super().__setattr__(name, value)
 
     @abstractmethod
     def asset_definitions(self) -> Sequence[Asset]: ...
@@ -55,18 +85,6 @@ class Source(ABC):
     @property
     def assets(self) -> list[Asset]:
         return list(self._assets.values())
-
-    @property
-    def io(self) -> dict[str, IO]:
-        return self._io
-
-    @io.setter
-    def io(self, value: dict[str, IO]) -> None:
-        self._io = value
-
-        for asset in self._assets.values():
-            if not asset.has_io and value is not None:
-                asset.io = value
 
     @classmethod
     def from_asset_defs_fn(
@@ -106,7 +124,7 @@ class Source(ABC):
 
             if not asset.has_io:
                 asset.io = self.io
-                
+
             asset.default_io_key = asset.default_io_key or self.default_io_key
 
             # Automatically set the deps for the asset if the source has another asset with the same name
@@ -115,8 +133,8 @@ class Source(ABC):
                     if upstream_asset.name in self._assets:
                         asset.deps[upstream_asset.name] = upstream_asset.name
 
-            self._assets[asset.name] = asset
             setattr(self, asset.name, asset)
+            self._assets[asset.name] = asset
 
     def _copy(self) -> "Source":
         return self.__class__(
