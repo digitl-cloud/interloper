@@ -61,10 +61,10 @@ class Pipeline:
 
         self.graph = nx.DiGraph()
         for asset in self.assets.values():
-            self.graph.add_node(asset)
+            self.graph.add_node(asset, label=asset.name)
 
             for upstream_ref in asset.upstream_assets:
-                # Check if the asset has a dependency with the given name
+                # Verify that the upstream asset ref is in the asset's deps config
                 if upstream_ref.name not in asset.deps.keys():
                     raise ValueError(f"Unable to resolve upstream asset '{upstream_ref.name}' of asset '{asset.name}'")
 

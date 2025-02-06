@@ -127,14 +127,16 @@ class Source(ABC):
 
             asset.default_io_key = asset.default_io_key or self.default_io_key
 
-            # Automatically set the deps for the asset if the source has another asset with the same name
+            setattr(self, asset.name, asset)
+            self._assets[asset.name] = asset
+
+        # Automatically set the deps for the asset if the source has another asset with the same name
+        # Needs to be done after all assets are built
+        for asset in self._assets.values():
             if self.auto_asset_deps:
                 for upstream_asset in asset.upstream_assets:
                     if upstream_asset.name in self._assets:
                         asset.deps[upstream_asset.name] = upstream_asset.name
-
-            setattr(self, asset.name, asset)
-            self._assets[asset.name] = asset
 
     def _copy(self) -> "Source":
         return self.__class__(

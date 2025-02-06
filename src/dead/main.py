@@ -7,9 +7,9 @@ from dead.pipeline import Pipeline
 from dead.sentinel import Env, UpstreamAsset
 from dead.source import source
 
-##############
+##################
 # OOO
-##############
+##################
 # class AssetX(Asset):
 #     def data(self) -> Any:
 #         return ["x1", "x2"]
@@ -33,9 +33,9 @@ from dead.source import source
 # Pipeline(z).materialize()
 
 
-##############
+##################
 # FUNCTIONAL
-##############
+##################
 
 
 @source
@@ -43,16 +43,23 @@ def Z(
     key: str = Env("KEY_A"),
 ) -> Sequence[Asset]:
     @asset
-    def X() -> Any:
+    def W() -> Any:
+        return ["w1", "w2"]
+
+    @asset
+    def X(
+        w: Any = UpstreamAsset("W"),
+    ) -> Any:
         return ["x1", "x2"]
 
     @asset
     def Y(
+        w: Any = UpstreamAsset("W"),
         x: Any = UpstreamAsset("X"),
     ) -> Any:
         return ["y1", "y2"]
 
-    return (X, Y)
+    return (W, X, Y)
 
 
 Z.io = {
@@ -61,4 +68,23 @@ Z.io = {
 }
 Z.default_io_key = "file"
 
-Pipeline(Z).materialize()
+pipeline = Pipeline(Z)
+pipeline.materialize()
+
+
+##################
+# VISUALIZATION
+##################
+
+# import matplotlib.pyplot as plt
+# import networkx as nx
+# import streamlit as st
+
+# fig, ax = plt.subplots()
+
+# G = nx.convert_node_labels_to_integers(pipeline.graph)
+# G = nx.relabel_nodes(G, {index: node.name for index, node in enumerate(pipeline.graph.nodes)})
+# pos = nx.planar_layout(G)
+# nx.draw(G, pos, with_labels=True)
+
+# st.pyplot(fig)
