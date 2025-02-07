@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from typing_extensions import Self
 
-from dead.io import IO, IOContext
-from dead.sentinel import RunnableSentinel, Sentinel, UpstreamAsset
+from dead.core.io import IO, IOContext
+from dead.core.sentinel import RunnableSentinel, Sentinel, UpstreamAsset
 
 if TYPE_CHECKING:
-    from dead.pipeline import ExecutionContext
+    from dead.core.pipeline import ExecutionContext
 
 
 T = TypeVar("T")
@@ -36,7 +36,7 @@ class Asset(ABC):
         asset.io = io or self.io
         asset.default_io_key = default_io_key or self.default_io_key
 
-        asset._bind_params(**kwargs)
+        asset.bind(**kwargs)
         return asset
 
     def __hash__(self):
@@ -67,6 +67,19 @@ class Asset(ABC):
 
         for x in self.io.values():
             x.write(IOContext(self.name), data)
+
+    def bind(self, **new_params: Any) -> None:
+        sig = signature(self.data)
+        current_params = [p.name for p in sig.parameters.values()]
+        final_params = {}
+
+        for param_name, param_value in new_params.items():
+            if param_name not in current_params:
+                raise ValueError(f"Parameter {param_name} is not a valid parameter for asset {self.name}")
+
+            final_params[param_name] = param_value
+
+        self.data = partial(self.data, **final_params)
 
     @property
     def has_io(self) -> bool:
@@ -101,19 +114,6 @@ class Asset(ABC):
             io=self.io,
             materializable=self.materializable,
         )
-
-    def _bind_params(self, **new_params: Any) -> None:
-        sig = signature(self.data)
-        current_params = [p.name for p in sig.parameters.values()]
-        final_params = {}
-
-        for param_name, param_value in new_params.items():
-            if param_name not in current_params:
-                raise ValueError(f"Parameter {param_name} is not a valid parameter for asset {self.name}")
-
-            final_params[param_name] = param_value
-
-        self.data = partial(self.data, **final_params)
 
     def _evaluate_params(
         self,

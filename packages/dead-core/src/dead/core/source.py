@@ -7,9 +7,9 @@ from typing import Any, overload
 
 from typing_extensions import Self
 
-from dead.asset import Asset
-from dead.io import IO
-from dead.sentinel import RunnableSentinel, Sentinel
+from dead.core.asset import Asset
+from dead.core.io import IO
+from dead.core.sentinel import RunnableSentinel, Sentinel
 
 
 @dataclass
@@ -36,7 +36,7 @@ class Source(ABC):
         source.io = io or self.io
         source.default_io_key = default_io_key or self.default_io_key
 
-        source._bind_params(**kwargs)
+        source.bind(**kwargs)
         source._build_assets()
         return source
 
@@ -112,6 +112,19 @@ class Source(ABC):
             auto_asset_deps=auto_asset_deps,
         )
 
+    def bind(self, **new_params: Any) -> None:
+        sig = signature(self.asset_definitions)
+        current_params = [p.name for p in sig.parameters.values()]
+        final_params = {}
+
+        for param_name, param_value in new_params.items():
+            if param_name not in current_params:
+                raise ValueError(f"Parameter {param_name} is not a valid parameter for source {self.name}")
+
+            final_params[param_name] = param_value
+
+        self.asset_definitions = partial(self.asset_definitions, **final_params)
+
     def _build_assets(self) -> None:
         self._assets: dict[str, Asset] = {}
 
@@ -143,19 +156,6 @@ class Source(ABC):
             name=self.name,
             io=self.io,
         )
-
-    def _bind_params(self, **new_params: Any) -> None:
-        sig = signature(self.asset_definitions)
-        current_params = [p.name for p in sig.parameters.values()]
-        final_params = {}
-
-        for param_name, param_value in new_params.items():
-            if param_name not in current_params:
-                raise ValueError(f"Parameter {param_name} is not a valid parameter for source {self.name}")
-
-            final_params[param_name] = param_value
-
-        self.asset_definitions = partial(self.asset_definitions, **final_params)
 
     def _evaluate_params(self) -> dict:
         sig = signature(self.asset_definitions)

@@ -3,8 +3,8 @@ from typing import Any
 
 import networkx as nx
 
-from dead.asset import Asset
-from dead.source import Source
+from dead.core.asset import Asset
+from dead.core.source import Source
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,54 @@
+# ###############
+# UV
+# ###############
+[project]
+name = "dead"
+version = "0.1.0"
+description = "Does Everything Already Done"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "duckdb>=1.1.2",
+    "google-api-python-client>=2.149.0",
+    "google-auth-oauthlib>=1.2.1",
+    "httpx>=0.27.2",
+    "matplotlib>=3.10.0",
+    "networkx>=3.4.2",
+    "pydantic>=2.9.2",
+    "python-dotenv>=1.0.1",
+    "ruff>=0.7.1",
+    "streamlit>=1.42.0",
+    "typing-extensions>=4.12.2",
+]
+
+[dependency-groups]
+dev = ["duckdb>=1.1.3", "pyright>=1.1.392.post0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dead"]
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+
+# ###############
+# PYRIGHT
+# ###############
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "basic"
+reportMissingParameterType = true
+ignore = ["libs/**", "tests/**", "scripts/**"]

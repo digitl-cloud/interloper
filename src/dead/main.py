@@ -1,14 +1,16 @@
+import datetime as dt
 from collections.abc import Sequence
 from typing import Any
 
-from dead.asset import Asset, asset
-from dead.io import FileIO
-from dead.pipeline import Pipeline
-from dead.sentinel import Env, UpstreamAsset
-from dead.source import source
+from dead.assets.adservice import adservice
+from dead.core.asset import Asset, asset
+from dead.core.io import FileIO
+from dead.core.pipeline import Pipeline
+from dead.core.sentinel import Env, UpstreamAsset
+from dead.core.source import source
 
 ##################
-# OOO
+# OOP
 ##################
 # class AssetX(Asset):
 #     def data(self) -> Any:
@@ -26,7 +28,7 @@ from dead.source import source
 # class SourceZ(Source):
 #     def asset_definitions(self) -> Sequence[Asset]:
 #         return AssetX("X"), AssetY("Y")
-
+""
 
 # z = SourceZ("Z")
 # z.io = FileIO("/Users/g/Downloads/dead")
@@ -38,38 +40,38 @@ from dead.source import source
 ##################
 
 
-@source
-def Z(
-    key: str = Env("KEY_A"),
-) -> Sequence[Asset]:
-    @asset
-    def W() -> Any:
-        return ["w1", "w2"]
+# @source
+# def Z(
+#     key: str = Env("KEY_A"),
+# ) -> Sequence[Asset]:
+#     @asset
+#     def W() -> Any:
+#         return ["w1", "w2"]
 
-    @asset
-    def X(
-        w: Any = UpstreamAsset("W"),
-    ) -> Any:
-        return ["x1", "x2"]
+#     @asset
+#     def X(
+#         w: Any = UpstreamAsset("W"),
+#     ) -> Any:
+#         return ["x1", "x2"]
 
-    @asset
-    def Y(
-        w: Any = UpstreamAsset("W"),
-        x: Any = UpstreamAsset("X"),
-    ) -> Any:
-        return ["y1", "y2"]
+#     @asset
+#     def Y(
+#         w: Any = UpstreamAsset("W"),
+#         x: Any = UpstreamAsset("X"),
+#     ) -> Any:
+#         return ["y1", "y2"]
 
-    return (W, X, Y)
+#     return (W, X, Y)
 
 
-Z.io = {
-    "file": FileIO("/Users/g/Downloads/dead"),
-    "file2": FileIO("/Users/g/Downloads/dead2"),
-}
-Z.default_io_key = "file"
+# Z.io = {
+#     "file": FileIO("/Users/g/Downloads/dead"),
+#     "file2": FileIO("/Users/g/Downloads/dead2"),
+# }
+# Z.default_io_key = "file"
 
-pipeline = Pipeline(Z)
-pipeline.materialize()
+# pipeline = Pipeline(Z)
+# pipeline.materialize()
 
 
 ##################
@@ -88,3 +90,12 @@ pipeline.materialize()
 # nx.draw(G, pos, with_labels=True)
 
 # st.pyplot(fig)
+
+
+adservice.io = {
+    "file": FileIO("/Users/g/Downloads/dead"),
+}
+adservice.campaigns.bind(date=dt.date(2024, 1, 1))
+
+pipeline = Pipeline(adservice)
+pipeline.materialize()

@@ -2,10 +2,10 @@ import os
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from dead.io import IOContext
+from dead.core.io import IOContext
 
 if TYPE_CHECKING:
-    from dead.pipeline import ExecutionContext
+    from dead.core.pipeline import ExecutionContext
 
 T = TypeVar("T")
 
