@@ -1,19 +1,23 @@
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
-from inspect import signature
+from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from typing_extensions import Self
 
 from dead.core.io import IO, IOContext
-from dead.core.sentinel import RunnableSentinel, Sentinel, UpstreamAsset
+from dead.core.param import AssetParam, ContextualAssetParam, TimeAssetParam, UpstreamAsset
+from dead.core.schema import TTableSchema
+from dead.core.utils import safe_isinstance
 
 if TYPE_CHECKING:
     from dead.core.pipeline import ExecutionContext
 
 
+logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
@@ -22,8 +26,10 @@ class Asset(ABC):
     name: str
     deps: dict[str, str] = field(default_factory=dict)
     io: dict[str, IO] = field(default_factory=dict)
-    default_io_key: str | None = None
     materializable: bool = True
+    default_io_key: str | None = None
+    schema: TTableSchema | None = None
+    partition_column: str | None = None
 
     def __call__(
         self,
@@ -35,7 +41,6 @@ class Asset(ABC):
         asset = self._copy()
         asset.io = io or self.io
         asset.default_io_key = default_io_key or self.default_io_key
-
         asset.bind(**kwargs)
         return asset
 
@@ -48,32 +53,53 @@ class Asset(ABC):
     def run(
         self,
         context: "ExecutionContext | None" = None,
-        **new_params: Any,
+        **params: Any,
     ) -> Any:
-        params = self._evaluate_params(context, **new_params)
-        yield from self.data(**params)
+        params, return_type = self._resolve_parameters(context, **params)
+        data = self.data(**params)
 
-    # TODO: private?
+        # TODO: review safe_isinstance
+        if return_type != Parameter.empty and return_type is not Any and not safe_isinstance(data, return_type):
+            raise TypeError(f"Asset {self.name} returned data of type {type(data)}, expected {return_type}")
+
+        logger.debug(f"Asset {self.name} executed (Type check passed ✔)")
+
+        return data
+
     def materialize(
         self,
         context: "ExecutionContext | None" = None,
     ) -> None:
+        logger.info(f"Materializing asset {self.name}...")
+
         if not self.materializable:
-            raise RuntimeError(f"Asset {self.name} is not materializable")
+            logger.warning(f"Asset {self.name} is not materializable. Skipping.")
+            return
+
         if not self.has_io:
             raise RuntimeError(f"Asset {self.name} does not have any IO configured")
 
+        if context:
+            if context.partition and not self.partition_column:
+                raise ValueError(f"Asset {self.name} does not support partitioning (missing partition_column config)")
+
         data = self.run(context)
 
+        io_context = IOContext(
+            asset=self,
+            partition=context.partition if context else None,
+        )
         for x in self.io.values():
-            x.write(IOContext(self.name), data)
+            x.write(io_context, data)
 
-    def bind(self, **new_params: Any) -> None:
+        logger.info(f"Asset {self.name} materialization complete")
+
+    def bind(self, **params: Any) -> None:
         sig = signature(self.data)
         current_params = [p.name for p in sig.parameters.values()]
         final_params = {}
 
-        for param_name, param_value in new_params.items():
+        for param_name, param_value in params.items():
             if param_name not in current_params:
                 raise ValueError(f"Parameter {param_name} is not a valid parameter for asset {self.name}")
 
@@ -90,64 +116,56 @@ class Asset(ABC):
         sig = signature(self.data)
         return [param.default for param in sig.parameters.values() if isinstance(param.default, UpstreamAsset)]
 
-    @classmethod
-    def from_data_fn(cls, name: str, data_fn: Callable):
-        """
-        Dynamically creates an instance of a concrete Asset class that implements the data method.
-        """
-
-        class ConcreteAsset(cls):
-            # Define the dynamically provided data method
-            def data(self, *args: Any, **kwargs: Any) -> Any:
-                return data_fn(*args, **kwargs)
-
-        # Override `data` signature to dynamically match the signature of the provided `data_fn`
-        original_sig, wrapper_sig = signature(data_fn), signature(ConcreteAsset.data)
-        parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
-        ConcreteAsset.data.__signature__ = wrapper_sig.replace(parameters=parameters)
-
-        return ConcreteAsset(name=name)
-
     def _copy(self) -> "Asset":
         return self.__class__(
             name=self.name,
             io=self.io,
             materializable=self.materializable,
+            schema=self.schema,
         )
 
-    def _evaluate_params(
+    def _resolve_parameters(
         self,
         context: "ExecutionContext | None" = None,
-        **new_params: Any,
-    ) -> dict:
+        **overriding_params: Any,
+    ) -> tuple[dict[str, Any], Any]:
         sig = signature(self.data)
         final_params = {}
+        has_time_asset_param = False
+
+        if sig.return_annotation is None:
+            raise ValueError(f"None is not a valid return type for asset {self.name}")
 
         for param in sig.parameters.values():
-            # Runtime user defined parameters take precedence over sentinels
-            if param.name in new_params:
-                final_params[param.name] = new_params[param.name]
+            # Runtime user defined parameters take precedence over asset_params
+            if param.name in overriding_params:
+                final_params[param.name] = overriding_params[param.name]
                 continue
 
             # No user defined paramters and no default value
             if param.default is param.empty:
                 raise ValueError(f"Cannot resolve parameter {param.name} for asset {self.name}")
 
-            if isinstance(param.default, RunnableSentinel):
+            if isinstance(param.default, TimeAssetParam):
+                if has_time_asset_param:
+                    raise ValueError("Asset can only have one TimeAssetParam")
+                has_time_asset_param = True
+
+            if isinstance(param.default, ContextualAssetParam):
                 if context is None:
-                    raise ValueError(f"RunnableSentinel {param.name} requires an execution context")
+                    raise ValueError(f"ContextualAssetParam {param.name} requires an execution context")
                 final_params[param.name] = param.default.resolve(context)
                 continue
 
-            # Default value is a sentinel
-            if isinstance(param.default, Sentinel):
+            # Default value is a asset_param
+            if isinstance(param.default, AssetParam):
                 final_params[param.name] = param.default.resolve()
                 continue
 
-            # Default value is not a sentinel
+            # Default value is not a asset_param
             final_params[param.name] = param.default
 
-        return final_params
+        return final_params, sig.return_annotation
 
 
 class AssetDecorator:
@@ -161,6 +179,8 @@ class AssetDecorator:
         cls,
         *,
         name: str | None = None,
+        schema: TTableSchema | None = None,
+        partition_column: str | None = None,
     ) -> Self: ...
 
     def __new__(cls, func: Callable | None = None, *args: Any, **kwargs: Any):
@@ -180,13 +200,36 @@ class AssetDecorator:
         self,
         func: Callable | None = None,
         name: str | None = None,
+        schema: TTableSchema | None = None,
+        partition_column: str | None = None,
     ):
         self.name = name
+        self.schema = schema
+        self.partition_column = partition_column
 
     def __call__(self, func: Callable) -> Asset:
-        return Asset.from_data_fn(
+        """
+        Dynamically creates an instance of a concrete Asset class that implements the data method
+        using the decorated function.
+        """
+
+        class ConcreteAsset(Asset):
+            # Define the dynamically provided data method
+            def data(self, *args: Any, **kwargs: Any) -> Any:
+                return func(*args, **kwargs)
+
+        # Override `data` signature to dynamically match the signature of the provided `func`
+        original_sig, wrapper_sig = signature(func), signature(ConcreteAsset.data)
+        parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
+        ConcreteAsset.data.__signature__ = wrapper_sig.replace(
+            parameters=parameters,
+            return_annotation=original_sig.return_annotation,
+        )
+
+        return ConcreteAsset(
             name=self.name or func.__name__,
-            data_fn=func,
+            schema=self.schema,
+            partition_column=self.partition_column,
         )
 
 

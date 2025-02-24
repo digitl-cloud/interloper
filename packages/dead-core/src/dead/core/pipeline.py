@@ -1,9 +1,11 @@
+# import datetime as dt
 from dataclasses import dataclass
 from typing import Any
 
 import networkx as nx
 
 from dead.core.asset import Asset
+from dead.core.partitioning import Partition
 from dead.core.source import Source
 
 
@@ -11,6 +13,17 @@ from dead.core.source import Source
 class ExecutionContext:
     assets: dict[str, Asset]
     executed_asset: Asset
+    partition: Partition | None = None
+    # date_window: tuple[dt.date, dt.date] | None = None
+
+    # def __post_init__(self):
+    #     if self.partition and self.date_window:
+    #         raise ValueError("Invalid execution context: only one of 'date' or 'date_window' can be provided")
+
+    #     if self.date_window:
+    #         start_date, end_date = self.date_window
+    #         if start_date > end_date:
+    #             raise ValueError("Invalid execution context:  start date must be less than or equal to end date")
 
 
 class Pipeline:
@@ -19,22 +32,33 @@ class Pipeline:
         sources_or_assets: Source | Asset | list[Source | Asset],
     ):
         self.assets = {}
-
         self._add_assets(sources_or_assets)
         self._build_execution_graph()
 
-    def materialize(self, **global_params: Any) -> Any:
+    def materialize(
+        self,
+        partition: Partition | None = None,
+    ) -> Any:
         for asset in self._get_execution_order():
-            # if asset.materializable:
-            #     if asset.io is None:
-            #         raise RuntimeError(f"Asset {asset.name} does not have any IO configured")
-
-            #     # data = asset.run(ExecutionContext(self.assets, asset), **global_params)
-            #     # asset.io.write(IOContext(asset.name), data)
-
-            # TODO: shared execution context?
-            context = ExecutionContext(self.assets, asset)
+            context = ExecutionContext(
+                assets=self.assets,
+                executed_asset=asset,
+                partition=partition,
+            )
             asset.materialize(context)
+
+    # def backfill(
+    #     self,
+    #     start: dt.date,
+    #     end: dt.date,
+    # ) -> None:
+    #     for asset in self._get_execution_order():
+    #         context = ExecutionContext(
+    #             assets=self.assets,
+    #             executed_asset=asset,
+    #             date_window=(start, end),
+    #         )
+    #         asset.materialize(context)
 
     def _add_assets(self, sources_or_assets: Source | Asset | list[Source | Asset]) -> None:
         # Convert single source/asset to a list
@@ -61,7 +85,7 @@ class Pipeline:
 
         self.graph = nx.DiGraph()
         for asset in self.assets.values():
-            self.graph.add_node(asset, label=asset.name)
+            self.graph.add_node(asset)
 
             for upstream_ref in asset.upstream_assets:
                 # Verify that the upstream asset ref is in the asset's deps config

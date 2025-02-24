@@ -2,13 +2,13 @@
 # UV
 # ###############
 [project]
-name = "dead-assets"
+name = "dead-sql"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
-dependencies = ["dead"]
+dependencies = ["dead", "psycopg2-binary>=2.9.10", "sqlalchemy>=2.0.38"]
 
 [tool.uv.sources]
 dead = { workspace = true }

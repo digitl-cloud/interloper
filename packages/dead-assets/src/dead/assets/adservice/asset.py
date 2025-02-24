@@ -2,12 +2,13 @@ import datetime as dt
 import logging
 from base64 import b64encode
 from collections.abc import Sequence
-from typing import Any
 
 import httpx
+import pandas as pd
 
+from dead.assets.adservice.schema import Campaign
 from dead.core.asset import Asset, asset
-from dead.core.sentinel import Env
+from dead.core.param import Date, Env, UpstreamAsset
 from dead.core.source import source
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,6 @@ def adservice(
         end_group: str | None = None,
         sales_amount: int | None = None,
     ) -> dict:
-        logger.info(f"Fetching {report_type} report...")
-
         response = client.get(
             url=f"{base_url}/{report_type}",
             params={
@@ -42,14 +41,18 @@ def adservice(
             },
         )
         response.raise_for_status()
-
-        logger.info(f"{report_type} Report fetched")
         return response.json()
 
-    @asset
+    @asset(
+        name="campaigns",
+        schema=Campaign,
+        partition_column="date",
+    )
     def campaigns(
-        date: dt.date,
-    ) -> Any:
+        date: dt.date = Date(),
+    ) -> pd.DataFrame:
+        logger.debug(date)
+
         response = get_report(
             start_date=date,
             end_date=date,
@@ -58,7 +61,24 @@ def adservice(
             end_group="stamp",
             sales_amount=1,
         )
-        print(response["data"]["rows"])
-        return response["data"]["rows"]
+        data = response["data"]["rows"]
+        return pd.DataFrame(data)
 
-    return (campaigns,)
+    @asset
+    def conversions(
+        date: dt.date = Date(),
+        campaigns: pd.DataFrame = UpstreamAsset("campaigns", pd.DataFrame),
+        # date_range: tuple[dt.date, dt.date] = DateWindow(),
+    ) -> pd.DataFrame:
+        print(campaigns)
+        response = get_report(
+            start_date=date,
+            end_date=date,
+            # start_date=date_range[0],
+            # end_date=date_range[1],
+            report_type="conversions",
+        )
+        data = response["data"]
+        return pd.DataFrame(data)
+
+    return (campaigns, conversions)

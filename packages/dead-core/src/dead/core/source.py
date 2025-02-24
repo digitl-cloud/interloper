@@ -9,7 +9,7 @@ from typing_extensions import Self
 
 from dead.core.asset import Asset
 from dead.core.io import IO
-from dead.core.sentinel import RunnableSentinel, Sentinel
+from dead.core.param import AssetParam, ContextualAssetParam
 
 
 @dataclass
@@ -35,7 +35,6 @@ class Source(ABC):
         source = self._copy()
         source.io = io or self.io
         source.default_io_key = default_io_key or self.default_io_key
-
         source.bind(**kwargs)
         source._build_assets()
         return source
@@ -56,7 +55,7 @@ class Source(ABC):
         This method ensures that certain attributes are handled in a specific way:
         - Prevents overwriting existing assets by raising an AttributeError if an attempt is made to set an attribute
           that already exists in `_assets`.
-        - Propagates specific properties (defined in `asset_properties`) to all assets in `_assets` if they are not
+        - Propagates specific attributes (defined in `asset_attributes`) to all assets in `_assets` if they are not
           already set.
         """
 
@@ -70,9 +69,9 @@ class Source(ABC):
         if name in self._assets:
             raise AttributeError(f"Asset {name} is read-only")
 
-        # Properties that should be propagated to the assets
-        asset_properties = ["io", "default_io_key"]
-        if name in asset_properties:
+        # Attributes that should be propagated to the assets
+        asset_attributes = ["io", "default_io_key"]
+        if name in asset_attributes:
             for asset in self._assets.values():
                 if not getattr(asset, name):
                     setattr(asset, name, value)
@@ -86,38 +85,12 @@ class Source(ABC):
     def assets(self) -> list[Asset]:
         return list(self._assets.values())
 
-    @classmethod
-    def from_asset_defs_fn(
-        cls,
-        name: str,
-        asset_defs_fn: Callable,
-        auto_asset_deps: bool = True,
-    ):
-        """
-        Dynamically creates an instance of a concrete Source class that implements the assets method.
-        """
-
-        class ConcreteSource(cls):
-            # Define the dynamically provided asset_definitions method
-            def asset_definitions(self, *args: Any, **kwargs: Any) -> Any:
-                return asset_defs_fn(*args, **kwargs)
-
-        # Override `asset_definitions` signature to dynamically match the signature of the provided `asset_defs_fn`
-        original_sig, wrapper_sig = signature(asset_defs_fn), signature(ConcreteSource.asset_definitions)
-        parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
-        ConcreteSource.asset_definitions.__signature__ = wrapper_sig.replace(parameters=parameters)
-
-        return ConcreteSource(
-            name=name,
-            auto_asset_deps=auto_asset_deps,
-        )
-
-    def bind(self, **new_params: Any) -> None:
+    def bind(self, **params: Any) -> None:
         sig = signature(self.asset_definitions)
         current_params = [p.name for p in sig.parameters.values()]
         final_params = {}
 
-        for param_name, param_value in new_params.items():
+        for param_name, param_value in params.items():
             if param_name not in current_params:
                 raise ValueError(f"Parameter {param_name} is not a valid parameter for source {self.name}")
 
@@ -128,7 +101,7 @@ class Source(ABC):
     def _build_assets(self) -> None:
         self._assets: dict[str, Asset] = {}
 
-        params = self._evaluate_params()
+        params = self._resolve_parameters()
         for asset in self.asset_definitions(**params):
             if not isinstance(asset, Asset):
                 raise ValueError(f"Expected an instance of Asset, but got {type(asset)}")
@@ -157,30 +130,25 @@ class Source(ABC):
             io=self.io,
         )
 
-    def _evaluate_params(self) -> dict:
+    def _resolve_parameters(self) -> dict:
         sig = signature(self.asset_definitions)
         final_params = {}
 
         for param in sig.parameters.values():
-            # # Runtime user defined parameters take precedence over sentinels
-            # if param.name in new_params:
-            #     final_params[param.name] = new_params[param.name]
-            #     continue
-
             # No user defined paramters and no default value
             if param.default is param.empty:
                 raise ValueError(f"Cannot resolve parameter {param.name} for source {self.name}")
 
-            # RunnableSentinel not supported for sources (requires an execution context)
-            if isinstance(param.default, RunnableSentinel):
-                raise ValueError(f"RunnableSentinel {param.name} not supported in source parameters")
+            # ContextualAssetParam not supported for sources (requires an execution context)
+            if isinstance(param.default, ContextualAssetParam):
+                raise ValueError(f"ContextualAssetParam {param.name} not supported in source parameters")
 
-            # Default value is a sentinel -> resolve it
-            if isinstance(param.default, Sentinel):
+            # Default value is a asset_param -> resolve it
+            if isinstance(param.default, AssetParam):
                 final_params[param.name] = param.default.resolve()
                 continue
 
-            # Default value is not a sentinel
+            # Default value is not a asset_param
             final_params[param.name] = param.default
 
         return final_params
@@ -223,9 +191,26 @@ class SourceDecorator:
         self.auto_asset_deps = auto_asset_deps
 
     def __call__(self, func: Callable) -> Source:
-        return Source.from_asset_defs_fn(
+        """
+        Dynamically creates an instance of a concrete Source class that implements the assets method
+        using the decorated function.
+        """
+
+        class ConcreteSource(Source):
+            # Define the dynamically provided asset_definitions method
+            def asset_definitions(self, *args: Any, **kwargs: Any) -> Any:
+                return func(*args, **kwargs)
+
+        # Override `asset_definitions` signature to dynamically match the signature of the provided `func`
+        original_sig, wrapper_sig = signature(func), signature(ConcreteSource.asset_definitions)
+        parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
+        ConcreteSource.asset_definitions.__signature__ = wrapper_sig.replace(
+            parameters=parameters,
+            return_annotation=original_sig.return_annotation,
+        )
+
+        return ConcreteSource(
             name=self.name or func.__name__,
-            asset_defs_fn=func,
             auto_asset_deps=self.auto_asset_deps,
         )
 
