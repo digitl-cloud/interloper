@@ -1,0 +1,45 @@
+# ###############
+# UV
+# ###############
+[project]
+name = "interloper-assets"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+requires-python = ">=3.10"
+dependencies = ["interloper"]
+
+[tool.uv.sources]
+interloper = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/interloper"]
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+
+# ###############
+# PYRIGHT
+# ###############
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "basic"
+reportMissingParameterType = true
+ignore = ["libs/**", "tests/**", "scripts/**"]

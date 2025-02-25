@@ -2,29 +2,29 @@
 # UV
 # ###############
 [project]
-name = "deeead"
+name = "interloper"
 version = "0.1.0"
-description = "Does Everything Already Done"
+description = "Interloper"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "dead",
-    "dead-assets",
-    "dead-duckdb",
-    "dead-pandas",
-    "dead-sql",
-    "dead-sqlite",
+    "interloper-core",
+    "interloper-assets",
+    "interloper-duckdb",
+    "interloper-pandas",
+    "interloper-sql",
+    "interloper-sqlite",
     "matplotlib>=3.10.0",
     "streamlit>=1.42.2",
 ]
 
 [tool.uv.sources]
-dead = { workspace = true }
-dead-assets = { workspace = true }
-dead-duckdb = { workspace = true }
-dead-pandas = { workspace = true }
-dead-sql = { workspace = true }
-dead-sqlite = { workspace = true }
+interloper-core = { workspace = true }
+interloper-assets = { workspace = true }
+interloper-duckdb = { workspace = true }
+interloper-pandas = { workspace = true }
+interloper-sql = { workspace = true }
+interloper-sqlite = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]

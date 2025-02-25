@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 from typing import Any
 
-from dead.core.asset import Asset, asset
-from dead.core.pipeline import Pipeline
-from dead.core.param import UpstreamAsset
-from dead.core.source import source
+from interloper.core.asset import Asset, asset
+from interloper.core.pipeline import Pipeline
+from interloper.core.param import UpstreamAsset
+from interloper.core.source import source
 import matplotlib.pyplot as plt
 import networkx as nx
 import streamlit as st

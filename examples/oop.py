@@ -1,11 +1,11 @@
 from collections.abc import Sequence
 from typing import Any
 
-from dead.core.asset import Asset
-from dead.core.io import FileIO
-from dead.core.pipeline import Pipeline
-from dead.core.param import UpstreamAsset
-from dead.core.source import Source
+from interloper.core.asset import Asset
+from interloper.core.io import FileIO
+from interloper.core.pipeline import Pipeline
+from interloper.core.param import UpstreamAsset
+from interloper.core.source import Source
 
 
 class AssetA(Asset):
@@ -31,6 +31,6 @@ class SourceX(Source):
 
 z = SourceX(
     name="X",
-    io={"file": FileIO("/Users/g/Downloads/dead")},
+    io={"file": FileIO("/Users/g/Downloads/interloper")},
 )
 Pipeline(z).materialize()

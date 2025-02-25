@@ -1,11 +1,11 @@
 from collections.abc import Sequence
 from typing import Any
 
-from dead.core.asset import Asset, asset
-from dead.core.io import FileIO
-from dead.core.pipeline import Pipeline
-from dead.core.param import Env, UpstreamAsset
-from dead.core.source import source
+from interloper.core.asset import Asset, asset
+from interloper.core.io import FileIO
+from interloper.core.pipeline import Pipeline
+from interloper.core.param import Env, UpstreamAsset
+from interloper.core.source import source
 
 
 @source
@@ -33,8 +33,8 @@ def X(
 
 
 X.io = {
-    "file": FileIO("/Users/g/Downloads/dead"),
-    "file2": FileIO("/Users/g/Downloads/dead2"),
+    "file": FileIO("/Users/g/Downloads/interloper"),
+    "file2": FileIO("/Users/g/Downloads/interloper2"),
 }
 X.default_io_key = "file"
 
