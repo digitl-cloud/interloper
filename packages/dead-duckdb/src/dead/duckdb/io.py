@@ -50,7 +50,7 @@ class DuckDBDataframeIO(DatabaseIO):
         result = self.client.execute(query).fetchone()
         return True if result and result[0] > 0 else False
 
-    def table_schema(self, table_name: str) -> dict[str, str]:
+    def fetch_table_schema(self, table_name: str) -> dict[str, str]:
         # query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}';"
         # return dict(self.client.execute(query).fetchall())
         query = f"PRAGMA table_info({table_name});"

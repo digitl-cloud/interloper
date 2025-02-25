@@ -60,7 +60,7 @@ class SQLiteDataframeIO(DatabaseIO):
         query = f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"
         return bool(self.connection.execute(query).fetchone())
 
-    def table_schema(self, table_name: str) -> dict[str, str]:
+    def fetch_table_schema(self, table_name: str) -> dict[str, str]:
         query = f"PRAGMA table_info({table_name});"
         result = self.connection.execute(query).fetchall()
         return {row[1]: row[2] for row in result}

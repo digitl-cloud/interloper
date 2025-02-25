@@ -8,16 +8,17 @@ from dead.core.pipeline import Pipeline
 from dead.core.utils import basic_logging
 
 from dead.duckdb.io import DuckDBDataframeIO
-from dead.sqlite.io import SQLiteDataframeIO
-from dead.sql.io import PostgresDataframeIO
+
+# from dead.sqlite.io import SQLiteDataframeIO
+from dead.sql.io import PostgresDataframeIO, SQLiteDataframeIO
 
 basic_logging(logging.INFO)
 
 
 adservice.io = {
-    "file": FileIO("/Users/g/Downloads/dead"),
-    "duckdb": DuckDBDataframeIO("/Users/g/Downloads/dead/test.duck"),
-    "sqlite": SQLiteDataframeIO("/Users/g/Downloads/dead/test.sqlite"),
+    "file": FileIO("data"),
+    "duckdb": DuckDBDataframeIO("data/duck.db"),
+    "sqlite": SQLiteDataframeIO("data/sqlite.db"),
     "postgres": PostgresDataframeIO("dead", "g", "", "localhost"),
 }
 adservice.default_io_key = "sqlite"

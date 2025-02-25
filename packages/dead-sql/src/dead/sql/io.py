@@ -49,7 +49,7 @@ class SQLAlchemyIO(DatabaseIO):
     def table_exists(self, table_name: str) -> bool:
         return table_name in self.inspector.get_table_names()
 
-    def table_schema(self, table_name: str) -> dict[str, str]:
+    def fetch_table_schema(self, table_name: str) -> dict[str, str]:
         table = self.metadata.tables[table_name]
         return {column.name: str(column.type.as_generic()) for column in table.columns}
 
@@ -58,7 +58,9 @@ class SQLAlchemyIO(DatabaseIO):
             query = f"CREATE TABLE IF NOT EXISTS {table_name} ({schema.to_sql()});"
             connection.execute(text(query))
             connection.commit()
-            logger.info(f"Table {table_name} created in Postgres")
+            logger.info(f"Table {table_name} created ({self.engine.url})")
+
+        self.metadata.reflect(self.engine)
 
     def delete_partition(self, table_name: str, column: str, partition: Partition) -> None:
         if not isinstance(partition, TimePartition):
@@ -75,5 +77,19 @@ class SQLAlchemyIO(DatabaseIO):
 class PostgresDataframeIO(SQLAlchemyIO):
     def __init__(self, database: str, user: str, password: str, host: str, port: int = 5432) -> None:
         engine = create_engine(f"postgresql://{user}:{password}@{host}:{port}/{database}")
+        handler = SQLAlchemyDataframeHandler(engine)
+        super().__init__(engine, handler)
+
+
+class MySQLDataframeIO(SQLAlchemyIO):
+    def __init__(self, database: str, user: str, password: str, host: str, port: int = 3306) -> None:
+        engine = create_engine(f"mysql://{user}:{password}@{host}:{port}/{database}")
+        handler = SQLAlchemyDataframeHandler(engine)
+        super().__init__(engine, handler)
+
+
+class SQLiteDataframeIO(SQLAlchemyIO):
+    def __init__(self, db_path: str) -> None:
+        engine = create_engine(f"sqlite:///{db_path}")
         handler = SQLAlchemyDataframeHandler(engine)
         super().__init__(engine, handler)

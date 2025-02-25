@@ -80,7 +80,7 @@ class DatabaseIO(Generic[T], TypedIO[T]):
             self.delete_partition(context.asset.name, context.asset.partition_column, context.partition)
 
         data = self.handler.sanitizer.sanitize(data)
-        data = self.handler.reconciler.reconcile(data, self.table_schema(context.asset.name))
+        data = self.handler.reconciler.reconcile(data, self.fetch_table_schema(context.asset.name))
 
         self.handler.write(context, data)
 
@@ -93,7 +93,7 @@ class DatabaseIO(Generic[T], TypedIO[T]):
     def table_exists(self, table_name: str) -> bool: ...
 
     @abstractmethod
-    def table_schema(self, table_name: str) -> dict[str, str]: ...
+    def fetch_table_schema(self, table_name: str) -> dict[str, str]: ...
 
     @abstractmethod
     def create_table(self, table_name: str, schema: TTableSchema) -> None: ...

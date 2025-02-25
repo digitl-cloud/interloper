@@ -44,6 +44,10 @@ SQL_TYPE_TO_DTYPE = {
         type="Float64",
         check_fn=types.is_float_dtype,
     ),
+    "NUMERIC": _SQLToDTypeMap(
+        type="Float64",
+        check_fn=types.is_float_dtype,
+    ),
     "DATE": _SQLToDTypeMap(
         type="datetime64[s]",
         check_fn=types.is_datetime64_any_dtype,
