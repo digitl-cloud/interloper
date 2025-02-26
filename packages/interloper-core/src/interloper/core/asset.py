@@ -10,6 +10,7 @@ from typing_extensions import Self
 
 from interloper.core.io import IO, IOContext
 from interloper.core.param import AssetParam, ContextualAssetParam, TimeAssetParam, UpstreamAsset
+from interloper.core.partitioning import PartitionStrategy
 from interloper.core.schema import TTableSchema
 from interloper.core.utils import safe_isinstance
 
@@ -29,7 +30,7 @@ class Asset(ABC):
     materializable: bool = True
     default_io_key: str | None = None
     schema: TTableSchema | None = None
-    partition_column: str | None = None
+    partition_strategy: PartitionStrategy | None = None
 
     def __call__(
         self,
@@ -75,16 +76,13 @@ class Asset(ABC):
         if not self.materializable:
             logger.warning(f"Asset {self.name} is not materializable. Skipping.")
             return
-
         if not self.has_io:
             raise RuntimeError(f"Asset {self.name} does not have any IO configured")
-
         if context:
-            if context.partition and not self.partition_column:
-                raise ValueError(f"Asset {self.name} does not support partitioning (missing partition_column config)")
+            if context.partition and not self.partition_strategy:
+                raise ValueError(f"Asset {self.name} does not support partitioning (missing partition_strategy config)")
 
         data = self.run(context)
-
         io_context = IOContext(
             asset=self,
             partition=context.partition if context else None,
@@ -115,6 +113,10 @@ class Asset(ABC):
     def upstream_assets(self) -> list[UpstreamAsset]:
         sig = signature(self.data)
         return [param.default for param in sig.parameters.values() if isinstance(param.default, UpstreamAsset)]
+
+    @property
+    def allows_partition_range(self) -> bool:
+        return self.partition_strategy is not None and self.partition_strategy.allow_range
 
     def _copy(self) -> "Asset":
         return self.__class__(
@@ -180,7 +182,7 @@ class AssetDecorator:
         *,
         name: str | None = None,
         schema: TTableSchema | None = None,
-        partition_column: str | None = None,
+        partition_strategy: PartitionStrategy | None = None,
     ) -> Self: ...
 
     def __new__(cls, func: Callable | None = None, *args: Any, **kwargs: Any):
@@ -201,11 +203,11 @@ class AssetDecorator:
         func: Callable | None = None,
         name: str | None = None,
         schema: TTableSchema | None = None,
-        partition_column: str | None = None,
+        partition_strategy: PartitionStrategy | None = None,
     ):
         self.name = name
         self.schema = schema
-        self.partition_column = partition_column
+        self.partition_strategy = partition_strategy
 
     def __call__(self, func: Callable) -> Asset:
         """
@@ -229,7 +231,7 @@ class AssetDecorator:
         return ConcreteAsset(
             name=self.name or func.__name__,
             schema=self.schema,
-            partition_column=self.partition_column,
+            partition_strategy=self.partition_strategy,
         )
 
 

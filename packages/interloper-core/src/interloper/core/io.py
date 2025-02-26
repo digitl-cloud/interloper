@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from interloper.core.partitioning import Partition
+from interloper.core.partitioning import Partition, PartitionRange
 from interloper.core.reconciler import Reconciler
 from interloper.core.sanitizer import Sanitizer
 from interloper.core.schema import TTableSchema
@@ -21,7 +21,7 @@ T = TypeVar("T")
 @dataclass(frozen=True)
 class IOContext:
     asset: "Asset"
-    partition: Partition | None = None
+    partition: Partition | PartitionRange | None = None
 
 
 @dataclass
@@ -76,8 +76,12 @@ class DatabaseIO(Generic[T], TypedIO[T]):
         self.create_table(context.asset.name, context.asset.schema)
 
         if context.partition:
-            assert context.asset.partition_column
-            self.delete_partition(context.asset.name, context.asset.partition_column, context.partition)
+            assert context.asset.partition_strategy
+
+            # TODO: review how to handle partition ranges (backfill). Should we delete partitions?
+            assert not isinstance(context.partition, PartitionRange)
+
+            self.delete_partition(context.asset.name, context.asset.partition_strategy.column, context.partition)
 
         data = self.handler.sanitizer.sanitize(data)
         data = self.handler.reconciler.reconcile(data, self.fetch_table_schema(context.asset.name))
@@ -108,7 +112,7 @@ class FileIO(IO):
 
     def write(self, context: IOContext, data: Any) -> None:
         with open(Path(self.folder) / context.asset.name, "wb") as f:
-            f.write(pickle.dumps(list(data)))
+            f.write(pickle.dumps(data))
         logger.info(f"Asset {context.asset.name} written to {self.folder}/{context.asset.name}")
 
     def read(self, context: IOContext) -> Any:

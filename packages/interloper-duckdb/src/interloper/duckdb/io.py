@@ -5,7 +5,7 @@ import pandas as pd
 
 import duckdb
 from interloper.core.io import DatabaseIO, IOContext, IOHandler
-from interloper.core.partitioning import Partition, TimePartition
+from interloper.core.partitioning import Partition
 from interloper.core.schema import TTableSchema
 from interloper.pandas.reconciler import DataFrameReconciler
 from interloper.pandas.sanitizer import DataFrameSanitizer
@@ -63,9 +63,6 @@ class DuckDBDataframeIO(DatabaseIO):
         logger.info(f"Table {table_name} created in DuckDB at {self.db_path}")
 
     def delete_partition(self, table_name: str, column: str, partition: Partition) -> None:
-        if not isinstance(partition, TimePartition):
-            raise ValueError(f"Unsupported partition type: {type(partition)}")
-
-        query = f"DELETE FROM {table_name} WHERE {column} = '{partition.date}';"
+        query = f"DELETE FROM {table_name} WHERE {column} = '{partition.value}';"
         self.client.execute(query)
         logger.info(f"Partition {partition} deleted from table {table_name} in DuckDB")

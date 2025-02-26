@@ -5,7 +5,7 @@ from typing import TypeVar
 import pandas as pd
 
 from interloper.core.io import DatabaseIO, IOContext, IOHandler
-from interloper.core.partitioning import TimePartition
+from interloper.core.partitioning import Partition
 from interloper.core.schema import TTableSchema
 from interloper.pandas.reconciler import DataFrameReconciler
 from interloper.pandas.sanitizer import DataFrameSanitizer
@@ -70,10 +70,7 @@ class SQLiteDataframeIO(DatabaseIO):
         self.connection.execute(query)
         logger.info(f"Table {table_name} created in SQLite at {self.db_path}")
 
-    def delete_partition(self, table_name: str, column: str, partition: str) -> None:
-        if not isinstance(partition, TimePartition):
-            raise ValueError(f"Unsupported partition type: {type(partition)}")
-
-        query = f"DELETE FROM {table_name} WHERE {column} = '{partition.date}';"
+    def delete_partition(self, table_name: str, column: str, partition: Partition) -> None:
+        query = f"DELETE FROM {table_name} WHERE {column} = '{partition.value}';"
         self.connection.execute(query)
         logger.info(f"Partition {partition} deleted from table {table_name} in SQLite")

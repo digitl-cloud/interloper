@@ -1,11 +1,11 @@
-# import datetime as dt
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
 import networkx as nx
 
 from interloper.core.asset import Asset
-from interloper.core.partitioning import Partition
+from interloper.core.partitioning import Partition, PartitionRange
 from interloper.core.source import Source
 
 
@@ -13,17 +13,7 @@ from interloper.core.source import Source
 class ExecutionContext:
     assets: dict[str, Asset]
     executed_asset: Asset
-    partition: Partition | None = None
-    # date_window: tuple[dt.date, dt.date] | None = None
-
-    # def __post_init__(self):
-    #     if self.partition and self.date_window:
-    #         raise ValueError("Invalid execution context: only one of 'date' or 'date_window' can be provided")
-
-    #     if self.date_window:
-    #         start_date, end_date = self.date_window
-    #         if start_date > end_date:
-    #             raise ValueError("Invalid execution context:  start date must be less than or equal to end date")
+    partition: Partition | PartitionRange | None = None
 
 
 class Pipeline:
@@ -47,18 +37,29 @@ class Pipeline:
             )
             asset.materialize(context)
 
-    # def backfill(
-    #     self,
-    #     start: dt.date,
-    #     end: dt.date,
-    # ) -> None:
-    #     for asset in self._get_execution_order():
-    #         context = ExecutionContext(
-    #             assets=self.assets,
-    #             executed_asset=asset,
-    #             date_window=(start, end),
-    #         )
-    #         asset.materialize(context)
+    def backfill(
+        self,
+        partitions: Iterator[Partition] | PartitionRange,
+    ) -> None:
+        for asset in self._get_execution_order():
+            # Single run per asset
+            if isinstance(partitions, PartitionRange) and asset.allows_partition_range:
+                context = ExecutionContext(
+                    assets=self.assets,
+                    executed_asset=asset,
+                    partition=partitions,
+                )
+                asset.materialize(context)
+
+            # Multi runs per asset
+            else:
+                for partition in partitions:
+                    context = ExecutionContext(
+                        assets=self.assets,
+                        executed_asset=asset,
+                        partition=partition,
+                    )
+                    asset.materialize(context)
 
     def _add_assets(self, sources_or_assets: Source | Asset | list[Source | Asset]) -> None:
         # Convert single source/asset to a list

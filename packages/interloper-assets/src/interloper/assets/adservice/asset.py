@@ -8,7 +8,8 @@ import pandas as pd
 
 from interloper.assets.adservice.schema import Campaign
 from interloper.core.asset import Asset, asset
-from interloper.core.param import Date, Env, UpstreamAsset
+from interloper.core.param import ActivePartition, Date, DateWindow, Env, UpstreamAsset
+from interloper.core.partitioning import TimePartitionStrategy
 from interloper.core.source import source
 
 logger = logging.getLogger(__name__)
@@ -45,13 +46,12 @@ def adservice(
 
     @asset(
         schema=Campaign,
-        partition_column="date",
+        partition_strategy=TimePartitionStrategy(column="date"),
     )
     def campaigns(
         date: dt.date = Date(),
+        # date: dt.date = ActivePartition(),
     ) -> pd.DataFrame:
-        logger.debug(date)
-
         response = get_report(
             start_date=date,
             end_date=date,
@@ -64,15 +64,16 @@ def adservice(
         return pd.DataFrame(data)
 
     @asset(
-        partition_column="date",
+        partition_strategy=TimePartitionStrategy("date", allow_range=True),
     )
     def conversions(
-        date: dt.date = Date(),
+        date: tuple[dt.date, dt.date] = DateWindow(),
         campaigns: pd.DataFrame = UpstreamAsset("campaigns", pd.DataFrame),
     ) -> pd.DataFrame:
+        start, end = date
         response = get_report(
-            start_date=date,
-            end_date=date,
+            start_date=start,
+            end_date=end,
             report_type="conversions",
         )
         data = response["data"]

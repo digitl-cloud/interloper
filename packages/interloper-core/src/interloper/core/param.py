@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from interloper.core.io import IOContext
-from interloper.core.partitioning import TimePartition
+from interloper.core.partitioning import PartitionRange, TimePartition
 
 if TYPE_CHECKING:
     from interloper.core.pipeline import ExecutionContext
@@ -14,17 +14,25 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class AssetParam(ABC):
+class AssetParam(ABC, Generic[T]):
+    # Forces an AssetParam's instance to be of type T
+    def __new__(cls) -> T:
+        return super().__new__(cls)  # type: ignore
+
     @abstractmethod
-    def resolve(self) -> Any: ...
+    def resolve(self) -> T: ...
 
 
-class ContextualAssetParam(AssetParam):
+class ContextualAssetParam(AssetParam[T], Generic[T]):
     @abstractmethod
-    def resolve(self, context: "ExecutionContext") -> Any: ...
+    def resolve(self, context: "ExecutionContext") -> T: ...
 
 
-class Env(AssetParam, str):
+class Env(AssetParam[str]):
+    # Forces an Env's instance to be of type str
+    def __new__(cls, value: str) -> str:
+        return super().__new__(cls)  # type: ignore
+
     def __init__(self, key: str, default: str | None = None) -> None:
         self.key = key
         self.default = default
@@ -33,8 +41,7 @@ class Env(AssetParam, str):
         return os.environ.get(self.key, self.default)
 
 
-class UpstreamAsset(ContextualAssetParam, Generic[T]):
-    # Forces an UpstreamAsset's instance to be of type T
+class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
     def __new__(
         cls,
         name: str,
@@ -70,7 +77,8 @@ class UpstreamAsset(ContextualAssetParam, Generic[T]):
         data = io.read(IOContext(upstream_asset))
         if self.asset_type is not None and not isinstance(data, self.asset_type):
             raise TypeError(
-                f"Expected data of type {self.asset_type} from upstream asset {upstream_name}, but got {type(data)}"
+                f"Expected data of type {self.asset_type.__name__} from upstream asset {upstream_name}, "
+                f"but got {type(data).__name__}"
             )
 
         logger.debug(f"Upstream asset {upstream_name} resolved (Type check passed ✔)")
@@ -78,29 +86,38 @@ class UpstreamAsset(ContextualAssetParam, Generic[T]):
         return data
 
 
-class TimeAssetParam(ContextualAssetParam): ...
+class TimeAssetParam(ContextualAssetParam[T], Generic[T]): ...
 
 
 # TODO: default yesterday?
-class Date(TimeAssetParam):
-    # Forces an Date's instance to be of type datetime.date
-    def __new__(cls) -> dt.date:
-        return super().__new__(cls)  # type: ignore
-
+class Date(TimeAssetParam[dt.date]):
     def resolve(self, context: "ExecutionContext") -> dt.date:
         if not context.partition or not isinstance(context.partition, TimePartition):
-            raise ValueError("Date AssetParam requires the context to have a TimePartition")
+            raise ValueError("Date asset parameter requires the context to have a TimePartition")
 
-        return context.partition.date
+        return context.partition.value
 
 
-# class DateWindow(TimeAssetParam):
-#     # Forces an Date's instance to be of type datetime.date
-#     def __new__(cls) -> tuple[dt.date, dt.date]:
-#         return super().__new__(cls)  # type: ignore
+class DateWindow(TimeAssetParam[tuple[dt.date, dt.date]]):
+    def resolve(self, context: "ExecutionContext") -> tuple[dt.date, dt.date]:
+        # if not context.executed_asset.allows_partition_range:
+        #     raise ValueError("DateWindow asset parameter requires the executed asset to allow partition ranges")
+        # if not context.partition or not isinstance(context.partition, TimePartitionRange):
+        #     raise ValueError("DateWindow asset parameter requires the context to have a TimePartitionRange")
 
-#     def resolve(self, context: "ExecutionContext") -> tuple[dt.date, dt.date]:
-#         if not context.date_window:
-#             raise ValueError("DateWindow asset_param requires a materialization date window")
+        if not context.partition or not isinstance(context.partition, TimePartition | PartitionRange):
+            raise ValueError("Date asset parameter requires the context to have a TimePartition or PartitionRange")
 
-#         return context.date_window
+        if isinstance(context.partition, PartitionRange):
+            return context.partition.start, context.partition.end
+        return context.partition.value, context.partition.value
+
+
+class ActivePartition(ContextualAssetParam[T], Generic[T]):
+    def resolve(self, context: "ExecutionContext") -> T:
+        if not context.partition:
+            raise ValueError("ActivePartition asset param requires the current execution context to have a Partition")
+        if isinstance(context.partition, PartitionRange):
+            raise ValueError("ActivePartition asset param does not support PartitionRange")
+
+        return context.partition.value

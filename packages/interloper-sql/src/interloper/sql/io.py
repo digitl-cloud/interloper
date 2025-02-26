@@ -4,7 +4,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData, create_engine, inspect, text
 
 from interloper.core.io import DatabaseIO, IOContext, IOHandler
-from interloper.core.partitioning import Partition, TimePartition
+from interloper.core.partitioning import Partition
 from interloper.core.schema import TTableSchema
 from interloper.pandas.reconciler import DataFrameReconciler
 from interloper.pandas.sanitizer import DataFrameSanitizer
@@ -63,12 +63,9 @@ class SQLAlchemyIO(DatabaseIO):
         self.metadata.reflect(self.engine)
 
     def delete_partition(self, table_name: str, column: str, partition: Partition) -> None:
-        if not isinstance(partition, TimePartition):
-            raise ValueError(f"Unsupported partition type: {type(partition)}")
-
         with self.engine.connect() as connection:
             # TODO: use parameterized queries
-            query = f"DELETE FROM {table_name} WHERE {column} = '{partition.date}';"
+            query = f"DELETE FROM {table_name} WHERE {column} = '{partition.value}';"
             connection.execute(text(query))
             connection.commit()
             logger.info(f"Partition {partition} deleted from table {table_name}")
