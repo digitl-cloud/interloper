@@ -16,16 +16,16 @@ basic_logging(logging.INFO)
 
 
 adservice.io = {
-    "file": FileIO("data"),
-    # "duckdb": DuckDBDataframeIO("data/duck.db"),
+    # "file": FileIO("data"),
+    "duckdb": DuckDBDataframeIO("data/duck.db"),
     # "sqlite": SQLiteDataframeIO("data/sqlite.db"),
     # "postgres": PostgresDataframeIO("interloper", "g", "", "localhost"),
 }
-adservice.default_io_key = "file"
+adservice.default_io_key = "duckdb"
 
 pipeline = Pipeline(adservice)
 
-pipeline.materialize(partition=TimePartition(dt.date(2024, 1, 1)))
+# pipeline.materialize(partition=TimePartition(dt.date(2024, 1, 3)))
 
 pipeline.backfill(
     partitions=TimePartitionRange(

@@ -8,7 +8,7 @@ description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
-dependencies = ["interloper", "pandas>=2.2.3"]
+dependencies = ["interloper-core", "pandas>=2.2.3"]
 
 [tool.uv.sources]
 interloper = { workspace = true }
@@ -18,10 +18,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
-dev = [
-    "pyright>=1.1.394",
-    "ruff>=0.9.6",
-]
+dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/interloper"]

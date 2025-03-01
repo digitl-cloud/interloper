@@ -8,7 +8,7 @@ description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
-dependencies = ["interloper", "duckdb>=1.2.0"]
+dependencies = ["interloper-core", "duckdb>=1.2.0"]
 
 [tool.uv.sources]
 interloper = { workspace = true }

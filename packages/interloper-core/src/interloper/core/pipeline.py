@@ -98,7 +98,7 @@ class Pipeline:
                 # Check if the dependency exists in the asset map
                 if upstream_asset_name not in self.assets:
                     raise ValueError(
-                        f"Upstream asset '{upstream_asset_name}' of asset '{{asset.name}}' not found in asset graph"
+                        f"Upstream asset '{upstream_asset_name}' of asset '{asset.name}' not found in asset graph"
                     )
 
                 # Get the corresponding asset and add to the graph

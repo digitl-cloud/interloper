@@ -68,31 +68,7 @@ class TypedIO(Generic[T], IO[T]):
             )
 
 
-class DatabaseIO(Generic[T], TypedIO[T]):
-    def write(self, context: IOContext, data: T) -> None:
-        self._check_asset_type(data)
-
-        assert context.asset.schema
-        self.create_table(context.asset.name, context.asset.schema)
-
-        if context.partition:
-            assert context.asset.partition_strategy
-
-            # TODO: review how to handle partition ranges (backfill). Should we delete partitions?
-            assert not isinstance(context.partition, PartitionRange)
-
-            self.delete_partition(context.asset.name, context.asset.partition_strategy.column, context.partition)
-
-        data = self.handler.sanitizer.sanitize(data)
-        data = self.handler.reconciler.reconcile(data, self.fetch_table_schema(context.asset.name))
-
-        self.handler.write(context, data)
-
-    def read(self, context: IOContext) -> T:
-        data = self.handler.read(context)
-        self._check_asset_type(data)
-        return data
-
+class DatabaseClient(ABC):
     @abstractmethod
     def table_exists(self, table_name: str) -> bool: ...
 
@@ -103,7 +79,39 @@ class DatabaseIO(Generic[T], TypedIO[T]):
     def create_table(self, table_name: str, schema: TTableSchema) -> None: ...
 
     @abstractmethod
-    def delete_partition(self, table_name: str, column: str, partition: Partition) -> None: ...
+    def get_select_partition_statement(
+        self, table_name: str, column: str, partition: Partition | PartitionRange
+    ) -> None: ...
+
+    @abstractmethod
+    def delete_partition(self, table_name: str, column: str, partition: Partition | PartitionRange) -> None: ...
+
+
+class DatabaseIO(Generic[T], TypedIO[T]):
+    def __init__(self, client: DatabaseClient, handler: IOHandler[T]):
+        self.client = client
+        self.handler = handler
+
+    def write(self, context: IOContext, data: T) -> None:
+        self._check_asset_type(data)
+
+        assert context.asset.schema
+        if not self.client.table_exists(context.asset.name):
+            self.client.create_table(context.asset.name, context.asset.schema)
+
+        if context.partition:
+            assert context.asset.partition_strategy
+            self.client.delete_partition(context.asset.name, context.asset.partition_strategy.column, context.partition)
+
+        data = self.handler.sanitizer.sanitize(data)
+        data = self.handler.reconciler.reconcile(data, self.client.fetch_table_schema(context.asset.name))
+
+        self.handler.write(context, data)
+
+    def read(self, context: IOContext) -> T:
+        data = self.handler.read(context)
+        self._check_asset_type(data)
+        return data
 
 
 class FileIO(IO):

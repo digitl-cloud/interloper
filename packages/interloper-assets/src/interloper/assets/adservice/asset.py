@@ -46,11 +46,10 @@ def adservice(
 
     @asset(
         schema=Campaign,
-        partition_strategy=TimePartitionStrategy(column="date"),
+        partition_strategy=TimePartitionStrategy("date"),
     )
     def campaigns(
         date: dt.date = Date(),
-        # date: dt.date = ActivePartition(),
     ) -> pd.DataFrame:
         response = get_report(
             start_date=date,
@@ -64,7 +63,7 @@ def adservice(
         return pd.DataFrame(data)
 
     @asset(
-        partition_strategy=TimePartitionStrategy("date", allow_range=True),
+        partition_strategy=TimePartitionStrategy("date", allow_window=True),
     )
     def conversions(
         date: tuple[dt.date, dt.date] = DateWindow(),

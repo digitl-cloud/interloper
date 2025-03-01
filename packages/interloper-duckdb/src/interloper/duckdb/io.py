@@ -4,8 +4,8 @@ from typing import TypeVar
 import pandas as pd
 
 import duckdb
-from interloper.core.io import DatabaseIO, IOContext, IOHandler
-from interloper.core.partitioning import Partition
+from interloper.core.io import DatabaseClient, DatabaseIO, IOContext, IOHandler
+from interloper.core.partitioning import Partition, PartitionRange, TimePartitionRange
 from interloper.core.schema import TTableSchema
 from interloper.pandas.reconciler import DataFrameReconciler
 from interloper.pandas.sanitizer import DataFrameSanitizer
@@ -14,26 +14,74 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class DuckDBDataframeHandler(IOHandler):
-    def __init__(self, client: duckdb.DuckDBPyConnection) -> None:
-        self.client = client
+class DuckDBClient(DatabaseClient):
+    def __init__(self, db_path: str) -> None:
+        self.db_path = db_path
+        self.connection = duckdb.connect(db_path)
+
+    def table_exists(self, table_name: str) -> bool:
+        query = f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{table_name}';"
+        result = self.connection.execute(query).fetchone()
+        return True if result and result[0] > 0 else False
+
+    def fetch_table_schema(self, table_name: str) -> dict[str, str]:
+        query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}';"
+        return dict(self.connection.execute(query).fetchall())
+
+    def create_table(self, table_name: str, schema: TTableSchema) -> None:
+        query = f"CREATE TABLE {table_name} ({schema.to_sql()});"
+        self.connection.execute(query)
+        logger.info(f"Table {table_name} created in DuckDB")
+
+    def get_select_partition_statement(
+        self, table_name: str, column: str, partition: Partition | PartitionRange
+    ) -> str:
+        if isinstance(partition, PartitionRange):
+            # TODO: to be removed: support any PartitionRange
+            assert isinstance(partition, TimePartitionRange)
+            return f"SELECT * FROM {table_name} WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}';"
+        else:
+            return f"SELECT * FROM {table_name} WHERE {column} = '{partition.value}';"
+
+    def delete_partition(self, table_name: str, column: str, partition: Partition | PartitionRange) -> None:
+        if isinstance(partition, PartitionRange):
+            # TODO: to be removed: support any PartitionRange
+            assert isinstance(partition, TimePartitionRange)
+            query = f"DELETE FROM {table_name} WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}';"
+        else:
+            query = f"DELETE FROM {table_name} WHERE {column} = '{partition.value}';"
+        self.connection.execute(query)
+        logger.info(f"Partition {partition} deleted from table {table_name} in DuckDB")
+
+
+class DuckDBDataframeHandler(IOHandler[pd.DataFrame]):
+    def __init__(self, client: DuckDBClient) -> None:
         super().__init__(
             type=pd.DataFrame,
             sanitizer=DataFrameSanitizer(),
             reconciler=DataFrameReconciler(),
         )
+        self.client = client
 
     def write(self, context: IOContext, data: pd.DataFrame) -> None:
         if data.empty:
             logger.warning(f"Dataframe from asset {context.asset.name} is empty, not writing to DuckDB")
             return
 
-        self.client.execute(f"INSERT INTO {context.asset.name} SELECT * FROM data")
+        self.client.connection.execute(f"INSERT INTO {context.asset.name} BY NAME SELECT * FROM data")
         size = data.memory_usage(index=False).sum()
         logger.info(f"Asset {context.asset.name} written to DuckDB at ({size} bytes)")
 
     def read(self, context: IOContext) -> pd.DataFrame:
-        data = self.client.execute(f"SELECT * FROM {context.asset.name}").fetchdf()
+        if context.partition:
+            assert context.asset.partition_strategy
+            query = self.client.get_select_partition_statement(
+                context.asset.name, context.asset.partition_strategy.column, context.partition
+            )
+        else:
+            query = f"SELECT * FROM {context.asset.name};"
+
+        data = self.client.connection.execute(query).fetchdf()
         size = data.memory_usage(index=False).sum()
         logger.info(f"Asset {context.asset.name} read from DuckDB ({size} bytes)")
         return data
@@ -41,28 +89,6 @@ class DuckDBDataframeHandler(IOHandler):
 
 class DuckDBDataframeIO(DatabaseIO):
     def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
-        self.client = duckdb.connect(db_path)
-        super().__init__(handler=DuckDBDataframeHandler(self.client))
-
-    def table_exists(self, table_name: str) -> bool:
-        query = f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{table_name}';"
-        result = self.client.execute(query).fetchone()
-        return True if result and result[0] > 0 else False
-
-    def fetch_table_schema(self, table_name: str) -> dict[str, str]:
-        # query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}';"
-        # return dict(self.client.execute(query).fetchall())
-        query = f"PRAGMA table_info({table_name});"
-        result = self.client.execute(query).fetchall()
-        return {row[1]: row[2] for row in result}
-
-    def create_table(self, table_name: str, schema: TTableSchema) -> None:
-        query = f"CREATE TABLE IF NOT EXISTS {table_name} ({schema.to_sql()});"
-        self.client.execute(query)
-        logger.info(f"Table {table_name} created in DuckDB at {self.db_path}")
-
-    def delete_partition(self, table_name: str, column: str, partition: Partition) -> None:
-        query = f"DELETE FROM {table_name} WHERE {column} = '{partition.value}';"
-        self.client.execute(query)
-        logger.info(f"Partition {partition} deleted from table {table_name} in DuckDB")
+        client = DuckDBClient(db_path)
+        handler = DuckDBDataframeHandler(client)
+        super().__init__(client, handler)

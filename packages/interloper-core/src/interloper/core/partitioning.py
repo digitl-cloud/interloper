@@ -19,6 +19,9 @@ class Partition:
 class TimePartition(Partition):
     value: dt.date
 
+    def __repr__(self):
+        return self.value.isoformat()
+
 
 #########################
 # PARTITION RANGES
@@ -42,6 +45,9 @@ class TimePartitionRange(PartitionRange):
         for date in date_range(self.start, self.end, reversed=True):
             yield TimePartition(date)
 
+    def __repr__(self):
+        return f"{self.start.isoformat()} to {self.end.isoformat()}"
+
 
 #########################
 # PARTITION STRATEGIES
@@ -49,7 +55,7 @@ class TimePartitionRange(PartitionRange):
 @dataclass(frozen=True)
 class PartitionStrategy:
     column: str
-    allow_range: bool = False
+    allow_window: bool = False
 
 
 @dataclass(frozen=True)

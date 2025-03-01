@@ -495,7 +495,8 @@ name = "interloper-assets"
 version = "0.1.0"
 source = { editable = "packages/interloper-assets" }
 dependencies = [
-    { name = "interloper" },
+    { name = "httpx" },
+    { name = "interloper-core" },
 ]
 
 [package.dev-dependencies]
@@ -505,7 +506,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "interloper", virtual = "." }]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "interloper-core", editable = "packages/interloper-core" },
+]
 
 [package.metadata.requires-dev]
 dev = [
@@ -520,7 +524,6 @@ source = { editable = "packages/interloper-core" }
 dependencies = [
     { name = "httpx" },
     { name = "networkx" },
-    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -533,7 +536,6 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.27.2" },
     { name = "networkx", specifier = ">=3.4.2" },
-    { name = "typing-extensions", specifier = ">=4.12.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -548,7 +550,7 @@ version = "0.1.0"
 source = { editable = "packages/interloper-duckdb" }
 dependencies = [
     { name = "duckdb" },
-    { name = "interloper" },
+    { name = "interloper-core" },
 ]
 
 [package.dev-dependencies]
@@ -560,7 +562,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.2.0" },
-    { name = "interloper", virtual = "." },
+    { name = "interloper-core", editable = "packages/interloper-core" },
 ]
 
 [package.metadata.requires-dev]
@@ -574,7 +576,7 @@ name = "interloper-pandas"
 version = "0.1.0"
 source = { editable = "packages/interloper-pandas" }
 dependencies = [
-    { name = "interloper" },
+    { name = "interloper-core" },
     { name = "pandas" },
 ]
 
@@ -586,7 +588,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper", virtual = "." },
+    { name = "interloper-core", editable = "packages/interloper-core" },
     { name = "pandas", specifier = ">=2.2.3" },
 ]
 
@@ -601,7 +603,8 @@ name = "interloper-sql"
 version = "0.1.0"
 source = { editable = "packages/interloper-sql" }
 dependencies = [
-    { name = "interloper" },
+    { name = "interloper-core" },
+    { name = "interloper-pandas" },
     { name = "psycopg2-binary" },
     { name = "sqlalchemy" },
 ]
@@ -614,7 +617,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper", virtual = "." },
+    { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "interloper-pandas", editable = "packages/interloper-pandas" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "sqlalchemy", specifier = ">=2.0.38" },
 ]

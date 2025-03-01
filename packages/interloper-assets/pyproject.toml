@@ -8,7 +8,10 @@ description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
-dependencies = ["interloper"]
+dependencies = [
+    "httpx>=0.28.1",
+    "interloper-core",
+]
 
 [tool.uv.sources]
 interloper = { workspace = true }

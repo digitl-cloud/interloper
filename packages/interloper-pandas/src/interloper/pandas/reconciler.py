@@ -33,19 +33,19 @@ SQL_TYPE_TO_DTYPE = {
         check_fn=types.is_bool_dtype,
     ),
     "INTEGER": _SQLToDTypeMap(
-        type="Int64",
+        type="int64",
         check_fn=types.is_integer_dtype,
     ),
     "FLOAT": _SQLToDTypeMap(
-        type="Float64",
+        type="float64",
         check_fn=types.is_float_dtype,
     ),
     "DOUBLE": _SQLToDTypeMap(
-        type="Float64",
+        type="float64",
         check_fn=types.is_float_dtype,
     ),
     "NUMERIC": _SQLToDTypeMap(
-        type="Float64",
+        type="float64",
         check_fn=types.is_float_dtype,
     ),
     "DATE": _SQLToDTypeMap(
@@ -94,7 +94,7 @@ class DataFrameReconciler(Reconciler[pd.DataFrame]):
 
                 if force or not check_fn(current_dtype):
                     logger.debug(
-                        f"Converting column '{column}' from {current_dtype} to {target_dtype} (Schema: {sql_type})"
+                        f"Converting column '{column}' from {current_dtype} to {target_dtype} (Schema {sql_type})"
                         + ("(Forced)" if force else "")
                     )
 

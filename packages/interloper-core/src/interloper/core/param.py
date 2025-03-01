@@ -30,7 +30,7 @@ class ContextualAssetParam(AssetParam[T], Generic[T]):
 
 class Env(AssetParam[str]):
     # Forces an Env's instance to be of type str
-    def __new__(cls, value: str) -> str:
+    def __new__(cls, value: str, default: str | None = None) -> str:
         return super().__new__(cls)  # type: ignore
 
     def __init__(self, key: str, default: str | None = None) -> None:
@@ -44,7 +44,7 @@ class Env(AssetParam[str]):
 class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
     def __new__(
         cls,
-        name: str,
+        ref: str,
         asset_type: type[T] | None = None,
     ) -> T:
         return super().__new__(cls)  # type: ignore
@@ -74,7 +74,9 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
                 )
             io = next(iter(upstream_asset.io.values()))
 
-        data = io.read(IOContext(upstream_asset))
+        io_context = IOContext(upstream_asset, context.partition)
+        data = io.read(io_context)
+
         if self.asset_type is not None and not isinstance(data, self.asset_type):
             raise TypeError(
                 f"Expected data of type {self.asset_type.__name__} from upstream asset {upstream_name}, "

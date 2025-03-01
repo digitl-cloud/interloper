@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, overload
 from typing_extensions import Self
 
 from interloper.core.io import IO, IOContext
-from interloper.core.param import AssetParam, ContextualAssetParam, TimeAssetParam, UpstreamAsset
+from interloper.core.param import AssetParam, ContextualAssetParam, UpstreamAsset
 from interloper.core.partitioning import PartitionStrategy
 from interloper.core.schema import TTableSchema
 from interloper.core.utils import safe_isinstance
@@ -116,7 +116,7 @@ class Asset(ABC):
 
     @property
     def allows_partition_range(self) -> bool:
-        return self.partition_strategy is not None and self.partition_strategy.allow_range
+        return self.partition_strategy is not None and self.partition_strategy.allow_window
 
     def _copy(self) -> "Asset":
         return self.__class__(
@@ -133,7 +133,6 @@ class Asset(ABC):
     ) -> tuple[dict[str, Any], Any]:
         sig = signature(self.data)
         final_params = {}
-        has_time_asset_param = False
 
         if sig.return_annotation is None:
             raise ValueError(f"None is not a valid return type for asset {self.name}")
@@ -147,11 +146,6 @@ class Asset(ABC):
             # No user defined paramters and no default value
             if param.default is param.empty:
                 raise ValueError(f"Cannot resolve parameter {param.name} for asset {self.name}")
-
-            if isinstance(param.default, TimeAssetParam):
-                if has_time_asset_param:
-                    raise ValueError("Asset can only have one TimeAssetParam")
-                has_time_asset_param = True
 
             if isinstance(param.default, ContextualAssetParam):
                 if context is None:

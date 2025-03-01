@@ -8,7 +8,7 @@ description = "Interloper Core"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["httpx>=0.27.2", "networkx>=3.4.2", "typing-extensions>=4.12.2"]
+dependencies = ["httpx>=0.27.2", "networkx>=3.4.2"]
 
 [dependency-groups]
 dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
