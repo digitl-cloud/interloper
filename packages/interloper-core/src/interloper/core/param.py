@@ -45,17 +45,17 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
     def __new__(
         cls,
         ref: str,
-        asset_type: type[T] | None = None,
+        type: type[T] | None = None,
     ) -> T:
         return super().__new__(cls)  # type: ignore
 
     def __init__(
         self,
         name: str,
-        asset_type: type[T] | None = None,
+        type: type[T] | None = None,
     ) -> None:
         self.name = name
-        self.asset_type = asset_type
+        self.type = type
 
     def resolve(self, context: "ExecutionContext") -> T:
         upstream_name = context.executed_asset.deps[self.name]
@@ -77,9 +77,9 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
         io_context = IOContext(upstream_asset, context.partition)
         data = io.read(io_context)
 
-        if self.asset_type is not None and not isinstance(data, self.asset_type):
+        if self.type is not None and not isinstance(data, self.type):
             raise TypeError(
-                f"Expected data of type {self.asset_type.__name__} from upstream asset {upstream_name}, "
+                f"Expected data of type {self.type.__name__} from upstream asset {upstream_name}, "
                 f"but got {type(data).__name__}"
             )
 
@@ -91,7 +91,6 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
 class TimeAssetParam(ContextualAssetParam[T], Generic[T]): ...
 
 
-# TODO: default yesterday?
 class Date(TimeAssetParam[dt.date]):
     def resolve(self, context: "ExecutionContext") -> dt.date:
         if not context.partition or not isinstance(context.partition, TimePartition):

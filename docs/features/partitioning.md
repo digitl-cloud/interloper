@@ -1,18 +1,6 @@
-import datetime as dt
-import logging
-from collections.abc import Sequence
+## Time partitioning
 
-from interloper.core.asset import Asset, asset
-from interloper.core.io import FileIO
-from interloper.core.param import Date, DateWindow
-from interloper.core.partitioning import TimePartition, TimePartitionStrategy
-from interloper.core.pipeline import Pipeline
-from interloper.core.source import source
-from interloper.core.utils import basic_logging
-
-basic_logging(logging.INFO)
-
-
+```py
 @source
 def my_source() -> Sequence[Asset]:
     @asset(
@@ -37,3 +25,5 @@ def my_source() -> Sequence[Asset]:
 my_source.io = {"file": FileIO("data")}
 
 Pipeline(my_source).materialize(partition=TimePartition(dt.date.today()))
+
+```

@@ -6,7 +6,6 @@ from interloper.core.io import FileIO
 from interloper.core.partitioning import TimePartition, TimePartitionRange
 from interloper.core.pipeline import Pipeline
 from interloper.core.utils import basic_logging
-
 from interloper.duckdb.io import DuckDBDataframeIO
 
 # from interloper.sqlite.io import SQLiteDataframeIO
@@ -23,7 +22,7 @@ adservice.io = {
 }
 adservice.default_io_key = "duckdb"
 
-pipeline = Pipeline(adservice)
+pipeline = Pipeline(adservice.campaigns)
 
 # pipeline.materialize(partition=TimePartition(dt.date(2024, 1, 3)))
 

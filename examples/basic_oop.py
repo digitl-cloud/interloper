@@ -22,13 +22,11 @@ class MyAssetB(Asset):
 class MySource(Source):
     def asset_definitions(self) -> Sequence[Asset]:
         return (
-            MyAssetA("A"),
-            MyAssetB("B"),
+            MyAssetA("my_asset_A"),
+            MyAssetB("my_asset_B"),
         )
 
 
-x = MySource(
-    name="my_source",
-    io={"file": FileIO("data")},
-)
-Pipeline(x).materialize()
+my_source = MySource("my_source")
+
+my_source.my_asset_A.run()

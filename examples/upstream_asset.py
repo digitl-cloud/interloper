@@ -12,34 +12,34 @@ basic_logging(logging.INFO)
 
 
 @source
-def MySource() -> Sequence[Asset]:
+def my_source() -> Sequence[Asset]:
     @asset(name="A")
-    def MyAssetA() -> str:
+    def my_asset_A() -> str:
         return "A"
 
     @asset(name="B")
-    def MyAssetB(
+    def my_asset_B(
         a: str = UpstreamAsset("A"),
     ) -> str:
         return "B"
 
     @asset(name="C")
-    def MyAssetC(
+    def my_assetC(
         a: str = UpstreamAsset("custom_ref_A"),
         b: str = UpstreamAsset("custom_ref_B"),
     ) -> str:
         return "C"
 
-    return (MyAssetA, MyAssetB, MyAssetC)
+    return (my_asset_A, my_asset_B, my_assetC)
 
 
-MySource.io = {"file": FileIO("data")}
+my_source.io = {"file": FileIO("data")}
 
 # Upstream assets's refs do not match the name of the corresponding assets
 # therefore, the source cannot build the deps config map automatically and it has to be defined manually
-MySource.C.deps = {
+my_source.C.deps = {
     "custom_ref_A": "A",
     "custom_ref_B": "B",
 }
 
-Pipeline(MySource).materialize()
+Pipeline(my_source).materialize()

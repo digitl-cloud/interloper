@@ -35,7 +35,7 @@ class Asset(ABC):
     def __call__(
         self,
         *,
-        io: dict[str, IO] | None = None,
+        io: dict[str, IO] | None = None,  # TODO: support single IO
         default_io_key: str | None = None,
         **kwargs: Any,
     ) -> "Asset":
@@ -61,7 +61,9 @@ class Asset(ABC):
 
         # TODO: review safe_isinstance
         if return_type != Parameter.empty and return_type is not Any and not safe_isinstance(data, return_type):
-            raise TypeError(f"Asset {self.name} returned data of type {type(data)}, expected {return_type}")
+            raise TypeError(
+                f"Asset {self.name} returned data of type {type(data).__name__}, expected {return_type.__name__}"
+            )
 
         logger.debug(f"Asset {self.name} executed (Type check passed ✔)")
 

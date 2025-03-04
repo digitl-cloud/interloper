@@ -110,7 +110,6 @@ class DataFrameReconciler(Reconciler[pd.DataFrame]):
                 logger.warning(f"Unsupported SQL type {sql_type} for column {column}. Unable to reconcile.")
 
         if reorder:
-            # TODO: check this is working
             logger.info("Reordering columns to match schema...")
             data = data[schema.keys()]
 

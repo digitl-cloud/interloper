@@ -11,18 +11,16 @@ basic_logging(logging.INFO)
 
 
 @source
-def MySource() -> Sequence[Asset]:
+def my_source() -> Sequence[Asset]:
     @asset
-    def MyAssetA() -> str:
+    def my_asset_A() -> str:
         return "A"
 
     @asset
-    def MyAssetB() -> str:
+    def my_asset_B() -> str:
         return "B"
 
-    return (MyAssetA, MyAssetB)
+    return (my_asset_A, my_asset_B)
 
 
-MySource.io = {"file": FileIO("data")}
-
-Pipeline(MySource).materialize()
+my_source.my_asset_A.run()

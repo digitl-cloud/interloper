@@ -14,21 +14,21 @@ basic_logging(logging.INFO)
 
 
 @source
-def MySource() -> Sequence[Asset]:
+def my_source() -> Sequence[Asset]:
     @asset(
         partition_strategy=TimePartitionStrategy(column="date"),
     )
-    def MyAsset(
+    def my_asset(
         date: dt.date = Date(),
     ) -> str:
         return "hello"
 
-    return (MyAsset,)
+    return (my_asset,)
 
 
-MySource.io = {"file": FileIO("data")}
+my_source.io = {"file": FileIO("data")}
 
-Pipeline(MySource).backfill(
+Pipeline(my_source).backfill(
     partitions=TimePartitionRange(
         start=dt.date.today() - dt.timedelta(days=3),
         end=dt.date.today() - dt.timedelta(days=1),

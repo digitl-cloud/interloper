@@ -12,24 +12,24 @@ basic_logging(logging.INFO)
 
 
 @source
-def MySource() -> Sequence[Asset]:
+def my_source() -> Sequence[Asset]:
     @asset
-    def MyAssetA() -> str:
+    def my_asset_A() -> str:
         return "A"
 
     @asset
-    def MyAssetB(
+    def my_asset_B(
         a: str = UpstreamAsset("A"),
     ) -> str:
         return "B"
 
-    return (MyAssetA, MyAssetB)
+    return (my_asset_A, my_asset_B)
 
 
-MySource.io = {
+my_source.io = {
     "file": FileIO("data"),
     "file2": FileIO("data2"),
 }
-MySource.default_io_key = "file"
+my_source.default_io_key = "file"
 
-Pipeline(MySource).materialize()
+Pipeline(my_source).materialize()
