@@ -1,10 +1,11 @@
 site_name: Interloper
-
+site_description: The ultra-portable data asset framework
 repo_name: digitl-cloud/interloper-core
 repo_url: https://github.com/digitl-cloud/interloper-core
 
 theme:
   name: material
+  custom_dir: docs/overrides
   features:
     - announce.dismiss
     - content.code.copy
@@ -30,6 +31,12 @@ theme:
   icon:
     logo: material/rocket
 
+extra:
+  generator: false
+
+extra_css:
+  - stylesheets/extra.css
+
 plugins:
   - blog
   - search
@@ -41,13 +48,13 @@ nav:
   - Getting started: getting-started.md
   - Tutorial: tutorial.md
   - Features:
-    - Basic: features/basic.md
-    - IO: features/io.md
-    - Schema: features/schema.md
-    - Upstream assets: features/upstream-assets.md
-    - Data Validation: features/data-validation.md
-    - Partitioning: features/partitioning.md
-    - Backfilling: features/backfilling.md
+      - Basic: features/basic.md
+      - IO: features/io.md
+      - Schema: features/schema.md
+      - Upstream assets: features/upstream-assets.md
+      - Data Validation: features/data-validation.md
+      - Partitioning: features/partitioning.md
+      - Backfilling: features/backfilling.md
   - FAQ: faq.md
 
 markdown_extensions:
@@ -57,3 +64,12 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+watch:
+  - mkdocs.yml
+  - docs
