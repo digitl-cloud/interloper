@@ -1,0 +1,34 @@
+import datetime as dt
+from abc import ABC, abstractmethod
+from collections.abc import Generator
+from dataclasses import dataclass
+from typing import Any
+
+from interloper.partitioning.partitions import Partition, TimePartition
+from interloper.utils.dates import date_range
+
+
+@dataclass(frozen=True)
+class PartitionRange(ABC):
+    start: Any
+    end: Any
+
+    @abstractmethod
+    def __iter__(self) -> Generator[Partition]:
+        pass
+
+
+@dataclass(frozen=True)
+class TimePartitionRange(PartitionRange):
+    start: dt.date
+    end: dt.date
+
+    def __iter__(self) -> Generator[TimePartition]:
+        yield from self.as_range()
+
+    def __repr__(self):
+        return f"{self.start.isoformat()} to {self.end.isoformat()}"
+
+    def as_range(self) -> Generator[TimePartition]:
+        for date in date_range(self.start, self.end, reversed=True):
+            yield TimePartition(date)

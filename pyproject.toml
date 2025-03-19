@@ -1,15 +1,15 @@
 # ###############
-# UV
+# PROJECT
 # ###############
 [project]
-name = "interloper"
+name = "interloper-workspace"
 version = "0.1.0"
-description = "Interloper"
+description = "The Interloper Project"
 readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "interloper-core",
+    "interloper",
     "interloper-assets",
     "interloper-duckdb",
     "interloper-pandas",
@@ -20,10 +20,19 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["mkdocs-material>=9.6.7", "pyright>=1.1.393", "ruff>=0.9.4"]
+dev = [
+    "mkdocs-material>=9.6.7",
+    "pyright>=1.1.393",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.9.4",
+]
 
+# ###############
+# UV
+# ###############
 [tool.uv.sources]
-interloper-core = { workspace = true }
+interloper = { workspace = true }
 interloper-assets = { workspace = true }
 interloper-duckdb = { workspace = true }
 interloper-pandas = { workspace = true }
@@ -33,14 +42,13 @@ interloper-sqlite = { workspace = true }
 [tool.uv.workspace]
 members = ["packages/*"]
 
-
 # ###############
 # PYRIGHT
 # ###############
 [tool.pyright]
 typeCheckingMode = "basic"
 reportMissingParameterType = true
-
+ignore = ["**/tests/**"]
 
 # ###############
 # RUFF
@@ -56,3 +64,31 @@ extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "tests/**" = ["ANN"]
+
+# ###############
+# PYTEST
+# ###############
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+
+# ###############
+# COVERAGE
+# ###############
+[tool.coverage.report]
+include = ["packages/**/src/**"]
+exclude_also = [
+    # Don't complain about missing debug-only code:
+    # "def __repr__",
+    "if self\\.debug",
+
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+
+    # Don't complain if non-runnable code isn't run:
+    "if 0:",
+    "if __name__ == .__main__.:",
+
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+]

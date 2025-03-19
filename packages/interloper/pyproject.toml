@@ -1,27 +1,21 @@
 # ###############
-# UV
+# PROJECT
 # ###############
 [project]
-name = "interloper-sqlite"
+name = "interloper"
 version = "0.1.0"
-description = "Interloper SQLite integration"
-readme = "README.md"
+description = "Interloper"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["interloper"]
+dependencies = ["httpx>=0.27.2", "networkx>=3.4.2"]
 
 [dependency-groups]
-dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
-
-[tool.uv.sources]
-interloper = { workspace = true }
+dev = ["pyright>=1.1.394", "pytest>=8.3.5", "ruff>=0.9.6"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-# [tool.hatch.build.targets.wheel]
-# packages = ["src/interloper"]
 
 # ###############
 # RUFF
@@ -44,3 +38,9 @@ include = ["src"]
 typeCheckingMode = "basic"
 reportMissingParameterType = true
 ignore = ["libs/**", "tests/**", "scripts/**"]
+
+# ###############
+# PYTEST
+# ###############
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::DeprecationWarning"]

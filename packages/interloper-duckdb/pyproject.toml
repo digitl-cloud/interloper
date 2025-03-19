@@ -1,30 +1,27 @@
 # ###############
-# UV
+# PROJECT
 # ###############
 [project]
 name = "interloper-duckdb"
 version = "0.1.0"
-description = "Add your description here"
+description = "Interloper DuckDB integration"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
-dependencies = ["interloper-core", "duckdb>=1.2.0"]
+dependencies = ["interloper", "duckdb>=1.2.0"]
 
-[tool.uv.sources]
-interloper = { workspace = true }
+[dependency-groups]
+dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[dependency-groups]
-dev = [
-    "pyright>=1.1.394",
-    "ruff>=0.9.6",
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/interloper"]
+# ###############
+# UV
+# ###############
+[tool.uv.sources]
+interloper = { workspace = true }
 
 # ###############
 # RUFF
@@ -37,6 +34,7 @@ extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN"]
 
 # ###############
 # PYRIGHT
