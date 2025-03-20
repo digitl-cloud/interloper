@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from interloper.io.base import IOContext, IOHandler, TypedIO
+from interloper.io.base import IOContext, TypedIO
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.ranges import PartitionRange
 from interloper.schema import TableSchema
@@ -28,10 +29,9 @@ class DatabaseClient(ABC):
     def delete_partition(self, table_name: str, column: str, partition: Partition | PartitionRange) -> None: ...
 
 
+@dataclass
 class DatabaseIO(Generic[T], TypedIO[T]):
-    def __init__(self, client: DatabaseClient, handler: IOHandler[T]):
-        self.client = client
-        self.handler = handler
+    client: DatabaseClient
 
     def write(self, context: IOContext, data: T) -> None:
         self._check_asset_type(data)

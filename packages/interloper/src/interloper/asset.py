@@ -18,6 +18,7 @@ from interloper.schema import TableSchema
 
 if TYPE_CHECKING:
     from interloper.pipeline import ExecutionContext
+    from interloper.source import Source
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ T = TypeVar("T")
 @dataclass
 class Asset(ABC):
     name: str
+    dataset: str | None = field(default=None, kw_only=True)
     deps: dict[str, str] = field(default_factory=dict, kw_only=True)
     io: dict[str, IO] = field(default_factory=dict, kw_only=True)
     materializable: bool = field(default=True, kw_only=True)
@@ -35,6 +37,9 @@ class Asset(ABC):
     normalizer: Normalizer | None = field(default=None, kw_only=True)
     partition_strategy: PartitionStrategy | None = field(default=None, kw_only=True)
 
+    ############
+    # Magic
+    ############
     def __call__(
         self,
         *,
@@ -51,6 +56,9 @@ class Asset(ABC):
     def __hash__(self):
         return hash(self.name)
 
+    ############
+    # Public
+    ############
     @abstractmethod
     def data(self) -> Any: ...
 
@@ -154,6 +162,9 @@ class Asset(ABC):
         # TODO: should check if the asset has a DateWindow asset param?
         return self.partition_strategy is not None and self.partition_strategy.allow_window
 
+    ############
+    # Private
+    ############
     def _resolve_parameters(
         self,
         context: "ExecutionContext | None" = None,
@@ -206,6 +217,7 @@ class AssetDecorator:
         cls,
         *,
         name: str | None = None,
+        dataset: str | None = None,
         schema: type[TableSchema] | None = None,
         normalizer: Normalizer | None = None,
         partition_strategy: PartitionStrategy | None = None,
@@ -228,11 +240,13 @@ class AssetDecorator:
         self,
         func: Callable | None = None,
         name: str | None = None,
+        dataset: str | None = None,
         schema: type[TableSchema] | None = None,
         normalizer: Normalizer | None = None,
         partition_strategy: PartitionStrategy | None = None,
     ):
         self.name = name
+        self.dataset = dataset
         self.schema = schema
         self.normalizer = normalizer
         self.partition_strategy = partition_strategy
@@ -258,6 +272,7 @@ class AssetDecorator:
 
         return ConcreteAsset(
             name=self.name or func.__name__,
+            dataset=self.dataset,
             schema=self.schema,
             normalizer=self.normalizer,
             partition_strategy=self.partition_strategy,

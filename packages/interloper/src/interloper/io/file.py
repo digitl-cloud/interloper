@@ -3,6 +3,7 @@ import pickle
 from pathlib import Path
 from typing import Any
 
+from interloper.asset import Asset
 from interloper.io.base import IO, IOContext
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.ranges import PartitionRange
@@ -15,45 +16,40 @@ class FileIO(IO):
         self.folder = base_dir
 
     def write(self, context: IOContext, data: Any) -> None:
-        if context.partition:
-            if isinstance(context.partition, PartitionRange):
-                raise RuntimeError("Partition ranges are not supported by FileIO")
-            else:
-                self._write_partition(context.asset.name, context.partition, data)
-                logger.info(
-                    f"Asset {context.asset.name} partition written to "
-                    f"{self.folder}/{context.asset.name}${context.partition.id}"
-                )
-        else:
-            self._write_data(self.folder, context.asset.name, data)
-            logger.info(f"Asset {context.asset.name} written to {self.folder}/{context.asset.name}")
+        if context.partition and isinstance(context.partition, PartitionRange):
+            raise RuntimeError("Partition ranges are not supported by FileIO")
+
+        self._write_asset(context.asset, data, context.partition)
 
     def read(self, context: IOContext) -> Any:
-        if context.partition:
-            if isinstance(context.partition, PartitionRange):
-                raise RuntimeError("Partition ranges are not supported by FileIO")
-            else:
-                data = self._read_partition(context.asset.name, context.partition)
-                logger.info(
-                    f"Asset {context.asset.name} partition read from "
-                    f"{self.folder}/{context.asset.name}${context.partition.id}"
-                )
-        else:
-            data = self._read_data(self.folder, context.asset.name)
-            logger.info(f"Asset {context.asset.name} read from {self.folder}/{context.asset.name}")
-        return data
+        if context.partition and isinstance(context.partition, PartitionRange):
+            raise RuntimeError("Partition ranges are not supported by FileIO")
 
-    def _write_data(self, folder: str, asset_name: str, data: Any) -> None:
-        with open(Path(folder) / asset_name, "wb") as f:
+        return self._read_asset(context.asset, context.partition)
+
+    def _write_asset(self, asset: Asset, data: Any, partition: Partition | None = None) -> None:
+        if not Path.exists(Path(self.folder)):
+            raise FileNotFoundError(f"Folder {self.folder} does not exist")
+
+        path = f"{asset.dataset}/{asset.name}" if asset.dataset else asset.name
+        path = f"{self.folder}/{path}"
+        path = f"{path}${partition.id}" if partition else path
+
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+        with open(Path(path), "wb") as f:
             f.write(pickle.dumps(data))
 
-    def _write_partition(self, asset_name: str, partition: Partition, data: Any) -> None:
-        self._write_data(self.folder, f"{asset_name}${partition.id}", data)
+        logger.info(f"Asset {asset.name} {'partition ' + str(partition) if partition else ''} written to {path}")
 
-    def _read_data(self, folder: str, asset_name: str) -> Any:
-        with open(Path(folder) / asset_name, "rb") as f:
+    def _read_asset(self, asset: Asset, partition: Partition | None = None) -> Any:
+        path = f"{asset.dataset}/{asset.name}" if asset.dataset else asset.name
+        path = f"{self.folder}/{path}"
+        path = f"{path}${partition.id}" if partition else path
+
+        with open(Path(path), "rb") as f:
             data = pickle.loads(f.read())
-        return data
 
-    def _read_partition(self, asset_name: str, partition: Partition) -> Any:
-        return self._read_data(self.folder, f"{asset_name}${partition.id}")
+        logger.info(f"Asset {asset.name} {'partition ' + str(partition) if partition else ''} read from {path}")
+
+        return data

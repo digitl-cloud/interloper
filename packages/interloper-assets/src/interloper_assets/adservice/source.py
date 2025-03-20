@@ -13,9 +13,7 @@ from interloper_assets.adservice.schemas.campaigns import Campaigns
 logger = logging.getLogger(__name__)
 
 
-@itlp.source(
-    normalizer=DataframeNormalizer(),
-)
+@itlp.source(normalizer=DataframeNormalizer())
 def adservice(
     api_key: str = itlp.Env("ADSERVICE_API_KEY"),
 ) -> Sequence[itlp.Asset]:

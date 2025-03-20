@@ -5,9 +5,10 @@ from typing import Any
 
 import httpx
 import interloper as itlp
-from interloper_assets.adup.schemas.ads import Ads
 import pandas as pd
 from interloper_pandas import DataframeNormalizer
+
+from interloper_assets.adup.schemas.ads import Ads
 
 from . import constants
 

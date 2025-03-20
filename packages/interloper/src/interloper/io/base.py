@@ -43,9 +43,9 @@ class IOHandler(ABC, Generic[T]):
     def read(self, context: IOContext) -> T: ...
 
 
+@dataclass
 class TypedIO(Generic[T], IO[T]):
-    def __init__(self, handler: IOHandler[T]):
-        self.handler = handler
+    handler: IOHandler[T]
 
     def write(self, context: IOContext, data: T) -> None:
         self._check_asset_type(data)

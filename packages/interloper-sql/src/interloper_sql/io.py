@@ -1,4 +1,5 @@
 import logging
+from typing import Generic, TypeVar
 
 import interloper as itlp
 import pandas as pd
@@ -6,6 +7,7 @@ from interloper_pandas import DataFrameReconciler
 from sqlalchemy import MetaData, create_engine, inspect, text
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 class SQLAlchemyClient(itlp.DatabaseClient):
@@ -87,15 +89,9 @@ class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
         return data
 
 
-class SQLAlchemyIO(itlp.DatabaseIO):
-    def __init__(self, client: SQLAlchemyClient, handler: itlp.IOHandler) -> None:
-        super().__init__(client, handler)
-
-    @classmethod
-    def from_url(cls, url: str) -> "SQLAlchemyIO":
-        client = SQLAlchemyClient(url)
-        handler = SQLAlchemyDataframeHandler(client)
-        return cls(client, handler)
+class SQLAlchemyIO(Generic[T], itlp.DatabaseIO[T]):
+    def __init__(self, client: SQLAlchemyClient, handler: itlp.IOHandler[T]) -> None:
+        super().__init__(handler, client)
 
 
 class PostgresDataframeIO(SQLAlchemyIO):

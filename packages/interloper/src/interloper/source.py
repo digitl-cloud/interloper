@@ -19,22 +19,29 @@ class Source(ABC):
     _assets: dict[str, Asset] = field(default_factory=dict, init=False)
 
     name: str
+    dataset: str | None = None
     io: dict[str, IO] = field(default_factory=dict)
     default_io_key: str | None = None
     auto_asset_deps: bool = True
     normalizer: Normalizer | None = None
 
+    ############
+    # Magic
+    ############
     def __post_init__(self) -> None:
+        self.dataset = self.dataset or self.name
         self._build_assets()
 
     def __call__(
         self,
         *,
+        dataset: str | None = None,
         io: dict[str, IO] | None = None,
         default_io_key: str | None = None,
         **kwargs: Any,
     ) -> "Source":
         copy = replace(self)
+        copy.dataset = dataset or self.dataset
         copy.io = io or self.io
         copy.default_io_key = default_io_key or self.default_io_key
         copy.bind(**kwargs)
@@ -72,7 +79,7 @@ class Source(ABC):
             raise AttributeError(f"Asset {name} is read-only")
 
         # Attributes that should be propagated to the assets
-        asset_attributes = ["io", "default_io_key", "normalizer"]
+        asset_attributes = ["dataset", "io", "default_io_key", "normalizer"]
         if name in asset_attributes:
             for asset in self._assets.values():
                 if not getattr(asset, name):
@@ -80,6 +87,9 @@ class Source(ABC):
 
         super().__setattr__(name, value)
 
+    ############
+    # Public
+    ############
     @abstractmethod
     def asset_definitions(self) -> Sequence[Asset]: ...
 
@@ -100,6 +110,9 @@ class Source(ABC):
 
         self.asset_definitions = partial(self.asset_definitions, **final_params)
 
+    ############
+    # Private
+    ############
     def _build_assets(self) -> None:
         self._assets: dict[str, Asset] = {}
 
@@ -111,10 +124,11 @@ class Source(ABC):
                 raise ValueError(f"Duplicate asset name '{asset.name}'")
 
             # Propagate some source attributes to the asset as defaults
-            if not asset.has_io:
-                asset.io = self.io
+            asset.dataset = asset.dataset or self.dataset
             asset.default_io_key = asset.default_io_key or self.default_io_key
             asset.normalizer = asset.normalizer or self.normalizer
+            if not asset.has_io:
+                asset.io = self.io
 
             setattr(self, asset.name, asset)
             self._assets[asset.name] = asset
@@ -162,6 +176,7 @@ class SourceDecorator:
         cls,
         *,
         name: str | None = None,
+        dataset: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
     ) -> Self: ...
@@ -183,10 +198,12 @@ class SourceDecorator:
         self,
         func: Callable | None = None,
         name: str | None = None,
+        dataset: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
     ):
         self.name = name
+        self.dataset = dataset
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
 
@@ -211,6 +228,7 @@ class SourceDecorator:
 
         return ConcreteSource(
             name=self.name or func.__name__,
+            dataset=self.dataset,
             auto_asset_deps=self.auto_asset_deps,
             normalizer=self.normalizer,
         )

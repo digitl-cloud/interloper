@@ -58,7 +58,7 @@ class TableSchema(ABC):
         if cls_fields == other_fields:
             return True, {}
 
-        differences = {
+        diff = {
             f"missing_in_{cls.__name__}": list(set(other_fields.keys()) - set(cls_fields.keys())),
             f"missing_in_{other.__name__}": list(set(cls_fields.keys()) - set(other_fields.keys())),
             "type_mismatches": {
@@ -67,7 +67,7 @@ class TableSchema(ABC):
                 if cls_fields[field] != other_fields[field]
             },
         }
-        return False, differences
+        return False, diff
 
     @classmethod
     def print_implementation(cls) -> None:

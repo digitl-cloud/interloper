@@ -82,8 +82,8 @@ class DuckDBDataframeHandler(itlp.IOHandler[pd.DataFrame]):
         return data
 
 
-class DuckDBDataframeIO(itlp.DatabaseIO):
+class DuckDBDataframeIO(itlp.DatabaseIO[pd.DataFrame]):
     def __init__(self, db_path: str) -> None:
         client = DuckDBClient(db_path)
         handler = DuckDBDataframeHandler(client)
-        super().__init__(client, handler)
+        super().__init__(handler, client)
