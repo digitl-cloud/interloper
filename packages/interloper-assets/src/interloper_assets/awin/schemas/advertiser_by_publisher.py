@@ -1,3 +1,4 @@
+import datetime as dt
 from dataclasses import dataclass, field
 
 import interloper as itlp
@@ -11,6 +12,7 @@ class AdvertiserByPublishers(itlp.TableSchema):
     and associated commission values.
     """  # noqa: E501
 
+    date: dt.date = field(metadata={"description": "The date of the report"})
     advertiser_id: int = field(metadata={"description": "The ID of the advertiser"})
     advertiser_name: str = field(metadata={"description": "The name of the advertiser"})
     bonus_comm: float = field(metadata={"description": "The commission of bonus items"})

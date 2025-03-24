@@ -24,6 +24,7 @@ class Source(ABC):
     default_io_key: str | None = None
     auto_asset_deps: bool = True
     normalizer: Normalizer | None = None
+    default_args: dict[str, Any] = field(default_factory=dict)
 
     ############
     # Magic
@@ -38,12 +39,14 @@ class Source(ABC):
         dataset: str | None = None,
         io: dict[str, IO] | None = None,
         default_io_key: str | None = None,
+        default_args: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> "Source":
         copy = replace(self)
         copy.dataset = dataset or self.dataset
         copy.io = io or self.io
         copy.default_io_key = default_io_key or self.default_io_key
+        copy.default_args = default_args or self.default_args
         copy.bind(**kwargs)
         copy._build_assets()
         return copy
@@ -64,8 +67,6 @@ class Source(ABC):
         This method ensures that certain attributes are handled in a specific way:
         - Prevents overwriting existing assets by raising an AttributeError if an attempt is made to set an attribute
           that already exists in `_assets`.
-        - Propagates specific attributes (defined in `asset_attributes`) to all assets in `_assets` if they are not
-          already set.
         """
 
         # Since _assets is accessed here in the __setattr__ method, we need to handle it separately
@@ -77,13 +78,6 @@ class Source(ABC):
         # Prevent overwriting the assets
         if name in self._assets:
             raise AttributeError(f"Asset {name} is read-only")
-
-        # Attributes that should be propagated to the assets
-        asset_attributes = ["dataset", "io", "default_io_key", "normalizer"]
-        if name in asset_attributes:
-            for asset in self._assets.values():
-                if not getattr(asset, name):
-                    setattr(asset, name, value)
 
         super().__setattr__(name, value)
 
@@ -123,17 +117,12 @@ class Source(ABC):
             if asset.name in self._assets:
                 raise ValueError(f"Duplicate asset name '{asset.name}'")
 
-            # Propagate some source attributes to the asset as defaults
-            asset.dataset = asset.dataset or self.dataset
-            asset.default_io_key = asset.default_io_key or self.default_io_key
-            asset.normalizer = asset.normalizer or self.normalizer
-            if not asset.has_io:
-                asset.io = self.io
+            asset._source = self  # Set the source
+            asset.bind(**self.default_args, ignore_unknown_params=True)  # Bind the default args to the asset
+            setattr(self, asset.name, asset)  # Set the asset as an attribute
+            self._assets[asset.name] = asset  # Add the asset to the assets dictionary
 
-            setattr(self, asset.name, asset)
-            self._assets[asset.name] = asset
-
-        # Automatically set the deps for the asset if the source has the correspondign asset with the same name
+        # Automatically set the deps for the asset if the source has the corresponding asset with the same name
         # Needs to be done after all assets are built
         for asset in self._assets.values():
             if self.auto_asset_deps:

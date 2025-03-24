@@ -79,6 +79,10 @@ class TestSourceDefinition:
         assert isinstance(simple_source, Source)
         assert simple_source.name == "new_name"
 
+    def test_definition_assets_are_readonly(self, simple_source):
+        with pytest.raises(AttributeError, match="Asset simple_asset is read-only"):
+            simple_source.simple_asset = None
+
     def test_definition_propagate_dataset(self, simple_source):
         simple_source.dataset = "new_dataset"
         assert simple_source.simple_asset.dataset == "new_dataset"

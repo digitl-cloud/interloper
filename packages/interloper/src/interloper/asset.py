@@ -2,7 +2,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from copy import copy
 from functools import partial
 from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Any, TypeVar, overload
@@ -25,21 +25,39 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-@dataclass
 class Asset(ABC):
-    name: str
-    dataset: str | None = field(default=None, kw_only=True)
-    deps: dict[str, str] = field(default_factory=dict, kw_only=True)
-    io: dict[str, IO] = field(default_factory=dict, kw_only=True)
-    materializable: bool = field(default=True, kw_only=True)
-    default_io_key: str | None = field(default=None, kw_only=True)
-    schema: type[TableSchema] | None = field(default=None, kw_only=True)
-    normalizer: Normalizer | None = field(default=None, kw_only=True)
-    partition_strategy: PartitionStrategy | None = field(default=None, kw_only=True)
+    def __init__(
+        self,
+        name: str,
+        *,
+        source: "Source | None" = None,
+        dataset: str | None = None,
+        deps: dict[str, str] | None = None,
+        io: dict[str, IO] | None = None,
+        materializable: bool = True,
+        default_io_key: str | None = None,
+        schema: type[TableSchema] | None = None,
+        normalizer: Normalizer | None = None,
+        partition_strategy: PartitionStrategy | None = None,
+    ):
+        self._source: Source | None = source
 
-    ############
+        self.name = name
+        self.deps = deps or {}
+        self.materializable = materializable
+        self.schema = schema
+        self.partition_strategy = partition_strategy
+
+        # Attributes shared with Source
+        # Those attributes need getters to fallback on the source's attributes if not defined
+        self._dataset = dataset
+        self._io = io or {}
+        self._default_io_key = default_io_key
+        self._normalizer = normalizer
+
+    #############
     # Magic
-    ############
+    #############
     def __call__(
         self,
         *,
@@ -47,18 +65,67 @@ class Asset(ABC):
         default_io_key: str | None = None,
         **kwargs: Any,
     ) -> "Asset":
-        copy = replace(self)
-        copy.io = io or self.io
-        copy.default_io_key = default_io_key or self.default_io_key
-        copy.bind(**kwargs)
-        return copy
+        c = copy(self)  # TODO: implement __copy__
+        c._io = io or self._io
+        c._default_io_key = default_io_key or self._default_io_key
+        c.bind(**kwargs)
+        return c
 
     def __hash__(self):
         return hash(self.name)
 
-    ############
+    #############
+    # Properties
+    #############
+    @property
+    def dataset(self) -> str | None:
+        return self._dataset or (self._source and self._source.dataset)
+
+    @dataset.setter
+    def dataset(self, value: str | None) -> None:
+        self._dataset = value
+
+    @property
+    def io(self) -> dict[str, IO]:
+        return self._io or (self._source and self._source.io) or {}
+
+    @io.setter
+    def io(self, value: dict[str, IO]) -> None:
+        self._io = value
+
+    @property
+    def default_io_key(self) -> str | None:
+        return self._default_io_key or (self._source and self._source.default_io_key)
+
+    @default_io_key.setter
+    def default_io_key(self, value: str | None) -> None:
+        self._default_io_key = value
+
+    @property
+    def normalizer(self) -> Normalizer | None:
+        return self._normalizer or (self._source and self._source.normalizer)
+
+    @normalizer.setter
+    def normalizer(self, value: Normalizer) -> None:
+        self._normalizer = value
+
+    @property
+    def has_io(self) -> bool:
+        return self.io is not None and len(self.io) > 0
+
+    @property
+    def upstream_assets(self) -> list[UpstreamAsset]:
+        sig = signature(self.data)
+        return [param.default for param in sig.parameters.values() if isinstance(param.default, UpstreamAsset)]
+
+    @property
+    def allows_partition_range(self) -> bool:
+        # TODO: should check if the asset has a DateWindow asset param?
+        return self.partition_strategy is not None and self.partition_strategy.allow_window
+
+    #############
     # Public
-    ############
+    #############
     @abstractmethod
     def data(self) -> Any: ...
 
@@ -135,36 +202,26 @@ class Asset(ABC):
 
         logger.info(f"Asset {self.name} materialization complete")
 
-    def bind(self, **params: Any) -> None:
+    def bind(self, ignore_unknown_params: bool = False, **params: Any) -> None:
         sig = signature(self.data)
         current_params = [p.name for p in sig.parameters.values()]
         final_params = {}
 
         for param_name, param_value in params.items():
             if param_name not in current_params:
-                raise errors.AssetValueError(f"Parameter {param_name} is not a valid parameter for asset {self.name}")
+                if not ignore_unknown_params:
+                    raise errors.AssetValueError(
+                        f"Parameter {param_name} is not a valid parameter for asset {self.name}"
+                    )
+                continue
 
             final_params[param_name] = param_value
 
         self.data = partial(self.data, **final_params)
 
-    @property
-    def has_io(self) -> bool:
-        return self.io is not None and len(self.io) > 0
-
-    @property
-    def upstream_assets(self) -> list[UpstreamAsset]:
-        sig = signature(self.data)
-        return [param.default for param in sig.parameters.values() if isinstance(param.default, UpstreamAsset)]
-
-    @property
-    def allows_partition_range(self) -> bool:
-        # TODO: should check if the asset has a DateWindow asset param?
-        return self.partition_strategy is not None and self.partition_strategy.allow_window
-
-    ############
+    #############
     # Private
-    ############
+    #############
     def _resolve_parameters(
         self,
         context: "ExecutionContext | None" = None,

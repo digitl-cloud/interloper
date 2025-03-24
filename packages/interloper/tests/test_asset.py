@@ -63,6 +63,8 @@ class TestAssetCall:
         simple_asset.io = {"what": "ever"}
         simple_asset.default_io_key = "whatever"
 
+        print(simple_asset.io)
+
         copy = simple_asset()
 
         assert id(copy) != id(simple_asset)

@@ -12,6 +12,7 @@ class AdvertiserTransactions(itlp.TableSchema):
     It includes key metrics such as sale amount, transaction date, and commission amount.
     """
 
+    date: dt.date = field(metadata={"description": "The date of the report"})
     advertiser_country: str = field(
         metadata={"description": "The country of the advertiser associated with the transaction"}
     )
