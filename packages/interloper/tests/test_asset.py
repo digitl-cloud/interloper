@@ -1,6 +1,6 @@
 from inspect import Parameter, signature
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -12,6 +12,7 @@ from interloper.param import AssetParam, ContextualAssetParam
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.strategies import PartitionStrategy, TimePartitionStrategy
 from interloper.pipeline import ExecutionContext
+from interloper.schema import TableSchema
 
 
 @pytest.fixture
@@ -26,10 +27,11 @@ def simple_asset() -> Asset:
 @pytest.fixture
 def simple_normalizer() -> Normalizer:
     class SimpleNormalizer(Normalizer):
-        def normalize(self, data: Any) -> Any:
+        def normalize(self, data: Any) -> str:
             return f"normalized {data}"
 
-        def infer_schema(self, data): ...
+        def infer_schema(self, data) -> type[TableSchema]:
+            return TableSchema.from_dict({"whatever": str})
 
     return SimpleNormalizer()
 
@@ -148,7 +150,7 @@ class TestAssetProperties:
 
 
 class TestAssetCall:
-    def test_copy(self, simple_asset: Asset):
+    def test_call(self, simple_asset: Asset):
         simple_asset.io = {"what": "ever"}
         simple_asset.default_io_key = "whatever"
 
@@ -158,7 +160,7 @@ class TestAssetCall:
         assert copy.io == {"what": "ever"}
         assert copy.default_io_key == "whatever"
 
-    def test_copy_with_param_override(self, simple_asset: Asset):
+    def test_call_with_options(self, simple_asset: Asset):
         simple_asset.io = {"what": "ever"}
         simple_asset.default_io_key = "whatever"
 
@@ -198,34 +200,55 @@ class TestAssetRun:
         with pytest.raises(errors.AssetValueError, match="Asset my_asset returned data of type int, expected str"):
             my_asset.run()
 
-    def test_run_with_normalizer(self):
-        class SimpleNormalizer(Normalizer):
-            def normalize(self, data: Any) -> Any:
-                return f"normalized {data}"
+    def test_run_with_normalizer(self, simple_asset: Asset, simple_normalizer: Normalizer):
+        simple_asset.normalizer = simple_normalizer
 
-            def infer_schema(self, data: Any) -> Any: ...
+        assert simple_asset.run(who="world") == "normalized hello world"
+        assert simple_asset.schema.equals(TableSchema.from_dict({"whatever": str}))
 
-        @asset(normalizer=SimpleNormalizer())
-        def my_asset():
-            return "data"
+    def test_run_with_normalizer_fails(self, simple_asset: Asset, simple_normalizer: Normalizer):
+        simple_normalizer.normalize = Mock(side_effect=Exception("error"))
+        simple_asset.normalizer = simple_normalizer
 
-        assert my_asset.run() == "normalized data"
-
-    def test_run_with_normalizer_fails(self):
-        class SimpleNormalizer(Normalizer):
-            def normalize(self, data: Any) -> Any:
-                raise Exception("error")
-
-            def infer_schema(self, data: Any) -> Any: ...
-
-        @asset(normalizer=SimpleNormalizer())
+        @asset(normalizer=simple_normalizer)
         def my_asset():
             return "data"
 
         with pytest.raises(
             errors.AssetMaterializationError, match="Failed to normalize data for asset my_asset: error"
         ):
+            my_asset.run(who="world")
+
+    def test_run_schema_inference_fails(self, simple_asset: Asset, simple_normalizer: Normalizer):
+        simple_normalizer.infer_schema = Mock(side_effect=Exception("error"))
+        simple_asset.normalizer = simple_normalizer
+
+        @asset(normalizer=simple_normalizer)
+        def my_asset():
+            return "data"
+
+        with pytest.raises(errors.AssetSchemaError, match="Failed to infer schema for asset my_asset: error"):
             my_asset.run()
+
+    def test_run_with_normalizer_inferred_schema_match(
+        self, simple_asset: Asset, simple_normalizer: Normalizer, caplog
+    ):
+        simple_asset.schema = TableSchema.from_dict({"whatever": str})
+        simple_asset.normalizer = simple_normalizer
+
+        with caplog.at_level("DEBUG"):
+            assert simple_asset.run(who="world") == "normalized hello world"
+        assert "Asset simple_asset schema inferred from data (Schema check passed ✔)" in caplog.text
+
+    def test_run_with_normalizer_inferred_schema_mismatch(
+        self, simple_asset: Asset, simple_normalizer: Normalizer, caplog
+    ):
+        simple_asset.schema = TableSchema.from_dict({"something_else": str})
+        simple_asset.normalizer = simple_normalizer
+
+        with caplog.at_level("DEBUG"):
+            assert simple_asset.run(who="world") == "normalized hello world"
+        assert "Schema mismatch for asset simple_asset between provided and inferred schemas" in caplog.text
 
 
 class TestAssetMaterialize:
@@ -295,10 +318,10 @@ class TestAssetMaterialize:
         ):
             simple_asset.materialize()
 
-    def test_materialize_multiple_iox(self, simple_asset: Asset):
+    def test_materialize_multiple_io(self, simple_asset: Asset):
         simple_asset.io = {
-            "simple": MagicMock(),
-            "other": MagicMock(),
+            "simple": Mock(),
+            "other": Mock(),
         }
         simple_asset.bind(who="world")
 

@@ -208,6 +208,7 @@ class Asset(ABC):
                 )
 
         data = self.run(context)
+
         io_context = IOContext(
             asset=self,
             partition=context.partition if context else None,

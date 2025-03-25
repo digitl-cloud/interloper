@@ -42,7 +42,7 @@ class TableSchema(ABC):
         return ",\n".join(columns)
 
     @classmethod
-    def is_equal(cls, other: type["TableSchema"]) -> bool:
+    def equals(cls, other: type["TableSchema"]) -> bool:
         if not issubclass(other, TableSchema):
             return False
 

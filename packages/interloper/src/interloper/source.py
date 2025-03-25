@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
+from copy import copy
 from functools import partial
 from inspect import signature
 from typing import Any, overload
@@ -19,7 +20,7 @@ class Source(ABC):
     default_io_key: str | None
     auto_asset_deps: bool
     normalizer: Normalizer | None
-    default_args: dict[str, Any]
+    default_assets_args: dict[str, Any]
 
     def __init__(
         self,
@@ -30,16 +31,16 @@ class Source(ABC):
         default_io_key: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
-        default_args: dict[str, Any] | None = None,
+        default_assets_args: dict[str, Any] | None = None,
     ):
         self._assets: dict[str, Asset] = {}
         self.name = name
         self.dataset = dataset or name
         self.io = dict(io) if io else {}
-        self.default_io_key = default_io_key
+        self.default_io_key = default_io_key 
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
-        self.default_args = default_args or {}
+        self.default_assets_args = default_assets_args or {}
         self._build_assets()
 
     ############
@@ -51,21 +52,17 @@ class Source(ABC):
         dataset: str | None = None,
         io: dict[str, IO] | None = None,
         default_io_key: str | None = None,
-        default_args: dict[str, Any] | None = None,
+        default_assets_args: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> "Source":
-        copy = self.__class__(
-            name=self.name,
-            dataset=dataset or self.dataset,
-            io=io or self.io,
-            default_io_key=default_io_key or self.default_io_key,
-            auto_asset_deps=self.auto_asset_deps,
-            normalizer=self.normalizer,
-            default_args=default_args or self.default_args,
-        )
-        copy.bind(**kwargs)
-        copy._build_assets()
-        return copy
+        c = copy(self)
+        c.dataset = dataset or self.dataset
+        c.io = io or self.io
+        c.default_io_key = default_io_key or self.default_io_key
+        c.default_assets_args = default_assets_args or self.default_assets_args
+        c.bind(**kwargs)
+        c._build_assets()
+        return c
 
     def __getattr__(self, name: str) -> Asset:
         """
@@ -97,15 +94,18 @@ class Source(ABC):
 
         super().__setattr__(name, value)
 
+    #############
+    # Properties
+    #############
+    @property
+    def assets(self) -> list[Asset]:
+        return list(self._assets.values())
+
     ############
     # Public
     ############
     @abstractmethod
     def asset_definitions(self) -> Sequence[Asset]: ...
-
-    @property
-    def assets(self) -> list[Asset]:
-        return list(self._assets.values())
 
     def bind(self, **params: Any) -> None:
         sig = signature(self.asset_definitions)
@@ -134,7 +134,7 @@ class Source(ABC):
                 raise ValueError(f"Duplicate asset name '{asset.name}'")
 
             asset._source = self  # Set the source
-            asset.bind(**self.default_args, ignore_unknown_params=True)  # Bind the default args to the asset
+            asset.bind(**self.default_assets_args, ignore_unknown_params=True)  # Bind the default args to the asset
             setattr(self, asset.name, asset)  # Set the asset as an attribute
             self._assets[asset.name] = asset  # Add the asset to the assets dictionary
 
