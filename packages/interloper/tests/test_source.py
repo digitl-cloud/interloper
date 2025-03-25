@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from interloper import errors
 from interloper.asset import Asset, asset
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam, UpstreamAsset
@@ -100,13 +101,13 @@ class TestSourceDefinition:
         assert simple_source.name == "new_name"
 
     def test_definition_param_default_value_required(self):
-        with pytest.raises(ValueError, match="Source simple_source requires a default value for parameter key"):
+        with pytest.raises(errors.SourceParamError, match="Source simple_source requires a default value for parameter key"):
 
             @source
             def simple_source(key: str): ...
 
     def test_definition_assets_are_readonly(self, simple_source):
-        with pytest.raises(AttributeError, match="Asset simple_asset is read-only"):
+        with pytest.raises(errors.SourceDefinitionError, match="Asset simple_asset is read-only"):
             simple_source.simple_asset = None
 
     def test_definition_propagate_dataset(self, simple_source):
@@ -168,7 +169,7 @@ class TestSourceBind:
 
     def test_bind_invalid_param(self, simple_source: Source):
         with pytest.raises(
-            ValueError, match="Parameter invalid_param is not a valid parameter for source simple_source"
+            errors.SourceValueError, match="Parameter invalid_param is not a valid parameter for source simple_source"
         ):
             simple_source.bind(invalid_param="new_key")
 
@@ -194,12 +195,12 @@ class TestSourceBuildAssets:
 
     def test_build_assets_with_invalid_asset_definition(self, simple_source: Source):
         simple_source.asset_definitions = lambda: (1, 2, 3)
-        with pytest.raises(ValueError, match="Expected an instance of Asset, but got <class 'int'>"):
+        with pytest.raises(errors.SourceValueError, match="Expected an instance of Asset, but got <class 'int'>"):
             simple_source._build_assets()
 
     def test_build_assets_with_duplicate_asset_name(self, simple_source: Source):
         simple_source.asset_definitions = lambda: (simple_source.simple_asset, simple_source.simple_asset)
-        with pytest.raises(ValueError, match="Duplicate asset name 'simple_asset'"):
+        with pytest.raises(errors.SourceValueError, match="Duplicate asset name 'simple_asset'"):
             simple_source._build_assets()
 
     def test_build_asset_with_auto_asset_deps(self, simple_source: Source):
@@ -249,7 +250,7 @@ class TestSourceResolveParameters:
     def test_resolve_parameters_with_contextual_asset_param_fails(
         self, simple_source: Source, simple_contextual_asset_param: ContextualAssetParam
     ):
-        with pytest.raises(ValueError, match="ContextualAssetParam x not supported in source parameters"):
+        with pytest.raises(errors.SourceParamError, match="ContextualAssetParam x not supported in source parameters"):
 
             @source
             def simple_source(x=simple_contextual_asset_param):

@@ -7,6 +7,7 @@ from typing import Any, overload
 
 from typing_extensions import Self
 
+from interloper import errors
 from interloper.asset import Asset
 from interloper.io.base import IO
 from interloper.normalizer import Normalizer
@@ -37,7 +38,7 @@ class Source(ABC):
         self.name = name
         self.dataset = dataset or name
         self.io = dict(io) if io else {}
-        self.default_io_key = default_io_key 
+        self.default_io_key = default_io_key
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
         self.default_assets_args = default_assets_args or {}
@@ -90,7 +91,7 @@ class Source(ABC):
 
         # Prevent overwriting the assets
         if name in self._assets:
-            raise AttributeError(f"Asset {name} is read-only")
+            raise errors.SourceDefinitionError(f"Asset {name} is read-only")
 
         super().__setattr__(name, value)
 
@@ -114,7 +115,7 @@ class Source(ABC):
 
         for param_name, param_value in params.items():
             if param_name not in current_params:
-                raise ValueError(f"Parameter {param_name} is not a valid parameter for source {self.name}")
+                raise errors.SourceValueError(f"Parameter {param_name} is not a valid parameter for source {self.name}")
 
             final_params[param_name] = param_value
 
@@ -129,9 +130,9 @@ class Source(ABC):
         params = self._resolve_parameters()
         for asset in self.asset_definitions(**params):
             if not isinstance(asset, Asset):
-                raise ValueError(f"Expected an instance of Asset, but got {type(asset)}")
+                raise errors.SourceValueError(f"Expected an instance of Asset, but got {type(asset)}")
             if asset.name in self._assets:
-                raise ValueError(f"Duplicate asset name '{asset.name}'")
+                raise errors.SourceValueError(f"Duplicate asset name '{asset.name}'")
 
             asset._source = self  # Set the source
             asset.bind(**self.default_assets_args, ignore_unknown_params=True)  # Bind the default args to the asset
@@ -153,11 +154,11 @@ class Source(ABC):
         for param in sig.parameters.values():
             # No user defined paramters and no default value
             if param.default is param.empty:
-                raise ValueError(f"Source {self.name} requires a default value for parameter {param.name}")
+                raise errors.SourceParamError(f"Source {self.name} requires a default value for parameter {param.name}")
 
             # ContextualAssetParam not supported for sources (requires an execution context)
             if isinstance(param.default, ContextualAssetParam):
-                raise ValueError(f"ContextualAssetParam {param.name} not supported in source parameters")
+                raise errors.SourceParamError(f"ContextualAssetParam {param.name} not supported in source parameters")
 
             # Default value is a asset_param -> resolve it
             if isinstance(param.default, AssetParam):

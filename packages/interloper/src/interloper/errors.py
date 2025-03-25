@@ -3,6 +3,23 @@ class InterloperError(Exception):
 
 
 #######################
+# Source Errors
+#######################
+
+
+class SourceError(InterloperError): ...
+
+
+class SourceDefinitionError(SourceError): ...
+
+
+class SourceValueError(SourceError): ...
+
+
+class SourceParamError(SourceError): ...
+
+
+#######################
 # Asset Errors
 #######################
 
