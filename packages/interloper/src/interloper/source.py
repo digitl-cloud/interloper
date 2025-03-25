@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field, replace
 from functools import partial
 from inspect import signature
 from typing import Any, overload
@@ -13,26 +12,39 @@ from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam
 
 
-@dataclass
 class Source(ABC):
-    # Should be kept at the top to avoid race conditions in __setattr__
-    _assets: dict[str, Asset] = field(default_factory=dict, init=False)
-
     name: str
-    dataset: str | None = None
-    io: dict[str, IO] = field(default_factory=dict)
-    default_io_key: str | None = None
-    auto_asset_deps: bool = True
-    normalizer: Normalizer | None = None
-    default_args: dict[str, Any] = field(default_factory=dict)
+    dataset: str | None
+    io: dict[str, IO] | None
+    default_io_key: str | None
+    auto_asset_deps: bool
+    normalizer: Normalizer | None
+    default_args: dict[str, Any]
+
+    def __init__(
+        self,
+        name: str,
+        *,
+        dataset: str | None = None,
+        io: dict[str, IO] | None = None,
+        default_io_key: str | None = None,
+        auto_asset_deps: bool = True,
+        normalizer: Normalizer | None = None,
+        default_args: dict[str, Any] | None = None,
+    ):
+        self._assets: dict[str, Asset] = {}
+        self.name = name
+        self.dataset = dataset or name
+        self.io = dict(io) if io else {}
+        self.default_io_key = default_io_key
+        self.auto_asset_deps = auto_asset_deps
+        self.normalizer = normalizer
+        self.default_args = default_args or {}
+        self._build_assets()
 
     ############
     # Magic
     ############
-    def __post_init__(self) -> None:
-        self.dataset = self.dataset or self.name
-        self._build_assets()
-
     def __call__(
         self,
         *,
@@ -42,11 +54,15 @@ class Source(ABC):
         default_args: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> "Source":
-        copy = replace(self)
-        copy.dataset = dataset or self.dataset
-        copy.io = io or self.io
-        copy.default_io_key = default_io_key or self.default_io_key
-        copy.default_args = default_args or self.default_args
+        copy = self.__class__(
+            name=self.name,
+            dataset=dataset or self.dataset,
+            io=io or self.io,
+            default_io_key=default_io_key or self.default_io_key,
+            auto_asset_deps=self.auto_asset_deps,
+            normalizer=self.normalizer,
+            default_args=default_args or self.default_args,
+        )
         copy.bind(**kwargs)
         copy._build_assets()
         return copy

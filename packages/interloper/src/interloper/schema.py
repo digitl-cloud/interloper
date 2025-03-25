@@ -82,4 +82,3 @@ class TableSchema(ABC):
         for f in fields(cls):
             type_name = f.type.__name__  # type: ignore
             lines.append(f"    {f.name}: {type_name}")
-        print("\n".join(lines))

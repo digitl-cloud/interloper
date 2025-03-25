@@ -12,21 +12,23 @@ T = TypeVar("T")
 
 class DatabaseClient(ABC):
     @abstractmethod
-    def table_exists(self, table_name: str) -> bool: ...
+    def table_exists(self, table_name: str, dataset: str | None = None) -> bool: ...
 
     @abstractmethod
-    def fetch_table_schema(self, table_name: str) -> dict[str, str]: ...
+    def fetch_table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]: ...
 
     @abstractmethod
-    def create_table(self, table_name: str, schema: type[TableSchema]) -> None: ...
+    def create_table(self, table_name: str, schema: type[TableSchema], dataset: str | None = None) -> None: ...
 
     @abstractmethod
     def get_select_partition_statement(
-        self, table_name: str, column: str, partition: Partition | PartitionRange
-    ) -> None: ...
+        self, table_name: str, column: str, partition: Partition | PartitionRange, dataset: str | None = None
+    ) -> str: ...
 
     @abstractmethod
-    def delete_partition(self, table_name: str, column: str, partition: Partition | PartitionRange) -> None: ...
+    def delete_partition(
+        self, table_name: str, column: str, partition: Partition | PartitionRange, dataset: str | None = None
+    ) -> None: ...
 
 
 @dataclass
@@ -42,15 +44,16 @@ class DatabaseIO(Generic[T], TypedIO[T]):
                 "Either provide schema with the asset definition and/or use a normalizer to infer it from the data."
             )
 
-        if not self.client.table_exists(context.asset.name):
-            self.client.create_table(context.asset.name, context.asset.schema)
+        if not self.client.table_exists(context.asset.name, context.asset.dataset):
+            self.client.create_table(context.asset.name, context.asset.schema, context.asset.dataset)
 
         if context.partition:
             assert context.asset.partition_strategy
-            self.client.delete_partition(context.asset.name, context.asset.partition_strategy.column, context.partition)
+            self.client.delete_partition(
+                context.asset.name, context.asset.partition_strategy.column, context.partition, context.asset.dataset
+            )
 
-        table_schema = self.client.fetch_table_schema(context.asset.name)
-        print(table_schema)
+        table_schema = self.client.fetch_table_schema(context.asset.name, context.asset.dataset)
         data = self.handler.reconciler.reconcile(data, table_schema)
 
         self.handler.write(context, data)

@@ -44,7 +44,7 @@ class Pipeline:
     ) -> None:
         for asset in self._get_execution_order():
             # Single run per asset
-            if isinstance(partitions, PartitionRange) and asset.allows_partition_range:
+            if isinstance(partitions, PartitionRange) and asset.allows_partition_window:
                 context = ExecutionContext(
                     assets=self.assets,
                     executed_asset=asset,

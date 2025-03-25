@@ -66,9 +66,7 @@ def adup(
         schema=Ads,
         partition_strategy=itlp.TimePartitionStrategy(column="Date", allow_window=True),
     )
-    def ads(
-        date_window: tuple[dt.date, dt.date] = itlp.DateWindow(),
-    ) -> Any:
+    def ads(date_window: tuple[dt.date, dt.date] = itlp.DateWindow()) -> Any:
         response = _get_report("AD_PERFORMANCE_REPORT", date_window[0], date_window[1])
         data = response["rows"]
         return pd.DataFrame(data)

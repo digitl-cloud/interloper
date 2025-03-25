@@ -15,22 +15,26 @@ class DuckDBClient(itlp.DatabaseClient):
         self.db_path = db_path
         self.connection = duckdb.connect(db_path)
 
-    def table_exists(self, table_name: str) -> bool:
+    def table_exists(self, table_name: str, dataset: str | None = None) -> bool:
         query = f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{table_name}';"
         result = self.connection.execute(query).fetchone()
         return True if result and result[0] > 0 else False
 
-    def fetch_table_schema(self, table_name: str) -> dict[str, str]:
+    def fetch_table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]:
         query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}';"
         return dict(self.connection.execute(query).fetchall())
 
-    def create_table(self, table_name: str, schema: type[itlp.TableSchema]) -> None:
+    def create_table(self, table_name: str, schema: type[itlp.TableSchema], dataset: str | None = None) -> None:
         query = f"CREATE TABLE {table_name} ({schema.to_sql()});"
         self.connection.execute(query)
         logger.info(f"Table {table_name} created in DuckDB")
 
     def get_select_partition_statement(
-        self, table_name: str, column: str, partition: itlp.Partition | itlp.PartitionRange
+        self,
+        table_name: str,
+        column: str,
+        partition: itlp.Partition | itlp.PartitionRange,
+        dataset: str | None = None,
     ) -> str:
         if isinstance(partition, itlp.PartitionRange):
             # TODO: to be removed: support any PartitionRange
@@ -39,7 +43,13 @@ class DuckDBClient(itlp.DatabaseClient):
         else:
             return f"SELECT * FROM {table_name} WHERE {column} = '{partition.value}';"
 
-    def delete_partition(self, table_name: str, column: str, partition: itlp.Partition | itlp.PartitionRange) -> None:
+    def delete_partition(
+        self,
+        table_name: str,
+        column: str,
+        partition: itlp.Partition | itlp.PartitionRange,
+        dataset: str | None = None,
+    ) -> None:
         if isinstance(partition, itlp.PartitionRange):
             # TODO: to be removed: support any PartitionRange
             assert isinstance(partition, itlp.TimePartitionRange)

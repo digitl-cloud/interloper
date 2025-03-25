@@ -8,8 +8,10 @@ from interloper_duckdb import DuckDBDataframeIO
 itlp.basic_logging(logging.DEBUG)
 
 
-adservice.io = {"duckdb": DuckDBDataframeIO("data/duck.db")}
-adservice.default_io_key = "duckdb"
+adservice = adservice(
+    io={"duckdb": DuckDBDataframeIO("data/duck.db")},
+    default_io_key="duckdb",
+)
 
 data = adservice.campaigns.run(date=dt.date(2024, 1, 1))
 

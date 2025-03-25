@@ -111,7 +111,7 @@ class Date(TimeAssetParam[dt.date]):
 
 class DateWindow(TimeAssetParam[tuple[dt.date, dt.date]]):
     def resolve(self, context: "ExecutionContext") -> tuple[dt.date, dt.date]:
-        # if not context.executed_asset.allows_partition_range:
+        # if not context.executed_asset.allows_partition_window:
         #     raise ValueError("DateWindow asset parameter requires the executed asset to allow partition ranges")
         # if not context.partition or not isinstance(context.partition, TimePartitionRange):
         #     raise ValueError("DateWindow asset parameter requires the context to have a TimePartitionRange")

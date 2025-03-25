@@ -26,6 +26,17 @@ T = TypeVar("T")
 
 
 class Asset(ABC):
+    name: str
+    deps: dict[str, str]
+    materializable: bool
+    schema: type[TableSchema] | None
+    partition_strategy: PartitionStrategy | None
+    _source: "Source | None"
+    _dataset: str | None
+    _io: dict[str, IO[Any]]
+    _default_io_key: str | None
+    _normalizer: Normalizer | None
+
     def __init__(
         self,
         name: str,
@@ -33,7 +44,7 @@ class Asset(ABC):
         source: "Source | None" = None,
         dataset: str | None = None,
         deps: dict[str, str] | None = None,
-        io: dict[str, IO] | None = None,
+        io: dict[str, IO[Any]] | None = None,
         materializable: bool = True,
         default_io_key: str | None = None,
         schema: type[TableSchema] | None = None,
@@ -107,6 +118,8 @@ class Asset(ABC):
 
     @normalizer.setter
     def normalizer(self, value: Normalizer) -> None:
+        if not isinstance(value, Normalizer):
+            raise errors.AssetValueError(f"Normalizer must be an instance of Normalizer, got {type(value).__name__}")
         self._normalizer = value
 
     @property
@@ -119,7 +132,7 @@ class Asset(ABC):
         return [param.default for param in sig.parameters.values() if isinstance(param.default, UpstreamAsset)]
 
     @property
-    def allows_partition_range(self) -> bool:
+    def allows_partition_window(self) -> bool:
         # TODO: should check if the asset has a DateWindow asset param?
         return self.partition_strategy is not None and self.partition_strategy.allow_window
 
@@ -184,8 +197,10 @@ class Asset(ABC):
         if not self.materializable:
             logger.warning(f"Asset {self.name} is not materializable. Skipping.")
             return
+
         if not self.has_io:
             raise errors.AssetMaterializationError(f"Asset {self.name} does not have any IO configured")
+
         if context:
             if context.partition and not self.partition_strategy:
                 raise errors.AssetMaterializationError(
