@@ -36,13 +36,27 @@ class BigQueryClient(itlp.DatabaseClient):
         table = self.client.get_table(f"{dataset or self.default_dataset}.{table_name}")
         return {str(field.name): str(field.field_type) for field in table.schema}
 
-    def create_table(self, table_name: str, schema: type[itlp.TableSchema], dataset: str | None = None) -> None:
+    def create_table(
+        self,
+        table_name: str,
+        schema: type[itlp.TableSchema],
+        dataset: str | None = None,
+        partition_strategy: itlp.PartitionStrategy | None = None,
+    ) -> None:
         self.client.create_dataset(dataset or self.default_dataset, exists_ok=True)
+
         table = bigquery.Table(f"{self.client.project}.{dataset or self.default_dataset}.{table_name}")
         table.schema = [
             bigquery.SchemaField(name=name, field_type=type)
             for name, type in schema.to_tuple(format="sql", types=PYTHON_TO_SQL_TYPE)
         ]
+        if partition_strategy:
+            assert isinstance(partition_strategy, itlp.TimePartitionStrategy)
+            table.time_partitioning = bigquery.TimePartitioning(
+                type_=bigquery.TimePartitioningType.DAY,
+                field=partition_strategy.column,
+            )
+
         self.client.create_table(table)
 
     def get_select_partition_statement(

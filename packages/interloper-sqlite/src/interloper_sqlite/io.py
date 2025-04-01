@@ -34,7 +34,13 @@ class SQLiteClient(itlp.DatabaseClient):
         result = self.connection.execute(query).fetchall()
         return {row[1]: row[2] for row in result}
 
-    def create_table(self, table_name: str, schema: type[itlp.TableSchema], dataset: str | None = None) -> None:
+    def create_table(
+        self,
+        table_name: str,
+        schema: type[itlp.TableSchema],
+        dataset: str | None = None,
+        partition_strategy: itlp.PartitionStrategy | None = None,
+    ) -> None:
         query = f"CREATE TABLE {table_name} ({schema.to_sql(PYTHON_TO_SQL_TYPE)});"
         self.connection.execute(query)
         logger.info(f"Table {table_name} created in SQLite at {self.db_path}")

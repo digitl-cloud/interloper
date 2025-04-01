@@ -45,6 +45,7 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         table_name: str,
         schema: type[itlp.TableSchema],
         dataset: str | None = None,
+        partition_strategy: itlp.PartitionStrategy | None = None,
     ) -> None:
         with self.engine.connect() as connection:
             # Create dataset if it doesn't exist and database supports schemas

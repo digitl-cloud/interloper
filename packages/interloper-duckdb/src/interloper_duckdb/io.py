@@ -24,7 +24,13 @@ class DuckDBClient(itlp.DatabaseClient):
         query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}';"
         return dict(self.connection.execute(query).fetchall())
 
-    def create_table(self, table_name: str, schema: type[itlp.TableSchema], dataset: str | None = None) -> None:
+    def create_table(
+        self,
+        table_name: str,
+        schema: type[itlp.TableSchema],
+        dataset: str | None = None,
+        partition_strategy: itlp.PartitionStrategy | None = None,
+    ) -> None:
         query = f"CREATE TABLE {table_name} ({schema.to_sql()});"
         self.connection.execute(query)
         logger.info(f"Table {table_name} created in DuckDB")

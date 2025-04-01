@@ -7,15 +7,15 @@ from interloper_duckdb import DuckDBDataframeIO
 from interloper_google_cloud import BigQueryDataframeIO
 from interloper_sql import PostgresDataframeIO, SQLiteDataframeIO
 
-itlp.basic_logging(logging.DEBUG)
+itlp.basic_logging(logging.INFO)
 
 
 awin = awin(
     io={
-        # "file": itlp.FileIO("./data"),
-        # "duckdb": DuckDBDataframeIO("data/duck.db"),
-        # "sqlite": SQLiteDataframeIO("data/sqlite.db"),
-        # "postgres": PostgresDataframeIO(database="interloper", user="g", password="", host="localhost", port=5432),
+        "file": itlp.FileIO("./data"),
+        "duckdb": DuckDBDataframeIO("data/duck.db"),
+        "sqlite": SQLiteDataframeIO("data/sqlite.db"),
+        "postgres": PostgresDataframeIO(database="interloper", user="g", password="", host="localhost", port=5432),
         "bigquery": BigQueryDataframeIO(project="dc-int-connectors-prd", location="eu"),
     },
     default_io_key="bigquery",

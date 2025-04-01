@@ -5,6 +5,7 @@ from typing import Generic, TypeVar
 from interloper.io.base import IOContext, TypedIO
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.ranges import PartitionRange
+from interloper.partitioning.strategies import PartitionStrategy
 from interloper.schema import TableSchema
 
 T = TypeVar("T")
@@ -18,7 +19,13 @@ class DatabaseClient(ABC):
     def table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]: ...
 
     @abstractmethod
-    def create_table(self, table_name: str, schema: type[TableSchema], dataset: str | None = None) -> None: ...
+    def create_table(
+        self,
+        table_name: str,
+        schema: type[TableSchema],
+        dataset: str | None = None,
+        partition_strategy: PartitionStrategy | None = None,
+    ) -> None: ...
 
     @abstractmethod
     def get_select_partition_statement(
@@ -45,7 +52,9 @@ class DatabaseIO(Generic[T], TypedIO[T]):
             )
 
         if not self.client.table_exists(context.asset.name, context.asset.dataset):
-            self.client.create_table(context.asset.name, context.asset.schema, context.asset.dataset)
+            self.client.create_table(
+                context.asset.name, context.asset.schema, context.asset.dataset, context.asset.partition_strategy
+            )
 
         if context.partition:
             assert context.asset.partition_strategy
