@@ -56,7 +56,7 @@ class Source(ABC):
         default_assets_args: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> "Source":
-        c = copy(self)
+        c = copy(self)  # TODO: implement __copy__
         c.dataset = dataset or self.dataset
         c.io = io or self.io
         c.default_io_key = default_io_key or self.default_io_key

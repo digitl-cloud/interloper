@@ -13,6 +13,7 @@ dependencies = [
     "interloper-assets",
     "interloper-duckdb",
     "interloper-pandas",
+    "interloper-google-cloud",
     "interloper-sql",
     "interloper-sqlite",
     "matplotlib>=3.10.0",
@@ -35,6 +36,7 @@ dev = [
 interloper = { workspace = true }
 interloper-assets = { workspace = true }
 interloper-duckdb = { workspace = true }
+interloper-google-cloud = { workspace = true }
 interloper-pandas = { workspace = true }
 interloper-sql = { workspace = true }
 interloper-sqlite = { workspace = true }

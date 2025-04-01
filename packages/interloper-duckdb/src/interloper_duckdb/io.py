@@ -20,7 +20,7 @@ class DuckDBClient(itlp.DatabaseClient):
         result = self.connection.execute(query).fetchone()
         return True if result and result[0] > 0 else False
 
-    def fetch_table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]:
+    def table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]:
         query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}';"
         return dict(self.connection.execute(query).fetchall())
 

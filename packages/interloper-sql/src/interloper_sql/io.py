@@ -25,7 +25,7 @@ class SQLAlchemyClient(itlp.DatabaseClient):
             return table_name in self.inspector.get_table_names(schema=dataset)
         return table_name in self.inspector.get_table_names()
 
-    def fetch_table_schema(
+    def table_schema(
         self,
         table_name: str,
         dataset: str | None = None,

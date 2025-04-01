@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 import interloper as itlp
 
-itlp.basic_logging(logging.INFO)
+itlp.basic_logging(logging.DEBUG)
 
 
 @itlp.source
@@ -19,13 +19,20 @@ def my_source() -> Sequence[itlp.Asset]:
         return "B"
 
     @itlp.asset(name="C")
-    def my_assetC(
+    def my_asset_C(
         a: str = itlp.UpstreamAsset("custom_ref_A"),
         b: str = itlp.UpstreamAsset("custom_ref_B"),
     ) -> str:
+        raise Exception("C failed")
         return "C"
 
-    return (my_asset_A, my_asset_B, my_assetC)
+    @itlp.asset(name="D")
+    def my_asset_D(
+        a: str = itlp.UpstreamAsset("A"),
+    ) -> str:
+        return "D"
+
+    return (my_asset_A, my_asset_B, my_asset_C, my_asset_D)
 
 
 my_source.io = {"file": itlp.FileIO("data")}
@@ -37,4 +44,6 @@ my_source.C.deps = {
     "custom_ref_B": "B",
 }
 
-itlp.Pipeline(my_source).materialize()
+
+pipeline = itlp.Pipeline(my_source)
+pipeline.materialize()

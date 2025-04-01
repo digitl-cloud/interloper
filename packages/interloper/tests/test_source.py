@@ -101,7 +101,9 @@ class TestSourceDefinition:
         assert simple_source.name == "new_name"
 
     def test_definition_param_default_value_required(self):
-        with pytest.raises(errors.SourceParamError, match="Source simple_source requires a default value for parameter key"):
+        with pytest.raises(
+            errors.SourceParamError, match="Source simple_source requires a default value for parameter key"
+        ):
 
             @source
             def simple_source(key: str): ...

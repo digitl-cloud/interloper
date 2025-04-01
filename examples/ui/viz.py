@@ -19,7 +19,20 @@ def X() -> Sequence[itlp.Asset]:
     ) -> Any:
         return "B"
 
-    return (A, B)
+    @itlp.asset
+    def C(
+        a: Any = itlp.UpstreamAsset("A"),
+        b: Any = itlp.UpstreamAsset("B"),
+    ) -> Any:
+        return "C"
+
+    @itlp.asset
+    def D(
+        a: Any = itlp.UpstreamAsset("A"),
+    ) -> Any:
+        return "D"
+
+    return (A, B, C, D)
 
 
 pipeline = itlp.Pipeline(X)

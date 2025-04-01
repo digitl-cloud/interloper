@@ -1,3 +1,5 @@
+import concurrent.futures
+import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -8,6 +10,8 @@ from interloper.asset import Asset
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.ranges import PartitionRange
 from interloper.source import Source
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -30,19 +34,30 @@ class Pipeline:
         self,
         partition: Partition | None = None,
     ) -> Any:
-        for asset in self._get_execution_order():
-            context = ExecutionContext(
-                assets=self.assets,
-                executed_asset=asset,
-                partition=partition,
-            )
-            asset.materialize(context)
+
+        for generation in self._get_parallel_execution_order():
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = []
+                for asset in generation:
+                    context = ExecutionContext(
+                        assets=self.assets,
+                        executed_asset=asset,
+                        partition=partition,
+                    )
+                    futures.append(executor.submit(asset.materialize, context))
+
+                # Wait for all assets in this generation to complete
+                concurrent.futures.wait(futures)
+
+                # Re-raise any exceptions that occurred
+                for future in futures:
+                    future.result()
 
     def backfill(
         self,
         partitions: Iterator[Partition] | PartitionRange,
     ) -> None:
-        for asset in self._get_execution_order():
+        for asset in self._get_sequential_execution_order():
             # Single run per asset
             if isinstance(partitions, PartitionRange) and asset.allows_partition_window:
                 context = ExecutionContext(
@@ -115,7 +130,16 @@ class Pipeline:
 
         assert nx.is_directed_acyclic_graph(self.graph)
 
-    def _get_execution_order(self) -> list[Asset]:
-        """Returns the execution order of assets."""
+    def _get_sequential_execution_order(self) -> list[Asset]:
+        """Returns the sequential execution order of assets."""
 
-        return list(nx.topological_sort(self.graph))
+        order = list(nx.topological_sort(self.graph))
+        logger.debug(f"Sequential execution order: {order}")
+        return order
+
+    def _get_parallel_execution_order(self) -> list[list[Asset]]:
+        """Returns the parallel execution order of assets."""
+
+        generations = list(nx.topological_generations(self.graph))
+        logger.debug(f"Parallel execution order: {generations}")
+        return generations

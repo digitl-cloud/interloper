@@ -2,16 +2,20 @@
 # PROJECT
 # ###############
 [project]
-name = "interloper-duckdb"
+name = "interloper-google-cloud"
 version = "0.1.0"
-description = "Interloper DuckDB integration"
+description = "Interloper Google Cloud integration"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
-dependencies = ["interloper", "duckdb>=1.2.0", "interloper-pandas"]
+dependencies = [
+    "google-cloud-bigquery>=3.31.0",
+    "interloper",
+    "interloper-pandas",
+]
 
 [dependency-groups]
-dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
+dev = ["pyright>=1.1.394", "pytest>=8.3.5", "ruff>=0.9.6"]
 
 [build-system]
 requires = ["hatchling"]

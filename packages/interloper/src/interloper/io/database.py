@@ -15,7 +15,7 @@ class DatabaseClient(ABC):
     def table_exists(self, table_name: str, dataset: str | None = None) -> bool: ...
 
     @abstractmethod
-    def fetch_table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]: ...
+    def table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]: ...
 
     @abstractmethod
     def create_table(self, table_name: str, schema: type[TableSchema], dataset: str | None = None) -> None: ...
@@ -36,7 +36,7 @@ class DatabaseIO(Generic[T], TypedIO[T]):
     client: DatabaseClient
 
     def write(self, context: IOContext, data: T) -> None:
-        self._check_asset_type(data)
+        self._check_asset_type(data)  # because is TypedIO
 
         if not context.asset.schema:
             raise RuntimeError(
@@ -53,7 +53,7 @@ class DatabaseIO(Generic[T], TypedIO[T]):
                 context.asset.name, context.asset.partition_strategy.column, context.partition, context.asset.dataset
             )
 
-        table_schema = self.client.fetch_table_schema(context.asset.name, context.asset.dataset)
+        table_schema = self.client.table_schema(context.asset.name, context.asset.dataset)
         data = self.handler.reconciler.reconcile(data, table_schema)
 
         self.handler.write(context, data)

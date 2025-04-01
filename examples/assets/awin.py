@@ -4,22 +4,24 @@ import logging
 import interloper as itlp
 from interloper_assets import awin
 from interloper_duckdb import DuckDBDataframeIO
+from interloper_google_cloud import BigQueryDataframeIO
 from interloper_sql import PostgresDataframeIO, SQLiteDataframeIO
 
-itlp.basic_logging(logging.INFO)
+itlp.basic_logging(logging.DEBUG)
 
 
 awin = awin(
     io={
-        "file": itlp.FileIO("./data"),
-        "duckdb": DuckDBDataframeIO("data/duck.db"),
-        "sqlite": SQLiteDataframeIO("data/sqlite.db"),
-        "postgres": PostgresDataframeIO(database="interloper", user="g", password="", host="localhost", port=5432),
+        # "file": itlp.FileIO("./data"),
+        # "duckdb": DuckDBDataframeIO("data/duck.db"),
+        # "sqlite": SQLiteDataframeIO("data/sqlite.db"),
+        # "postgres": PostgresDataframeIO(database="interloper", user="g", password="", host="localhost", port=5432),
+        "bigquery": BigQueryDataframeIO(project="dc-int-connectors-prd", location="eu"),
     },
-    default_io_key="duckdb",
+    default_io_key="bigquery",
 )
 
-awin_10990 = awin(default_args={"advertiser_id": "10990"})
+awin_10990 = awin(default_assets_args={"advertiser_id": "10990"})
 
 
 # data = awin_10990.advertiser_by_publisher.run(date=dt.date(2025, 1, 1))

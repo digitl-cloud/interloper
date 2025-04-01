@@ -29,7 +29,7 @@ class SQLiteClient(itlp.DatabaseClient):
         query = f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"
         return bool(self.connection.execute(query).fetchone())
 
-    def fetch_table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]:
+    def table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]:
         query = f"PRAGMA table_info({table_name});"
         result = self.connection.execute(query).fetchall()
         return {row[1]: row[2] for row in result}

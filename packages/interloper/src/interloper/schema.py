@@ -1,6 +1,7 @@
 import datetime as dt
-from abc import ABC
+from abc import ABCMeta
 from dataclasses import dataclass, fields, make_dataclass
+from typing import Any, Literal, overload
 
 PYTHON_TO_SQL_TYPE = {
     int: "INTEGER",
@@ -12,15 +13,27 @@ PYTHON_TO_SQL_TYPE = {
 }
 
 
+class TableSchemaMeta(ABCMeta):
+    def __new__(mcs, name: str, bases: tuple[type, ...], namespace: dict[str, Any]) -> type:
+        cls = super().__new__(mcs, name, bases, namespace)
+
+        # Ignore the base class
+        if name == "TableSchema":
+            return cls
+
+        # Forces subclasses to be dataclasses
+        return dataclass(cls)
+
+
 @dataclass
-class TableSchema(ABC):
+class TableSchema(metaclass=TableSchemaMeta):
     @classmethod
     def from_dict(cls, schema: dict[str, type], name: str | None = None) -> type["TableSchema"]:
         fields = [(name, field_type) for name, field_type in schema.items()]
         return make_dataclass(name or cls.__name__, fields, bases=(cls,))
 
     @classmethod
-    def to_dict(cls) -> dict:
+    def to_dict(cls) -> dict[str, dict[str, Any]]:
         return {
             f.name: {
                 "type": f.type,
@@ -30,12 +43,39 @@ class TableSchema(ABC):
         }
 
     @classmethod
+    @overload
+    def to_tuple(
+        cls, format: Literal["python"], types: dict[type, str] = PYTHON_TO_SQL_TYPE
+    ) -> tuple[tuple[str, type], ...]: ...
+
+    @classmethod
+    @overload
+    def to_tuple(
+        cls, format: Literal["sql"], types: dict[type, str] = PYTHON_TO_SQL_TYPE
+    ) -> tuple[tuple[str, str], ...]: ...
+
+    @classmethod
+    def to_tuple(
+        cls,
+        format: Literal["python", "sql"] = "python",
+        types: dict[type, str] = PYTHON_TO_SQL_TYPE,
+    ) -> tuple[tuple[str, Any], ...]:
+        if format not in ("python", "sql"):
+            raise ValueError(f"Invalid format {format}, must be one of: python, sql")
+
+        return tuple(
+            (f.name, f.type) if format == "python" else (f.name, types[f.type])  # type: ignore
+            for f in fields(cls)
+        )
+
+    @classmethod
     def to_sql(cls, types: dict[type, str] = PYTHON_TO_SQL_TYPE) -> str:
         columns = []
         for f in fields(cls):
             if f.type not in types:
                 raise ValueError(f"Unsupported type {f.type} for field {f.name}")
 
+            assert isinstance(f.type, type)
             sql_type = types[f.type]
             columns.append(f"{f.name} {sql_type}")
 
