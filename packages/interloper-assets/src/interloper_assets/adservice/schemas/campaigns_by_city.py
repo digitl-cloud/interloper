@@ -4,7 +4,7 @@ import interloper as itlp
 
 
 @dataclass
-class CampaignsByCity(itlp.TableSchema):
+class CampaignsByCity(itlp.AssetSchema):
     """
     The Campaigns by City report provides insights into campaign performance segmented by cities.
     It includes key metrics such as conversion rates, the number of conversions, and user demographics

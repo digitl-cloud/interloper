@@ -10,6 +10,6 @@ from interloper.partitioning.ranges import PartitionRange, TimePartitionRange
 from interloper.partitioning.strategies import PartitionStrategy, TimePartitionStrategy
 from interloper.pipeline import ExecutionContext, Pipeline
 from interloper.reconciler import Reconciler
-from interloper.schema import TableSchema
+from interloper.schema import AssetSchema
 from interloper.source import Source, source
 from interloper.utils.logging import basic_logging

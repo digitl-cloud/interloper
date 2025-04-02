@@ -4,7 +4,7 @@ import interloper as itlp
 
 
 @dataclass
-class CampaignsByBrowser(itlp.TableSchema):
+class CampaignsByBrowser(itlp.AssetSchema):
     """
     The Campaigns by Browser report provides insights into campaign performance based on the user's browser usage.
     It includes key metrics such as conversion rates, the number of conversions, and user demographics such as

@@ -5,7 +5,7 @@ import interloper as itlp
 
 
 @dataclass
-class Ads(itlp.TableSchema):
+class Ads(itlp.AssetSchema):
     """
     The AdUp Ads report provides insights into the performance of ads within the AdUp platform.
     It includes key metrics such as impressions, clicks, conversions, average cost, click-through rate (CTR),

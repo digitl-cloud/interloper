@@ -4,7 +4,7 @@ import interloper as itlp
 
 
 @dataclass
-class ConversionsReport(itlp.TableSchema):
+class ConversionsReport(itlp.AssetSchema):
     """
     The Conversions report provides insights on conversion events tracked within campaigns.
     It includes key metrics such as the amount of conversions, conversion time, currency, IP geolocation data,

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from interloper.errors import AssetNormalizationError
-from interloper.schema import TableSchema
+from interloper.schema import AssetSchema
 from interloper.utils.strings import to_snake_case
 
 
@@ -52,7 +52,7 @@ class JSONNormalizer(Normalizer):
 
         return data
 
-    def infer_schema(self, data: list[dict[str, Any]], sample_size: int = 1000) -> type[TableSchema]:
+    def infer_schema(self, data: list[dict[str, Any]], sample_size: int = 1000) -> type[AssetSchema]:
         if not isinstance(data, list) and not all(isinstance(row, dict) for row in data[:sample_size]):
             raise AssetNormalizationError("Cannot infer schema from data: unexpected data type")
 
@@ -72,7 +72,7 @@ class JSONNormalizer(Normalizer):
             return str
 
         schema_dict = {key: resolve_mixed_types(types) for key, types in type_map.items()}
-        return TableSchema.from_dict(schema_dict, name="Inferred")
+        return AssetSchema.from_dict(schema_dict, name="Inferred")
 
     def _validate(self, data: Any) -> list:
         if isinstance(data, Generator):

@@ -4,7 +4,7 @@ import interloper as itlp
 
 
 @dataclass
-class ConversionsByTimeOfDay(itlp.TableSchema):
+class ConversionsByTimeOfDay(itlp.AssetSchema):
     """
     The Conversions by Time of Day report provides insights into conversion patterns based on the day of the week
     and hour of the day. It includes key metrics such as the number of conversions and revenue generated within each

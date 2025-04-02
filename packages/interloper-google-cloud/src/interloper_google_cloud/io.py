@@ -39,7 +39,7 @@ class BigQueryClient(itlp.DatabaseClient):
     def create_table(
         self,
         table_name: str,
-        schema: type[itlp.TableSchema],
+        schema: type[itlp.AssetSchema],
         dataset: str | None = None,
         partition_strategy: itlp.PartitionStrategy | None = None,
     ) -> None:

@@ -4,7 +4,7 @@ import interloper as itlp
 
 
 @dataclass
-class CampaignsByDeviceType(itlp.TableSchema):
+class CampaignsByDeviceType(itlp.AssetSchema):
     """
     The Campaigns by Device Type report provides insights into campaign performance
     based on the type of device used by users. It includes key metrics such as

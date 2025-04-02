@@ -5,7 +5,7 @@ import interloper as itlp
 
 
 @dataclass
-class AdvertiserByPublishers(itlp.TableSchema):
+class AdvertiserByPublishers(itlp.AssetSchema):
     """
     The Advertiser by Publishers report provides insights into their performance across publishers within the Awin network.
     It includes key metrics such as clicks, impressions, confirmed items, pending items, declined items, bonus items,

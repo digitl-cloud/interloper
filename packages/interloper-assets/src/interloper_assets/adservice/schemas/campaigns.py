@@ -5,7 +5,7 @@ import interloper as itlp
 
 
 @dataclass
-class Campaigns(itlp.TableSchema):
+class Campaigns(itlp.AssetSchema):
     """
     The Campaigns report provides insights into the performance and financial outcomes of advertising campaigns.
     It includes key metrics such as click rates, conversion rates, revenue from various client activities such as

@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, wait
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -14,7 +15,7 @@ from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam, UpstreamAsset
 from interloper.partitioning.strategies import PartitionStrategy
-from interloper.schema import TableSchema
+from interloper.schema import AssetSchema
 
 if TYPE_CHECKING:
     from interloper.pipeline import ExecutionContext
@@ -29,7 +30,7 @@ class Asset(ABC):
     name: str
     deps: dict[str, str]
     materializable: bool
-    schema: type[TableSchema] | None
+    schema: type[AssetSchema] | None
     partition_strategy: PartitionStrategy | None
     _source: "Source | None"
     _dataset: str | None
@@ -47,7 +48,7 @@ class Asset(ABC):
         io: dict[str, IO[Any]] | None = None,
         materializable: bool = True,
         default_io_key: str | None = None,
-        schema: type[TableSchema] | None = None,
+        schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
         partition_strategy: PartitionStrategy | None = None,
     ):
@@ -216,8 +217,16 @@ class Asset(ABC):
             asset=self,
             partition=context.partition if context else None,
         )
-        for io in self.io.values():
-            io.write(io_context, data)
+
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for io in self.io.values():
+                futures.append(executor.submit(io.write, io_context, data))
+
+            wait(futures)
+
+            for future in futures:
+                future.result()
 
         logger.info(f"Asset {self.name} materialization complete")
 
@@ -294,7 +303,7 @@ class AssetDecorator:
         *,
         name: str | None = None,
         dataset: str | None = None,
-        schema: type[TableSchema] | None = None,
+        schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
         partition_strategy: PartitionStrategy | None = None,
     ) -> Self: ...
@@ -317,7 +326,7 @@ class AssetDecorator:
         func: Callable | None = None,
         name: str | None = None,
         dataset: str | None = None,
-        schema: type[TableSchema] | None = None,
+        schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
         partition_strategy: PartitionStrategy | None = None,
     ):

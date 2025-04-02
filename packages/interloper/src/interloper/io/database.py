@@ -6,7 +6,7 @@ from interloper.io.base import IOContext, TypedIO
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.ranges import PartitionRange
 from interloper.partitioning.strategies import PartitionStrategy
-from interloper.schema import TableSchema
+from interloper.schema import AssetSchema
 
 T = TypeVar("T")
 
@@ -22,19 +22,27 @@ class DatabaseClient(ABC):
     def create_table(
         self,
         table_name: str,
-        schema: type[TableSchema],
+        schema: type[AssetSchema],
         dataset: str | None = None,
         partition_strategy: PartitionStrategy | None = None,
     ) -> None: ...
 
     @abstractmethod
     def get_select_partition_statement(
-        self, table_name: str, column: str, partition: Partition | PartitionRange, dataset: str | None = None
+        self,
+        table_name: str,
+        column: str,
+        partition: Partition | PartitionRange,
+        dataset: str | None = None,
     ) -> str: ...
 
     @abstractmethod
     def delete_partition(
-        self, table_name: str, column: str, partition: Partition | PartitionRange, dataset: str | None = None
+        self,
+        table_name: str,
+        column: str,
+        partition: Partition | PartitionRange,
+        dataset: str | None = None,
     ) -> None: ...
 
 

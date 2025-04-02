@@ -13,12 +13,16 @@ PYTHON_TO_SQL_TYPE = {
 }
 
 
-class TableSchemaMeta(ABCMeta):
+class AssetSchemaMeta(ABCMeta):
+    """
+    Metaclass for AssetSchema. Forces subclasses to be dataclasses.
+    """
+
     def __new__(mcs, name: str, bases: tuple[type, ...], namespace: dict[str, Any]) -> type:
         cls = super().__new__(mcs, name, bases, namespace)
 
         # Ignore the base class
-        if name == "TableSchema":
+        if name == "AssetSchema":
             return cls
 
         # Forces subclasses to be dataclasses
@@ -26,9 +30,9 @@ class TableSchemaMeta(ABCMeta):
 
 
 @dataclass
-class TableSchema(metaclass=TableSchemaMeta):
+class AssetSchema(metaclass=AssetSchemaMeta):
     @classmethod
-    def from_dict(cls, schema: dict[str, type], name: str | None = None) -> type["TableSchema"]:
+    def from_dict(cls, schema: dict[str, type], name: str | None = None) -> type["AssetSchema"]:
         fields = [(name, field_type) for name, field_type in schema.items()]
         return make_dataclass(name or cls.__name__, fields, bases=(cls,))
 
@@ -82,8 +86,8 @@ class TableSchema(metaclass=TableSchemaMeta):
         return ",\n".join(columns)
 
     @classmethod
-    def equals(cls, other: type["TableSchema"]) -> bool:
-        if not issubclass(other, TableSchema):
+    def equals(cls, other: type["AssetSchema"]) -> bool:
+        if not issubclass(other, AssetSchema):
             return False
 
         self_fields = {f.name: f.type for f in fields(cls)}
@@ -91,7 +95,7 @@ class TableSchema(metaclass=TableSchemaMeta):
         return self_fields == other_fields
 
     @classmethod
-    def compare(cls, other: type["TableSchema"]) -> tuple[bool, dict]:
+    def compare(cls, other: type["AssetSchema"]) -> tuple[bool, dict]:
         cls_fields = {f.name: f.type for f in fields(cls)}
         other_fields = {f.name: f.type for f in fields(other)}
 
@@ -113,11 +117,9 @@ class TableSchema(metaclass=TableSchemaMeta):
     def print_implementation(cls) -> None:
         class_name = cls.__name__
         lines = [
-            "from dataclasses import dataclass",
             "import interloper as itlp",
             "",
-            "@dataclass",
-            f"class {class_name}(TableSchema):",
+            f"class {class_name}(itlp.AssetSchema):",
         ]
         for f in fields(cls):
             type_name = f.type.__name__  # type: ignore

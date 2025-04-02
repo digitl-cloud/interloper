@@ -27,11 +27,11 @@ class DuckDBClient(itlp.DatabaseClient):
     def create_table(
         self,
         table_name: str,
-        schema: type[itlp.TableSchema],
+        schema: type[itlp.AssetSchema],
         dataset: str | None = None,
         partition_strategy: itlp.PartitionStrategy | None = None,
     ) -> None:
-        query = f"CREATE TABLE {table_name} ({schema.to_sql()});"
+        query = f"CREATE TABLE IF NOT EXISTS {table_name} ({schema.to_sql()});"
         self.connection.execute(query)
         logger.info(f"Table {table_name} created in DuckDB")
 

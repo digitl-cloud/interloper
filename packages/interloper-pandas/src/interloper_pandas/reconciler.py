@@ -42,19 +42,19 @@ class DataFrameReconciler(itlp.Reconciler[pd.DataFrame]):
     def reconcile(
         self,
         data: pd.DataFrame,
-        schema: dict[str, str],
+        table_schema: dict[str, str],
         reorder: bool = False,
     ) -> pd.DataFrame:
         logger.info("Reconciling dataframe with SQL schema...")
         data = data.copy()
 
-        if set(data.columns) != set(schema.keys()):
+        if set(data.columns) != set(table_schema.keys()):
             logger.warning("Columns do not match the provided schema.")
 
-        extra_data_columns = set(data.columns) - set(schema.keys())
+        extra_data_columns = set(data.columns) - set(table_schema.keys())
         data.drop(columns=list(extra_data_columns), inplace=True)
 
-        for index, (column, sql_type) in enumerate(schema.items()):
+        for index, (column, sql_type) in enumerate(table_schema.items()):
             if column not in data.columns:
                 logger.debug(f"Column {column} is missing from dataframe. Adding empty column...")
                 data.insert(index, column, np.nan)
@@ -76,7 +76,7 @@ class DataFrameReconciler(itlp.Reconciler[pd.DataFrame]):
 
         if reorder:
             logger.info("Reordering columns to match schema...")
-            data = data[schema.keys()]
+            data = data[table_schema.keys()]
 
         logger.info("Schema reconciliation complete.")
         return data

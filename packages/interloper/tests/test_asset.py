@@ -12,7 +12,7 @@ from interloper.param import AssetParam, ContextualAssetParam
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.strategies import PartitionStrategy, TimePartitionStrategy
 from interloper.pipeline import ExecutionContext
-from interloper.schema import TableSchema
+from interloper.schema import AssetSchema
 
 
 @pytest.fixture
@@ -30,8 +30,8 @@ def simple_normalizer() -> Normalizer:
         def normalize(self, data: Any) -> str:
             return f"normalized {data}"
 
-        def infer_schema(self, data) -> type[TableSchema]:
-            return TableSchema.from_dict({"whatever": str})
+        def infer_schema(self, data) -> type[AssetSchema]:
+            return AssetSchema.from_dict({"whatever": str})
 
     return SimpleNormalizer()
 
@@ -204,7 +204,7 @@ class TestAssetRun:
         simple_asset.normalizer = simple_normalizer
 
         assert simple_asset.run(who="world") == "normalized hello world"
-        assert simple_asset.schema.equals(TableSchema.from_dict({"whatever": str}))
+        assert simple_asset.schema.equals(AssetSchema.from_dict({"whatever": str}))
 
     def test_run_with_normalizer_fails(self, simple_asset: Asset, simple_normalizer: Normalizer):
         simple_normalizer.normalize = Mock(side_effect=Exception("error"))
@@ -233,7 +233,7 @@ class TestAssetRun:
     def test_run_with_normalizer_inferred_schema_match(
         self, simple_asset: Asset, simple_normalizer: Normalizer, caplog
     ):
-        simple_asset.schema = TableSchema.from_dict({"whatever": str})
+        simple_asset.schema = AssetSchema.from_dict({"whatever": str})
         simple_asset.normalizer = simple_normalizer
 
         with caplog.at_level("DEBUG"):
@@ -243,7 +243,7 @@ class TestAssetRun:
     def test_run_with_normalizer_inferred_schema_mismatch(
         self, simple_asset: Asset, simple_normalizer: Normalizer, caplog
     ):
-        simple_asset.schema = TableSchema.from_dict({"something_else": str})
+        simple_asset.schema = AssetSchema.from_dict({"something_else": str})
         simple_asset.normalizer = simple_normalizer
 
         with caplog.at_level("DEBUG"):

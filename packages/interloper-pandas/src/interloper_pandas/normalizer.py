@@ -61,12 +61,12 @@ class DataframeNormalizer(itlp.Normalizer):
 
         return data
 
-    def infer_schema(self, data: pd.DataFrame) -> type[itlp.TableSchema]:
+    def infer_schema(self, data: pd.DataFrame) -> type[itlp.AssetSchema]:
         schema_dict = {}
         for column in data.columns:
             dtype = data[column].dtype
             schema_dict[column] = self._dtype_to_python_type(dtype)
-        return itlp.TableSchema.from_dict(schema_dict, name="Inferred")
+        return itlp.AssetSchema.from_dict(schema_dict, name="Inferred")
 
     def _dtype_to_python_type(self, dtype: Any) -> type:
         if pd.api.types.is_integer_dtype(dtype):

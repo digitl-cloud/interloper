@@ -2,12 +2,12 @@ from dataclasses import field
 
 import pytest
 
-from interloper.schema import TableSchema
+from interloper.schema import AssetSchema
 
 
-class TestTableSchema:
+class TestAssetSchema:
     def test_schema(self):
-        class Schema(TableSchema):
+        class Schema(AssetSchema):
             a: int
             b: str
 
@@ -20,7 +20,7 @@ class TestTableSchema:
         assert Schema.compare(Schema) == (True, {})
 
     def test_schema_with_description(self):
-        class Schema(TableSchema):
+        class Schema(AssetSchema):
             a: int = field(metadata={"description": "a description"})
             b: str = field(metadata={"description": "b description"})
 
@@ -31,14 +31,14 @@ class TestTableSchema:
         }
 
     def test_schema_with_invalid_type(self):
-        class Schema(TableSchema):
+        class Schema(AssetSchema):
             a: list[int]
 
         with pytest.raises(ValueError):
             Schema.to_sql()
 
     def test_schema_to_tuple(self):
-        class Schema(TableSchema):
+        class Schema(AssetSchema):
             a: int
             b: str
 
@@ -46,7 +46,7 @@ class TestTableSchema:
         assert Schema.to_tuple("sql") == (("a", "INTEGER"), ("b", "VARCHAR"))
 
     def test_schema_to_tuple_invalid_format(self):
-        class Schema(TableSchema):
+        class Schema(AssetSchema):
             a: int
             b: str
 

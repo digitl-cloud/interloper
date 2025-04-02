@@ -11,5 +11,5 @@ class Reconciler(ABC, Generic[T]):
     def reconcile(
         self,
         data: T,
-        schema: dict[str, str],
+        table_schema: dict[str, str],
     ) -> T: ...

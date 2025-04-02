@@ -1,6 +1,6 @@
-import concurrent.futures
 import logging
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,9 +34,8 @@ class Pipeline:
         self,
         partition: Partition | None = None,
     ) -> Any:
-
         for generation in self._get_parallel_execution_order():
-            with concurrent.futures.ThreadPoolExecutor() as executor:
+            with ThreadPoolExecutor() as executor:
                 futures = []
                 for asset in generation:
                     context = ExecutionContext(
@@ -47,7 +46,7 @@ class Pipeline:
                     futures.append(executor.submit(asset.materialize, context))
 
                 # Wait for all assets in this generation to complete
-                concurrent.futures.wait(futures)
+                wait(futures)
 
                 # Re-raise any exceptions that occurred
                 for future in futures:

@@ -5,7 +5,7 @@ import interloper as itlp
 
 
 @dataclass
-class AdvertiserTransactions(itlp.TableSchema):
+class AdvertiserTransactions(itlp.AssetSchema):
     """
     The Advertiser Transactions report provides insights into their transactional activities,
     including clicks, commissions, sales, and associated parameters.
