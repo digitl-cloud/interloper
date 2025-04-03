@@ -11,7 +11,7 @@ from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.strategies import PartitionStrategy, TimePartitionStrategy
-from interloper.pipeline import ExecutionContext
+from interloper.execution.pipeline import ExecutionContext
 from interloper.schema import AssetSchema
 
 
@@ -256,9 +256,9 @@ class TestAssetMaterialize:
         simple_asset.io = {"simple": simple_io}
         simple_asset.bind(who="world")
 
-        with patch.object(simple_asset, "run", wraps=simple_asset.run) as run:
+        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
             simple_asset.materialize()
-            run.assert_called_once_with(None)
+            extract.assert_called_once_with(None)
 
     def test_materialize_with_context(self, simple_asset: Asset, simple_io: IO):
         simple_asset.io = {"simple": simple_io}
@@ -270,9 +270,9 @@ class TestAssetMaterialize:
             partition=None,
         )
 
-        with patch.object(simple_asset, "run", wraps=simple_asset.run) as run:
+        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
             simple_asset.materialize(context)
-            run.assert_called_once_with(context)
+            extract.assert_called_once_with(context)
 
     def test_materialize_with_context_with_partition(self, simple_asset: Asset, simple_io: IO):
         simple_asset.io = {"simple": simple_io}
@@ -285,9 +285,9 @@ class TestAssetMaterialize:
             partition=Partition(value="whatever"),
         )
 
-        with patch.object(simple_asset, "run", wraps=simple_asset.run) as run:
+        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
             simple_asset.materialize(context)
-            run.assert_called_once_with(context)
+            extract.assert_called_once_with(context)
 
     def test_materialize_with_context_with_partition_fails_missing_stategy(self, simple_asset: Asset, simple_io: IO):
         simple_asset.io = {"simple": simple_io}
@@ -308,9 +308,9 @@ class TestAssetMaterialize:
     def test_not_materializable(self, simple_asset: Asset):
         simple_asset.materializable = False
 
-        with patch.object(simple_asset, "run", wraps=simple_asset.run) as run:
+        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
             simple_asset.materialize()
-            run.assert_not_called()
+            extract.assert_not_called()
 
     def test_materialize_fails_no_io(self, simple_asset: Asset):
         with pytest.raises(
@@ -325,9 +325,9 @@ class TestAssetMaterialize:
         }
         simple_asset.bind(who="world")
 
-        with patch.object(simple_asset, "run", wraps=simple_asset.run) as run:
+        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
             simple_asset.materialize()
-            run.assert_called_once_with(None)
+            extract.assert_called_once_with(None)
         simple_asset.io["simple"].write.assert_called_once()
         simple_asset.io["other"].write.assert_called_once()
 

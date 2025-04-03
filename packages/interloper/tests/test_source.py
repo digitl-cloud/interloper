@@ -3,11 +3,11 @@ from typing import Any
 
 import pytest
 
-from interloper import errors
+from interloper import errors, source
 from interloper.asset import Asset, asset
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam, UpstreamAsset
-from interloper.source import Source, source
+from interloper.source import Source
 
 
 @pytest.fixture

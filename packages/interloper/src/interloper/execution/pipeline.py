@@ -1,30 +1,25 @@
 import logging
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, wait
-from dataclasses import dataclass
 from typing import Any
 
 import networkx as nx
 
 from interloper.asset import Asset
+from interloper.execution.context import ExecutionContext
+from interloper.execution.observable import Event, Observer
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.ranges import PartitionRange
 from interloper.source import Source
 
 logger = logging.getLogger(__name__)
+TAssetOrSource = Source | Asset | list[Source | Asset]
 
 
-@dataclass(frozen=True)
-class ExecutionContext:
-    assets: dict[str, Asset]
-    executed_asset: Asset
-    partition: Partition | PartitionRange | None = None
-
-
-class Pipeline:
+class Pipeline(Observer):
     def __init__(
         self,
-        sources_or_assets: Source | Asset | list[Source | Asset],
+        sources_or_assets: TAssetOrSource,
     ):
         self.assets = {}
         self._add_assets(sources_or_assets)
@@ -76,7 +71,10 @@ class Pipeline:
                     )
                     asset.materialize(context)
 
-    def _add_assets(self, sources_or_assets: Source | Asset | list[Source | Asset]) -> None:
+    def on_event(self, event: Event) -> None:
+        logger.info(f"[EVENT] {event.observable} -> {event.name}" + (f" {event.status}" if event.status else ""))
+
+    def _add_assets(self, sources_or_assets: TAssetOrSource) -> None:
         # Convert single source/asset to a list
         if not isinstance(sources_or_assets, list):
             sources_or_assets = [sources_or_assets]
@@ -94,6 +92,7 @@ class Pipeline:
             for asset in batch:
                 if asset.name in self.assets:
                     raise ValueError(f"Duplicate asset name '{asset.name}'")
+                asset.add_observer(self)
                 self.assets[asset.name] = asset
 
     def _build_execution_graph(self) -> None:

@@ -9,7 +9,7 @@ from interloper.partitioning.partitions import TimePartition
 from interloper.partitioning.ranges import PartitionRange
 
 if TYPE_CHECKING:
-    from interloper.pipeline import ExecutionContext
+    from interloper.execution.pipeline import ExecutionContext
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")

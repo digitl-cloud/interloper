@@ -12,7 +12,7 @@ def basic_logging(level: int = logging.DEBUG) -> None:
     handler.setLevel(level)
 
     # Set a formatter
-    formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)-16s | %(message)s")
+    formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)-32s | %(message)s")
     handler.setFormatter(formatter)
 
     # Remove existing handlers to avoid duplicate logs

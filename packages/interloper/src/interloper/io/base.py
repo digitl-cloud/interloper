@@ -34,7 +34,7 @@ class IO(ABC, Generic[T]):
 @dataclass
 class IOHandler(ABC, Generic[T]):
     type: type[T]
-    reconciler: Reconciler[T]
+    reconciler: Reconciler[T]  # TODO: should be optional?
 
     @abstractmethod
     def write(self, context: IOContext, data: T) -> None: ...

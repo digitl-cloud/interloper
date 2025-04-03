@@ -26,7 +26,7 @@ class AssetSchemaMeta(ABCMeta):
             return cls
 
         # Forces subclasses to be dataclasses
-        return dataclass(cls)
+        return dataclass(cls)  # type: ignore
 
 
 @dataclass

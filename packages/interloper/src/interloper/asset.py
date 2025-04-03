@@ -1,8 +1,8 @@
-from concurrent.futures import ThreadPoolExecutor, wait
 import json
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, wait
 from copy import copy
 from functools import partial
 from inspect import Parameter, signature
@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any, TypeVar, overload
 from typing_extensions import Self
 
 from interloper import errors
+from interloper.execution.context import ExecutionContext
+from interloper.execution.observable import Event, Observable
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam, UpstreamAsset
@@ -18,7 +20,6 @@ from interloper.partitioning.strategies import PartitionStrategy
 from interloper.schema import AssetSchema
 
 if TYPE_CHECKING:
-    from interloper.pipeline import ExecutionContext
     from interloper.source import Source
 
 
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class Asset(ABC):
+class Asset(ABC, Observable):
     name: str
     deps: dict[str, str]
     materializable: bool
@@ -52,8 +53,9 @@ class Asset(ABC):
         normalizer: Normalizer | None = None,
         partition_strategy: PartitionStrategy | None = None,
     ):
-        self._source: Source | None = source
+        super().__init__()
 
+        self._source: Source | None = source
         self.name = name
         self.deps = deps or {}
         self.materializable = materializable
@@ -84,7 +86,7 @@ class Asset(ABC):
         return c
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(f"{self.dataset}.{self.name}" if self.dataset else self.name)
 
     def __repr__(self):
         return f"{self.dataset}.{self.name}" if self.dataset else self.name
@@ -151,6 +153,65 @@ class Asset(ABC):
         context: "ExecutionContext | None" = None,
         **params: Any,
     ) -> Any:
+        """
+        Execute + Normalize
+        """
+
+        data = self._execute(context, **params)
+        data = self._normalize(data, context)
+        return data
+
+    @Event.wrap(name="MATERIALIZATION")
+    def materialize(
+        self,
+        context: "ExecutionContext | None" = None,
+        **params: Any,
+    ) -> None:
+        """
+        Execute + Normalize + Write
+        """
+
+        logger.info(f"Materializing asset {self.name} {f'partition(s) {context.partition}' if context else ''}")
+
+        if not self.materializable:
+            logger.warning(f"Asset {self.name} is not materializable. Skipping.")
+            return
+
+        if not self.has_io:
+            raise errors.AssetMaterializationError(f"Asset {self.name} does not have any IO configured")
+
+        data = self._execute(context, **params)
+        data = self._normalize(data, context)
+        self._write(data, context)
+
+        logger.info(f"Asset {self.name} materialization complete")
+
+    def bind(self, ignore_unknown_params: bool = False, **params: Any) -> None:
+        sig = signature(self.data)
+        current_params = [p.name for p in sig.parameters.values()]
+        final_params = {}
+
+        for param_name, param_value in params.items():
+            if param_name not in current_params:
+                if not ignore_unknown_params:
+                    raise errors.AssetValueError(
+                        f"Parameter {param_name} is not a valid parameter for asset {self.name}"
+                    )
+                continue
+
+            final_params[param_name] = param_value
+
+        self.data = partial(self.data, **final_params)
+
+    #############
+    # Private
+    #############
+    @Event.wrap(name="EXECUTE")
+    def _execute(
+        self,
+        context: "ExecutionContext | None" = None,
+        **params: Any,
+    ) -> Any:
         # Parameter resolution
         params, return_type = self._resolve_parameters(context, **params)
 
@@ -164,7 +225,14 @@ class Asset(ABC):
             )
         logger.info(f"Asset {self.name} executed (Type check passed ✔)")
 
-        # Normalization
+        return data
+
+    @Event.wrap(name="NORMALIZE")
+    def _normalize(
+        self,
+        data: Any,
+        context: "ExecutionContext | None" = None,
+    ) -> Any:
         if self.normalizer:
             try:
                 data = self.normalizer.normalize(data)
@@ -189,29 +257,22 @@ class Asset(ABC):
                 else:
                     logger.warning(f"Schema mismatch for asset {self.name} between provided and inferred schemas")
                     logger.debug(f"Schema diff: \n{json.dumps(diff, indent=2, default=str)}")
+        else:
+            logger.warning(f"Asset {self.name} does not have a normalizer. Skipping normalization.")
 
         return data
 
-    def materialize(
+    @Event.wrap(name="WRITE")
+    def _write(
         self,
+        data: Any,
         context: "ExecutionContext | None" = None,
     ) -> None:
-        logger.info(f"Materializing asset {self.name} {f'partition(s) {context.partition}' if context else ''}")
-
-        if not self.materializable:
-            logger.warning(f"Asset {self.name} is not materializable. Skipping.")
-            return
-
-        if not self.has_io:
-            raise errors.AssetMaterializationError(f"Asset {self.name} does not have any IO configured")
-
         if context:
             if context.partition and not self.partition_strategy:
                 raise errors.AssetMaterializationError(
                     f"Asset {self.name} does not support partitioning (missing partition_strategy config)"
                 )
-
-        data = self.run(context)
 
         io_context = IOContext(
             asset=self,
@@ -228,28 +289,6 @@ class Asset(ABC):
             for future in futures:
                 future.result()
 
-        logger.info(f"Asset {self.name} materialization complete")
-
-    def bind(self, ignore_unknown_params: bool = False, **params: Any) -> None:
-        sig = signature(self.data)
-        current_params = [p.name for p in sig.parameters.values()]
-        final_params = {}
-
-        for param_name, param_value in params.items():
-            if param_name not in current_params:
-                if not ignore_unknown_params:
-                    raise errors.AssetValueError(
-                        f"Parameter {param_name} is not a valid parameter for asset {self.name}"
-                    )
-                continue
-
-            final_params[param_name] = param_value
-
-        self.data = partial(self.data, **final_params)
-
-    #############
-    # Private
-    #############
     def _resolve_parameters(
         self,
         context: "ExecutionContext | None" = None,

@@ -36,7 +36,7 @@ class DataframeNormalizer(itlp.Normalizer):
             data.columns = [self.column_name(column) for column in data.columns]
 
         if self.remove_empty_dict:
-            data.replace([{}], None, inplace=True)
+            data.replace([{}], None, inplace=True)  # type: ignore
 
         if self.remove_empty_strings:
             data.replace([""], None, inplace=True)

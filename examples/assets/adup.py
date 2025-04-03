@@ -13,10 +13,10 @@ adup = adup(
     default_io_key="duckdb",
 )
 
-data = adup.ads.run(date_window=(dt.date(2025, 1, 1), dt.date(2025, 1, 2)))
+# data = adup.ads.run(date_window=(dt.date(2025, 1, 1), dt.date(2025, 1, 2)))
 
-# pipeline = itlp.Pipeline(adup)
-# pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 3)))
+pipeline = itlp.Pipeline(adup)
+pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 3)))
 # pipeline.backfill(
 #     partitions=itlp.TimePartitionRange(
 #         start=dt.date(2025, 1, 1),

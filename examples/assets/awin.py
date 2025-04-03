@@ -3,11 +3,12 @@ import logging
 
 import interloper as itlp
 from interloper_assets import awin
-from interloper_duckdb import DuckDBDataframeIO
 from interloper_google_cloud import BigQueryDataframeIO
-from interloper_sql import PostgresDataframeIO, SQLiteDataframeIO
 
-itlp.basic_logging(logging.DEBUG)
+# from interloper_duckdb import DuckDBDataframeIO
+# from interloper_sql import PostgresDataframeIO, SQLiteDataframeIO
+
+itlp.basic_logging(logging.INFO)
 
 
 awin = awin(
@@ -27,13 +28,7 @@ awin_10990 = awin(default_assets_args={"advertiser_id": "10990"})
 # data = awin_10990.advertiser_by_publisher.run(date=dt.date(2025, 1, 1))
 
 pipeline = itlp.Pipeline(awin_10990.advertiser_by_publisher)
-
-start_time = dt.datetime.now()
-
 pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 3)))
-
-end_time = dt.datetime.now()
-print(f"Pipeline materialization took {(end_time - start_time).total_seconds():.2f} seconds")
 
 # pipeline.backfill(
 #     partitions=itlp.TimePartitionRange(
