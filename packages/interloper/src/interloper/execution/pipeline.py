@@ -21,6 +21,8 @@ class Pipeline(Observer):
         self,
         sources_or_assets: TAssetOrSource,
     ):
+        super().__init__(is_async=False)
+
         self.assets = {}
         self._add_assets(sources_or_assets)
         self._build_execution_graph()

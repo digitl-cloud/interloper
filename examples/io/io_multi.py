@@ -23,8 +23,8 @@ def my_source() -> Sequence[itlp.Asset]:
 
 my_source.io = {
     "file": itlp.FileIO("data"),
-    "file2": itlp.FileIO("data2"),
+    # "file2": itlp.FileIO("data2"),
 }
 my_source.default_io_key = "file"
 
-itlp.Pipeline(my_source).materialize()
+itlp.Pipeline(my_source.my_asset_A).materialize()

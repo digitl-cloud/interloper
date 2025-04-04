@@ -1,32 +1,12 @@
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
+from queue import Queue
 from typing import Any
-
-
-class Observer(ABC):
-    @abstractmethod
-    def on_event(self, event: "Event") -> None: ...
-
-
-class Observable:
-    def __init__(self) -> None:
-        self._observers: list[Observer] = []
-
-    def add_observer(self, observer: Observer) -> None:
-        if not isinstance(observer, Observer):
-            raise TypeError("Observer must implement the Observer interface")
-        self._observers.append(observer)
-
-    def remove_observer(self, observer: Observer) -> None:
-        self._observers.remove(observer)
-
-    def notify_observers(self, event: "Event") -> None:
-        for observer in self._observers:
-            observer.on_event(event)
 
 
 class EventStatus(Enum):
@@ -46,11 +26,6 @@ class Event:
 
     def with_status(self, status: EventStatus) -> "Event":
         return Event(self.observable, self.name, status)
-
-    @staticmethod
-    def emit(observable: "Observable", name: str) -> None:
-        event = Event(observable, name)
-        observable.notify_observers(event)
 
     @staticmethod
     def wrap(
@@ -80,17 +55,64 @@ class Event:
             return decorator
         return decorator(func)
 
-    @staticmethod
+
+class Observer(ABC):
+    def __init__(self, is_async: bool = False) -> None:
+        self._is_async = is_async
+        self._queue = Queue()
+        if is_async:
+            self._thread = threading.Thread(target=self._process_events, daemon=True)
+            self._thread.start()
+
+    def _process_events(self) -> None:
+        while True:
+            event = self._queue.get()
+            if event is None:  # Shutdown signal
+                break
+            self.on_event(event)
+
+    def __del__(self) -> None:
+        if self._is_async:
+            self._queue.put(None)  # Signal shutdown
+            self._thread.join()
+
+    @abstractmethod
+    def on_event(self, event: "Event") -> None: ...
+
+
+class Observable:
+    def __init__(self) -> None:
+        self._observers: list[Observer] = []
+
+    def add_observer(self, observer: Observer) -> None:
+        if not isinstance(observer, Observer):
+            raise TypeError("Observer must implement the Observer interface")
+        self._observers.append(observer)
+
+    def remove_observer(self, observer: Observer) -> None:
+        self._observers.remove(observer)
+
+    def notify_observers(self, event: "Event") -> None:
+        for observer in self._observers:
+            if observer._is_async:
+                # In async mode, queue the event for processing in the background thread
+                observer._queue.put(event)
+            else:
+                # In sync mode, process events immediately in the current thread
+                observer.on_event(event)
+
+    def emit_event(self, name: str, status: EventStatus | None = None) -> None:
+        event = Event(self, name, status)
+        self.notify_observers(event)
+
     @contextmanager
-    def context(observable: "Observable", name: str) -> Generator[None]:
-        if not isinstance(observable, Observable):
-            raise TypeError("Event context can only be used with Observable classes")
-        event = Event(observable, name, EventStatus.START)
-        observable.notify_observers(event)
+    def event_context(self, name: str) -> Generator[None]:
+        event = Event(self, name, EventStatus.START)
+        self.notify_observers(event)
         try:
             yield
         except Exception:
-            observable.notify_observers(event.with_status(EventStatus.FAILURE))
+            self.notify_observers(event.with_status(EventStatus.FAILURE))
             raise
         else:
-            observable.notify_observers(event.with_status(EventStatus.SUCCESS))
+            self.notify_observers(event.with_status(EventStatus.SUCCESS))

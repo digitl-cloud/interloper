@@ -34,6 +34,7 @@ class Source(ABC):
         normalizer: Normalizer | None = None,
         default_assets_args: dict[str, Any] | None = None,
     ):
+        super().__init__()
         self._assets: dict[str, Asset] = {}
         self.name = name
         self.dataset = dataset or name
@@ -90,8 +91,12 @@ class Source(ABC):
             return
 
         # Prevent overwriting the assets
-        if name in self._assets:
-            raise errors.SourceDefinitionError(f"Asset {name} is read-only")
+        try:
+            if name in self._assets:
+                raise errors.SourceDefinitionError(f"Asset {name} is read-only")
+        except AttributeError:
+            # Race condition: _assets is not yet initialized
+            pass
 
         super().__setattr__(name, value)
 

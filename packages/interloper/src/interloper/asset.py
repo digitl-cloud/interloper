@@ -171,7 +171,10 @@ class Asset(ABC, Observable):
         Execute + Normalize + Write
         """
 
-        logger.info(f"Materializing asset {self.name} {f'partition(s) {context.partition}' if context else ''}")
+        logger.info(
+            f"Materializing asset {self.name} "
+            f"{f'partition(s) {context.partition}' if context and context.partition else ''}"
+        )
 
         if not self.materializable:
             logger.warning(f"Asset {self.name} is not materializable. Skipping.")
