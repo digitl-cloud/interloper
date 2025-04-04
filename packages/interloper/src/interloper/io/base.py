@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from interloper.partitioning.partitions import Partition
-from interloper.partitioning.ranges import PartitionRange
+from interloper.partitioning.partition import Partition
+from interloper.partitioning.range import PartitionRange
 from interloper.reconciler import Reconciler
 
 if TYPE_CHECKING:

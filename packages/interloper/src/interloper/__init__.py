@@ -6,9 +6,9 @@ from interloper.io.database import DatabaseClient, DatabaseIO
 from interloper.io.file import FileIO
 from interloper.normalizer import JSONNormalizer, Normalizer
 from interloper.param import AssetParam, ContextualAssetParam, Date, DateWindow, Env, UpstreamAsset
-from interloper.partitioning.partitions import Partition, TimePartition
-from interloper.partitioning.ranges import PartitionRange, TimePartitionRange
-from interloper.partitioning.strategies import PartitionStrategy, TimePartitionStrategy
+from interloper.partitioning.partition import Partition, TimePartition
+from interloper.partitioning.range import PartitionRange, TimePartitionRange
+from interloper.partitioning.strategy import PartitionStrategy, TimePartitionStrategy
 from interloper.reconciler import Reconciler
 from interloper.schema import AssetSchema
 from interloper.source import Source, source

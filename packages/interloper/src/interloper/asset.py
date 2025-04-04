@@ -16,7 +16,7 @@ from interloper.execution.observable import Event, Observable
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam, UpstreamAsset
-from interloper.partitioning.strategies import PartitionStrategy
+from interloper.partitioning.strategy import PartitionStrategy
 from interloper.schema import AssetSchema
 
 if TYPE_CHECKING:

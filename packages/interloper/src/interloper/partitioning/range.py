@@ -4,7 +4,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
 
-from interloper.partitioning.partitions import Partition, TimePartition
+from interloper.partitioning.partition import Partition, TimePartition
 from interloper.utils.dates import date_range
 
 

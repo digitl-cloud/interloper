@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from interloper.io.base import IOContext, TypedIO
-from interloper.partitioning.partitions import Partition
-from interloper.partitioning.ranges import PartitionRange
-from interloper.partitioning.strategies import PartitionStrategy
+from interloper.partitioning.partition import Partition
+from interloper.partitioning.range import PartitionRange
+from interloper.partitioning.strategy import PartitionStrategy
 from interloper.schema import AssetSchema
 
 T = TypeVar("T")

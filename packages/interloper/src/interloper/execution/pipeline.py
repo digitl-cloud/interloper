@@ -8,8 +8,8 @@ import networkx as nx
 from interloper.asset import Asset
 from interloper.execution.context import ExecutionContext
 from interloper.execution.observable import Event, Observer
-from interloper.partitioning.partitions import Partition
-from interloper.partitioning.ranges import PartitionRange
+from interloper.partitioning.partition import Partition
+from interloper.partitioning.range import PartitionRange
 from interloper.source import Source
 
 logger = logging.getLogger(__name__)

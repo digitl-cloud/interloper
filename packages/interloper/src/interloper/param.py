@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from interloper.io.base import IOContext
-from interloper.partitioning.partitions import TimePartition
-from interloper.partitioning.ranges import PartitionRange
+from interloper.partitioning.partition import TimePartition
+from interloper.partitioning.range import PartitionRange
 
 if TYPE_CHECKING:
     from interloper.execution.pipeline import ExecutionContext

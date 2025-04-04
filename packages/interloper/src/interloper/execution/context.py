@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from interloper.partitioning.partitions import Partition
-from interloper.partitioning.ranges import PartitionRange
+from interloper.partitioning.partition import Partition
+from interloper.partitioning.range import PartitionRange
 
 if TYPE_CHECKING:
     from interloper.asset import Asset

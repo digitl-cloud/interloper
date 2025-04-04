@@ -5,8 +5,8 @@ from typing import Any
 
 from interloper.asset import Asset
 from interloper.io.base import IO, IOContext
-from interloper.partitioning.partitions import Partition
-from interloper.partitioning.ranges import PartitionRange
+from interloper.partitioning.partition import Partition
+from interloper.partitioning.range import PartitionRange
 
 logger = logging.getLogger(__name__)
 
