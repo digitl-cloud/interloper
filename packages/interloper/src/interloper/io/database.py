@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from interloper.io.base import IOContext, TypedIO
+from interloper.partitioning.config import PartitionConfig
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.range import PartitionRange
-from interloper.partitioning.strategy import PartitionStrategy
 from interloper.schema import AssetSchema
 
 T = TypeVar("T")
@@ -24,7 +24,7 @@ class DatabaseClient(ABC):
         table_name: str,
         schema: type[AssetSchema],
         dataset: str | None = None,
-        partition_strategy: PartitionStrategy | None = None,
+        partitioning: PartitionConfig | None = None,
     ) -> None: ...
 
     @abstractmethod
@@ -61,13 +61,13 @@ class DatabaseIO(Generic[T], TypedIO[T]):
 
         if not self.client.table_exists(context.asset.name, context.asset.dataset):
             self.client.create_table(
-                context.asset.name, context.asset.schema, context.asset.dataset, context.asset.partition_strategy
+                context.asset.name, context.asset.schema, context.asset.dataset, context.asset.partitioning
             )
 
         if context.partition:
-            assert context.asset.partition_strategy
+            assert context.asset.partitioning
             self.client.delete_partition(
-                context.asset.name, context.asset.partition_strategy.column, context.partition, context.asset.dataset
+                context.asset.name, context.asset.partitioning.column, context.partition, context.asset.dataset
             )
 
         table_schema = self.client.table_schema(context.asset.name, context.asset.dataset)

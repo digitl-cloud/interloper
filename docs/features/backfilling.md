@@ -4,7 +4,7 @@
 @source
 def my_source() -> Sequence[Asset]:
     @asset(
-        partition_strategy=TimePartitionStrategy(column="date"),
+        partitioning=TimePartitionConfig(column="date"),
     )
     def my_asset(
         date: dt.date = Date(),
@@ -30,7 +30,7 @@ Pipeline(my_source).backfill(
 @source
 def my_source() -> Sequence[Asset]:
     @asset(
-        partition_strategy=TimePartitionStrategy(column="date", allow_window=True),
+        partitioning=TimePartitionConfig(column="date", allow_window=True),
     )
     def my_asset(
         date_window: tuple[dt.date, dt.date] = DateWindow(),

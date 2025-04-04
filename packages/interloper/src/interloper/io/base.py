@@ -60,5 +60,5 @@ class TypedIO(Generic[T], IO[T]):
         if not isinstance(data, self.handler.type):
             raise ValueError(
                 f"Data type {type(data).__name__} is not supported by {self.__class__.__name__}. "
-                f"Expected type {self.handler.type.__name__}"
+                f"Expected type {self.handler.type.__name__}."
             )

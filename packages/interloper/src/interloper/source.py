@@ -5,6 +5,7 @@ from functools import partial
 from inspect import signature
 from typing import Any, overload
 
+from interloper.execution.strategy import MaterializationStrategy
 from typing_extensions import Self
 
 from interloper import errors
@@ -21,6 +22,7 @@ class Source(ABC):
     default_io_key: str | None
     auto_asset_deps: bool
     normalizer: Normalizer | None
+    materialization_strategy: MaterializationStrategy
     default_assets_args: dict[str, Any]
 
     def __init__(
@@ -32,6 +34,7 @@ class Source(ABC):
         default_io_key: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
+        materialization_strategy: MaterializationStrategy = MaterializationStrategy.FLEXIBLE,
         default_assets_args: dict[str, Any] | None = None,
     ):
         super().__init__()
@@ -42,6 +45,7 @@ class Source(ABC):
         self.default_io_key = default_io_key
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
+        self.materialization_strategy = materialization_strategy
         self.default_assets_args = default_assets_args or {}
         self._build_assets()
 
@@ -55,6 +59,7 @@ class Source(ABC):
         io: dict[str, IO] | None = None,
         default_io_key: str | None = None,
         default_assets_args: dict[str, Any] | None = None,
+        materialization_strategy: MaterializationStrategy | None = None,
         **kwargs: Any,
     ) -> "Source":
         c = copy(self)  # TODO: implement __copy__
@@ -62,6 +67,7 @@ class Source(ABC):
         c.io = io or self.io
         c.default_io_key = default_io_key or self.default_io_key
         c.default_assets_args = default_assets_args or self.default_assets_args
+        c.materialization_strategy = materialization_strategy or self.materialization_strategy
         c.bind(**kwargs)
         c._build_assets()
         return c
@@ -190,6 +196,7 @@ class SourceDecorator:
         dataset: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
+        materialization_strategy: MaterializationStrategy = MaterializationStrategy.FLEXIBLE,
     ) -> Self: ...
 
     def __new__(cls, func: Callable | None = None, *args: Any, **kwargs: Any):
@@ -212,11 +219,13 @@ class SourceDecorator:
         dataset: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
+        materialization_strategy: MaterializationStrategy = MaterializationStrategy.FLEXIBLE,
     ):
         self.name = name
         self.dataset = dataset
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
+        self.materialization_strategy = materialization_strategy
 
     def __call__(self, func: Callable) -> Source:
         """
@@ -242,6 +251,7 @@ class SourceDecorator:
             dataset=self.dataset,
             auto_asset_deps=self.auto_asset_deps,
             normalizer=self.normalizer,
+            materialization_strategy=self.materialization_strategy,
         )
 
 

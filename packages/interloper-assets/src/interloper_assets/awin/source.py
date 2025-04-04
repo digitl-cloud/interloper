@@ -53,12 +53,12 @@ def awin(
 
     @itlp.asset(
         schema=AdvertiserByPublishers,
-        partition_strategy=itlp.TimePartitionStrategy(column="date"),
+        partitioning=itlp.TimePartitionConfig(column="date"),
     )
     def advertiser_by_publisher(
         advertiser_id: str,
         date: dt.date = itlp.Date(),
-    ) -> Any:
+    ) -> pd.DataFrame:
         response = client.get(
             f"advertisers/{advertiser_id}/reports/publisher",
             params={
@@ -75,7 +75,7 @@ def awin(
 
     @itlp.asset(
         schema=AdvertiserTransactions,
-        partition_strategy=itlp.TimePartitionStrategy(column="date"),
+        partitioning=itlp.TimePartitionConfig(column="date"),
     )
     def advertiser_transactions(
         advertiser_id: str,

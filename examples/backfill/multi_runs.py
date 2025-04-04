@@ -10,7 +10,7 @@ itlp.basic_logging(logging.INFO)
 @itlp.source
 def my_source() -> Sequence[itlp.Asset]:
     @itlp.asset(
-        partition_strategy=itlp.TimePartitionStrategy(column="date"),
+        partitioning=itlp.TimePartitionConfig(column="date"),
     )
     def my_asset(
         date: dt.date = itlp.Date(),

@@ -41,7 +41,7 @@ class BigQueryClient(itlp.DatabaseClient):
         table_name: str,
         schema: type[itlp.AssetSchema],
         dataset: str | None = None,
-        partition_strategy: itlp.PartitionStrategy | None = None,
+        partitioning: itlp.PartitionConfig | None = None,
     ) -> None:
         self.client.create_dataset(dataset or self.default_dataset, exists_ok=True)
 
@@ -50,11 +50,11 @@ class BigQueryClient(itlp.DatabaseClient):
             bigquery.SchemaField(name=name, field_type=type)
             for name, type in schema.to_tuple(format="sql", types=PYTHON_TO_SQL_TYPE)
         ]
-        if partition_strategy:
-            assert isinstance(partition_strategy, itlp.TimePartitionStrategy)
+        if partitioning:
+            assert isinstance(partitioning, itlp.TimePartitionConfig)
             table.time_partitioning = bigquery.TimePartitioning(
                 type_=bigquery.TimePartitioningType.DAY,
-                field=partition_strategy.column,
+                field=partitioning.column,
             )
 
         self.client.create_table(table)
@@ -119,9 +119,9 @@ class BigQueryDataframeHandler(itlp.IOHandler[pd.DataFrame]):
 
     def read(self, context: itlp.IOContext) -> pd.DataFrame:
         if context.partition:
-            assert context.asset.partition_strategy
+            assert context.asset.partitioning
             query = self.client.get_select_partition_statement(
-                context.asset.name, context.asset.partition_strategy.column, context.partition, context.asset.dataset
+                context.asset.name, context.asset.partitioning.column, context.partition, context.asset.dataset
             )
         else:
             table_id = f"{context.asset.dataset or self.client.default_dataset}.{context.asset.name}"

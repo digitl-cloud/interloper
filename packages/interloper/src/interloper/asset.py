@@ -13,10 +13,11 @@ from typing_extensions import Self
 from interloper import errors
 from interloper.execution.context import ExecutionContext
 from interloper.execution.observable import Event, Observable
+from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam, UpstreamAsset
-from interloper.partitioning.strategy import PartitionStrategy
+from interloper.partitioning.config import PartitionConfig
 from interloper.schema import AssetSchema
 
 if TYPE_CHECKING:
@@ -32,12 +33,13 @@ class Asset(ABC, Observable):
     deps: dict[str, str]
     materializable: bool
     schema: type[AssetSchema] | None
-    partition_strategy: PartitionStrategy | None
+    partitioning: PartitionConfig | None
     _source: "Source | None"
     _dataset: str | None
     _io: dict[str, IO[Any]]
     _default_io_key: str | None
     _normalizer: Normalizer | None
+    _materialization_strategy: MaterializationStrategy | None
 
     def __init__(
         self,
@@ -51,7 +53,8 @@ class Asset(ABC, Observable):
         default_io_key: str | None = None,
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
-        partition_strategy: PartitionStrategy | None = None,
+        partitioning: PartitionConfig | None = None,
+        materialization_strategy: MaterializationStrategy | None = None,
     ):
         super().__init__()
 
@@ -60,7 +63,7 @@ class Asset(ABC, Observable):
         self.deps = deps or {}
         self.materializable = materializable
         self.schema = schema
-        self.partition_strategy = partition_strategy
+        self.partitioning = partitioning
 
         # Attributes shared with Source
         # Those attributes need getters to fallback on the source's attributes if not defined
@@ -68,6 +71,7 @@ class Asset(ABC, Observable):
         self._io = io or {}
         self._default_io_key = default_io_key
         self._normalizer = normalizer
+        self._materialization_strategy = materialization_strategy
 
     #############
     # Magic
@@ -129,6 +133,18 @@ class Asset(ABC, Observable):
         self._normalizer = value
 
     @property
+    def materialization_strategy(self) -> MaterializationStrategy:
+        return (
+            self._materialization_strategy
+            or (self._source and self._source.materialization_strategy)
+            or MaterializationStrategy.FLEXIBLE
+        )
+
+    @materialization_strategy.setter
+    def materialization_strategy(self, value: MaterializationStrategy) -> None:
+        self._materialization_strategy = value
+
+    @property
     def has_io(self) -> bool:
         return self.io is not None and len(self.io) > 0
 
@@ -140,7 +156,7 @@ class Asset(ABC, Observable):
     @property
     def allows_partition_window(self) -> bool:
         # TODO: should check if the asset has a DateWindow asset param?
-        return self.partition_strategy is not None and self.partition_strategy.allow_window
+        return self.partitioning is not None and self.partitioning.allow_window
 
     #############
     # Public
@@ -222,7 +238,7 @@ class Asset(ABC, Observable):
         data = self.data(**params)
 
         # Type checking
-        if return_type != Parameter.empty and return_type is not Any and not isinstance(data, return_type):
+        if return_type != Parameter.empty and not isinstance(data, return_type):
             raise errors.AssetValueError(
                 f"Asset {self.name} returned data of type {type(data).__name__}, expected {return_type.__name__}"
             )
@@ -241,7 +257,7 @@ class Asset(ABC, Observable):
                 data = self.normalizer.normalize(data)
                 logger.info(f"Asset {self.name} normalized")
             except Exception as e:
-                raise errors.AssetMaterializationError(f"Failed to normalize data for asset {self.name}: {e}")
+                raise errors.AssetNormalizationError(f"Failed to normalize data for asset {self.name}: {e}")
 
             # Schema inference
             try:
@@ -258,8 +274,13 @@ class Asset(ABC, Observable):
                 if equal:
                     logger.info(f"Asset {self.name} schema inferred from data (Schema check passed ✔)")
                 else:
-                    logger.warning(f"Schema mismatch for asset {self.name} between provided and inferred schemas")
-                    logger.debug(f"Schema diff: \n{json.dumps(diff, indent=2, default=str)}")
+                    if self.materialization_strategy == MaterializationStrategy.STRICT:
+                        raise errors.AssetNormalizationError(
+                            f"The data does not match the provided schema for asset {self.name} [STRICT strategy]"
+                        )
+                    else:
+                        logger.warning(f"Schema mismatch for asset {self.name} between provided and inferred schemas")
+                        logger.debug(f"Schema diff: \n{json.dumps(diff, indent=2, default=str)}")
         else:
             logger.warning(f"Asset {self.name} does not have a normalizer. Skipping normalization.")
 
@@ -272,9 +293,9 @@ class Asset(ABC, Observable):
         context: "ExecutionContext | None" = None,
     ) -> None:
         if context:
-            if context.partition and not self.partition_strategy:
+            if context.partition and not self.partitioning:
                 raise errors.AssetMaterializationError(
-                    f"Asset {self.name} does not support partitioning (missing partition_strategy config)"
+                    f"Asset {self.name} does not support partitioning (missing partitioning config)"
                 )
 
         io_context = IOContext(
@@ -330,7 +351,12 @@ class Asset(ABC, Observable):
             # Default value is not a asset_param
             final_params[param.name] = param.default
 
-        return final_params, sig.return_annotation
+        return_type = sig.return_annotation
+        # return_type is not allow to be a Generic
+        if hasattr(return_type, "__origin__"):
+            raise errors.AssetDefinitionError(f"Generic return type {return_type} is not allowed for asset {self.name}")
+
+        return final_params, return_type
 
 
 class AssetDecorator:
@@ -347,7 +373,8 @@ class AssetDecorator:
         dataset: str | None = None,
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
-        partition_strategy: PartitionStrategy | None = None,
+        partitioning: PartitionConfig | None = None,
+        materialization_strategy: MaterializationStrategy | None = None,
     ) -> Self: ...
 
     def __new__(cls, func: Callable | None = None, *args: Any, **kwargs: Any):
@@ -370,13 +397,15 @@ class AssetDecorator:
         dataset: str | None = None,
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
-        partition_strategy: PartitionStrategy | None = None,
+        partitioning: PartitionConfig | None = None,
+        materialization_strategy: MaterializationStrategy | None = None,
     ):
         self.name = name
         self.dataset = dataset
         self.schema = schema
         self.normalizer = normalizer
-        self.partition_strategy = partition_strategy
+        self.partitioning = partitioning
+        self.materialization_strategy = materialization_strategy
 
     def __call__(self, func: Callable) -> Asset:
         """
@@ -402,7 +431,8 @@ class AssetDecorator:
             dataset=self.dataset,
             schema=self.schema,
             normalizer=self.normalizer,
-            partition_strategy=self.partition_strategy,
+            partitioning=self.partitioning,
+            materialization_strategy=self.materialization_strategy,
         )
 
 

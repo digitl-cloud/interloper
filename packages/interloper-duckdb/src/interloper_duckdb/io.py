@@ -29,7 +29,7 @@ class DuckDBClient(itlp.DatabaseClient):
         table_name: str,
         schema: type[itlp.AssetSchema],
         dataset: str | None = None,
-        partition_strategy: itlp.PartitionStrategy | None = None,
+        partitioning: itlp.PartitionConfig | None = None,
     ) -> None:
         query = f"CREATE TABLE IF NOT EXISTS {table_name} ({schema.to_sql()});"
         self.connection.execute(query)
@@ -85,9 +85,9 @@ class DuckDBDataframeHandler(itlp.IOHandler[pd.DataFrame]):
 
     def read(self, context: itlp.IOContext) -> pd.DataFrame:
         if context.partition:
-            assert context.asset.partition_strategy
+            assert context.asset.partitioning
             query = self.client.get_select_partition_statement(
-                context.asset.name, context.asset.partition_strategy.column, context.partition
+                context.asset.name, context.asset.partitioning.column, context.partition
             )
         else:
             query = f"SELECT * FROM {context.asset.name};"

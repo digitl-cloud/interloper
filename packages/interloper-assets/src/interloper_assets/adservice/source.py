@@ -44,7 +44,7 @@ def adservice(
 
     @itlp.asset(
         schema=Campaigns,
-        partition_strategy=itlp.TimePartitionStrategy("date"),
+        partitioning=itlp.TimePartitionConfig("date"),
     )
     def campaigns(date: dt.date = itlp.Date()) -> pd.DataFrame:
         response = get_report(
@@ -59,7 +59,7 @@ def adservice(
         return pd.DataFrame(data)
 
     @itlp.asset(
-        partition_strategy=itlp.TimePartitionStrategy("date"),
+        partitioning=itlp.TimePartitionConfig("date"),
     )
     def conversions(date: dt.date = itlp.Date()) -> pd.DataFrame:
         response = get_report(
@@ -71,7 +71,7 @@ def adservice(
         return pd.DataFrame(data)
 
     @itlp.asset(
-        partition_strategy=itlp.TimePartitionStrategy("date"),
+        partitioning=itlp.TimePartitionConfig("date"),
     )
     def conversions_time_of_day(date: dt.date = itlp.Date()) -> pd.DataFrame:
         response = get_report(
@@ -83,7 +83,7 @@ def adservice(
         return pd.DataFrame(data)
 
     @itlp.asset(
-        partition_strategy=itlp.TimePartitionStrategy("date"),
+        partitioning=itlp.TimePartitionConfig("date"),
     )
     def campaigns_by_city(date: dt.date = itlp.Date()) -> pd.DataFrame:
         response = get_report(
@@ -96,7 +96,7 @@ def adservice(
         return pd.DataFrame(data)
 
     @itlp.asset(
-        partition_strategy=itlp.TimePartitionStrategy("date"),
+        partitioning=itlp.TimePartitionConfig("date"),
     )
     def campaigns_by_browser(date: dt.date = itlp.Date()) -> pd.DataFrame:
         response = get_report(
@@ -109,7 +109,7 @@ def adservice(
         return pd.DataFrame(data)
 
     @itlp.asset(
-        partition_strategy=itlp.TimePartitionStrategy("date"),
+        partitioning=itlp.TimePartitionConfig("date"),
     )
     def campaigns_by_device_type(date: dt.date = itlp.Date()) -> pd.DataFrame:
         response = get_report(

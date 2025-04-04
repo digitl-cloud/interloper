@@ -3,11 +3,11 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class PartitionStrategy:
+class PartitionConfig:
     column: str
     allow_window: bool = False
 
 
 @dataclass(frozen=True)
-class TimePartitionStrategy(PartitionStrategy):
+class TimePartitionConfig(PartitionConfig):
     start_date: dt.date | None = None

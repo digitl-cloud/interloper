@@ -11,7 +11,7 @@ from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam
 from interloper.partitioning.partition import Partition
-from interloper.partitioning.strategy import PartitionStrategy, TimePartitionStrategy
+from interloper.partitioning.config import PartitionConfig, TimePartitionConfig
 from interloper.schema import AssetSchema
 
 
@@ -136,16 +136,16 @@ class TestAssetProperties:
         assert not simple_asset.has_io
 
     def test_allows_partition_window(self, simple_asset: Asset):
-        simple_asset.partition_strategy = TimePartitionStrategy(column="date", allow_window=True)
+        simple_asset.partitioning = TimePartitionConfig(column="date", allow_window=True)
         assert simple_asset.allows_partition_window
 
     def test_allows_partition_window_false(self, simple_asset: Asset):
         assert not simple_asset.allows_partition_window
 
-        simple_asset.partition_strategy = PartitionStrategy(column="date")
+        simple_asset.partitioning = PartitionConfig(column="date")
         assert not simple_asset.allows_partition_window
 
-        simple_asset.partition_strategy = TimePartitionStrategy(column="date")
+        simple_asset.partitioning = TimePartitionConfig(column="date")
         assert not simple_asset.allows_partition_window
 
 
@@ -215,7 +215,7 @@ class TestAssetRun:
             return "data"
 
         with pytest.raises(
-            errors.AssetMaterializationError, match="Failed to normalize data for asset my_asset: error"
+            errors.AssetNormalizationError, match="Failed to normalize data for asset my_asset: error"
         ):
             my_asset.run(who="world")
 
@@ -276,7 +276,7 @@ class TestAssetMaterialize:
 
     def test_materialize_with_context_with_partition(self, simple_asset: Asset, simple_io: IO):
         simple_asset.io = {"simple": simple_io}
-        simple_asset.partition_strategy = PartitionStrategy(column="date")
+        simple_asset.partitioning = PartitionConfig(column="date")
         simple_asset.bind(who="world")
 
         context = ExecutionContext(
@@ -301,7 +301,7 @@ class TestAssetMaterialize:
 
         with pytest.raises(
             errors.AssetMaterializationError,
-            match="Asset simple_asset does not support partitioning \\(missing partition_strategy config\\)",
+            match="Asset simple_asset does not support partitioning \\(missing partitioning config\\)",
         ):
             simple_asset.materialize(context)
 

@@ -20,14 +20,13 @@ awin = awin(
         "bigquery": BigQueryDataframeIO(project="dc-int-connectors-prd", location="eu"),
     },
     default_io_key="bigquery",
+    default_assets_args={"advertiser_id": "10990"},
+    # materialization_strategy=itlp.MaterializationStrategy.STRICT,
 )
 
-awin_10990 = awin(default_assets_args={"advertiser_id": "10990"})
+# data = awin.advertiser_by_publisher.run(date=dt.date(2025, 1, 1))
 
-
-# data = awin_10990.advertiser_by_publisher.run(date=dt.date(2025, 1, 1))
-
-pipeline = itlp.Pipeline(awin_10990.advertiser_by_publisher)
+pipeline = itlp.Pipeline(awin.advertiser_by_publisher)
 pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 3)))
 
 # pipeline.backfill(

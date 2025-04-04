@@ -1,5 +1,5 @@
 import logging
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import interloper as itlp
 import pandas as pd
@@ -45,7 +45,7 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         table_name: str,
         schema: type[itlp.AssetSchema],
         dataset: str | None = None,
-        partition_strategy: itlp.PartitionStrategy | None = None,
+        partitioning: itlp.PartitionConfig | None = None,
     ) -> None:
         with self.engine.connect() as connection:
             # Create dataset if it doesn't exist and database supports schemas
@@ -99,6 +99,19 @@ class SQLAlchemyClient(itlp.DatabaseClient):
             logger.info(f"Partition {partition} deleted from table {table_dataset}{table_name}")
 
 
+class SQLAlchemyJSONHandler(itlp.IOHandler[list[dict[str, Any]]]):
+    def __init__(self, client: SQLAlchemyClient) -> None:
+        super().__init__(
+            type=list[dict[str, Any]],
+            reconciler=itlp.JSONReconciler(),
+        )
+        self.client = client
+
+    def write(self, context: itlp.IOContext, data: list[dict[str, Any]]) -> None: ...
+
+    def read(self, context: itlp.IOContext) -> list[dict[str, Any]]: ...
+
+
 class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
     def __init__(self, client: SQLAlchemyClient) -> None:
         super().__init__(
@@ -125,9 +138,9 @@ class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
 
     def read(self, context: itlp.IOContext) -> pd.DataFrame:
         if context.partition:
-            assert context.asset.partition_strategy
+            assert context.asset.partitioning
             query = self.client.get_select_partition_statement(
-                context.asset.name, context.asset.partition_strategy.column, context.partition, context.asset.dataset
+                context.asset.name, context.asset.partitioning.column, context.partition, context.asset.dataset
             )
         else:
             table_dataset = f"{context.asset.dataset}." if context.asset.dataset else ""
