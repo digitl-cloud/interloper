@@ -6,12 +6,12 @@ import pytest
 
 from interloper import errors
 from interloper.asset import Asset, asset
+from interloper.execution.pipeline import ExecutionContext
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam
 from interloper.partitioning.partitions import Partition
 from interloper.partitioning.strategies import PartitionStrategy, TimePartitionStrategy
-from interloper.execution.pipeline import ExecutionContext
 from interloper.schema import AssetSchema
 
 
@@ -256,7 +256,7 @@ class TestAssetMaterialize:
         simple_asset.io = {"simple": simple_io}
         simple_asset.bind(who="world")
 
-        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
+        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
             simple_asset.materialize()
             extract.assert_called_once_with(None)
 
@@ -270,7 +270,7 @@ class TestAssetMaterialize:
             partition=None,
         )
 
-        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
+        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
             simple_asset.materialize(context)
             extract.assert_called_once_with(context)
 
@@ -285,7 +285,7 @@ class TestAssetMaterialize:
             partition=Partition(value="whatever"),
         )
 
-        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
+        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
             simple_asset.materialize(context)
             extract.assert_called_once_with(context)
 
@@ -308,7 +308,7 @@ class TestAssetMaterialize:
     def test_not_materializable(self, simple_asset: Asset):
         simple_asset.materializable = False
 
-        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
+        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
             simple_asset.materialize()
             extract.assert_not_called()
 
@@ -325,7 +325,7 @@ class TestAssetMaterialize:
         }
         simple_asset.bind(who="world")
 
-        with patch.object(simple_asset, "_extract", wraps=simple_asset._execute) as extract:
+        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
             simple_asset.materialize()
             extract.assert_called_once_with(None)
         simple_asset.io["simple"].write.assert_called_once()
