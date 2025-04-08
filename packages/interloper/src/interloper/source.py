@@ -5,11 +5,11 @@ from functools import partial
 from inspect import signature
 from typing import Any, overload
 
-from interloper.execution.strategy import MaterializationStrategy
 from typing_extensions import Self
 
 from interloper import errors
 from interloper.asset import Asset
+from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam

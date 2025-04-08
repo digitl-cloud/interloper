@@ -65,7 +65,7 @@ class DataFrameReconciler(itlp.Reconciler[pd.DataFrame]):
                 logger.debug(f"Converting column '{column}' from {current_dtype} to {target_dtype} (Schema {sql_type})")
                 try:
                     if convert_fn:
-                        data[column] = convert_fn(data[column])
+                        data[column] = convert_fn(data[column])  # type: ignore
                     else:
                         data[column] = data[column].astype(target_dtype)  # type: ignore
                 except Exception as e:
@@ -76,7 +76,7 @@ class DataFrameReconciler(itlp.Reconciler[pd.DataFrame]):
 
         if reorder:
             logger.info("Reordering columns to match schema...")
-            data = data[table_schema.keys()]
+            data = data[table_schema.keys()]  # type: ignore
 
         logger.info("Schema reconciliation complete.")
         return data

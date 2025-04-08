@@ -1,5 +1,4 @@
 import logging
-import sys
 
 import duckdb
 import interloper as itlp

@@ -10,8 +10,8 @@ from interloper.execution.pipeline import ExecutionContext
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
 from interloper.param import AssetParam, ContextualAssetParam
-from interloper.partitioning.partition import Partition
 from interloper.partitioning.config import PartitionConfig, TimePartitionConfig
+from interloper.partitioning.partition import Partition
 from interloper.schema import AssetSchema
 
 

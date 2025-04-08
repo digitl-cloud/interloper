@@ -1,5 +1,4 @@
 import logging
-from collections.abc import Sequence
 
 import interloper as itlp
 
@@ -7,7 +6,7 @@ itlp.basic_logging(logging.INFO)
 
 
 @itlp.source
-def my_source() -> Sequence[itlp.Asset]:
+def my_source() -> tuple[itlp.Asset, ...]:
     @itlp.asset
     def my_asset_A() -> str:
         return "A"
