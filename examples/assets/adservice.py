@@ -3,13 +3,13 @@ import logging
 
 import interloper as itlp
 from interloper_assets import adservice
-from interloper_duckdb import DuckDBDataframeIO
+from interloper_duckdb import DuckDBIO
 
 itlp.basic_logging(logging.DEBUG)
 
 
 adservice = adservice(
-    io={"duckdb": DuckDBDataframeIO("data/duck.db")},
+    io={"duckdb": DuckDBIO("data/duck.db")},
     default_io_key="duckdb",
 )
 

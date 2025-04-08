@@ -1,1 +1,1 @@
-from interloper_google_cloud.io import BigQueryClient, BigQueryDataframeHandler, BigQueryDataframeIO
+from interloper_google_cloud.io import BigQueryClient, BigQueryDataframeHandler, BigQueryIO

@@ -132,8 +132,7 @@ class BigQueryDataframeHandler(itlp.IOHandler[pd.DataFrame]):
         return df
 
 
-class BigQueryDataframeIO(itlp.DatabaseIO[pd.DataFrame]):
+class BigQueryIO(itlp.DatabaseIO):
     def __init__(self, project: str, location: str, default_dataset: str = "public"):
         client = BigQueryClient(project, location, default_dataset)
-        handler = BigQueryDataframeHandler(client)
-        super().__init__(handler, client)
+        super().__init__(client, handlers=[BigQueryDataframeHandler(client)])

@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 import interloper as itlp
 import pandas as pd
@@ -7,7 +7,6 @@ from interloper_pandas import DataFrameReconciler
 from sqlalchemy import MetaData, create_engine, inspect, text
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T")
 
 
 class SQLAlchemyClient(itlp.DatabaseClient):
@@ -152,27 +151,24 @@ class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
         return data
 
 
-class SQLAlchemyIO(Generic[T], itlp.DatabaseIO[T]):
-    def __init__(self, client: SQLAlchemyClient, handler: itlp.IOHandler[T]) -> None:
-        super().__init__(handler, client)
+class SQLAlchemyIO(itlp.DatabaseIO):
+    def __init__(self, client: SQLAlchemyClient, handlers: list[itlp.IOHandler]) -> None:
+        super().__init__(client, handlers)
 
 
-class PostgresDataframeIO(SQLAlchemyIO):
+class PostgresIO(SQLAlchemyIO):
     def __init__(self, database: str, user: str, password: str, host: str, port: int = 5432) -> None:
         client = SQLAlchemyClient(f"postgresql://{user}:{password}@{host}:{port}/{database}")
-        handler = SQLAlchemyDataframeHandler(client)
-        super().__init__(client, handler)
+        super().__init__(client, handlers=[SQLAlchemyDataframeHandler(client)])
 
 
-class MySQLDataframeIO(SQLAlchemyIO):
+class MySQLIO(SQLAlchemyIO):
     def __init__(self, database: str, user: str, password: str, host: str, port: int = 3306) -> None:
         client = SQLAlchemyClient(f"mysql://{user}:{password}@{host}:{port}/{database}")
-        handler = SQLAlchemyDataframeHandler(client)
-        super().__init__(client, handler)
+        super().__init__(client, handlers=[SQLAlchemyDataframeHandler(client)])
 
 
-class SQLiteDataframeIO(SQLAlchemyIO):
+class SQLiteIO(SQLAlchemyIO):
     def __init__(self, db_path: str) -> None:
         client = SQLAlchemyClient(f"sqlite:///{db_path}")
-        handler = SQLAlchemyDataframeHandler(client)
-        super().__init__(client, handler)
+        super().__init__(client, handlers=[SQLAlchemyDataframeHandler(client)])

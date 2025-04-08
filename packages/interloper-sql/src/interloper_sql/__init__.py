@@ -1,8 +1,8 @@
 from .io import (
-    MySQLDataframeIO,
-    PostgresDataframeIO,
+    MySQLIO,
+    PostgresIO,
     SQLAlchemyClient,
     SQLAlchemyDataframeHandler,
     SQLAlchemyIO,
-    SQLiteDataframeIO,
+    SQLiteIO,
 )

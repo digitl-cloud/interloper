@@ -1,14 +1,11 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Any
 
-from interloper.io.base import IOContext, TypedIO
+from interloper.io.base import IOContext, IOHandler, TypedIO
 from interloper.partitioning.config import PartitionConfig
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.range import PartitionRange
 from interloper.schema import AssetSchema
-
-T = TypeVar("T")
 
 
 class DatabaseClient(ABC):
@@ -46,17 +43,20 @@ class DatabaseClient(ABC):
     ) -> None: ...
 
 
-@dataclass
-class DatabaseIO(Generic[T], TypedIO[T]):
-    client: DatabaseClient
+class DatabaseIO(TypedIO):
+    def __init__(self, client: DatabaseClient, handlers: list[IOHandler]) -> None:
+        super().__init__(handlers)
+        self.client = client
 
-    def write(self, context: IOContext, data: T) -> None:
-        self._check_asset_type(data)  # because is TypedIO
+    def write(self, context: IOContext, data: Any) -> None:
+        handler = self.get_handler(type(data))
+        handler.verify_type(data)
 
         if not context.asset.schema:
             raise RuntimeError(
-                f"Schema is required for asset {context.asset.name} when using Database IO {self.__class__.__name__}. "
-                "Either provide schema with the asset definition and/or use a normalizer to infer it from the data."
+                f"Schema is required for asset {context.asset.name} when using {self.__class__.__name__}. "
+                "Either provide a schema with the asset definition (`@asset(schema=...)`) "
+                "and/or use a normalizer to infer the schema automatically from the data (`@asset(normalizer=...)`)."
             )
 
         if not self.client.table_exists(context.asset.name, context.asset.dataset):
@@ -71,11 +71,12 @@ class DatabaseIO(Generic[T], TypedIO[T]):
             )
 
         table_schema = self.client.table_schema(context.asset.name, context.asset.dataset)
-        data = self.handler.reconciler.reconcile(data, table_schema)
+        data = handler.reconciler.reconcile(data, table_schema)
 
-        self.handler.write(context, data)
+        handler.write(context, data)
 
-    def read(self, context: IOContext) -> T:
-        data = self.handler.read(context)
-        self._check_asset_type(data)
+    def read(self, context: IOContext) -> Any:
+        handler = self.get_handler(type(context.asset.schema))
+        data = handler.read(context)
+        handler.verify_type(data)
         return data

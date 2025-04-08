@@ -1,1 +1,1 @@
-from .io import DuckDBClient, DuckDBDataframeHandler, DuckDBDataframeIO
+from .io import DuckDBClient, DuckDBDataframeHandler, DuckDBIO

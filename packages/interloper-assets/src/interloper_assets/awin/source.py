@@ -1,6 +1,5 @@
 import datetime as dt
 from collections.abc import Sequence
-from typing import Any
 
 import httpx
 import interloper as itlp

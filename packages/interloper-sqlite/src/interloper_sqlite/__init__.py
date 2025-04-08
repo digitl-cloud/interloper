@@ -1,1 +1,1 @@
-from .io import SQLiteClient, SQLiteDataframeHandler, SQLiteDataframeIO
+from .io import SQLiteClient, SQLiteDataframeHandler, SQLiteIO

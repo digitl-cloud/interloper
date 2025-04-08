@@ -1,5 +1,4 @@
 import logging
-from typing import TypeVar
 
 import duckdb
 import interloper as itlp
@@ -7,7 +6,6 @@ import pandas as pd
 from interloper_pandas import DataFrameReconciler
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T")
 
 
 class DuckDBClient(itlp.DatabaseClient):
@@ -98,8 +96,7 @@ class DuckDBDataframeHandler(itlp.IOHandler[pd.DataFrame]):
         return data
 
 
-class DuckDBDataframeIO(itlp.DatabaseIO[pd.DataFrame]):
+class DuckDBIO(itlp.DatabaseIO):
     def __init__(self, db_path: str) -> None:
         client = DuckDBClient(db_path)
-        handler = DuckDBDataframeHandler(client)
-        super().__init__(handler, client)
+        super().__init__(client, handlers=[DuckDBDataframeHandler(client)])

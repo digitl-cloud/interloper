@@ -21,16 +21,6 @@ class IOContext:
     partition: Partition | PartitionRange | None = None
 
 
-class IO(ABC, Generic[T]):
-    @abstractmethod
-    def write(self, context: IOContext, data: T) -> None:
-        pass
-
-    @abstractmethod
-    def read(self, context: IOContext) -> T:
-        pass
-
-
 @dataclass
 class IOHandler(ABC, Generic[T]):
     type: type[T]
@@ -42,23 +32,39 @@ class IOHandler(ABC, Generic[T]):
     @abstractmethod
     def read(self, context: IOContext) -> T: ...
 
-
-@dataclass
-class TypedIO(Generic[T], IO[T]):
-    handler: IOHandler[T]
-
-    def write(self, context: IOContext, data: T) -> None:
-        self._check_asset_type(data)
-        self.handler.write(context, data)
-
-    def read(self, context: IOContext) -> T:
-        data = self.handler.read(context)
-        self._check_asset_type(data)
-        return data
-
-    def _check_asset_type(self, data: Any) -> None:
-        if not isinstance(data, self.handler.type):
+    def verify_type(self, data: Any) -> None:
+        if not isinstance(data, self.type):
             raise ValueError(
                 f"Data type {type(data).__name__} is not supported by {self.__class__.__name__}. "
-                f"Expected type {self.handler.type.__name__}."
+                f"Expected type {self.type.__name__}."
             )
+
+
+class IO(ABC):
+    @abstractmethod
+    def write(self, context: IOContext, data: Any) -> None:
+        pass
+
+    @abstractmethod
+    def read(self, context: IOContext) -> Any:
+        pass
+
+
+class TypedIO(IO):
+    _handlers: dict[type, IOHandler] | None
+
+    def __init__(self, handlers: list[IOHandler]) -> None:
+        self._handlers = {handler.type: handler for handler in handlers}
+
+    @property
+    def supported_types(self) -> set[type]:
+        if self._handlers is None:
+            return set()
+
+        return set(self._handlers.keys())
+
+    def get_handler(self, data_type: type) -> IOHandler:
+        if self._handlers is None or data_type not in self._handlers:
+            raise RuntimeError(f"IO {self.__class__.__name__} does not support data type {data_type.__name__}")
+
+        return self._handlers[data_type]

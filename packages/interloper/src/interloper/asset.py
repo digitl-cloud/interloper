@@ -36,7 +36,7 @@ class Asset(ABC, Observable):
     partitioning: PartitionConfig | None
     _source: "Source | None"
     _dataset: str | None
-    _io: dict[str, IO[Any]]
+    _io: dict[str, IO]
     _default_io_key: str | None
     _normalizer: Normalizer | None
     _materialization_strategy: MaterializationStrategy | None
@@ -48,7 +48,7 @@ class Asset(ABC, Observable):
         source: "Source | None" = None,
         dataset: str | None = None,
         deps: dict[str, str] | None = None,
-        io: dict[str, IO[Any]] | None = None,
+        io: dict[str, IO] | None = None,
         materializable: bool = True,
         default_io_key: str | None = None,
         schema: type[AssetSchema] | None = None,

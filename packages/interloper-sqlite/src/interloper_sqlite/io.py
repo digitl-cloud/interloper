@@ -102,12 +102,7 @@ class SQLiteDataframeHandler(itlp.IOHandler[pd.DataFrame]):
         return data
 
 
-class SQLiteDataframeIO(itlp.DatabaseIO):
+class SQLiteIO(itlp.DatabaseIO):
     def __init__(self, db_path: str) -> None:
         client = SQLiteClient(db_path)
-        handler = SQLiteDataframeHandler(client)
-        super().__init__(handler, client)
-
-    @property
-    def type(self) -> type[pd.DataFrame]:
-        return pd.DataFrame
+        super().__init__(client, handlers=[SQLiteDataframeHandler(client)])
