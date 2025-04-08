@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.range import PartitionRange
 from interloper.reconciler import Reconciler
+from interloper.utils.typing import match_type, safe_isinstance
 
 if TYPE_CHECKING:
     from interloper.asset import Asset
@@ -24,7 +25,7 @@ class IOContext:
 @dataclass
 class IOHandler(ABC, Generic[T]):
     type: type[T]
-    reconciler: Reconciler[T]  # TODO: should be optional?
+    reconciler: Reconciler[T] | None = None  # TODO: should be optional?
 
     @abstractmethod
     def write(self, context: IOContext, data: T) -> None: ...
@@ -33,7 +34,7 @@ class IOHandler(ABC, Generic[T]):
     def read(self, context: IOContext) -> T: ...
 
     def verify_type(self, data: Any) -> None:
-        if not isinstance(data, self.type):
+        if not safe_isinstance(data, self.type):
             raise ValueError(
                 f"Data type {type(data).__name__} is not supported by {self.__class__.__name__}. "
                 f"Expected type {self.type.__name__}."
@@ -64,7 +65,11 @@ class TypedIO(IO):
         return set(self._handlers.keys())
 
     def get_handler(self, data_type: type) -> IOHandler:
-        if self._handlers is None or data_type not in self._handlers:
+        if self._handlers is None:
             raise RuntimeError(f"IO {self.__class__.__name__} does not support data type {data_type.__name__}")
 
-        return self._handlers[data_type]
+        for handler_type in self._handlers.keys():
+            if match_type(data_type, handler_type):
+                return self._handlers[handler_type]
+
+        raise RuntimeError(f"IO {self.__class__.__name__} does not support data type {data_type.__name__}")

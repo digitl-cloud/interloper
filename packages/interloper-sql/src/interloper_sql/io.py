@@ -1,10 +1,11 @@
 import logging
+import sys
 from typing import Any
 
 import interloper as itlp
 import pandas as pd
 from interloper_pandas import DataFrameReconciler
-from sqlalchemy import MetaData, create_engine, inspect, text
+from sqlalchemy import MetaData, Table, create_engine, inspect, text
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,11 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         self.engine = create_engine(url)
         self.inspector = inspect(self.engine)
         self.supports_schemas = self.engine.dialect.name not in ("sqlite",)
+
+    def _get_table(self, table_name: str, dataset: str | None = None) -> Table:
+        if dataset and self.supports_schemas:
+            return Table(table_name, MetaData(schema=dataset), autoload_with=self.engine)
+        return Table(table_name, MetaData(), autoload_with=self.engine)
 
     def table_exists(
         self,
@@ -29,14 +35,7 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         table_name: str,
         dataset: str | None = None,
     ) -> dict[str, str]:
-        if dataset and self.supports_schemas:
-            metadata = MetaData(schema=dataset)
-            metadata.reflect(self.engine)
-            table = metadata.tables[f"{dataset}.{table_name}"]
-        else:
-            metadata = MetaData()
-            metadata.reflect(self.engine)
-            table = metadata.tables[table_name]
+        table = self._get_table(table_name, dataset)
         return {column.name: str(column.type.as_generic()) for column in table.columns}
 
     def create_table(
@@ -98,19 +97,6 @@ class SQLAlchemyClient(itlp.DatabaseClient):
             logger.info(f"Partition {partition} deleted from table {table_dataset}{table_name}")
 
 
-class SQLAlchemyJSONHandler(itlp.IOHandler[list[dict[str, Any]]]):
-    def __init__(self, client: SQLAlchemyClient) -> None:
-        super().__init__(
-            type=list[dict[str, Any]],
-            reconciler=itlp.JSONReconciler(),
-        )
-        self.client = client
-
-    def write(self, context: itlp.IOContext, data: list[dict[str, Any]]) -> None: ...
-
-    def read(self, context: itlp.IOContext) -> list[dict[str, Any]]: ...
-
-
 class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
     def __init__(self, client: SQLAlchemyClient) -> None:
         super().__init__(
@@ -151,6 +137,36 @@ class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
         return data
 
 
+class SQLAlchemyJSONHandler(itlp.IOHandler[list[dict[str, Any]]]):
+    def __init__(self, client: SQLAlchemyClient) -> None:
+        super().__init__(
+            type=list[dict[str, Any]],
+            reconciler=itlp.JSONReconciler(),
+        )
+        self.client = client
+
+    def write(self, context: itlp.IOContext, data: list[dict[str, Any]]) -> None:
+        if not data:
+            logger.warning(f"Data from asset {context.asset.name} is empty, not writing to Postgres")
+            return
+
+        table = self.client._get_table(context.asset.name, context.asset.dataset)
+        with self.client.engine.connect() as connection:
+            connection.execute(table.insert(), data)
+            connection.commit()
+
+        size = sys.getsizeof(data)
+        logger.info(f"Asset {context.asset.name} written to Postgres ({size} bytes)")
+
+    def read(self, context: itlp.IOContext) -> list[dict[str, Any]]:
+        table = self.client._get_table(context.asset.name, context.asset.dataset)
+        with self.client.engine.connect() as connection:
+            result = connection.execute(table.select())
+            size = sys.getsizeof(result)
+            logger.info(f"Asset {context.asset.name} read from Postgres ({size} bytes)")
+            return [dict(row) for row in result]
+
+
 class SQLAlchemyIO(itlp.DatabaseIO):
     def __init__(self, client: SQLAlchemyClient, handlers: list[itlp.IOHandler]) -> None:
         super().__init__(client, handlers)
@@ -159,16 +175,34 @@ class SQLAlchemyIO(itlp.DatabaseIO):
 class PostgresIO(SQLAlchemyIO):
     def __init__(self, database: str, user: str, password: str, host: str, port: int = 5432) -> None:
         client = SQLAlchemyClient(f"postgresql://{user}:{password}@{host}:{port}/{database}")
-        super().__init__(client, handlers=[SQLAlchemyDataframeHandler(client)])
+        super().__init__(
+            client,
+            handlers=[
+                SQLAlchemyDataframeHandler(client),
+                SQLAlchemyJSONHandler(client),
+            ],
+        )
 
 
 class MySQLIO(SQLAlchemyIO):
     def __init__(self, database: str, user: str, password: str, host: str, port: int = 3306) -> None:
         client = SQLAlchemyClient(f"mysql://{user}:{password}@{host}:{port}/{database}")
-        super().__init__(client, handlers=[SQLAlchemyDataframeHandler(client)])
+        super().__init__(
+            client,
+            handlers=[
+                SQLAlchemyDataframeHandler(client),
+                SQLAlchemyJSONHandler(client),
+            ],
+        )
 
 
 class SQLiteIO(SQLAlchemyIO):
     def __init__(self, db_path: str) -> None:
         client = SQLAlchemyClient(f"sqlite:///{db_path}")
-        super().__init__(client, handlers=[SQLAlchemyDataframeHandler(client)])
+        super().__init__(
+            client,
+            handlers=[
+                SQLAlchemyDataframeHandler(client),
+                SQLAlchemyJSONHandler(client),
+            ],
+        )

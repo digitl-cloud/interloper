@@ -60,3 +60,25 @@ def safe_isinstance(obj: Any, expected_type: Any, max_depth: int = 5, sample_siz
         )
 
     return False  # Unsupported type
+
+
+def match_type(t1: type, t2: type) -> bool:
+    if t1 == t2:
+        return True
+
+    origin1 = get_origin(t1) or t1
+    origin2 = get_origin(t2) or t2
+
+    if origin1 != origin2:
+        return False
+
+    args1 = get_args(t1)
+    args2 = get_args(t2)
+
+    if not args1 or not args2:
+        return True  # accept if generic params are not specified
+
+    if len(args1) != len(args2):
+        return False
+
+    return all(match_type(a1, a2) for a1, a2 in zip(args1, args2))

@@ -1,5 +1,7 @@
 import datetime as dt
 import logging
+import sys
+from typing import Any
 
 import interloper as itlp
 import pandas as pd
@@ -10,6 +12,7 @@ from interloper_pandas import DataFrameReconciler
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_DATASET = "public"
 PYTHON_TO_SQL_TYPE = {
     int: "INTEGER",
     float: "FLOAT",
@@ -21,7 +24,7 @@ PYTHON_TO_SQL_TYPE = {
 
 
 class BigQueryClient(itlp.DatabaseClient):
-    def __init__(self, project: str, location: str, default_dataset: str = "public"):
+    def __init__(self, project: str, location: str, default_dataset: str = DEFAULT_DATASET):
         self.default_dataset = default_dataset
         self.client = bigquery.Client(project=project, location=location)
 
@@ -92,6 +95,44 @@ class BigQueryClient(itlp.DatabaseClient):
         logger.info(f"Partition {partition} deleted from table {table_id}")
 
 
+class BigQueryJSONHandler(itlp.IOHandler[list[dict[str, Any]]]):
+    def __init__(self, client: BigQueryClient):
+        super().__init__(type=list[dict[str, Any]])
+        self.client = client
+
+    def write(self, context: itlp.IOContext, data: list[dict[str, Any]]) -> None:
+        if not data:
+            logger.warning(f"Data from asset {context.asset.name} is empty, not writing to BigQuery")
+            return
+
+        table_id = f"{context.asset.dataset or self.client.default_dataset}.{context.asset.name}"
+        job_config = bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        )
+
+        self.client.client.load_table_from_json(
+            json_rows=data,
+            destination=table_id,
+            timeout=None,
+            job_config=job_config,
+        ).result()
+
+        size = sys.getsizeof(data)
+        logger.info(f"Asset {context.asset.name} written to BigQuery ({size} bytes)")
+
+    def read(self, context: itlp.IOContext) -> list[dict[str, Any]]:
+        if context.partition:
+            assert context.asset.partitioning
+            query = self.client.get_select_partition_statement(
+                context.asset.name, context.asset.partitioning.column, context.partition, context.asset.dataset
+            )
+        else:
+            table_id = f"{context.asset.dataset or self.client.default_dataset}.{context.asset.name}"
+            query = f"SELECT * FROM {table_id}"
+
+        return [dict(row) for row in self.client.client.query(query)]
+
+
 class BigQueryDataframeHandler(itlp.IOHandler[pd.DataFrame]):
     def __init__(self, client: BigQueryClient):
         super().__init__(type=pd.DataFrame, reconciler=DataFrameReconciler())
@@ -133,6 +174,12 @@ class BigQueryDataframeHandler(itlp.IOHandler[pd.DataFrame]):
 
 
 class BigQueryIO(itlp.DatabaseIO):
-    def __init__(self, project: str, location: str, default_dataset: str = "public"):
+    def __init__(self, project: str, location: str, default_dataset: str = DEFAULT_DATASET):
         client = BigQueryClient(project, location, default_dataset)
-        super().__init__(client, handlers=[BigQueryDataframeHandler(client)])
+        super().__init__(
+            client,
+            handlers=[
+                BigQueryJSONHandler(client),
+                BigQueryDataframeHandler(client),
+            ],
+        )

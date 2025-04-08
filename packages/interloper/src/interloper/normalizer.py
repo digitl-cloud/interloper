@@ -81,13 +81,13 @@ class JSONNormalizer(Normalizer):
         try:
             json.dumps(data)
         except Exception:
-            raise AssetNormalizationError("Data is not JSON-serializable")
+            raise AssetNormalizationError("Data is not JSON-serializable (JSONNormalizer)")
 
         if isinstance(data, dict):
             data = [data]
 
         if not isinstance(data, list):
-            raise AssetNormalizationError("Unexpected data type")
+            raise AssetNormalizationError("Unexpected data type (JSONNormalizer)")
 
         return data
 

@@ -1,4 +1,5 @@
 import logging
+import sys
 
 import duckdb
 import interloper as itlp
@@ -99,4 +100,7 @@ class DuckDBDataframeHandler(itlp.IOHandler[pd.DataFrame]):
 class DuckDBIO(itlp.DatabaseIO):
     def __init__(self, db_path: str) -> None:
         client = DuckDBClient(db_path)
-        super().__init__(client, handlers=[DuckDBDataframeHandler(client)])
+        super().__init__(
+            client,
+            handlers=[DuckDBDataframeHandler(client)],
+        )

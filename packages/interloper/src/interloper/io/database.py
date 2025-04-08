@@ -71,7 +71,9 @@ class DatabaseIO(TypedIO):
             )
 
         table_schema = self.client.table_schema(context.asset.name, context.asset.dataset)
-        data = handler.reconciler.reconcile(data, table_schema)
+
+        if handler.reconciler:
+            data = handler.reconciler.reconcile(data, table_schema)
 
         handler.write(context, data)
 
