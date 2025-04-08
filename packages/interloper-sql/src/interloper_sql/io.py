@@ -107,7 +107,9 @@ class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
 
     def write(self, context: itlp.IOContext, data: pd.DataFrame) -> None:
         if data.empty:
-            logger.warning(f"Dataframe from asset {context.asset.name} is empty, nothing to write to Postgres")
+            logger.warning(
+                f"Dataframe from asset {context.asset.name} is empty, nothing to write to {self.client.engine.url}"
+            )
             return
 
         # Write data to table
@@ -119,7 +121,7 @@ class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
             index=False,
         )
         size = data.memory_usage(index=False).sum()
-        logger.info(f"Asset {context.asset.name} written to Postgres ({size} bytes)")
+        logger.info(f"Asset {context.asset.name} written to {self.client.engine.url} ({size} bytes)")
 
     def read(self, context: itlp.IOContext) -> pd.DataFrame:
         if context.partition:
@@ -133,7 +135,7 @@ class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
 
         data = pd.read_sql_query(query, self.client.engine)
         size = data.memory_usage(index=False).sum()
-        logger.info(f"Asset {context.asset.name} read from Postgres ({size} bytes)")
+        logger.info(f"Asset {context.asset.name} read from {self.client.engine.url} ({size} bytes)")
         return data
 
 
@@ -147,7 +149,7 @@ class SQLAlchemyJSONHandler(itlp.IOHandler[list[dict[str, Any]]]):
 
     def write(self, context: itlp.IOContext, data: list[dict[str, Any]]) -> None:
         if not data:
-            logger.warning(f"Data from asset {context.asset.name} is empty, not writing to Postgres")
+            logger.warning(f"Data from asset {context.asset.name} is empty, not writing to {self.client.engine.url}")
             return
 
         table = self.client._get_table(context.asset.name, context.asset.dataset)
@@ -156,7 +158,7 @@ class SQLAlchemyJSONHandler(itlp.IOHandler[list[dict[str, Any]]]):
             connection.commit()
 
         size = sys.getsizeof(data)
-        logger.info(f"Asset {context.asset.name} written to Postgres ({size} bytes)")
+        logger.info(f"Asset {context.asset.name} written to {self.client.engine.url} ({size} bytes)")
 
     def read(self, context: itlp.IOContext) -> list[dict[str, Any]]:
         table = self.client._get_table(context.asset.name, context.asset.dataset)
