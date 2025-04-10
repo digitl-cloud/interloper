@@ -40,7 +40,7 @@ class FileIO(IO):
         with open(Path(path), "wb") as f:
             f.write(pickle.dumps(data))
 
-        logger.info(f"Asset {asset.name} {'partition ' + str(partition) if partition else ''} written to {path}")
+        logger.info(f"Asset {asset.name} {'partition ' + str(partition) if partition else ''}written to {path}")
 
     def _read_asset(self, asset: Asset, partition: Partition | None = None) -> Any:
         path = f"{asset.dataset}/{asset.name}" if asset.dataset else asset.name

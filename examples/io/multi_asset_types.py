@@ -10,7 +10,9 @@ from interloper_sql.io import PostgresIO, SQLiteIO
 itlp.basic_logging(logging.INFO)
 
 
-@itlp.source
+@itlp.source(
+    materialization_strategy=itlp.MaterializationStrategy.STRICT,
+)
 def my_source() -> tuple[itlp.Asset, ...]:
     @itlp.asset(
         normalizer=JSONNormalizer(),
@@ -46,4 +48,4 @@ test = my_source(
 )
 
 
-itlp.Pipeline(test).materialize()
+itlp.Pipeline(test.as_dataframe).materialize()

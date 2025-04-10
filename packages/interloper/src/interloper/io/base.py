@@ -22,6 +22,16 @@ class IOContext:
     partition: Partition | PartitionRange | None = None
 
 
+class IO(ABC):
+    @abstractmethod
+    def write(self, context: IOContext, data: Any) -> None:
+        pass
+
+    @abstractmethod
+    def read(self, context: IOContext) -> Any:
+        pass
+
+
 @dataclass
 class IOHandler(ABC, Generic[T]):
     type: type[T]
@@ -39,16 +49,6 @@ class IOHandler(ABC, Generic[T]):
                 f"Data type {type(data).__name__} is not supported by {self.__class__.__name__}. "
                 f"Expected type {self.type.__name__}."
             )
-
-
-class IO(ABC):
-    @abstractmethod
-    def write(self, context: IOContext, data: Any) -> None:
-        pass
-
-    @abstractmethod
-    def read(self, context: IOContext) -> Any:
-        pass
 
 
 class TypedIO(IO):

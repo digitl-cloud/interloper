@@ -1,11 +1,15 @@
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
+from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IOContext, IOHandler, TypedIO
 from interloper.partitioning.config import PartitionConfig
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.range import PartitionRange
 from interloper.schema import AssetSchema
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseClient(ABC):
@@ -70,10 +74,16 @@ class DatabaseIO(TypedIO):
                 context.asset.name, context.asset.partitioning.column, context.partition, context.asset.dataset
             )
 
-        table_schema = self.client.table_schema(context.asset.name, context.asset.dataset)
-
-        if handler.reconciler:
-            data = handler.reconciler.reconcile(data, table_schema)
+        if context.asset.materialization_strategy == MaterializationStrategy.FLEXIBLE:
+            if not handler.reconciler:
+                logger.warning(
+                    f"No reconciler found for IO {self.__class__.__name__} with handler {handler.__class__.__name__} "
+                    f"when materializing asset {context.asset.name}. Skipping schema reconciliation for flexible "
+                    f"materialization strategy."
+                )
+            else:
+                table_schema = self.client.table_schema(context.asset.name, context.asset.dataset)
+                data = handler.reconciler.reconcile(data, table_schema)
 
         handler.write(context, data)
 

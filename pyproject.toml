@@ -72,7 +72,8 @@ extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 # PYTEST
 # ###############
 [tool.pytest.ini_options]
-addopts = ["--import-mode=importlib"]
+markers = ["integration", "functional"]
+addopts = ["--import-mode=importlib", "-m not functional"]
 
 # ###############
 # COVERAGE

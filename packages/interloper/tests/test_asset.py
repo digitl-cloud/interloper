@@ -238,6 +238,7 @@ class TestAssetRun:
 
         with caplog.at_level("DEBUG"):
             assert simple_asset.run(who="world") == "normalized hello world"
+        print(caplog.text)
         assert "Asset simple_asset schema inferred from data (Schema check passed ✔)" in caplog.text
 
     def test_run_with_normalizer_inferred_schema_mismatch(

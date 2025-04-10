@@ -12,6 +12,7 @@ dependencies = [
     "google-cloud-bigquery>=3.31.0",
     "interloper",
     "interloper-pandas",
+    "pandas-gbq>=0.28.0",
 ]
 
 [dependency-groups]

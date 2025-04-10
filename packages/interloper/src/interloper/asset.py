@@ -262,11 +262,9 @@ class Asset(ABC, Observable):
             # Schema inference
             try:
                 inferred_schema = self.normalizer.infer_schema(data)
-                # inferred_schema.print_implementation()
             except Exception as e:
                 raise errors.AssetSchemaError(f"Failed to infer schema for asset {self.name}: {e}")
 
-            # TODO: schema resolution strategy should play a role here
             if not self.schema:
                 self.schema = inferred_schema
             else:
