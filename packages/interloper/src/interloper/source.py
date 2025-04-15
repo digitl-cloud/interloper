@@ -18,12 +18,13 @@ from interloper.param import AssetParam, ContextualAssetParam
 class Source(ABC):
     name: str
     dataset: str | None
-    io: dict[str, IO] | None
+    io: dict[str, IO]
     default_io_key: str | None
     auto_asset_deps: bool
     normalizer: Normalizer | None
     materialization_strategy: MaterializationStrategy
     default_assets_args: dict[str, Any]
+    _initialized: bool
 
     def __init__(
         self,
@@ -47,7 +48,7 @@ class Source(ABC):
         self.normalizer = normalizer
         self.materialization_strategy = materialization_strategy
         self.default_assets_args = default_assets_args or {}
-        self._build_assets()
+        self._initialized = False
 
     ############
     # Magic
@@ -74,11 +75,13 @@ class Source(ABC):
 
     def __getattr__(self, name: str) -> Asset:
         """
-        Custom __getattr__ method to retrieve an attribute by name.
+        Custom __getattr__. Lazily initializes the source if it hasn't been initialized yet.
 
         This method is intended to force the type checker to recognize attributes as instances of the Asset class.
-        However, it should not affect the type of the attributes explicitly defined in the Source class.
+        However, it should not affect the type of the Source class attributes.
         """
+
+        self._ensure_initialized()
         return super().__getattribute__(name)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -111,6 +114,11 @@ class Source(ABC):
     #############
     @property
     def assets(self) -> list[Asset]:
+        """
+        Get all assets, ensuring initialization.
+        """
+
+        self._ensure_initialized()
         return list(self._assets.values())
 
     ############
@@ -135,6 +143,11 @@ class Source(ABC):
     ############
     # Private
     ############
+    def _ensure_initialized(self) -> None:
+        if object.__getattribute__(self, "_initialized") is False:  # avoid recursion with __getattr__
+            self._build_assets()
+            self._initialized = True
+
     def _build_assets(self) -> None:
         self._assets: dict[str, Asset] = {}
 
@@ -163,9 +176,9 @@ class Source(ABC):
         final_params = {}
 
         for param in sig.parameters.values():
-            # No user defined paramters and no default value
+            # # No user defined paramters and no default value
             if param.default is param.empty:
-                raise errors.SourceParamError(f"Source {self.name} requires a default value for parameter {param.name}")
+                raise errors.SourceParamError(f"Cannot resolve parameter {param.name} for source {self.name}")
 
             # ContextualAssetParam not supported for sources (requires an execution context)
             if isinstance(param.default, ContextualAssetParam):
@@ -173,7 +186,13 @@ class Source(ABC):
 
             # Default value is a asset_param -> resolve it
             if isinstance(param.default, AssetParam):
-                final_params[param.name] = param.default.resolve()
+                try:
+                    final_params[param.name] = param.default.resolve()
+                except Exception as e:
+                    raise errors.SourceParamError(
+                        f"Failed to resolve parameter {param.name} for source {self.name}: {e}"
+                    )
+
                 continue
 
             # Default value is not a asset_param
@@ -237,6 +256,9 @@ class SourceDecorator:
             # Define the dynamically provided asset_definitions method
             def asset_definitions(self, *args: Any, **kwargs: Any) -> Any:
                 return func(*args, **kwargs)
+
+            def __repr__(self) -> str:
+                return f"<Source {self.name} at {hex(id(self))}>"
 
         # Override `asset_definitions` signature to dynamically match the signature of the provided `func`
         original_sig, wrapper_sig = signature(func), signature(ConcreteSource.asset_definitions)

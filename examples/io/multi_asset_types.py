@@ -14,18 +14,14 @@ itlp.basic_logging(logging.INFO)
     materialization_strategy=itlp.MaterializationStrategy.STRICT,
 )
 def my_source() -> tuple[itlp.Asset, ...]:
-    @itlp.asset(
-        normalizer=JSONNormalizer(),
-    )
+    @itlp.asset(normalizer=JSONNormalizer())
     def as_json() -> list:
         return [
             {"a": 1, "b": 2},
             {"b": 3, "c": "4"},
         ]
 
-    @itlp.asset(
-        normalizer=DataframeNormalizer(),
-    )
+    @itlp.asset(normalizer=DataframeNormalizer())
     def as_dataframe() -> pd.DataFrame:
         return pd.DataFrame(
             [
@@ -39,10 +35,10 @@ def my_source() -> tuple[itlp.Asset, ...]:
 
 test = my_source(
     io={
-        "file": itlp.FileIO("./data"),
-        "sqlite": SQLiteIO("data/sqlite.db"),
-        "postgres": PostgresIO(database="interloper", user="g", password="", host="localhost", port=5432),
-        "bigquery": BigQueryIO(project="dc-int-connectors-prd", location="eu"),
+        "file": itlp.FileIO(base_dir="./data"),
+        "sqlite": SQLiteIO(db_path="data/sqlite.db"),
+        "postgres": PostgresIO(database="interloper", user="g", password="", host="localhost"),
+        "bigquery": BigQueryIO(project="dc-int-connectors-prd", location="EU"),
     },
     default_io_key="bigquery",
 )

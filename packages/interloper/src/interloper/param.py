@@ -4,6 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from interloper import errors
 from interloper.io.base import IOContext
 from interloper.partitioning.partition import TimePartition
 from interloper.partitioning.range import PartitionRange
@@ -39,7 +40,10 @@ class Env(AssetParam[str]):
         self.default = default
 
     def resolve(self) -> Any:
-        return os.environ.get(self.key, self.default)
+        value = os.environ.get(self.key, self.default)
+        if value is None:
+            raise errors.AssetParamResolutionError(f"Environment variable {self.key} is not set")
+        return value
 
 
 class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
@@ -111,11 +115,6 @@ class Date(TimeAssetParam[dt.date]):
 
 class DateWindow(TimeAssetParam[tuple[dt.date, dt.date]]):
     def resolve(self, context: "ExecutionContext") -> tuple[dt.date, dt.date]:
-        # if not context.executed_asset.allows_partition_window:
-        #     raise ValueError("DateWindow asset parameter requires the executed asset to allow partition ranges")
-        # if not context.partition or not isinstance(context.partition, TimePartitionRange):
-        #     raise ValueError("DateWindow asset parameter requires the context to have a TimePartitionRange")
-
         if not context.partition or not isinstance(context.partition, TimePartition | PartitionRange):
             raise ValueError(
                 "Asset param of type DateWindow requires the context to have a TimePartition or TimePartitionRange"

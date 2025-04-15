@@ -77,13 +77,17 @@ class DatabaseIO(TypedIO):
         if context.asset.materialization_strategy == MaterializationStrategy.FLEXIBLE:
             if not handler.reconciler:
                 logger.warning(
-                    f"No reconciler found for IO {self.__class__.__name__} with handler {handler.__class__.__name__} "
-                    f"when materializing asset {context.asset.name}. Skipping schema reconciliation for flexible "
-                    f"materialization strategy."
+                    f"<FLEXIBLE> No reconciler found for IO {self.__class__.__name__} with handler "
+                    f"{handler.__class__.__name__} when materializing asset {context.asset.name}. "
+                    "Skipping schema reconciliation"
                 )
             else:
                 table_schema = self.client.table_schema(context.asset.name, context.asset.dataset)
                 data = handler.reconciler.reconcile(data, table_schema)
+        elif context.asset.materialization_strategy == MaterializationStrategy.STRICT:
+            logger.warning(
+                f"<STRICT> Skipping schema reconciliation for asset {context.asset.name}"
+            )
 
         handler.write(context, data)
 

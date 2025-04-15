@@ -4,167 +4,159 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from interloper import errors
-from interloper.asset import Asset, asset
-from interloper.execution.pipeline import ExecutionContext
-from interloper.io.base import IO, IOContext
-from interloper.normalizer import Normalizer
-from interloper.param import AssetParam, ContextualAssetParam
-from interloper.partitioning.config import PartitionConfig, TimePartitionConfig
-from interloper.partitioning.partition import Partition
-from interloper.schema import AssetSchema
+import interloper as itlp
 
 
 @pytest.fixture
-def simple_asset() -> Asset:
-    @asset
-    def simple_asset(who: str):
+def asset() -> itlp.Asset:
+    @itlp.asset
+    def asset(who: str):
         return f"hello {who}"
 
-    return simple_asset
+    return asset
 
 
 @pytest.fixture
-def simple_normalizer() -> Normalizer:
-    class SimpleNormalizer(Normalizer):
+def normalizer() -> itlp.Normalizer:
+    class Normalizer(itlp.Normalizer):
         def normalize(self, data: Any) -> str:
             return f"normalized {data}"
 
-        def infer_schema(self, data) -> type[AssetSchema]:
-            return AssetSchema.from_dict({"whatever": str})
+        def infer_schema(self, data) -> type[itlp.AssetSchema]:
+            return itlp.AssetSchema.from_dict({"whatever": str})
 
-    return SimpleNormalizer()
+    return Normalizer()
 
 
 @pytest.fixture
-def simple_io() -> IO:
-    class SimpleIO(IO):
-        def write(self, context: IOContext, data: Any) -> None:
+def io() -> itlp.IO:
+    class IO(itlp.IO):
+        def write(self, context: itlp.IOContext, data: Any) -> None:
             pass
 
-        def read(self, context: IOContext) -> Any:
-            "data"
+        def read(self, context: itlp.IOContext) -> Any:
+            return "data"
 
-    return SimpleIO()
+    return IO()
 
 
 @pytest.fixture
-def simple_asset_param() -> AssetParam:
-    class SimpleAssetParam(AssetParam):
+def asset_param() -> itlp.AssetParam:
+    class AssetParam(itlp.AssetParam):
         def resolve(self) -> Any:
             return "resolved"
 
-    return SimpleAssetParam()
+    return AssetParam()
 
 
 @pytest.fixture
-def simple_contextual_asset_param() -> AssetParam:
-    class SimpleContextualAssetParam(ContextualAssetParam):
+def contextual_asset_param() -> itlp.AssetParam:
+    class ContextualAssetParam(itlp.ContextualAssetParam):
         def resolve(self, context) -> Any:
             return "resolved with context"
 
-    return SimpleContextualAssetParam()
+    return ContextualAssetParam()
 
 
 class TestAssetDefinition:
     def test_abstract_instance_fails(self):
         with pytest.raises(TypeError):
-            Asset()
+            itlp.Asset()
 
     def test_definition_from_class(self):
-        class MyAsset(Asset):
+        class MyAsset(itlp.Asset):
             def data(self): ...
 
         my_asset = MyAsset(name="my_asset")
-        assert isinstance(my_asset, Asset)
+        assert isinstance(my_asset, itlp.Asset)
         assert my_asset.name == "my_asset"
 
     def test_definition_from_class_name_required(self):
-        class MyAsset(Asset):
+        class MyAsset(itlp.Asset):
             def data(self): ...
 
         with pytest.raises(TypeError):
             MyAsset()
 
     def test_definition_from_decorator(self):
-        @asset
+        @itlp.asset
         def my_asset(): ...
 
-        assert isinstance(my_asset, Asset)
+        assert isinstance(my_asset, itlp.Asset)
         assert my_asset.name == "my_asset"
 
     def test_definition_from_decorator_with_options(self):
-        @asset(name="new_name")
+        @itlp.asset(name="new_name")
         def my_asset(): ...
 
-        assert isinstance(my_asset, Asset)
+        assert isinstance(my_asset, itlp.Asset)
         assert my_asset.name == "new_name"
 
     def test_hash(self):
-        @asset
+        @itlp.asset
         def my_asset(): ...
 
         assert hash(my_asset) == hash("my_asset")
 
 
 class TestAssetProperties:
-    def test_dataset_setter(self, simple_asset: Asset):
-        simple_asset.dataset = "my_dataset"
-        assert simple_asset.dataset == "my_dataset"
+    def test_dataset_setter(self, asset: itlp.Asset):
+        asset.dataset = "my_dataset"
+        assert asset.dataset == "my_dataset"
 
-    def test_io_setter(self, simple_asset: Asset):
-        simple_asset.io = {"what": "ever"}
-        assert simple_asset.io == {"what": "ever"}
+    def test_io_setter(self, asset: itlp.Asset):
+        asset.io = {"what": "ever"}
+        assert asset.io == {"what": "ever"}
 
-    def test_default_io_key_setter(self, simple_asset: Asset):
-        simple_asset.default_io_key = "whatever"
-        assert simple_asset.default_io_key == "whatever"
+    def test_default_io_key_setter(self, asset: itlp.Asset):
+        asset.default_io_key = "whatever"
+        assert asset.default_io_key == "whatever"
 
-    def test_normalizer_setter(self, simple_asset: Asset, simple_normalizer: Normalizer):
-        simple_asset.normalizer = simple_normalizer
-        assert simple_asset.normalizer == simple_normalizer
+    def test_normalizer_setter(self, asset: itlp.Asset, normalizer: itlp.Normalizer):
+        asset.normalizer = normalizer
+        assert asset.normalizer == normalizer
 
-    def test_normalizer_setter_fails(self, simple_asset: Asset, simple_normalizer: Normalizer):
-        with pytest.raises(errors.AssetValueError, match="Normalizer must be an instance of Normalizer, got str"):
-            simple_asset.normalizer = "normalizer"
+    def test_normalizer_setter_fails(self, asset: itlp.Asset, normalizer: itlp.Normalizer):
+        with pytest.raises(itlp.errors.AssetValueError, match="Normalizer must be an instance of Normalizer, got str"):
+            asset.normalizer = "normalizer"
 
-    def test_has_io(self, simple_asset: Asset):
-        simple_asset.io = {"what": "ever"}
-        assert simple_asset.has_io
+    def test_has_io(self, asset: itlp.Asset):
+        asset.io = {"what": "ever"}
+        assert asset.has_io
 
-    def test_has_io_false(self, simple_asset: Asset):
-        assert not simple_asset.has_io
+    def test_has_io_false(self, asset: itlp.Asset):
+        assert not asset.has_io
 
-    def test_allows_partition_window(self, simple_asset: Asset):
-        simple_asset.partitioning = TimePartitionConfig(column="date", allow_window=True)
-        assert simple_asset.allows_partition_window
+    def test_allows_partition_window(self, asset: itlp.Asset):
+        asset.partitioning = itlp.TimePartitionConfig(column="date", allow_window=True)
+        assert asset.allows_partition_window
 
-    def test_allows_partition_window_false(self, simple_asset: Asset):
-        assert not simple_asset.allows_partition_window
+    def test_allows_partition_window_false(self, asset: itlp.Asset):
+        assert not asset.allows_partition_window
 
-        simple_asset.partitioning = PartitionConfig(column="date")
-        assert not simple_asset.allows_partition_window
+        asset.partitioning = itlp.PartitionConfig(column="date")
+        assert not asset.allows_partition_window
 
-        simple_asset.partitioning = TimePartitionConfig(column="date")
-        assert not simple_asset.allows_partition_window
+        asset.partitioning = itlp.TimePartitionConfig(column="date")
+        assert not asset.allows_partition_window
 
 
 class TestAssetCall:
-    def test_call(self, simple_asset: Asset):
-        simple_asset.io = {"what": "ever"}
-        simple_asset.default_io_key = "whatever"
+    def test_call(self, asset: itlp.Asset):
+        asset.io = {"what": "ever"}
+        asset.default_io_key = "whatever"
 
-        copy = simple_asset()
+        copy = asset()
 
-        assert id(copy) != id(simple_asset)
+        assert id(copy) != id(asset)
         assert copy.io == {"what": "ever"}
         assert copy.default_io_key == "whatever"
 
-    def test_call_with_options(self, simple_asset: Asset):
-        simple_asset.io = {"what": "ever"}
-        simple_asset.default_io_key = "whatever"
+    def test_call_with_options(self, asset: itlp.Asset):
+        asset.io = {"what": "ever"}
+        asset.default_io_key = "whatever"
 
-        copy = simple_asset(
+        copy = asset(
             who="world",
             io={"something": "else"},
             default_io_key="something",
@@ -177,260 +169,267 @@ class TestAssetCall:
 
 class TestAssetRun:
     def test_run(self):
-        @asset
+        @itlp.asset
         def my_asset():
             return "data"
 
         assert my_asset.run() == "data"
 
-    def test_run_with_param(self, simple_asset: Asset):
-        assert simple_asset.run(who="world") == "hello world"
+    def test_run_with_param(self, asset: itlp.Asset):
+        assert asset.run(who="world") == "hello world"
 
-    def test_run_with_param_without_kw_fails(self, simple_asset: Asset):
-        with pytest.raises(
-            errors.AssetParamResolutionError, match="Cannot resolve parameter who for asset simple_asset"
-        ):
-            simple_asset.run("world")
+    def test_run_with_param_without_kw_fails(self, asset: itlp.Asset):
+        with pytest.raises(itlp.errors.AssetParamResolutionError, match="Cannot resolve parameter who for asset asset"):
+            asset.run("world")
+
+    def test_run_with_type_check_return_type_any(self):
+        @itlp.asset
+        def my_asset() -> Any:
+            return 123
+
+        assert my_asset.run() == 123
 
     def test_run_with_type_check_fails(self):
-        @asset
+        @itlp.asset
         def my_asset() -> str:
             return 123
 
-        with pytest.raises(errors.AssetValueError, match="Asset my_asset returned data of type int, expected str"):
+        with pytest.raises(itlp.errors.AssetValueError, match="Asset my_asset returned data of type int, expected str"):
             my_asset.run()
 
-    def test_run_with_normalizer(self, simple_asset: Asset, simple_normalizer: Normalizer):
-        simple_asset.normalizer = simple_normalizer
+    def test_run_with_normalizer(self, asset: itlp.Asset, normalizer: itlp.Normalizer):
+        asset.normalizer = normalizer
 
-        assert simple_asset.run(who="world") == "normalized hello world"
-        assert simple_asset.schema.equals(AssetSchema.from_dict({"whatever": str}))
+        assert asset.run(who="world") == "normalized hello world"
+        assert asset.schema.equals(itlp.AssetSchema.from_dict({"whatever": str}))
 
-    def test_run_with_normalizer_fails(self, simple_asset: Asset, simple_normalizer: Normalizer):
-        simple_normalizer.normalize = Mock(side_effect=Exception("error"))
-        simple_asset.normalizer = simple_normalizer
+    def test_run_with_normalizer_fails(self, asset: itlp.Asset, normalizer: itlp.Normalizer):
+        normalizer.normalize = Mock(side_effect=Exception("error"))
+        asset.normalizer = normalizer
 
-        @asset(normalizer=simple_normalizer)
+        @itlp.asset(normalizer=normalizer)
         def my_asset():
             return "data"
 
         with pytest.raises(
-            errors.AssetNormalizationError, match="Failed to normalize data for asset my_asset: error"
+            itlp.errors.AssetNormalizationError, match="Failed to normalize data for asset my_asset: error"
         ):
             my_asset.run(who="world")
 
-    def test_run_schema_inference_fails(self, simple_asset: Asset, simple_normalizer: Normalizer):
-        simple_normalizer.infer_schema = Mock(side_effect=Exception("error"))
-        simple_asset.normalizer = simple_normalizer
+    def test_run_schema_inference_fails(self, asset: itlp.Asset, normalizer: itlp.Normalizer):
+        normalizer.infer_schema = Mock(side_effect=Exception("error"))
+        asset.normalizer = normalizer
 
-        @asset(normalizer=simple_normalizer)
+        @itlp.asset(normalizer=normalizer)
         def my_asset():
             return "data"
 
-        with pytest.raises(errors.AssetSchemaError, match="Failed to infer schema for asset my_asset: error"):
+        with pytest.raises(itlp.errors.AssetSchemaError, match="Failed to infer schema for asset my_asset: error"):
             my_asset.run()
 
-    def test_run_with_normalizer_inferred_schema_match(
-        self, simple_asset: Asset, simple_normalizer: Normalizer, caplog
-    ):
-        simple_asset.schema = AssetSchema.from_dict({"whatever": str})
-        simple_asset.normalizer = simple_normalizer
+    def test_run_with_normalizer_inferred_schema_match(self, asset: itlp.Asset, normalizer: itlp.Normalizer, caplog):
+        asset.schema = itlp.AssetSchema.from_dict({"whatever": str})
+        asset.normalizer = normalizer
 
         with caplog.at_level("DEBUG"):
-            assert simple_asset.run(who="world") == "normalized hello world"
-        print(caplog.text)
-        assert "Asset simple_asset schema inferred from data (Schema check passed ✔)" in caplog.text
+            assert asset.run(who="world") == "normalized hello world"
+        assert "Asset asset schema inferred from data (Schema check passed ✔)" in caplog.text
 
-    def test_run_with_normalizer_inferred_schema_mismatch(
-        self, simple_asset: Asset, simple_normalizer: Normalizer, caplog
-    ):
-        simple_asset.schema = AssetSchema.from_dict({"something_else": str})
-        simple_asset.normalizer = simple_normalizer
+    def test_run_with_normalizer_inferred_schema_mismatch(self, asset: itlp.Asset, normalizer: itlp.Normalizer, caplog):
+        asset.schema = itlp.AssetSchema.from_dict({"something_else": str})
+        asset.normalizer = normalizer
 
         with caplog.at_level("DEBUG"):
-            assert simple_asset.run(who="world") == "normalized hello world"
-        assert "Schema mismatch for asset simple_asset between provided and inferred schemas" in caplog.text
+            assert asset.run(who="world") == "normalized hello world"
+        assert "Schema mismatch for asset asset between provided and inferred schemas" in caplog.text
 
 
 class TestAssetMaterialize:
-    def test_materialize(self, simple_asset: Asset, simple_io: IO):
-        simple_asset.io = {"simple": simple_io}
-        simple_asset.bind(who="world")
+    def test_materialize(self, asset: itlp.Asset, io: itlp.IO):
+        asset.io = {"simple": io}
+        asset.bind(who="world")
 
-        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
-            simple_asset.materialize()
+        with patch.object(asset, "_execute", wraps=asset._execute) as extract:
+            asset.materialize()
             extract.assert_called_once_with(None)
 
-    def test_materialize_with_context(self, simple_asset: Asset, simple_io: IO):
-        simple_asset.io = {"simple": simple_io}
-        simple_asset.bind(who="world")
+    def test_materialize_with_context(self, asset: itlp.Asset, io: itlp.IO):
+        asset.io = {"simple": io}
+        asset.bind(who="world")
 
-        context = ExecutionContext(
-            assets={"simple_asset": simple_asset},
-            executed_asset=simple_asset,
+        context = itlp.ExecutionContext(
+            assets={"asset": asset},
+            executed_asset=asset,
             partition=None,
         )
 
-        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
-            simple_asset.materialize(context)
+        with patch.object(asset, "_execute", wraps=asset._execute) as extract:
+            asset.materialize(context)
             extract.assert_called_once_with(context)
 
-    def test_materialize_with_context_with_partition(self, simple_asset: Asset, simple_io: IO):
-        simple_asset.io = {"simple": simple_io}
-        simple_asset.partitioning = PartitionConfig(column="date")
-        simple_asset.bind(who="world")
+    def test_materialize_with_context_with_partition(self, asset: itlp.Asset, io: itlp.IO):
+        asset.io = {"simple": io}
+        asset.partitioning = itlp.PartitionConfig(column="date")
+        asset.bind(who="world")
 
-        context = ExecutionContext(
-            assets={"simple_asset": simple_asset},
-            executed_asset=simple_asset,
-            partition=Partition(value="whatever"),
+        context = itlp.ExecutionContext(
+            assets={"asset": asset},
+            executed_asset=asset,
+            partition=itlp.Partition(value="whatever"),
         )
 
-        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
-            simple_asset.materialize(context)
+        with patch.object(asset, "_execute", wraps=asset._execute) as extract:
+            asset.materialize(context)
             extract.assert_called_once_with(context)
 
-    def test_materialize_with_context_with_partition_fails_missing_stategy(self, simple_asset: Asset, simple_io: IO):
-        simple_asset.io = {"simple": simple_io}
-        simple_asset.bind(who="world")
+    def test_materialize_with_context_with_partition_fails_missing_stategy(self, asset: itlp.Asset, io: itlp.IO):
+        asset.io = {"simple": io}
+        asset.bind(who="world")
 
-        context = ExecutionContext(
-            assets={"simple_asset": simple_asset},
-            executed_asset=simple_asset,
-            partition=Partition(value="whatever"),
+        context = itlp.ExecutionContext(
+            assets={"asset": asset},
+            executed_asset=asset,
+            partition=itlp.Partition(value="whatever"),
         )
 
         with pytest.raises(
-            errors.AssetMaterializationError,
-            match="Asset simple_asset does not support partitioning \\(missing partitioning config\\)",
+            itlp.errors.AssetMaterializationError,
+            match="Asset asset does not support partitioning \\(missing partitioning config\\)",
         ):
-            simple_asset.materialize(context)
+            asset.materialize(context)
 
-    def test_not_materializable(self, simple_asset: Asset):
-        simple_asset.materializable = False
+    def test_not_materializable(self, asset: itlp.Asset):
+        asset.materializable = False
 
-        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
-            simple_asset.materialize()
+        with patch.object(asset, "_execute", wraps=asset._execute) as extract:
+            asset.materialize()
             extract.assert_not_called()
 
-    def test_materialize_fails_no_io(self, simple_asset: Asset):
-        with pytest.raises(
-            errors.AssetMaterializationError, match="Asset simple_asset does not have any IO configured"
-        ):
-            simple_asset.materialize()
+    def test_materialize_fails_no_io(self, asset: itlp.Asset):
+        with pytest.raises(itlp.errors.AssetMaterializationError, match="Asset asset does not have any IO configured"):
+            asset.materialize()
 
-    def test_materialize_multiple_io(self, simple_asset: Asset):
-        simple_asset.io = {
+    def test_materialize_multiple_io(self, asset: itlp.Asset):
+        asset.io = {
             "simple": Mock(),
             "other": Mock(),
         }
-        simple_asset.bind(who="world")
+        asset.bind(who="world")
 
-        with patch.object(simple_asset, "_execute", wraps=simple_asset._execute) as extract:
-            simple_asset.materialize()
+        with patch.object(asset, "_execute", wraps=asset._execute) as extract:
+            asset.materialize()
             extract.assert_called_once_with(None)
-        simple_asset.io["simple"].write.assert_called_once()
-        simple_asset.io["other"].write.assert_called_once()
+        asset.io["simple"].write.assert_called_once()
+        asset.io["other"].write.assert_called_once()
 
 
 class TestAssetBind:
-    def test_bind(self, simple_asset: Asset):
-        simple_asset.bind(who="world")
+    def test_bind(self, asset: itlp.Asset):
+        asset.bind(who="world")
 
-        signature(simple_asset.data).parameters["who"].default == "world"
+        signature(asset.data).parameters["who"].default == "world"
 
-    def test_bind_invalid_param(self, simple_asset: Asset):
+    def test_bind_invalid_param(self, asset: itlp.Asset):
         with pytest.raises(
-            errors.AssetValueError, match="Parameter what is not a valid parameter for asset simple_asset"
+            itlp.errors.AssetValueError, match="Parameter what is not a valid parameter for asset asset"
         ):
-            simple_asset.bind(what="ever")
+            asset.bind(what="ever")
 
-    def test_bind_invalid_param_ignored(self, simple_asset: Asset):
-        simple_asset.bind(what="ever", ignore_unknown_params=True)
+    def test_bind_invalid_param_ignored(self, asset: itlp.Asset):
+        asset.bind(what="ever", ignore_unknown_params=True)
 
-        assert "what" not in signature(simple_asset.data).parameters
+        assert "what" not in signature(asset.data).parameters
 
 
 class TestAssetResolveParameters:
     def test_resolve_parameters_no_param(self):
-        @asset
-        def simple_asset(): ...
+        @itlp.asset
+        def asset(): ...
 
-        params, return_type = simple_asset._resolve_parameters()
+        params, return_type = asset._resolve_parameters()
 
         assert params == {}
         assert return_type is Parameter.empty
 
     def test_resolve_parameters_with_return_type(self):
-        @asset
-        def simple_asset() -> str: ...
+        @itlp.asset
+        def asset() -> str: ...
 
-        params, return_type = simple_asset._resolve_parameters()
+        params, return_type = asset._resolve_parameters()
 
         assert params == {}
         assert return_type is str
 
     def test_resolve_parameters_has_default_value(self):
-        @asset
-        def simple_asset(what="ever"): ...
+        @itlp.asset
+        def asset(what="ever"): ...
 
-        params, return_type = simple_asset._resolve_parameters()
+        params, return_type = asset._resolve_parameters()
 
         assert params == {"what": "ever"}
         assert return_type is Parameter.empty
 
     def test_resolve_parameters_user_defined(self):
-        @asset
-        def simple_asset(what): ...
+        @itlp.asset
+        def asset(what): ...
 
-        params, return_type = simple_asset._resolve_parameters(what="ever")
+        params, return_type = asset._resolve_parameters(what="ever")
 
         assert params == {"what": "ever"}
         assert return_type is Parameter.empty
 
-    def test_resolve_parameters_user_asset_param(self, simple_asset_param):
-        @asset
-        def simple_asset(what=simple_asset_param): ...
+    def test_resolve_parameters_user_asset_param(self, asset_param):
+        @itlp.asset
+        def asset(what=asset_param): ...
 
-        params, return_type = simple_asset._resolve_parameters()
+        params, return_type = asset._resolve_parameters()
 
         assert params == {"what": "resolved"}
         assert return_type is Parameter.empty
 
-    def test_resolve_parameters_user_contextual_asset_param(self, simple_contextual_asset_param):
-        @asset
-        def simple_asset(what=simple_contextual_asset_param): ...
+    def test_resolve_parameters_user_contextual_asset_param(self, contextual_asset_param):
+        @itlp.asset
+        def asset(what=contextual_asset_param): ...
 
-        context = ExecutionContext(
-            assets={"simple_asset": simple_asset},
-            executed_asset=simple_asset,
+        context = itlp.ExecutionContext(
+            assets={"asset": asset},
+            executed_asset=asset,
         )
-        params, return_type = simple_asset._resolve_parameters(context)
+        params, return_type = asset._resolve_parameters(context)
 
         assert params == {"what": "resolved with context"}
         assert return_type is Parameter.empty
 
-    def test_resolve_parameters_user_contextual_asset_param_fails_missing_context(self, simple_contextual_asset_param):
-        @asset
-        def simple_asset(what=simple_contextual_asset_param): ...
+    def test_resolve_parameters_user_contextual_asset_param_fails_missing_context(self, contextual_asset_param):
+        @itlp.asset
+        def asset(what=contextual_asset_param): ...
 
         with pytest.raises(
-            errors.AssetParamResolutionError, match="Cannot resolve parameter what for asset simple_asset"
+            itlp.errors.AssetParamResolutionError, match="Cannot resolve parameter what for asset asset"
         ):
-            simple_asset._resolve_parameters()
+            asset._resolve_parameters()
 
-    def test_resolve_parameters_fails_invalid_return_type(self):
-        @asset
-        def simple_asset(what) -> None: ...
+    def test_resolve_parameters_fails_invalid_return_type_none(self):
+        @itlp.asset
+        def asset(what) -> None: ...
 
-        with pytest.raises(errors.AssetDefinitionError, match="None is not a valid return type for asset simple_asset"):
-            simple_asset._resolve_parameters()
+        with pytest.raises(itlp.errors.AssetDefinitionError, match="None is not a valid return type for asset asset"):
+            asset._resolve_parameters()
+
+    def test_resolve_parameters_fails_invalid_return_type_generic(self):
+        @itlp.asset
+        def asset() -> list[int]: ...
+
+        with pytest.raises(
+            itlp.errors.AssetDefinitionError, match="Generic return type list\\[int\\] is not allowed for asset asset"
+        ):
+            asset._resolve_parameters()
 
     def test_resolve_parameters_fails_param_missing(self):
-        @asset
-        def simple_asset(what): ...
+        @itlp.asset
+        def asset(what): ...
 
         with pytest.raises(
-            errors.AssetParamResolutionError, match="Cannot resolve parameter what for asset simple_asset"
+            itlp.errors.AssetParamResolutionError, match="Cannot resolve parameter what for asset asset"
         ):
-            simple_asset._resolve_parameters()
+            asset._resolve_parameters()

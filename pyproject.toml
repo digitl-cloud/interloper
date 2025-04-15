@@ -18,6 +18,7 @@ dependencies = [
     "interloper-sqlite",
     "matplotlib>=3.10.0",
     "streamlit>=1.42.2",
+    "pyyaml>=6.0.2",
 ]
 
 [dependency-groups]

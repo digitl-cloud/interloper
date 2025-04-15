@@ -1029,6 +1029,7 @@ dependencies = [
     { name = "interloper-sql" },
     { name = "interloper-sqlite" },
     { name = "matplotlib" },
+    { name = "pyyaml" },
     { name = "streamlit" },
 ]
 
@@ -1052,6 +1053,7 @@ requires-dist = [
     { name = "interloper-sql", editable = "packages/interloper-sql" },
     { name = "interloper-sqlite", editable = "packages/interloper-sqlite" },
     { name = "matplotlib", specifier = ">=3.10.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "streamlit", specifier = ">=1.42.2" },
 ]
 

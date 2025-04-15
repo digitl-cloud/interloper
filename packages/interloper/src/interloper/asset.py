@@ -238,7 +238,7 @@ class Asset(ABC, Observable):
         data = self.data(**params)
 
         # Type checking
-        if return_type != Parameter.empty and not isinstance(data, return_type):
+        if return_type != Parameter.empty and return_type != Any and not isinstance(data, return_type):
             raise errors.AssetValueError(
                 f"Asset {self.name} returned data of type {type(data).__name__}, expected {return_type.__name__}"
             )
@@ -274,10 +274,12 @@ class Asset(ABC, Observable):
                 else:
                     if self.materialization_strategy == MaterializationStrategy.STRICT:
                         raise errors.AssetNormalizationError(
-                            f"The data does not match the provided schema for asset {self.name} [STRICT strategy]"
+                            f"<STRICT> The data does not match the provided schema for asset {self.name}"
                         )
-                    else:
-                        logger.warning(f"Schema mismatch for asset {self.name} between provided and inferred schemas")
+                    elif self.materialization_strategy == MaterializationStrategy.FLEXIBLE:
+                        logger.warning(
+                            f"<FLEXIBLE> Schema mismatch for asset {self.name} between provided and inferred schemas"
+                        )
                         logger.debug(f"Schema diff: \n{json.dumps(diff, indent=2, default=str)}")
         else:
             logger.warning(f"Asset {self.name} does not have a normalizer. Skipping normalization.")
@@ -338,12 +340,23 @@ class Asset(ABC, Observable):
                         f"Cannot resolve parameter {param.name} for asset {self.name}"
                         # f"ContextualAssetParam {param.name} requires an execution context"
                     )
-                final_params[param.name] = param.default.resolve(context)
+
+                try:
+                    final_params[param.name] = param.default.resolve(context)
+                except Exception as e:
+                    raise errors.AssetParamResolutionError(
+                        f"Failed to resolve parameter {param.name} for asset {self.name}: {e}"
+                    )
                 continue
 
             # Default value is a asset_param
             if isinstance(param.default, AssetParam):
-                final_params[param.name] = param.default.resolve()
+                try:
+                    final_params[param.name] = param.default.resolve()
+                except Exception as e:
+                    raise errors.AssetParamResolutionError(
+                        f"Failed to resolve parameter {param.name} for asset {self.name}: {e}"
+                    )
                 continue
 
             # Default value is not a asset_param
@@ -415,6 +428,10 @@ class AssetDecorator:
             # Define the dynamically provided data method
             def data(self, *args: Any, **kwargs: Any) -> Any:
                 return func(*args, **kwargs)
+
+            def __repr__(self) -> str:
+                source_str = f" from Source {self._source.name}" if self._source else ""
+                return f"<Asset {self.name}{source_str} at {hex(id(self))}>"
 
         # Override `data` signature to dynamically match the signature of the provided `func`
         original_sig, wrapper_sig = signature(func), signature(ConcreteAsset.data)
