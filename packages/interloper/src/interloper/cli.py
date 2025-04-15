@@ -53,20 +53,20 @@ def _load_asset_or_source_from_spec(spec: dict) -> Source | Asset:
     if "io" in spec:
         source_or_asset.io = _load_io_from_spec(spec["io"])
 
-    default_asset_args = spec.get("args", {})
+    assets_args = spec.get("assets_args", {})
 
     if isinstance(source_or_asset, Asset):
-        source_or_asset.bind(**default_asset_args)
+        source_or_asset.bind(**assets_args)
     else:
         for asset in source_or_asset.assets:
-            asset.bind(**default_asset_args)
+            asset.bind(**assets_args)
 
     return source_or_asset
 
 
 def _load_single_io_from_spec(spec: dict) -> IO:
     io_type = _import_io_type_from_path(spec["path"])
-    kwargs = spec.get("config", {})
+    kwargs = spec.get("init", {})
     return io_type(**kwargs)
 
 

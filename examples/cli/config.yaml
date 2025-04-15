@@ -1,16 +1,16 @@
 io:
   file:
-    path: interloper.FileIO
-    config:
+    path: interloper:FileIO
+    init:
       base_dir: data
   sqlite:
-    path: interloper_sql.SQLiteIO
-    config:
+    path: interloper_sql:SQLiteIO
+    init:
       db_path: data/sqlite.db
 pipeline:
   - name: adup
-    path: interloper_assets.adup
+    path: interloper_assets:adup
   - name: awin
-    path: interloper_assets.awin
-    args:
+    path: interloper_assets:awin
+    assets_args:
       advertiser_id: 10990
