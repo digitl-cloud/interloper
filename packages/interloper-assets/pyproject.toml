@@ -8,7 +8,11 @@ description = "Interloper Assets"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
-dependencies = ["interloper", "interloper-pandas", "httpx>=0.28.1"]
+dependencies = [
+    "interloper",
+ "interloper-pandas",
+ "httpx>=0.28.1",
+]
 
 [dependency-groups]
 dev = ["pyright>=1.1.394", "ruff>=0.9.6"]

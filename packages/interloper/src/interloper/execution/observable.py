@@ -1,7 +1,6 @@
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
@@ -9,8 +8,18 @@ from queue import Queue
 from typing import Any
 
 
-class EventStatus(Enum):
-    START = "START"
+class ExecutionStep(Enum):
+    EXECUTION = "EXECUTION"
+    NORMALIZATION = "NORMALIZATION"
+    MATERIALIZATION = "MATERIALIZATION"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class ExecutionStatus(Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILURE = "FAILURE"
 
@@ -20,40 +29,25 @@ class EventStatus(Enum):
 
 @dataclass
 class Event:
-    observable: "Observable"
-    name: str
-    status: EventStatus | None = None
+    observable: "Observable | None"
+    step: ExecutionStep
+    status: ExecutionStatus | None = None
+    error: Exception | None = None
 
-    def with_status(self, status: EventStatus) -> "Event":
-        return Event(self.observable, self.name, status)
+    def __enter__(self) -> None:
+        if self.observable is None or not isinstance(self.observable, Observable):
+            raise ValueError("Event must be bound to an observable before use")
 
-    @staticmethod
-    def wrap(
-        func: Callable | None = None,
-        *,
-        name: str | None = None,
-    ) -> Callable:
-        def decorator(func: Callable) -> Callable:
-            @wraps(func)
-            def wrapper(self: Observable, *args: Any, **kwargs: Any) -> Any:
-                if not isinstance(self, Observable):
-                    raise TypeError("observable_event decorator can only be used with Observable classes")
+        self.status = ExecutionStatus.RUNNING
+        self.observable.notify_observers(self)
 
-                event = Event(self, name or func.__name__, EventStatus.START)
-                self.notify_observers(event)
-                try:
-                    result = func(self, *args, **kwargs)
-                    self.notify_observers(event.with_status(EventStatus.SUCCESS))
-                    return result
-                except Exception as e:
-                    self.notify_observers(event.with_status(EventStatus.FAILURE))
-                    raise e
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self.observable is None or not isinstance(self.observable, Observable):
+            raise ValueError("Event must be bound to an observable before use")
 
-            return wrapper
-
-        if func is None:
-            return decorator
-        return decorator(func)
+        self.status = ExecutionStatus.FAILURE if exc_type else ExecutionStatus.SUCCESS
+        self.error = exc_val if exc_type else None
+        self.observable.notify_observers(self)
 
 
 class Observer(ABC):
@@ -92,7 +86,7 @@ class Observable:
     def remove_observer(self, observer: Observer) -> None:
         self._observers.remove(observer)
 
-    def notify_observers(self, event: "Event") -> None:
+    def notify_observers(self, event: Event) -> None:
         for observer in self._observers:
             if observer._is_async:
                 # In async mode, queue the event for processing in the background thread
@@ -101,18 +95,31 @@ class Observable:
                 # In sync mode, process events immediately in the current thread
                 observer.on_event(event)
 
-    def emit_event(self, name: str, status: EventStatus | None = None) -> None:
-        event = Event(self, name, status)
+    def emit(self, name: str, step: ExecutionStep, status: ExecutionStatus) -> None:
+        event = Event(self, step, status)
         self.notify_observers(event)
 
-    @contextmanager
-    def event_context(self, name: str) -> Generator[None]:
-        event = Event(self, name, EventStatus.START)
-        self.notify_observers(event)
-        try:
-            yield
-        except Exception:
-            self.notify_observers(event.with_status(EventStatus.FAILURE))
-            raise
-        else:
-            self.notify_observers(event.with_status(EventStatus.SUCCESS))
+    @staticmethod
+    def event(
+        func: Callable | None = None,
+        *,
+        step: ExecutionStep,
+    ) -> Callable:
+        """
+        Decorator
+        """
+
+        def decorator(func: Callable) -> Callable:
+            @wraps(func)
+            def wrapper(self: Observable, *args: Any, **kwargs: Any) -> Any:
+                if not isinstance(self, Observable):
+                    raise TypeError("observable_event decorator can only be used with Observable classes")
+
+                with Event(self, step):
+                    return func(self, *args, **kwargs)
+
+            return wrapper
+
+        if func is None:
+            return decorator
+        return decorator(func)

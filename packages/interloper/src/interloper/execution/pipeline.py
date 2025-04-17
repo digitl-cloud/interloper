@@ -1,13 +1,15 @@
+import datetime as dt
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, wait
+from dataclasses import dataclass
 from typing import Any
 
 import networkx as nx
 
 from interloper.asset import Asset
 from interloper.execution.context import ExecutionContext
-from interloper.execution.observable import Event, Observer
+from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep, Observer
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.range import PartitionRange
 from interloper.source import Source
@@ -16,16 +18,47 @@ logger = logging.getLogger(__name__)
 TAssetOrSource = Source | Asset | list[Source | Asset]
 
 
+
+
+@dataclass
+class AssetExecutionState:
+    asset: Asset
+    step: ExecutionStep | None = None
+    status: ExecutionStatus | None = None
+    started_at: dt.datetime | None = None
+    completed_at: dt.datetime | None = None
+    error: Exception | None = None
+
+    @property
+    def is_running(self) -> bool:
+        return self.started_at is not None and self.completed_at is None
+
+    @property
+    def is_completed(self) -> bool:
+        return self.completed_at is not None and self.status == ExecutionStatus.SUCCESS
+
+    @property
+    def is_failed(self) -> bool:
+        return self.status == ExecutionStatus.FAILURE
+
+
 class Pipeline(Observer):
     def __init__(
         self,
         sources_or_assets: TAssetOrSource,
+        on_event: Callable[["Pipeline", Event], None] | None = None,
+        async_events: bool = False,
     ):
-        super().__init__(is_async=False)
+        super().__init__(is_async=async_events)
 
+        self.on_event_callback = on_event
         self.assets = {}
         self._add_assets(sources_or_assets)
         self._build_execution_graph()
+
+        self.execution_state: dict[Asset, AssetExecutionState] = {
+            asset: AssetExecutionState(asset) for asset in self.assets.values()
+        }
 
     def materialize(
         self,
@@ -53,28 +86,69 @@ class Pipeline(Observer):
         self,
         partitions: Iterator[Partition] | PartitionRange,
     ) -> None:
-        for asset in self._get_sequential_execution_order():
-            # Single run per asset
-            if isinstance(partitions, PartitionRange) and asset.allows_partition_window:
-                context = ExecutionContext(
-                    assets=self.assets,
-                    executed_asset=asset,
-                    partition=partitions,
-                )
-                asset.materialize(context)
+        # TODO: review implementation
+        raise NotImplementedError()
 
-            # Multi runs per asset
-            else:
-                for partition in partitions:
-                    context = ExecutionContext(
-                        assets=self.assets,
-                        executed_asset=asset,
-                        partition=partition,
-                    )
-                    asset.materialize(context)
+        # for asset in self._get_sequential_execution_order():
+        #     # Single run per asset
+        #     if isinstance(partitions, PartitionRange) and asset.allows_partition_window:
+        #         context = ExecutionContext(
+        #             assets=self.assets,
+        #             executed_asset=asset,
+        #             partition=partitions,
+        #         )
+        #         asset.materialize(context)
+
+        #     # Multi runs per asset
+        #     else:
+        #         for partition in partitions:
+        #             context = ExecutionContext(
+        #                 assets=self.assets,
+        #                 executed_asset=asset,
+        #                 partition=partition,
+        #             )
+        #             asset.materialize(context)
 
     def on_event(self, event: Event) -> None:
-        logger.info(f"[EVENT] {event.observable} -> {event.name}" + (f" {event.status}" if event.status else ""))
+        if isinstance(event.observable, Asset):
+            self.execution_state[event.observable] = AssetExecutionState(
+                asset=event.observable,
+                step=event.step,
+                status=event.status,
+            )
+
+            if event.status == ExecutionStatus.RUNNING:
+                self.execution_state[event.observable].started_at = dt.datetime.now()
+            elif event.status in (ExecutionStatus.SUCCESS, ExecutionStatus.FAILURE):
+                self.execution_state[event.observable].completed_at = dt.datetime.now()
+
+            if event.status == ExecutionStatus.FAILURE:
+                self.execution_state[event.observable].error = event.error
+
+        # User-defined callback
+        if self.on_event_callback:
+            self.on_event_callback(self, event)
+
+    def get_running_assets(self) -> list[Asset]:
+        return [asset for asset, state in self.execution_state.items() if state.is_running]
+
+    def get_completed_assets(self) -> list[Asset]:
+        return [asset for asset, state in self.execution_state.items() if state.is_completed]
+
+    def get_failed_assets(self) -> list[Asset]:
+        return [asset for asset, state in self.execution_state.items() if state.is_failed]
+
+    def get_execution_summary(self) -> dict:
+        return {
+            "total": len(self.assets),
+            "pending": len(self.assets)
+            - len(self.get_running_assets())
+            - len(self.get_completed_assets())
+            - len(self.get_failed_assets()),
+            "running": len(self.get_running_assets()),
+            "completed": len(self.get_completed_assets()),
+            "failed": len(self.get_failed_assets()),
+        }
 
     def _add_assets(self, sources_or_assets: TAssetOrSource) -> None:
         # Convert single source/asset to a list

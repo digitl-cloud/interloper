@@ -12,7 +12,7 @@ from typing_extensions import Self
 
 from interloper import errors
 from interloper.execution.context import ExecutionContext
-from interloper.execution.observable import Event, Observable
+from interloper.execution.observable import ExecutionStep, Observable
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
@@ -92,12 +92,13 @@ class Asset(ABC, Observable):
     def __hash__(self):
         return hash(f"{self.dataset}.{self.name}" if self.dataset else self.name)
 
-    def __repr__(self):
-        return f"{self.dataset}.{self.name}" if self.dataset else self.name
-
     #############
     # Properties
     #############
+    @property
+    def id(self) -> str:
+        return f"{self.dataset}.{self.name}" if self.dataset else self.name
+
     @property
     def dataset(self) -> str | None:
         return self._dataset or (self._source and self._source.dataset)
@@ -177,7 +178,6 @@ class Asset(ABC, Observable):
         data = self._normalize(data, context)
         return data
 
-    @Event.wrap(name="MATERIALIZATION")
     def materialize(
         self,
         context: "ExecutionContext | None" = None,
@@ -225,7 +225,7 @@ class Asset(ABC, Observable):
     #############
     # Private
     #############
-    @Event.wrap(name="EXECUTE")
+    @Observable.event(step=ExecutionStep.EXECUTION)
     def _execute(
         self,
         context: "ExecutionContext | None" = None,
@@ -246,7 +246,7 @@ class Asset(ABC, Observable):
 
         return data
 
-    @Event.wrap(name="NORMALIZE")
+    @Observable.event(step=ExecutionStep.NORMALIZATION)
     def _normalize(
         self,
         data: Any,
@@ -286,7 +286,7 @@ class Asset(ABC, Observable):
 
         return data
 
-    @Event.wrap(name="WRITE")
+    @Observable.event(step=ExecutionStep.MATERIALIZATION)
     def _write(
         self,
         data: Any,
