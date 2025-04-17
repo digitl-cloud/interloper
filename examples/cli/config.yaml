@@ -7,6 +7,11 @@ io:
     path: interloper_sql:SQLiteIO
     init:
       db_path: data/sqlite.db
+  bigquery:
+    path: interloper_google_cloud:BigQueryIO
+    init:
+      project: dc-int-connectors-prdxxx
+      location: eu
 pipeline:
   - name: adup
     path: interloper_assets:adup

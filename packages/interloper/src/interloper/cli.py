@@ -5,8 +5,10 @@ import logging
 from typing import Any
 
 import yaml
+from rich.console import Console
 from rich.live import Live
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 
 from interloper.asset import Asset
 from interloper.execution.observable import Event
@@ -88,7 +90,7 @@ def _load_pipeline_from_config(config: dict) -> Pipeline:
 
         assets.add(source_or_asset)
 
-    return Pipeline(list(assets))
+    return Pipeline(list(assets), async_events=True)
 
 
 def run(
@@ -109,16 +111,19 @@ def run(
         TimeElapsedColumn(),
     )
 
-    # Create tasks for each asset and its steps
-    asset_tasks = {}
-    step_tasks = {}
+    asset_tasks: dict[Asset, TaskID] = {}
+    step_tasks: dict[Asset, dict[ExecutionStep, TaskID]] = {}
+    failed_assets: dict[Asset, Exception] = {}
+
     for asset in pipeline.assets.values():
-        asset_tasks[asset] = progress.add_task(asset.id, status="Pending", total=1)
+        asset_tasks[asset] = progress.add_task(f"[magenta][cyan]{asset.id}", status="Pending", total=1)
         step_tasks[asset] = {
-            ExecutionStep.EXECUTION: progress.add_task("  Execution", status="Pending", total=1, visible=False),
-            ExecutionStep.NORMALIZATION: progress.add_task("  Normalization", status="Pending", total=1, visible=False),
+            ExecutionStep.EXECUTION: progress.add_task("  ├─ Execution", status="Pending", total=1, visible=False),
+            ExecutionStep.NORMALIZATION: progress.add_task(
+                "  ├─ Normalization", status="Pending", total=1, visible=False
+            ),
             ExecutionStep.MATERIALIZATION: progress.add_task(
-                "  Materialization", status="Pending", total=1, visible=False
+                "  └─ Materialization", status="Pending", total=1, visible=False
             ),
         }
 
@@ -139,22 +144,31 @@ def run(
                 progress.update(step_task, visible=False)
         elif event.status == ExecutionStatus.FAILURE:
             progress.update(asset_tasks[asset], status="[red]Failed")
-            for step_task in step_tasks[asset].values():
-                progress.update(step_task, visible=False)
+            assert event.error is not None
+            failed_assets[asset] = event.error or Exception("Unknown error")
 
         if event.step in step_tasks[asset]:
             step_task = step_tasks[asset][event.step]
             if event.status == ExecutionStatus.RUNNING:
                 progress.update(step_task, status="Running...")
             elif event.status == ExecutionStatus.SUCCESS:
-                progress.update(step_task, advance=1, status="[green]Complete")
+                progress.update(step_task, completed=1, status="[green]Complete")
             elif event.status == ExecutionStatus.FAILURE:
-                progress.update(step_task, status="[red]Failed")
+                progress.update(step_task, completed=1, status="[red]Failed")
 
     pipeline.on_event_callback = on_pipeline_event
 
-    with Live(progress):
-        pipeline.materialize(partition=time_partition)
+    console = Console()
+    with Live(progress, console=console, refresh_per_second=10):
+        try:
+            pipeline.materialize(partition=time_partition)
+        except Exception:
+            pass
+
+    if failed_assets:
+        console.print("\n[red bold]Failed Assets:[/red bold]")
+        for asset, error in failed_assets.items():
+            console.print(Panel(str(error), title=f"[red]{asset.id}[/red]", expand=False))
 
 
 def main() -> None:

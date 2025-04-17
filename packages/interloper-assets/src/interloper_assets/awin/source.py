@@ -1,6 +1,5 @@
 import datetime as dt
 from collections.abc import Sequence
-from time import sleep
 
 import httpx
 import interloper as itlp
@@ -72,7 +71,6 @@ def awin(
         df = pd.DataFrame(data)
         df.insert(0, "date", pd.to_datetime(date))
 
-        sleep(1)
         return df
 
     @itlp.asset(
@@ -96,7 +94,6 @@ def awin(
         data = response.json()
         df = pd.DataFrame(data)
         df.insert(0, "date", pd.to_datetime(date))
-        sleep(2)
         return df
 
     return (advertiser_by_publisher, advertiser_transactions)
