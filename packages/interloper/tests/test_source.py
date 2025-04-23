@@ -145,7 +145,7 @@ class TestSourceCall:
         assert len(copy.assets) == 1
         assert copy.asset.name == "asset"
 
-    def test_call_with_options(self, source: itlp.Source):
+    def test_call_with_args(self, source: itlp.Source):
         copy = source(
             dataset="new_dataset",
             io={"what": "ever"},
@@ -162,6 +162,22 @@ class TestSourceCall:
         assert copy.asset.io == {"what": "ever"}
         assert copy.asset.default_io_key == "whatever"
         assert signature(copy.asset.data).parameters["who"].default == "world"
+
+    def test_call_source_that_has_params(self):
+        @itlp.source
+        def source(key: str):
+            @itlp.asset
+            def asset(who: str):
+                return f"hello {who}"
+
+            return (asset,)
+
+        copy = source(key="new_key")
+        assert isinstance(copy, itlp.Source)
+        assert copy.name == "source"
+        assert len(copy.assets) == 1
+        assert copy.asset.name == "asset"
+        assert signature(copy.asset_definitions).parameters["key"].default == "new_key"
 
 
 class TestSourceBind:

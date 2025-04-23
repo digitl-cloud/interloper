@@ -63,7 +63,7 @@ class Source(ABC):
         materialization_strategy: MaterializationStrategy | None = None,
         **kwargs: Any,
     ) -> "Source":
-        c = copy(self)  # TODO: implement __copy__
+        c = copy(self)
         c.dataset = dataset or self.dataset
         c.io = io or self.io
         c.default_io_key = default_io_key or self.default_io_key
@@ -72,6 +72,12 @@ class Source(ABC):
         c.bind(**kwargs)
         c._build_assets()
         return c
+
+    def __copy__(self) -> Self:
+        cls = self.__class__
+        _copy = cls.__new__(cls)
+        _copy.__dict__.update(self.__dict__)
+        return _copy
 
     def __getattr__(self, name: str) -> Asset:
         """

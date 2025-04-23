@@ -168,7 +168,7 @@ def run(
     if failed_assets:
         console.print("\n[red bold]Failed Assets:[/red bold]")
         for asset, error in failed_assets.items():
-            console.print(Panel(str(error), title=f"[red]{asset.id}[/red]", expand=False))
+            console.print(Panel(str(error), title=f"[red]{asset.id}[/red]", expand=False, title_align="left"))
 
 
 def main() -> None:

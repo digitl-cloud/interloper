@@ -76,6 +76,12 @@ class Asset(ABC, Observable):
     #############
     # Magic
     #############
+    def __copy__(self) -> Self:
+        cls = self.__class__
+        _copy = cls.__new__(cls)
+        _copy.__dict__.update(self.__dict__)
+        return _copy
+
     def __call__(
         self,
         *,
@@ -83,7 +89,7 @@ class Asset(ABC, Observable):
         default_io_key: str | None = None,
         **kwargs: Any,
     ) -> "Asset":
-        c = copy(self)  # TODO: implement __copy__
+        c = copy(self)
         c._io = io or self._io
         c._default_io_key = default_io_key or self._default_io_key
         c.bind(**kwargs)

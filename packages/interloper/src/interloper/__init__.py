@@ -10,6 +10,15 @@ from interloper.partitioning.config import PartitionConfig, TimePartitionConfig
 from interloper.partitioning.partition import Partition, TimePartition
 from interloper.partitioning.range import PartitionRange, TimePartitionRange
 from interloper.reconciler import JSONReconciler, Reconciler
+from interloper.rest.auth import (
+    Auth,
+    HTTPBasicAuth,
+    HTTPBearerAuth,
+    OAuth2Auth,
+    OAuth2ClientCredentialsAuth,
+    OAuth2RefreshTokenAuth,
+)
+from interloper.rest.client import RESTClient
 from interloper.schema import AssetSchema
 from interloper.source import Source, source
 from interloper.utils.logging import basic_logging

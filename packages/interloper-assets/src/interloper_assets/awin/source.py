@@ -70,7 +70,6 @@ def awin(
         data = response.json()
         df = pd.DataFrame(data)
         df.insert(0, "date", pd.to_datetime(date))
-
         return df
 
     @itlp.asset(

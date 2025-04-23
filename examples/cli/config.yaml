@@ -10,7 +10,7 @@ io:
   bigquery:
     path: interloper_google_cloud:BigQueryIO
     init:
-      project: dc-int-connectors-prdxxx
+      project: dc-int-connectors-prd
       location: eu
 pipeline:
   - name: adup
