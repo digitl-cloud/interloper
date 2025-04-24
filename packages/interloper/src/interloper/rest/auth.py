@@ -75,10 +75,14 @@ class OAuth2Auth(HTTPAuth):
 
     @property
     def access_token(self) -> str:
+        if not self.authenticated:
+            raise ValueError("Cannot access access token: not authenticated")
         return self._access_token
 
     @property
     def refresh_token(self) -> str | None:
+        if not self.authenticated:
+            raise ValueError("Cannot access refresh token: not authenticated")
         return self._refresh_token
 
     def __call__(self, client: httpx.Client):

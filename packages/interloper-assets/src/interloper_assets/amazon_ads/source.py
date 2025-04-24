@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 # Notes:
 # - Even though the API supports start and end date, the data is aggregated over the entire date range,
 #   so we don't use DateWindow to partition the data.
+# - TODO: schemas
 # - TODO: should we set the profile ID at the source level?
 
 
