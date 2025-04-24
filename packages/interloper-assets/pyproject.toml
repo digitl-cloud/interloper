@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
+dev = ["bingads>=13.0.24.1", "pyright>=1.1.394", "ruff>=0.9.6"]
 
 [build-system]
 requires = ["hatchling"]

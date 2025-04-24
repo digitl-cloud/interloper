@@ -1,10 +1,9 @@
 import datetime as dt
-from dataclasses import dataclass, field
+from dataclasses import field
 
 import interloper as itlp
 
 
-@dataclass
 class Ads(itlp.AssetSchema):
     """
     The AdUp Ads report provides insights into the performance of ads within the AdUp platform.

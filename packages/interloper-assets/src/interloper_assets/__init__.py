@@ -7,3 +7,4 @@ from interloper_assets.amazon_selling_partner.source import (
     amazon_selling_partner,
 )
 from interloper_assets.awin.source import awin
+from interloper_assets.bing_ads.source import bing_ads

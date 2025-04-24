@@ -83,6 +83,16 @@ wheels = [
 ]
 
 [[package]]
+name = "bingads"
+version = "13.0.24.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "suds-community" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/74/33/19e2fe9dd245066fdf42895d11b034e7e46b93ba9f0481e1a91b20651e3d/bingads-13.0.24.1.tar.gz", hash = "sha256:16a399c8b99a15435cfe17c7d737182e8125a9e28b06f0336f69f964f68846f0", size = 380459 }
+
+[[package]]
 name = "blinker"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -863,6 +873,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "bingads" },
     { name = "pyright" },
     { name = "ruff" },
 ]
@@ -877,6 +888,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "bingads", specifier = ">=13.0.24.1" },
     { name = "pyright", specifier = ">=1.1.394" },
     { name = "ruff", specifier = ">=0.9.6" },
 ]
@@ -2344,6 +2356,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3e/c0/7286284567e5045f0c587c426d0c41aee5d10c0a2e360e627a83037e9f0c/streamlit-1.44.1.tar.gz", hash = "sha256:c6914ed6d5b76870b461510476806db370f36425ae0e6654d227c988288198d3", size = 9423685 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/17/fc425e1d4d86e31b2aaf0812a2ef2163763a0670d671720c7c36e8679323/streamlit-1.44.1-py3-none-any.whl", hash = "sha256:9fe355f58b11f4eb71e74f115ce1f38c4c9eaff2733e6bcffb510ac1298a5990", size = 9812242 },
+]
+
+[[package]]
+name = "suds-community"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/5d/da767935b4cb869417307fbd6dec93d2bf3723228214302b6e6b277f474b/suds_community-1.2.0.tar.gz", hash = "sha256:ab3b24dc9ba06b5e6598e2a5d34d2a7d06c79e613d81cedc028475bfbd3bb90c", size = 271408 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/0e/513c353018247dc846074d9460f3c9adeeea360ac85abd5a7750eb53fc03/suds_community-1.2.0-py3-none-any.whl", hash = "sha256:505b191865bca125f12e8ff9598b24d9c0108b98826671bdd700ed51def44e36", size = 145270 },
 ]
 
 [[package]]
