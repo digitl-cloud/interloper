@@ -233,6 +233,61 @@ def campaign_manager_360(
 
             return data
 
+    @itlp.asset
+    def accounts(profile_id: str) -> pd.DataFrame:
+        accounts = []
+        next_page_token = None
+
+        while True:
+            response = service.accounts().list(profileId=profile_id, pageToken=next_page_token).execute()
+            accounts.extend(response["accounts"])
+            next_page_token = response.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        return pd.DataFrame(accounts)
+
+    @itlp.asset
+    def advertisers(profile_id: str) -> pd.DataFrame:
+        advertisers = []
+        next_page_token = None
+
+        while True:
+            response = service.advertisers().list(profileId=profile_id, pageToken=next_page_token).execute()
+            advertisers.extend(response["advertisers"])
+            next_page_token = response.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        return pd.DataFrame(advertisers)
+
+    @itlp.asset
+    def advertiser_invoices(
+        profile_id: str,
+        advertiser_id: str,
+        issue_month: str,
+    ) -> pd.DataFrame:
+        invoices = []
+        next_page_token = None
+
+        while True:
+            response = (
+                service.advertiserInvoices()
+                .list(
+                    profileId=profile_id,
+                    advertiserId=advertiser_id,
+                    issueMonth=issue_month,
+                    pageToken=next_page_token,
+                )
+                .execute()
+            )
+            invoices.extend(response["advertiserInvoices"])  # TODO: check if this is correctƒ
+            next_page_token = response.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        return pd.DataFrame(invoices)
+
     @itlp.asset(
         # schema=...,
         partitioning=itlp.TimePartitionConfig(column="date"),
@@ -291,4 +346,4 @@ def campaign_manager_360(
         )
         return pd.DataFrame(data)
 
-    return (ads, campaigns, reach)
+    return (accounts, advertisers, advertiser_invoices, ads, campaigns, reach)
