@@ -8,7 +8,7 @@ import pandas as pd
 from bingads import AuthorizationData, OAuthAuthorization, OAuthWebAuthCodeGrant, ServiceClient
 from bingads.v13.reporting.reporting_download_parameters import ReportingDownloadParameters
 from bingads.v13.reporting.reporting_service_manager import ReportingServiceManager
-from interloper_pandas.normalizer import DataframeNormalizer
+from interloper_pandas import DataframeNormalizer
 from suds.sudsobject import Object
 
 from interloper_assets.bing_ads import constants, schemas
@@ -69,7 +69,7 @@ def bing_ads(
         authorization_data.customer_id = customer_id
         return authorization_data
 
-    def _build_report_time(
+    def build_report_time(
         service_client: ServiceClient,
         date: dt.date,
         timezone: str = "AmsterdamBerlinBernRomeStockholmVienna",
@@ -92,7 +92,7 @@ def bing_ads(
 
         return report_time
 
-    def _build_ad_performance_report_request(
+    def build_ad_performance_report_request(
         reporting_service: ServiceClient,
         time: Object,
         account_id: str,
@@ -140,7 +140,10 @@ def bing_ads(
 
             return report
 
-    @itlp.asset(schema=schemas.Ads)
+    @itlp.asset(
+        schema=schemas.Ads,
+        partitioning=itlp.TimePartitionConfig(column="time_period"),  # TODO: check
+    )
     def ads(
         account_id: str = itlp.Env("BING_ADS_ACCOUNT_ID"),
         customer_id: str = itlp.Env("BING_ADS_CUSTOMER_ID"),
@@ -148,8 +151,8 @@ def bing_ads(
     ) -> pd.DataFrame:
         authorization_data = authenticate(account_id, customer_id)
         reporting_service = ServiceClient("ReportingService", 13, authorization_data)
-        report_time = _build_report_time(reporting_service, date)
-        request = _build_ad_performance_report_request(
+        report_time = build_report_time(reporting_service, date)
+        request = build_ad_performance_report_request(
             reporting_service=reporting_service,
             time=report_time,
             account_id=cast(str, authorization_data.account_id),

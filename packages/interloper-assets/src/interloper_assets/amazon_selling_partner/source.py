@@ -8,7 +8,7 @@ from functools import partial
 import httpx
 import interloper as itlp
 import pandas as pd
-from interloper_pandas.normalizer import DataframeNormalizer
+from interloper_pandas import DataframeNormalizer
 from tenacity import (
     Retrying,
     before_sleep_log,

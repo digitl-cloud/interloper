@@ -16,8 +16,6 @@ dependencies = [
     "interloper-google-cloud",
     "interloper-sql",
     "interloper-sqlite",
-    "matplotlib>=3.10.0",
-    "streamlit>=1.42.2",
 ]
 
 [dependency-groups]

@@ -1,5 +1,5 @@
 # ###############
-# PROJECT
+# PROJECT / UV
 # ###############
 [project]
 name = "interloper-google-cloud"
@@ -9,9 +9,10 @@ readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
 dependencies = [
+    "google-auth-oauthlib>=1.2.1",
     "google-cloud-bigquery>=3.31.0",
-    "interloper",
     "interloper-pandas",
+    "interloper",
     "pandas-gbq>=0.28.0",
 ]
 
@@ -22,9 +23,6 @@ dev = ["pyright>=1.1.394", "pytest>=8.3.5", "ruff>=0.9.6"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# ###############
-# UV
-# ###############
 [tool.uv.sources]
 interloper = { workspace = true }
 interloper-pandas = { workspace = true }

@@ -1,5 +1,5 @@
 # ###############
-# PROJECT
+# PROJECT / UV
 # ###############
 [project]
 name = "interloper-assets"
@@ -15,16 +15,17 @@ dependencies = [
     "tenacity>=9.1.2",
 ]
 
+[project.optional-dependencies]
+bing = ["bingads>=13.0.24.1"]
+google = ["google-api-python-client>=2.167.0"]
+
 [dependency-groups]
-dev = ["bingads>=13.0.24.1", "pyright>=1.1.394", "ruff>=0.9.6"]
+dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# ###############
-# UV
-# ###############
 [tool.uv.sources]
 interloper = { workspace = true }
 interloper-pandas = { workspace = true }

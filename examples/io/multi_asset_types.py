@@ -3,9 +3,9 @@ import logging
 import interloper as itlp
 import pandas as pd
 from interloper.normalizer import JSONNormalizer
-from interloper_google_cloud.io import BigQueryIO
-from interloper_pandas.normalizer import DataframeNormalizer
-from interloper_sql.io import PostgresIO, SQLiteIO
+from interloper_google_cloud import BigQueryIO
+from interloper_pandas import DataframeNormalizer
+from interloper_sql import PostgresIO, SQLiteIO
 
 itlp.basic_logging(logging.INFO)
 

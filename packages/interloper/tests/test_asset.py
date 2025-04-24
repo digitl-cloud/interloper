@@ -243,6 +243,8 @@ class TestAssetRun:
             assert asset.run(who="world") == "normalized hello world"
         assert "Schema mismatch for asset asset between provided and inferred schemas" in caplog.text
 
+    # TODO: test run with AssetParam passed as an overriding parameter -> should be resolved
+
 
 class TestAssetMaterialize:
     def test_materialize(self, asset: itlp.Asset, io: itlp.IO):

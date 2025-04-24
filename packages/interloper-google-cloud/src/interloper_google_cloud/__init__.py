@@ -1,1 +1,2 @@
+from interloper_google_cloud.auth import GoogleAuth, GoogleOauth2ClientCredentialsAuth
 from interloper_google_cloud.io import BigQueryClient, BigQueryDataframeHandler, BigQueryIO

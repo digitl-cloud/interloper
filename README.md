@@ -11,9 +11,9 @@ pip install interloper
 ```py
 import interloper as itlp
 
-from interloper_google_cloud.io import BigQueryIO
-from interloper_pandas.normalizer import DataframeNormalizer
-from interloper_sql.io import PostgresIO, SQLiteIO
+from interloper_google_cloud import BigQueryIO
+from interloper_pandas import DataframeNormalizer
+from interloper_sql import PostgresIO, SQLiteIO
 
 
 @itlp.source

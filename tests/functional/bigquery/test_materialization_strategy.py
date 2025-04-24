@@ -5,8 +5,8 @@ import interloper as itlp
 import pandas as pd
 import pytest
 from google.cloud import bigquery
-from interloper_google_cloud.io import BigQueryIO
-from interloper_pandas.normalizer import DataframeNormalizer
+from interloper_google_cloud import BigQueryIO
+from interloper_pandas import DataframeNormalizer
 from pandas.testing import assert_frame_equal
 
 BIGQUERY_DATASET = "interloper_functional_tests"

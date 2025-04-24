@@ -331,15 +331,26 @@ class Asset(ABC, Observable):
             raise errors.AssetDefinitionError(f"None is not a valid return type for asset {self.name}")
 
         for param in sig.parameters.values():
-            # Runtime user defined parameters take precedence over asset_params
+            # Overriding param: take precedences over default AssetParams
             if param.name in overriding_params:
-                final_params[param.name] = overriding_params[param.name]
-                continue
+                overriding_param = overriding_params[param.name]
+
+                # If the overriding param is an AssetParam, we want to resolve it. Since the logic to resolve
+                # AssetParam & ContextualAssetParam is handled below based on the default value,we choose to replace 
+                # the default value with the overriding param and proceed with the resolution.
+                if isinstance(overriding_param, AssetParam):
+                    param = param.replace(default=overriding_param)
+
+                # If the overriding param is not an AssetParam, we directly use the value
+                else:
+                    final_params[param.name] = overriding_param
+                    continue
 
             # No user defined paramters and no default value
             if param.default is param.empty:
                 raise errors.AssetParamResolutionError(f"Cannot resolve parameter {param.name} for asset {self.name}")
 
+            # Default value is a ContextualAssetParam
             if isinstance(param.default, ContextualAssetParam):
                 if context is None:
                     raise errors.AssetParamResolutionError(
