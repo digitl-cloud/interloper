@@ -19,6 +19,7 @@ from interloper.rest.auth import (
     OAuth2RefreshTokenAuth,
 )
 from interloper.rest.client import RESTClient
+from interloper.rest.paginator import PageNumberPaginator
 from interloper.schema import AssetSchema
 from interloper.source import Source, source
 from interloper.utils.logging import basic_logging

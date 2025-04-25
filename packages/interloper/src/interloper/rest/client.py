@@ -1,9 +1,11 @@
 import logging
+from collections.abc import Generator
 from typing import Any
 
 import httpx
 
 from interloper.rest.auth import Auth
+from interloper.rest.paginator import Paginator
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +18,16 @@ class RESTClient:
         timeout: float | None = None,
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
+        paginator: Paginator | None = None,
     ):
-        self._auth = auth
         self._client = httpx.Client(
             base_url=base_url,
             timeout=timeout,
             headers=headers,
             params=params,
         )
+        self._auth = auth
+        self._paginator = paginator
 
     @property
     def auth(self) -> Auth:
@@ -50,7 +54,7 @@ class RESTClient:
         self,
         url: str,
         *,
-        params: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> httpx.Response:
@@ -67,7 +71,7 @@ class RESTClient:
         *,
         data: dict[str, Any] | None = None,
         json: Any | None = None,
-        params: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> httpx.Response:
@@ -79,3 +83,9 @@ class RESTClient:
             headers=headers,
             **kwargs,
         )
+
+    def paginate(self, path: str) -> Generator[Any]:
+        if self._paginator is None:
+            raise ValueError("RESTClient has no paginator configured")
+
+        yield from self._paginator.paginate(self.client, path)

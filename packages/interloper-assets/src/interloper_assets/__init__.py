@@ -9,3 +9,4 @@ from interloper_assets.amazon_selling_partner.source import (
 from interloper_assets.awin.source import awin
 from interloper_assets.bing_ads.source import bing_ads
 from interloper_assets.campaign_manager_360.source import campaign_manager_360
+from interloper_assets.clockify.source import clockify
