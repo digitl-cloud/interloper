@@ -212,4 +212,4 @@ def display_video_360(
         )
         return pd.DataFrame(data)
 
-    return (partners, line_items)
+    return (partners, line_items, line_items_by_country)

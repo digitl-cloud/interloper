@@ -12,3 +12,5 @@ from interloper_assets.campaign_manager_360.source import campaign_manager_360
 from interloper_assets.clockify.source import clockify
 from interloper_assets.criteo.source import criteo
 from interloper_assets.display_video_360.source import display_video_360
+from interloper_assets.easybill.source import easybill
+from interloper_assets.facebook_ads.source import facebook_ads

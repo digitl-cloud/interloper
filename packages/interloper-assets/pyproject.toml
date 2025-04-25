@@ -18,6 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 bing = ["bingads>=13.0.24.1"]
 google = ["google-api-python-client>=2.167.0"]
+facebook = ["facebook-business>=20.0.0"]
 
 [dependency-groups]
 dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
