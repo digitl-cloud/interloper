@@ -22,6 +22,7 @@ class Source(ABC):
     default_io_key: str | None
     auto_asset_deps: bool
     normalizer: Normalizer | None
+    materializable: bool
     materialization_strategy: MaterializationStrategy
     default_assets_args: dict[str, Any]
     _initialized: bool
@@ -35,6 +36,7 @@ class Source(ABC):
         default_io_key: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
+        materializable: bool = True,
         materialization_strategy: MaterializationStrategy = MaterializationStrategy.FLEXIBLE,
         default_assets_args: dict[str, Any] | None = None,
     ):
@@ -46,6 +48,7 @@ class Source(ABC):
         self.default_io_key = default_io_key
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
+        self.materializable = materializable
         self.materialization_strategy = materialization_strategy
         self.default_assets_args = default_assets_args or {}
         self._initialized = False
@@ -59,6 +62,7 @@ class Source(ABC):
         dataset: str | None = None,
         io: dict[str, IO] | None = None,
         default_io_key: str | None = None,
+        materializable: bool | None = None,
         default_assets_args: dict[str, Any] | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
         **kwargs: Any,
@@ -68,6 +72,7 @@ class Source(ABC):
         c.io = io or self.io
         c.default_io_key = default_io_key or self.default_io_key
         c.default_assets_args = default_assets_args or self.default_assets_args
+        c.materializable = materializable or self.materializable
         c.materialization_strategy = materialization_strategy or self.materialization_strategy
         c.bind(**kwargs)
         c._build_assets()
@@ -114,6 +119,12 @@ class Source(ABC):
             pass
 
         super().__setattr__(name, value)
+
+    def __getitem__(self, name: str) -> Asset:
+        self._ensure_initialized()
+        if name not in self._assets:
+            raise errors.SourceValueError(f"Asset {name} not found in source {self.name}")
+        return self._assets[name]
 
     #############
     # Properties
@@ -219,6 +230,7 @@ class SourceDecorator:
         *,
         name: str | None = None,
         dataset: str | None = None,
+        materializable: bool = True,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
         materialization_strategy: MaterializationStrategy = MaterializationStrategy.FLEXIBLE,
@@ -244,12 +256,14 @@ class SourceDecorator:
         dataset: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
+        materializable: bool = True,
         materialization_strategy: MaterializationStrategy = MaterializationStrategy.FLEXIBLE,
     ):
         self.name = name
         self.dataset = dataset
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
+        self.materializable = materializable
         self.materialization_strategy = materialization_strategy
 
     def __call__(self, func: Callable) -> Source:
@@ -279,6 +293,7 @@ class SourceDecorator:
             dataset=self.dataset,
             auto_asset_deps=self.auto_asset_deps,
             normalizer=self.normalizer,
+            materializable=self.materializable,
             materialization_strategy=self.materialization_strategy,
         )
 

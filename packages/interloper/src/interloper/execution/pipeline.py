@@ -9,15 +9,13 @@ import networkx as nx
 
 from interloper.asset import Asset
 from interloper.execution.context import ExecutionContext
-from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep, Observer
+from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep, Observable, Observer
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.range import PartitionRange
 from interloper.source import Source
 
 logger = logging.getLogger(__name__)
 TAssetOrSource = Source | Asset | list[Source | Asset]
-
-
 
 
 @dataclass
@@ -42,24 +40,44 @@ class AssetExecutionState:
         return self.status == ExecutionStatus.FAILURE
 
 
-class Pipeline(Observer):
+class Pipeline(Observer, Observable):
+    _assets: dict[str, Asset]
+    _graph: nx.DiGraph
+    _finished: bool
+
     def __init__(
         self,
         sources_or_assets: TAssetOrSource,
         on_event: Callable[["Pipeline", Event], None] | None = None,
         async_events: bool = False,
     ):
-        super().__init__(is_async=async_events)
+        Observer.__init__(self, is_async=async_events)
+        Observable.__init__(self, observers=[self])
 
         self.on_event_callback = on_event
-        self.assets = {}
+        self._assets = {}
         self._add_assets(sources_or_assets)
         self._build_execution_graph()
+        self._async_events = async_events
+        self._finished = False
 
         self.execution_state: dict[Asset, AssetExecutionState] = {
-            asset: AssetExecutionState(asset) for asset in self.assets.values()
+            asset: AssetExecutionState(asset) for asset in self._assets.values()
         }
 
+    @property
+    def assets(self) -> dict[str, Asset]:
+        return self._assets
+
+    @property
+    def graph(self) -> nx.DiGraph:
+        return self._graph
+
+    @property
+    def finished(self) -> bool:
+        return self._finished
+
+    @Observable.event(step=ExecutionStep.PIPELINE_MATERIALIZATION)
     def materialize(
         self,
         partition: Partition | None = None,
@@ -69,7 +87,7 @@ class Pipeline(Observer):
                 futures = []
                 for asset in generation:
                     context = ExecutionContext(
-                        assets=self.assets,
+                        assets=self._assets,
                         executed_asset=asset,
                         partition=partition,
                     )
@@ -82,6 +100,7 @@ class Pipeline(Observer):
                 for future in futures:
                     future.result()
 
+    @Observable.event(step=ExecutionStep.PIPELINE_BACKFILL)
     def backfill(
         self,
         partitions: Iterator[Partition] | PartitionRange,
@@ -110,6 +129,12 @@ class Pipeline(Observer):
         #             asset.materialize(context)
 
     def on_event(self, event: Event) -> None:
+        # if event.step == ExecutionStep.PIPELINE_MATERIALIZATION and event.status in (
+        #     ExecutionStatus.SUCCESS,
+        #     ExecutionStatus.FAILURE,
+        # ):
+        #     self._finished = True
+
         if isinstance(event.observable, Asset):
             self.execution_state[event.observable] = AssetExecutionState(
                 asset=event.observable,
@@ -129,19 +154,19 @@ class Pipeline(Observer):
         if self.on_event_callback:
             self.on_event_callback(self, event)
 
-    def get_running_assets(self) -> list[Asset]:
-        return [asset for asset, state in self.execution_state.items() if state.is_running]
+    def get_running_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
+        return [(asset, state) for asset, state in self.execution_state.items() if state.is_running]
 
-    def get_completed_assets(self) -> list[Asset]:
-        return [asset for asset, state in self.execution_state.items() if state.is_completed]
+    def get_completed_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
+        return [(asset, state) for asset, state in self.execution_state.items() if state.is_completed]
 
-    def get_failed_assets(self) -> list[Asset]:
-        return [asset for asset, state in self.execution_state.items() if state.is_failed]
+    def get_failed_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
+        return [(asset, state) for asset, state in self.execution_state.items() if state.is_failed]
 
     def get_execution_summary(self) -> dict:
         return {
-            "total": len(self.assets),
-            "pending": len(self.assets)
+            "total": len(self._assets),
+            "pending": len(self._assets)
             - len(self.get_running_assets())
             - len(self.get_completed_assets())
             - len(self.get_failed_assets()),
@@ -159,24 +184,25 @@ class Pipeline(Observer):
         for source_or_asset in sources_or_assets:
             batch = []
             if isinstance(source_or_asset, Source):
-                batch.extend(source_or_asset.assets)
+                batch.extend([asset for asset in source_or_asset.assets if asset.materializable])
             elif isinstance(source_or_asset, Asset):
-                batch.append(source_or_asset)
+                if source_or_asset.materializable:
+                    batch.append(source_or_asset)
             else:
                 raise ValueError(f"Expected an instance of Source or Asset, but got {type(source_or_asset)}")
 
             for asset in batch:
-                if asset.name in self.assets:
-                    raise ValueError(f"Duplicate asset name '{asset.name}'")
+                if asset in self._assets:
+                    raise ValueError(f"Duplicate asset name '{asset.id}'")
                 asset.add_observer(self)
-                self.assets[asset.name] = asset
+                self._assets[asset] = asset
 
     def _build_execution_graph(self) -> None:
         """Builds the asset dependency graph."""
 
-        self.graph = nx.DiGraph()
-        for asset in self.assets.values():
-            self.graph.add_node(asset)
+        self._graph = nx.DiGraph()
+        for asset in self._assets.values():
+            self._graph.add_node(asset)
 
             for upstream_ref in asset.upstream_assets:
                 # Verify that the upstream asset ref is in the asset's deps config
@@ -186,34 +212,34 @@ class Pipeline(Observer):
                 upstream_asset_name = asset.deps[upstream_ref.name]
 
                 # Check if the dependency exists in the asset map
-                if upstream_asset_name not in self.assets:
+                if upstream_asset_name not in self._assets:
                     raise ValueError(
                         f"Upstream asset '{upstream_asset_name}' of asset '{asset.name}' not found in asset graph"
                     )
 
                 # Get the corresponding asset and add to the graph
-                upstream_asset = self.assets[upstream_asset_name]
-                self.graph.add_edge(upstream_asset, asset)
+                upstream_asset = self._assets[upstream_asset_name]
+                self._graph.add_edge(upstream_asset, asset)
 
         # Detect cycles
         try:
-            nx.find_cycle(self.graph, orientation="original")
+            nx.find_cycle(self._graph, orientation="original")
             raise ValueError("Circular dependency detected in the asset dependency graph")
         except nx.NetworkXNoCycle:
             pass
 
-        assert nx.is_directed_acyclic_graph(self.graph)
+        assert nx.is_directed_acyclic_graph(self._graph)
 
     def _get_sequential_execution_order(self) -> list[Asset]:
         """Returns the sequential execution order of assets."""
 
-        order = list(nx.topological_sort(self.graph))
+        order = list(nx.topological_sort(self._graph))
         logger.debug(f"Sequential execution order: {order}")
         return order
 
     def _get_parallel_execution_order(self) -> list[list[Asset]]:
         """Returns the parallel execution order of assets."""
 
-        generations = list(nx.topological_generations(self.graph))
+        generations = list(nx.topological_generations(self._graph))
         logger.debug(f"Parallel execution order: {generations}")
         return generations

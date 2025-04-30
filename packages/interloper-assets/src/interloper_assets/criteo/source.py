@@ -5,7 +5,7 @@ import interloper as itlp
 import pandas as pd
 from interloper_pandas import DataframeNormalizer
 
-from interloper_assets.criteo import constants
+from interloper_assets.criteo import constants, schemas
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ def criteo(
         return pd.DataFrame(response.json()["data"])
 
     @itlp.asset(
-        # schema=...
+        schema=schemas.Ads,
         partitioning=itlp.TimePartitionConfig(column="day"),
     )
     def ads(
@@ -127,7 +127,7 @@ def criteo(
         return pd.DataFrame(response["Rows"])
 
     @itlp.asset(
-        # schema=...
+        schema=schemas.Campaigns,
         partitioning=itlp.TimePartitionConfig(column="day"),
     )
     def campaigns(

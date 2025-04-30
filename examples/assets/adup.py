@@ -3,13 +3,13 @@ import logging
 
 import interloper as itlp
 from interloper_assets import adup
-from interloper_duckdb import DuckDBIO
+from interloper_sql import SQLiteIO
 
 itlp.basic_logging(logging.DEBUG)
 
 
 adup = adup(
-    io={"duckdb": DuckDBIO("data/duck.db")},
+    io={"sqlite": SQLiteIO(db_path="data/sqlite.db")},
     default_io_key="duckdb",
 )
 

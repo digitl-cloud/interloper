@@ -3,10 +3,10 @@ io:
     path: interloper:FileIO
     init:
       base_dir: data
-  sqlite:
-    path: interloper_sql:SQLiteIO
-    init:
-      db_path: data/sqlite.db
+  # sqlite:
+  #   path: interloper_sql:SQLiteIO
+  #   init:
+  #     db_path: data/sqlite.db
   bigquery:
     path: interloper_google_cloud:BigQueryIO
     init:
@@ -14,8 +14,18 @@ io:
       location: eu
 pipeline:
   - name: adup
+    type: source
     path: interloper_assets:adup
   - name: awin
+    type: source
     path: interloper_assets:awin
     assets_args:
-      advertiser_id: 10990
+      advertiser_id: "10990"
+  - name: criteo
+    type: source
+    path: interloper_assets:criteo
+    assets:
+      - ads
+      - campaigns
+    assets_args:
+      advertiser_id: "1176"

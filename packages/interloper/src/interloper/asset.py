@@ -31,7 +31,6 @@ T = TypeVar("T")
 class Asset(ABC, Observable):
     name: str
     deps: dict[str, str]
-    materializable: bool
     schema: type[AssetSchema] | None
     partitioning: PartitionConfig | None
     _source: "Source | None"
@@ -39,6 +38,7 @@ class Asset(ABC, Observable):
     _io: dict[str, IO]
     _default_io_key: str | None
     _normalizer: Normalizer | None
+    _materializable: bool | None
     _materialization_strategy: MaterializationStrategy | None
 
     def __init__(
@@ -49,11 +49,11 @@ class Asset(ABC, Observable):
         dataset: str | None = None,
         deps: dict[str, str] | None = None,
         io: dict[str, IO] | None = None,
-        materializable: bool = True,
         default_io_key: str | None = None,
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
         partitioning: PartitionConfig | None = None,
+        materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
     ):
         super().__init__()
@@ -61,7 +61,6 @@ class Asset(ABC, Observable):
         self._source: Source | None = source
         self.name = name
         self.deps = deps or {}
-        self.materializable = materializable
         self.schema = schema
         self.partitioning = partitioning
 
@@ -71,6 +70,7 @@ class Asset(ABC, Observable):
         self._io = io or {}
         self._default_io_key = default_io_key
         self._normalizer = normalizer
+        self._materializable = materializable
         self._materialization_strategy = materialization_strategy
 
     #############
@@ -106,6 +106,10 @@ class Asset(ABC, Observable):
         return f"{self.dataset}.{self.name}" if self.dataset else self.name
 
     @property
+    def source(self) -> "Source | None":
+        return self._source
+
+    @property
     def dataset(self) -> str | None:
         return self._dataset or (self._source and self._source.dataset)
 
@@ -138,6 +142,18 @@ class Asset(ABC, Observable):
         if not isinstance(value, Normalizer):
             raise errors.AssetValueError(f"Normalizer must be an instance of Normalizer, got {type(value).__name__}")
         self._normalizer = value
+
+    @property
+    def materializable(self) -> bool:
+        if self._materializable is not None:
+            return self._materializable
+        if self._source:
+            return self._source.materializable
+        return True
+
+    @materializable.setter
+    def materializable(self, value: bool) -> None:
+        self._materializable = value
 
     @property
     def materialization_strategy(self) -> MaterializationStrategy:
@@ -231,7 +247,7 @@ class Asset(ABC, Observable):
     #############
     # Private
     #############
-    @Observable.event(step=ExecutionStep.EXECUTION)
+    @Observable.event(step=ExecutionStep.ASSET_EXECUTION)
     def _execute(
         self,
         context: "ExecutionContext | None" = None,
@@ -252,7 +268,7 @@ class Asset(ABC, Observable):
 
         return data
 
-    @Observable.event(step=ExecutionStep.NORMALIZATION)
+    @Observable.event(step=ExecutionStep.ASSET_NORMALIZATION)
     def _normalize(
         self,
         data: Any,
@@ -292,7 +308,7 @@ class Asset(ABC, Observable):
 
         return data
 
-    @Observable.event(step=ExecutionStep.MATERIALIZATION)
+    @Observable.event(step=ExecutionStep.ASSET_MATERIALIZATION)
     def _write(
         self,
         data: Any,
@@ -336,7 +352,7 @@ class Asset(ABC, Observable):
                 overriding_param = overriding_params[param.name]
 
                 # If the overriding param is an AssetParam, we want to resolve it. Since the logic to resolve
-                # AssetParam & ContextualAssetParam is handled below based on the default value,we choose to replace 
+                # AssetParam & ContextualAssetParam is handled below based on the default value,we choose to replace
                 # the default value with the overriding param and proceed with the resolution.
                 if isinstance(overriding_param, AssetParam):
                     param = param.replace(default=overriding_param)
@@ -402,6 +418,7 @@ class AssetDecorator:
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
         partitioning: PartitionConfig | None = None,
+        materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
     ) -> Self: ...
 
@@ -426,6 +443,7 @@ class AssetDecorator:
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
         partitioning: PartitionConfig | None = None,
+        materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
     ):
         self.name = name
@@ -434,6 +452,7 @@ class AssetDecorator:
         self.normalizer = normalizer
         self.partitioning = partitioning
         self.materialization_strategy = materialization_strategy
+        self.materializable = materializable
 
     def __call__(self, func: Callable) -> Asset:
         """
@@ -464,6 +483,7 @@ class AssetDecorator:
             schema=self.schema,
             normalizer=self.normalizer,
             partitioning=self.partitioning,
+            materializable=self.materializable,
             materialization_strategy=self.materialization_strategy,
         )
 

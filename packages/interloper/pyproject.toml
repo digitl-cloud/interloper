@@ -8,12 +8,10 @@ description = "Interloper"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "httpx>=0.28.1",
-    "networkx>=3.4.2",
-    "pyyaml>=6.0.2",
-    "rich>=14.0.0",
-]
+dependencies = ["httpx>=0.28.1", "networkx>=3.4.2"]
+
+[project.optional-dependencies]
+cli = ["jsonschema>=4.23.0", "pyyaml>=6.0.0", "rich>=14.0.0"]
 
 [dependency-groups]
 dev = ["pyright>=1.1.394", "pytest>=8.3.5", "ruff>=0.9.6"]

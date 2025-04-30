@@ -17,6 +17,15 @@ def asset() -> itlp.Asset:
 
 
 @pytest.fixture
+def source(asset: itlp.Asset) -> itlp.Source:
+    @itlp.source
+    def source():
+        return (asset,)
+
+    return source
+
+
+@pytest.fixture
 def normalizer() -> itlp.Normalizer:
     class Normalizer(itlp.Normalizer):
         def normalize(self, data: Any) -> str:
@@ -100,25 +109,61 @@ class TestAssetDefinition:
 
 
 class TestAssetProperties:
-    def test_dataset_setter(self, asset: itlp.Asset):
-        asset.dataset = "my_dataset"
-        assert asset.dataset == "my_dataset"
+    def test_id(self, asset: itlp.Asset):
+        assert asset.id == "asset"
 
-    def test_io_setter(self, asset: itlp.Asset):
+    def test_id_with_dataset(self, asset: itlp.Asset):
+        asset.dataset = "dataset"
+        assert asset.id == "dataset.asset"
+
+    def test_id_with_dataset_from_source(self, source: itlp.Source):
+        assert source.asset.id == "source.asset"
+
+    def test_dataset(self, asset: itlp.Asset):
+        asset.dataset = "dataset"
+        assert asset.dataset == "dataset"
+
+    def test_dataset_from_source(self, source: itlp.Source):
+        assert source.asset.dataset == "source"
+
+    def test_io(self, asset: itlp.Asset):
         asset.io = {"what": "ever"}
         assert asset.io == {"what": "ever"}
 
-    def test_default_io_key_setter(self, asset: itlp.Asset):
+    def test_io_from_source(self, source: itlp.Source):
+        source.io = {"what": "ever"}
+        assert source.asset.io == {"what": "ever"}
+
+    def test_default_io_key(self, asset: itlp.Asset):
         asset.default_io_key = "whatever"
         assert asset.default_io_key == "whatever"
 
-    def test_normalizer_setter(self, asset: itlp.Asset, normalizer: itlp.Normalizer):
+    def test_default_io_key_from_source(self, source: itlp.Source):
+        source.default_io_key = "whatever"
+        assert source.asset.default_io_key == "whatever"
+
+    def test_normalizer(self, asset: itlp.Asset, normalizer: itlp.Normalizer):
         asset.normalizer = normalizer
         assert asset.normalizer == normalizer
+
+    def test_normalizer_from_source(self, source: itlp.Source):
+        source.normalizer = normalizer
+        assert source.asset.normalizer == normalizer
 
     def test_normalizer_setter_fails(self, asset: itlp.Asset, normalizer: itlp.Normalizer):
         with pytest.raises(itlp.errors.AssetValueError, match="Normalizer must be an instance of Normalizer, got str"):
             asset.normalizer = "normalizer"
+
+    def test_materializable_default(self, asset: itlp.Asset):
+        assert asset.materializable
+
+    def test_materializable_false(self, asset: itlp.Asset):
+        asset.materializable = False
+        assert not asset.materializable
+
+    def test_materializable_from_source(self, source: itlp.Source):
+        source.materializable = False
+        assert not source.asset.materializable
 
     def test_has_io(self, asset: itlp.Asset):
         asset.io = {"what": "ever"}

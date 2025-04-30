@@ -55,7 +55,7 @@ class TestSourceDefinition:
         ):
             itlp.Source()
 
-    def test_definition_from_class(self):
+    def test_from_class(self):
         class Asset(itlp.Asset):
             def data(self):
                 return "hello"
@@ -76,7 +76,7 @@ class TestSourceDefinition:
         assert source.asset.normalizer is None
         assert source._initialized
 
-    def test_definition_from_class_name_required(self):
+    def test_from_class_name_required(self):
         class Source(itlp.Source):
             def asset_definitions(self):
                 return {}
@@ -84,7 +84,7 @@ class TestSourceDefinition:
         with pytest.raises(TypeError):
             Source()
 
-    def test_definition_from_decorator(self, source):
+    def test_from_decorator(self, source):
         assert isinstance(source, itlp.Source)
         assert source._initialized is False
 
@@ -96,7 +96,7 @@ class TestSourceDefinition:
         assert source.asset.normalizer is None
         assert source._initialized is True
 
-    def test_definition_from_decorator_with_options(self):
+    def test_from_decorator_with_options(self):
         @itlp.source(name="new_name")
         def source():
             return {}
@@ -104,7 +104,7 @@ class TestSourceDefinition:
         assert isinstance(source, itlp.Source)
         assert source.name == "new_name"
 
-    def test_definition_assets_are_readonly(self, source):
+    def test_assets_are_readonly(self, source):
         # Source needs to be initialized first. Accessing asset will trigger initialization.
         # TODO: We should find a way force initialization of the source if we're accessing attributes on an
         #       uninitialized source. But this is tricky because of recursion with __getattr__ and __setattr__.
@@ -113,19 +113,23 @@ class TestSourceDefinition:
         with pytest.raises(itlp.errors.SourceDefinitionError, match="Asset asset is read-only"):
             source.asset = None
 
-    def test_definition_propagate_dataset(self, source):
+    def test_propagate_dataset(self, source):
         source.dataset = "new_dataset"
         assert source.asset.dataset == "new_dataset"
 
-    def test_definition_propagate_io(self, source):
+    def test_propagate_io(self, source):
         source.io = {"what": "ever"}
         assert source.asset.io == {"what": "ever"}
 
-    def test_definition_propagate_default_io_key(self, source):
+    def test_propagate_default_io_key(self, source):
         source.default_io_key = "whatever"
         assert source.asset.default_io_key == "whatever"
 
-    def test_definition_propage_normalizer(self, source, normalizer):
+    def test_propagate_materializable(self, source):
+        source.materializable = False
+        assert source.asset.materializable is False
+
+    def test_propage_normalizer(self, source, normalizer):
         source.normalizer = normalizer
         assert source.asset.normalizer == normalizer
 
@@ -134,6 +138,16 @@ class TestSourceProperties:
     def test_assets(self, source: itlp.Source):
         assert len(source.assets) == 1
         assert source.asset.name == "asset"
+
+
+class TestGetItem:
+    def test_get_item(self, source: itlp.Source):
+        assert isinstance(source["asset"], itlp.Asset)
+        assert source["asset"].name == "asset"
+
+    def test_get_item_with_invalid_name(self, source: itlp.Source):
+        with pytest.raises(itlp.errors.SourceValueError, match="Asset invalid_asset not found in source source"):
+            source["invalid_asset"]
 
 
 class TestSourceCall:

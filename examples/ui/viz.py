@@ -40,9 +40,9 @@ pipeline = itlp.Pipeline(X)
 
 fig, ax = plt.subplots()
 
-G = nx.convert_node_labels_to_integers(pipeline.graph)
+G = nx.convert_node_labels_to_integers(pipeline._graph)
 G = nx.relabel_nodes(
-    G, {index: node.name for index, node in enumerate(pipeline.graph.nodes)}
+    G, {index: node.name for index, node in enumerate(pipeline._graph.nodes)}
 )
 pos = nx.planar_layout(G)
 nx.draw(G, pos, with_labels=True)
