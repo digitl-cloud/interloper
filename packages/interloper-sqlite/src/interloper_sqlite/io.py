@@ -46,11 +46,11 @@ class SQLiteClient(itlp.DatabaseClient):
         logger.info(f"Table {table_name} created in SQLite at {self.db_path}")
 
     def get_select_partition_statement(
-        self, table_name: str, column: str, partition: itlp.Partition | itlp.PartitionRange, dataset: str | None = None
+        self, table_name: str, column: str, partition: itlp.Partition | itlp.PartitionWindow, dataset: str | None = None
     ) -> str:
-        if isinstance(partition, itlp.PartitionRange):
-            # TODO: to be removed: support any PartitionRange
-            assert isinstance(partition, itlp.TimePartitionRange)
+        if isinstance(partition, itlp.PartitionWindow):
+            # TODO: to be removed: support any PartitionWindow
+            assert isinstance(partition, itlp.TimePartitionWindow)
             return f"SELECT * FROM {table_name} WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}';"
         else:
             return f"SELECT * FROM {table_name} WHERE {column} = '{partition.value}';"

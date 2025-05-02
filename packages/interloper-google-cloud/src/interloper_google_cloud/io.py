@@ -66,12 +66,12 @@ class BigQueryClient(itlp.DatabaseClient):
         self,
         table_name: str,
         column: str,
-        partition: itlp.Partition | itlp.PartitionRange,
+        partition: itlp.Partition | itlp.PartitionWindow,
         dataset: str | None = None,
     ) -> str:
         table_id = f"{dataset or self.default_dataset}.{table_name}"
-        if isinstance(partition, itlp.PartitionRange):
-            assert isinstance(partition, itlp.TimePartitionRange)
+        if isinstance(partition, itlp.PartitionWindow):
+            assert isinstance(partition, itlp.TimePartitionWindow)
             return f"SELECT * FROM {table_id} WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}'"
         else:
             return f"SELECT * FROM {table_id} WHERE {column} = '{partition.value}'"
@@ -80,13 +80,13 @@ class BigQueryClient(itlp.DatabaseClient):
         self,
         table_name: str,
         column: str,
-        partition: itlp.Partition | itlp.PartitionRange,
+        partition: itlp.Partition | itlp.PartitionWindow,
         dataset: str | None = None,
     ) -> None:
         table_id = f"{dataset or self.default_dataset}.{table_name}"
-        if isinstance(partition, itlp.PartitionRange):
-            # TODO: to be removed: support any PartitionRange
-            assert isinstance(partition, itlp.TimePartitionRange)
+        if isinstance(partition, itlp.PartitionWindow):
+            # TODO: to be removed: support any PartitionWindow
+            assert isinstance(partition, itlp.TimePartitionWindow)
             self.client.query(
                 f"DELETE FROM {table_id} WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}'"
             ).result()

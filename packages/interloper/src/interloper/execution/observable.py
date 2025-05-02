@@ -63,6 +63,7 @@ class Observer(ABC):
         self._is_async = is_async
         self._queue = Queue()
         if is_async:
+            # TODO: review whether we should use daemon threads
             self._thread = threading.Thread(target=self._process_events, daemon=True)
             self._thread.start()
 

@@ -62,13 +62,13 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         self,
         table_name: str,
         column: str,
-        partition: itlp.Partition | itlp.PartitionRange,
+        partition: itlp.Partition | itlp.PartitionWindow,
         dataset: str | None = None,
     ) -> str:
         table_dataset = f"{dataset}." if dataset and self.supports_schemas else ""
-        if isinstance(partition, itlp.PartitionRange):
-            # TODO: to be removed: support any PartitionRange
-            assert isinstance(partition, itlp.TimePartitionRange)
+        if isinstance(partition, itlp.PartitionWindow):
+            # TODO: to be removed: support any PartitionWindow
+            assert isinstance(partition, itlp.TimePartitionWindow)
             return (
                 f"SELECT * FROM {table_dataset}{table_name} "
                 f"WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}';"
@@ -80,14 +80,14 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         self,
         table_name: str,
         column: str,
-        partition: itlp.Partition | itlp.PartitionRange,
+        partition: itlp.Partition | itlp.PartitionWindow,
         dataset: str | None = None,
     ) -> None:
         with self.engine.connect() as connection:
             table_dataset = f"{dataset}." if dataset and self.supports_schemas else ""
-            if isinstance(partition, itlp.PartitionRange):
-                # TODO: to be removed: support any PartitionRange
-                assert isinstance(partition, itlp.TimePartitionRange)
+            if isinstance(partition, itlp.PartitionWindow):
+                # TODO: to be removed: support any PartitionWindow
+                assert isinstance(partition, itlp.TimePartitionWindow)
                 query = text(f"DELETE FROM {table_dataset}{table_name} WHERE {column} BETWEEN :start AND :end")
                 connection.execute(query, {"start": partition.start, "end": partition.end})
             else:

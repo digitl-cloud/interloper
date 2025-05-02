@@ -9,7 +9,7 @@ from interloper.utils.dates import date_range
 
 
 @dataclass(frozen=True)
-class PartitionRange(ABC):
+class PartitionWindow(ABC):
     start: Any
     end: Any
 
@@ -19,7 +19,7 @@ class PartitionRange(ABC):
 
 
 @dataclass(frozen=True)
-class TimePartitionRange(PartitionRange):
+class TimePartitionWindow(PartitionWindow):
     start: dt.date
     end: dt.date
 

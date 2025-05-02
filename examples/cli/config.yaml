@@ -24,8 +24,8 @@ pipeline:
   - name: criteo
     type: source
     path: interloper_assets:criteo
-    assets:
-      - ads
-      - campaigns
+    # assets:
+    #   - ads
+    #   - campaigns
     assets_args:
       advertiser_id: "1176"

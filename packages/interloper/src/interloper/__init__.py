@@ -9,7 +9,7 @@ from interloper.normalizer import JSONNormalizer, Normalizer
 from interloper.param import AssetParam, ContextualAssetParam, Date, DateWindow, Env, UpstreamAsset
 from interloper.partitioning.config import PartitionConfig, TimePartitionConfig
 from interloper.partitioning.partition import Partition, TimePartition
-from interloper.partitioning.range import PartitionRange, TimePartitionRange
+from interloper.partitioning.window import PartitionWindow, TimePartitionWindow
 from interloper.reconciler import JSONReconciler, Reconciler
 from interloper.rest.auth import (
     Auth,

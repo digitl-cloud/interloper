@@ -177,6 +177,10 @@ class Asset(ABC, Observable):
         return [param.default for param in sig.parameters.values() if isinstance(param.default, UpstreamAsset)]
 
     @property
+    def is_partitioned(self) -> bool:
+        return self.partitioning is not None
+
+    @property
     def allows_partition_window(self) -> bool:
         # TODO: should check if the asset has a DateWindow asset param?
         return self.partitioning is not None and self.partitioning.allow_window

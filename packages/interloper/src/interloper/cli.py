@@ -175,49 +175,7 @@ def _load_and_validate_config(file: str) -> dict:
     return config
 
 
-# from time import sleep
-
-# import interloper as itlp
-
-
-# @itlp.source
-# def my_source_1() -> tuple[itlp.Asset, ...]:
-#     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
-#     def my_asset_A() -> str:
-#         sleep(1.6)
-#         return "A"
-
-#     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
-#     def my_asset_B() -> str:
-#         sleep(1.3)
-#         return "B"
-
-#     return (my_asset_A, my_asset_B)
-
-
-# @itlp.source
-# def my_source_2() -> tuple[itlp.Asset, ...]:
-#     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
-#     def my_asset_C() -> str:
-#         sleep(10.1)
-#         return "C"
-
-#     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
-#     def my_asset_D() -> str:
-#         sleep(1.5)
-#         raise ValueError("Failed")
-#         return "D"
-
-#     return (my_asset_C, my_asset_D)
-
-
-# io: dict[str, IO] = {"file": itlp.FileIO(base_dir="data")}
-# my_source_1.io = io
-# my_source_2.io = io
-# pipeline = Pipeline([my_source_1, my_source_2], async_events=True)
-
-
-def run(
+def materialize(
     file: str,
     partition: str | None = None,
 ) -> None:
@@ -244,24 +202,16 @@ def run(
         ExecutionStep.ASSET_MATERIALIZATION,
     ]
 
-    # Group assets by source
-    assets_by_source: dict[str, list[Asset]] = {}
-    for asset in pipeline.assets.values():
-        source_id = asset.source.name if asset.source else "unknown"
-        if source_id not in assets_by_source:
-            assets_by_source[source_id] = []
-        assets_by_source[source_id].append(asset)
-
     # Create source and asset tasks
-    for source_id, assets in assets_by_source.items():
-        source_tasks[source_id] = progress.add_task(f"[bold magenta]{source_id}", status="Pending", total=len(assets))
+    for source_id, assets in pipeline.group_assets_by_source().items():
+        source_tasks[source_id] = progress.add_task(f"[bold magenta]{source_id}", status="", total=len(assets))
         for asset in assets:
             symbols = ("└", " ") if asset == assets[-1] else ("├", "│")
             asset_tasks[asset] = progress.add_task(
-                f"  {symbols[0]}─[bold cyan]{asset.name}", status="Pending", total=1, visible=False
+                f"  {symbols[0]}─[bold cyan]{asset.name}", status="", total=1, visible=False
             )
             step_tasks[asset] = progress.add_task(
-                f"  {symbols[1]} └─[red]Partition X", status="", total=len(steps), visible=False
+                f"  {symbols[1]} └─{partition}", status="", total=len(steps), visible=False
             )
 
     def on_pipeline_event(pipeline: Pipeline, event: Event) -> None:
@@ -269,7 +219,7 @@ def run(
             return
 
         asset = event.observable
-        source_id = asset.source.name if asset.source else "unknown"
+        source_id = asset.source.name if asset.source else "<no source>"
         assert asset in asset_tasks
 
         if event.status == ExecutionStatus.RUNNING:
@@ -277,13 +227,13 @@ def run(
             if event.step == ExecutionStep.ASSET_EXECUTION:
                 progress.update(step_tasks[asset], status="", completed=0, visible=True)
 
-            progress.update(asset_tasks[asset], status="[red]Partition X", visible=True)
+            progress.update(asset_tasks[asset], status="", visible=True)
             progress.update(step_tasks[asset], status=f"[yellow]{event.step}", visible=True)
 
         elif event.status == ExecutionStatus.SUCCESS:
             progress.update(step_tasks[asset], advance=1)
 
-            # Tasks are finished -> advance asset progress
+            # Steps are finished -> advance asset progress
             if progress.tasks[step_tasks[asset]].finished:
                 progress.update(asset_tasks[asset], advance=1)
 
@@ -295,13 +245,12 @@ def run(
             # Source is finished -> complete source + hide step tasks
             if progress.tasks[source_tasks[source_id]].finished:
                 progress.update(source_tasks[source_id], status="[green]Complete")
-                # progress.update(asset_tasks[asset], visible=False)
                 progress.update(step_tasks[asset], visible=False)
 
         elif event.status == ExecutionStatus.FAILURE:
-            progress.update(source_tasks[source_id], status="[red]Incomplete")
-            progress.update(asset_tasks[asset], status=f"[red]Failed at {event.step}")
-            progress.update(step_tasks[asset], status=f"[red]Failed at {event.step}")
+            progress.update(source_tasks[source_id], status="[red]Failed")
+            progress.update(asset_tasks[asset], status=f"[red]{event.step} failed")
+            progress.update(step_tasks[asset], status=f"[red]{event.step} failed")
 
     pipeline.on_event_callback = on_pipeline_event
 
@@ -332,18 +281,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Interloper")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Run
-    run_parser = subparsers.add_parser("run", help="Run a pipeline")
-    run_parser.add_argument("file", type=str, help="Path to script, or config if --from-config is provided")
-    run_parser.add_argument("--partition", type=str, help="Partition to materialize (YYYY-MM-DD)")
+    # Materialize
+    materialize_parser = subparsers.add_parser("materialize", help="Materialize a pipeline")
+    materialize_parser.add_argument("file", type=str, help="Path to script, or config if --from-config is provided")
+    materialize_parser.add_argument("--partition", type=str, help="Partition to materialize (YYYY-MM-DD)")
 
     # Visualize
     subparsers.add_parser("viz", help="Visualize pipeline materialization")
 
     args = parser.parse_args()
 
-    if args.command == "run":
-        run(args.file, args.partition)
+    if args.command == "materialize":
+        materialize(args.file, args.partition)
     # elif args.command == "viz":
     #     viz()
 

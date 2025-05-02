@@ -6,7 +6,7 @@ from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IOContext, IOHandler, TypedIO
 from interloper.partitioning.config import PartitionConfig
 from interloper.partitioning.partition import Partition
-from interloper.partitioning.range import PartitionRange
+from interloper.partitioning.window import PartitionWindow
 from interloper.schema import AssetSchema
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class DatabaseClient(ABC):
         self,
         table_name: str,
         column: str,
-        partition: Partition | PartitionRange,
+        partition: Partition | PartitionWindow,
         dataset: str | None = None,
     ) -> str: ...
 
@@ -42,7 +42,7 @@ class DatabaseClient(ABC):
         self,
         table_name: str,
         column: str,
-        partition: Partition | PartitionRange,
+        partition: Partition | PartitionWindow,
         dataset: str | None = None,
     ) -> None: ...
 

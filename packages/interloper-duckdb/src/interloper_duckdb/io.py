@@ -37,12 +37,12 @@ class DuckDBClient(itlp.DatabaseClient):
         self,
         table_name: str,
         column: str,
-        partition: itlp.Partition | itlp.PartitionRange,
+        partition: itlp.Partition | itlp.PartitionWindow,
         dataset: str | None = None,
     ) -> str:
-        if isinstance(partition, itlp.PartitionRange):
-            # TODO: to be removed: support any PartitionRange
-            assert isinstance(partition, itlp.TimePartitionRange)
+        if isinstance(partition, itlp.PartitionWindow):
+            # TODO: to be removed: support any PartitionWindow
+            assert isinstance(partition, itlp.TimePartitionWindow)
             return f"SELECT * FROM {table_name} WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}';"
         else:
             return f"SELECT * FROM {table_name} WHERE {column} = '{partition.value}';"
@@ -51,12 +51,12 @@ class DuckDBClient(itlp.DatabaseClient):
         self,
         table_name: str,
         column: str,
-        partition: itlp.Partition | itlp.PartitionRange,
+        partition: itlp.Partition | itlp.PartitionWindow,
         dataset: str | None = None,
     ) -> None:
-        if isinstance(partition, itlp.PartitionRange):
-            # TODO: to be removed: support any PartitionRange
-            assert isinstance(partition, itlp.TimePartitionRange)
+        if isinstance(partition, itlp.PartitionWindow):
+            # TODO: to be removed: support any PartitionWindow
+            assert isinstance(partition, itlp.TimePartitionWindow)
             query = f"DELETE FROM {table_name} WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}';"
         else:
             query = f"DELETE FROM {table_name} WHERE {column} = '{partition.value}';"

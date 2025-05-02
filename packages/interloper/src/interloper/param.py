@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from interloper import errors
 from interloper.io.base import IOContext
 from interloper.partitioning.partition import TimePartition
-from interloper.partitioning.range import PartitionRange
+from interloper.partitioning.window import PartitionWindow
 
 if TYPE_CHECKING:
     from interloper.execution.pipeline import ExecutionContext
@@ -107,7 +107,7 @@ class Date(TimeAssetParam[dt.date]):
         if not context.partition or not isinstance(context.partition, TimePartition):
             raise ValueError(
                 "Asset param of type Date requires the execution context to have a TimePartition"
-                f"{' (has TimePartitionRange)' if context.partition else ''}"
+                f"{' (has TimePartitionWindow)' if context.partition else ''}"
             )
 
         return context.partition.value
@@ -115,12 +115,12 @@ class Date(TimeAssetParam[dt.date]):
 
 class DateWindow(TimeAssetParam[tuple[dt.date, dt.date]]):
     def resolve(self, context: "ExecutionContext") -> tuple[dt.date, dt.date]:
-        if not context.partition or not isinstance(context.partition, TimePartition | PartitionRange):
+        if not context.partition or not isinstance(context.partition, TimePartition | PartitionWindow):
             raise ValueError(
-                "Asset param of type DateWindow requires the context to have a TimePartition or TimePartitionRange"
+                "Asset param of type DateWindow requires the context to have a TimePartition or TimePartitionWindow"
             )
 
-        if isinstance(context.partition, PartitionRange):
+        if isinstance(context.partition, PartitionWindow):
             return context.partition.start, context.partition.end
         return context.partition.value, context.partition.value
 
@@ -131,7 +131,7 @@ class ActivePartition(ContextualAssetParam[T], Generic[T]):
             raise ValueError(
                 "Asset param of type ActivePartition requires the current execution context to have a Partition"
             )
-        if isinstance(context.partition, PartitionRange):
-            raise ValueError("Asset param of type ActivePartition does not support PartitionRange")
+        if isinstance(context.partition, PartitionWindow):
+            raise ValueError("Asset param of type ActivePartition does not support PartitionWindow")
 
         return context.partition.value

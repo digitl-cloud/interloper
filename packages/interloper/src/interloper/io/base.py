@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from interloper.partitioning.partition import Partition
-from interloper.partitioning.range import PartitionRange
+from interloper.partitioning.window import PartitionWindow
 from interloper.reconciler import Reconciler
 from interloper.utils.typing import match_type, safe_isinstance
 
@@ -19,7 +19,7 @@ T = TypeVar("T")
 @dataclass(frozen=True)
 class IOContext:
     asset: "Asset"
-    partition: Partition | PartitionRange | None = None
+    partition: Partition | PartitionWindow | None = None
 
 
 class IO(ABC):

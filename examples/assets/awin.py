@@ -30,7 +30,7 @@ pipeline = itlp.Pipeline(awin.advertiser_by_publisher)
 pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 3)))
 
 # pipeline.backfill(
-#     partitions=itlp.TimePartitionRange(
+#     partitions=itlp.TimePartitionWindow(
 #         start=dt.date(2025, 1, 1),
 #         end=dt.date(2025, 1, 2),
 #     )

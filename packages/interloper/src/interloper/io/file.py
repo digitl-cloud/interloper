@@ -6,7 +6,7 @@ from typing import Any
 from interloper.asset import Asset
 from interloper.io.base import IO, IOContext
 from interloper.partitioning.partition import Partition
-from interloper.partitioning.range import PartitionRange
+from interloper.partitioning.window import PartitionWindow
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +16,13 @@ class FileIO(IO):
         self.folder = base_dir
 
     def write(self, context: IOContext, data: Any) -> None:
-        if context.partition and isinstance(context.partition, PartitionRange):
+        if context.partition and isinstance(context.partition, PartitionWindow):
             raise RuntimeError("Partition ranges are not supported by FileIO")
 
         self._write_asset(context.asset, data, context.partition)
 
     def read(self, context: IOContext) -> Any:
-        if context.partition and isinstance(context.partition, PartitionRange):
+        if context.partition and isinstance(context.partition, PartitionWindow):
             raise RuntimeError("Partition ranges are not supported by FileIO")
 
         return self._read_asset(context.asset, context.partition)

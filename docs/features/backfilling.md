@@ -17,7 +17,7 @@ def my_source() -> Sequence[Asset]:
 my_source.io = {"file": FileIO("data")}
 
 Pipeline(my_source).backfill(
-    partitions=TimePartitionRange(
+    partitions=TimePartitionWindow(
         start=dt.date.today() - dt.timedelta(days=3),
         end=dt.date.today() - dt.timedelta(days=1),
     )
@@ -43,7 +43,7 @@ def my_source() -> Sequence[Asset]:
 my_source.io = {"file": FileIO("data")}
 
 Pipeline(my_source).backfill(
-    partitions=TimePartitionRange(
+    partitions=TimePartitionWindow(
         start=dt.date.today() - dt.timedelta(days=3),
         end=dt.date.today() - dt.timedelta(days=1),
     )

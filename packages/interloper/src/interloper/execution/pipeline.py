@@ -10,8 +10,9 @@ import networkx as nx
 from interloper.asset import Asset
 from interloper.execution.context import ExecutionContext
 from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep, Observable, Observer
+from interloper.partitioning.config import PartitionConfig
 from interloper.partitioning.partition import Partition
-from interloper.partitioning.range import PartitionRange
+from interloper.partitioning.window import PartitionWindow
 from interloper.source import Source
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,6 @@ class AssetExecutionState:
 class Pipeline(Observer, Observable):
     _assets: dict[str, Asset]
     _graph: nx.DiGraph
-    _finished: bool
 
     def __init__(
         self,
@@ -59,7 +59,6 @@ class Pipeline(Observer, Observable):
         self._add_assets(sources_or_assets)
         self._build_execution_graph()
         self._async_events = async_events
-        self._finished = False
 
         self.execution_state: dict[Asset, AssetExecutionState] = {
             asset: AssetExecutionState(asset) for asset in self._assets.values()
@@ -72,10 +71,6 @@ class Pipeline(Observer, Observable):
     @property
     def graph(self) -> nx.DiGraph:
         return self._graph
-
-    @property
-    def finished(self) -> bool:
-        return self._finished
 
     @Observable.event(step=ExecutionStep.PIPELINE_MATERIALIZATION)
     def materialize(
@@ -103,38 +98,29 @@ class Pipeline(Observer, Observable):
     @Observable.event(step=ExecutionStep.PIPELINE_BACKFILL)
     def backfill(
         self,
-        partitions: Iterator[Partition] | PartitionRange,
+        partitions: Iterator[Partition] | PartitionWindow,
     ) -> None:
-        # TODO: review implementation
-        raise NotImplementedError()
+        for asset in self._get_sequential_execution_order():
+            # Single run per asset
+            if isinstance(partitions, PartitionWindow) and asset.allows_partition_window:
+                context = ExecutionContext(
+                    assets=self.assets,
+                    executed_asset=asset,
+                    partition=partitions,
+                )
+                asset.materialize(context)
 
-        # for asset in self._get_sequential_execution_order():
-        #     # Single run per asset
-        #     if isinstance(partitions, PartitionRange) and asset.allows_partition_window:
-        #         context = ExecutionContext(
-        #             assets=self.assets,
-        #             executed_asset=asset,
-        #             partition=partitions,
-        #         )
-        #         asset.materialize(context)
-
-        #     # Multi runs per asset
-        #     else:
-        #         for partition in partitions:
-        #             context = ExecutionContext(
-        #                 assets=self.assets,
-        #                 executed_asset=asset,
-        #                 partition=partition,
-        #             )
-        #             asset.materialize(context)
+            # Multi runs per asset
+            else:
+                for partition in partitions:
+                    context = ExecutionContext(
+                        assets=self.assets,
+                        executed_asset=asset,
+                        partition=partition,
+                    )
+                    asset.materialize(context)
 
     def on_event(self, event: Event) -> None:
-        # if event.step == ExecutionStep.PIPELINE_MATERIALIZATION and event.status in (
-        #     ExecutionStatus.SUCCESS,
-        #     ExecutionStatus.FAILURE,
-        # ):
-        #     self._finished = True
-
         if isinstance(event.observable, Asset):
             self.execution_state[event.observable] = AssetExecutionState(
                 asset=event.observable,
@@ -153,6 +139,17 @@ class Pipeline(Observer, Observable):
         # User-defined callback
         if self.on_event_callback:
             self.on_event_callback(self, event)
+
+    def group_assets_by_source(self) -> dict[str, list[Asset]]:
+        assets_by_source: dict[str, list[Asset]] = {}
+        for asset in self.assets.values():
+            source_id = asset.source.name if asset.source else "<no source>"
+            if source_id not in assets_by_source:
+                assets_by_source[source_id] = []
+            assets_by_source[source_id].append(asset)
+        return assets_by_source
+
+    def group_assets_by_partitioning_config(self) -> dict[PartitionConfig | None, list[Asset]]: ...
 
     def get_running_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
         return [(asset, state) for asset, state in self.execution_state.items() if state.is_running]

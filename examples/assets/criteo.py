@@ -16,22 +16,10 @@ pipeline = itlp.Pipeline(criteo.ads, async_events=True)
 pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 1)))
 
 
-# @itlp.source
-# def my_source() -> tuple[itlp.Asset, ...]:
-#     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
-#     def my_asset_A() -> str:
-#         # sleep(3.6)
-#         return "A"
+@itlp.source
+def my_source() -> tuple[itlp.Asset, ...]:
+    @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
+    def my_asset_A() -> str:
+        return "A"
 
-#     return (my_asset_A,)
-
-
-# my_source.io = {"file": itlp.FileIO(base_dir="data")}
-
-
-# def on_event(pipeline: itlp.Pipeline, event: itlp.Event) -> None:
-#     print(f"{event.step} {event.status}")
-
-
-# pipeline = itlp.Pipeline(my_source, on_event=on_event, async_events=True)
-# pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 1)))
+    return (my_asset_A,)
