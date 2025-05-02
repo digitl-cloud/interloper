@@ -41,10 +41,7 @@ class Event:
             raise ValueError("Event must be bound to an observable before use")
 
         self.status = ExecutionStatus.RUNNING
-        self.observable.notify_observers(
-            # Important: new instance to avoid race conditions in async mode
-            Event(self.observable, self.step, self.status, self.error)
-        )
+        self.observable.notify_observers(Event(self.observable, self.step, self.status, self.error))
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self.observable is None or not isinstance(self.observable, Observable):
@@ -52,10 +49,7 @@ class Event:
 
         self.status = ExecutionStatus.FAILURE if exc_type else ExecutionStatus.SUCCESS
         self.error = exc_val if exc_type else None
-        self.observable.notify_observers(
-            # Important: new instance to avoid race conditions in async mode
-            Event(self.observable, self.step, self.status, self.error)
-        )
+        self.observable.notify_observers(Event(self.observable, self.step, self.status, self.error))
 
 
 class Observer(ABC):

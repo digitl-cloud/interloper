@@ -8,6 +8,8 @@ from functools import partial
 from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
+from opentelemetry import trace
+from opentelemetry.util.types import Attributes as SpanAttributes
 from typing_extensions import Self
 
 from interloper import errors
@@ -25,6 +27,7 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 T = TypeVar("T")
 
 
@@ -200,9 +203,10 @@ class Asset(ABC, Observable):
         Execute + Normalize
         """
 
-        data = self._execute(context, **params)
-        data = self._normalize(data, context)
-        return data
+        with tracer.start_as_current_span(name="interloper.asset.run", attributes=self._get_span_attributes()):
+            data = self._execute(context, **params)
+            data = self._normalize(data, context)
+            return data
 
     def materialize(
         self,
@@ -212,24 +216,24 @@ class Asset(ABC, Observable):
         """
         Execute + Normalize + Write
         """
+        with tracer.start_as_current_span(name="interloper.asset.materialize", attributes=self._get_span_attributes()):
+            logger.info(
+                f"Materializing asset {self.name} "
+                f"{f'partition(s) {context.partition}' if context and context.partition else ''}"
+            )
 
-        logger.info(
-            f"Materializing asset {self.name} "
-            f"{f'partition(s) {context.partition}' if context and context.partition else ''}"
-        )
+            if not self.materializable:
+                logger.warning(f"Asset {self.name} is not materializable. Skipping.")
+                return
 
-        if not self.materializable:
-            logger.warning(f"Asset {self.name} is not materializable. Skipping.")
-            return
+            if not self.has_io:
+                raise errors.AssetMaterializationError(f"Asset {self.name} does not have any IO configured")
 
-        if not self.has_io:
-            raise errors.AssetMaterializationError(f"Asset {self.name} does not have any IO configured")
+            data = self._execute(context, **params)
+            data = self._normalize(data, context)
+            self._write(data, context)
 
-        data = self._execute(context, **params)
-        data = self._normalize(data, context)
-        self._write(data, context)
-
-        logger.info(f"Asset {self.name} materialization complete")
+            logger.info(f"Asset {self.name} materialization complete")
 
     def bind(self, ignore_unknown_params: bool = False, **params: Any) -> None:
         sig = signature(self.data)
@@ -257,20 +261,20 @@ class Asset(ABC, Observable):
         context: "ExecutionContext | None" = None,
         **params: Any,
     ) -> Any:
-        # Parameter resolution
-        params, return_type = self._resolve_parameters(context, **params)
+        with tracer.start_as_current_span(name="interloper.asset.execute", attributes=self._get_span_attributes()):
+            # Parameter resolution
+            params, return_type = self._resolve_parameters(context, **params)
 
-        # Execution
-        data = self.data(**params)
+            # Execution
+            data = self.data(**params)
 
-        # Type checking
-        if return_type != Parameter.empty and return_type != Any and not isinstance(data, return_type):
-            raise errors.AssetValueError(
-                f"Asset {self.name} returned data of type {type(data).__name__}, expected {return_type.__name__}"
-            )
-        logger.info(f"Asset {self.name} executed (Type check passed ✔)")
+            if return_type != Parameter.empty and return_type != Any and not isinstance(data, return_type):
+                raise errors.AssetValueError(
+                    f"Asset {self.name} returned data of type {type(data).__name__}, expected {return_type.__name__}"
+                )
+            logger.info(f"Asset {self.name} executed (Type check passed ✔)")
 
-        return data
+            return data
 
     @Observable.event(step=ExecutionStep.ASSET_NORMALIZATION)
     def _normalize(
@@ -278,39 +282,41 @@ class Asset(ABC, Observable):
         data: Any,
         context: "ExecutionContext | None" = None,
     ) -> Any:
-        if self.normalizer:
-            try:
-                data = self.normalizer.normalize(data)
-                logger.info(f"Asset {self.name} normalized")
-            except Exception as e:
-                raise errors.AssetNormalizationError(f"Failed to normalize data for asset {self.name}: {e}")
+        with tracer.start_as_current_span("interloper.asset.normalize", attributes=self._get_span_attributes()):
+            if self.normalizer:
+                try:
+                    data = self.normalizer.normalize(data)
+                    logger.info(f"Asset {self.name} normalized")
+                except Exception as e:
+                    raise errors.AssetNormalizationError(f"Failed to normalize data for asset {self.name}: {e}")
 
-            # Schema inference
-            try:
-                inferred_schema = self.normalizer.infer_schema(data)
-            except Exception as e:
-                raise errors.AssetSchemaError(f"Failed to infer schema for asset {self.name}: {e}")
+                # Schema inference
+                try:
+                    inferred_schema = self.normalizer.infer_schema(data)
+                except Exception as e:
+                    raise errors.AssetSchemaError(f"Failed to infer schema for asset {self.name}: {e}")
 
-            if not self.schema:
-                self.schema = inferred_schema
-            else:
-                equal, diff = self.schema.compare(inferred_schema)
-                if equal:
-                    logger.info(f"Asset {self.name} schema inferred from data (Schema check passed ✔)")
+                if not self.schema:
+                    self.schema = inferred_schema
                 else:
-                    if self.materialization_strategy == MaterializationStrategy.STRICT:
-                        raise errors.AssetNormalizationError(
-                            f"<STRICT> The data does not match the provided schema for asset {self.name}"
-                        )
-                    elif self.materialization_strategy == MaterializationStrategy.FLEXIBLE:
-                        logger.warning(
-                            f"<FLEXIBLE> Schema mismatch for asset {self.name} between provided and inferred schemas"
-                        )
-                        logger.debug(f"Schema diff: \n{json.dumps(diff, indent=2, default=str)}")
-        else:
-            logger.warning(f"Asset {self.name} does not have a normalizer. Skipping normalization.")
+                    equal, diff = self.schema.compare(inferred_schema)
+                    if equal:
+                        logger.info(f"Asset {self.name} schema inferred from data (Schema check passed ✔)")
+                    else:
+                        if self.materialization_strategy == MaterializationStrategy.STRICT:
+                            raise errors.AssetNormalizationError(
+                                f"<STRICT> The data does not match the provided schema for asset {self.name}"
+                            )
+                        elif self.materialization_strategy == MaterializationStrategy.FLEXIBLE:
+                            logger.warning(
+                                f"<FLEXIBLE> Schema mismatch for asset {self.name} between provided "
+                                "and inferred schemas"
+                            )
+                            logger.debug(f"Schema diff: \n{json.dumps(diff, indent=2, default=str)}")
+            else:
+                logger.warning(f"Asset {self.name} does not have a normalizer. Skipping normalization.")
 
-        return data
+            return data
 
     @Observable.event(step=ExecutionStep.ASSET_MATERIALIZATION)
     def _write(
@@ -318,26 +324,27 @@ class Asset(ABC, Observable):
         data: Any,
         context: "ExecutionContext | None" = None,
     ) -> None:
-        if context:
-            if context.partition and not self.partitioning:
-                raise errors.AssetMaterializationError(
-                    f"Asset {self.name} does not support partitioning (missing partitioning config)"
-                )
+        with tracer.start_as_current_span("interloper.asset.write", attributes=self._get_span_attributes()):
+            if context:
+                if context.partition and not self.partitioning:
+                    raise errors.AssetMaterializationError(
+                        f"Asset {self.name} does not support partitioning (missing partitioning config)"
+                    )
 
-        io_context = IOContext(
-            asset=self,
-            partition=context.partition if context else None,
-        )
+            io_context = IOContext(
+                asset=self,
+                partition=context.partition if context else None,
+            )
 
-        with ThreadPoolExecutor() as executor:
-            futures = []
-            for io in self.io.values():
-                futures.append(executor.submit(io.write, io_context, data))
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for io in self.io.values():
+                    futures.append(executor.submit(io.write, io_context, data))
 
-            wait(futures)
+                wait(futures)
 
-            for future in futures:
-                future.result()
+                for future in futures:
+                    future.result()
 
     def _resolve_parameters(
         self,
@@ -405,6 +412,17 @@ class Asset(ABC, Observable):
             raise errors.AssetDefinitionError(f"Generic return type {return_type} is not allowed for asset {self.name}")
 
         return final_params, return_type
+
+    def _get_span_attributes(self) -> SpanAttributes:
+        attributes: SpanAttributes = {
+            "asset_id": self.id,
+            "asset_name": self.name,
+        }
+        if self.source:
+            attributes["source"] = self.source.name
+        if self.dataset:
+            attributes["dataset"] = self.dataset
+        return attributes
 
 
 class AssetDecorator:

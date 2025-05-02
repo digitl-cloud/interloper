@@ -140,10 +140,10 @@ class Pipeline(Observer, Observable):
         if self.on_event_callback:
             self.on_event_callback(self, event)
 
-    def group_assets_by_source(self) -> dict[str, list[Asset]]:
-        assets_by_source: dict[str, list[Asset]] = {}
+    def group_assets_by_source(self) -> dict[str | None, list[Asset]]:
+        assets_by_source: dict[str | None, list[Asset]] = {}
         for asset in self.assets.values():
-            source_id = asset.source.name if asset.source else "<no source>"
+            source_id = asset.source.name if asset.source else None
             if source_id not in assets_by_source:
                 assets_by_source[source_id] = []
             assets_by_source[source_id].append(asset)
