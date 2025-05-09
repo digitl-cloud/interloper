@@ -180,13 +180,17 @@ class Source(ABC):
             setattr(self, asset.name, asset)  # Set the asset as an attribute
             self._assets[asset.name] = asset  # Add the asset to the assets dictionary
 
-        # Automatically set the deps for the asset if the source has the corresponding asset with the same name
-        # Needs to be done after all assets are built
-        for asset in self._assets.values():
-            if self.auto_asset_deps:
+        # Automatically set the upstream deps map for each asset if the source has the corresponding asset with the same
+        # name. Needs to be done after all assets are built.
+        if self.auto_asset_deps:
+            for asset in self._assets.values():
                 for upstream_asset in asset.upstream_assets:
-                    if upstream_asset.name in self._assets:
-                        asset.deps[upstream_asset.name] = upstream_asset.name
+                    # This is true if upstream_asset.ref matches the name of an asset in the source and not the full
+                    # asset ID. Depends on:
+                    #  - Source collects assets by name, not by ID -> always true
+                    #  - UpstreamAsset param is initialized with the name of an asset from the same source
+                    if upstream_asset.key in self._assets:
+                        asset.deps[upstream_asset.key] = self._assets[upstream_asset.key].id
 
     def _resolve_parameters(self) -> dict:
         sig = signature(self.asset_definitions)

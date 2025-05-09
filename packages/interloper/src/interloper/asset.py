@@ -90,16 +90,18 @@ class Asset(ABC, Observable):
         *,
         io: dict[str, IO] | None = None,  # TODO: support single IO
         default_io_key: str | None = None,
+        deps: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> "Asset":
         c = copy(self)
         c._io = io or self._io
         c._default_io_key = default_io_key or self._default_io_key
+        c.deps = deps or self.deps
         c.bind(**kwargs)
         return c
 
     def __hash__(self):
-        return hash(f"{self.dataset}.{self.name}" if self.dataset else self.name)
+        return hash(self.id)
 
     #############
     # Properties
@@ -219,7 +221,7 @@ class Asset(ABC, Observable):
         with tracer.start_as_current_span(name="interloper.asset.materialize", attributes=self._get_span_attributes()):
             logger.info(
                 f"Materializing asset {self.name} "
-                f"{f'partition(s) {context.partition}' if context and context.partition else ''}"
+                f"{f'partition(s) {context.partition}' if context and context.partition and self.is_partitioned else ''}"  # noqa: E501
             )
 
             if not self.materializable:
@@ -318,23 +320,28 @@ class Asset(ABC, Observable):
 
             return data
 
-    @Observable.event(step=ExecutionStep.ASSET_MATERIALIZATION)
+    @Observable.event(step=ExecutionStep.ASSET_WRITING)
     def _write(
         self,
         data: Any,
         context: "ExecutionContext | None" = None,
     ) -> None:
         with tracer.start_as_current_span("interloper.asset.write", attributes=self._get_span_attributes()):
-            if context:
-                if context.partition and not self.partitioning:
-                    raise errors.AssetMaterializationError(
-                        f"Asset {self.name} does not support partitioning (missing partitioning config)"
-                    )
+            # if context:
+            #     if context.partition and not self.partitioning:
+            #         raise errors.AssetMaterializationError(
+            #             f"Asset {self.name} does not support partitioning (missing partitioning config)"
+            #         )
 
-            io_context = IOContext(
-                asset=self,
-                partition=context.partition if context else None,
-            )
+            # Current approach: an asset can be materialized if the context has a partition but the asset does not
+            # support partitioning. In that case, we drop the partition from the IO context.
+            # This allows non-partitioned assets to be materialized alongside partitioned assets.
+            # TODO: approach to be reviewed
+            partition = None
+            if context and context.partition and self.is_partitioned:
+                partition = context.partition
+
+            io_context = IOContext(asset=self, partition=partition)
 
             with ThreadPoolExecutor() as executor:
                 futures = []

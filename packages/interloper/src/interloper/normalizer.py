@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -6,9 +7,14 @@ from collections.abc import Generator
 from dataclasses import dataclass, field
 from typing import Any
 
+from opentelemetry import trace
+
 from interloper.errors import AssetNormalizationError
 from interloper.schema import AssetSchema
 from interloper.utils.strings import to_snake_case
+
+logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class Normalizer(ABC):
@@ -37,6 +43,7 @@ class JSONNormalizer(Normalizer):
     add_missing_columns: bool = field(default=True, kw_only=True)
     rename_columns: bool = field(default=True, kw_only=True)
 
+    @tracer.start_as_current_span("interloper.normalizer.JSONNormalizer.normalize")
     def normalize(self, data: Any) -> list[dict[str, Any]]:
         data = self._validate(data)
 
@@ -52,6 +59,7 @@ class JSONNormalizer(Normalizer):
 
         return data
 
+    @tracer.start_as_current_span("interloper.normalizer.JSONNormalizer.infer_schema")
     def infer_schema(self, data: list[dict[str, Any]], sample_size: int = 1000) -> type[AssetSchema]:
         if not isinstance(data, list) and not all(isinstance(row, dict) for row in data[:sample_size]):
             raise AssetNormalizationError("Cannot infer schema from data: unexpected data type")

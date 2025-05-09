@@ -9,7 +9,11 @@ import yaml
 from jsonschema import ValidationError, validate
 from opentelemetry import trace
 from opentelemetry.context import Context
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.threading import ThreadingInstrumentor
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor, TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -17,7 +21,8 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TaskProgre
 
 import interloper as itlp
 from interloper.asset import Asset
-from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep
+
+# from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep
 from interloper.execution.pipeline import Pipeline
 from interloper.io.base import IO
 from interloper.partitioning.partition import TimePartition
@@ -336,12 +341,13 @@ def materialize(
                 else:
                     progress.update(asset_tasks[asset_id], status="[red]Failed")
 
-        def shutdown(self) -> None:
-            pass
-
+    ThreadingInstrumentor().instrument()
     cli_span_processor = CLISpanProcessor()
-    trace_provider = TracerProvider()
+    batch_span_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces"))
+    resource = Resource(attributes={"service.name": "interloper"})
+    trace_provider = TracerProvider(resource=resource)
     trace_provider.add_span_processor(cli_span_processor)
+    trace_provider.add_span_processor(batch_span_processor)
     trace.set_tracer_provider(trace_provider)
 
     console = Console()
@@ -363,6 +369,8 @@ def materialize(
         console.print("\n[red bold]Failed Assets:[/red bold]")
         for asset, state in failed_assets:
             console.print(Panel(str(state.error), title=f"[red]{asset.id}[/red]", expand=False, title_align="left"))
+
+    trace_provider.shutdown()
 
 
 def main() -> None:

@@ -329,6 +329,10 @@ class TestAssetMaterialize:
             asset.materialize(context)
             extract.assert_called_once_with(context)
 
+    @pytest.mark.skip(
+        "Current approach: an asset can be materialized if the context "
+        "has a partition but the asset does not support partitioning"
+    )
     def test_materialize_with_context_with_partition_fails_missing_stategy(self, asset: itlp.Asset, io: itlp.IO):
         asset.io = {"simple": io}
         asset.bind(who="world")

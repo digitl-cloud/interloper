@@ -23,27 +23,19 @@ def my_source() -> Sequence[itlp.Asset]:
         a: str = itlp.UpstreamAsset("custom_ref_A"),
         b: str = itlp.UpstreamAsset("custom_ref_B"),
     ) -> str:
-        raise Exception("C failed")
         return "C"
 
-    @itlp.asset(name="D")
-    def my_asset_D(
-        a: str = itlp.UpstreamAsset("A"),
-    ) -> str:
-        return "D"
-
-    return (my_asset_A, my_asset_B, my_asset_C, my_asset_D)
+    return (my_asset_A, my_asset_B, my_asset_C)
 
 
 my_source.io = {"file": itlp.FileIO("data")}
 
-# Upstream assets's refs do not match the name of the corresponding assets
-# therefore, the source cannot build the deps config map automatically and it has to be defined manually
+# Upstream assets's keys do not match the name of the corresponding assets therefore, the source cannot build the deps
+# config map automatically and it has to be defined manually. Note that the ref then points to the asset ID (+source).
 my_source.C.deps = {
-    "custom_ref_A": "A",
-    "custom_ref_B": "B",
+    "custom_ref_A": "my_source.A",
+    "custom_ref_B": "my_source.B",
 }
-
 
 pipeline = itlp.Pipeline(my_source)
 pipeline.materialize()

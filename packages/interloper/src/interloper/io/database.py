@@ -2,6 +2,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
+from opentelemetry import trace
+
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IOContext, IOHandler, TypedIO
 from interloper.partitioning.config import PartitionConfig
@@ -10,6 +12,7 @@ from interloper.partitioning.window import PartitionWindow
 from interloper.schema import AssetSchema
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class DatabaseClient(ABC):
@@ -52,6 +55,7 @@ class DatabaseIO(TypedIO):
         super().__init__(handlers)
         self.client = client
 
+    @tracer.start_as_current_span("interloper.io.DatabaseIO.write")
     def write(self, context: IOContext, data: Any) -> None:
         handler = self.get_handler(type(data))
         handler.verify_type(data)
@@ -85,12 +89,11 @@ class DatabaseIO(TypedIO):
                 table_schema = self.client.table_schema(context.asset.name, context.asset.dataset)
                 data = handler.reconciler.reconcile(data, table_schema)
         elif context.asset.materialization_strategy == MaterializationStrategy.STRICT:
-            logger.warning(
-                f"<STRICT> Skipping schema reconciliation for asset {context.asset.name}"
-            )
+            logger.warning(f"<STRICT> Skipping schema reconciliation for asset {context.asset.name}")
 
         handler.write(context, data)
 
+    @tracer.start_as_current_span("interloper.io.DatabaseIO.read")
     def read(self, context: IOContext) -> Any:
         handler = self.get_handler(type(context.asset.schema))
         data = handler.read(context)

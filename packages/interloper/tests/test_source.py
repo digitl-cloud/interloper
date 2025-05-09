@@ -258,7 +258,7 @@ class TestSourceBuildAssets:
 
             return (asset_a, asset_b)
 
-        assert source.asset_b.deps == {"asset_a": "asset_a"}
+        assert source.asset_b.deps == {"asset_a": "source.asset_a"}
 
     def test_build_asset_with_auto_asset_deps_disabled(self):
         @itlp.source(auto_asset_deps=False)

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import networkx as nx
+from opentelemetry import trace
 
 from interloper.asset import Asset
 from interloper.execution.context import ExecutionContext
@@ -16,6 +17,7 @@ from interloper.partitioning.window import PartitionWindow
 from interloper.source import Source
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 TAssetOrSource = Source | Asset | list[Source | Asset]
 
 
@@ -77,48 +79,50 @@ class Pipeline(Observer, Observable):
         self,
         partition: Partition | None = None,
     ) -> Any:
-        for generation in self._get_parallel_execution_order():
-            with ThreadPoolExecutor() as executor:
-                futures = []
-                for asset in generation:
-                    context = ExecutionContext(
-                        assets=self._assets,
-                        executed_asset=asset,
-                        partition=partition,
-                    )
-                    futures.append(executor.submit(asset.materialize, context))
+        with tracer.start_as_current_span("interloper.pipeline.materialize"):
+            for generation in self._get_parallel_execution_order():
+                with ThreadPoolExecutor() as executor:
+                    futures = []
+                    for asset in generation:
+                        context = ExecutionContext(
+                            assets=self._assets,
+                            executed_asset=asset,
+                            partition=partition,
+                        )
+                        futures.append(executor.submit(asset.materialize, context))
 
-                # Wait for all assets in this generation to complete
-                wait(futures)
+                    # Wait for all assets in this generation to complete
+                    wait(futures)
 
-                # Re-raise any exceptions that occurred
-                for future in futures:
-                    future.result()
+                    # Re-raise any exceptions that occurred
+                    for future in futures:
+                        future.result()
 
     @Observable.event(step=ExecutionStep.PIPELINE_BACKFILL)
     def backfill(
         self,
         partitions: Iterator[Partition] | PartitionWindow,
     ) -> None:
-        for asset in self._get_sequential_execution_order():
-            # Single run per asset
-            if isinstance(partitions, PartitionWindow) and asset.allows_partition_window:
-                context = ExecutionContext(
-                    assets=self.assets,
-                    executed_asset=asset,
-                    partition=partitions,
-                )
-                asset.materialize(context)
-
-            # Multi runs per asset
-            else:
-                for partition in partitions:
+        with tracer.start_as_current_span("interloper.pipeline.backfill"):
+            for asset in self._get_sequential_execution_order():
+                # Single run per asset
+                if isinstance(partitions, PartitionWindow) and asset.allows_partition_window:
                     context = ExecutionContext(
                         assets=self.assets,
                         executed_asset=asset,
-                        partition=partition,
+                        partition=partitions,
                     )
                     asset.materialize(context)
+
+                # Multi runs per asset
+                else:
+                    for partition in partitions:
+                        context = ExecutionContext(
+                            assets=self.assets,
+                            executed_asset=asset,
+                            partition=partition,
+                        )
+                        asset.materialize(context)
 
     def on_event(self, event: Event) -> None:
         if isinstance(event.observable, Asset):
@@ -149,7 +153,8 @@ class Pipeline(Observer, Observable):
             assets_by_source[source_id].append(asset)
         return assets_by_source
 
-    def group_assets_by_partitioning_config(self) -> dict[PartitionConfig | None, list[Asset]]: ...
+    def group_assets_by_partitioning_config(self) -> dict[PartitionConfig | None, list[Asset]]:
+        raise NotImplementedError()
 
     def get_running_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
         return [(asset, state) for asset, state in self.execution_state.items() if state.is_running]
@@ -160,18 +165,6 @@ class Pipeline(Observer, Observable):
     def get_failed_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
         return [(asset, state) for asset, state in self.execution_state.items() if state.is_failed]
 
-    def get_execution_summary(self) -> dict:
-        return {
-            "total": len(self._assets),
-            "pending": len(self._assets)
-            - len(self.get_running_assets())
-            - len(self.get_completed_assets())
-            - len(self.get_failed_assets()),
-            "running": len(self.get_running_assets()),
-            "completed": len(self.get_completed_assets()),
-            "failed": len(self.get_failed_assets()),
-        }
-
     def _add_assets(self, sources_or_assets: TAssetOrSource) -> None:
         # Convert single source/asset to a list
         if not isinstance(sources_or_assets, list):
@@ -179,7 +172,7 @@ class Pipeline(Observer, Observable):
 
         # Unpack assets or source's assets
         for source_or_asset in sources_or_assets:
-            batch = []
+            batch: list[Asset] = []
             if isinstance(source_or_asset, Source):
                 batch.extend([asset for asset in source_or_asset.assets if asset.materializable])
             elif isinstance(source_or_asset, Asset):
@@ -192,7 +185,7 @@ class Pipeline(Observer, Observable):
                 if asset in self._assets:
                     raise ValueError(f"Duplicate asset name '{asset.id}'")
                 asset.add_observer(self)
-                self._assets[asset] = asset
+                self._assets[asset.id] = asset
 
     def _build_execution_graph(self) -> None:
         """Builds the asset dependency graph."""
@@ -203,10 +196,10 @@ class Pipeline(Observer, Observable):
 
             for upstream_ref in asset.upstream_assets:
                 # Verify that the upstream asset ref is in the asset's deps config
-                if upstream_ref.name not in asset.deps.keys():
-                    raise ValueError(f"Unable to resolve upstream asset '{upstream_ref.name}' of asset '{asset.name}'")
+                if upstream_ref.key not in asset.deps.keys():
+                    raise ValueError(f"Unable to resolve upstream asset '{upstream_ref.key}' of asset '{asset.name}'")
 
-                upstream_asset_name = asset.deps[upstream_ref.name]
+                upstream_asset_name = asset.deps[upstream_ref.key]
 
                 # Check if the dependency exists in the asset map
                 if upstream_asset_name not in self._assets:
