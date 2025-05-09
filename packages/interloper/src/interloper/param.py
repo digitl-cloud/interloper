@@ -136,7 +136,7 @@ class Date(ContextualAssetParam[dt.date]):
         if not context.partition or not isinstance(context.partition, TimePartition):
             raise ValueError(
                 "Asset param of type Date requires the execution context to have a TimePartition"
-                f"{' (has TimePartitionWindow)' if context.partition else ''}"
+                f"{' (has ' + context.partition.__class__.__name__ + ')' if context.partition else ''}"
             )
 
         return context.partition.value
