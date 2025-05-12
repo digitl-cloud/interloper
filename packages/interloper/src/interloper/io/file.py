@@ -21,14 +21,14 @@ class FileIO(IO):
     @tracer.start_as_current_span("interloper.io.FileIO.write")
     def write(self, context: IOContext, data: Any) -> None:
         if context.partition and isinstance(context.partition, PartitionWindow):
-            raise RuntimeError("Partition ranges are not supported by FileIO")
+            raise RuntimeError("Partition windows are not supported by FileIO")
 
         self._write_asset(context.asset, data, context.partition)
 
     @tracer.start_as_current_span("interloper.io.FileIO.read")
     def read(self, context: IOContext) -> Any:
         if context.partition and isinstance(context.partition, PartitionWindow):
-            raise RuntimeError("Partition ranges are not supported by FileIO")
+            raise RuntimeError("Partition windows are not supported by FileIO")
 
         return self._read_asset(context.asset, context.partition)
 
@@ -40,7 +40,7 @@ class FileIO(IO):
         path = f"{self.folder}/{path}"
         path = f"{path}${partition.id}" if partition else path
 
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).parent.mkdir(exist_ok=True)
 
         with open(Path(path), "wb") as f:
             f.write(pickle.dumps(data))

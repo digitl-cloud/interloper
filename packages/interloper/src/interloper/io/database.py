@@ -57,7 +57,7 @@ class DatabaseIO(TypedIO):
 
     @tracer.start_as_current_span("interloper.io.DatabaseIO.write")
     def write(self, context: IOContext, data: Any) -> None:
-        handler = self.get_handler(type(data))
+        handler = self.get_handler(context.asset.data_type)
         handler.verify_type(data)
 
         if not context.asset.schema:
@@ -95,7 +95,7 @@ class DatabaseIO(TypedIO):
 
     @tracer.start_as_current_span("interloper.io.DatabaseIO.read")
     def read(self, context: IOContext) -> Any:
-        handler = self.get_handler(type(context.asset.schema))
+        handler = self.get_handler(context.asset.data_type)
         data = handler.read(context)
         handler.verify_type(data)
         return data

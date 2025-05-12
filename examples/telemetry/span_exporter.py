@@ -4,6 +4,7 @@ import logging
 import interloper as itlp
 import pandas as pd
 from interloper_pandas import DataframeNormalizer
+from interloper_sql import SQLiteIO
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.threading import ThreadingInstrumentor
@@ -23,25 +24,59 @@ trace.set_tracer_provider(trace_provider)
 
 
 @itlp.source(normalizer=DataframeNormalizer())
-def my_source() -> tuple[itlp.Asset, ...]:
-    @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
-    def my_asset_A(date: dt.date = itlp.Date()) -> pd.DataFrame:
-        return pd.DataFrame({"a": [1, 2, 3]})
+def source() -> tuple[itlp.Asset, ...]:
+    @itlp.asset()
+    def a() -> pd.DataFrame:
+        return pd.DataFrame({"val": [1, 2, 3]})
 
-    @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
-    def my_asset_B(date: dt.date = itlp.Date()) -> pd.DataFrame:
-        return pd.DataFrame({"b": [4, 5, 6]})
+    @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=False))
+    def b(
+        date: tuple[dt.date, dt.date] = itlp.DateWindow(),
+        a: pd.DataFrame = itlp.UpstreamAsset("a"),
+    ) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "val": [123],
+                "date": [date],
+            }
+        )
 
-    return (my_asset_A, my_asset_B)
+    @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=True))
+    def c(
+        date: tuple[dt.date, dt.date] = itlp.DateWindow(),
+        b: pd.DataFrame = itlp.UpstreamAsset("b"),
+    ) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "val": [123],
+                "date": [date],
+            }
+        )
+
+    @itlp.asset()
+    def d(
+        c: pd.DataFrame = itlp.UpstreamAsset("c"),
+    ) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "val": [123],
+                # "date": [date],
+            }
+        )
+
+    return (a, b, c)
 
 
-my_source.io = {
-    "file": itlp.FileIO(base_dir="./data"),
-    "file2": itlp.FileIO(base_dir="./data2"),
+source.io = {
+    # "file": itlp.FileIO(base_dir="./data"),
+    "sqlite": SQLiteIO(db_path="data/sqlite.db"),
 }
 
 
-itlp.Pipeline(my_source).backfill(
+pipeline = itlp.Pipeline(source)
+
+# pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 1)))
+pipeline.backfill(
     partitions=itlp.TimePartitionWindow(
         start=dt.date(2025, 1, 1),
         end=dt.date(2025, 1, 3),

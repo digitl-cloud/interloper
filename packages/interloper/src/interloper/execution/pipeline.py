@@ -3,6 +3,7 @@ import logging
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 import networkx as nx
@@ -11,7 +12,6 @@ from opentelemetry import trace
 from interloper.asset import Asset
 from interloper.execution.context import ExecutionContext
 from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep, Observable, Observer
-from interloper.partitioning.config import PartitionConfig
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.window import PartitionWindow
 from interloper.source import Source
@@ -19,6 +19,12 @@ from interloper.source import Source
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 TAssetOrSource = Source | Asset | list[Source | Asset]
+
+
+class AssetExecutionStategy(Enum):
+    NOT_PARTITIONED = "not_partitioned"
+    MULTI_RUNS = "multi_runs"
+    SINGLE_RUN = "single_run"
 
 
 @dataclass
@@ -104,25 +110,66 @@ class Pipeline(Observer, Observable):
         partitions: Iterator[Partition] | PartitionWindow,
     ) -> None:
         with tracer.start_as_current_span("interloper.pipeline.backfill"):
-            for asset in self._get_sequential_execution_order():
-                # Single run per asset
-                if isinstance(partitions, PartitionWindow) and asset.allows_partition_window:
-                    context = ExecutionContext(
-                        assets=self.assets,
-                        executed_asset=asset,
-                        partition=partitions,
-                    )
-                    asset.materialize(context)
+            assets_by_execution_strategy = self.group_assets_by_execution_strategy()
 
-                # Multi runs per asset
-                else:
-                    for partition in partitions:
+            # No partitioned assets
+            if (
+                len(assets_by_execution_strategy[AssetExecutionStategy.SINGLE_RUN]) == 0
+                and len(assets_by_execution_strategy[AssetExecutionStategy.MULTI_RUNS]) == 0
+            ):
+                logger.warning(
+                    "No partitioned assets to backfill, only non-partitioned assets: running simple materialization."
+                )
+                self.materialize()
+                return
+
+            # SINGLE RUN EXECUTION:
+            # Partition Window + (Non partitioned assets & Single run partitioned assets)
+            elif (
+                isinstance(partitions, PartitionWindow)
+                and len(assets_by_execution_strategy[AssetExecutionStategy.MULTI_RUNS]) == 0
+            ):
+                for generation in nx.topological_generations(self._graph):
+                    for asset in generation:
                         context = ExecutionContext(
-                            assets=self.assets,
+                            assets=self._assets,
                             executed_asset=asset,
-                            partition=partition,
+                            partition=partitions,
                         )
                         asset.materialize(context)
+
+            # MULTI RUN EXECUTION:
+            # Mix of partitioned and non-partitioned assets -> Multi-run execution
+            else:
+                with ThreadPoolExecutor() as executor:
+                    futures = []
+
+                    # Non-partitioned assets
+                    non_partitioned_assets = [asset for asset in self._assets.values() if not asset.partitioning]
+                    non_partitioned_subgraph = nx.subgraph(self._graph, non_partitioned_assets)
+                    for generation in nx.topological_generations(non_partitioned_subgraph):
+                        for asset in generation:
+                            context = ExecutionContext(assets=self._assets, executed_asset=asset)
+                            futures.append(executor.submit(asset.materialize, context))
+
+                    wait(futures)
+                    for future in futures:
+                        future.result()
+
+                    # Partitioned assets
+                    partitioned_assets = [asset for asset in self._assets.values() if asset.partitioning]
+                    partitioned_subgraph = nx.subgraph(self._graph, partitioned_assets)
+                    for partition in partitions:
+                        for generation in nx.topological_generations(partitioned_subgraph):
+                            for asset in generation:
+                                context = ExecutionContext(
+                                    assets=self._assets, executed_asset=asset, partition=partition
+                                )
+                                futures.append(executor.submit(asset.materialize, context))
+
+                        wait(futures)
+                        for future in futures:
+                            future.result()
 
     def on_event(self, event: Event) -> None:
         if isinstance(event.observable, Asset):
@@ -153,8 +200,20 @@ class Pipeline(Observer, Observable):
             assets_by_source[source_id].append(asset)
         return assets_by_source
 
-    def group_assets_by_partitioning_config(self) -> dict[PartitionConfig | None, list[Asset]]:
-        raise NotImplementedError()
+    def group_assets_by_execution_strategy(self) -> dict[AssetExecutionStategy, list[Asset]]:
+        assets_by_execution_strategy: dict[AssetExecutionStategy, list[Asset]] = {
+            AssetExecutionStategy.NOT_PARTITIONED: [],
+            AssetExecutionStategy.MULTI_RUNS: [],
+            AssetExecutionStategy.SINGLE_RUN: [],
+        }
+        for asset in self.assets.values():
+            if not asset.partitioning:
+                assets_by_execution_strategy[AssetExecutionStategy.NOT_PARTITIONED].append(asset)
+            elif asset.partitioning.allow_window:
+                assets_by_execution_strategy[AssetExecutionStategy.SINGLE_RUN].append(asset)
+            else:
+                assets_by_execution_strategy[AssetExecutionStategy.MULTI_RUNS].append(asset)
+        return assets_by_execution_strategy
 
     def get_running_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
         return [(asset, state) for asset, state in self.execution_state.items() if state.is_running]
@@ -166,6 +225,9 @@ class Pipeline(Observer, Observable):
         return [(asset, state) for asset, state in self.execution_state.items() if state.is_failed]
 
     def _add_assets(self, sources_or_assets: TAssetOrSource) -> None:
+        if not sources_or_assets:
+            raise ValueError("No assets or sources provided to the pipeline")
+
         # Convert single source/asset to a list
         if not isinstance(sources_or_assets, list):
             sources_or_assets = [sources_or_assets]
@@ -199,16 +261,23 @@ class Pipeline(Observer, Observable):
                 if upstream_ref.key not in asset.deps.keys():
                     raise ValueError(f"Unable to resolve upstream asset '{upstream_ref.key}' of asset '{asset.name}'")
 
-                upstream_asset_name = asset.deps[upstream_ref.key]
+                upstream_asset_id = asset.deps[upstream_ref.key]
 
                 # Check if the dependency exists in the asset map
-                if upstream_asset_name not in self._assets:
+                if upstream_asset_id not in self._assets:
                     raise ValueError(
-                        f"Upstream asset '{upstream_asset_name}' of asset '{asset.name}' not found in asset graph"
+                        f"Upstream asset '{upstream_asset_id}' of asset '{asset.name}' not found in asset graph"
+                    )
+
+                upstream_asset = self._assets[upstream_asset_id]
+                if not asset.is_partitioned and upstream_asset.is_partitioned:
+                    raise ValueError(
+                        "Invalid asset graph: a non-partitioned asset cannot have a partitioned upstream asset. "
+                        f"Asset '{asset.name}' is not partitioned, but its upstream asset '{upstream_asset.name}' is."
                     )
 
                 # Get the corresponding asset and add to the graph
-                upstream_asset = self._assets[upstream_asset_name]
+                upstream_asset = self._assets[upstream_asset_id]
                 self._graph.add_edge(upstream_asset, asset)
 
         # Detect cycles

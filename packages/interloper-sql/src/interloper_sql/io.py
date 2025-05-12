@@ -21,6 +21,11 @@ class SQLAlchemyClient(itlp.DatabaseClient):
             return Table(table_name, MetaData(schema=dataset), autoload_with=self.engine)
         return Table(table_name, MetaData(), autoload_with=self.engine)
 
+    def table_id(self, table_name: str, dataset: str | None = None) -> str:
+        if dataset and self.supports_schemas:
+            return f"{dataset}.{table_name}"
+        return table_name
+
     def table_exists(
         self,
         table_name: str,
@@ -46,17 +51,19 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         partitioning: itlp.PartitionConfig | None = None,
     ) -> None:
         with self.engine.connect() as connection:
+            table_id = self.table_id(table_name, dataset)
+
             # Create dataset if it doesn't exist and database supports schemas
             if dataset and self.supports_schemas:
-                connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {dataset};"))
+                query = text("CREATE SCHEMA IF NOT EXISTS :dataset")
+                connection.execute(query, {"dataset": dataset})
                 connection.commit()
 
             # Create table with dataset if specified and supported
-            table_dataset = f"{dataset}." if dataset and self.supports_schemas else ""
-            query = f"CREATE TABLE {table_dataset}{table_name} ({schema.to_sql()});"
-            connection.execute(text(query))
+            query = text(f"CREATE TABLE {table_id} ({schema.to_sql()});")
+            connection.execute(query)
             connection.commit()
-            logger.info(f"Table {table_dataset}{table_name} created ({self.engine.url})")
+            logger.info(f"Table {table_id} created ({self.engine.url})")
 
     def get_select_partition_statement(
         self,
@@ -65,16 +72,14 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         partition: itlp.Partition | itlp.PartitionWindow,
         dataset: str | None = None,
     ) -> str:
-        table_dataset = f"{dataset}." if dataset and self.supports_schemas else ""
+        table_id = self.table_id(table_name, dataset)
         if isinstance(partition, itlp.PartitionWindow):
             # TODO: to be removed: support any PartitionWindow
+            # TODO: mitigate SQL injection?
             assert isinstance(partition, itlp.TimePartitionWindow)
-            return (
-                f"SELECT * FROM {table_dataset}{table_name} "
-                f"WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}';"
-            )
+            return f"SELECT * FROM {table_id} WHERE {column} BETWEEN '{partition.start}' AND '{partition.end}';"
         else:
-            return f"SELECT * FROM {table_dataset}{table_name} WHERE {column} = '{partition.value}';"
+            return f"SELECT * FROM {table_id} WHERE {column} = '{partition.value}';"
 
     def delete_partition(
         self,
@@ -84,17 +89,17 @@ class SQLAlchemyClient(itlp.DatabaseClient):
         dataset: str | None = None,
     ) -> None:
         with self.engine.connect() as connection:
-            table_dataset = f"{dataset}." if dataset and self.supports_schemas else ""
+            table_id = self.table_id(table_name, dataset)
             if isinstance(partition, itlp.PartitionWindow):
                 # TODO: to be removed: support any PartitionWindow
                 assert isinstance(partition, itlp.TimePartitionWindow)
-                query = text(f"DELETE FROM {table_dataset}{table_name} WHERE {column} BETWEEN :start AND :end")
+                query = text(f"DELETE FROM {table_id} WHERE {column} BETWEEN :start AND :end")
                 connection.execute(query, {"start": partition.start, "end": partition.end})
             else:
-                query = text(f"DELETE FROM {table_dataset}{table_name} WHERE {column} = :value")
+                query = text(f"DELETE FROM {table_id} WHERE {column} = :value")
                 connection.execute(query, {"value": partition.value})
             connection.commit()
-            logger.info(f"Partition {partition} deleted from table {table_dataset}{table_name}")
+            logger.info(f"Partition {partition} deleted from table {table_id}")
 
 
 class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
@@ -130,8 +135,8 @@ class SQLAlchemyDataframeHandler(itlp.IOHandler[pd.DataFrame]):
                 context.asset.name, context.asset.partitioning.column, context.partition, context.asset.dataset
             )
         else:
-            table_dataset = f"{context.asset.dataset}." if context.asset.dataset else ""
-            query = f"SELECT * FROM {table_dataset}{context.asset.name};"
+            table_id = self.client.table_id(context.asset.name, context.asset.dataset)
+            query = f"SELECT * FROM {table_id};"
 
         data = pd.read_sql_query(query, self.client.engine)
         size = data.memory_usage(index=False).sum()

@@ -24,11 +24,11 @@ class TimePartitionWindow(PartitionWindow):
     end: dt.date
 
     def __iter__(self) -> Generator[TimePartition]:
-        yield from self.as_range()
+        yield from self.iterate()
 
     def __repr__(self):
         return f"{self.start.isoformat()} to {self.end.isoformat()}"
 
-    def as_range(self) -> Generator[TimePartition]:
+    def iterate(self) -> Generator[TimePartition]:
         for date in date_range(self.start, self.end, reversed=True):
             yield TimePartition(date)

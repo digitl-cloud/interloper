@@ -173,6 +173,11 @@ class Asset(ABC, Observable):
         self._materialization_strategy = value
 
     @property
+    def data_type(self) -> type:
+        sig = signature(self.data)
+        return sig.return_annotation
+
+    @property
     def has_io(self) -> bool:
         return self.io is not None and len(self.io) > 0
 
