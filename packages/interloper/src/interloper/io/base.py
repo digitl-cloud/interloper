@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-# TODO: use ExecutionContext instead?
 @dataclass(frozen=True)
 class IOContext:
     asset: "Asset"
@@ -52,7 +51,7 @@ class IOHandler(ABC, Generic[T]):
 
 
 class TypedIO(IO):
-    _handlers: dict[type, IOHandler] | None
+    _handlers: dict[type, IOHandler]
 
     def __init__(self, handlers: list[IOHandler]) -> None:
         self._handlers = {handler.type: handler for handler in handlers}
@@ -64,12 +63,19 @@ class TypedIO(IO):
 
         return set(self._handlers.keys())
 
-    def get_handler(self, data_type: type) -> IOHandler:
-        if self._handlers is None:
-            raise RuntimeError(f"IO {self.__class__.__name__} does not support data type {data_type.__name__}")
+    def get_handler(self, data_type: type | None) -> IOHandler:
+        if data_type is None:
+            raise RuntimeError(
+                f"IO {self.__class__.__name__} requires the asset to have a data type in order to select the correct "
+                "handler. Add the return type annotation to the asset function that corresponds to one of the "
+                f"supported types: {self.supported_types}"
+            )
 
         for handler_type in self._handlers.keys():
             if match_type(data_type, handler_type):
                 return self._handlers[handler_type]
 
-        raise RuntimeError(f"IO {self.__class__.__name__} does not support data type {data_type.__name__}")
+        raise RuntimeError(
+            f"IO {self.__class__.__name__} does not support data type {data_type.__name__}. "
+            f"Supported types: {self.supported_types}"
+        )

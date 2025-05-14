@@ -21,4 +21,4 @@ class TimePartition(Partition):
 
     @property
     def id(self) -> str:
-        return self.value.strftime("%Y%m%d")
+        return self.value.isoformat()

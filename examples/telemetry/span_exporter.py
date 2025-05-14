@@ -3,6 +3,7 @@ import logging
 
 import interloper as itlp
 import pandas as pd
+from interloper_google_cloud import BigQueryIO
 from interloper_pandas import DataframeNormalizer
 from interloper_sql import SQLiteIO
 from opentelemetry import trace
@@ -29,7 +30,7 @@ def source() -> tuple[itlp.Asset, ...]:
     def a() -> pd.DataFrame:
         return pd.DataFrame({"val": [1, 2, 3]})
 
-    @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=False))
+    @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=True))
     def b(
         date: tuple[dt.date, dt.date] = itlp.DateWindow(),
         a: pd.DataFrame = itlp.UpstreamAsset("a"),
@@ -37,30 +38,19 @@ def source() -> tuple[itlp.Asset, ...]:
         return pd.DataFrame(
             {
                 "val": [123],
-                "date": [date],
+                "date": pd.Series([date[0]], dtype="datetime64[ns]"),
             }
         )
 
-    @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=True))
+    @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=False))
     def c(
         date: tuple[dt.date, dt.date] = itlp.DateWindow(),
-        b: pd.DataFrame = itlp.UpstreamAsset("b"),
+        a: pd.DataFrame = itlp.UpstreamAsset("a"),
     ) -> pd.DataFrame:
         return pd.DataFrame(
             {
                 "val": [123],
-                "date": [date],
-            }
-        )
-
-    @itlp.asset()
-    def d(
-        c: pd.DataFrame = itlp.UpstreamAsset("c"),
-    ) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "val": [123],
-                # "date": [date],
+                "date": pd.Series([date[0]], dtype="datetime64[ns]"),
             }
         )
 
@@ -70,17 +60,13 @@ def source() -> tuple[itlp.Asset, ...]:
 source.io = {
     # "file": itlp.FileIO(base_dir="./data"),
     "sqlite": SQLiteIO(db_path="data/sqlite.db"),
+    "bigquery": BigQueryIO(project="dc-int-connectors-prd", location="eu"),
 }
 
 
 pipeline = itlp.Pipeline(source)
 
 # pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 1)))
-pipeline.backfill(
-    partitions=itlp.TimePartitionWindow(
-        start=dt.date(2025, 1, 1),
-        end=dt.date(2025, 1, 3),
-    )
-)
+pipeline.backfill(partitions=itlp.TimePartitionWindow(start=dt.date(2025, 1, 1), end=dt.date(2025, 1, 3)))
 
 trace_provider.shutdown()

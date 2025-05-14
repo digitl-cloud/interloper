@@ -2,6 +2,7 @@ import argparse
 import datetime as dt
 import importlib.util
 import logging
+from enum import Enum
 from time import sleep
 from typing import Any
 
@@ -25,7 +26,9 @@ from interloper.asset import Asset
 # from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep
 from interloper.execution.pipeline import Pipeline
 from interloper.io.base import IO
-from interloper.partitioning.partition import TimePartition
+
+# from interloper.partitioning.partition import TimePartition
+from interloper.partitioning.window import TimePartitionWindow
 from interloper.source import Source
 
 _schema = {
@@ -213,7 +216,6 @@ def my_source_2() -> tuple[itlp.Asset, ...]:
     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
     def my_asset_D() -> str:
         sleep(1.5)
-        raise ValueError("Failed")
         return "D"
 
     return (my_asset_C, my_asset_D)
@@ -222,7 +224,7 @@ def my_source_2() -> tuple[itlp.Asset, ...]:
 io: dict[str, IO] = {"file": itlp.FileIO(base_dir="data")}
 my_source_1.io = io
 my_source_2.io = io
-# pipeline = Pipeline([my_source_1, my_source_2], async_events=True)
+pipeline = Pipeline([my_source_1, my_source_2], async_events=True)
 ########################
 ########################
 
@@ -231,9 +233,10 @@ def materialize(
     file: str,
     partition: str | None = None,
 ) -> None:
-    config = _load_and_validate_config(file)
-    pipeline = _load_pipeline_from_config(config)
-    time_partition = TimePartition(dt.date.fromisoformat(partition)) if partition else None
+    # config = _load_and_validate_config(file)
+    # pipeline = _load_pipeline_from_config(config)
+    # time_partition = TimePartition(dt.date.fromisoformat(partition)) if partition else None
+    time_partitions = TimePartitionWindow(start=dt.date(2025, 1, 1), end=dt.date(2025, 1, 10))
 
     progress = Progress(
         "{task.description}",
@@ -251,54 +254,31 @@ def materialize(
     # Create source and asset tasks
     for source_id, assets in pipeline.group_assets_by_source().items():
         source_tasks[source_id] = progress.add_task(
-            f"[bold magenta]{source_id}", status="", total=len(assets), visible=True
+            f"[bold magenta]{source_id}",
+            status="",
+            total=len(assets) * time_partitions.partition_count(),
+            visible=True,
         )
         for asset in assets:
             symbols = ("└", " ") if asset == assets[-1] else ("├", "│")
             asset_tasks[asset.id] = progress.add_task(
-                f"  {symbols[0]}─[bold cyan]{asset.name}", status="", total=1, visible=False
+                f"  {symbols[0]}─[bold cyan]{asset.name}",
+                status="",
+                total=time_partitions.partition_count(),
+                visible=False,
             )
-            step_tasks[asset.id] = progress.add_task(f"  {symbols[1]} └─{partition}", status="", total=3, visible=False)
+            step_tasks[asset.id] = progress.add_task(
+                f"  {symbols[1]} └─{time_partitions.start.isoformat()}",
+                status="",
+                total=time_partitions.partition_count(),
+                visible=False,
+            )
 
-    # def on_pipeline_event(pipeline: Pipeline, event: Event) -> None:
-    #     if not isinstance(event.observable, Asset):
-    #         return
-
-    #     asset = event.observable
-    #     source_id = asset.source.name if asset.source else "<no source>"
-    #     assert asset.id in asset_tasks
-
-    #     if event.status == ExecutionStatus.RUNNING:
-    #         # Reset progress for the step task
-    #         if event.step == ExecutionStep.ASSET_EXECUTION:
-    #             progress.update(step_tasks[asset.id], status="", completed=0, visible=True)
-
-    #         progress.update(asset_tasks[asset.id], status="", visible=True)
-    #         progress.update(step_tasks[asset.id], status=f"[yellow]{event.step}", visible=True)
-
-    #     elif event.status == ExecutionStatus.SUCCESS:
-    #         progress.update(step_tasks[asset.id], advance=1)
-
-    #         # Steps are finished -> advance asset progress
-    #         if progress.tasks[step_tasks[asset.id]].finished:
-    #             progress.update(asset_tasks[asset.id], advance=1)
-
-    #         # Asset is finished -> complete asset + advance source progress
-    #         if progress.tasks[asset_tasks[asset.id]].finished:
-    #             progress.update(asset_tasks[asset.id], status="[green]Complete")
-    #             progress.update(source_tasks[source_id], advance=1)
-
-    #         # Source is finished -> complete source + hide step tasks
-    #         if progress.tasks[source_tasks[source_id]].finished:
-    #             progress.update(source_tasks[source_id], status="[green]Complete")
-    #             progress.update(step_tasks[asset.id], visible=False)
-
-    #     elif event.status == ExecutionStatus.FAILURE:
-    #         progress.update(source_tasks[source_id], status="[red]Failed")
-    #         progress.update(asset_tasks[asset.id], status=f"[red]{event.step} failed")
-    #         progress.update(step_tasks[asset.id], status=f"[red]{event.step} failed")
-
-    # pipeline.on_event_callback = on_pipeline_event
+    class Op(Enum):
+        MATERIALIZATION = "interloper.asset.materialize"
+        EXECUTE = "interloper.asset.execute"
+        NORMALIZE = "interloper.asset.normalize"
+        WRITE = "interloper.asset.write"
 
     class CLISpanProcessor(SpanProcessor):
         def __init__(self): ...
@@ -308,32 +288,32 @@ def materialize(
                 return
 
             assert span.attributes
+            op = Op(span.name)
             asset_id = str(span.attributes["asset_id"])
-            op_name = span.name.split(".")[-1]
 
-            if op_name == "materialize":
+            if op == Op.MATERIALIZATION:
                 progress.update(asset_tasks[asset_id], status="", visible=True)
                 progress.update(step_tasks[asset_id], status="", completed=0, visible=True)
 
-            if op_name in ("execute", "normalize", "write"):
-                progress.update(step_tasks[asset_id], status=f"[yellow]{op_name}")
+            if op in (Op.EXECUTE, Op.NORMALIZE, Op.WRITE):
+                progress.update(step_tasks[asset_id], status=f"[yellow]{op.value.split('.')[-1]}")
 
         def on_end(self, span: ReadableSpan) -> None:
             if not span.name.startswith("interloper.asset"):
                 return
 
             assert span.attributes
+            op = Op(span.name)
             asset_id = str(span.attributes["asset_id"])
-            source_id = str(span.attributes["source"]) if "source" in span.attributes else None
-            op_name = span.name.split(".")[-1]
+            source_id = str(span.attributes["source_name"]) if "source_name" in span.attributes else None
 
-            if op_name in ("execute", "normalize", "write"):
+            if op in (Op.EXECUTE, Op.NORMALIZE, Op.WRITE):
                 if span.status.is_ok:
                     progress.update(step_tasks[asset_id], advance=1)
                 else:
-                    progress.update(step_tasks[asset_id], status=f"[red]Failed ({op_name})")
+                    progress.update(step_tasks[asset_id], status=f"[red]Failed ({span.name.split('.')[-1]})")
 
-            elif op_name == "materialize":
+            elif op == Op.MATERIALIZATION:
                 if span.status.is_ok:
                     progress.update(source_tasks[source_id], advance=1)
                     progress.update(asset_tasks[asset_id], advance=1, status="[green]Complete")
@@ -353,7 +333,7 @@ def materialize(
     console = Console()
     with Live(progress, console=console, refresh_per_second=10):
         try:
-            pipeline.materialize(partition=time_partition)
+            pipeline.backfill(partitions=time_partitions)
         except Exception:
             pass
         # finally:

@@ -85,8 +85,12 @@ class Pipeline(Observer, Observable):
         self,
         partition: Partition | None = None,
     ) -> Any:
-        with tracer.start_as_current_span("interloper.pipeline.materialize"):
-            for generation in self._get_parallel_execution_order():
+        attributes = {}
+        if partition:
+            attributes["partition"] = str(partition)
+
+        with tracer.start_as_current_span("interloper.pipeline.materialize", attributes=attributes):
+            for generation in nx.topological_generations(self._graph):
                 with ThreadPoolExecutor() as executor:
                     futures = []
                     for asset in generation:
@@ -123,8 +127,8 @@ class Pipeline(Observer, Observable):
                 self.materialize()
                 return
 
-            # SINGLE RUN EXECUTION:
-            # Partition Window + (Non partitioned assets & Single run partitioned assets)
+            # SINGLE RUN EXECUTION
+            # Partition Window + (Non-partitioned assets & Single run partitioned assets)
             elif (
                 isinstance(partitions, PartitionWindow)
                 and len(assets_by_execution_strategy[AssetExecutionStategy.MULTI_RUNS]) == 0
@@ -139,37 +143,35 @@ class Pipeline(Observer, Observable):
                         asset.materialize(context)
 
             # MULTI RUN EXECUTION:
-            # Mix of partitioned and non-partitioned assets -> Multi-run execution
+            # Mix of partitioned and non-partitioned assets
             else:
                 with ThreadPoolExecutor() as executor:
-                    futures = []
-
                     # Non-partitioned assets
                     non_partitioned_assets = [asset for asset in self._assets.values() if not asset.partitioning]
                     non_partitioned_subgraph = nx.subgraph(self._graph, non_partitioned_assets)
                     for generation in nx.topological_generations(non_partitioned_subgraph):
+                        futures = []
                         for asset in generation:
                             context = ExecutionContext(assets=self._assets, executed_asset=asset)
                             futures.append(executor.submit(asset.materialize, context))
-
-                    wait(futures)
-                    for future in futures:
-                        future.result()
+                        wait(futures)
+                        for future in futures:
+                            future.result()
 
                     # Partitioned assets
                     partitioned_assets = [asset for asset in self._assets.values() if asset.partitioning]
                     partitioned_subgraph = nx.subgraph(self._graph, partitioned_assets)
                     for partition in partitions:
                         for generation in nx.topological_generations(partitioned_subgraph):
+                            futures = []
                             for asset in generation:
                                 context = ExecutionContext(
                                     assets=self._assets, executed_asset=asset, partition=partition
                                 )
                                 futures.append(executor.submit(asset.materialize, context))
-
-                        wait(futures)
-                        for future in futures:
-                            future.result()
+                            wait(futures)
+                            for future in futures:
+                                future.result()
 
     def on_event(self, event: Event) -> None:
         if isinstance(event.observable, Asset):
@@ -288,17 +290,3 @@ class Pipeline(Observer, Observable):
             pass
 
         assert nx.is_directed_acyclic_graph(self._graph)
-
-    def _get_sequential_execution_order(self) -> list[Asset]:
-        """Returns the sequential execution order of assets."""
-
-        order = list(nx.topological_sort(self._graph))
-        logger.debug(f"Sequential execution order: {order}")
-        return order
-
-    def _get_parallel_execution_order(self) -> list[list[Asset]]:
-        """Returns the parallel execution order of assets."""
-
-        generations = list(nx.topological_generations(self._graph))
-        logger.debug(f"Parallel execution order: {generations}")
-        return generations

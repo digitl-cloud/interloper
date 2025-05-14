@@ -173,8 +173,10 @@ class Asset(ABC, Observable):
         self._materialization_strategy = value
 
     @property
-    def data_type(self) -> type:
+    def data_type(self) -> type | None:
         sig = signature(self.data)
+        if sig.return_annotation is Parameter.empty:
+            return None
         return sig.return_annotation
 
     @property
@@ -210,7 +212,7 @@ class Asset(ABC, Observable):
         Execute + Normalize
         """
 
-        with tracer.start_as_current_span(name="interloper.asset.run", attributes=self._get_span_attributes()):
+        with tracer.start_as_current_span("interloper.asset.run", attributes=self._get_span_attributes(context)):
             data = self._execute(context, **params)
             data = self._normalize(data, context)
             return data
@@ -223,7 +225,10 @@ class Asset(ABC, Observable):
         """
         Execute + Normalize + Write
         """
-        with tracer.start_as_current_span(name="interloper.asset.materialize", attributes=self._get_span_attributes()):
+
+        with tracer.start_as_current_span(
+            "interloper.asset.materialize", attributes=self._get_span_attributes(context)
+        ):
             logger.info(
                 f"Materializing asset {self.name} "
                 f"{f'partition(s) {context.partition}' if context and context.partition and self.is_partitioned else ''}"  # noqa: E501
@@ -268,7 +273,7 @@ class Asset(ABC, Observable):
         context: "ExecutionContext | None" = None,
         **params: Any,
     ) -> Any:
-        with tracer.start_as_current_span(name="interloper.asset.execute", attributes=self._get_span_attributes()):
+        with tracer.start_as_current_span("interloper.asset.execute", attributes=self._get_span_attributes(context)):
             # Parameter resolution
             params, return_type = self._resolve_parameters(context, **params)
 
@@ -289,7 +294,7 @@ class Asset(ABC, Observable):
         data: Any,
         context: "ExecutionContext | None" = None,
     ) -> Any:
-        with tracer.start_as_current_span("interloper.asset.normalize", attributes=self._get_span_attributes()):
+        with tracer.start_as_current_span("interloper.asset.normalize", attributes=self._get_span_attributes(context)):
             if self.normalizer:
                 try:
                     data = self.normalizer.normalize(data)
@@ -331,7 +336,7 @@ class Asset(ABC, Observable):
         data: Any,
         context: "ExecutionContext | None" = None,
     ) -> None:
-        with tracer.start_as_current_span("interloper.asset.write", attributes=self._get_span_attributes()):
+        with tracer.start_as_current_span("interloper.asset.write", attributes=self._get_span_attributes(context)):
             # if context:
             #     if context.partition and not self.partitioning:
             #         raise errors.AssetMaterializationError(
@@ -425,15 +430,17 @@ class Asset(ABC, Observable):
 
         return final_params, return_type
 
-    def _get_span_attributes(self) -> SpanAttributes:
+    def _get_span_attributes(self, context: "ExecutionContext | None" = None) -> SpanAttributes:
         attributes: SpanAttributes = {
             "asset_id": self.id,
             "asset_name": self.name,
         }
         if self.source:
-            attributes["source"] = self.source.name
+            attributes["source_name"] = self.source.name
         if self.dataset:
             attributes["dataset"] = self.dataset
+        if context and context.partition:
+            attributes["partition"] = str(context.partition)
         return attributes
 
 

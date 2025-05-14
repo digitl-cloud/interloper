@@ -32,3 +32,6 @@ class TimePartitionWindow(PartitionWindow):
     def iterate(self) -> Generator[TimePartition]:
         for date in date_range(self.start, self.end, reversed=True):
             yield TimePartition(date)
+
+    def partition_count(self) -> int:
+        return (self.end - self.start).days + 1
