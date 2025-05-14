@@ -14,7 +14,7 @@ from typing_extensions import Self
 
 from interloper import errors
 from interloper.execution.context import ExecutionContext
-from interloper.execution.observable import ExecutionStep, Observable
+from interloper.execution.observable import EventType, Observable
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
@@ -205,7 +205,7 @@ class Asset(ABC, Observable):
 
     def run(
         self,
-        context: "ExecutionContext | None" = None,
+        context: ExecutionContext | None = None,
         **params: Any,
     ) -> Any:
         """
@@ -219,7 +219,7 @@ class Asset(ABC, Observable):
 
     def materialize(
         self,
-        context: "ExecutionContext | None" = None,
+        context: ExecutionContext | None = None,
         **params: Any,
     ) -> None:
         """
@@ -267,10 +267,10 @@ class Asset(ABC, Observable):
     #############
     # Private
     #############
-    @Observable.event(step=ExecutionStep.ASSET_EXECUTION)
+    @Observable.event(EventType.ASSET_EXECUTION)
     def _execute(
         self,
-        context: "ExecutionContext | None" = None,
+        context: ExecutionContext | None = None,
         **params: Any,
     ) -> Any:
         with tracer.start_as_current_span("interloper.asset.execute", attributes=self._get_span_attributes(context)):
@@ -288,11 +288,11 @@ class Asset(ABC, Observable):
 
             return data
 
-    @Observable.event(step=ExecutionStep.ASSET_NORMALIZATION)
+    @Observable.event(EventType.ASSET_NORMALIZATION)
     def _normalize(
         self,
         data: Any,
-        context: "ExecutionContext | None" = None,
+        context: ExecutionContext | None = None,
     ) -> Any:
         with tracer.start_as_current_span("interloper.asset.normalize", attributes=self._get_span_attributes(context)):
             if self.normalizer:
@@ -330,11 +330,11 @@ class Asset(ABC, Observable):
 
             return data
 
-    @Observable.event(step=ExecutionStep.ASSET_WRITING)
+    @Observable.event(EventType.ASSET_WRITING)
     def _write(
         self,
         data: Any,
-        context: "ExecutionContext | None" = None,
+        context: ExecutionContext | None = None,
     ) -> None:
         with tracer.start_as_current_span("interloper.asset.write", attributes=self._get_span_attributes(context)):
             # if context:
@@ -365,7 +365,7 @@ class Asset(ABC, Observable):
 
     def _resolve_parameters(
         self,
-        context: "ExecutionContext | None" = None,
+        context: ExecutionContext | None = None,
         **overriding_params: Any,
     ) -> tuple[dict[str, Any], Any]:
         sig = signature(self.data)
@@ -430,7 +430,7 @@ class Asset(ABC, Observable):
 
         return final_params, return_type
 
-    def _get_span_attributes(self, context: "ExecutionContext | None" = None) -> SpanAttributes:
+    def _get_span_attributes(self, context: ExecutionContext | None = None) -> SpanAttributes:
         attributes: SpanAttributes = {
             "asset_id": self.id,
             "asset_name": self.name,

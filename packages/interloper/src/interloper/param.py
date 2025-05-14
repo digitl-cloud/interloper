@@ -2,15 +2,13 @@ import datetime as dt
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from interloper import errors
+from interloper.execution.context import ExecutionContext
 from interloper.io.base import IOContext
 from interloper.partitioning.partition import TimePartition
 from interloper.partitioning.window import PartitionWindow
-
-if TYPE_CHECKING:
-    from interloper.execution.pipeline import ExecutionContext
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -27,7 +25,7 @@ class AssetParam(ABC, Generic[T]):
 
 class ContextualAssetParam(AssetParam[T], Generic[T]):
     @abstractmethod
-    def resolve(self, context: "ExecutionContext") -> T: ...
+    def resolve(self, context: ExecutionContext) -> T: ...
 
 
 class Env(AssetParam[str]):
@@ -62,7 +60,7 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
         self.key = key
         self.type = type
 
-    def resolve(self, context: "ExecutionContext") -> T:
+    def resolve(self, context: ExecutionContext) -> T:
         upstream_id = context.executed_asset.deps[self.key]
         upstream_asset = context.assets[upstream_id]
 
@@ -129,7 +127,7 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
 
 
 class Date(ContextualAssetParam[dt.date]):
-    def resolve(self, context: "ExecutionContext") -> dt.date:
+    def resolve(self, context: ExecutionContext) -> dt.date:
         if not context.executed_asset.is_partitioned:
             raise ValueError("Asset param of type Date requires the executed asset to support partitioning")
 
@@ -143,7 +141,7 @@ class Date(ContextualAssetParam[dt.date]):
 
 
 class DateWindow(ContextualAssetParam[tuple[dt.date, dt.date]]):
-    def resolve(self, context: "ExecutionContext") -> tuple[dt.date, dt.date]:
+    def resolve(self, context: ExecutionContext) -> tuple[dt.date, dt.date]:
         if not context.executed_asset.is_partitioned:
             raise ValueError("Asset param of type DateWindow requires the executed asset to support partitioning")
 

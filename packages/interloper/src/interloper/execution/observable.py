@@ -8,7 +8,7 @@ from queue import Queue
 from typing import Any
 
 
-class ExecutionStep(Enum):
+class EventType(Enum):
     ASSET_EXECUTION = "ASSET_EXECUTION"
     ASSET_NORMALIZATION = "ASSET_NORMALIZATION"
     ASSET_WRITING = "ASSET_WRITING"
@@ -19,8 +19,7 @@ class ExecutionStep(Enum):
         return self.value
 
 
-class ExecutionStatus(Enum):
-    PENDING = "PENDING"
+class EventStatus(Enum):
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILURE = "FAILURE"
@@ -32,24 +31,24 @@ class ExecutionStatus(Enum):
 @dataclass
 class Event:
     observable: "Observable | None"
-    step: ExecutionStep
-    status: ExecutionStatus | None = None
+    type: EventType
+    status: EventStatus | None = None
     error: Exception | None = None
 
     def __enter__(self) -> None:
         if self.observable is None or not isinstance(self.observable, Observable):
             raise ValueError("Event must be bound to an observable before use")
 
-        self.status = ExecutionStatus.RUNNING
-        self.observable.notify_observers(Event(self.observable, self.step, self.status, self.error))
+        self.status = EventStatus.RUNNING
+        self.observable.notify_observers(Event(self.observable, self.type, self.status, self.error))
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self.observable is None or not isinstance(self.observable, Observable):
             raise ValueError("Event must be bound to an observable before use")
 
-        self.status = ExecutionStatus.FAILURE if exc_type else ExecutionStatus.SUCCESS
+        self.status = EventStatus.FAILURE if exc_type else EventStatus.SUCCESS
         self.error = exc_val if exc_type else None
-        self.observable.notify_observers(Event(self.observable, self.step, self.status, self.error))
+        self.observable.notify_observers(Event(self.observable, self.type, self.status, self.error))
 
 
 class Observer(ABC):
@@ -98,16 +97,12 @@ class Observable:
                 # In sync mode, process events immediately in the current thread
                 observer.on_event(event)
 
-    def emit(self, name: str, step: ExecutionStep, status: ExecutionStatus) -> None:
-        event = Event(self, step, status)
+    def emit(self, type: EventType, status: EventStatus) -> None:
+        event = Event(self, type, status)
         self.notify_observers(event)
 
     @staticmethod
-    def event(
-        func: Callable | None = None,
-        *,
-        step: ExecutionStep,
-    ) -> Callable:
+    def event(type: EventType) -> Callable:
         """
         Decorator
         """
@@ -118,11 +113,9 @@ class Observable:
                 if not isinstance(self, Observable):
                     raise TypeError("observable_event decorator can only be used with Observable classes")
 
-                with Event(self, step):
+                with Event(self, type):
                     return func(self, *args, **kwargs)
 
             return wrapper
 
-        if func is None:
-            return decorator
-        return decorator(func)
+        return decorator

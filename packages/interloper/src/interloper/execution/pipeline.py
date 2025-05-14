@@ -1,5 +1,6 @@
 import datetime as dt
 import logging
+import threading
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from opentelemetry import trace
 
 from interloper.asset import Asset
 from interloper.execution.context import ExecutionContext
-from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep, Observable, Observer
+from interloper.execution.observable import Event, EventStatus, EventType, Observable, Observer
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.window import PartitionWindow
 from interloper.source import Source
@@ -30,23 +31,23 @@ class AssetExecutionStategy(Enum):
 @dataclass
 class AssetExecutionState:
     asset: Asset
-    step: ExecutionStep | None = None
-    status: ExecutionStatus | None = None
+    type: EventType | None = None
+    status: EventStatus | None = None
     started_at: dt.datetime | None = None
     completed_at: dt.datetime | None = None
     error: Exception | None = None
 
     @property
     def is_running(self) -> bool:
-        return self.started_at is not None and self.completed_at is None
+        return self.status == EventStatus.RUNNING
 
     @property
     def is_completed(self) -> bool:
-        return self.completed_at is not None and self.status == ExecutionStatus.SUCCESS
+        return self.status == EventStatus.SUCCESS
 
     @property
     def is_failed(self) -> bool:
-        return self.status == ExecutionStatus.FAILURE
+        return self.status == EventStatus.FAILURE
 
 
 class Pipeline(Observer, Observable):
@@ -68,7 +69,8 @@ class Pipeline(Observer, Observable):
         self._build_execution_graph()
         self._async_events = async_events
 
-        self.execution_state: dict[Asset, AssetExecutionState] = {
+        self._execution_state_lock = threading.Lock()
+        self._execution_state: dict[Asset, AssetExecutionState] = {
             asset: AssetExecutionState(asset) for asset in self._assets.values()
         }
 
@@ -80,7 +82,26 @@ class Pipeline(Observer, Observable):
     def graph(self) -> nx.DiGraph:
         return self._graph
 
-    @Observable.event(step=ExecutionStep.PIPELINE_MATERIALIZATION)
+    @property
+    def execution_state(self) -> dict[Asset, AssetExecutionState]:
+        return self._execution_state
+
+    @property
+    def running_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
+        with self._execution_state_lock:
+            return [(asset, state) for asset, state in self._execution_state.items() if state.is_running]
+
+    @property
+    def completed_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
+        with self._execution_state_lock:
+            return [(asset, state) for asset, state in self._execution_state.items() if state.is_completed]
+
+    @property
+    def failed_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
+        with self._execution_state_lock:
+            return [(asset, state) for asset, state in self._execution_state.items() if state.is_failed]
+
+    @Observable.event(EventType.PIPELINE_MATERIALIZATION)
     def materialize(
         self,
         partition: Partition | None = None,
@@ -108,7 +129,7 @@ class Pipeline(Observer, Observable):
                     for future in futures:
                         future.result()
 
-    @Observable.event(step=ExecutionStep.PIPELINE_BACKFILL)
+    @Observable.event(EventType.PIPELINE_BACKFILL)
     def backfill(
         self,
         partitions: Iterator[Partition] | PartitionWindow,
@@ -175,19 +196,20 @@ class Pipeline(Observer, Observable):
 
     def on_event(self, event: Event) -> None:
         if isinstance(event.observable, Asset):
-            self.execution_state[event.observable] = AssetExecutionState(
-                asset=event.observable,
-                step=event.step,
-                status=event.status,
-            )
+            with self._execution_state_lock:
+                self._execution_state[event.observable] = AssetExecutionState(
+                    asset=event.observable,
+                    type=event.type,
+                    status=event.status,
+                )
 
-            if event.status == ExecutionStatus.RUNNING:
-                self.execution_state[event.observable].started_at = dt.datetime.now()
-            elif event.status in (ExecutionStatus.SUCCESS, ExecutionStatus.FAILURE):
-                self.execution_state[event.observable].completed_at = dt.datetime.now()
+                if event.status == EventStatus.RUNNING:
+                    self._execution_state[event.observable].started_at = dt.datetime.now()
+                elif event.status in (EventStatus.SUCCESS, EventStatus.FAILURE):
+                    self._execution_state[event.observable].completed_at = dt.datetime.now()
 
-            if event.status == ExecutionStatus.FAILURE:
-                self.execution_state[event.observable].error = event.error
+                if event.status == EventStatus.FAILURE:
+                    self._execution_state[event.observable].error = event.error
 
         # User-defined callback
         if self.on_event_callback:
@@ -216,15 +238,6 @@ class Pipeline(Observer, Observable):
             else:
                 assets_by_execution_strategy[AssetExecutionStategy.MULTI_RUNS].append(asset)
         return assets_by_execution_strategy
-
-    def get_running_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
-        return [(asset, state) for asset, state in self.execution_state.items() if state.is_running]
-
-    def get_completed_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
-        return [(asset, state) for asset, state in self.execution_state.items() if state.is_completed]
-
-    def get_failed_assets(self) -> list[tuple[Asset, AssetExecutionState]]:
-        return [(asset, state) for asset, state in self.execution_state.items() if state.is_failed]
 
     def _add_assets(self, sources_or_assets: TAssetOrSource) -> None:
         if not sources_or_assets:
