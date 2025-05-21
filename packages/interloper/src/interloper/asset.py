@@ -38,7 +38,7 @@ class Asset(ABC, Observable):
     partitioning: PartitionConfig | None
     _source: "Source | None"
     _dataset: str | None
-    _io: dict[str, IO]
+    _io: dict[str, IO] | IO
     _default_io_key: str | None
     _normalizer: Normalizer | None
     _materializable: bool | None
@@ -51,7 +51,7 @@ class Asset(ABC, Observable):
         source: "Source | None" = None,
         dataset: str | None = None,
         deps: dict[str, str] | None = None,
-        io: dict[str, IO] | None = None,
+        io: dict[str, IO] | IO | None = None,
         default_io_key: str | None = None,
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
@@ -88,7 +88,7 @@ class Asset(ABC, Observable):
     def __call__(
         self,
         *,
-        io: dict[str, IO] | None = None,  # TODO: support single IO
+        io: dict[str, IO] | IO | None = None,
         default_io_key: str | None = None,
         deps: dict[str, str] | None = None,
         **kwargs: Any,
@@ -123,11 +123,11 @@ class Asset(ABC, Observable):
         self._dataset = value
 
     @property
-    def io(self) -> dict[str, IO]:
+    def io(self) -> dict[str, IO] | IO:
         return self._io or (self._source and self._source.io) or {}
 
     @io.setter
-    def io(self, value: dict[str, IO]) -> None:
+    def io(self, value: dict[str, IO] | IO) -> None:
         self._io = value
 
     @property
@@ -181,7 +181,7 @@ class Asset(ABC, Observable):
 
     @property
     def has_io(self) -> bool:
-        return self.io is not None and len(self.io) > 0
+        return self.io is not None and isinstance(self.io, IO) or len(self.io) > 0
 
     @property
     def upstream_assets(self) -> list[UpstreamAsset]:
@@ -353,15 +353,18 @@ class Asset(ABC, Observable):
 
             io_context = IOContext(asset=self, partition=partition)
 
-            with ThreadPoolExecutor() as executor:
-                futures = []
-                for io in self.io.values():
-                    futures.append(executor.submit(io.write, io_context, data))
+            if isinstance(self.io, IO):
+                self.io.write(io_context, data)
+            else:
+                with ThreadPoolExecutor() as executor:
+                    futures = []
+                    for io in self.io.values():
+                        futures.append(executor.submit(io.write, io_context, data))
 
-                wait(futures)
+                    wait(futures)
 
-                for future in futures:
-                    future.result()
+                    for future in futures:
+                        future.result()
 
     def _resolve_parameters(
         self,

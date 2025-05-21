@@ -32,7 +32,7 @@ class Source(ABC):
         name: str,
         *,
         dataset: str | None = None,
-        io: dict[str, IO] | None = None,
+        io: dict[str, IO] | IO | None = None,
         default_io_key: str | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
@@ -44,7 +44,7 @@ class Source(ABC):
         self._assets: dict[str, Asset] = {}
         self.name = name
         self.dataset = dataset or name
-        self.io = dict(io) if io else {}
+        self.io = io or {}
         self.default_io_key = default_io_key
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
@@ -60,7 +60,7 @@ class Source(ABC):
         self,
         *,
         dataset: str | None = None,
-        io: dict[str, IO] | None = None,
+        io: dict[str, IO] | IO | None = None,
         default_io_key: str | None = None,
         materializable: bool | None = None,
         default_assets_args: dict[str, Any] | None = None,
