@@ -1,6 +1,7 @@
 from interloper.asset import Asset, asset
+from interloper.execution.context import AssetExecutionContext, ExecutionContext
 from interloper.execution.observable import Event, EventStatus, EventType
-from interloper.execution.pipeline import ExecutionContext, Pipeline
+from interloper.execution.pipeline import Pipeline
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext, IOHandler
 from interloper.io.database import DatabaseClient, DatabaseIO

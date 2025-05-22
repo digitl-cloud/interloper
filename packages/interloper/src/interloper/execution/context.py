@@ -8,8 +8,12 @@ if TYPE_CHECKING:
     from interloper.asset import Asset
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ExecutionContext:
     assets: dict[str, "Asset"]
-    executed_asset: "Asset"
     partition: Partition | PartitionWindow | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class AssetExecutionContext(ExecutionContext):
+    executed_asset: "Asset"

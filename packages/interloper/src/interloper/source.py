@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from copy import copy
 from functools import partial
-from inspect import signature
+from inspect import Parameter, Signature, signature
 from typing import Any, overload
 
 from typing_extensions import Self
@@ -222,6 +222,11 @@ class Source(ABC):
         return final_params
 
 
+class ConcreteSource(Source):
+    def asset_definitions(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
+
+
 class SourceDecorator:
     # Decorator used without parameters
     @overload
@@ -276,23 +281,32 @@ class SourceDecorator:
         using the decorated function.
         """
 
-        class ConcreteSource(Source):
-            # Define the dynamically provided asset_definitions method
-            def asset_definitions(self, *args: Any, **kwargs: Any) -> Any:
-                return func(*args, **kwargs)
+        # class ConcreteSource(Source):
+        #     # Define the dynamically provided asset_definitions method
+        #     def asset_definitions(self, *args: Any, **kwargs: Any) -> Any:
+        #         return func(*args, **kwargs)
 
-            def __repr__(self) -> str:
-                return f"<Source {self.name} at {hex(id(self))}>"
+        #     def __repr__(self) -> str:
+        #         return f"<Source {self.name} at {hex(id(self))}>"
 
-        # Override `asset_definitions` signature to dynamically match the signature of the provided `func`
-        original_sig, wrapper_sig = signature(func), signature(ConcreteSource.asset_definitions)
-        parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
-        ConcreteSource.asset_definitions.__signature__ = wrapper_sig.replace(
-            parameters=parameters,
-            return_annotation=original_sig.return_annotation,
-        )
+        # # Override `asset_definitions` signature to dynamically match the signature of the provided `func`
+        # original_sig, wrapper_sig = signature(func), signature(ConcreteSource.asset_definitions)
+        # parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
+        # ConcreteSource.asset_definitions.__signature__ = wrapper_sig.replace(
+        #     parameters=parameters,
+        #     return_annotation=original_sig.return_annotation,
+        # )
 
-        return ConcreteSource(
+        # return ConcreteSource(
+        #     name=self.name or func.__name__,
+        #     dataset=self.dataset,
+        #     auto_asset_deps=self.auto_asset_deps,
+        #     normalizer=self.normalizer,
+        #     materializable=self.materializable,
+        #     materialization_strategy=self.materialization_strategy,
+        # )
+
+        source = ConcreteSource(
             name=self.name or func.__name__,
             dataset=self.dataset,
             auto_asset_deps=self.auto_asset_deps,
@@ -300,6 +314,18 @@ class SourceDecorator:
             materializable=self.materializable,
             materialization_strategy=self.materialization_strategy,
         )
+
+        def wrapper(self: Any, **kwargs: Any) -> Any:
+            return func(**kwargs)
+
+        sig = signature(func)
+        params = [Parameter("self", Parameter.POSITIONAL_OR_KEYWORD)]
+        params.extend(list(sig.parameters.values()))
+        wrapper.__signature__ = Signature(parameters=params, return_annotation=sig.return_annotation)
+
+        source.asset_definitions = wrapper.__get__(source, ConcreteSource)
+
+        return source
 
 
 source = SourceDecorator

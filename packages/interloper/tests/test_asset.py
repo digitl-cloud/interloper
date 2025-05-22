@@ -304,7 +304,7 @@ class TestAssetMaterialize:
         asset.io = {"simple": io}
         asset.bind(who="world")
 
-        context = itlp.ExecutionContext(
+        context = itlp.AssetExecutionContext(
             assets={"asset": asset},
             executed_asset=asset,
             partition=None,
@@ -319,7 +319,7 @@ class TestAssetMaterialize:
         asset.partitioning = itlp.PartitionConfig(column="date")
         asset.bind(who="world")
 
-        context = itlp.ExecutionContext(
+        context = itlp.AssetExecutionContext(
             assets={"asset": asset},
             executed_asset=asset,
             partition=itlp.Partition(value="whatever"),
@@ -442,7 +442,7 @@ class TestAssetResolveParameters:
         @itlp.asset
         def asset(what=contextual_asset_param): ...
 
-        context = itlp.ExecutionContext(
+        context = itlp.AssetExecutionContext(
             assets={"asset": asset},
             executed_asset=asset,
         )

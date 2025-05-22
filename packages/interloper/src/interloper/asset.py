@@ -5,7 +5,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, wait
 from copy import copy
 from functools import partial
-from inspect import Parameter, signature
+from inspect import Parameter, Signature, signature
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from opentelemetry import trace
@@ -13,7 +13,7 @@ from opentelemetry.util.types import Attributes as SpanAttributes
 from typing_extensions import Self
 
 from interloper import errors
-from interloper.execution.context import ExecutionContext
+from interloper.execution.context import AssetExecutionContext, ExecutionContext
 from interloper.execution.observable import EventType, Observable
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext
@@ -403,6 +403,11 @@ class Asset(ABC, Observable):
                     )
 
                 try:
+                    context = AssetExecutionContext(
+                        executed_asset=self,
+                        assets=context.assets,
+                        partition=context.partition,
+                    )
                     final_params[param.name] = param.default.resolve(context)
                 except Exception as e:
                     raise errors.AssetParamResolutionError(
@@ -442,6 +447,15 @@ class Asset(ABC, Observable):
         if context and context.partition:
             attributes["partition"] = str(context.partition)
         return attributes
+
+
+class ConcreteAsset(Asset):
+    def data(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
+
+    def __repr__(self) -> str:
+        source_str = f" from Source {self._source.name}" if self._source else ""
+        return f"<Asset {self.name}{source_str} at {hex(id(self))}>"
 
 
 class AssetDecorator:
@@ -501,24 +515,34 @@ class AssetDecorator:
         using the decorated function.
         """
 
-        class ConcreteAsset(Asset):
-            # Define the dynamically provided data method
-            def data(self, *args: Any, **kwargs: Any) -> Any:
-                return func(*args, **kwargs)
+        # class ConcreteAsset(Asset):
+        #     # Define the dynamically provided data method
+        #     def data(self, *args: Any, **kwargs: Any) -> Any:
+        #         return func(*args, **kwargs)
 
-            def __repr__(self) -> str:
-                source_str = f" from Source {self._source.name}" if self._source else ""
-                return f"<Asset {self.name}{source_str} at {hex(id(self))}>"
+        #     def __repr__(self) -> str:
+        #         source_str = f" from Source {self._source.name}" if self._source else ""
+        #         return f"<Asset {self.name}{source_str} at {hex(id(self))}>"
 
-        # Override `data` signature to dynamically match the signature of the provided `func`
-        original_sig, wrapper_sig = signature(func), signature(ConcreteAsset.data)
-        parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
-        ConcreteAsset.data.__signature__ = wrapper_sig.replace(
-            parameters=parameters,
-            return_annotation=original_sig.return_annotation,
-        )
+        # # Override `data` signature to dynamically match the signature of the provided `func`
+        # original_sig, wrapper_sig = signature(func), signature(ConcreteAsset.data)
+        # parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
+        # ConcreteAsset.data.__signature__ = wrapper_sig.replace(
+        #     parameters=parameters,
+        #     return_annotation=original_sig.return_annotation,
+        # )
 
-        return ConcreteAsset(
+        # return ConcreteAsset(
+        #     name=self.name or func.__name__,
+        #     dataset=self.dataset,
+        #     schema=self.schema,
+        #     normalizer=self.normalizer,
+        #     partitioning=self.partitioning,
+        #     materializable=self.materializable,
+        #     materialization_strategy=self.materialization_strategy,
+        # )
+
+        asset = ConcreteAsset(
             name=self.name or func.__name__,
             dataset=self.dataset,
             schema=self.schema,
@@ -527,6 +551,18 @@ class AssetDecorator:
             materializable=self.materializable,
             materialization_strategy=self.materialization_strategy,
         )
+
+        def wrapper(self: Any, **kwargs: Any) -> Any:
+            return func(**kwargs)
+
+        sig = signature(func)
+        params = [Parameter("self", Parameter.POSITIONAL_OR_KEYWORD)]
+        params.extend(list(sig.parameters.values()))
+        wrapper.__signature__ = Signature(parameters=params, return_annotation=sig.return_annotation)
+
+        asset.data = wrapper.__get__(asset, ConcreteAsset)
+
+        return asset
 
 
 asset = AssetDecorator
