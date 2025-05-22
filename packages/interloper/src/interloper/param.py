@@ -6,7 +6,7 @@ from typing import Any, Generic, TypeVar
 
 from interloper import errors
 from interloper.execution.context import ExecutionContext
-from interloper.io.base import IOContext
+from interloper.io.base import IO, IOContext
 from interloper.partitioning.partition import TimePartition
 from interloper.partitioning.window import PartitionWindow
 
@@ -71,8 +71,11 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
                 "because it does not have any IO configured"
             )
 
+        if isinstance(upstream_asset.io, IO):
+            io = upstream_asset.io
+
         # If the upstream asset has a default IO key, use it
-        if upstream_asset.default_io_key is not None:
+        elif upstream_asset.default_io_key is not None:
             try:
                 io = upstream_asset.io[upstream_asset.default_io_key]
             except KeyError:
