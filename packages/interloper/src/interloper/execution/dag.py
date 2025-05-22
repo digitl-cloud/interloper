@@ -1,103 +1,112 @@
 import functools
-import logging
 from collections.abc import Sequence
 
-import networkx as nx
-
-import interloper as itlp
 from interloper.asset import Asset
 from interloper.execution.strategy import ExecutionStategy
 from interloper.source import Source
 
 TAssetOrSource = Source | Asset | Sequence[Source | Asset]
 
-itlp.basic_logging(logging.CRITICAL)
+
+class Node:
+    def __init__(self, asset: Asset):
+        self.asset = asset
+        self.upstream: set[Node] = set()
+        self.downstream: set[Node] = set()
+
+    def __repr__(self):
+        return f"Node({self.asset.id})"
 
 
 # TODO: subgraphs should probably be immutable (DAGView?) since some upstream assets might not be present in the graph
 # anymore. The consequence is that subdags cannot be built again (_build_graph). Adding new assets (add_assets) to
 # will always fail because it will build the graph again and the upstream assets will then not be present.
 class DAG:
-    _graph: nx.DiGraph
-    _assets: dict[str, Asset]
+    _nodes: dict[str, Node]
 
     def __init__(
         self,
         sources_or_assets: TAssetOrSource | None = None,
+        allow_missing_dependencies: bool = False,
     ):
-        self._assets = {}
+        self._nodes = {}
+        self._allow_missing_dependencies = allow_missing_dependencies
         if sources_or_assets:
             self.add_assets(sources_or_assets)
 
-    @property
-    def graph(self) -> nx.DiGraph:
-        return self._graph
-
     def add_assets(self, sources_or_assets: TAssetOrSource) -> None:
-        # Convert single source/asset to a list
         if not isinstance(sources_or_assets, Sequence):
             sources_or_assets = [sources_or_assets]
 
-        # Unpack assets or source's assets
-        batch: list[Asset] = []
         for source_or_asset in sources_or_assets:
-            batch = []
+            batch: list[Asset] = []
             if isinstance(source_or_asset, Source):
-                batch.extend([asset for asset in source_or_asset.assets if asset.materializable])
+                batch.extend([a for a in source_or_asset.assets if a.materializable])
             elif isinstance(source_or_asset, Asset):
                 if source_or_asset.materializable:
                     batch.append(source_or_asset)
             else:
-                raise ValueError(f"Expected an instance of Source or Asset, but got {type(source_or_asset)}")
+                raise ValueError(f"Expected Source or Asset, got {type(source_or_asset)}")
 
             for asset in batch:
-                if asset in self._assets:
-                    raise ValueError(f"Duplicate asset name '{asset.id}'")
-                self._assets[asset.id] = asset
+                if asset.id in self._nodes:
+                    raise ValueError(f"Duplicate asset '{asset.id}'")
+                self._nodes[asset.id] = Node(asset)
 
         self._build_graph()
         self._clear_cache()
 
+    def successors(self, asset: Asset) -> list[Asset]:
+        return [n.asset for n in self._nodes[asset.id].downstream]
+
+    def predecessors(self, asset: Asset) -> list[Asset]:
+        return [n.asset for n in self._nodes[asset.id].upstream]
+
     def _build_graph(self) -> None:
-        """Builds the asset dependency graph."""
-
-        self._graph = nx.DiGraph()
-        for asset in self._assets.values():
-            self._graph.add_node(asset)
-
+        for node in self._nodes.values():
+            asset = node.asset
             for upstream_ref in asset.upstream_assets:
-                # Verify that the upstream asset ref is in the asset's deps config
-                if upstream_ref.key not in asset.deps.keys():
-                    raise ValueError(f"Unable to resolve upstream asset '{upstream_ref.key}' of asset '{asset.name}'")
-
+                if upstream_ref.key not in asset.deps:
+                    raise ValueError(f"Missing dep key '{upstream_ref.key}' in asset '{asset.name}'")
                 upstream_asset_id = asset.deps[upstream_ref.key]
 
-                # Check if the dependency exists in the asset map
-                if upstream_asset_id not in self._assets:
+                if upstream_asset_id not in self._nodes:
+                    if not self._allow_missing_dependencies:
+                        raise ValueError(f"Upstream asset '{upstream_asset_id}' not found for '{asset.name}'")
+                    continue
+
+                upstream_node = self._nodes[upstream_asset_id]
+                if not asset.is_partitioned and upstream_node.asset.is_partitioned:
                     raise ValueError(
-                        f"Upstream asset '{upstream_asset_id}' of asset '{asset.name}' not found in asset graph"
+                        f"Non-partitioned asset '{asset.name}' cannot depend on "
+                        f"partitioned asset '{upstream_node.asset.name}'"
                     )
 
-                upstream_asset = self._assets[upstream_asset_id]
-                if not asset.is_partitioned and upstream_asset.is_partitioned:
-                    raise ValueError(
-                        "Invalid asset graph: a non-partitioned asset cannot have a partitioned upstream asset. "
-                        f"Asset '{asset.name}' is not partitioned, but its upstream asset '{upstream_asset.name}' is."
-                    )
+                node.upstream.add(upstream_node)
+                upstream_node.downstream.add(node)
 
-                # Get the corresponding asset and add to the graph
-                self._graph.add_edge(upstream_asset, asset)
+        self._detect_cycles()
 
-        # Detect cycles
-        try:
-            nx.find_cycle(self._graph, orientation="original")
-            raise ValueError("Circular dependency detected in the asset dependency graph")
-        except nx.NetworkXNoCycle:
-            pass
+    def _detect_cycles(self) -> None:
+        visited = set()
+        path = set()
 
-        assert nx.is_directed_acyclic_graph(self._graph)
+        def visit(node: Node) -> None:
+            if node in path:
+                raise ValueError("Circular dependency detected in the asset graph")
+            if node in visited:
+                return
+            path.add(node)
+            for upstream in node.upstream:
+                visit(upstream)
+            path.remove(node)
+            visited.add(node)
+
+        for node in self._nodes.values():
+            visit(node)
 
     def _clear_cache(self) -> None:
+        DAG.assets.fget.cache_clear()  # type: ignore
         DAG.assets_by_sources.fget.cache_clear()  # type: ignore
         DAG.assets_by_execution_strategy.fget.cache_clear()  # type: ignore
         DAG.non_partitioned_subdag.fget.cache_clear()  # type: ignore
@@ -108,93 +117,131 @@ class DAG:
         self.split.cache_clear()
 
     @property
+    @functools.cache
     def assets(self) -> dict[str, Asset]:
-        return self._assets
+        return {node.asset.id: node.asset for node in self._nodes.values()}
 
     @property
     @functools.cache
     def assets_by_sources(self) -> dict[str | None, list[Asset]]:
-        assets_by_source: dict[str | None, list[Asset]] = {}
-        for asset in self._assets.values():
-            source_id = asset.source.name if asset.source else None
-            if source_id not in assets_by_source:
-                assets_by_source[source_id] = []
-            assets_by_source[source_id].append(asset)
-        return assets_by_source
+        result: dict[str | None, list[Asset]] = {}
+        for asset in self.assets.values():
+            key = asset.source.name if asset.source else None
+            result.setdefault(key, []).append(asset)
+        return result
 
     @property
     @functools.cache
     def assets_by_execution_strategy(self) -> dict[ExecutionStategy, list[Asset]]:
-        assets_by_execution_strategy: dict[ExecutionStategy, list[Asset]] = {
+        result = {
             ExecutionStategy.NOT_PARTITIONED: [],
             ExecutionStategy.PARTITIONED_MULTI_RUNS: [],
             ExecutionStategy.PARTITIONED_SINGLE_RUN: [],
         }
-        for asset in self._assets.values():
+        for asset in self.assets.values():
             if not asset.partitioning:
-                assets_by_execution_strategy[ExecutionStategy.NOT_PARTITIONED].append(asset)
+                result[ExecutionStategy.NOT_PARTITIONED].append(asset)
             elif asset.partitioning.allow_window:
-                assets_by_execution_strategy[ExecutionStategy.PARTITIONED_SINGLE_RUN].append(asset)
+                result[ExecutionStategy.PARTITIONED_SINGLE_RUN].append(asset)
             else:
-                assets_by_execution_strategy[ExecutionStategy.PARTITIONED_MULTI_RUNS].append(asset)
-        return assets_by_execution_strategy
+                result[ExecutionStategy.PARTITIONED_MULTI_RUNS].append(asset)
+        return result
 
     @property
     @functools.cache
     def non_partitioned_subdag(self) -> "DAG":
-        non_partitioned_assets = [asset for asset in self._assets.values() if not asset.is_partitioned]
-        subgraph = nx.subgraph(self._graph, non_partitioned_assets)
-
-        dag = DAG()
-        dag._graph = subgraph
-        dag._assets = {asset.id: asset for asset in non_partitioned_assets}
-        assert dag.execution_strategy == ExecutionStategy.NOT_PARTITIONED
-        return dag
+        assets = [a for a in self.assets.values() if not a.is_partitioned]
+        return DAG(assets)
 
     @property
     @functools.cache
     def partitioned_subdag(self) -> "DAG":
-        partitioned_assets = [asset for asset in self._assets.values() if asset.is_partitioned]
-        subgraph = nx.subgraph(self._graph, partitioned_assets)
-
-        dag = DAG()
-        dag._graph = subgraph
-        dag._assets = {asset.id: asset for asset in partitioned_assets}
-        assert (
-            dag.execution_strategy == ExecutionStategy.PARTITIONED_MULTI_RUNS
-            or dag.execution_strategy == ExecutionStategy.PARTITIONED_SINGLE_RUN
-        )
-        return dag
+        assets = [a for a in self.assets.values() if a.is_partitioned]
+        return DAG(assets, allow_missing_dependencies=True)
 
     @property
     @functools.cache
     def execution_strategy(self) -> ExecutionStategy:
-        assets_by_execution_strategy = self.assets_by_execution_strategy
-        if len(assets_by_execution_strategy[ExecutionStategy.PARTITIONED_SINGLE_RUN]) == len(self._assets):
+        strat = self.assets_by_execution_strategy
+        if len(strat[ExecutionStategy.PARTITIONED_SINGLE_RUN]) == len(self.assets):
             return ExecutionStategy.PARTITIONED_SINGLE_RUN
-        elif len(assets_by_execution_strategy[ExecutionStategy.PARTITIONED_MULTI_RUNS]) == len(self._assets):
+        elif len(strat[ExecutionStategy.PARTITIONED_MULTI_RUNS]) == len(self.assets):
             return ExecutionStategy.PARTITIONED_MULTI_RUNS
-        elif len(assets_by_execution_strategy[ExecutionStategy.NOT_PARTITIONED]) == len(self._assets):
+        elif len(strat[ExecutionStategy.NOT_PARTITIONED]) == len(self.assets):
             return ExecutionStategy.NOT_PARTITIONED
         elif (
-            len(assets_by_execution_strategy[ExecutionStategy.PARTITIONED_SINGLE_RUN])
-            + len(assets_by_execution_strategy[ExecutionStategy.PARTITIONED_MULTI_RUNS])
-        ) == len(self._assets):
+            len(strat[ExecutionStategy.PARTITIONED_SINGLE_RUN]) + len(strat[ExecutionStategy.PARTITIONED_MULTI_RUNS])
+        ) == len(self.assets):
             return ExecutionStategy.PARTITIONED_MULTI_RUNS
         return ExecutionStategy.MIXED
 
     @property
     @functools.cache
     def supports_partitioning(self) -> bool:
-        return all(asset.partitioning for asset in self._assets.values())
+        return all(asset.partitioning for asset in self.assets.values())
 
     @property
     @functools.cache
     def supports_partitioning_window(self) -> bool:
-        return all(asset.partitioning and asset.partitioning.allow_window for asset in self._assets.values())
+        return all(asset.partitioning and asset.partitioning.allow_window for asset in self.assets.values())
 
     @functools.cache
     def split(self) -> tuple["DAG", "DAG"]:
-        non_partitioned_subdag = self.non_partitioned_subdag
-        partitioned_subdag = self.partitioned_subdag
-        return non_partitioned_subdag, partitioned_subdag
+        return self.non_partitioned_subdag, self.partitioned_subdag
+
+
+if __name__ == "__main__":
+    import datetime as dt
+    from pprint import pp
+
+    import interloper as itlp
+
+    @itlp.source
+    def source() -> tuple[itlp.Asset, ...]:
+        @itlp.asset()
+        def root() -> str:
+            print("[NOT PARTITIONED] root")
+            return "root"
+
+        @itlp.asset()
+        def left_1(
+            root: str = itlp.UpstreamAsset("root"),
+        ) -> str:
+            print("[NOT PARTITIONED] left_1")
+            return "left_1"
+
+        @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=True))
+        def left_2(
+            date: tuple[dt.date, dt.date] = itlp.DateWindow(),
+            left_1: str = itlp.UpstreamAsset("left_1"),
+        ) -> str:
+            print(f"[{date[0].isoformat()}] left_2")
+            return "left_2"
+
+        @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=True))
+        def right_1(
+            date: tuple[dt.date, dt.date] = itlp.DateWindow(),
+            root: str = itlp.UpstreamAsset("root"),
+        ) -> str:
+            print(f"[{date[0].isoformat()}] right_1")
+            return "right_1"
+
+        @itlp.asset(partitioning=itlp.TimePartitionConfig("date", allow_window=True))
+        def right_2(
+            date: tuple[dt.date, dt.date] = itlp.DateWindow(),
+            right_1: str = itlp.UpstreamAsset("right_1"),
+        ) -> str:
+            print(f"[{date[0].isoformat()}] right_2")
+            import random
+
+            if random.random() < 0.5:
+                raise Exception("Failed")
+
+            return "right_2"
+
+        return (root, left_1, left_2, right_1, right_2)
+
+    dag = DAG(source)
+    pp(dag.assets)
+    pp(dag.non_partitioned_subdag.assets)
+    pp(dag.partitioned_subdag.assets)

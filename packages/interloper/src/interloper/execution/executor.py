@@ -90,7 +90,7 @@ class Run:
 
         return all(
             self._asset_states[upstream_asset].status == ExecutionStatus.COMPLETED
-            for upstream_asset in self._dag._graph.predecessors(asset)
+            for upstream_asset in self._dag.predecessors(asset)
         )
 
     def _is_asset_done(self, asset: Asset) -> bool:
@@ -102,7 +102,7 @@ class Run:
 
     def _schedule_assets(self) -> None:
         with self._lock:
-            for asset in self._dag._assets.values():
+            for asset in self._dag.assets.values():
                 if self._is_asset_ready(asset):
                     self._submit_asset(asset)
 
@@ -121,7 +121,7 @@ class Run:
                     self._asset_states[asset].error = e
 
                 # Block all downstream assets
-                for desc in self._dag._graph.successors(asset):
+                for desc in self._dag.successors(asset):
                     with self._lock:
                         self._asset_states[desc].status = ExecutionStatus.BLOCKED
 
@@ -242,15 +242,15 @@ class MultiThreadExecutor(Executor):
         with self._lock:
             self._futures[run] = self._pool.submit(task)
 
-    def _cancel_runs(self) -> None:
-        for future in self._futures.values():
-            future.cancel()
-
     def wait_for_runs(self) -> None:
         wait(list(self._futures.values()))
 
     def shutdown(self) -> None:
         self._pool.shutdown(wait=True)
+
+    def _cancel_runs(self) -> None:
+        for future in self._futures.values():
+            future.cancel()
 
 
 if __name__ == "__main__":
@@ -335,7 +335,7 @@ if __name__ == "__main__":
     # run = DAGRun(dag, ExecutionContext(assets=dag.assets, partition=TimePartition(dt.date(2025, 1, 1))))
     # run.start()
 
-    # executor = SimpleExecutor(fail_fast=True)
+    # executor = SimpleExecutor()
     executor = MultiThreadExecutor(max_concurrency=1)
 
     executor.execute(
