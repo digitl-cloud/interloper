@@ -5,7 +5,7 @@ from interloper.partitioning.partition import Partition
 from interloper.partitioning.window import PartitionWindow
 
 if TYPE_CHECKING:
-    from interloper.asset import Asset
+    from interloper.asset.base import Asset
 
 
 @dataclass(frozen=True, kw_only=True)

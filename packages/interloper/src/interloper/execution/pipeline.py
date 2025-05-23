@@ -10,12 +10,12 @@ from typing import Any
 import networkx as nx
 from opentelemetry import trace
 
-from interloper.asset import Asset
+from interloper.asset.base import Asset
 from interloper.execution.context import ExecutionContext
 from interloper.execution.observable import Event, EventStatus, EventType, Observable, Observer
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.window import PartitionWindow
-from interloper.source import Source
+from interloper.source.base import Source
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)

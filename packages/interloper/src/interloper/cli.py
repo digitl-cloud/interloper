@@ -21,15 +21,11 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TaskProgressColumn, TextColumn
 
 import interloper as itlp
-from interloper.asset import Asset
-
-# from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep
+from interloper.asset.base import Asset
 from interloper.execution.pipeline import Pipeline
 from interloper.io.base import IO
-
-# from interloper.partitioning.partition import TimePartition
 from interloper.partitioning.window import TimePartitionWindow
-from interloper.source import Source
+from interloper.source.base import Source
 
 _schema = {
     "$schema": "http://json-schema.org/draft-07/schema#",

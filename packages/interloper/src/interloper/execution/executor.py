@@ -10,9 +10,9 @@ from interloper_pandas.normalizer import DataframeNormalizer
 from interloper_sql.io import SQLiteIO
 
 import interloper as itlp
-from interloper.asset import Asset
+from interloper.asset.base import Asset
+from interloper.dag.base import DAG
 from interloper.execution.context import ExecutionContext
-from interloper.execution.dag import DAG
 from interloper.execution.state import ExecutionState, ExecutionStatus
 from interloper.execution.strategy import ExecutionStategy
 from interloper.partitioning.partition import Partition

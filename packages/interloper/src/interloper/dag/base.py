@@ -1,9 +1,10 @@
 import functools
 from collections.abc import Sequence
 
-from interloper.asset import Asset
+from interloper.asset.base import Asset
 from interloper.execution.strategy import ExecutionStategy
-from interloper.source import Source
+from interloper.source.base import Source
+from interloper.source.spec import SourceSpec
 
 TAssetOrSource = Source | Asset | Sequence[Source | Asset]
 
@@ -19,8 +20,8 @@ class Node:
 
 
 # TODO: subgraphs should probably be immutable (DAGView?) since some upstream assets might not be present in the graph
-# anymore. The consequence is that subdags cannot be built again (_build_graph). Adding new assets (add_assets) to
-# will always fail because it will build the graph again and the upstream assets will then not be present.
+# after split. The consequence is that subdags might not build again (_build_graph). Adding new assets (add_assets) to
+# will then fail because it will build the graph and the upstream assets will then not be present.
 class DAG:
     _nodes: dict[str, Node]
 
@@ -189,6 +190,11 @@ class DAG:
     def split(self) -> tuple["DAG", "DAG"]:
         return self.non_partitioned_subdag, self.partitioned_subdag
 
+    @classmethod
+    def from_source_specs(cls, specs: list[SourceSpec]) -> "DAG":
+        sources = [spec.to_source() for spec in specs]
+        return cls(sources, allow_missing_dependencies=True)
+
 
 if __name__ == "__main__":
     import datetime as dt
@@ -241,7 +247,17 @@ if __name__ == "__main__":
 
         return (root, left_1, left_2, right_1, right_2)
 
-    dag = DAG(source)
+    # dag = DAG(source)
+    # pp(dag.assets)
+    # pp(dag.non_partitioned_subdag.assets)
+    # pp(dag.partitioned_subdag.assets)
+
+    dag = DAG.from_source_specs(
+        [
+            SourceSpec(
+                name="adup",
+                path="interloper_assets:awin",
+            )
+        ]
+    )
     pp(dag.assets)
-    pp(dag.non_partitioned_subdag.assets)
-    pp(dag.partitioned_subdag.assets)

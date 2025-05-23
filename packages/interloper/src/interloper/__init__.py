@@ -1,4 +1,5 @@
-from interloper.asset import Asset, asset
+from interloper.asset.base import Asset
+from interloper.asset.decorator import asset
 from interloper.execution.context import AssetExecutionContext, ExecutionContext
 from interloper.execution.observable import Event, EventStatus, EventType
 from interloper.execution.pipeline import Pipeline
@@ -23,5 +24,6 @@ from interloper.rest.auth import (
 from interloper.rest.client import RESTClient
 from interloper.rest.paginator import PageNumberPaginator
 from interloper.schema import AssetSchema
-from interloper.source import Source, source
+from interloper.source.base import Source
+from interloper.source.decorator import source
 from interloper.utils.logging import basic_logging

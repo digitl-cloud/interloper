@@ -5,7 +5,7 @@ from typing import Any
 
 from opentelemetry import trace
 
-from interloper.asset import Asset
+from interloper.asset.base import Asset
 from interloper.io.base import IO, IOContext
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.window import PartitionWindow

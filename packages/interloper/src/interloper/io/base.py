@@ -9,7 +9,7 @@ from interloper.reconciler import Reconciler
 from interloper.utils.typing import match_type, safe_isinstance
 
 if TYPE_CHECKING:
-    from interloper.asset import Asset
+    from interloper.asset.base import Asset
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
