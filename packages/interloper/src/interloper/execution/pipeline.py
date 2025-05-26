@@ -2,7 +2,7 @@ import datetime as dt
 import logging
 import threading
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_EXCEPTION, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -10,12 +10,12 @@ from typing import Any
 import networkx as nx
 from opentelemetry import trace
 
-from interloper.asset import Asset
+from interloper.asset.base import Asset
 from interloper.execution.context import ExecutionContext
 from interloper.execution.observable import Event, EventStatus, EventType, Observable, Observer
 from interloper.partitioning.partition import Partition
 from interloper.partitioning.window import PartitionWindow
-from interloper.source import Source
+from interloper.source.base import Source
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -53,12 +53,14 @@ class AssetExecutionState:
 class Pipeline(Observer, Observable):
     _assets: dict[str, Asset]
     _graph: nx.DiGraph
+    _execution_state: dict[Asset, AssetExecutionState]
 
     def __init__(
         self,
         sources_or_assets: TAssetOrSource,
         on_event: Callable[["Pipeline", Event], None] | None = None,
         async_events: bool = False,
+        fail_fast: bool = False,
     ):
         Observer.__init__(self, is_async=async_events)
         Observable.__init__(self, observers=[self])
@@ -68,11 +70,9 @@ class Pipeline(Observer, Observable):
         self._add_assets(sources_or_assets)
         self._build_execution_graph()
         self._async_events = async_events
-
+        self._fail_fast = fail_fast
         self._execution_state_lock = threading.Lock()
-        self._execution_state: dict[Asset, AssetExecutionState] = {
-            asset: AssetExecutionState(asset) for asset in self._assets.values()
-        }
+        self._execution_state = {asset: AssetExecutionState(asset) for asset in self._assets.values()}
 
     @property
     def assets(self) -> dict[str, Asset]:
@@ -110,24 +110,34 @@ class Pipeline(Observer, Observable):
         if partition:
             attributes["partition"] = str(partition)
 
+        errors = []
         with tracer.start_as_current_span("interloper.pipeline.materialize", attributes=attributes):
             for generation in nx.topological_generations(self._graph):
                 with ThreadPoolExecutor() as executor:
-                    futures = []
+                    futures: list[Future] = []
                     for asset in generation:
-                        context = ExecutionContext(
-                            assets=self._assets,
-                            executed_asset=asset,
-                            partition=partition,
-                        )
+                        context = ExecutionContext(assets=self._assets, partition=partition)
                         futures.append(executor.submit(asset.materialize, context))
 
-                    # Wait for all assets in this generation to complete
-                    wait(futures)
+                    if self._fail_fast:
+                        done, not_done = wait(futures, return_when=FIRST_EXCEPTION)
+                        for future in not_done:
+                            future.cancel()
+                    else:
+                        wait(futures)
 
-                    # Re-raise any exceptions that occurred
                     for future in futures:
-                        future.result()
+                        try:
+                            future.result()
+                        except Exception as e:
+                            errors.append(e)
+
+                    if self._fail_fast and errors:
+                        raise Exception(f"Multiple errors occurred during materialization: {errors}")
+
+            # Not fail-fast
+            if errors:
+                raise Exception(f"Multiple errors occurred during materialization: {errors}")
 
     @Observable.event(EventType.PIPELINE_BACKFILL)
     def backfill(
@@ -156,11 +166,7 @@ class Pipeline(Observer, Observable):
             ):
                 for generation in nx.topological_generations(self._graph):
                     for asset in generation:
-                        context = ExecutionContext(
-                            assets=self._assets,
-                            executed_asset=asset,
-                            partition=partitions,
-                        )
+                        context = ExecutionContext(assets=self._assets, partition=partitions)
                         asset.materialize(context)
 
             # MULTI RUN EXECUTION:
@@ -171,28 +177,42 @@ class Pipeline(Observer, Observable):
                     non_partitioned_assets = [asset for asset in self._assets.values() if not asset.partitioning]
                     non_partitioned_subgraph = nx.subgraph(self._graph, non_partitioned_assets)
                     for generation in nx.topological_generations(non_partitioned_subgraph):
-                        futures = []
+                        futures: list[Future] = []
                         for asset in generation:
-                            context = ExecutionContext(assets=self._assets, executed_asset=asset)
+                            context = ExecutionContext(assets=self._assets)
                             futures.append(executor.submit(asset.materialize, context))
-                        wait(futures)
-                        for future in futures:
-                            future.result()
+
+                        if self._fail_fast:
+                            done, not_done = wait(futures, return_when=FIRST_EXCEPTION)
+                            for future in not_done:
+                                future.cancel()
+                            for future in done:
+                                future.result()
+                        else:
+                            wait(futures)
+                            for future in futures:
+                                future.result()
 
                     # Partitioned assets
                     partitioned_assets = [asset for asset in self._assets.values() if asset.partitioning]
                     partitioned_subgraph = nx.subgraph(self._graph, partitioned_assets)
                     for partition in partitions:
                         for generation in nx.topological_generations(partitioned_subgraph):
-                            futures = []
+                            futures: list[Future] = []
                             for asset in generation:
-                                context = ExecutionContext(
-                                    assets=self._assets, executed_asset=asset, partition=partition
-                                )
+                                context = ExecutionContext(assets=self._assets, partition=partition)
                                 futures.append(executor.submit(asset.materialize, context))
-                            wait(futures)
-                            for future in futures:
-                                future.result()
+
+                            if self._fail_fast:
+                                done, not_done = wait(futures, return_when=FIRST_EXCEPTION)
+                                for future in done:
+                                    future.result()
+                                for future in not_done:
+                                    future.cancel()
+                            else:
+                                wait(futures)
+                                for future in futures:
+                                    future.result()
 
     def on_event(self, event: Event) -> None:
         if isinstance(event.observable, Asset):
@@ -292,7 +312,6 @@ class Pipeline(Observer, Observable):
                     )
 
                 # Get the corresponding asset and add to the graph
-                upstream_asset = self._assets[upstream_asset_id]
                 self._graph.add_edge(upstream_asset, asset)
 
         # Detect cycles

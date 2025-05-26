@@ -5,10 +5,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Generic, TypeVar
 
 from interloper import errors
-from interloper.execution.context import ExecutionContext
 from interloper.io.base import IO, IOContext
+from interloper.execution.context import AssetExecutionContext
 from interloper.partitioning.partition import TimePartition
-from interloper.partitioning.window import PartitionWindow
+from interloper.partitioning.window import TimePartitionWindow
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -25,7 +25,7 @@ class AssetParam(ABC, Generic[T]):
 
 class ContextualAssetParam(AssetParam[T], Generic[T]):
     @abstractmethod
-    def resolve(self, context: ExecutionContext) -> T: ...
+    def resolve(self, context: AssetExecutionContext) -> T: ...
 
 
 class Env(AssetParam[str]):
@@ -60,9 +60,18 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
         self.key = key
         self.type = type
 
-    def resolve(self, context: ExecutionContext) -> T:
-        upstream_id = context.executed_asset.deps[self.key]
-        upstream_asset = context.assets[upstream_id]
+    def resolve(self, context: AssetExecutionContext) -> T:
+        if self.key not in context.executed_asset.deps:
+            raise errors.UpstreamAssetError(
+                f"Upstream asset param with key {self.key} is not a dependency of asset {context.executed_asset.id}"
+            )
+        upstream_asset_id = context.executed_asset.deps[self.key]
+
+        if upstream_asset_id not in context.assets:
+            raise errors.UpstreamAssetError(
+                f"Upstream asset {upstream_asset_id} is not found among the assets of the execution context"
+            )
+        upstream_asset = context.assets[upstream_asset_id]
 
         # The upstream asset must have at least one IO configured to be loaded
         if not upstream_asset.has_io:
@@ -121,16 +130,16 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
         # If the upstream asset has a type, check that the data is of the correct type
         if self.type is not None and not isinstance(data, self.type):
             raise TypeError(
-                f"Expected data of type {self.type.__name__} from upstream asset {upstream_id}, "
+                f"Expected data of type {self.type.__name__} from upstream asset {upstream_asset_id}, "
                 f"but got {type(data).__name__}"
             )
 
-        logger.debug(f"Upstream asset {upstream_id} resolved (Type check passed ✔)")
-        return data
+        logger.debug(f"Upstream asset {upstream_asset_id} resolved (Type check passed ✔)")
+        return data  # type: ignore
 
 
 class Date(ContextualAssetParam[dt.date]):
-    def resolve(self, context: ExecutionContext) -> dt.date:
+    def resolve(self, context: AssetExecutionContext) -> dt.date:
         if not context.executed_asset.is_partitioned:
             raise ValueError("Asset param of type Date requires the executed asset to support partitioning")
 
@@ -144,15 +153,15 @@ class Date(ContextualAssetParam[dt.date]):
 
 
 class DateWindow(ContextualAssetParam[tuple[dt.date, dt.date]]):
-    def resolve(self, context: ExecutionContext) -> tuple[dt.date, dt.date]:
+    def resolve(self, context: AssetExecutionContext) -> tuple[dt.date, dt.date]:
         if not context.executed_asset.is_partitioned:
             raise ValueError("Asset param of type DateWindow requires the executed asset to support partitioning")
 
-        if not context.partition or not isinstance(context.partition, TimePartition | PartitionWindow):
+        if not context.partition or not isinstance(context.partition, TimePartition | TimePartitionWindow):
             raise ValueError(
                 "Asset param of type DateWindow requires the context to have a TimePartition or TimePartitionWindow"
             )
 
-        if isinstance(context.partition, PartitionWindow):
+        if isinstance(context.partition, TimePartitionWindow):
             return context.partition.start, context.partition.end
         return context.partition.value, context.partition.value

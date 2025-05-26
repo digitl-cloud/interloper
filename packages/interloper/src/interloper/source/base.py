@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from copy import copy
 from functools import partial
 from inspect import signature
-from typing import Any, overload
+from typing import Any
 
 from typing_extensions import Self
 
 from interloper import errors
-from interloper.asset import Asset
+from interloper.asset.base import Asset
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO
 from interloper.normalizer import Normalizer
@@ -220,86 +220,3 @@ class Source(ABC):
             final_params[param.name] = param.default
 
         return final_params
-
-
-class SourceDecorator:
-    # Decorator used without parameters
-    @overload
-    def __new__(cls, func: Callable) -> Source: ...
-
-    # Decorator used with parameters
-    @overload
-    def __new__(
-        cls,
-        *,
-        name: str | None = None,
-        dataset: str | None = None,
-        materializable: bool = True,
-        auto_asset_deps: bool = True,
-        normalizer: Normalizer | None = None,
-        materialization_strategy: MaterializationStrategy = MaterializationStrategy.FLEXIBLE,
-    ) -> Self: ...
-
-    def __new__(cls, func: Callable | None = None, *args: Any, **kwargs: Any):
-        instance = super().__new__(cls)
-
-        # Decorator used without parameters
-        if func:
-            assert callable(func)
-            instance.__init__(func, **kwargs)
-            return instance(func)
-
-        # Decorator used with parameters
-        else:
-            return instance
-
-    def __init__(
-        self,
-        func: Callable | None = None,
-        name: str | None = None,
-        dataset: str | None = None,
-        auto_asset_deps: bool = True,
-        normalizer: Normalizer | None = None,
-        materializable: bool = True,
-        materialization_strategy: MaterializationStrategy = MaterializationStrategy.FLEXIBLE,
-    ):
-        self.name = name
-        self.dataset = dataset
-        self.auto_asset_deps = auto_asset_deps
-        self.normalizer = normalizer
-        self.materializable = materializable
-        self.materialization_strategy = materialization_strategy
-
-    def __call__(self, func: Callable) -> Source:
-        """
-        Dynamically creates an instance of a concrete Source class that implements the assets method
-        using the decorated function.
-        """
-
-        class ConcreteSource(Source):
-            # Define the dynamically provided asset_definitions method
-            def asset_definitions(self, *args: Any, **kwargs: Any) -> Any:
-                return func(*args, **kwargs)
-
-            def __repr__(self) -> str:
-                return f"<Source {self.name} at {hex(id(self))}>"
-
-        # Override `asset_definitions` signature to dynamically match the signature of the provided `func`
-        original_sig, wrapper_sig = signature(func), signature(ConcreteSource.asset_definitions)
-        parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
-        ConcreteSource.asset_definitions.__signature__ = wrapper_sig.replace(
-            parameters=parameters,
-            return_annotation=original_sig.return_annotation,
-        )
-
-        return ConcreteSource(
-            name=self.name or func.__name__,
-            dataset=self.dataset,
-            auto_asset_deps=self.auto_asset_deps,
-            normalizer=self.normalizer,
-            materializable=self.materializable,
-            materialization_strategy=self.materialization_strategy,
-        )
-
-
-source = SourceDecorator

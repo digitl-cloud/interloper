@@ -21,15 +21,11 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TaskProgressColumn, TextColumn
 
 import interloper as itlp
-from interloper.asset import Asset
-
-# from interloper.execution.observable import Event, ExecutionStatus, ExecutionStep
+from interloper.asset.base import Asset
 from interloper.execution.pipeline import Pipeline
 from interloper.io.base import IO
-
-# from interloper.partitioning.partition import TimePartition
 from interloper.partitioning.window import TimePartitionWindow
-from interloper.source import Source
+from interloper.source.base import Source
 
 _schema = {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -195,7 +191,7 @@ def _load_and_validate_config(file: str) -> dict:
 def my_source_1() -> tuple[itlp.Asset, ...]:
     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
     def my_asset_A() -> str:
-        sleep(1.6)
+        sleep(10.6)
         return "A"
 
     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
@@ -216,6 +212,7 @@ def my_source_2() -> tuple[itlp.Asset, ...]:
     @itlp.asset(partitioning=itlp.TimePartitionConfig("date"))
     def my_asset_D() -> str:
         sleep(1.5)
+        raise ValueError("Failed")
         return "D"
 
     return (my_asset_C, my_asset_D)
@@ -224,7 +221,7 @@ def my_source_2() -> tuple[itlp.Asset, ...]:
 io: dict[str, IO] = {"file": itlp.FileIO(base_dir="data")}
 my_source_1.io = io
 my_source_2.io = io
-pipeline = Pipeline([my_source_1, my_source_2], async_events=True)
+pipeline = Pipeline([my_source_1, my_source_2], async_events=True, fail_fast=True)
 ########################
 ########################
 
@@ -236,7 +233,7 @@ def materialize(
     # config = _load_and_validate_config(file)
     # pipeline = _load_pipeline_from_config(config)
     # time_partition = TimePartition(dt.date.fromisoformat(partition)) if partition else None
-    time_partitions = TimePartitionWindow(start=dt.date(2025, 1, 1), end=dt.date(2025, 1, 10))
+    time_partitions = TimePartitionWindow(start=dt.date(2025, 1, 1), end=dt.date(2025, 1, 3))
 
     progress = Progress(
         "{task.description}",
@@ -344,7 +341,7 @@ def materialize(
         #     #     progress.update(step_task, visible=False)
 
     # Display failed assets
-    failed_assets = pipeline.get_failed_assets()
+    failed_assets = pipeline.failed_assets
     if failed_assets:
         console.print("\n[red bold]Failed Assets:[/red bold]")
         for asset, state in failed_assets:

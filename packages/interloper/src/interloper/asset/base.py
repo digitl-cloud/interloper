@@ -1,19 +1,18 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, wait
 from copy import copy
 from functools import partial
 from inspect import Parameter, signature
-from typing import TYPE_CHECKING, Any, TypeVar, overload
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from opentelemetry import trace
 from opentelemetry.util.types import Attributes as SpanAttributes
 from typing_extensions import Self
 
 from interloper import errors
-from interloper.execution.context import ExecutionContext
+from interloper.execution.context import AssetExecutionContext, ExecutionContext
 from interloper.execution.observable import EventType, Observable
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext
@@ -23,7 +22,7 @@ from interloper.partitioning.config import PartitionConfig
 from interloper.schema import AssetSchema
 
 if TYPE_CHECKING:
-    from interloper.source import Source
+    from interloper.source.base import Source
 
 
 logger = logging.getLogger(__name__)
@@ -264,6 +263,7 @@ class Asset(ABC, Observable):
 
         self.data = partial(self.data, **final_params)
 
+
     #############
     # Private
     #############
@@ -406,6 +406,11 @@ class Asset(ABC, Observable):
                     )
 
                 try:
+                    context = AssetExecutionContext(
+                        executed_asset=self,
+                        assets=context.assets,
+                        partition=context.partition,
+                    )
                     final_params[param.name] = param.default.resolve(context)
                 except Exception as e:
                     raise errors.AssetParamResolutionError(
@@ -446,90 +451,3 @@ class Asset(ABC, Observable):
             attributes["partition"] = str(context.partition)
         return attributes
 
-
-class AssetDecorator:
-    # Decorator used without parameters
-    @overload
-    def __new__(cls, func: Callable) -> Asset: ...
-
-    # Decorator used with parameters
-    @overload
-    def __new__(
-        cls,
-        *,
-        name: str | None = None,
-        dataset: str | None = None,
-        schema: type[AssetSchema] | None = None,
-        normalizer: Normalizer | None = None,
-        partitioning: PartitionConfig | None = None,
-        materializable: bool | None = None,
-        materialization_strategy: MaterializationStrategy | None = None,
-    ) -> Self: ...
-
-    def __new__(cls, func: Callable | None = None, *args: Any, **kwargs: Any):
-        instance = super().__new__(cls)
-
-        # Decorator used without parameters
-        if func:
-            assert callable(func)
-            instance.__init__(func, **kwargs)
-            return instance(func)
-
-        # Decorator used with parameters
-        else:
-            return instance
-
-    def __init__(
-        self,
-        func: Callable | None = None,
-        name: str | None = None,
-        dataset: str | None = None,
-        schema: type[AssetSchema] | None = None,
-        normalizer: Normalizer | None = None,
-        partitioning: PartitionConfig | None = None,
-        materializable: bool | None = None,
-        materialization_strategy: MaterializationStrategy | None = None,
-    ):
-        self.name = name
-        self.dataset = dataset
-        self.schema = schema
-        self.normalizer = normalizer
-        self.partitioning = partitioning
-        self.materialization_strategy = materialization_strategy
-        self.materializable = materializable
-
-    def __call__(self, func: Callable) -> Asset:
-        """
-        Dynamically creates an instance of a concrete Asset class that implements the data method
-        using the decorated function.
-        """
-
-        class ConcreteAsset(Asset):
-            # Define the dynamically provided data method
-            def data(self, *args: Any, **kwargs: Any) -> Any:
-                return func(*args, **kwargs)
-
-            def __repr__(self) -> str:
-                source_str = f" from Source {self._source.name}" if self._source else ""
-                return f"<Asset {self.name}{source_str} at {hex(id(self))}>"
-
-        # Override `data` signature to dynamically match the signature of the provided `func`
-        original_sig, wrapper_sig = signature(func), signature(ConcreteAsset.data)
-        parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
-        ConcreteAsset.data.__signature__ = wrapper_sig.replace(
-            parameters=parameters,
-            return_annotation=original_sig.return_annotation,
-        )
-
-        return ConcreteAsset(
-            name=self.name or func.__name__,
-            dataset=self.dataset,
-            schema=self.schema,
-            normalizer=self.normalizer,
-            partitioning=self.partitioning,
-            materializable=self.materializable,
-            materialization_strategy=self.materialization_strategy,
-        )
-
-
-asset = AssetDecorator
