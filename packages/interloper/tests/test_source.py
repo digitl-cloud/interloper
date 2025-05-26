@@ -1,9 +1,10 @@
 from collections.abc import Sequence
 from inspect import signature
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
-from unittest.mock import Mock
+from fixtures import io
 
 import interloper as itlp
 from interloper.io.base import IO, IOContext
@@ -142,6 +143,13 @@ class TestSourceProperties:
         assert len(source.assets) == 1
         assert source.asset.name == "asset"
 
+    def test_io(self, source: itlp.Source, io: io):
+        source.io = io
+        assert source.io == io
+
+        source.io = {"foo": io}
+        assert source.io == {"foo": io}
+
 
 class TestGetItem:
     def test_get_item(self, source: itlp.Source):
@@ -195,57 +203,6 @@ class TestSourceCall:
         assert len(copy.assets) == 1
         assert copy.asset.name == "asset"
         assert signature(copy.asset_definitions).parameters["key"].default == "new_key"
-
-
-class TestIOWrite:
-    @staticmethod
-    def io_mocker():
-        class MockIO(IO):
-            def __init__(self) -> None:
-                pass
-
-            write = Mock()
-
-            def read(self, context: IOContext) -> Any:
-                pass
-
-        return MockIO
-
-    @itlp.source
-    def source() -> Sequence[itlp.Asset]:
-        @itlp.asset
-        def asset() -> str:
-            return "mock"
-
-        return (asset,)
-
-    def test_io_dict_write(self):
-        MockIOFoo = self.io_mocker()
-        MockIOBar = self.io_mocker()
-
-        self.source.io = {
-            "foo": MockIOFoo(),
-            "bar": MockIOBar(),
-        }
-
-        itlp.Pipeline(self.source.asset).materialize()
-        MockIOFoo.write.assert_called_once_with(
-            IOContext(asset=self.source.asset, partition=None),
-            "mock",
-        )
-        MockIOBar.write.assert_called_once_with(
-            IOContext(asset=self.source.asset, partition=None),
-            "mock",
-        )
-
-    def test_single_io_write(self):
-        MockIO = self.io_mocker()
-        self.source.io = MockIO()
-        itlp.Pipeline(self.source.asset).materialize()
-        MockIO.write.assert_called_once_with(
-            IOContext(asset=self.source.asset, partition=None),
-            "mock",
-        )
 
 
 class TestSourceBind:
