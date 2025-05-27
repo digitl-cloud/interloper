@@ -3,6 +3,7 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
+from fixtures import io
 
 import interloper as itlp
 
@@ -35,18 +36,6 @@ def normalizer() -> itlp.Normalizer:
             return itlp.AssetSchema.from_dict({"whatever": str})
 
     return Normalizer()
-
-
-@pytest.fixture
-def io() -> itlp.IO:
-    class IO(itlp.IO):
-        def write(self, context: itlp.IOContext, data: Any) -> None:
-            pass
-
-        def read(self, context: itlp.IOContext) -> Any:
-            return "data"
-
-    return IO()
 
 
 @pytest.fixture
@@ -126,13 +115,19 @@ class TestAssetProperties:
     def test_dataset_from_source(self, source: itlp.Source):
         assert source.asset.dataset == "source"
 
-    def test_io(self, asset: itlp.Asset):
-        asset.io = {"what": "ever"}
-        assert asset.io == {"what": "ever"}
+    def test_io(self, asset: itlp.Asset, io: io):
+        asset.io = io
+        assert asset.io == io
 
-    def test_io_from_source(self, source: itlp.Source):
-        source.io = {"what": "ever"}
-        assert source.asset.io == {"what": "ever"}
+        asset.io = {"foo": io}
+        assert asset.io == {"foo": io}
+
+    def test_io_from_source(self, source: itlp.Source, io: io):
+        source.io = io
+        assert source.asset.io == io
+
+        source.io = {"foo": io}
+        assert source.asset.io == {"foo": io}
 
     def test_default_io_key(self, asset: itlp.Asset):
         asset.default_io_key = "whatever"

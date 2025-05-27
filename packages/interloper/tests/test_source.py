@@ -1,9 +1,13 @@
+from collections.abc import Sequence
 from inspect import signature
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
+from fixtures import io
 
 import interloper as itlp
+from interloper.io.base import IO, IOContext
 
 
 @pytest.fixture
@@ -138,6 +142,13 @@ class TestSourceProperties:
     def test_assets(self, source: itlp.Source):
         assert len(source.assets) == 1
         assert source.asset.name == "asset"
+
+    def test_io(self, source: itlp.Source, io: io):
+        source.io = io
+        assert source.io == io
+
+        source.io = {"foo": io}
+        assert source.io == {"foo": io}
 
 
 class TestGetItem:
