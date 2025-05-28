@@ -11,7 +11,7 @@ def work() -> None:
     from random import random, uniform
 
     sleep(uniform(0.0, 1.0))
-    if random() < 0.2:
+    if random() < 0.1:
         raise Exception("Ooops")
 
 
@@ -80,3 +80,6 @@ def source() -> tuple[itlp.Asset, ...]:
 
 
 dag = itlp.DAG(source)
+
+# Run with:
+# uv run interloper run examples/cli/script.py --start-date 2025-01-01 --end-date 2025-01-31

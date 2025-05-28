@@ -71,6 +71,15 @@ def run(
     _visualize(execution)
 
 
+def load(
+    config: str,
+    date: dt.date | None = None,
+    start_date: dt.date | None = None,
+    end_date: dt.date | None = None,
+) -> None:
+    pass
+
+
 def main() -> None:
     logging.disable()
 
@@ -78,15 +87,24 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Run command
-    run_parser = subparsers.add_parser("run", help="Run DAG materialization")
-    run_parser.add_argument("script", type=str, help="Python script containing DAG definition")
+    run_parser = subparsers.add_parser("run", help="Executes a script declaring a DAG and materializes it")
+    run_parser.add_argument("script", type=str, help="Python script containing a DAG definition")
     run_parser.add_argument("--date", type=dt.date.fromisoformat, help="Single date to materialize")
     run_parser.add_argument("--start-date", type=dt.date.fromisoformat, help="Start date for date range")
     run_parser.add_argument("--end-date", type=dt.date.fromisoformat, help="End date for date range")
 
+    # Load command
+    load_parser = subparsers.add_parser("load", help="Loads a DAG from a configuration file and materializes it")
+    load_parser.add_argument("config", type=str, help="YAML configuration file containing a DAG definition")
+    load_parser.add_argument("--date", type=dt.date.fromisoformat, help="Single date to materialize")
+    load_parser.add_argument("--start-date", type=dt.date.fromisoformat, help="Start date for date range")
+    load_parser.add_argument("--end-date", type=dt.date.fromisoformat, help="End date for date range")
+
     args = parser.parse_args()
     if args.command == "run":
         run(args.script, args.date, args.start_date, args.end_date)
+    elif args.command == "load":
+        load(args.config, args.date, args.start_date, args.end_date)
 
 
 if __name__ == "__main__":
