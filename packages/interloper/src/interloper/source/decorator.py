@@ -5,6 +5,7 @@ from typing import Any, overload
 from typing_extensions import Self
 
 from interloper.execution.strategy import MaterializationStrategy
+from interloper.io.base import IO
 from interloper.normalizer import Normalizer
 from interloper.source.base import Source
 
@@ -29,6 +30,7 @@ class SourceDecorator:
         *,
         name: str | None = None,
         dataset: str | None = None,
+        io: IO | dict[str, IO] | None = None,
         materializable: bool = True,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
@@ -53,6 +55,7 @@ class SourceDecorator:
         func: Callable | None = None,
         name: str | None = None,
         dataset: str | None = None,
+        io: IO | dict[str, IO] | None = None,
         auto_asset_deps: bool = True,
         normalizer: Normalizer | None = None,
         materializable: bool = True,
@@ -60,6 +63,7 @@ class SourceDecorator:
     ):
         self.name = name
         self.dataset = dataset
+        self.io = io
         self.auto_asset_deps = auto_asset_deps
         self.normalizer = normalizer
         self.materializable = materializable
@@ -99,6 +103,7 @@ class SourceDecorator:
         source = ConcreteSource(
             name=self.name or func.__name__,
             dataset=self.dataset,
+            io=self.io,
             auto_asset_deps=self.auto_asset_deps,
             normalizer=self.normalizer,
             materializable=self.materializable,

@@ -202,7 +202,6 @@ class DAG:
 
 if __name__ == "__main__":
     import datetime as dt
-    from pprint import pp
 
     import interloper as itlp
 
@@ -264,4 +263,3 @@ if __name__ == "__main__":
     #         )
     #     ]
     # )
-    pp(dag.successors(dag.assets["source.root"]))

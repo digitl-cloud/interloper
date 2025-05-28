@@ -1,6 +1,8 @@
 from interloper.asset.base import Asset
 from interloper.asset.decorator import asset
+from interloper.dag.base import DAG
 from interloper.execution.context import AssetExecutionContext, ExecutionContext
+from interloper.execution.execution import MultiThreadExecution, SimpleExecution
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext, IOHandler
 from interloper.io.database import DatabaseClient, DatabaseIO

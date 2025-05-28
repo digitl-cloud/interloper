@@ -1,12 +1,9 @@
 import datetime as dt
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pprint import pp
-
-import pandas as pd
-from interloper_pandas.normalizer import DataframeNormalizer
-from interloper_sql.io import SQLiteIO
 
 import interloper as itlp
 from interloper.asset.base import Asset
@@ -149,23 +146,32 @@ class Run:
                 self._block_assets(self.dag.successors(asset))
 
 
-TPartition = Partition | PartitionWindow | None
+TPartition = Partition | Sequence[Partition] | PartitionWindow | None
 TExecutionState = dict[Asset, dict[TPartition, ExecutionState]]
 TExecutionStateBySource = dict[Source | None, TExecutionState]
 TRunsByPartition = dict[TPartition, ExecutionState]
 
 
 class Execution(ABC):
+    _partitions: Sequence[Partition] | PartitionWindow | None
+
     def __init__(
         self,
         dag: DAG,
-        partitions: list[Partition] | PartitionWindow | None = None,
+        partitions: TPartition = None,
         fail_fast: bool = False,
     ):
         self._dag = dag
-        self._partitions = partitions
         self._runs = set()
         self._fail_fast = fail_fast
+
+        if isinstance(partitions, Partition):
+            self._partitions = [partitions]
+        else:
+            self._partitions = partitions
+
+        if partitions is None and not self.dag.execution_strategy == ExecutionStategy.NOT_PARTITIONED:
+            raise RuntimeError("The DAG contains partitioned assets, but no partitions were provided to the executor")
 
         event_bus.subscribe(self.on_event, is_async=True)
         self._init_state()
@@ -176,11 +182,6 @@ class Execution(ABC):
     @event_bus.event(EventType.EXECUTION)
     def __call__(self) -> None:
         if self._partitions is None:
-            if not self.dag.execution_strategy == ExecutionStategy.NOT_PARTITIONED:
-                raise RuntimeError(
-                    "The DAG contains partitioned assets, but no partitions were provided to the executor"
-                )
-
             run = Run(self.dag, ExecutionContext(assets=self.dag.assets))
             self.submit_run(run)
         else:
@@ -309,7 +310,7 @@ class MultiThreadExecution(Execution):
     def __init__(
         self,
         dag: DAG,
-        partitions: list[Partition] | PartitionWindow | None = None,
+        partitions: TPartition = None,
         max_concurrency: int = 3,
         fail_fast: bool = False,
     ):
@@ -346,6 +347,9 @@ class MultiThreadExecution(Execution):
 
 
 if __name__ == "__main__":
+    import pandas as pd
+    from interloper_pandas.normalizer import DataframeNormalizer
+    from interloper_sql.io import SQLiteIO
 
     def work() -> None:
         from random import random, uniform

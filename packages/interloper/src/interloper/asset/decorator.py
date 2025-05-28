@@ -6,6 +6,7 @@ from typing_extensions import Self
 
 from interloper.asset.base import Asset
 from interloper.execution.strategy import MaterializationStrategy
+from interloper.io.base import IO
 from interloper.normalizer import Normalizer
 from interloper.partitioning.config import PartitionConfig
 from interloper.schema import AssetSchema
@@ -32,6 +33,7 @@ class AssetDecorator:
         *,
         name: str | None = None,
         dataset: str | None = None,
+        io: IO | dict[str, IO] | None = None,
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
         partitioning: PartitionConfig | None = None,
@@ -57,6 +59,7 @@ class AssetDecorator:
         func: Callable | None = None,
         name: str | None = None,
         dataset: str | None = None,
+        io: IO | dict[str, IO] | None = None,
         schema: type[AssetSchema] | None = None,
         normalizer: Normalizer | None = None,
         partitioning: PartitionConfig | None = None,
@@ -65,6 +68,7 @@ class AssetDecorator:
     ):
         self.name = name
         self.dataset = dataset
+        self.io = io
         self.schema = schema
         self.normalizer = normalizer
         self.partitioning = partitioning
@@ -107,6 +111,7 @@ class AssetDecorator:
         asset = ConcreteAsset(
             name=self.name or func.__name__,
             dataset=self.dataset,
+            io=self.io,
             schema=self.schema,
             normalizer=self.normalizer,
             partitioning=self.partitioning,
