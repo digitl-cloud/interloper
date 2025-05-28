@@ -18,7 +18,7 @@ from interloper.param import AssetParam, ContextualAssetParam
 class Source(ABC):
     name: str
     dataset: str | None
-    io: dict[str, IO]
+    io: dict[str, IO] | IO
     default_io_key: str | None
     auto_asset_deps: bool
     normalizer: Normalizer | None
@@ -59,6 +59,7 @@ class Source(ABC):
     def __call__(
         self,
         *,
+        name: str | None = None,
         dataset: str | None = None,
         io: dict[str, IO] | IO | None = None,
         default_io_key: str | None = None,
@@ -68,6 +69,7 @@ class Source(ABC):
         **kwargs: Any,
     ) -> "Source":
         c = copy(self)
+        c.name = name or self.name
         c.dataset = dataset or self.dataset
         c.io = io or self.io
         c.default_io_key = default_io_key or self.default_io_key

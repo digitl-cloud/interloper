@@ -12,8 +12,9 @@ from opentelemetry.util.types import Attributes as SpanAttributes
 from typing_extensions import Self
 
 from interloper import errors
+from interloper.events.bus import get_event_bus
+from interloper.events.event import EventType
 from interloper.execution.context import AssetExecutionContext, ExecutionContext
-from interloper.execution.observable import EventType, Observable
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
@@ -27,10 +28,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
+event_bus = get_event_bus()
 T = TypeVar("T")
 
 
-class Asset(ABC, Observable):
+class Asset(ABC):
     name: str
     deps: dict[str, str]
     schema: type[AssetSchema] | None
@@ -115,7 +117,7 @@ class Asset(ABC, Observable):
 
     @property
     def dataset(self) -> str | None:
-        return self._dataset or (self._source and self._source.dataset)
+        return self._dataset or (self._source and self._source.dataset) or (self._source and self._source.name)
 
     @dataset.setter
     def dataset(self, value: str | None) -> None:
@@ -216,6 +218,7 @@ class Asset(ABC, Observable):
             data = self._normalize(data, context)
             return data
 
+    @event_bus.event(EventType.ASSET_MATERIALIZATION)
     def materialize(
         self,
         context: ExecutionContext | None = None,
@@ -263,11 +266,10 @@ class Asset(ABC, Observable):
 
         self.data = partial(self.data, **final_params)
 
-
     #############
     # Private
     #############
-    @Observable.event(EventType.ASSET_EXECUTION)
+    @event_bus.event(EventType.ASSET_EXECUTION)
     def _execute(
         self,
         context: ExecutionContext | None = None,
@@ -288,7 +290,7 @@ class Asset(ABC, Observable):
 
             return data
 
-    @Observable.event(EventType.ASSET_NORMALIZATION)
+    @event_bus.event(EventType.ASSET_NORMALIZATION)
     def _normalize(
         self,
         data: Any,
@@ -330,28 +332,14 @@ class Asset(ABC, Observable):
 
             return data
 
-    @Observable.event(EventType.ASSET_WRITING)
+    @event_bus.event(EventType.ASSET_WRITING)
     def _write(
         self,
         data: Any,
         context: ExecutionContext | None = None,
     ) -> None:
         with tracer.start_as_current_span("interloper.asset.write", attributes=self._get_span_attributes(context)):
-            # if context:
-            #     if context.partition and not self.partitioning:
-            #         raise errors.AssetMaterializationError(
-            #             f"Asset {self.name} does not support partitioning (missing partitioning config)"
-            #         )
-
-            # Current approach: an asset can be materialized if the context has a partition but the asset does not
-            # support partitioning. In that case, we drop the partition from the IO context.
-            # This allows non-partitioned assets to be materialized alongside partitioned assets.
-            # TODO: approach to be reviewed
-            partition = None
-            if context and context.partition and self.is_partitioned:
-                partition = context.partition
-
-            io_context = IOContext(asset=self, partition=partition)
+            io_context = IOContext(asset=self, partition=context.partition if context else None)
 
             if isinstance(self.io, IO):
                 self.io.write(io_context, data)
@@ -450,4 +438,3 @@ class Asset(ABC, Observable):
         if context and context.partition:
             attributes["partition"] = str(context.partition)
         return attributes
-

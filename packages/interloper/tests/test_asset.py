@@ -3,9 +3,10 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
-from fixtures import io
 
 import interloper as itlp
+
+from .fixtures import io
 
 
 @pytest.fixture
@@ -115,7 +116,10 @@ class TestAssetProperties:
     def test_dataset_from_source(self, source: itlp.Source):
         assert source.asset.dataset == "source"
 
-    def test_io(self, asset: itlp.Asset, io: io):
+        source.dataset = "something"
+        assert source.asset.dataset == "something"
+
+    def test_io(self, asset: itlp.Asset, io: itlp.IO):
         asset.io = io
         assert asset.io == io
 

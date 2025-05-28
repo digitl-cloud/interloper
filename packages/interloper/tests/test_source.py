@@ -1,13 +1,11 @@
-from collections.abc import Sequence
 from inspect import signature
 from typing import Any
-from unittest.mock import Mock
 
 import pytest
-from fixtures import io
 
 import interloper as itlp
-from interloper.io.base import IO, IOContext
+
+from .fixtures import io
 
 
 @pytest.fixture

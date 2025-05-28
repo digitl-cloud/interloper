@@ -118,6 +118,10 @@ class DAG:
         self.split.cache_clear()
 
     @property
+    def is_empty(self) -> bool:
+        return not self._nodes
+
+    @property
     @functools.cache
     def assets(self) -> dict[str, Asset]:
         return {node.asset.id: node.asset for node in self._nodes.values()}
@@ -247,17 +251,17 @@ if __name__ == "__main__":
 
         return (root, left_1, left_2, right_1, right_2)
 
-    # dag = DAG(source)
+    dag = DAG(source)
     # pp(dag.assets)
     # pp(dag.non_partitioned_subdag.assets)
     # pp(dag.partitioned_subdag.assets)
 
-    dag = DAG.from_source_specs(
-        [
-            SourceSpec(
-                name="adup",
-                path="interloper_assets:awin",
-            )
-        ]
-    )
-    pp(dag.assets)
+    # dag = DAG.from_source_specs(
+    #     [
+    #         SourceSpec(
+    #             name="adup",
+    #             path="interloper_assets:awin",
+    #         )
+    #     ]
+    # )
+    pp(dag.successors(dag.assets["source.root"]))

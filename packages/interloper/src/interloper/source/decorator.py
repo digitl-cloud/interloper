@@ -13,6 +13,9 @@ class ConcreteSource(Source):
     def asset_definitions(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
+    def __repr__(self) -> str:
+        return f"<Source {self.name} at {hex(id(self))}>"
+
 
 class SourceDecorator:
     # Decorator used without parameters
