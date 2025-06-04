@@ -2,6 +2,10 @@
 
 <!-- version list -->
 
+## v0.1.0 (2025-06-04)
+
+- Initial Release
+
 ## v0.1.0-dev.5+ci (2025-06-04)
 
 ### Features
