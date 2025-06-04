@@ -24,14 +24,4 @@ awin = awin(
     # materialization_strategy=itlp.MaterializationStrategy.STRICT,
 )
 
-# data = awin.advertiser_by_publisher.run(date=dt.date(2025, 1, 1))
-
-pipeline = itlp.Pipeline(awin.advertiser_by_publisher)
-pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 3)))
-
-# pipeline.backfill(
-#     partitions=itlp.TimePartitionWindow(
-#         start=dt.date(2025, 1, 1),
-#         end=dt.date(2025, 1, 2),
-#     )
-# )
+data = awin.advertiser_by_publisher.run(date=dt.date(2025, 1, 1))

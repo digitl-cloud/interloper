@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Generic, TypeVar
 
 from interloper import errors
-from interloper.io.base import IO, IOContext
 from interloper.execution.context import AssetExecutionContext
+from interloper.io.base import IO, IOContext
 from interloper.partitioning.partition import TimePartition
 from interloper.partitioning.window import TimePartitionWindow
 

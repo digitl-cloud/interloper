@@ -43,5 +43,5 @@ my_source = my_source(
     }
 )
 
-itlp.Pipeline(my_source).materialize()
+itlp.DAG(my_source).materialize()
 ```

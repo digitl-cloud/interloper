@@ -3,15 +3,12 @@
 # ###############
 [project]
 name = "interloper-duckdb"
-version = "0.1.0"
+version = "0.1.0-dev.5+ci"
 description = "Interloper DuckDB integration"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
 dependencies = ["interloper", "duckdb>=1.2.0", "interloper-pandas"]
-
-[dependency-groups]
-dev = ["pyright>=1.1.394", "ruff>=0.9.6"]
 
 [build-system]
 requires = ["hatchling"]

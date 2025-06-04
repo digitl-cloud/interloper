@@ -44,4 +44,4 @@ test = my_source(
 )
 
 
-itlp.Pipeline(test.as_dataframe).materialize()
+itlp.DAG(test.as_dataframe).materialize()

@@ -27,4 +27,4 @@ my_source.io = {
 }
 my_source.default_io_key = "file"
 
-itlp.Pipeline(my_source.my_asset_A).materialize()
+itlp.DAG(my_source.my_asset_A).materialize()

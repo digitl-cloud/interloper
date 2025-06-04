@@ -22,7 +22,7 @@ def my_source() -> Sequence[itlp.Asset]:
 
 my_source.io = {"file": itlp.FileIO("data")}
 
-itlp.Pipeline(my_source).backfill(
+itlp.DAG(my_source).backfill(
     partitions=itlp.TimePartitionWindow(
         start=dt.date.today() - dt.timedelta(days=3),
         end=dt.date.today() - dt.timedelta(days=1),

@@ -15,9 +15,9 @@ adservice = adservice(
 
 data = adservice.campaigns.run(date=dt.date(2024, 1, 1))
 
-# pipeline = itlp.Pipeline(adservice)
-# pipeline.materialize(partition=itlp.TimePartition(dt.date(2024, 1, 3)))
-# pipeline.backfill(
+# dag = itlp.DAG(adservice)
+# dag.materialize(partition=itlp.TimePartition(dt.date(2024, 1, 3)))
+# dag.backfill(
 #     partitions=itlp.TimePartitionWindow(
 #         start=dt.date(2024, 1, 1),
 #         end=dt.date(2024, 1, 2),
