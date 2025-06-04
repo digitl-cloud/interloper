@@ -1,0 +1,95 @@
+on:
+  workflow_call:
+    secrets:
+      GH_TOKEN:
+        required: true
+    inputs:
+      suffix:
+        type: string
+        required: false
+        default: ""
+      changelog:
+        type: boolean
+        required: false
+        default: false
+      commit:
+        type: boolean
+        required: false
+        default: false
+      tag:
+        type: boolean
+        required: false
+        default: false
+      vcs_release:
+        type: boolean
+        required: false
+        default: false
+      build:
+        type: boolean
+        required: false
+        default: false
+      publish:
+        type: boolean
+        required: false
+        default: false
+
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "write"
+      id-token: "write"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/499027771610/locations/global/workloadIdentityPools/github-actions/providers/github-actions"
+          service_account: "github-actions@dc-int-connectors-prd.iam.gserviceaccount.com"
+
+      - name: Get access token
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.10"
+
+      - name: UV sync
+        run: uv sync --all-packages --all-extras
+
+      # TODO: replace with `uv run python-semantic-release` command for faster execution
+      - name: Release
+        uses: python-semantic-release/python-semantic-release@v10
+        with:
+          build_metadata: ${{ inputs.suffix }}
+          build: false
+          changelog: ${{ inputs.changelog }}
+          commit: ${{ inputs.commit }}
+          github_token: ${{ secrets.GH_TOKEN }}
+          tag: ${{ inputs.tag }}
+          vcs_release: ${{ inputs.vcs_release }}
+          git_committer_email: "semantic-release@digitlcloud.dev"
+          git_committer_name: "Semantic Release"
+
+      - name: Build
+        if: ${{ inputs.build }}
+        run: uv build --all-packages
+
+      - name: Publish
+        if: ${{ inputs.publish }}
+        run: uv publish --index dc-int-connectors-prd --username oauth2accesstoken --password ${{ env.ACCESS_TOKEN }} --keyring-provider subprocess

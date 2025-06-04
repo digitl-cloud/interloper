@@ -29,4 +29,4 @@ def my_source() -> Sequence[itlp.Asset]:
 
 my_source.io = {"file": itlp.FileIO("data")}
 
-itlp.Pipeline(my_source).materialize(partition=itlp.TimePartition(dt.date.today()))
+itlp.DAG(my_source).materialize(partition=itlp.TimePartition(dt.date.today()))

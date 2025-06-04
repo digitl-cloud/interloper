@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-workspace"
-version = "0.1.0"
+version = "0.1.0-dev.5+ci"
 description = "The Interloper Project"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,6 +25,7 @@ dev = [
     "pyright>=1.1.393",
     "pytest>=8.3.5",
     "pytest-cov>=6.0.0",
+    "python-semantic-release>=10.0.0",
     "ruff>=0.9.4",
 ]
 
@@ -43,13 +44,19 @@ interloper-sqlite = { workspace = true }
 [tool.uv.workspace]
 members = ["packages/*"]
 
+[[tool.uv.index]]
+name = "dc-int-connectors-prd"
+url = "https://europe-python.pkg.dev/dc-int-connectors-prd/python-public/simple"
+publish-url = "https://europe-python.pkg.dev/dc-int-connectors-prd/python-public"
+explicit = true
+
 # ###############
 # PYRIGHT
 # ###############
 [tool.pyright]
 typeCheckingMode = "basic"
 reportMissingParameterType = true
-ignore = ["**/tests/**"]
+ignore = ["**/tests", "examples/telemetry"]
 
 # ###############
 # RUFF
@@ -95,3 +102,39 @@ exclude_also = [
     # Don't complain about abstract methods, they aren't run:
     "@(abc\\.)?abstractmethod",
 ]
+
+# ################
+# SEMANTIC RELEASE
+# ################
+[tool.semantic_release]
+allow_zero_version = true
+build_command = "uv build --all-packages"
+version_toml = [
+    "pyproject.toml:project.version",
+    "packages/interloper/pyproject.toml:project.version",
+    "packages/interloper-assets/pyproject.toml:project.version",
+    "packages/interloper-duckdb/pyproject.toml:project.version",
+    "packages/interloper-google-cloud/pyproject.toml:project.version",
+    "packages/interloper-pandas/pyproject.toml:project.version",
+    "packages/interloper-sql/pyproject.toml:project.version",
+    "packages/interloper-sqlite/pyproject.toml:project.version",
+]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.branches.rc]
+match = "rc"
+prerelease = true
+prerelease_token = "rc"
+
+[tool.semantic_release.branches.alpha]
+match = "alpha"
+prerelease = true
+prerelease_token = "alpha"
+
+[tool.semantic_release.branches.feat]
+match = "feat/.*$"
+prerelease = true
+prerelease_token = "dev"

@@ -37,5 +37,4 @@ my_source.C.deps = {
     "custom_ref_B": "my_source.B",
 }
 
-pipeline = itlp.Pipeline(my_source)
-pipeline.materialize()
+itlp.DAG(my_source).materialize()

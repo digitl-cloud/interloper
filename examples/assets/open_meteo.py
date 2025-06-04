@@ -52,4 +52,3 @@ def open_meteo(
 
 open_meteo.io = {"file": itlp.FileIO("data")}
 open_meteo_paris = open_meteo(lat=48.8566, lon=2.3522)
-itlp.Pipeline(open_meteo_paris).materialize()

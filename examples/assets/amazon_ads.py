@@ -17,5 +17,5 @@ data = amazon_ads.products_advertised_products.run(
 )
 print(data)
 
-# pipeline = itlp.Pipeline(amazon_ads)
-# pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 1)))
+# dag = itlp.DAG(amazon_ads)
+# dag.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 1)))

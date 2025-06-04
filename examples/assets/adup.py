@@ -19,9 +19,9 @@ adup = adup(
 
 # data = adup.ads.run(date_window=(dt.date(2025, 1, 1), dt.date(2025, 1, 2)))
 
-pipeline = itlp.Pipeline(adup)
-pipeline.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 3)))
-# pipeline.backfill(
+dag = itlp.DAG(adup)
+dag.materialize(partition=itlp.TimePartition(dt.date(2025, 1, 3)))
+# dag.backfill(
 #     partitions=itlp.TimePartitionWindow(
 #         start=dt.date(2025, 1, 1),
 #         end=dt.date(2025, 1, 2),

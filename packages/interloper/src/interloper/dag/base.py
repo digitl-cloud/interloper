@@ -3,6 +3,8 @@ from collections.abc import Sequence
 
 from interloper.asset.base import Asset
 from interloper.execution.strategy import ExecutionStategy
+from interloper.partitioning.partition import Partition
+from interloper.partitioning.window import PartitionWindow
 from interloper.source.base import Source
 from interloper.source.spec import SourceSpec
 
@@ -62,6 +64,18 @@ class DAG:
 
     def predecessors(self, asset: Asset) -> list[Asset]:
         return [n.asset for n in self._nodes[asset.id].upstream]
+
+    def materialize(self, partition: Partition | None = None) -> None:
+        from interloper.execution.execution import MultiThreadExecution
+
+        execution = MultiThreadExecution(dag=self, partitions=partition)
+        execution()
+
+    def backfill(self, partitions: Sequence[Partition] | PartitionWindow | None = None) -> None:
+        from interloper.execution.execution import MultiThreadExecution
+
+        execution = MultiThreadExecution(dag=self, partitions=partitions)
+        execution()
 
     def _build_graph(self) -> None:
         for node in self._nodes.values():
