@@ -30,4 +30,3 @@ jobs:
             pandas
             sql
           requireScope: true
-          wip: true
