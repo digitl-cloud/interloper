@@ -1,28 +1,34 @@
 on:
   workflow_call:
     inputs:
-      ruff:
+      linter:
         type: boolean
         required: false
         default: false
-      pyright:
+      type-checker:
         type: boolean
         required: false
         default: false
-      pytest:
+      tests:
         type: boolean
         required: false
         default: false
+      python-versions:
+        type: string
+        required: false
+        default: '["3.10", "3.11", "3.12"]'
+        description: 'JSON array of Python versions to test'
 
 jobs:
-  checks:
-    name: Checks
+  setup:
+    name: Setup Environment (${{ matrix.python-version }})
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        python-version: ${{ fromJson(inputs.python-versions) }}
     permissions:
       contents: "write"
       id-token: "write"
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,19 +37,128 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
 
       - name: UV sync
         run: uv sync --all-packages --all-extras
 
-      - name: Ruff
-        if: inputs.ruff == true
+      - name: Cache UV environment
+        run: |
+          # Create a tarball of the UV environment
+          tar -czf uv-env-${{ matrix.python-version }}.tar.gz -C .uv/venv .
+        shell: bash
+
+      - name: Upload UV environment
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-environment-${{ matrix.python-version }}
+          path: uv-env-${{ matrix.python-version }}.tar.gz
+          retention-days: 1
+
+  linter:
+    name: Linter (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: setup
+    if: inputs.linter == true
+    strategy:
+      matrix:
+        python-version: ${{ fromJson(inputs.python-versions) }}
+    permissions:
+      contents: "write"
+      id-token: "write"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download UV environment
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-environment-${{ matrix.python-version }}
+          path: .
+
+      - name: Restore UV environment
+        run: |
+          mkdir -p .uv/venv
+          tar -xzf uv-env-${{ matrix.python-version }}.tar.gz -C .uv/venv
+        shell: bash
+
+      - name: Run Ruff
         run: uv run ruff check .
 
-      - name: Pyright
-        if: inputs.pyright == true
+  type-checker:
+    name: Type Checker (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: setup
+    if: inputs.type-checker == true
+    strategy:
+      matrix:
+        python-version: ${{ fromJson(inputs.python-versions) }}
+    permissions:
+      contents: "write"
+      id-token: "write"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download UV environment
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-environment-${{ matrix.python-version }}
+          path: .
+
+      - name: Restore UV environment
+        run: |
+          mkdir -p .uv/venv
+          tar -xzf uv-env-${{ matrix.python-version }}.tar.gz -C .uv/venv
+        shell: bash
+
+      - name: Run Pyright
         run: uv run pyright
 
-      - name: Pytest
-        if: inputs.pytest == true
+  tests:
+    name: Tests (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: setup
+    if: inputs.tests == true
+    strategy:
+      matrix:
+        python-version: ${{ fromJson(inputs.python-versions) }}
+    permissions:
+      contents: "write"
+      id-token: "write"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download UV environment
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-environment-${{ matrix.python-version }}
+          path: .
+
+      - name: Restore UV environment
+        run: |
+          mkdir -p .uv/venv
+          tar -xzf uv-env-${{ matrix.python-version }}.tar.gz -C .uv/venv
+        shell: bash
+
+      - name: Run Pytest
         run: uv run pytest
