@@ -3,7 +3,7 @@ on:
 
 jobs:
   setup:
-    name: Setup Environment (${{ matrix.python-version }})
+    name: Setup (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

@@ -14,7 +14,7 @@ class TestSourceDefinition:
     def test_abstract_instance_fails(self):
         """Test that instantiating an abstract source fails."""
         with pytest.raises(
-            TypeError, match="Can't instantiate abstract class Source with abstract method asset_definitions"
+            TypeError, match="Can't instantiate abstract class Source.*asset_definitions"
         ):
             itlp.Source()
 
