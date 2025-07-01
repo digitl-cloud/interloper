@@ -7,79 +7,12 @@ on:
       - "*"
 
 jobs:
-  config:
-    runs-on: ubuntu-latest
-    outputs:
-      CHANGELOG: ${{ steps.set-vars.outputs.CHANGELOG }}
-      COMMIT: ${{ steps.set-vars.outputs.COMMIT }}
-      SUFFIX: ${{ steps.set-vars.outputs.SUFFIX }}
-      TAG: ${{ steps.set-vars.outputs.TAG }}
-      VCS_RELEASE: ${{ steps.set-vars.outputs.VCS_RELEASE }}
-      BUILD: ${{ steps.set-vars.outputs.BUILD }}
-      PUBLISH: ${{ steps.set-vars.outputs.PUBLISH }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set release variables
-        id: set-vars
-        run: |
-          BRANCH="${GITHUB_REF#refs/heads/}"
-
-          case "$BRANCH" in
-            main)
-              echo "CHANGELOG=true" >> $GITHUB_OUTPUT
-              echo "COMMIT=true" >> $GITHUB_OUTPUT
-              echo "SUFFIX=''" >> $GITHUB_OUTPUT
-              echo "TAG=true" >> $GITHUB_OUTPUT
-              echo "VCS_RELEASE=true" >> $GITHUB_OUTPUT
-              echo "BUILD=true" >> $GITHUB_OUTPUT
-              echo "PUBLISH=true" >> $GITHUB_OUTPUT
-              ;;
-            rc)
-              echo "CHANGELOG=false" >> $GITHUB_OUTPUT
-              echo "COMMIT=true" >> $GITHUB_OUTPUT
-              echo "SUFFIX=''" >> $GITHUB_OUTPUT
-              echo "TAG=true" >> $GITHUB_OUTPUT
-              echo "VCS_RELEASE=true" >> $GITHUB_OUTPUT
-              echo "BUILD=true" >> $GITHUB_OUTPUT
-              echo "PUBLISH=true" >> $GITHUB_OUTPUT
-              ;;
-            alpha)
-              echo "CHANGELOG=false" >> $GITHUB_OUTPUT
-              echo "COMMIT=true" >> $GITHUB_OUTPUT
-              echo "SUFFIX=''" >> $GITHUB_OUTPUT
-              echo "TAG=true" >> $GITHUB_OUTPUT
-              echo "VCS_RELEASE=false" >> $GITHUB_OUTPUT
-              echo "BUILD=false" >> $GITHUB_OUTPUT
-              echo "PUBLISH=false" >> $GITHUB_OUTPUT
-              ;;
-            *)
-              echo "CHANGELOG=false" >> $GITHUB_OUTPUT
-              echo "COMMIT=false" >> $GITHUB_OUTPUT
-              echo "SUFFIX=$(git branch --show-current | sed 's/[^a-zA-Z0-9-]/-/g')" >> $GITHUB_OUTPUT
-              echo "TAG=false" >> $GITHUB_OUTPUT
-              echo "VCS_RELEASE=false" >> $GITHUB_OUTPUT
-              echo "BUILD=false" >> $GITHUB_OUTPUT
-              echo "PUBLISH=false" >> $GITHUB_OUTPUT
-              ;;
-          esac
-
   checks:
     uses: ./.github/workflows/_checks.yaml
 
   release:
     uses: ./.github/workflows/_release.yaml
     if: github.ref_name == 'main' || github.ref_name == 'rc' || github.ref_name == 'alpha'
-    needs:
-      - config
-      - checks
+    needs: checks
     secrets:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-    with:
-      suffix: ${{ needs.config.outputs.SUFFIX }}
-      commit: ${{ needs.config.outputs.COMMIT == 'true' }}
-      tag: ${{ needs.config.outputs.TAG == 'true' }}
-      vcs_release: ${{ needs.config.outputs.VCS_RELEASE == 'true' }}
-      changelog: ${{ needs.config.outputs.CHANGELOG == 'true' }}
-      build: ${{ needs.config.outputs.BUILD == 'true' }}
-      publish: ${{ needs.config.outputs.PUBLISH == 'true' }}
