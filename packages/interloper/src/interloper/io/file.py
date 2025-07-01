@@ -1,3 +1,4 @@
+"""This module contains the FileIO class."""
 import logging
 import pickle
 from pathlib import Path
@@ -15,11 +16,27 @@ tracer = trace.get_tracer(__name__)
 
 
 class FileIO(IO):
+    """An IO class for files."""
+
     def __init__(self, base_dir: str) -> None:
+        """Initialize the FileIO.
+
+        Args:
+            base_dir: The base directory to write files to.
+        """
         self.folder = base_dir
 
     @tracer.start_as_current_span("interloper.io.FileIO.write")
     def write(self, context: IOContext, data: Any) -> None:
+        """Write data to a file.
+
+        Args:
+            context: The IO context.
+            data: The data to write.
+
+        Raises:
+            RuntimeError: If the partition is a partition window.
+        """
         if context.partition and isinstance(context.partition, PartitionWindow):
             raise RuntimeError("Partition windows are not supported by FileIO")
 
@@ -27,6 +44,17 @@ class FileIO(IO):
 
     @tracer.start_as_current_span("interloper.io.FileIO.read")
     def read(self, context: IOContext) -> Any:
+        """Read data from a file.
+
+        Args:
+            context: The IO context.
+
+        Returns:
+            The data that was read.
+
+        Raises:
+            RuntimeError: If the partition is a partition window.
+        """
         if context.partition and isinstance(context.partition, PartitionWindow):
             raise RuntimeError("Partition windows are not supported by FileIO")
 

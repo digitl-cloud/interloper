@@ -1,3 +1,4 @@
+"""This module contains the asset decorator."""
 from collections.abc import Callable
 from inspect import Parameter, Signature, signature
 from typing import Any, overload
@@ -13,15 +14,21 @@ from interloper.schema import AssetSchema
 
 
 class ConcreteAsset(Asset):
+    """A concrete asset class used by the asset decorator."""
+
     def data(self, *args: Any, **kwargs: Any) -> Any:
+        """This method is implemented dynamically by the asset decorator."""
         raise NotImplementedError
 
     def __repr__(self) -> str:
+        """Return a string representation of the asset."""
         source_str = f" from Source {self._source.name}" if self._source else ""
         return f"<Asset {self.name}{source_str} at {hex(id(self))}>"
 
 
 class AssetDecorator:
+    """A decorator to create assets from functions."""
+
     # Decorator used without parameters
     @overload
     def __new__(cls, func: Callable) -> Asset: ...
@@ -42,6 +49,7 @@ class AssetDecorator:
     ) -> Self: ...
 
     def __new__(cls, func: Callable | None = None, *args: Any, **kwargs: Any):
+        """Create a new instance of the decorator."""
         instance = super().__new__(cls)
 
         # Decorator used without parameters
@@ -66,6 +74,19 @@ class AssetDecorator:
         materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
     ):
+        """Initialize the decorator.
+
+        Args:
+            func: The function to decorate.
+            name: The name of the asset.
+            dataset: The dataset of the asset.
+            io: The IO of the asset.
+            schema: The schema of the asset.
+            normalizer: The normalizer of the asset.
+            partitioning: The partitioning of the asset.
+            materializable: Whether the asset is materializable.
+            materialization_strategy: The materialization strategy of the asset.
+        """
         self.name = name
         self.dataset = dataset
         self.io = io
@@ -76,38 +97,16 @@ class AssetDecorator:
         self.materializable = materializable
 
     def __call__(self, func: Callable) -> Asset:
+        """Dynamically create an instance of a concrete Asset.
+
+        This method implements the data method using the decorated function.
+
+        Args:
+            func: The function to decorate.
+
+        Returns:
+            An instance of a concrete Asset.
         """
-        Dynamically creates an instance of a concrete Asset class that implements the data method
-        using the decorated function.
-        """
-
-        # class ConcreteAsset(Asset):
-        #     # Define the dynamically provided data method
-        #     def data(self, *args: Any, **kwargs: Any) -> Any:
-        #         return func(*args, **kwargs)
-
-        #     def __repr__(self) -> str:
-        #         source_str = f" from Source {self._source.name}" if self._source else ""
-        #         return f"<Asset {self.name}{source_str} at {hex(id(self))}>"
-
-        # # Override `data` signature to dynamically match the signature of the provided `func`
-        # original_sig, wrapper_sig = signature(func), signature(ConcreteAsset.data)
-        # parameters = [wrapper_sig.parameters.get("self"), *original_sig.parameters.values()]
-        # ConcreteAsset.data.__signature__ = wrapper_sig.replace(
-        #     parameters=parameters,
-        #     return_annotation=original_sig.return_annotation,
-        # )
-
-        # return ConcreteAsset(
-        #     name=self.name or func.__name__,
-        #     dataset=self.dataset,
-        #     schema=self.schema,
-        #     normalizer=self.normalizer,
-        #     partitioning=self.partitioning,
-        #     materializable=self.materializable,
-        #     materialization_strategy=self.materialization_strategy,
-        # )
-
         asset = ConcreteAsset(
             name=self.name or func.__name__,
             dataset=self.dataset,

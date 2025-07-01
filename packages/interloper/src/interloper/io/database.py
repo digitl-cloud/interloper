@@ -1,3 +1,4 @@
+"""This module contains the database IO classes."""
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
@@ -16,11 +17,33 @@ tracer = trace.get_tracer(__name__)
 
 
 class DatabaseClient(ABC):
-    @abstractmethod
-    def table_exists(self, table_name: str, dataset: str | None = None) -> bool: ...
+    """An abstract class for database clients."""
 
     @abstractmethod
-    def table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]: ...
+    def table_exists(self, table_name: str, dataset: str | None = None) -> bool:
+        """Check if a table exists.
+
+        Args:
+            table_name: The name of the table.
+            dataset: The dataset of the table.
+
+        Returns:
+            True if the table exists, False otherwise.
+        """
+        ...
+
+    @abstractmethod
+    def table_schema(self, table_name: str, dataset: str | None = None) -> dict[str, str]:
+        """Get the schema of a table.
+
+        Args:
+            table_name: The name of the table.
+            dataset: The dataset of the table.
+
+        Returns:
+            The schema of the table.
+        """
+        ...
 
     @abstractmethod
     def create_table(
@@ -29,7 +52,16 @@ class DatabaseClient(ABC):
         schema: type[AssetSchema],
         dataset: str | None = None,
         partitioning: PartitionConfig | None = None,
-    ) -> None: ...
+    ) -> None:
+        """Create a table.
+
+        Args:
+            table_name: The name of the table.
+            schema: The schema of the table.
+            dataset: The dataset of the table.
+            partitioning: The partitioning of the table.
+        """
+        ...
 
     @abstractmethod
     def get_select_partition_statement(
@@ -38,7 +70,19 @@ class DatabaseClient(ABC):
         column: str,
         partition: Partition | PartitionWindow,
         dataset: str | None = None,
-    ) -> str: ...
+    ) -> str:
+        """Get the select statement for a partition.
+
+        Args:
+            table_name: The name of the table.
+            column: The partitioning column.
+            partition: The partition to select.
+            dataset: The dataset of the table.
+
+        Returns:
+            The select statement for the partition.
+        """
+        ...
 
     @abstractmethod
     def delete_partition(
@@ -47,16 +91,42 @@ class DatabaseClient(ABC):
         column: str,
         partition: Partition | PartitionWindow,
         dataset: str | None = None,
-    ) -> None: ...
+    ) -> None:
+        """Delete a partition.
+
+        Args:
+            table_name: The name of the table.
+            column: The partitioning column.
+            partition: The partition to delete.
+            dataset: The dataset of the table.
+        """
+        ...
 
 
 class DatabaseIO(TypedIO):
+    """An IO class for databases."""
+
     def __init__(self, client: DatabaseClient, handlers: list[IOHandler]) -> None:
+        """Initialize the DatabaseIO.
+
+        Args:
+            client: The database client to use.
+            handlers: The handlers to use.
+        """
         super().__init__(handlers)
         self.client = client
 
     @tracer.start_as_current_span("interloper.io.DatabaseIO.write")
     def write(self, context: IOContext, data: Any) -> None:
+        """Write data to the database.
+
+        Args:
+            context: The IO context.
+            data: The data to write.
+
+        Raises:
+            RuntimeError: If the asset has no schema.
+        """
         handler = self.get_handler(context.asset.data_type)
         handler.verify_type(data)
 
@@ -95,6 +165,14 @@ class DatabaseIO(TypedIO):
 
     @tracer.start_as_current_span("interloper.io.DatabaseIO.read")
     def read(self, context: IOContext) -> Any:
+        """Read data from the database.
+
+        Args:
+            context: The IO context.
+
+        Returns:
+            The data that was read.
+        """
         handler = self.get_handler(context.asset.data_type)
         data = handler.read(context)
         handler.verify_type(data)

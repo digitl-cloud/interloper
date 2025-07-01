@@ -27,11 +27,16 @@ interloper = "interloper.cli.main:main"
 line-length = 120
 
 [tool.ruff.lint]
-extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+preview = true
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+ignore = ["D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"tests/**" = ["ANN"]
+"tests/**" = ["ANN", "F811"]
 
 # ###############
 # PYRIGHT

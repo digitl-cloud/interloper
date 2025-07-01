@@ -1,3 +1,4 @@
+"""This module contains the base classes for assets."""
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -33,8 +34,10 @@ T = TypeVar("T")
 
 
 class Asset(ABC):
+    """An asset represents a piece of data."""
+
     name: str
-    deps: dict[str, str]
+    deps: dict[str, "Asset"]
     schema: type[AssetSchema] | None
     partitioning: PartitionConfig | None
     _source: "Source | None"
@@ -51,7 +54,7 @@ class Asset(ABC):
         *,
         source: "Source | None" = None,
         dataset: str | None = None,
-        deps: dict[str, str] | None = None,
+        deps: dict[str, "Asset"] | None = None,
         io: dict[str, IO] | IO | None = None,
         default_io_key: str | None = None,
         schema: type[AssetSchema] | None = None,
@@ -60,6 +63,21 @@ class Asset(ABC):
         materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
     ):
+        """Initialize the asset.
+
+        Args:
+            name: The name of the asset.
+            source: The source of the asset.
+            dataset: The dataset of the asset.
+            deps: The dependencies of the asset.
+            io: The IO of the asset.
+            default_io_key: The default IO key of the asset.
+            schema: The schema of the asset.
+            normalizer: The normalizer of the asset.
+            partitioning: The partitioning of the asset.
+            materializable: Whether the asset is materializable.
+            materialization_strategy: The materialization strategy of the asset.
+        """
         super().__init__()
 
         self._source: Source | None = source
@@ -81,6 +99,11 @@ class Asset(ABC):
     # Magic
     #############
     def __copy__(self) -> Self:
+        """Create a copy of the asset.
+
+        Returns:
+            A copy of the asset.
+        """
         cls = self.__class__
         _copy = cls.__new__(cls)
         _copy.__dict__.update(self.__dict__)
@@ -91,9 +114,20 @@ class Asset(ABC):
         *,
         io: dict[str, IO] | IO | None = None,
         default_io_key: str | None = None,
-        deps: dict[str, str] | None = None,
+        deps: dict[str, "Asset"] | None = None,
         **kwargs: Any,
     ) -> "Asset":
+        """Create a copy of the asset with new parameters.
+
+        Args:
+            io: The IO of the asset.
+            default_io_key: The default IO key of the asset.
+            deps: The dependencies of the asset.
+            **kwargs: The parameters to bind to the data function.
+
+        Returns:
+            A new asset with the updated parameters.
+        """
         c = copy(self)
         c._io = io or self._io
         c._default_io_key = default_io_key or self._default_io_key
@@ -102,6 +136,7 @@ class Asset(ABC):
         return c
 
     def __hash__(self):
+        """Return the hash of the asset."""
         return hash(self.id)
 
     #############
@@ -109,14 +144,17 @@ class Asset(ABC):
     #############
     @property
     def id(self) -> str:
+        """The unique identifier of the asset."""
         return f"{self.dataset}.{self.name}" if self.dataset else self.name
 
     @property
     def source(self) -> "Source | None":
+        """The source of the asset."""
         return self._source
 
     @property
     def dataset(self) -> str | None:
+        """The dataset of the asset."""
         return self._dataset or (self._source and self._source.dataset) or (self._source and self._source.name)
 
     @dataset.setter
@@ -125,6 +163,7 @@ class Asset(ABC):
 
     @property
     def io(self) -> dict[str, IO] | IO:
+        """The IO of the asset."""
         return self._io or (self._source and self._source.io) or {}
 
     @io.setter
@@ -133,6 +172,7 @@ class Asset(ABC):
 
     @property
     def default_io_key(self) -> str | None:
+        """The default IO key of the asset."""
         return self._default_io_key or (self._source and self._source.default_io_key)
 
     @default_io_key.setter
@@ -141,6 +181,7 @@ class Asset(ABC):
 
     @property
     def normalizer(self) -> Normalizer | None:
+        """The normalizer of the asset."""
         return self._normalizer or (self._source and self._source.normalizer)
 
     @normalizer.setter
@@ -151,6 +192,7 @@ class Asset(ABC):
 
     @property
     def materializable(self) -> bool:
+        """Whether the asset is materializable."""
         if self._materializable is not None:
             return self._materializable
         if self._source:
@@ -163,6 +205,7 @@ class Asset(ABC):
 
     @property
     def materialization_strategy(self) -> MaterializationStrategy:
+        """The materialization strategy of the asset."""
         return (
             self._materialization_strategy
             or (self._source and self._source.materialization_strategy)
@@ -175,6 +218,7 @@ class Asset(ABC):
 
     @property
     def data_type(self) -> type | None:
+        """The data type of the asset."""
         sig = signature(self.data)
         if sig.return_annotation is Parameter.empty:
             return None
@@ -182,19 +226,23 @@ class Asset(ABC):
 
     @property
     def has_io(self) -> bool:
+        """Whether the asset has IO configured."""
         return self.io is not None and isinstance(self.io, IO) or len(self.io) > 0
 
     @property
     def upstream_assets(self) -> list[UpstreamAsset]:
+        """The upstream assets of the asset."""
         sig = signature(self.data)
         return [param.default for param in sig.parameters.values() if isinstance(param.default, UpstreamAsset)]
 
     @property
     def is_partitioned(self) -> bool:
+        """Whether the asset is partitioned."""
         return self.partitioning is not None
 
     @property
     def allows_partition_window(self) -> bool:
+        """Whether the asset allows partition windows."""
         # TODO: should check if the asset has a DateWindow asset param?
         return self.partitioning is not None and self.partitioning.allow_window
 
@@ -202,17 +250,24 @@ class Asset(ABC):
     # Public
     #############
     @abstractmethod
-    def data(self) -> Any: ...
+    def data(self) -> Any:
+        """The data of the asset."""
+        ...
 
     def run(
         self,
         context: ExecutionContext | None = None,
         **params: Any,
     ) -> Any:
-        """
-        Execute + Normalize
-        """
+        """Execute + Normalize.
 
+        Args:
+            context: The execution context.
+            **params: The parameters to override.
+
+        Returns:
+            The data of the asset.
+        """
         with tracer.start_as_current_span("interloper.asset.run", attributes=self._get_span_attributes(context)):
             data = self._execute(context, **params)
             data = self._normalize(data, context)
@@ -224,10 +279,15 @@ class Asset(ABC):
         context: ExecutionContext | None = None,
         **params: Any,
     ) -> None:
-        """
-        Execute + Normalize + Write
-        """
+        """Execute + Normalize + Write.
 
+        Args:
+            context: The execution context.
+            **params: The parameters to override.
+
+        Raises:
+            AssetMaterializationError: If the asset does not have any IO configured.
+        """
         with tracer.start_as_current_span(
             "interloper.asset.materialize", attributes=self._get_span_attributes(context)
         ):
@@ -250,6 +310,15 @@ class Asset(ABC):
             logger.info(f"Asset {self.name} materialization complete")
 
     def bind(self, ignore_unknown_params: bool = False, **params: Any) -> None:
+        """Bind parameters to the data function.
+
+        Args:
+            ignore_unknown_params: Whether to ignore unknown parameters.
+            **params: The parameters to bind.
+
+        Raises:
+            AssetValueError: If a parameter is not a valid parameter for the asset.
+        """
         sig = signature(self.data)
         current_params = [p.name for p in sig.parameters.values()]
         final_params = {}
@@ -275,6 +344,18 @@ class Asset(ABC):
         context: ExecutionContext | None = None,
         **params: Any,
     ) -> Any:
+        """Execute the asset.
+
+        Args:
+            context: The execution context.
+            **params: The parameters to override.
+
+        Raises:
+            AssetValueError: If the returned data does not match the expected type.
+
+        Returns:
+            The data of the asset.
+        """
         with tracer.start_as_current_span("interloper.asset.execute", attributes=self._get_span_attributes(context)):
             # Parameter resolution
             params, return_type = self._resolve_parameters(context, **params)
@@ -296,6 +377,19 @@ class Asset(ABC):
         data: Any,
         context: ExecutionContext | None = None,
     ) -> Any:
+        """Normalize the data.
+
+        Args:
+            data: The data to normalize.
+            context: The execution context.
+
+        Raises:
+            AssetNormalizationError: If the normalization fails.
+            AssetSchemaError: If the schema inference fails.
+
+        Returns:
+            The normalized data.
+        """
         with tracer.start_as_current_span("interloper.asset.normalize", attributes=self._get_span_attributes(context)):
             if self.normalizer:
                 try:
@@ -338,6 +432,12 @@ class Asset(ABC):
         data: Any,
         context: ExecutionContext | None = None,
     ) -> None:
+        """Write the data.
+
+        Args:
+            data: The data to write.
+            context: The execution context.
+        """
         with tracer.start_as_current_span("interloper.asset.write", attributes=self._get_span_attributes(context)):
             io_context = IOContext(asset=self, partition=context.partition if context else None)
 
@@ -359,6 +459,19 @@ class Asset(ABC):
         context: ExecutionContext | None = None,
         **overriding_params: Any,
     ) -> tuple[dict[str, Any], Any]:
+        """Resolve the parameters for the data function.
+
+        Args:
+            context: The execution context.
+            **overriding_params: The parameters to override.
+
+        Raises:
+            AssetDefinitionError: If the asset has an invalid return type.
+            AssetParamResolutionError: If a parameter cannot be resolved.
+
+        Returns:
+            A tuple containing the resolved parameters and the return type.
+        """
         sig = signature(self.data)
         final_params = {}
 
@@ -371,7 +484,7 @@ class Asset(ABC):
                 overriding_param = overriding_params[param.name]
 
                 # If the overriding param is an AssetParam, we want to resolve it. Since the logic to resolve
-                # AssetParam & ContextualAssetParam is handled below based on the default value,we choose to replace
+                # AssetParam & ContextualAssetParam is handled below based on the default value, we choose to replace
                 # the default value with the overriding param and proceed with the resolution.
                 if isinstance(overriding_param, AssetParam):
                     param = param.replace(default=overriding_param)
@@ -389,8 +502,7 @@ class Asset(ABC):
             if isinstance(param.default, ContextualAssetParam):
                 if context is None:
                     raise errors.AssetParamResolutionError(
-                        f"Cannot resolve parameter {param.name} for asset {self.name}"
-                        # f"ContextualAssetParam {param.name} requires an execution context"
+                        f"Cannot resolve parameter {param.name} for asset {self.name} (missing execution context)"
                     )
 
                 try:
@@ -427,6 +539,14 @@ class Asset(ABC):
         return final_params, return_type
 
     def _get_span_attributes(self, context: ExecutionContext | None = None) -> SpanAttributes:
+        """Get the span attributes for the asset.
+
+        Args:
+            context: The execution context.
+
+        Returns:
+            The span attributes.
+        """
         attributes: SpanAttributes = {
             "asset_id": self.id,
             "asset_name": self.name,

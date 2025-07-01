@@ -1,3 +1,4 @@
+"""This module contains the asset parameter classes."""
 import datetime as dt
 import logging
 import os
@@ -15,29 +16,59 @@ T = TypeVar("T")
 
 
 class AssetParam(ABC, Generic[T]):
+    """An abstract class for asset parameters."""
+
     # Forces an AssetParam's instance to be of type T
     def __new__(cls) -> T:
+        """Create a new instance of the asset parameter."""
         return super().__new__(cls)  # type: ignore
 
     @abstractmethod
-    def resolve(self) -> T: ...
+    def resolve(self) -> T:
+        """Resolve the value of the parameter."""
+        ...
 
 
 class ContextualAssetParam(AssetParam[T], Generic[T]):
+    """An abstract class for contextual asset parameters."""
+
     @abstractmethod
-    def resolve(self, context: AssetExecutionContext) -> T: ...
+    def resolve(self, context: AssetExecutionContext) -> T:
+        """Resolve the value of the parameter.
+
+        Args:
+            context: The execution context.
+        """
+        ...
 
 
 class Env(AssetParam[str]):
+    """An asset parameter that resolves to an environment variable."""
+
     # Forces an Env's instance to be of type str
     def __new__(cls, value: str, default: str | None = None) -> str:
+        """Create a new instance of the environment variable parameter."""
         return super().__new__(cls)  # type: ignore
 
     def __init__(self, key: str, default: str | None = None) -> None:
+        """Initialize the environment variable parameter.
+
+        Args:
+            key: The name of the environment variable.
+            default: The default value to use if the environment variable is not set.
+        """
         self.key = key
         self.default = default
 
     def resolve(self) -> Any:
+        """Resolve the value of the parameter.
+
+        Returns:
+            The value of the environment variable.
+
+        Raises:
+            AssetParamResolutionError: If the environment variable is not set and no default is provided.
+        """
         value = os.environ.get(self.key, self.default)
         if value is None:
             raise errors.AssetParamResolutionError(f"Environment variable {self.key} is not set")
@@ -45,11 +76,14 @@ class Env(AssetParam[str]):
 
 
 class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
+    """An asset parameter that resolves to the output of an upstream asset."""
+
     def __new__(
         cls,
         key: str,
         type: type[T] | None = None,
     ) -> T:
+        """Create a new instance of the upstream asset parameter."""
         return super().__new__(cls)  # type: ignore
 
     def __init__(
@@ -57,21 +91,38 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
         key: str,
         type: type[T] | None = None,
     ) -> None:
+        """Initialize the upstream asset parameter.
+
+        Args:
+            key: The key of the upstream asset in the dependencies dictionary.
+            type: The expected type of the upstream asset's output.
+        """
         self.key = key
         self.type = type
 
     def resolve(self, context: AssetExecutionContext) -> T:
+        """Resolve the value of the parameter.
+
+        Args:
+            context: The execution context.
+
+        Returns:
+            The output of the upstream asset.
+
+        Raises:
+            UpstreamAssetError: If the upstream asset cannot be resolved.
+            TypeError: If the output of the upstream asset is not of the expected type.
+        """
         if self.key not in context.executed_asset.deps:
             raise errors.UpstreamAssetError(
                 f"Upstream asset param with key {self.key} is not a dependency of asset {context.executed_asset.id}"
             )
-        upstream_asset_id = context.executed_asset.deps[self.key]
+        upstream_asset = context.executed_asset.deps[self.key]
 
-        if upstream_asset_id not in context.assets:
+        if upstream_asset.id not in context.assets:
             raise errors.UpstreamAssetError(
-                f"Upstream asset {upstream_asset_id} is not found among the assets of the execution context"
+                f"Upstream asset {upstream_asset.id} is not found among the assets of the execution context"
             )
-        upstream_asset = context.assets[upstream_asset_id]
 
         # The upstream asset must have at least one IO configured to be loaded
         if not upstream_asset.has_io:
@@ -130,16 +181,29 @@ class UpstreamAsset(ContextualAssetParam[T], Generic[T]):
         # If the upstream asset has a type, check that the data is of the correct type
         if self.type is not None and not isinstance(data, self.type):
             raise TypeError(
-                f"Expected data of type {self.type.__name__} from upstream asset {upstream_asset_id}, "
+                f"Expected data of type {self.type.__name__} from upstream asset {upstream_asset.id}, "
                 f"but got {type(data).__name__}"
             )
 
-        logger.debug(f"Upstream asset {upstream_asset_id} resolved (Type check passed ✔)")
+        logger.debug(f"Upstream asset {upstream_asset.id} resolved (Type check passed ✔)")
         return data  # type: ignore
 
 
 class Date(ContextualAssetParam[dt.date]):
+    """An asset parameter that resolves to the date of the partition."""
+
     def resolve(self, context: AssetExecutionContext) -> dt.date:
+        """Resolve the value of the parameter.
+
+        Args:
+            context: The execution context.
+
+        Returns:
+            The date of the partition.
+
+        Raises:
+            ValueError: If the asset is not partitioned or the partition is not a TimePartition.
+        """
         if not context.executed_asset.is_partitioned:
             raise ValueError("Asset param of type Date requires the executed asset to support partitioning")
 
@@ -153,7 +217,20 @@ class Date(ContextualAssetParam[dt.date]):
 
 
 class DateWindow(ContextualAssetParam[tuple[dt.date, dt.date]]):
+    """An asset parameter that resolves to the date window of the partition."""
+
     def resolve(self, context: AssetExecutionContext) -> tuple[dt.date, dt.date]:
+        """Resolve the value of the parameter.
+
+        Args:
+            context: The execution context.
+
+        Returns:
+            The date window of the partition.
+
+        Raises:
+            ValueError: If the asset is not partitioned or the partition is not a TimePartition or TimePartitionWindow.
+        """
         if not context.executed_asset.is_partitioned:
             raise ValueError("Asset param of type DateWindow requires the executed asset to support partitioning")
 
