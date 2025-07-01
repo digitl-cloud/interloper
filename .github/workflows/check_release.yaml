@@ -66,11 +66,6 @@ jobs:
 
   checks:
     uses: ./.github/workflows/_checks.yaml
-    needs: config
-    with:
-      ruff: true
-      pyright: true
-      pytest: true
 
   release:
     uses: ./.github/workflows/_release.yaml

@@ -4,15 +4,15 @@ on:
       linter:
         type: boolean
         required: false
-        default: false
+        default: true
       type-checker:
         type: boolean
         required: false
-        default: false
+        default: true
       tests:
         type: boolean
         required: false
-        default: false
+        default: true
       python-versions:
         type: string
         required: false
