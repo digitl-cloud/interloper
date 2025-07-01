@@ -1,4 +1,9 @@
+"""This module contains the custom errors for the interloper package."""
+
+
 class InterloperError(Exception):
+    """Base class for all interloper errors."""
+
     pass
 
 
@@ -7,16 +12,28 @@ class InterloperError(Exception):
 #######################
 
 
-class SourceError(InterloperError): ...
+class SourceError(InterloperError):
+    """Base class for source errors."""
+
+    ...
 
 
-class SourceDefinitionError(SourceError): ...
+class SourceDefinitionError(SourceError):
+    """Raised when there is an error in a source definition."""
+
+    ...
 
 
-class SourceValueError(SourceError): ...
+class SourceValueError(SourceError):
+    """Raised when there is an error with a source value."""
+
+    ...
 
 
-class SourceParamError(SourceError): ...
+class SourceParamError(SourceError):
+    """Raised when there is an error with a source parameter."""
+
+    ...
 
 
 #######################
@@ -24,22 +41,40 @@ class SourceParamError(SourceError): ...
 #######################
 
 
-class AssetError(InterloperError): ...
+class AssetError(InterloperError):
+    """Base class for asset errors."""
+
+    ...
 
 
-class AssetDefinitionError(AssetError): ...
+class AssetDefinitionError(AssetError):
+    """Raised when there is an error in an asset definition."""
+
+    ...
 
 
-class AssetValueError(AssetError): ...
+class AssetValueError(AssetError):
+    """Raised when there is an error with an asset value."""
+
+    ...
 
 
-class AssetNormalizationError(AssetError): ...
+class AssetNormalizationError(AssetError):
+    """Raised when there is an error normalizing an asset."""
+
+    ...
 
 
-class AssetMaterializationError(AssetError): ...
+class AssetMaterializationError(AssetError):
+    """Raised when there is an error materializing an asset."""
+
+    ...
 
 
-class AssetSchemaError(AssetError): ...
+class AssetSchemaError(AssetError):
+    """Raised when there is an error with an asset schema."""
+
+    ...
 
 
 #######################
@@ -47,10 +82,19 @@ class AssetSchemaError(AssetError): ...
 #######################
 
 
-class AssetParamError(InterloperError): ...
+class AssetParamError(InterloperError):
+    """Base class for asset parameter errors."""
+
+    ...
 
 
-class AssetParamResolutionError(AssetParamError): ...
+class AssetParamResolutionError(AssetParamError):
+    """Raised when there is an error resolving an asset parameter."""
+
+    ...
 
 
-class UpstreamAssetError(AssetParamError): ...
+class UpstreamAssetError(AssetParamError):
+    """Raised when there is an error with an upstream asset."""
+
+    ...

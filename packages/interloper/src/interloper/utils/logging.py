@@ -1,7 +1,13 @@
+"""This module contains the logging utility functions."""
 import logging
 
 
 def basic_logging(level: int = logging.DEBUG) -> None:
+    """Configure basic logging for the interloper package.
+
+    Args:
+        level: The logging level to set.
+    """
     # Configure all loggers that start with "interloper"
     interloper_logger = logging.getLogger("interloper")
     interloper_logger.setLevel(level)

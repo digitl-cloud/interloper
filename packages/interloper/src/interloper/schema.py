@@ -1,3 +1,4 @@
+"""This module contains the AssetSchema class."""
 import datetime as dt
 from abc import ABCMeta
 from dataclasses import dataclass, fields, make_dataclass
@@ -14,11 +15,10 @@ PYTHON_TO_SQL_TYPE = {
 
 
 class AssetSchemaMeta(ABCMeta):
-    """
-    Metaclass for AssetSchema. Forces subclasses to be dataclasses.
-    """
+    """Metaclass for AssetSchema. Forces subclasses to be dataclasses."""
 
     def __new__(mcs, name: str, bases: tuple[type, ...], namespace: dict[str, Any]) -> type:
+        """Create a new class."""
         cls = super().__new__(mcs, name, bases, namespace)
 
         # Ignore the base class
@@ -31,13 +31,29 @@ class AssetSchemaMeta(ABCMeta):
 
 @dataclass
 class AssetSchema(metaclass=AssetSchemaMeta):
+    """The base class for asset schemas."""
+
     @classmethod
     def from_dict(cls, schema: dict[str, type], name: str | None = None) -> type["AssetSchema"]:
+        """Create a new AssetSchema from a dictionary.
+
+        Args:
+            schema: The dictionary to create the schema from.
+            name: The name of the schema.
+
+        Returns:
+            A new AssetSchema.
+        """
         fields = [(name, field_type) for name, field_type in schema.items()]
         return make_dataclass(name or cls.__name__, fields, bases=(cls,))
 
     @classmethod
     def to_dict(cls) -> dict[str, dict[str, Any]]:
+        """Convert the schema to a dictionary.
+
+        Returns:
+            A dictionary representation of the schema.
+        """
         return {
             f.name: {
                 "type": f.type,
@@ -64,6 +80,18 @@ class AssetSchema(metaclass=AssetSchemaMeta):
         format: Literal["python", "sql"] = "python",
         types: dict[type, str] = PYTHON_TO_SQL_TYPE,
     ) -> tuple[tuple[str, Any], ...]:
+        """Convert the schema to a tuple.
+
+        Args:
+            format: The format to convert to.
+            types: The types to use for SQL conversion.
+
+        Returns:
+            A tuple representation of the schema.
+
+        Raises:
+            ValueError: If the format is invalid.
+        """
         if format not in ("python", "sql"):
             raise ValueError(f"Invalid format {format}, must be one of: python, sql")
 
@@ -74,6 +102,17 @@ class AssetSchema(metaclass=AssetSchemaMeta):
 
     @classmethod
     def to_sql(cls, types: dict[type, str] = PYTHON_TO_SQL_TYPE) -> str:
+        """Convert the schema to a SQL string.
+
+        Args:
+            types: The types to use for SQL conversion.
+
+        Returns:
+            A SQL string representation of the schema.
+
+        Raises:
+            ValueError: If a type is not supported.
+        """
         columns = []
         for f in fields(cls):
             if f.type not in types:
@@ -87,6 +126,14 @@ class AssetSchema(metaclass=AssetSchemaMeta):
 
     @classmethod
     def equals(cls, other: type["AssetSchema"]) -> bool:
+        """Check if two schemas are equal.
+
+        Args:
+            other: The other schema to compare to.
+
+        Returns:
+            True if the schemas are equal, False otherwise.
+        """
         if not issubclass(other, AssetSchema):
             return False
 
@@ -96,6 +143,14 @@ class AssetSchema(metaclass=AssetSchemaMeta):
 
     @classmethod
     def compare(cls, other: type["AssetSchema"]) -> tuple[bool, dict]:
+        """Compare two schemas.
+
+        Args:
+            other: The other schema to compare to.
+
+        Returns:
+            A tuple containing a boolean indicating if the schemas are equal and a dictionary with the differences.
+        """
         cls_fields = {f.name: f.type for f in fields(cls)}
         other_fields = {f.name: f.type for f in fields(other)}
 
@@ -115,6 +170,7 @@ class AssetSchema(metaclass=AssetSchemaMeta):
 
     @classmethod
     def print_implementation(cls) -> None:
+        """Print the implementation of the schema."""
         class_name = cls.__name__
         lines = [
             "import interloper as itlp",

@@ -33,8 +33,8 @@ my_source.io = {"file": itlp.FileIO("data")}
 # Upstream assets's keys do not match the name of the corresponding assets therefore, the source cannot build the deps
 # config map automatically and it has to be defined manually. Note that the ref then points to the asset ID (+source).
 my_source.C.deps = {
-    "custom_ref_A": "my_source.A",
-    "custom_ref_B": "my_source.B",
+    "custom_ref_A": my_source.A,
+    "custom_ref_B": my_source.B,
 }
 
 itlp.DAG(my_source).materialize()

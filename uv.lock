@@ -685,6 +685,9 @@ dependencies = [
     { name = "uritemplate" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/35/99/237cd2510aecca9fabb54007e58553274cc43cb3c18512ee1ea574d11b87/google_api_python_client-2.171.0.tar.gz", hash = "sha256:057a5c08d28463c6b9eb89746355de5f14b7ed27a65c11fdbf1d06c66bb66b23", size = 13028937, upload-time = "2025-06-03T18:57:38.732Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/79/db/c397e3eb3ea18f423855479d0a5852bdc9c3f644e3d4194931fa664a70b4/google_api_python_client-2.171.0-py3-none-any.whl", hash = "sha256:c9c9b76f561e9d9ac14e54a9e2c0842876201d5b96e69e48f967373f0784cbe9", size = 13547393, upload-time = "2025-06-10T02:14:38.225Z" },
+]
 
 [[package]]
 name = "google-auth"
@@ -1029,7 +1032,7 @@ wheels = [
 
 [[package]]
 name = "interloper"
-version = "0.1.0.dev5+ci"
+version = "0.1.0"
 source = { editable = "packages/interloper" }
 dependencies = [
     { name = "httpx" },
@@ -1053,7 +1056,7 @@ provides-extras = ["cli"]
 
 [[package]]
 name = "interloper-assets"
-version = "0.1.0.dev5+ci"
+version = "0.1.0"
 source = { editable = "packages/interloper-assets" }
 dependencies = [
     { name = "httpx" },
@@ -1087,7 +1090,7 @@ provides-extras = ["bing", "google", "facebook"]
 
 [[package]]
 name = "interloper-duckdb"
-version = "0.1.0.dev5+ci"
+version = "0.1.0"
 source = { editable = "packages/interloper-duckdb" }
 dependencies = [
     { name = "duckdb" },
@@ -1104,7 +1107,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-google-cloud"
-version = "0.1.0.dev5+ci"
+version = "0.1.0"
 source = { editable = "packages/interloper-google-cloud" }
 dependencies = [
     { name = "google-auth-oauthlib" },
@@ -1139,7 +1142,7 @@ dev = [
 
 [[package]]
 name = "interloper-pandas"
-version = "0.1.0.dev5+ci"
+version = "0.1.0"
 source = { editable = "packages/interloper-pandas" }
 dependencies = [
     { name = "interloper" },
@@ -1168,7 +1171,7 @@ dev = [
 
 [[package]]
 name = "interloper-sql"
-version = "0.1.0.dev5+ci"
+version = "0.1.0"
 source = { editable = "packages/interloper-sql" }
 dependencies = [
     { name = "interloper" },
@@ -1199,7 +1202,7 @@ dev = [
 
 [[package]]
 name = "interloper-sqlite"
-version = "0.1.0.dev5+ci"
+version = "0.1.0"
 source = { editable = "packages/interloper-sqlite" }
 dependencies = [
     { name = "interloper" },
@@ -1222,7 +1225,7 @@ dev = [
 
 [[package]]
 name = "interloper-workspace"
-version = "0.1.0.dev5+ci"
+version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "interloper" },

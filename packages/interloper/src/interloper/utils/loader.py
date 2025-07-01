@@ -1,8 +1,22 @@
+"""This module contains the loader utility functions."""
 import importlib
 from typing import Any
 
 
 def import_from_path(path: str) -> Any:
+    """Import an object from a path.
+
+    The path can be in the format 'package.module:name' or 'package.module.name'.
+
+    Args:
+        path: The path to the object.
+
+    Returns:
+        The imported object.
+
+    Raises:
+        ValueError: If the path is invalid or the object cannot be imported.
+    """
     if not path or not isinstance(path, str):
         raise ValueError(f"Path must be a non-empty string, got {type(path)}")
 

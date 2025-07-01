@@ -1,8 +1,12 @@
+"""This module contains tests for the string utility functions."""
 from interloper.utils.strings import to_snake_case
 
 
 class TestCamelToSnakeCase:
+    """Test the to_snake_case function."""
+
     def test_to_snake_case(self):
+        """Test converting a string to snake case."""
         assert to_snake_case("camelCase") == "camel_case"
         assert to_snake_case("CamelCase") == "camel_case"
         assert to_snake_case("CamelCamelCase") == "camel_camel_case"

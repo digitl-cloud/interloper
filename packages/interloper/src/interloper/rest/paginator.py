@@ -1,3 +1,4 @@
+"""This module contains the paginator classes for the REST client."""
 import logging
 import re
 from abc import ABC, abstractmethod
@@ -10,13 +11,27 @@ logger = logging.getLogger(__name__)
 
 
 class Paginator(ABC):
+    """An abstract class for paginators."""
+
     @abstractmethod
-    def paginate(self, client: httpx.Client, path: str) -> Generator[Any]: ...
+    def paginate(self, client: httpx.Client, path: str) -> Generator[Any]:
+        """Paginate through a resource.
+
+        Args:
+            client: The httpx client.
+            path: The path to the resource.
+
+        Yields:
+            The items in the resource.
+        """
+        ...
 
 
 # TODO: implementation should be robust, as in, it should handle more exit strategies. `total_pages_path`?
 # And be tested!
 class PageNumberPaginator(Paginator):
+    """A paginator that uses page numbers."""
+
     def __init__(
         self,
         initial_page: int = 1,
@@ -24,12 +39,29 @@ class PageNumberPaginator(Paginator):
         total_pages_path: str | None = None,
         max_pages: int = 50,
     ):
+        """Initialize the page number paginator.
+
+        Args:
+            initial_page: The initial page number.
+            page_param: The name of the page parameter.
+            total_pages_path: The path to the total pages in the response.
+            max_pages: The maximum number of pages to fetch.
+        """
         self.initial_page = initial_page
         self.page_param = page_param
         self.total_pages_path = total_pages_path
         self.max_pages = max_pages
 
     def paginate(self, client: httpx.Client, path: str) -> Generator[Any]:
+        """Paginate through a resource.
+
+        Args:
+            client: The httpx client.
+            path: The path to the resource.
+
+        Yields:
+            The items in the resource.
+        """
         page = self.initial_page
 
         while True:

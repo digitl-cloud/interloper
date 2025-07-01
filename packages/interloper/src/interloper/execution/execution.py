@@ -1,3 +1,4 @@
+"""This module contains the execution classes."""
 import datetime as dt
 import threading
 from abc import ABC, abstractmethod
@@ -22,6 +23,8 @@ event_bus = get_event_bus()
 
 
 class Run:
+    """A single run of a DAG."""
+
     def __init__(
         self,
         dag: DAG,
@@ -30,6 +33,15 @@ class Run:
         raises: bool = True,
         blocked_assets: list[Asset] | None = None,
     ):
+        """Initialize the run.
+
+        Args:
+            dag: The DAG to run.
+            context: The execution context.
+            max_concurrency: The maximum number of concurrent assets.
+            raises: Whether to raise an exception if an asset fails.
+            blocked_assets: A list of assets to block.
+        """
         self._dag = dag
         self._context = context
         self._state = ExecutionState()
@@ -45,6 +57,7 @@ class Run:
 
     @event_bus.event(EventType.RUN)
     def __call__(self) -> None:
+        """Run the DAG."""
         self._state.status = ExecutionStatus.RUNNING
 
         while True:
@@ -68,21 +81,33 @@ class Run:
 
     @property
     def dag(self) -> DAG:
+        """The DAG of the run."""
         return self._dag
 
     @property
     def context(self) -> ExecutionContext:
+        """The execution context of the run."""
         return self._context
 
     @property
     def state(self) -> ExecutionState:
+        """The state of the run."""
         return self._state
 
     @property
     def asset_states(self) -> dict[Asset, ExecutionState]:
+        """The states of the assets in the run."""
         return self._asset_states
 
     def assets_with_status(self, status: ExecutionStatus) -> list[Asset]:
+        """Get the assets with a specific status.
+
+        Args:
+            status: The status to filter by.
+
+        Returns:
+            A list of assets with the given status.
+        """
         return [asset for asset in self._asset_states if self._asset_states[asset].status == status]
 
     def _is_asset_ready(self, asset: Asset) -> bool:
@@ -153,6 +178,8 @@ TRunsByPartition = dict[TPartition, ExecutionState]
 
 
 class Execution(ABC):
+    """An execution of a DAG."""
+
     _partitions: Sequence[Partition] | PartitionWindow | None
 
     def __init__(
@@ -161,6 +188,16 @@ class Execution(ABC):
         partitions: TPartition = None,
         fail_fast: bool = False,
     ):
+        """Initialize the execution.
+
+        Args:
+            dag: The DAG to execute.
+            partitions: The partitions to execute.
+            fail_fast: Whether to fail fast if an asset fails.
+
+        Raises:
+            RuntimeError: If the DAG contains partitioned assets but no partitions were provided.
+        """
         self._dag = dag
         self._runs = set()
         self._fail_fast = fail_fast
@@ -177,10 +214,12 @@ class Execution(ABC):
         self._init_state()
 
     def __del__(self) -> None:
+        """Clean up the execution."""
         event_bus.unsubscribe(self.on_event)
 
     @event_bus.event(EventType.EXECUTION)
     def __call__(self) -> None:
+        """Run the execution."""
         if self._partitions is None:
             run = Run(self.dag, ExecutionContext(assets=self.dag.assets))
             self.submit_run(run)
@@ -253,23 +292,32 @@ class Execution(ABC):
                 self._state[asset][run.context.partition] = state
 
     def on_event(self, event: Event) -> None:
+        """Handle events from the event bus.
+
+        Args:
+            event: The event to handle.
+        """
         if event.type == EventType.RUN:
             self._update_state()
 
     @property
     def dag(self) -> DAG:
+        """The DAG of the execution."""
         return self._dag
 
     @property
     def runs(self) -> list[Run]:
+        """The runs of the execution."""
         return list(self._runs)
 
     @property
     def state(self) -> TExecutionState:
+        """The state of the execution."""
         return self._state
 
     @property
     def state_by_source(self) -> TExecutionStateBySource:
+        """The state of the execution grouped by source."""
         final: TExecutionStateBySource = {}
         for asset, states in self.state.items():
             if asset.source not in final:
@@ -279,19 +327,33 @@ class Execution(ABC):
 
     @abstractmethod
     def submit_run(self, run: Run) -> None:
+        """Submit a run to the execution.
+
+        Args:
+            run: The run to submit.
+        """
         pass
 
     @abstractmethod
     def wait_for_runs(self) -> None:
+        """Wait for all runs to complete."""
         pass
 
     @abstractmethod
     def shutdown(self) -> None:
+        """Shutdown the execution."""
         pass
 
 
 class SimpleExecution(Execution):
+    """A simple execution that runs in the main thread."""
+
     def submit_run(self, run: Run) -> None:
+        """Submit a run to the execution.
+
+        Args:
+            run: The run to submit.
+        """
         try:
             self._runs.add(run)
             run()
@@ -300,13 +362,17 @@ class SimpleExecution(Execution):
                 raise e
 
     def wait_for_runs(self) -> None:
+        """Wait for all runs to complete."""
         pass
 
     def shutdown(self) -> None:
+        """Shutdown the execution."""
         pass
 
 
 class MultiThreadExecution(Execution):
+    """An execution that runs in multiple threads."""
+
     def __init__(
         self,
         dag: DAG,
@@ -314,6 +380,14 @@ class MultiThreadExecution(Execution):
         max_concurrency: int = 3,
         fail_fast: bool = False,
     ):
+        """Initialize the execution.
+
+        Args:
+            dag: The DAG to execute.
+            partitions: The partitions to execute.
+            max_concurrency: The maximum number of concurrent runs.
+            fail_fast: Whether to fail fast if a run fails.
+        """
         super().__init__(dag, partitions, fail_fast)
         self._max_concurrency = max_concurrency
         self._pool = ThreadPoolExecutor(max_workers=max_concurrency)
@@ -321,6 +395,11 @@ class MultiThreadExecution(Execution):
         self._futures: dict[Run, Future] = {}
 
     def submit_run(self, run: Run) -> None:
+        """Submit a run to the execution.
+
+        Args:
+            run: The run to submit.
+        """
         def task() -> None:
             try:
                 with self._lock:
@@ -336,9 +415,11 @@ class MultiThreadExecution(Execution):
             self._futures[run] = self._pool.submit(task)
 
     def wait_for_runs(self) -> None:
+        """Wait for all runs to complete."""
         wait(list(self._futures.values()))
 
     def shutdown(self) -> None:
+        """Shutdown the execution."""
         self._pool.shutdown(wait=True)
 
     def _cancel_runs(self) -> None:
@@ -352,6 +433,11 @@ if __name__ == "__main__":
     from interloper_sql.io import SQLiteIO
 
     def work() -> None:
+        """Simulate work being done.
+
+        Raises:
+            Exception: If the random number is less than 0.2.
+        """
         from random import random, uniform
         from time import sleep
 
@@ -361,6 +447,12 @@ if __name__ == "__main__":
 
     @itlp.source(normalizer=DataframeNormalizer())
     def source() -> tuple[itlp.Asset, ...]:
+        """A source for testing.
+
+        Returns:
+            A tuple of assets.
+        """
+
         @itlp.asset()
         def root() -> pd.DataFrame:
             raise Exception("Ooops")

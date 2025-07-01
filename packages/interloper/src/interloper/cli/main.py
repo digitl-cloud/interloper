@@ -1,3 +1,4 @@
+"""This module contains the main CLI for Interloper."""
 import argparse
 import datetime as dt
 import logging
@@ -55,6 +56,17 @@ def run(
     start_date: dt.date | None = None,
     end_date: dt.date | None = None,
 ) -> None:
+    """Run a DAG from a script.
+
+    Args:
+        path: The path to the script.
+        date: The date to run the DAG for.
+        start_date: The start date of the time window.
+        end_date: The end date of the time window.
+
+    Raises:
+        ValueError: If both date and a time window are specified.
+    """
     dag = _load_script(path)
 
     if date is not None and (start_date is not None or end_date is not None):
@@ -77,10 +89,19 @@ def load(
     start_date: dt.date | None = None,
     end_date: dt.date | None = None,
 ) -> None:
+    """Load a DAG from a config file.
+
+    Args:
+        config: The path to the config file.
+        date: The date to run the DAG for.
+        start_date: The start date of the time window.
+        end_date: The end date of the time window.
+    """
     pass
 
 
 def main() -> None:
+    """The main entrypoint for the CLI."""
     logging.disable()
 
     parser = argparse.ArgumentParser(description="Interloper")

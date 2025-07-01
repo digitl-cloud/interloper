@@ -1,7 +1,16 @@
+"""This module contains string utility functions."""
 import re
 
 
 def to_snake_case(value: str) -> str:
+    """Convert a string to snake case.
+
+    Args:
+        value: The string to convert.
+
+    Returns:
+        The snake-cased string.
+    """
     value = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", value)
     value = re.sub("__([A-Z])", r"_\1", value)
     value = re.sub("([a-z0-9])([A-Z])", r"\1_\2", value)

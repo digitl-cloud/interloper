@@ -1,17 +1,20 @@
+"""This module contains typing utility functions."""
 from itertools import islice
 from typing import Any, get_args, get_origin
 
 
 def safe_isinstance(obj: Any, expected_type: Any, max_depth: int = 5, sample_size: int = 100) -> bool:
-    """
-    Recursively checks if obj matches expected_type, with optimizations for large datasets.
+    """Recursively check if obj matches expected_type, with optimizations for large datasets.
 
-    Optimizations:
-    - `max_depth`: Prevents deep recursion.
-    - `sample_size`: Limits the number of elements checked in lists, sets, dicts, tuples.
-        - If `sample_size=None`, checks **all** elements.
-    """
+    Args:
+        obj: The object to check.
+        expected_type: The expected type.
+        max_depth: The maximum recursion depth.
+        sample_size: The number of elements to check in lists, sets, dicts, tuples.
 
+    Returns:
+        True if the object matches the expected type, False otherwise.
+    """
     if max_depth == 0:  # Stop recursion to prevent excessive depth
         return True
 
@@ -28,7 +31,14 @@ def safe_isinstance(obj: Any, expected_type: Any, max_depth: int = 5, sample_siz
     args = get_args(expected_type)
 
     def sample(iterable: Any) -> Any:
-        """Helper function to apply sampling if sample_size is set."""
+        """Apply sampling if sample_size is set.
+
+        Args:
+            iterable: The iterable to sample.
+
+        Returns:
+            The sampled iterable.
+        """
         return iterable if sample_size is None else islice(iterable, sample_size)
 
     if origin is list:
@@ -63,6 +73,15 @@ def safe_isinstance(obj: Any, expected_type: Any, max_depth: int = 5, sample_siz
 
 
 def match_type(t1: type, t2: type) -> bool:
+    """Recursively check if two types match.
+
+    Args:
+        t1: The first type.
+        t2: The second type.
+
+    Returns:
+        True if the types match, False otherwise.
+    """
     if t1 == t2:
         return True
 

@@ -1,3 +1,4 @@
+"""This module contains the normalizer classes."""
 import json
 import logging
 import re
@@ -18,13 +19,41 @@ tracer = trace.get_tracer(__name__)
 
 
 class Normalizer(ABC):
-    @abstractmethod
-    def normalize(self, data: Any) -> Any: ...
+    """An abstract class for normalizers."""
 
     @abstractmethod
-    def infer_schema(self, data: Any) -> Any: ...
+    def normalize(self, data: Any) -> Any:
+        """Normalize the data.
+
+        Args:
+            data: The data to normalize.
+
+        Returns:
+            The normalized data.
+        """
+        ...
+
+    @abstractmethod
+    def infer_schema(self, data: Any) -> Any:
+        """Infer the schema from the data.
+
+        Args:
+            data: The data to infer the schema from.
+
+        Returns:
+            The inferred schema.
+        """
+        ...
 
     def column_name(self, name: str) -> str:
+        """Normalize a column name.
+
+        Args:
+            name: The column name to normalize.
+
+        Returns:
+            The normalized column name.
+        """
         name = to_snake_case(name)
         # Replace % character by pct
         name = re.sub(r"%", "_pct", name)
@@ -38,6 +67,8 @@ class Normalizer(ABC):
 
 @dataclass
 class JSONNormalizer(Normalizer):
+    """A normalizer for JSON data."""
+
     separator: str = "_"
     max_level: int = 0
     add_missing_columns: bool = field(default=True, kw_only=True)
@@ -45,6 +76,14 @@ class JSONNormalizer(Normalizer):
 
     @tracer.start_as_current_span("interloper.normalizer.JSONNormalizer.normalize")
     def normalize(self, data: Any) -> list[dict[str, Any]]:
+        """Normalize the JSON data.
+
+        Args:
+            data: The data to normalize.
+
+        Returns:
+            The normalized data.
+        """
         data = self._validate(data)
 
         if self.max_level > 0:
@@ -61,6 +100,18 @@ class JSONNormalizer(Normalizer):
 
     @tracer.start_as_current_span("interloper.normalizer.JSONNormalizer.infer_schema")
     def infer_schema(self, data: list[dict[str, Any]], sample_size: int = 1000) -> type[AssetSchema]:
+        """Infer the schema from the JSON data.
+
+        Args:
+            data: The data to infer the schema from.
+            sample_size: The number of rows to sample to infer the schema.
+
+        Returns:
+            The inferred schema.
+
+        Raises:
+            AssetNormalizationError: If the schema cannot be inferred from the data.
+        """
         if not isinstance(data, list) and not all(isinstance(row, dict) for row in data[:sample_size]):
             raise AssetNormalizationError("Cannot infer schema from data: unexpected data type")
 

@@ -1,3 +1,4 @@
+"""This module contains the MaterializationVisualizer class."""
 import functools
 
 from rich.console import Group, RenderableType
@@ -15,8 +16,17 @@ from interloper.partitioning.window import PartitionWindow
 
 # TODO: ensure partitions are sorted
 class MaterializationVisualizer:
+    """A class to visualize the materialization of assets."""
+
     def render_progress(self, state: TExecutionStateBySource) -> Panel:
-        """Render the asset progress as a panel of grouped Rich Trees."""
+        """Render the asset progress as a panel of grouped Rich Trees.
+
+        Args:
+            state: The execution state.
+
+        Returns:
+            A panel with the progress.
+        """
         elements = []
 
         max_asset_name_length = max(max(len(asset.name) for asset in states.keys()) for states in state.values())
@@ -105,6 +115,14 @@ class MaterializationVisualizer:
         return table
 
     def render_failure_summary(self, errors: list[Exception]) -> Panel:
+        """Render the failure summary as a panel.
+
+        Args:
+            errors: The list of errors.
+
+        Returns:
+            A panel with the failure summary.
+        """
         table = Table(
             show_header=False,
             box=None,
@@ -128,6 +146,15 @@ class MaterializationVisualizer:
         )
 
     def render_all(self, state: TExecutionStateBySource, errors: list[Exception]) -> RenderableType:
+        """Render the progress and failure summary.
+
+        Args:
+            state: The execution state.
+            errors: The list of errors.
+
+        Returns:
+            A renderable object.
+        """
         if len(errors) > 0:
             return Group(
                 self.render_progress(state),

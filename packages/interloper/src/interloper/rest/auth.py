@@ -1,3 +1,4 @@
+"""This module contains the authentication classes for the REST client."""
 import base64
 import logging
 from abc import ABC, abstractmethod
@@ -9,41 +10,69 @@ logger = logging.getLogger(__name__)
 
 
 class Auth(ABC):
+    """An abstract class for authentication."""
+
     def __init__(self):
+        """Initialize the authentication."""
         self.authenticated = False
 
     @abstractmethod
-    def __call__(self, *args: Any, **kwargs: Any): ...
+    def __call__(self, *args: Any, **kwargs: Any):
+        """Authenticate the client."""
+        ...
 
 
 class HTTPAuth(Auth):
+    """An abstract class for HTTP authentication."""
+
     @abstractmethod
-    def __call__(self, client: httpx.Client): ...
+    def __call__(self, client: httpx.Client):
+        """Authenticate the client."""
+        ...
 
 
 class HTTPBasicAuth(HTTPAuth):
+    """HTTP Basic authentication."""
+
     def __init__(self, username: str, password: str):
+        """Initialize the HTTP Basic authentication.
+
+        Args:
+            username: The username.
+            password: The password.
+        """
         super().__init__()
         self._username = username
         self._password = password
 
     def __call__(self, client: httpx.Client):
+        """Authenticate the client."""
         credentials = base64.b64encode(f"{self._username}:{self._password}".encode()).decode()
         client.headers.update({"Authorization": f"Basic {credentials}"})
         self.authenticated = True
 
 
 class HTTPBearerAuth(HTTPAuth):
+    """HTTP Bearer authentication."""
+
     def __init__(self, token: str):
+        """Initialize the HTTP Bearer authentication.
+
+        Args:
+            token: The token.
+        """
         super().__init__()
         self._token = token
 
     def __call__(self, client: httpx.Client):
+        """Authenticate the client."""
         client.headers.update({"Authorization": f"Bearer {self._token}"})
         self.authenticated = True
 
 
 class OAuth2Auth(HTTPAuth):
+    """OAuth2 authentication."""
+
     def __init__(
         self,
         base_url: str,
@@ -53,6 +82,16 @@ class OAuth2Auth(HTTPAuth):
         scope: str | None = None,
         token_endpoint: str = "/oauth2/token",
     ):
+        """Initialize the OAuth2 authentication.
+
+        Args:
+            base_url: The base URL of the API.
+            client_id: The client ID.
+            client_secret: The client secret.
+            refresh_token: The refresh token.
+            scope: The scope.
+            token_endpoint: The token endpoint.
+        """
         super().__init__()
         self._base_url = base_url
         self._client_id = client_id
@@ -63,29 +102,45 @@ class OAuth2Auth(HTTPAuth):
 
     @property
     @abstractmethod
-    def grant_type(self) -> str: ...
+    def grant_type(self) -> str:
+        """The grant type."""
+        ...
 
     @property
     @abstractmethod
-    def auth_data(self) -> dict[str, str]: ...
+    def auth_data(self) -> dict[str, str]:
+        """The authentication data."""
+        ...
 
     @property
     def auth_headers(self) -> dict[str, str] | None:
+        """The authentication headers."""
         return None
 
     @property
     def access_token(self) -> str:
+        """The access token.
+
+        Raises:
+            ValueError: If the client is not authenticated.
+        """
         if not self.authenticated:
             raise ValueError("Cannot access access token: not authenticated")
         return self._access_token
 
     @property
     def refresh_token(self) -> str | None:
+        """The refresh token.
+
+        Raises:
+            ValueError: If the client is not authenticated.
+        """
         if not self.authenticated:
             raise ValueError("Cannot access refresh token: not authenticated")
         return self._refresh_token
 
     def __call__(self, client: httpx.Client):
+        """Authenticate the client."""
         logger.info("Authenticating API...")
 
         response = httpx.post(
@@ -106,12 +161,16 @@ class OAuth2Auth(HTTPAuth):
 
 
 class OAuth2ClientCredentialsAuth(OAuth2Auth):
+    """OAuth2 client credentials authentication."""
+
     @property
     def grant_type(self) -> str:
+        """The grant type."""
         return "client_credentials"
 
     @property
     def auth_data(self) -> dict[str, str]:
+        """The authentication data."""
         data = {
             "client_id": self._client_id,
             "client_secret": self._client_secret,
@@ -125,12 +184,20 @@ class OAuth2ClientCredentialsAuth(OAuth2Auth):
 
 
 class OAuth2RefreshTokenAuth(OAuth2ClientCredentialsAuth):
+    """OAuth2 refresh token authentication."""
+
     @property
     def grant_type(self) -> str:
+        """The grant type."""
         return "refresh_token"
 
     @property
     def auth_data(self) -> dict[str, str]:
+        """The authentication data.
+
+        Raises:
+            ValueError: If the refresh token is required but not provided.
+        """
         if self._refresh_token is None:
             raise ValueError("Refresh token is required when using `OAuth2RefreshTokenConnector`")
 
