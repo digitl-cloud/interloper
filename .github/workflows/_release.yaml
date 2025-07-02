@@ -90,7 +90,7 @@ jobs:
         uses: python-semantic-release/python-semantic-release@v10
         with:
           build_metadata: ${{ steps.set-vars.outputs.SUFFIX }}
-          build: true
+          build: false
           changelog: ${{ steps.set-vars.outputs.CHANGELOG == 'true' }}
           commit: ${{ steps.set-vars.outputs.COMMIT == 'true' }}
           github_token: ${{ secrets.GH_TOKEN }}
