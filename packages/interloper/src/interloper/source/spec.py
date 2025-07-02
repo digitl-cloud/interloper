@@ -22,7 +22,7 @@ class SourceSpec(BaseModel):
     type: Literal["source"]
     name: str
     path: str
-    io: dict[str, IOSpec] | None = None
+    io: dict[str, IOSpec] = {}
     assets: list[str] | None = None
     assets_args: dict[str, Any] | None = None
 
@@ -36,10 +36,12 @@ class SourceSpec(BaseModel):
             A source.
         """
         source: Source = import_from_path(self.path)
-        source.name = self.name
 
-        if self.io:
-            source.io = {name: spec.to_io() for name, spec in self.io.items()}
+        source = source(
+            name=self.name,
+            io={name: spec.to_io() for name, spec in self.io.items()},
+            default_assets_args=self.assets_args,
+        )
 
         # If assets are specified, all assets are "disabled" by making them non-materializable.
         # Then, the assets specified in `assets` are made materializable.
@@ -49,8 +51,5 @@ class SourceSpec(BaseModel):
                 if asset_name not in source:
                     raise ValueError(f"Asset {asset_name} is not a valid asset of source {self.name}")
                 source[asset_name].materializable = True
-
-        if self.assets_args:
-            source.default_assets_args = self.assets_args
 
         return source
