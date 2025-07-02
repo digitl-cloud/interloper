@@ -1,4 +1,5 @@
 """This module contains the execution classes."""
+
 import datetime as dt
 import threading
 from abc import ABC, abstractmethod
@@ -400,6 +401,7 @@ class MultiThreadExecution(Execution):
         Args:
             run: The run to submit.
         """
+
         def task() -> None:
             try:
                 with self._lock:

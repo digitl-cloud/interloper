@@ -3,7 +3,6 @@
 import argparse
 import datetime as dt
 import logging
-from pprint import pp
 from typing import Any
 
 import yaml
@@ -92,6 +91,7 @@ def load(
     date: dt.date | None = None,
     start_date: dt.date | None = None,
     end_date: dt.date | None = None,
+    iter_partitions: bool = False,
 ) -> None:
     """Load a DAG from a config file.
 
@@ -100,11 +100,29 @@ def load(
         date: The date to run the DAG for.
         start_date: The start date of the time window.
         end_date: The end date of the time window.
+        iter_partitions: Whether to iterate over partitions.
+
+    Raises:
+        ValueError: If both date and a time window are specified.
     """
     with open(path) as f:
         config = yaml.safe_load(f)
         dag = DAGSpec.model_validate(config).to_dag()
-        pp(dag)
+
+    if date is not None and (start_date is not None or end_date is not None):
+        raise ValueError("Cannot specify both --date and --start-date/--end-date")
+
+    if date is not None:
+        partitions = TimePartition(date)
+    elif start_date is not None and end_date is not None:
+        partitions = TimePartitionWindow(start=start_date, end=end_date)
+        if iter_partitions:
+            partitions = list(partitions.iter_partitions())
+    else:
+        partitions = None
+
+    execution = MultiThreadExecution(dag, partitions)
+    _visualize(execution)
 
 
 def main() -> None:
@@ -127,12 +145,13 @@ def main() -> None:
     load_parser.add_argument("--date", type=dt.date.fromisoformat, help="Single date to materialize")
     load_parser.add_argument("--start-date", type=dt.date.fromisoformat, help="Start date for date range")
     load_parser.add_argument("--end-date", type=dt.date.fromisoformat, help="End date for date range")
+    load_parser.add_argument("--iter-partitions", action="store_true", help="Iterate over partitions")
 
     args = parser.parse_args()
     if args.command == "run":
         run(args.script, args.date, args.start_date, args.end_date)
     elif args.command == "load":
-        load(args.config, args.date, args.start_date, args.end_date)
+        load(args.config, args.date, args.start_date, args.end_date, args.iter_partitions)
 
 
 if __name__ == "__main__":

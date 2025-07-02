@@ -5,7 +5,6 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from interloper.asset.base import Asset
-from interloper.io.base import IO
 from interloper.io.spec import IOSpec
 from interloper.utils.loader import import_from_path
 
@@ -33,8 +32,15 @@ class AssetSpec(BaseModel):
             An asset.
         """
         AssetType: type[Asset] = import_from_path(self.path)
-        io: dict[str, IO] = {name: spec.to_io() for name, spec in self.io.items()}
-        return AssetType(
+
+        print(AssetType)
+
+        asset = AssetType(
             name=self.name,
-            io=io,
+            io={name: spec.to_io() for name, spec in self.io.items()},
         )
+
+        if self.args:
+            asset.bind(**self.args)
+
+        return asset
