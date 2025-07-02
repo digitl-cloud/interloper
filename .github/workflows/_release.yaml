@@ -1,0 +1,106 @@
+on:
+  workflow_call:
+    secrets:
+      GH_TOKEN:
+        required: true
+
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "write"
+      id-token: "write"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Set release variables
+        id: set-vars
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+
+          case "$BRANCH" in
+            main)
+              echo "CHANGELOG=true" >> $GITHUB_OUTPUT
+              echo "COMMIT=true" >> $GITHUB_OUTPUT
+              echo "SUFFIX=''" >> $GITHUB_OUTPUT
+              echo "TAG=true" >> $GITHUB_OUTPUT
+              echo "VCS_RELEASE=true" >> $GITHUB_OUTPUT
+              echo "PUBLISH=true" >> $GITHUB_OUTPUT
+              ;;
+            rc)
+              echo "CHANGELOG=false" >> $GITHUB_OUTPUT
+              echo "COMMIT=true" >> $GITHUB_OUTPUT
+              echo "SUFFIX=''" >> $GITHUB_OUTPUT
+              echo "TAG=true" >> $GITHUB_OUTPUT
+              echo "VCS_RELEASE=true" >> $GITHUB_OUTPUT
+              echo "PUBLISH=true" >> $GITHUB_OUTPUT
+              ;;
+            alpha)
+              echo "CHANGELOG=false" >> $GITHUB_OUTPUT
+              echo "COMMIT=true" >> $GITHUB_OUTPUT
+              echo "SUFFIX=''" >> $GITHUB_OUTPUT
+              echo "TAG=true" >> $GITHUB_OUTPUT
+              echo "VCS_RELEASE=false" >> $GITHUB_OUTPUT
+              echo "PUBLISH=false" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "CHANGELOG=false" >> $GITHUB_OUTPUT
+              echo "COMMIT=false" >> $GITHUB_OUTPUT
+              echo "SUFFIX=$(git branch --show-current | sed 's/[^a-zA-Z0-9-]/-/g')" >> $GITHUB_OUTPUT
+              echo "TAG=false" >> $GITHUB_OUTPUT
+              echo "VCS_RELEASE=false" >> $GITHUB_OUTPUT
+              echo "PUBLISH=false" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/499027771610/locations/global/workloadIdentityPools/github-actions/providers/github-actions"
+          service_account: "github-actions@dc-int-connectors-prd.iam.gserviceaccount.com"
+
+      - name: Get access token
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.10"
+          cache-suffix: "3.10"
+
+      - name: UV sync
+        run: uv sync --all-packages --all-extras
+
+      # TODO: replace with `uv run python-semantic-release` command for faster execution
+      - name: Release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10
+        with:
+          build_metadata: ${{ steps.set-vars.outputs.SUFFIX }}
+          build: true
+          changelog: ${{ steps.set-vars.outputs.CHANGELOG == 'true' }}
+          commit: ${{ steps.set-vars.outputs.COMMIT == 'true' }}
+          github_token: ${{ secrets.GH_TOKEN }}
+          tag: ${{ steps.set-vars.outputs.TAG == 'true' }}
+          vcs_release: ${{ steps.set-vars.outputs.VCS_RELEASE == 'true' }}
+          git_committer_email: "semantic-release@digitlcloud.dev"
+          git_committer_name: "Semantic Release"
+
+      - name: Build & Publish
+        if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+        run: |
+          uv build --all-packages
+          uv publish --index dc-int-connectors-prd --username oauth2accesstoken --password ${{ env.ACCESS_TOKEN }} --keyring-provider subprocess

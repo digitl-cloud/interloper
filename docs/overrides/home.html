@@ -1,0 +1,45 @@
+{% extends "main.html" %}
+{% block tabs %}
+<style>
+    .md-header {
+        position: initial
+    }
+
+    .md-main__inner {
+        margin: 0
+    }
+
+    .md-content {
+        display: none
+    }
+
+    .md-sidebar--secondary {
+        display: none
+    }
+
+    .md-sidebar--primary {
+        display: none
+    }
+</style>
+<section class="mdx-container">
+    <div class="md-grid md-typeset">
+        <div class="mdx-hero">
+            <!-- <div class="mdx-hero__image">
+                <img src="assets/images/illustration.png" alt="" width="1659" height="1200" draggable="false">
+            </div> -->
+            <div class="mdx-hero__content">
+                <h1>{{ config.site_name}}</h1>
+                <p>{{ config.site_description }}</p>
+                <a href="{{  'getting-started/' | url }}" class="md-button md-button--primary">
+                    Get started
+                </a>
+                <a href="{{ config.repo_url }}" class="md-button">
+                    Github
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+{% block content %}{% endblock %}
+{% block footer %}{% endblock %}

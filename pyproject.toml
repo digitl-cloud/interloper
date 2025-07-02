@@ -1,0 +1,140 @@
+# ###############
+# PROJECT
+# ###############
+[project]
+name = "interloper-workspace"
+version = "0.1.0"
+description = "The Interloper Project"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "interloper",
+    "interloper-assets",
+    "interloper-duckdb",
+    "interloper-pandas",
+    "interloper-google-cloud",
+    "interloper-sql",
+    "interloper-sqlite",
+]
+
+[dependency-groups]
+dev = [
+    "mkdocs-material>=9.6.7",
+    "pre-commit>=4.2.0",
+    "pyright>=1.1.393",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+    "python-semantic-release>=10.0.0",
+    "ruff>=0.9.4",
+]
+
+# ###############
+# UV
+# ###############
+[tool.uv.sources]
+interloper = { workspace = true }
+interloper-assets = { workspace = true }
+interloper-duckdb = { workspace = true }
+interloper-google-cloud = { workspace = true }
+interloper-pandas = { workspace = true }
+interloper-sql = { workspace = true }
+interloper-sqlite = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[[tool.uv.index]]
+name = "dc-int-connectors-prd"
+url = "https://europe-python.pkg.dev/dc-int-connectors-prd/python-public/simple"
+publish-url = "https://europe-python.pkg.dev/dc-int-connectors-prd/python-public"
+explicit = true
+
+# ###############
+# PYRIGHT
+# ###############
+[tool.pyright]
+typeCheckingMode = "basic"
+reportMissingParameterType = true
+ignore = ["**/tests", "examples/telemetry"]
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+exclude = ["libs/**"]
+
+[tool.ruff.lint]
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "F811"]
+
+# ###############
+# PYTEST
+# ###############
+[tool.pytest.ini_options]
+markers = ["integration", "functional"]
+addopts = ["--import-mode=importlib", "-m not functional"]
+
+# ###############
+# COVERAGE
+# ###############
+[tool.coverage.report]
+include = ["packages/**/src/**"]
+exclude_also = [
+    # Don't complain about missing debug-only code:
+    # "def __repr__",
+    "if self\\.debug",
+
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+
+    # Don't complain if non-runnable code isn't run:
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+]
+
+# ################
+# SEMANTIC RELEASE
+# ################
+[tool.semantic_release]
+allow_zero_version = true
+build_command = "uv build --all-packages"
+version_toml = [
+    "pyproject.toml:project.version",
+    "packages/interloper/pyproject.toml:project.version",
+    "packages/interloper-assets/pyproject.toml:project.version",
+    "packages/interloper-duckdb/pyproject.toml:project.version",
+    "packages/interloper-google-cloud/pyproject.toml:project.version",
+    "packages/interloper-pandas/pyproject.toml:project.version",
+    "packages/interloper-sql/pyproject.toml:project.version",
+    "packages/interloper-sqlite/pyproject.toml:project.version",
+]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.branches.rc]
+match = "rc"
+prerelease = true
+prerelease_token = "rc"
+
+[tool.semantic_release.branches.alpha]
+match = "alpha"
+prerelease = true
+prerelease_token = "alpha"
+
+[tool.semantic_release.branches.feat]
+match = "feat/.*$"
+prerelease = true
+prerelease_token = "dev"

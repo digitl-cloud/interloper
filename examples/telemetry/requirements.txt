@@ -1,0 +1,3 @@
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-instrumentation-threading
+opentelemetry-sdk

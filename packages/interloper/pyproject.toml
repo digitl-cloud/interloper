@@ -1,0 +1,58 @@
+# ###############
+# PROJECT / UV
+# ###############
+[project]
+name = "interloper"
+version = "0.1.0"
+description = "Interloper"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.28.1",
+    "opentelemetry-api>=1.32.1",
+    "pydantic>=2.11.7",
+]
+
+[project.optional-dependencies]
+cli = ["pyyaml>=6.0.0", "rich>=14.0.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+interloper = "interloper.cli.main:main"
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+preview = true
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+ignore = ["D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "F811"]
+
+# ###############
+# PYRIGHT
+# ###############
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "basic"
+reportMissingParameterType = true
+ignore = ["libs/**", "tests/**", "scripts/**"]
+
+# ###############
+# PYTEST
+# ###############
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::DeprecationWarning"]
