@@ -103,6 +103,8 @@ Alongside Interloper, we maintain a **pre-built collection of assets** that pull
     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
 - :fontawesome-brands-google: Thetradedesk  
     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+- :fontawesome-brands-google: TikTok Ads  
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
 </div>
 
 </div>
