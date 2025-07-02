@@ -41,6 +41,3 @@ my_source = my_source(
 itlp.DAG(my_source).materialize()
 ```
 
-
-
-xxxx
