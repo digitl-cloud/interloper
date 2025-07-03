@@ -74,7 +74,7 @@ jobs:
           echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
 
       - name: Get GitHub App token
-      - uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.SEMANTIC_RELEASE_APP_ID }}
