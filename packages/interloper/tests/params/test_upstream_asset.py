@@ -1,93 +1,14 @@
-"""This module contains tests for the asset parameter classes."""
+"""This module contains tests for the upstream asset parameter classes."""
 import datetime as dt
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
 from interloper import errors
 from interloper.execution.context import AssetExecutionContext
 from interloper.io.base import IO, IOContext
-from interloper.param import (
-    AssetParam,
-    ContextualAssetParam,
-    Date,
-    DateWindow,
-    Env,
-    UpstreamAsset,
-)
+from interloper.params.upstream_asset import UpstreamAsset
 from interloper.partitioning.partition import TimePartition
-from interloper.partitioning.window import TimePartitionWindow
-
-
-class TestAssetParam:
-    """Test the AssetParam class."""
-
-    def test_asset_param_abstract_methods(self):
-        """Test that AssetParam is an abstract base class."""
-        with pytest.raises(TypeError):
-            AssetParam()
-
-    def test_asset_param_concrete_implementation(self):
-        """Test concrete implementation of AssetParam."""
-
-        class ConcreteAssetParam(AssetParam[str]):
-            def resolve(self) -> str:
-                return "test"
-
-        param = ConcreteAssetParam()
-        assert param.resolve() == "test"
-
-
-class TestContextualAssetParam:
-    """Test the ContextualAssetParam class."""
-
-    def test_contextual_asset_param_abstract_methods(self):
-        """Test that ContextualAssetParam is an abstract base class."""
-        with pytest.raises(TypeError):
-            ContextualAssetParam()
-
-    def test_contextual_asset_param_concrete_implementation(self):
-        """Test concrete implementation of ContextualAssetParam."""
-
-        class ConcreteContextualAssetParam(ContextualAssetParam[str]):
-            def resolve(self, context: AssetExecutionContext) -> str:
-                return "test"
-
-        param = ConcreteContextualAssetParam()
-        context = Mock(spec=AssetExecutionContext)
-        assert param.resolve(context) == "test"
-
-
-class TestEnv:
-    """Test the Env class."""
-
-    def test_env_resolve_with_existing_variable(self):
-        """Test Env.resolve with existing environment variable."""
-        with patch.dict(os.environ, {"TEST_KEY": "test_value"}):
-            env_param = Env("TEST_KEY")
-            result = env_param.resolve()
-            assert result == "test_value"
-
-    def test_env_resolve_with_default(self):
-        """Test Env.resolve with default value when variable doesn't exist."""
-        with patch.dict(os.environ, {}, clear=True):
-            env_param = Env("MISSING_KEY", default="default_value")
-            result = env_param.resolve()
-            assert result == "default_value"
-
-    def test_env_resolve_without_default_raises_error(self):
-        """Test Env.resolve raises error when variable doesn't exist and no default."""
-        with patch.dict(os.environ, {}, clear=True):
-            env_param = Env("MISSING_KEY")
-            with pytest.raises(errors.AssetParamResolutionError, match="Environment variable MISSING_KEY is not set"):
-                env_param.resolve()
-
-    def test_env_initialization(self):
-        """Test Env initialization."""
-        env_param = Env("TEST_KEY", default="default_value")
-        assert env_param.key == "TEST_KEY"
-        assert env_param.default == "default_value"
 
 
 class TestUpstreamAsset:
@@ -258,101 +179,4 @@ class TestUpstreamAsset:
 
         upstream_param = UpstreamAsset("upstream")
         with pytest.raises(errors.UpstreamAssetError, match="Cannot load data from upstream asset"):
-            upstream_param.resolve(mock_context)
-
-
-class TestDate:
-    """Test the Date asset parameter."""
-
-    @pytest.fixture
-    def mock_context(self):
-        """Return a mock asset execution context."""
-        context = Mock(spec=AssetExecutionContext)
-        context.executed_asset = Mock()
-        context.executed_asset.is_partitioned = True
-        context.partition = None
-        return context
-
-    def test_date_resolve_success(self, mock_context):
-        """Test successful Date resolution."""
-        mock_context.partition = TimePartition(dt.date(2024, 1, 1))
-
-        date_param = Date()
-        result = date_param.resolve(mock_context)
-
-        assert result == dt.date(2024, 1, 1)
-
-    def test_date_resolve_non_partitioned_asset(self, mock_context):
-        """Test Date resolution with non-partitioned asset."""
-        mock_context.executed_asset.is_partitioned = False
-
-        date_param = Date()
-        with pytest.raises(ValueError, match="requires the executed asset to support partitioning"):
-            date_param.resolve(mock_context)
-
-    def test_date_resolve_no_partition(self, mock_context):
-        """Test Date resolution with no partition."""
-        date_param = Date()
-        with pytest.raises(ValueError, match="requires the execution context to have a TimePartition"):
-            date_param.resolve(mock_context)
-
-    def test_date_resolve_wrong_partition_type(self, mock_context):
-        """Test Date resolution with wrong partition type."""
-        mock_context.partition = Mock()  # not a TimePartition
-
-        date_param = Date()
-        with pytest.raises(ValueError, match="requires the execution context to have a TimePartition"):
-            date_param.resolve(mock_context)
-
-
-class TestDateWindow:
-    """Test the DateWindow asset parameter."""
-
-    @pytest.fixture
-    def mock_context(self):
-        """Return a mock asset execution context."""
-        context = Mock(spec=AssetExecutionContext)
-        context.executed_asset = Mock()
-        context.executed_asset.is_partitioned = True
-        context.partition = None
-        return context
-
-    def test_date_window_resolve_with_time_partition(self, mock_context):
-        """Test DateWindow resolution with TimePartition."""
-        mock_context.partition = TimePartition(dt.date(2024, 1, 1))
-
-        date_window_param = DateWindow()
-        result = date_window_param.resolve(mock_context)
-
-        assert result == (dt.date(2024, 1, 1), dt.date(2024, 1, 1))
-
-    def test_date_window_resolve_with_time_partition_window(self, mock_context):
-        """Test DateWindow resolution with TimePartitionWindow."""
-        mock_context.partition = TimePartitionWindow(dt.date(2024, 1, 1), dt.date(2024, 1, 3))
-
-        date_window_param = DateWindow()
-        result = date_window_param.resolve(mock_context)
-
-        assert result == (dt.date(2024, 1, 1), dt.date(2024, 1, 3))
-
-    def test_date_window_resolve_non_partitioned_asset(self, mock_context):
-        """Test DateWindow resolution with non-partitioned asset."""
-        mock_context.executed_asset.is_partitioned = False
-
-        date_window_param = DateWindow()
-        with pytest.raises(ValueError, match="requires the executed asset to support partitioning"):
-            date_window_param.resolve(mock_context)
-
-    def test_date_window_resolve_no_partition(self, mock_context):
-        """Test DateWindow resolution with no partition."""
-        date_window_param = DateWindow()
-        with pytest.raises(ValueError, match="requires the context to have a TimePartition or TimePartitionWindow"):
-            date_window_param.resolve(mock_context)
-
-    def test_date_window_resolve_wrong_partition_type(self, mock_context):
-        """Test DateWindow resolution with wrong partition type."""
-        mock_context.partition = Mock()  # not a TimePartition or TimePartitionWindow
-
-        date_window_param = DateWindow()
-        with pytest.raises(ValueError, match="requires the context to have a TimePartition or TimePartitionWindow"):
-            date_window_param.resolve(mock_context)
+            upstream_param.resolve(mock_context) 

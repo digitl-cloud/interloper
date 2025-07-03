@@ -14,7 +14,7 @@ from interloper.asset.base import Asset
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO
 from interloper.normalizer import Normalizer
-from interloper.param import AssetParam, ContextualAssetParam
+from interloper.params.base import AssetParam, ContextualAssetParam
 
 
 class Source(ABC):

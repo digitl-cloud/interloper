@@ -8,7 +8,10 @@ from interloper.io.base import IO, IOContext, IOHandler
 from interloper.io.database import DatabaseClient, DatabaseIO
 from interloper.io.file import FileIO
 from interloper.normalizer import JSONNormalizer, Normalizer
-from interloper.param import AssetParam, ContextualAssetParam, Date, DateWindow, Env, UpstreamAsset
+from interloper.params.base import AssetParam, ContextualAssetParam
+from interloper.params.date import Date, DateWindow
+from interloper.params.env import Env
+from interloper.params.upstream_asset import UpstreamAsset
 from interloper.partitioning.config import PartitionConfig, TimePartitionConfig
 from interloper.partitioning.partition import Partition, TimePartition
 from interloper.partitioning.window import PartitionWindow, TimePartitionWindow
