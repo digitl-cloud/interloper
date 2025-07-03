@@ -26,11 +26,11 @@ class DAGSpec(BaseModel):
         for spec in self.assets:
             if spec.type == "asset":
                 asset = AssetSpec.model_validate(spec).to_asset()
-                asset.io = io
+                asset.io = asset.io or io
                 sources_or_assets.append(asset)
             elif spec.type == "source":
                 source = SourceSpec.model_validate(spec).to_source()
-                source.io = io
+                source.io = source.io or io
                 sources_or_assets.append(source)
 
         dag = DAG()

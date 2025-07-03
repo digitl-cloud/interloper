@@ -15,4 +15,5 @@ jobs:
     if: github.ref_name == 'main' || github.ref_name == 'rc' || github.ref_name == 'alpha'
     needs: checks
     secrets:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SEMANTIC_RELEASE_APP_ID: ${{ vars.SEMANTIC_RELEASE_APP_ID }}
+      SEMANTIC_RELEASE_APP_KEY: ${{ secrets.SEMANTIC_RELEASE_APP_KEY }}

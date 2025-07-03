@@ -1,11 +1,10 @@
 on:
   workflow_call:
     secrets:
-      GH_TOKEN:
+      SEMANTIC_RELEASE_APP_ID:
         required: true
-
-env:
-  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SEMANTIC_RELEASE_APP_KEY:
+        required: true
 
 jobs:
   release:
@@ -17,12 +16,6 @@ jobs:
       id-token: "write"
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-
       - name: Set release variables
         id: set-vars
         run: |
@@ -69,22 +62,30 @@ jobs:
           workload_identity_provider: "projects/499027771610/locations/global/workloadIdentityPools/github-actions/providers/github-actions"
           service_account: "github-actions@dc-int-connectors-prd.iam.gserviceaccount.com"
 
-      - name: Get access token
+      - name: Get Google Cloud access token
         run: |
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
 
-      - name: UV setup
-        uses: astral-sh/setup-uv@v6
+      - name: Get GitHub App token
+        uses: actions/create-github-app-token@v2
+        id: app-token
         with:
-          enable-cache: true
-          python-version: "3.10"
-          cache-suffix: "3.10"
+          app-id: ${{ vars.SEMANTIC_RELEASE_APP_ID }}
+          private-key: ${{ secrets.SEMANTIC_RELEASE_APP_KEY }}
 
-      - name: UV sync
-        run: uv sync --all-packages --all-extras
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      # TODO: replace with `uv run python-semantic-release` command for faster execution
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
       - name: Release
         id: release
         uses: python-semantic-release/python-semantic-release@v10
@@ -93,11 +94,23 @@ jobs:
           build: false
           changelog: ${{ steps.set-vars.outputs.CHANGELOG == 'true' }}
           commit: ${{ steps.set-vars.outputs.COMMIT == 'true' }}
-          github_token: ${{ secrets.GH_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
           tag: ${{ steps.set-vars.outputs.TAG == 'true' }}
           vcs_release: ${{ steps.set-vars.outputs.VCS_RELEASE == 'true' }}
-          git_committer_email: "semantic-release@digitlcloud.dev"
+          git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
           git_committer_name: "Semantic Release"
+
+      - name: UV setup
+        if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.10"
+          cache-suffix: "3.10"
+
+      - name: UV sync
+        if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+        run: uv sync --all-packages --all-extras
 
       - name: Build & Publish
         if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}

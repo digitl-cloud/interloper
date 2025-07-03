@@ -1,4 +1,5 @@
 """This module contains the base classes for assets."""
+
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -112,6 +113,7 @@ class Asset(ABC):
     def __call__(
         self,
         *,
+        name: str | None = None,
         io: dict[str, IO] | IO | None = None,
         default_io_key: str | None = None,
         deps: dict[str, "Asset"] | None = None,
@@ -120,6 +122,7 @@ class Asset(ABC):
         """Create a copy of the asset with new parameters.
 
         Args:
+            name: The name of the asset.
             io: The IO of the asset.
             default_io_key: The default IO key of the asset.
             deps: The dependencies of the asset.
@@ -129,6 +132,7 @@ class Asset(ABC):
             A new asset with the updated parameters.
         """
         c = copy(self)
+        c.name = name or self.name
         c._io = io or self._io
         c._default_io_key = default_io_key or self._default_io_key
         c.deps = deps or self.deps
@@ -309,7 +313,11 @@ class Asset(ABC):
 
             logger.info(f"Asset {self.name} materialization complete")
 
-    def bind(self, ignore_unknown_params: bool = False, **params: Any) -> None:
+    def bind(
+        self,
+        ignore_unknown_params: bool = False,
+        **params: Any,
+    ) -> None:
         """Bind parameters to the data function.
 
         Args:
