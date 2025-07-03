@@ -1,11 +1,10 @@
 on:
   workflow_call:
     secrets:
-      GH_TOKEN:
+      SEMANTIC_RELEASE_APP_ID:
         required: true
-
-env:
-  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SEMANTIC_RELEASE_APP_KEY:
+        required: true
 
 jobs:
   release:
@@ -111,8 +110,8 @@ jobs:
           github_token: ${{ steps.app-token.outputs.token }}
           tag: ${{ steps.set-vars.outputs.TAG == 'true' }}
           vcs_release: ${{ steps.set-vars.outputs.VCS_RELEASE == 'true' }}
-          git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.generate-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-          git_committer_name: "${{ steps.generate-token.outputs.app-slug }}[bot]"
+          git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+          git_committer_name: "${{ steps.app-token.outputs.app-slug }}[bot]"
 
       - name: Build & Publish
         if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
