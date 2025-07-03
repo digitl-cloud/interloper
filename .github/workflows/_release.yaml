@@ -96,7 +96,7 @@ jobs:
           github_token: ${{ secrets.GH_TOKEN }}
           tag: ${{ steps.set-vars.outputs.TAG == 'true' }}
           vcs_release: ${{ steps.set-vars.outputs.VCS_RELEASE == 'true' }}
-          git_committer_email: "github@digitlcloud.com"
+          git_committer_email: "digitlcloud@users.noreply.github.com"
           git_committer_name: "Semantic Release"
 
       - name: Build & Publish
