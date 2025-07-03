@@ -74,7 +74,7 @@ jobs:
           echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
 
       - name: Get GitHub App token
-        uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.SEMANTIC_RELEASE_APP_ID }}
@@ -86,38 +86,48 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - run: |
+      - name: Set Git user
+        run: |
           git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
-      - name: Release
-        id: release
-        uses: python-semantic-release/python-semantic-release@v10
-        with:
-          build_metadata: ${{ steps.set-vars.outputs.SUFFIX }}
-          build: false
-          changelog: ${{ steps.set-vars.outputs.CHANGELOG == 'true' }}
-          commit: ${{ steps.set-vars.outputs.COMMIT == 'true' }}
-          github_token: ${{ steps.app-token.outputs.token }}
-          tag: ${{ steps.set-vars.outputs.TAG == 'true' }}
-          vcs_release: ${{ steps.set-vars.outputs.VCS_RELEASE == 'true' }}
-          git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-          git_committer_name: "${{ steps.app-token.outputs.app-slug }}[bot]"
-
-      - name: UV setup
-        if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.10"
-          cache-suffix: "3.10"
-
-      - name: UV sync
-        if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
-        run: uv sync --all-packages --all-extras
-
-      - name: Build & Publish
-        if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+      - name: Test commit and push
         run: |
-          uv build --all-packages
-          uv publish --index dc-int-connectors-prd --username oauth2accesstoken --password ${{ env.ACCESS_TOKEN }} --keyring-provider subprocess
+          echo "test content" > test.txt
+          git add .
+          git commit -m "test: commit" || true
+          git push
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      # - name: Release
+      #   id: release
+      #   uses: python-semantic-release/python-semantic-release@v10
+      #   with:
+      #     build_metadata: ${{ steps.set-vars.outputs.SUFFIX }}
+      #     build: false
+      #     changelog: ${{ steps.set-vars.outputs.CHANGELOG == 'true' }}
+      #     commit: ${{ steps.set-vars.outputs.COMMIT == 'true' }}
+      #     github_token: ${{ steps.app-token.outputs.token }}
+      #     tag: ${{ steps.set-vars.outputs.TAG == 'true' }}
+      #     vcs_release: ${{ steps.set-vars.outputs.VCS_RELEASE == 'true' }}
+      #     git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+      #     git_committer_name: "${{ steps.app-token.outputs.app-slug }}[bot]"
+
+      # - name: UV setup
+      #   if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+      #   uses: astral-sh/setup-uv@v6
+      #   with:
+      #     enable-cache: true
+      #     python-version: "3.10"
+      #     cache-suffix: "3.10"
+
+      # - name: UV sync
+      #   if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+      #   run: uv sync --all-packages --all-extras
+
+      # - name: Build & Publish
+      #   if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+      #   run: |
+      #     uv build --all-packages
+      #     uv publish --index dc-int-connectors-prd --username oauth2accesstoken --password ${{ env.ACCESS_TOKEN }} --keyring-provider subprocess

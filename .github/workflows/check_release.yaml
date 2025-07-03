@@ -10,12 +10,6 @@ jobs:
   checks:
     uses: ./.github/workflows/_checks.yaml
 
-  debug:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Echo branch name
-        run: echo "Current branch is ${{ github.ref_name }}"
-
   release:
     uses: ./.github/workflows/_release.yaml
     if: github.ref_name == 'main' || github.ref_name == 'rc' || github.ref_name == 'alpha'

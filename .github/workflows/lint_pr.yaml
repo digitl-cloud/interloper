@@ -11,7 +11,7 @@ jobs:
   main:
     name: Validate PR title
     runs-on: ubuntu-latest
-    if: github.ref_name != 'main' && github.ref_name != 'rc' && github.ref_name != 'alpha'
+    if: github.event.pull_request.head.ref != 'main' && github.event.pull_request.head.ref != 'rc' && github.event.pull_request.head.ref != 'alpha'
     steps:
       - uses: amannn/action-semantic-pull-request@v5
         env:
