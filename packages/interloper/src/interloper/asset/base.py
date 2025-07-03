@@ -20,7 +20,8 @@ from interloper.execution.context import AssetExecutionContext, ExecutionContext
 from interloper.execution.strategy import MaterializationStrategy
 from interloper.io.base import IO, IOContext
 from interloper.normalizer import Normalizer
-from interloper.param import AssetParam, ContextualAssetParam, UpstreamAsset
+from interloper.params.base import AssetParam, ContextualAssetParam
+from interloper.params.upstream_asset import UpstreamAsset
 from interloper.partitioning.config import PartitionConfig
 from interloper.schema import AssetSchema
 
