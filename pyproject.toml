@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-workspace"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 description = "The Interloper Project"
 readme = "README.md"
 requires-python = ">=3.10"
