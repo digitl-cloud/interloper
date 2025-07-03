@@ -68,22 +68,13 @@ jobs:
           workload_identity_provider: "projects/499027771610/locations/global/workloadIdentityPools/github-actions/providers/github-actions"
           service_account: "github-actions@dc-int-connectors-prd.iam.gserviceaccount.com"
 
-      - name: Get access token
+      - name: Get Google Cloud access token
         run: |
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
 
-      - name: UV setup
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.10"
-          cache-suffix: "3.10"
-
-      - name: UV sync
-        run: uv sync --all-packages --all-extras
-
-      - uses: actions/create-github-app-token@v2
+      - name: Get GitHub App token
+        uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.SEMANTIC_RELEASE_APP_ID }}
@@ -112,6 +103,18 @@ jobs:
           vcs_release: ${{ steps.set-vars.outputs.VCS_RELEASE == 'true' }}
           git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
           git_committer_name: "${{ steps.app-token.outputs.app-slug }}[bot]"
+
+      - name: UV setup
+        if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.10"
+          cache-suffix: "3.10"
+
+      - name: UV sync
+        if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
+        run: uv sync --all-packages --all-extras
 
       - name: Build & Publish
         if: ${{ steps.set-vars.outputs.PUBLISH == 'true' && steps.release.outputs.released == 'true' }}
