@@ -1,0 +1,52 @@
+import datetime as dt
+
+from interloper.schema import Schema
+from pydantic import Field
+
+
+class AdPerformance(Schema):
+    """Bing Ads ad performance report with impressions, clicks, conversions, and revenue metrics."""
+
+    account_name: str = Field(description="The account name")
+    account_number: str = Field(description="The account number")
+    account_id: int = Field(description="The account ID")
+    time_period: dt.date = Field(description="The date of the record")
+    campaign_name: str = Field(description="The campaign name")
+    campaign_id: int = Field(description="The campaign ID")
+    ad_group_name: str = Field(description="The ad group name")
+    ad_id: int = Field(description="The ad ID")
+    ad_group_id: int = Field(description="The ad group ID")
+    ad_title: str = Field(description="The ad title")
+    ad_description: str = Field(description="The ad description")
+    ad_description2: str = Field(description="The second ad description")
+    ad_type: str = Field(description="The ad type")
+    currency_code: str = Field(description="The currency code")
+    ad_distribution: str = Field(description="The ad distribution channel")
+    impressions: int = Field(description="Number of impressions")
+    clicks: int = Field(description="Number of clicks")
+    ctr: str = Field(description="Click-through rate")
+    average_cpc: float = Field(description="Average cost per click")
+    spend: float = Field(description="Total spend")
+    average_position: float = Field(description="Average ad position")
+    conversions: float = Field(description="Number of conversions")
+    conversion_rate: str = Field(description="Conversion rate")
+    cost_per_conversion: float = Field(description="Cost per conversion")
+    device_type: str = Field(description="The device type")
+    language: str = Field(description="The language")
+    ad_status: str = Field(description="The ad status")
+    network: str = Field(description="The network")
+    assists: int = Field(description="Number of assists")
+    revenue: float = Field(description="Total revenue")
+    return_on_ad_spend: float = Field(description="Return on ad spend")
+    all_conversions: float = Field(description="All conversions including cross-device")
+    all_revenue: float = Field(description="All revenue including cross-device")
+    all_conversion_rate: str = Field(description="All conversion rate")
+    all_cost_per_conversion: float = Field(description="All cost per conversion")
+    all_return_on_ad_spend: float = Field(description="All return on ad spend")
+    view_through_conversions: float = Field(description="View-through conversions")
+    absolute_top_impression_rate_percent: str = Field(description="Absolute top impression rate percentage")
+    top_impression_rate_percent: str = Field(description="Top impression rate percentage")
+    average_cpm: float = Field(description="Average cost per thousand impressions")
+    conversions_qualified: float = Field(description="Qualified conversions")
+    all_conversions_qualified: float = Field(description="All qualified conversions")
+    view_through_revenue: float = Field(description="View-through revenue")

@@ -1,0 +1,16 @@
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -546,10 +546,10 @@
+   }, { immediate: !0 });
+   function Ve(o) {
+     var B, E;
+-    const R = o ? (window.innerWidth - re) / window.innerWidth : 1, b = o ? -16 : 0;
++    const R = o ? ((_(u.value) ? window.innerHeight : window.innerWidth) - re) / (_(u.value) ? window.innerHeight : window.innerWidth) : 1, b = o ? -16 : 0;
+     G.value && window.clearTimeout(G.value), C((B = g.value) == null ? void 0 : B.$el, {
+       transition: `transform ${O.DURATION}s cubic-bezier(${O.EASE.join(",")})`,
+-      transform: `scale(${R}) translate3d(0, ${b}px, 0)`
++      transform: _(u.value) ? `scale(${R}) translate3d(0, ${b}px, 0)` : `scale(${R}) translate3d(${b}px, 0, 0)`
+     }), !o && ((E = g.value) != null && E.$el) && (G.value = window.setTimeout(() => {
+       var k, X;
+       const A = ie((k = g.value) == null ? void 0 : k.$el, u.value);

@@ -1,0 +1,39 @@
+Interloper has been deployed to namespace {{ .Release.Namespace }}.
+
+Components:
+{{- if .Values.scheduler.enabled }}
+  ✓ Scheduler  (cron + reaper; singleton)
+{{- end }}
+{{- if .Values.worker.enabled }}
+  ✓ Worker     (queue consumer; replicas={{ .Values.worker.replicaCount }})
+{{- end }}
+{{- if .Values.api.enabled }}
+  ✓ API        (http://{{ include "interloper.fullname" . }}-api.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.api.service.port }})
+{{- end }}
+{{- if .Values.frontend.enabled }}
+  ✓ Frontend   (http://{{ include "interloper.fullname" . }}-frontend.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.frontend.service.port }})
+{{- end }}
+{{- if .Values.dbInit.enabled }}
+  ✓ DB init    (Job; runs once per release)
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+  ✓ Postgres   (bundled — use an external DB for production)
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+Ingress: https://{{ .Values.ingress.host }}
+{{- end }}
+{{- if .Values.httpRoute.enabled }}
+
+HTTPRoute hostnames: {{ join ", " .Values.httpRoute.hostnames }}
+{{- end }}
+
+{{- if not .Values.secrets.encryptionKey }}
+
+⚠  No secrets.encryptionKey set — resource data will NOT be encrypted at rest.
+   Generate one and re-apply:   openssl rand -base64 32
+{{- end }}
+
+Tail the scheduler logs:
+  kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "interloper.fullname" . }}-scheduler

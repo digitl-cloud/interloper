@@ -1,0 +1,282 @@
+# =============================================================================
+# Interloper Helm chart — default values
+# =============================================================================
+
+# Global image defaults (overridable per-component below).
+image:
+  registry: europe-docker.pkg.dev/dc-int-connectors-prd/docker/interloper
+  tag: ""  # defaults to Chart.appVersion
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  # - name: my-registry-secret
+
+# =============================================================================
+# Components
+# =============================================================================
+
+# ── Scheduler (cron + reaper; singleton) ───────────────────────────────────
+# Cron reconciler enqueues runs; reaper kills timed-out runs. Both are
+# singletons — replicaCount must stay at 1.
+scheduler:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ""  # defaults to {image.registry}:{tag}-scheduler
+    tag: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+# ── Worker (queue consumer; horizontally scalable) ─────────────────────────
+worker:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ""  # defaults to {image.registry}:{tag}-worker
+    tag: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+# ── API (REST + websocket backend) ─────────────────────────────────────────
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ""  # defaults to {image.registry}:{tag}-api
+    tag: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  service:
+    type: ClusterIP
+    port: 3000
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+# ── Frontend (nginx serving the pre-built Nuxt SPA) ────────────────────────
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ""  # defaults to {image.registry}:{tag}-frontend
+    tag: ""
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 64Mi
+  service:
+    type: ClusterIP
+    port: 80
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# ── DB init Job (schema bootstrap; runs once per release) ──────────────────
+dbInit:
+  enabled: true
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 300
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+# The chart generates an interloper.yaml ConfigMap from this block.
+# Any value set here becomes part of the config file mounted into the pods.
+config:
+  server:
+    host: "0.0.0.0"
+    port: 3000
+
+  cron:
+    reconcile_interval: 10
+
+  worker:
+    poll_interval: 5
+
+  # Reaper: kills timed-out runs (singleton, paired with cron).
+  reaper:
+    timeout: 3600
+    poll_interval: 10
+
+  # How runs are launched (where they execute).
+  launcher:
+    type: kubernetes
+    config:
+      image: ""  # defaults to scheduler image (set automatically if empty)
+      namespace: ""  # defaults to release namespace
+      # service_account_name: "{{ .Release.Name }}-launcher"  # auto-filled if rbac.create
+      # image_pull_policy: IfNotPresent
+      # resources:
+      #   requests: {cpu: "100m", memory: "256Mi"}
+      #   limits: {memory: "512Mi"}
+
+  # How the DAG runs inside each launched container.
+  runner:
+    type: multi_thread
+    config: {}
+
+  # Catalog: list of dotted import paths for sources, assets, destinations.
+  catalog: []
+  # - interloper_assets.demo.source.DemoSource
+  # - interloper_google_cloud.BigQueryDestination
+
+  # SMTP config for sending emails (password via secrets.smtpPassword)
+  smtp: {}
+  # smtp:
+  #   host: smtp.gmail.com
+  #   port: 465
+  #   user: "no-reply@example.com"
+
+  # Auth config (OAuth client ID)
+  auth: {}
+  # auth:
+  #   google_client_id: "..."
+
+# =============================================================================
+# Secrets
+# =============================================================================
+
+# Sensitive values.  Either set them inline (dev) or reference an existing
+# Secret via `existingSecret`.
+secrets:
+  # If set, the chart does NOT create a Secret and reads credentials from
+  # the named existing Secret.  It must contain the keys referenced below.
+  existingSecret: ""
+
+  # Inline values (only used when existingSecret is empty).
+  # Required keys:
+  #   - INTERLOPER_POSTGRES_PASSWORD
+  #   - SECRETS_ENCRYPTION_KEY (used to encrypt resource secrets at rest)
+  # Optional:
+  #   - INTERLOPER_SMTP_PASSWORD
+  postgresPassword: "postgres"
+  encryptionKey: ""  # recommended to generate: openssl rand -base64 32
+  smtpPassword: ""
+  googleClientSecret: ""  # OAuth client secret (paired with config.auth.google_client_id)
+
+# =============================================================================
+# Postgres
+# =============================================================================
+
+# Bundled Postgres for local/dev use only.  Single replica, no HA, no
+# backup tooling — production should use an external managed Postgres
+# (set postgresql.enabled=false and provide externalPostgres.*).
+postgresql:
+  enabled: false
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    username: interloper
+    database: interloper
+    # Password is read from secrets.postgresPassword (or secrets.existingSecret).
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""  # use cluster default
+  resources: {}
+
+# External Postgres.  Used when postgresql.enabled=false.
+externalPostgres:
+  host: ""
+  port: 5432
+  user: interloper
+  database: interloper
+  # Password comes from secrets.postgresPassword or secrets.existingSecret.
+
+# =============================================================================
+# Ingress / Gateway
+# =============================================================================
+
+# Standard Kubernetes Ingress (nginx, ALB, GKE, etc.)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  host: interloper.local
+  tls:
+    enabled: false
+    secretName: ""
+  # The chart routes /api/* to the API service and everything else to the
+  # frontend service.
+  apiPath: /api
+  apiPathType: Prefix
+  rootPath: /
+  rootPathType: Prefix
+
+# Gateway API HTTPRoute (gateway.networking.k8s.io/v1).  Mutually compatible
+# with the Ingress above — enable whichever your cluster uses.
+httpRoute:
+  enabled: false
+  parentRefs: []
+    # - name: my-gateway
+    #   namespace: gateway-system
+  hostnames:
+    - interloper.local
+  apiPath: /api
+  rootPath: /
+
+# =============================================================================
+# RBAC (required by the Kubernetes launcher)
+# =============================================================================
+
+rbac:
+  create: true
+  # Grants the scheduler's ServiceAccount permissions to manage Jobs + read
+  # Pods/logs in the release namespace, which is what the K8s launcher
+  # needs to dispatch per-run Jobs.
+
+serviceAccount:
+  # When rbac.create is true, a ServiceAccount is created with this name
+  # and bound to the Role.  If unset, defaults to "{{ .Release.Name }}-scheduler".
+  name: ""
+
+# =============================================================================
+# Pod defaults
+# =============================================================================
+
+podSecurityContext: {}
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+securityContext: {}
+  # readOnlyRootFilesystem: true
+  # allowPrivilegeEscalation: false
+
+commonLabels: {}
+commonAnnotations: {}

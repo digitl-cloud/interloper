@@ -1,0 +1,23 @@
+# ###############
+# PROJECT / UV
+# ###############
+[project]
+name = "interloper-app"
+version = "0.2.0"
+description = "Interloper web UI (Nuxt SPA, bundled as static assets)"
+readme = { text = "", content-type = "text/plain" }
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+requires-python = ">=3.10"
+dependencies = ["interloper-api", "interloper-db", "interloper-scheduler"]
+
+[build-system]
+requires = ["uv_build>=0.11.5,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+interloper-api = { workspace = true }
+interloper-db = { workspace = true }
+interloper-scheduler = { workspace = true }
+
+[tool.uv.build-backend]
+module-name = "interloper_app"

@@ -1,0 +1,127 @@
+# ###############
+# PROJECT
+# ###############
+[project]
+name = "interloper-workspace"
+version = "0.2.0"
+description = "The Interloper Project"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "interloper-core",
+    "interloper-assets",
+    "interloper-pandas",
+    "interloper-docker",
+    "interloper-k8s",
+    "interloper-db",
+    "interloper-api",
+    "interloper-scheduler",
+    "interloper-google-cloud",
+    "interloper-agent",
+    "interloper-app",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.2.0",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+    "python-dotenv>=1.1.1",
+    "python-semantic-release>=10.0.0",
+    "ruff>=0.9.4",
+    "pyright>=1.1.400",
+    "zensical>=0.0.24",
+]
+
+# ###############
+# UV
+# ###############
+[tool.uv.sources]
+interloper-core = { workspace = true }
+interloper-assets = { workspace = true }
+interloper-pandas = { workspace = true }
+interloper-docker = { workspace = true }
+interloper-k8s = { workspace = true }
+interloper-db = { workspace = true }
+interloper-api = { workspace = true }
+interloper-scheduler = { workspace = true }
+interloper-google-cloud = { workspace = true }
+interloper-agent = { workspace = true }
+interloper-app = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+# ###############
+# PYRIGHT
+# ###############
+[tool.pyright]
+include = ["packages"]
+typeCheckingMode = "basic"
+reportMissingParameterType = true
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "D102"]
+
+# ###############
+# TY
+# ###############
+[tool.ty.rules]
+invalid-method-override = "ignore"
+unused-type-ignore-comment = "ignore"
+
+# ###############
+# PYTEST
+# ###############
+[tool.pytest.ini_options]
+markers = ["integration", "functional"]
+addopts = ["--import-mode=importlib", "-m not functional"]
+filterwarnings = ["ignore::FutureWarning:google.api_core"]
+
+# ###############
+# COVERAGE
+# ###############
+[tool.coverage.report]
+include = ["packages/**/src/**"]
+exclude_also = [
+    # Don't complain about missing debug-only code:
+    # "def __repr__",
+    "if self\\.debug",
+
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+
+    # Don't complain if non-runnable code isn't run:
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+]
+
+# ################
+# SEMANTIC RELEASE
+# ################
+[tool.semantic_release]
+allow_zero_version = true
+build_command = "uv build --all-packages"
+commit_message = "chore(release): {version} [skip ci]"
+version_toml = ["pyproject.toml:project.version"]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false

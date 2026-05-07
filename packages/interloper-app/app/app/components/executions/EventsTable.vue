@@ -1,0 +1,115 @@
+<script setup lang="ts">
+import { h, resolveComponent } from 'vue'
+import type { TableColumn, TableRow } from '@nuxt/ui'
+import type { EventType } from '~/types/event'
+import type { RunEvent } from '~/stores/events'
+import { LazyExecutionsErrorDetailModal } from '#components'
+
+const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
+
+const props = defineProps<{
+    events: RunEvent[]
+    loading?: boolean
+}>()
+
+const selectedAsset = defineModel<string | null>('selectedAsset', { default: null })
+const eventInFocus = defineModel<RunEvent | null>('eventInFocus', { default: null })
+const assetDisplayName = useAssetDisplayName()
+
+const overlay = useOverlay()
+
+function onRowHover(_e: globalThis.Event, row: TableRow<RunEvent> | null) {
+    eventInFocus.value = row?.original ?? null
+}
+
+function showErrorDetail(event: RunEvent) {
+    const modal = overlay.create(LazyExecutionsErrorDetailModal, {
+        props: { event },
+        destroyOnClose: true,
+    })
+    modal.open()
+}
+
+const filteredEvents = computed(() => {
+    if (!selectedAsset.value) return props.events
+    return props.events.filter(e => e.asset_id === selectedAsset.value)
+})
+
+function formatTimestamp(value: string): string {
+    const date = new Date(value)
+    const hours = date.getHours().toString().padStart(2, '0')
+    const m = date.getMinutes().toString().padStart(2, '0')
+    const s = date.getSeconds().toString().padStart(2, '0')
+    const ms = date.getMilliseconds().toString().padStart(3, '0')
+    return `${hours}:${m}:${s}.${ms}`
+}
+
+const columns: TableColumn<RunEvent>[] = [
+    {
+        accessorKey: 'timestamp',
+        header: 'Time',
+        cell: ({ row }) => h('span', { class: 'font-mono text-xs text-muted' }, formatTimestamp(row.getValue<string>('timestamp'))),
+    },
+    {
+        accessorKey: 'asset_key',
+        header: 'Asset',
+        cell: ({ row }) => {
+            const event = row.original as RunEvent
+            const displayName = event.asset_id ? assetDisplayName.value.get(event.asset_id) : null
+            const label = displayName ?? event.asset_key
+            if (!label) return h('span', { class: 'text-muted' }, '—')
+            return h(UBadge, { color: 'neutral', variant: 'subtle' }, () => label)
+        },
+    },
+    {
+        accessorKey: 'event_type',
+        header: 'Event',
+        cell: ({ row }) => {
+            const et = row.getValue<EventType>('event_type')
+            return h(UBadge, {
+                color: eventTypeColor(et),
+                variant: 'subtle',
+                icon: eventTypeIcon(et),
+            }, () => eventTypeLabel(et))
+        },
+    },
+    {
+        id: 'details',
+        header: 'Details',
+        cell: ({ row }) => {
+            const event = row.original as RunEvent
+            if (event.error) {
+                return h('div', { class: 'flex items-center gap-2 max-w-[400px]' }, [
+                    h('span', { class: 'truncate text-sm text-error' }, event.error),
+                    h(UButton, {
+                        icon: 'i-lucide-expand',
+                        label: 'view',
+                        size: 'xs',
+                        color: 'neutral',
+                        variant: 'subtle',
+                        class: 'shrink-0',
+                        onClick: (e: MouseEvent) => {
+                            e.stopPropagation()
+                            showErrorDetail(event)
+                        },
+                    }),
+
+                ])
+            }
+            const text = event.message || ''
+            return h('span', { class: 'max-w-[400px] truncate text-sm text-muted' }, text)
+        },
+    },
+]
+</script>
+
+<template>
+    <UTable :data="filteredEvents"
+            :columns="columns"
+            :loading="loading"
+            sticky
+            :ui="{ tr: 'h-10' }"
+            class="h-full"
+            :on-hover="onRowHover" />
+</template>

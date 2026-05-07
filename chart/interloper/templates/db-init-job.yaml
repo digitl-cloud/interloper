@@ -1,0 +1,50 @@
+{{/*
+Schema bootstrap: runs `interloper db init` once per release. Application
+deployments are launched with --no-create-tables, so this Job is the sole
+writer of schema. The Job and the deployments come up together; deployments
+crash-loop briefly until the Job completes (~one backoff cycle).
+
+Not a Helm hook on purpose — hooks can't reference the chart's Secret
+(hooks live outside the managed-resource set). As a normal manifest, the
+Job sees the Secret and ConfigMap like any other pod.
+
+Reuses the api image (interloper-db is installed; image is already cached).
+*/}}
+{{- if .Values.dbInit.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # New name per revision so Helm creates a fresh Job on every upgrade
+  # (Job specs are immutable; reusing a name would fail).
+  name: {{ include "interloper.fullname" . }}-db-init-{{ .Release.Revision }}
+  labels:
+    {{- include "interloper.componentLabels" (dict "root" . "component" "db-init") | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.dbInit.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.dbInit.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "interloper.selectorLabels" (dict "root" . "component" "db-init") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: db-init
+          image: {{ include "interloper.image" (dict "root" . "component" "api" "image" .Values.api.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["interloper", "db", "init"]
+          {{- with .Values.securityContext }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # No config mount: pre-install hooks run before the ConfigMap is
+          # created. Postgres connection comes from env vars (commonEnv).
+          env:
+            {{- include "interloper.commonEnv" . | nindent 12 }}
+          resources: {{- toYaml .Values.dbInit.resources | nindent 12 }}
+{{- end }}

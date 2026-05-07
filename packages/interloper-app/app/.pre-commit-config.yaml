@@ -1,0 +1,18 @@
+fail_fast: false
+repos:
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: pnpm run lint
+        language: system
+        types_or: [ts, vue]
+        pass_filenames: false
+  - repo: local
+    hooks:
+      - id: typecheck
+        name: typecheck
+        entry: pnpm exec nuxt typecheck
+        language: system
+        types_or: [ts, vue]
+        pass_filenames: false

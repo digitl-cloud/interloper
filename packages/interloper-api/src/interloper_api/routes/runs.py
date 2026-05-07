@@ -1,0 +1,177 @@
+"""Runs API: read endpoints for runs and their events."""
+
+from __future__ import annotations
+
+import datetime as dt
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from interloper.errors import NotFoundError
+from interloper_db import Profile, Store
+from interloper_db.models import Event, Run
+from pydantic import BaseModel
+
+from interloper_api.dependencies import get_org_id, get_store, require_viewer
+
+router = APIRouter()
+
+
+class RunResponse(BaseModel):
+    """Response body for a run."""
+
+    id: UUID
+    org_id: UUID
+    job_id: UUID | None
+    backfill_id: UUID | None
+    partition_date: dt.date | None
+    status: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    created_at: str | None = None
+
+
+class AssetExecutionResponse(BaseModel):
+    """Response body for an asset execution (from the asset_executions view)."""
+
+    run_id: UUID
+    org_id: UUID
+    asset_id: UUID | None = None
+    asset_key: str
+    status: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    created_at: str | None = None
+
+
+class EventResponse(BaseModel):
+    """Response body for an event."""
+
+    id: UUID
+    org_id: UUID
+    run_id: UUID | None
+    event_type: str
+    asset_id: UUID | None = None
+    asset_key: str | None
+    partition_or_window: str | None
+    error: str | None
+    traceback: str | None
+    message: str | None
+    timestamp: str
+
+
+def _run_to_response(run: Run) -> RunResponse:
+    """Convert a DB Run to a RunResponse.
+
+    Args:
+        run: The DB Run row.
+
+    Returns:
+        The response model.
+    """
+    return RunResponse(
+        id=run.id,  # type: ignore[arg-type]
+        org_id=run.org_id,
+        job_id=run.job_id,
+        backfill_id=run.backfill_id,
+        partition_date=run.partition_date,
+        status=run.status,
+        started_at=str(run.started_at) if run.started_at else None,
+        completed_at=str(run.completed_at) if run.completed_at else None,
+        created_at=str(run.created_at) if run.created_at else None,
+    )
+
+
+def _event_to_response(event: Event) -> EventResponse:
+    """Convert a DB Event to an EventResponse.
+
+    Args:
+        event: The DB Event row.
+
+    Returns:
+        The response model.
+    """
+    return EventResponse(
+        id=event.id,  # type: ignore[arg-type]
+        org_id=event.org_id,
+        run_id=event.run_id,
+        event_type=event.event_type,
+        asset_id=event.asset_id,
+        asset_key=event.asset_key,
+        partition_or_window=event.partition_or_window,
+        error=event.error,
+        traceback=event.traceback,
+        message=event.message,
+        timestamp=str(event.timestamp),
+    )
+
+
+@router.get("/")
+def list_runs(
+    job_id: UUID | None = None,
+    backfill_id: UUID | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    user: Profile = Depends(require_viewer),
+    org_id: UUID = Depends(get_org_id),
+    store: Store = Depends(get_store),
+) -> list[RunResponse]:
+    """List runs with optional filters."""
+    runs = store.list_runs(
+        org_id,
+        job_id=job_id,
+        backfill_id=backfill_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+    return [_run_to_response(r) for r in runs]
+
+
+@router.get("/{run_id}")
+def get_run(
+    run_id: UUID,
+    user: Profile = Depends(require_viewer),
+    store: Store = Depends(get_store),
+) -> RunResponse:
+    """Get a single run by ID."""
+    try:
+        run = store.get_run(run_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    return _run_to_response(run)
+
+
+@router.get("/{run_id}/asset-executions")
+def list_asset_executions(
+    run_id: UUID,
+    user: Profile = Depends(require_viewer),
+    store: Store = Depends(get_store),
+) -> list[AssetExecutionResponse]:
+    """List asset executions for a run."""
+    rows = store.list_asset_executions(run_id)
+    return [
+        AssetExecutionResponse(
+            run_id=row["run_id"],
+            org_id=row["org_id"],
+            asset_id=row.get("asset_id"),
+            asset_key=row["asset_key"],
+            status=row["status"],
+            started_at=str(row["started_at"]) if row.get("started_at") else None,
+            completed_at=str(row["completed_at"]) if row.get("completed_at") else None,
+            created_at=str(row["created_at"]) if row.get("created_at") else None,
+        )
+        for row in rows
+    ]
+
+
+@router.get("/{run_id}/events")
+def list_run_events(
+    run_id: UUID,
+    limit: int = 100,
+    user: Profile = Depends(require_viewer),
+    store: Store = Depends(get_store),
+) -> list[EventResponse]:
+    """List events for a run."""
+    events = store.list_events(run_id=run_id, limit=limit)
+    return [_event_to_response(e) for e in events]

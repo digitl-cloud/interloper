@@ -1,0 +1,16 @@
+apiVersion: v2
+name: interloper
+description: |
+  Interloper — a data platform for building, scheduling, and running data
+  pipelines.  Deploys the scheduler (cron + queue worker + reaper), the
+  API, and the frontend, with optional Postgres and RBAC for the
+  Kubernetes launcher.
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://github.com/digitlcloud/interloper
+sources:
+  - https://github.com/digitlcloud/interloper
+maintainers:
+  - name: Guillaume Onfroy
+    email: guillaume@digitlcloud.com

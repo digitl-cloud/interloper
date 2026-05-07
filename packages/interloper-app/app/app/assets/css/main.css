@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Custom Colors */
+:root {
+    --color-blue-50: #f0f7ff;
+    --color-blue-100: #e0efff;
+    --color-blue-200: #b8d9ff;
+    --color-blue-300: #7ab9ff;
+    --color-blue-400: #3393ff;
+    --color-blue-500: #4CA0FF;
+    --color-blue-600: #006ce6;
+    --color-blue-700: #004da3;
+    --color-blue-800: #003775;
+    --color-blue-900: #00244d;
+    --color-blue-950: #001833;
+    --color-gray-50: #f5f5f6;
+    --color-gray-100: #eaeaec;
+    --color-gray-200: #d5d5d9;
+    --color-gray-300: #b0b0b8;
+    --color-gray-400: #85858f;
+    --color-gray-500: #6b6b75;
+    --color-gray-600: #565660;
+    --color-gray-700: #43434c;
+    --color-gray-800: #313139;
+    --color-gray-900: #232329;
+    --color-gray-950: #18181c;
+}
+
+
+:root {
+    --ui-font-sans: "Inter", sans-serif;
+    --ui-header-height: 4rem;
+}
+
+:root {
+    --ui-text-dimmed: var(--color-gray-500);
+    --ui-text-muted: var(--color-gray-600);
+    --ui-text-toned: var(--color-gray-700);
+    --ui-text: var(--color-gray-800);
+    --ui-text-highlighted: var(--color-gray-950);
+    --ui-text-inverted: #ffffff;
+    --ui-bg: var(--color-gray-50);
+    --ui-bg-muted: var(--color-gray-100);
+    --ui-bg-elevated: var(--color-gray-200);
+    --ui-bg-accented: var(--color-gray-300);
+    --ui-bg-inverted: var(--color-gray-900);
+    --ui-border: var(--color-gray-200);
+    --ui-border-muted: var(--color-gray-300);
+    --ui-border-accented: var(--color-gray-400);
+    --ui-border-inverted: var(--color-gray-900);
+    --ui-radius: 0.4rem;
+}
+
+/* Scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border-muted) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: var(--ui-border-muted);
+    border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background-color: var(--ui-border-accented);
+}
+
+@keyframes pulse-grow {
+    0%, 100% { box-shadow: 0 0 0 0 var(--ui-warning); }
+    50% { box-shadow: 0 0 0 4px var(--ui-warning); }
+}
+
+.animate-pulse-grow {
+    animation: pulse-grow 1.5s ease-in-out infinite;
+}
+
+.dark {
+    --ui-text-dimmed: var(--color-gray-500);
+    --ui-text-muted: var(--color-gray-400);
+    --ui-text-toned: var(--color-gray-300);
+    --ui-text: var(--color-gray-200);
+    --ui-text-highlighted: #ffffff;
+    --ui-text-inverted: var(--color-gray-900);
+    --ui-bg: var(--color-gray-950);
+    --ui-bg-muted: var(--color-gray-900);
+    --ui-bg-elevated: var(--color-gray-800);
+    --ui-bg-accented: var(--color-gray-700);
+    --ui-bg-inverted: #ffffff;
+    --ui-border: var(--color-gray-800);
+    --ui-border-muted: var(--color-gray-700);
+    --ui-border-accented: var(--color-gray-700);
+    --ui-border-inverted: #ffffff;
+    --ui-radius: 0.4rem;
+
+    --vf-node-bg: var(--color-gray-800);
+    --vf-node-text: var(--color-gray-200);
+    --vf-connection-path: var(--color-gray-500);
+    --vf-handle: var(--color-gray-400);
+}
+
+/* Vue Flow dark mode overrides */
+.dark .vue-flow__controls {
+    box-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.3);
+}
+
+.dark .vue-flow__controls-button {
+    background: var(--color-gray-800);
+    border-bottom-color: var(--color-gray-700);
+}
+
+.dark .vue-flow__controls-button svg {
+    fill: var(--color-gray-300);
+}
+
+.dark .vue-flow__controls-button:hover {
+    background: var(--color-gray-700);
+}
+
+.dark .vue-flow__minimap {
+    background-color: var(--color-gray-900);
+}
+
+.dark .vue-flow__edge-textbg {
+    fill: var(--color-gray-900);
+}
+
+.dark .vue-flow__handle {
+    border-color: var(--color-gray-800);
+}

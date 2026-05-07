@@ -1,0 +1,44 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "interloper.fullname" . }}
+  labels:
+    {{- include "interloper.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          {{- if .Values.api.enabled }}
+          - path: {{ .Values.ingress.apiPath }}
+            pathType: {{ .Values.ingress.apiPathType }}
+            backend:
+              service:
+                name: {{ include "interloper.fullname" . }}-api
+                port:
+                  number: {{ .Values.api.service.port }}
+          {{- end }}
+          {{- if .Values.frontend.enabled }}
+          - path: {{ .Values.ingress.rootPath }}
+            pathType: {{ .Values.ingress.rootPathType }}
+            backend:
+              service:
+                name: {{ include "interloper.fullname" . }}-frontend
+                port:
+                  number: {{ .Values.frontend.service.port }}
+          {{- end }}
+{{- end }}

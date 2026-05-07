@@ -1,0 +1,53 @@
+# ###############
+# PROJECT / UV
+# ###############
+[project]
+name = "interloper-api"
+version = "0.2.0"
+description = "Interloper FastAPI routes"
+readme = "README.md"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "interloper-core",
+    "interloper-db",
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "psycopg2-binary>=2.9.0",
+    "uvicorn[standard]>=0.41.0",
+    "wsproto>=1.2.0",
+]
+
+[project.optional-dependencies]
+agent = ["interloper-agent"]
+
+[build-system]
+requires = ["uv_build>=0.11.5,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+interloper-core = { workspace = true }
+interloper-db = { workspace = true }
+interloper-agent = { workspace = true }
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "F811"]
+
+# ###############
+# PYRIGHT
+# ###############
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "basic"
+reportMissingParameterType = true
+ignore = ["tests/**"]

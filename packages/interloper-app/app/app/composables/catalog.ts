@@ -1,0 +1,278 @@
+import type { Source } from '~/types/source'
+import type { Asset, AssetDependency } from '~/types/asset'
+import type { Job } from '~/types/job'
+import type { Run } from '~/types/run'
+import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
+import type { AssetWarning } from '~/composables/warnings'
+
+// ─── Types ───────────────────────────────────────────────────────────
+
+export interface CatalogRow {
+    id: string
+    sourceId: string
+    assetId: string
+    name: string
+    icon: string
+    sourceKey: string
+    tags: string[]
+    dependencies: Array<{ name: string; icon: string }>
+    warnings: AssetWarning[]
+    jobs: Array<{ name: string }>
+    lastRunStatus: string | null
+    lastRunAt: string | null
+    connectionName: string | null
+    connectionIcon: string | null
+    destinations: Array<{ name: string; icon: string }>
+    createdAt: string | null
+    destinationName: string | null
+    destinationIcon: string | null
+    destinationCreatedAt: string | null
+}
+
+// ─── Catalog Rows ────────────────────────────────────────────────────
+
+interface UseCatalogRowsOptions {
+    sources: Ref<Source[]>
+    assets: Ref<Asset[]>
+    dependencies: Ref<AssetDependency[]>
+    destinations: Ref<Array<{ id: string; key: string; name: string | null }>>
+    jobs: Ref<Job[]>
+    runs: Ref<Run[]>
+    getWarnings: (assetId: string, assetKey: string) => AssetWarning[]
+}
+
+export function useCatalogRows(options: UseCatalogRowsOptions) {
+    const catalogStore = useCatalogStore()
+
+    /** Asset id → Asset record (for created_at etc.) */
+    const assetById = computed(() => {
+        const map = new Map<string, Asset>()
+        for (const a of options.assets.value) map.set(a.id, a)
+        return map
+    })
+
+    /** Look up an asset definition by qualified key ("source_key.asset_key"). */
+    function getAssetDefinition(qk: string): AssetDefinition | undefined {
+        const dot = qk.indexOf('.')
+        if (dot !== -1) {
+            const sourceKey = qk.substring(0, dot)
+            const assetKey = qk.substring(dot + 1)
+            const src = catalogStore.sourceDefinitions.find(s => s.key === sourceKey)
+            return src?.assets?.find(a => a.key === assetKey)
+        }
+        for (const src of catalogStore.sourceDefinitions) {
+            const asset = src.assets?.find(a => a.key === qk)
+            if (asset) return asset
+        }
+        return undefined
+    }
+
+    const dependenciesByAssetId = computed(() => {
+        // Build asset id → qualified key map from all sources
+        const qkById = new Map<string, string>()
+        for (const source of options.sources.value) {
+            for (const asset of source.assets) {
+                qkById.set(asset.id, `${source.key}.${asset.key}`)
+            }
+        }
+
+        const map = new Map<string, Array<{ name: string; icon: string }>>()
+        for (const dep of options.dependencies.value) {
+            if (!map.has(dep.asset_id)) map.set(dep.asset_id, [])
+            const upstreamQk = qkById.get(dep.upstream_asset_id)
+            let name = upstreamQk ?? dep.upstream_asset_id
+            let icon = 'i-lucide-box'
+            if (upstreamQk) {
+                const defn = getAssetDefinition(upstreamQk)
+                if (defn) {
+                    name = defn.name
+                    icon = componentIcon(defn.key)
+                }
+            }
+            map.get(dep.asset_id)!.push({ name, icon })
+        }
+        return map
+    })
+
+    /** Jobs that reference each source. */
+    const jobsBySourceId = computed(() => {
+        const map = new Map<string, Job[]>()
+        for (const job of options.jobs.value) {
+            for (const sourceId of job.source_ids) {
+                if (!map.has(sourceId)) map.set(sourceId, [])
+                map.get(sourceId)!.push(job)
+            }
+        }
+        return map
+    })
+
+    /** Latest run per job. */
+    const lastRunByJobId = computed(() => {
+        const map = new Map<string, Run>()
+        for (const run of options.runs.value) {
+            if (!run.job_id) continue
+            const existing = map.get(run.job_id)
+            if (!existing || (run.started_at && (!existing.started_at || run.started_at > existing.started_at))) {
+                map.set(run.job_id, run)
+            }
+        }
+        return map
+    })
+
+    function getLastRunForSource(sourceId: string): { status: string | null; at: string | null } {
+        const sourceJobs = jobsBySourceId.value.get(sourceId) ?? []
+        let latest: Run | undefined
+        for (const job of sourceJobs) {
+            const run = lastRunByJobId.value.get(job.id)
+            if (!run) continue
+            if (!latest || (run.started_at && (!latest.started_at || run.started_at > latest.started_at))) {
+                latest = run
+            }
+        }
+        return { status: latest?.status ?? null, at: latest?.started_at ?? null }
+    }
+
+    /** Connection resource for each source (first resource of kind "connection"). */
+    const connectionBySourceId = computed(() => {
+        const map = new Map<string, { name: string; icon: string }>()
+        for (const source of options.sources.value) {
+            const sourceDefn = catalogStore.getSourceDefinition(source.key)
+            if (!sourceDefn?.resources) continue
+            // Find the connection resource slot in the source definition
+            for (const [_slotName, resourceKey] of Object.entries(sourceDefn.resources)) {
+                if (resourceKey.endsWith('_connection') || resourceKey === 'connection') {
+                    map.set(source.id, {
+                        name: catalogStore.catalog[resourceKey]?.name ?? resourceKey,
+                        icon: componentIcon(resourceKey, 'i-lucide-plug'),
+                    })
+                    break
+                }
+            }
+        }
+        return map
+    })
+
+    const data = computed<CatalogRow[]>(() => {
+        const rows: CatalogRow[] = []
+        for (const source of options.sources.value) {
+            const sourceDefn: SourceDefinition | undefined = catalogStore.getSourceDefinition(source.key)
+
+            const destInfos = source.destinations.map((dest) => {
+                const defn = catalogStore.catalog[dest.key]
+                return {
+                    name: dest.name ?? defn?.name ?? dest.key,
+                    icon: componentIcon(dest.key, 'i-lucide-hard-drive'),
+                }
+            })
+
+            const sourceJobs = (jobsBySourceId.value.get(source.id) ?? []).map(j => ({ name: j.name }))
+            const lastRun = getLastRunForSource(source.id)
+            const conn = connectionBySourceId.value.get(source.id)
+
+            for (const asset of source.assets) {
+                const assetDefn = getAssetDefinition(`${source.key}.${asset.key}`)
+
+                const baseRow = {
+                    sourceId: source.id,
+                    assetId: asset.id,
+                    name: assetDefn?.name ?? asset.key,
+                    icon: componentIcon(asset.key),
+                    sourceKey: source.key,
+                    tags: assetDefn?.tags ?? [],
+                    dependencies: dependenciesByAssetId.value.get(asset.id) ?? [],
+                    warnings: options.getWarnings(asset.id, asset.key),
+                    jobs: sourceJobs,
+                    lastRunStatus: lastRun.status,
+                    lastRunAt: lastRun.at,
+                    connectionName: conn?.name ?? null,
+                    connectionIcon: conn?.icon ?? null,
+                    destinations: destInfos,
+                    createdAt: assetById.value.get(asset.id)?.created_at ?? null,
+                }
+
+                if (destInfos.length > 0) {
+                    for (let di = 0; di < destInfos.length; di++) {
+                        const destInfo = destInfos[di]!
+                        rows.push({
+                            ...baseRow,
+                            id: `${asset.id}_dest_${di}`,
+                            destinationName: destInfo.name,
+                            destinationIcon: destInfo.icon,
+                            destinationCreatedAt: null,
+                        })
+                    }
+                }
+                else {
+                    rows.push({
+                        ...baseRow,
+                        id: asset.id,
+                        destinationName: null,
+                        destinationIcon: null,
+                        destinationCreatedAt: null,
+                    })
+                }
+            }
+
+            // Source with no assets: placeholder row
+            if (source.assets.length === 0) {
+                rows.push({
+                    id: source.id,
+                    sourceId: source.id,
+                    assetId: source.id,
+                    name: '(no assets)',
+                    icon: 'i-lucide-box',
+                    sourceKey: source.key,
+                    tags: [],
+                    dependencies: [],
+                    warnings: [],
+                    jobs: sourceJobs,
+                    lastRunStatus: lastRun.status,
+                    lastRunAt: lastRun.at,
+                    connectionName: conn?.name ?? null,
+                    connectionIcon: conn?.icon ?? null,
+                    destinations: destInfos,
+                    createdAt: null,
+                    destinationName: null,
+                    destinationIcon: null,
+                    destinationCreatedAt: null,
+                })
+            }
+        }
+        return rows
+    })
+
+    const sourceInfoById = computed(() => {
+        const map = new Map<string, {
+            name: string
+            icon: string
+            assetCount: number
+            warnings: AssetWarning[]
+        }>()
+        for (const source of options.sources.value) {
+            const sourceDefn = catalogStore.getSourceDefinition(source.key)
+
+            // Aggregate & deduplicate warnings across all assets in the source
+            const all = source.assets.flatMap(a => options.getWarnings(a.id, a.key))
+            const seen = new Set<string>()
+            const warnings = all.filter((w) => {
+                if (seen.has(w.message)) return false
+                seen.add(w.message)
+                return true
+            })
+
+            map.set(source.id, {
+                name: sourceDefn?.name ?? source.name ?? source.key,
+                icon: componentIcon(source.key, 'i-lucide-database'),
+                assetCount: source.assets.length,
+                warnings,
+            })
+        }
+        return map
+    })
+
+    const assetCount = computed(() =>
+        options.sources.value.reduce((sum, s) => sum + s.assets.length, 0),
+    )
+
+    return { data, sourceInfoById, assetCount }
+}

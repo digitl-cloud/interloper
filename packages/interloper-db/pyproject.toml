@@ -1,0 +1,54 @@
+# ###############
+# PROJECT / UV
+# ###############
+[project]
+name = "interloper-db"
+version = "0.2.0"
+description = "Interloper database persistence layer"
+readme = "README.md"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "interloper-core",
+    "sqlmodel>=0.0.27",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "alembic>=1.18.4",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.5,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+interloper-core = { workspace = true }
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "F811"]
+
+# ###############
+# ALEMBIC
+# ###############
+[tool.alembic]
+script_location = "src/interloper_db/migrations"
+file_template = "%(rev)s_%(slug)s"
+# sqlalchemy.url is set programmatically in env.py from the engine singleton.
+
+# ###############
+# PYRIGHT
+# ###############
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "basic"
+reportMissingParameterType = true
+ignore = ["tests/**"]

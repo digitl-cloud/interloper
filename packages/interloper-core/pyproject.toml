@@ -1,0 +1,69 @@
+# ###############
+# PROJECT / UV
+# ###############
+[project]
+name = "interloper-core"
+version = "0.2.0"
+description = "Interloper"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.11.0",
+    "httpx>=0.28.1",
+    "pyyaml>=6.0.0",
+    "typing_extensions>=4.0.0",
+]
+
+[project.optional-dependencies]
+google-cloud = ["interloper-google-cloud"]
+
+[dependency-groups]
+dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0"]
+
+[tool.uv.sources]
+interloper-google-cloud = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.11.5,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "interloper"
+
+[project.scripts]
+interloper = "interloper.cli.main:main"
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+preview = true
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+ignore = ["D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "D101", "D102", "B018"]
+
+# ###############
+# PYRIGHT
+# ###############
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "basic"
+reportMissingParameterType = true
+ignore = ["libs/**", "tests/**", "scripts/**"]
+
+# ###############
+# PYTEST
+# ###############
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::DeprecationWarning"]

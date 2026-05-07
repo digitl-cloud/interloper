@@ -1,0 +1,42 @@
+{{/*
+Generated interloper.yaml mounted into every pod at /etc/interloper/interloper.yaml.
+The launcher and runner sections get auto-filled with cluster-aware defaults
+(scheduler image, release namespace, service account) when the user hasn't
+set them explicitly.
+*/}}
+{{- $cfg := deepCopy .Values.config -}}
+{{- if eq (default "" (dig "launcher" "type" "" $cfg)) "kubernetes" -}}
+  {{- if not (hasKey $cfg "launcher") -}}{{- $_ := set $cfg "launcher" dict -}}{{- end -}}
+  {{- if not (hasKey $cfg.launcher "config") -}}{{- $_ := set $cfg.launcher "config" dict -}}{{- end -}}
+  {{- if not $cfg.launcher.config.image -}}
+    {{- $_ := set $cfg.launcher.config "image" (include "interloper.schedulerImage" .) -}}
+  {{- end -}}
+  {{- if not $cfg.launcher.config.namespace -}}
+    {{- $_ := set $cfg.launcher.config "namespace" .Release.Namespace -}}
+  {{- end -}}
+  {{- if and .Values.rbac.create (not $cfg.launcher.config.service_account_name) -}}
+    {{- $_ := set $cfg.launcher.config "service_account_name" (include "interloper.serviceAccountName" .) -}}
+  {{- end -}}
+{{- end -}}
+{{- if eq (default "" (dig "runner" "type" "" $cfg)) "k8s" -}}
+  {{- if not (hasKey $cfg "runner") -}}{{- $_ := set $cfg "runner" dict -}}{{- end -}}
+  {{- if not (hasKey $cfg.runner "config") -}}{{- $_ := set $cfg.runner "config" dict -}}{{- end -}}
+  {{- if not $cfg.runner.config.image -}}
+    {{- $_ := set $cfg.runner.config "image" (include "interloper.schedulerImage" .) -}}
+  {{- end -}}
+  {{- if not $cfg.runner.config.namespace -}}
+    {{- $_ := set $cfg.runner.config "namespace" .Release.Namespace -}}
+  {{- end -}}
+  {{- if and .Values.rbac.create (not $cfg.runner.config.service_account_name) -}}
+    {{- $_ := set $cfg.runner.config "service_account_name" (include "interloper.serviceAccountName" .) -}}
+  {{- end -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "interloper.fullname" . }}-config
+  labels:
+    {{- include "interloper.labels" . | nindent 4 }}
+data:
+  interloper.yaml: |
+{{ toYaml $cfg | indent 4 }}

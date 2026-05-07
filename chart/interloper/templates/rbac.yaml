@@ -1,0 +1,39 @@
+{{- if .Values.rbac.create -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "interloper.serviceAccountName" . }}
+  labels:
+    {{- include "interloper.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "interloper.serviceAccountName" . }}
+  labels:
+    {{- include "interloper.labels" . | nindent 4 }}
+rules:
+  # The Kubernetes launcher creates one Job per run.
+  - apiGroups: ["batch"]
+    resources: ["jobs", "jobs/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # The reaper and runner read Pods + logs to report container status.
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "interloper.serviceAccountName" . }}
+  labels:
+    {{- include "interloper.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "interloper.serviceAccountName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "interloper.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -1,0 +1,32 @@
+from functools import cached_property
+
+import interloper as il
+from pydantic_settings import SettingsConfigDict
+
+
+@il.connection(
+    name="Snapchat Ads",
+    icon="mdi:snapchat",
+    tags=["Advertising"],
+)
+class SnapchatAdsConnection(il.Connection):
+    """Snapchat Ads API connection with OAuth2 refresh token auth."""
+
+    model_config = SettingsConfigDict(env_prefix="snapchat_ads_")
+
+    client_id: str = il.InputField(description="OAuth2 client ID")
+    client_secret: str = il.SecretField(description="OAuth2 client secret")
+    refresh_token: str = il.SecretField(description="OAuth2 refresh token")
+
+    @cached_property
+    def client(self) -> il.RESTClient:
+        return il.RESTClient(
+            "https://adsapi.snapchat.com",
+            auth=il.OAuth2RefreshTokenAuth(
+                base_url="https://accounts.snapchat.com",
+                token_endpoint="/login/oauth2/access_token",
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                refresh_token=self.refresh_token,
+            ),
+        )

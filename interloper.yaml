@@ -1,0 +1,80 @@
+postgres:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  database: interloper
+
+server:
+  host: 0.0.0.0
+  port: 3000
+
+cron:
+  reconcile_interval: 10
+
+worker:
+  poll_interval: 5
+
+launcher:
+  # type: in_process
+
+  # type: docker
+  # config:
+  #   image: interloper:latest-scheduler
+  #   postgres_host: host.docker.internal
+
+  type: kubernetes
+  config:
+    image: interloper:latest-scheduler
+    namespace: interloper
+    image_pull_policy: Never
+
+runner:
+  # type: docker
+  # config:
+  #   image: interloper:latest-worker
+  #   auto_remove: false
+  #   image_pull_policy: Never
+
+  type: kubernetes
+  config:
+    image: interloper:latest-scheduler
+    namespace: interloper
+
+catalog:
+  - interloper_assets.adservice.source.Adservice
+  - interloper_assets.adup.source.Adup
+  - interloper_assets.amazon_ads.source.AmazonAds
+  - interloper_assets.amazon_selling_partner.source.AmazonSellingPartner
+  - interloper_assets.awin.source.Awin
+  - interloper_assets.bing_ads.source.BingAds
+  - interloper_assets.brandwatch.source.Brandwatch
+  - interloper_assets.campaign_manager_360.source.CampaignManager360
+  - interloper_assets.campaign_performance_analysis.source.CampaignPerformanceAnalysis
+  - interloper_assets.criteo_marketing.source.CriteoMarketing
+  - interloper_assets.demo.source.DemoSource
+  - interloper_assets.demo.source.demo_asset
+  - interloper_assets.display_video_360.source.DisplayVideo360
+  - interloper_assets.double_click_bid_manager.source.DoubleClickBidManager
+  - interloper_assets.facebook_ads.source.FacebookAds
+  - interloper_assets.facebook_insights.source.FacebookInsights
+  - interloper_assets.google_ads.source.GoogleAds
+  - interloper_assets.impact.source.Impact
+  - interloper_assets.instagram_insights.source.InstagramInsights
+  - interloper_assets.linkedin_ads.source.LinkedinAds
+  - interloper_assets.linkedin_organic.source.LinkedinOrganic
+  - interloper_assets.marketing_mix_modeling.source.MarketingMixModeling
+  - interloper_assets.pinterest_ads.source.PinterestAds
+  - interloper_assets.search_ads_360.source.SearchAds360
+  - interloper_assets.search_console.source.SearchConsole
+  - interloper_assets.snapchat_ads.source.SnapchatAds
+  - interloper_assets.teads.source.Teads
+  - interloper_assets.thetradedesk.source.TheTradeDesk
+  - interloper_assets.tiktok_ads.source.TiktokAds
+  - interloper_assets.usercentrics.source.Usercentrics
+  - interloper_google_cloud.BigQueryDestination
+
+smtp:
+  host: smtp.gmail.com
+  port: 465
+  user: "no-reply@digitlcloud.com"

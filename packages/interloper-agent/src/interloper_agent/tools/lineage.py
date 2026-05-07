@@ -1,0 +1,244 @@
+"""Lineage tools — dependency analysis, impact assessment, and DAG traversal."""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from typing import Any
+from uuid import UUID
+
+from google.adk.tools.tool_context import ToolContext
+
+from interloper_agent.context import get_org_id, get_store
+
+
+def get_upstream(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
+    """Get the direct upstream dependencies of an asset.
+
+    Args:
+        asset_id: UUID of the asset to inspect.
+
+    Returns the list of upstream assets that this asset depends on,
+    including the parameter name used for each dependency.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        deps = store.list_dependencies(org_id)
+        target = UUID(asset_id)
+
+        upstream = []
+        for dep in deps:
+            if dep.asset_id == target:
+                asset = store.get_asset(dep.upstream_asset_id)
+                upstream.append({
+                    "upstream_asset_id": str(dep.upstream_asset_id),
+                    "param_name": dep.param_name,
+                    "asset_key": asset.key,
+                    "source_id": str(asset.source_id),
+                })
+
+        return {"status": "success", "asset_id": asset_id, "upstream": upstream}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def get_downstream(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
+    """Get the direct downstream dependents of an asset.
+
+    Args:
+        asset_id: UUID of the asset to inspect.
+
+    Returns the list of assets that directly depend on this asset.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        deps = store.list_dependencies(org_id)
+        target = UUID(asset_id)
+
+        downstream = []
+        for dep in deps:
+            if dep.upstream_asset_id == target:
+                asset = store.get_asset(dep.asset_id)
+                downstream.append({
+                    "asset_id": str(dep.asset_id),
+                    "param_name": dep.param_name,
+                    "asset_key": asset.key,
+                    "source_id": str(asset.source_id),
+                })
+
+        return {"status": "success", "asset_id": asset_id, "downstream": downstream}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def get_full_lineage(asset_id: str, direction: str = "upstream", tool_context: ToolContext = None) -> dict[str, Any]:  # type: ignore[assignment]
+    """Recursively traverse the full lineage of an asset.
+
+    Args:
+        asset_id: UUID of the asset to start from.
+        direction: Either 'upstream' (ancestors) or 'downstream' (dependents).
+
+    Returns an ordered list of assets in the lineage chain with depth levels.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        adj, asset_info = _build_adjacency(org_id, direction)
+        target = UUID(asset_id)
+
+        visited: set[UUID] = set()
+        result: list[dict[str, Any]] = []
+        queue: list[tuple[UUID, int]] = [(target, 0)]
+
+        while queue:
+            current, depth = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            if current != target:
+                info = asset_info.get(current, {})
+                result.append({"asset_id": str(current), "depth": depth, **info})
+            for neighbor in adj.get(current, []):
+                if neighbor not in visited:
+                    queue.append((neighbor, depth + 1))
+
+        return {
+            "status": "success",
+            "asset_id": asset_id,
+            "direction": direction,
+            "lineage_count": len(result),
+            "lineage": result,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def impact_analysis(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
+    """Analyze the downstream impact if an asset fails or is disabled.
+
+    Args:
+        asset_id: UUID of the asset to analyze.
+
+    Returns all downstream assets grouped by source, with total affected count.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        adj, asset_info = _build_adjacency(org_id, "downstream")
+        target = UUID(asset_id)
+
+        visited: set[UUID] = set()
+        affected: list[dict[str, Any]] = []
+        queue: list[tuple[UUID, int]] = [(target, 0)]
+
+        while queue:
+            current, depth = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            if current != target:
+                info = asset_info.get(current, {})
+                affected.append({"asset_id": str(current), "depth": depth, **info})
+            for neighbor in adj.get(current, []):
+                if neighbor not in visited:
+                    queue.append((neighbor, depth + 1))
+
+        # Group by source
+        by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for item in affected:
+            by_source[item.get("source_key", "unknown")].append(item)
+
+        return {
+            "status": "success",
+            "asset_id": asset_id,
+            "total_affected": len(affected),
+            "by_source": {k: v for k, v in by_source.items()},
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def cross_source_dependencies(tool_context: ToolContext) -> dict[str, Any]:
+    """List all dependency edges that cross source boundaries.
+
+    Returns edges where the upstream and downstream assets belong to
+    different sources.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        deps = store.list_dependencies(org_id)
+        assets = store.list_assets(org_id)
+
+        asset_source: dict[UUID, UUID | None] = {}
+        asset_info: dict[UUID, dict[str, str]] = {}
+        for a in assets:
+            if not a.id:
+                continue
+            asset_source[a.id] = a.source_id
+            asset_info[a.id] = {"asset_key": a.key, "source_id": str(a.source_id) if a.source_id else ""}
+
+        cross_deps = []
+        for dep in deps:
+            src_down = asset_source.get(dep.asset_id)
+            src_up = asset_source.get(dep.upstream_asset_id)
+            if src_down and src_up and src_down != src_up:
+                cross_deps.append({
+                    "downstream_asset_id": str(dep.asset_id),
+                    "downstream": asset_info.get(dep.asset_id, {}),
+                    "upstream_asset_id": str(dep.upstream_asset_id),
+                    "upstream": asset_info.get(dep.upstream_asset_id, {}),
+                    "param_name": dep.param_name,
+                })
+
+        return {"status": "success", "cross_source_count": len(cross_deps), "dependencies": cross_deps}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_adjacency(
+    org_id: UUID,
+    direction: str,
+) -> tuple[dict[UUID, list[UUID]], dict[UUID, dict[str, Any]]]:
+    """Build an adjacency map and asset info lookup from all dependencies.
+
+    Args:
+        org_id: Organisation scope.
+        direction: 'upstream' builds child→parents; 'downstream' builds parent→children.
+
+    Returns:
+        (adjacency_map, asset_info_map)
+    """
+    store = get_store()
+    deps = store.list_dependencies(org_id)
+    assets = store.list_assets(org_id)
+
+    asset_info: dict[UUID, dict[str, Any]] = {}
+    source_keys: dict[UUID, str] = {}
+    for a in assets:
+        if not a.id:
+            continue
+        asset_info[a.id] = {"asset_key": a.key, "source_id": str(a.source_id) if a.source_id else ""}
+        if a.source and a.source_id:
+            source_keys[a.source_id] = a.source.key
+
+    # Add source_key to asset_info
+    for uid, info in asset_info.items():
+        sid_str = info["source_id"]
+        if sid_str:
+            info["source_key"] = source_keys.get(UUID(sid_str), "unknown")
+        else:
+            info["source_key"] = ""
+
+    adj: dict[UUID, list[UUID]] = defaultdict(list)
+    for dep in deps:
+        if direction == "upstream":
+            adj[dep.asset_id].append(dep.upstream_asset_id)
+        else:
+            adj[dep.upstream_asset_id].append(dep.asset_id)
+
+    return adj, asset_info

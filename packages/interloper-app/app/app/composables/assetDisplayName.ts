@@ -1,0 +1,21 @@
+/** asset_id → "Source Name → Asset Name" */
+export function useAssetDisplayName() {
+    const sourcesStore = useSourcesStore()
+    const catalogStore = useCatalogStore()
+
+    const assetDisplayName = computed(() => {
+        const map = new Map<string, string>()
+        for (const source of sourcesStore.sources) {
+            const sourceDefn = catalogStore.getSourceDefinition(source.key)
+            const sourceName = sourceDefn?.name ?? source.name ?? source.key
+            for (const asset of source.assets) {
+                const assetDefn = sourceDefn?.assets?.find(a => a.key === asset.key)
+                const assetName = assetDefn?.name ?? asset.key
+                map.set(asset.id, `${sourceName} → ${assetName}`)
+            }
+        }
+        return map
+    })
+
+    return assetDisplayName
+}
