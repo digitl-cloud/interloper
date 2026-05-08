@@ -60,4 +60,13 @@ if [ "$MODE" = "--locked --no-editable" ]; then
         # shellcheck disable=SC2086
         uv sync --locked --no-editable $PACKAGES $EXTRA_FLAGS
     fi
+
+    # Slim the venv: drop test dirs, type stubs, and bundled tests inside
+    # installed packages. Bytecode (.pyc) is preserved.
+    VENV="/interloper/.venv"
+    if [ -d "$VENV" ]; then
+        find "$VENV" -type d \( -name tests -o -name testing -o -name __pycache__ -path '*/tests/*' \) -prune -exec rm -rf {} + 2>/dev/null || true
+        find "$VENV" -type f \( -name '*.pyi' -o -name '*.pyx' -o -name '*.c' -o -name '*.h' \) -delete 2>/dev/null || true
+        find "$VENV" -type d -name '*.dist-info' -exec sh -c 'rm -f "$1/RECORD" "$1/INSTALLER" "$1/REQUESTED"' _ {} \; 2>/dev/null || true
+    fi
 fi

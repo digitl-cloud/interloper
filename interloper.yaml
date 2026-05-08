@@ -20,25 +20,25 @@ launcher:
 
   # type: docker
   # config:
-  #   image: interloper:latest-scheduler
+  #   image: interloper-scheduler:latest-docker
   #   postgres_host: host.docker.internal
 
   type: kubernetes
   config:
-    image: interloper:latest-scheduler
+    image: interloper-scheduler:latest-k8s
     namespace: interloper
     image_pull_policy: Never
 
 runner:
   # type: docker
   # config:
-  #   image: interloper:latest-worker
+  #   image: interloper-scheduler:latest-docker
   #   auto_remove: false
   #   image_pull_policy: Never
 
   type: kubernetes
   config:
-    image: interloper:latest-scheduler
+    image: interloper-scheduler:latest-k8s
     namespace: interloper
 
 catalog:

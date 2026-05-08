@@ -6,12 +6,27 @@ Deploys Interloper (scheduler + API + frontend) onto Kubernetes.
 
 | Component | Purpose |
 |-----------|---------|
-| **scheduler** | Runs cron, the queue worker (dispatches runs via the configured launcher), and the reaper.  Required. |
+| **scheduler** | Singleton: runs cron, the queue worker, and the reaper in one process. Dispatches runs via the configured launcher. Required. |
 | **api** | FastAPI backend serving `/api/*`. |
-| **app** | Nuxt SSR server (Node.js). |
+| **frontend** | nginx serving the pre-built Nuxt SPA. |
 
 All three are deployed as separate Deployments by default.  Each can be
 disabled via `<component>.enabled: false`.
+
+## Images
+
+Each component is its own image, named `interloper-<component>`:
+
+```
+<registry>/interloper-scheduler:<version>          # in-process launcher
+<registry>/interloper-scheduler:<version>-k8s      # kubernetes launcher
+<registry>/interloper-scheduler:<version>-docker   # docker launcher
+<registry>/interloper-api:<version>
+<registry>/interloper-frontend:<version>
+```
+
+The chart picks the scheduler tag suffix from `config.launcher.type`
+automatically — no manual mapping.
 
 ## Quick start (dev)
 
@@ -39,7 +54,7 @@ With a `values.prod.yaml` like:
 
 ```yaml
 image:
-  registry: registry.example.com/interloper
+  registry: registry.example.com
   tag: "0.2.0"
   pullSecrets:
     - name: registry-creds

@@ -5,14 +5,12 @@
 # Targets (build with: docker build --target <target> .):
 #
 #   core       interloper-core only (lightest)
-#   worker     core + assets
-#   scheduler  core + db + scheduler + assets
+#   scheduler  core + db + scheduler + assets (cron + worker + reaper)
 #   api        core + db + api + assets
-#   app        full monolith (all Python packages + Nuxt SPA)
-#   frontend   standalone Nuxt SSR server (Node.js)
+#   frontend   pre-built Nuxt SPA served by nginx
 #
 # Tagging convention:
-#   docker build --target core -t interloper:0.2.0-core .
+#   docker build --target scheduler -t interloper-scheduler:0.2.0 .
 #
 # Build args:
 #   CORE_EXTRAS       comma-separated interloper-core extras (default: google-cloud)
@@ -35,7 +33,8 @@ ARG SCHEDULER_EXTRAS=docker
 FROM ghcr.io/astral-sh/uv:python3.12-alpine AS base
 
 WORKDIR /interloper
-ENV UV_COMPILE_BYTECODE=1
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
 COPY docker/uv-sync.sh docker/uv-sync.sh
 COPY pyproject.toml uv.lock ./
@@ -73,22 +72,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core
 
 
-# ── worker ────────────────────────────────────────────────────
-# Worker pods need the scheduler package (QueueController) plus DB and the
-# launcher extras chosen at build time (docker | k8s | none).
-FROM base AS build-worker
-ARG CORE_EXTRAS
-ARG ASSETS_EXTRAS
-ARG SCHEDULER_EXTRAS
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    docker/uv-sync.sh --frozen interloper-core interloper-assets interloper-db interloper-scheduler
-COPY . .
-RUN --mount=type=cache,target=/root/.cache/uv \
-    docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-scheduler
-
-
 # ── scheduler ─────────────────────────────────────────────────
+# One image runs cron + queue worker + reaper in the same process.
+# Launcher extras (docker | k8s | none) are picked at build time.
 FROM base AS build-scheduler
 ARG CORE_EXTRAS
 ARG ASSETS_EXTRAS
@@ -135,17 +121,11 @@ COPY --from=build-core --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 CMD ["interloper"]
 
-# ── worker (queue consumer; horizontally scalable) ────────────
-FROM runtime AS worker
-COPY --from=build-worker --chown=app:app /interloper/.venv /interloper/.venv
-USER app
-CMD ["interloper", "app", "--no-api", "--no-cron", "--worker", "--no-reaper", "--no-create-tables"]
-
-# ── scheduler (cron + reaper; singleton) ──────────────────────
+# ── scheduler (cron + worker + reaper; singleton) ─────────────
 FROM runtime AS scheduler
 COPY --from=build-scheduler --chown=app:app /interloper/.venv /interloper/.venv
 USER app
-CMD ["interloper", "app", "--no-api", "--cron", "--no-worker", "--reaper", "--no-create-tables"]
+CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
 
 # ── api (HTTP backend; horizontally scalable) ─────────────────
 FROM runtime AS api
@@ -155,7 +135,7 @@ EXPOSE 3000
 CMD ["interloper", "app", "--api", "--no-cron", "--no-worker", "--no-reaper", "--no-create-tables"]
 
 # ── frontend (nginx serving the pre-built SPA) ────────────────
-FROM nginx:1.27-alpine AS frontend
+FROM nginx:1.27-alpine-slim AS frontend
 COPY --from=build-spa /app/.output/public/ /usr/share/nginx/html/
 # nginx-alpine expands /etc/nginx/templates/*.template into
 # /etc/nginx/conf.d/ at startup with envsubst. API_UPSTREAM is required;

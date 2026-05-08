@@ -2,10 +2,7 @@ Interloper has been deployed to namespace {{ .Release.Namespace }}.
 
 Components:
 {{- if .Values.scheduler.enabled }}
-  ✓ Scheduler  (cron + reaper; singleton)
-{{- end }}
-{{- if .Values.worker.enabled }}
-  ✓ Worker     (queue consumer; replicas={{ .Values.worker.replicaCount }})
+  ✓ Scheduler  (cron + worker + reaper; singleton)
 {{- end }}
 {{- if .Values.api.enabled }}
   ✓ API        (http://{{ include "interloper.fullname" . }}-api.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.api.service.port }})

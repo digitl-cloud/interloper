@@ -34,13 +34,13 @@ spec:
           image: {{ include "interloper.image" (dict "root" . "component" "scheduler" "image" .Values.scheduler.image) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["interloper"]
-          # Singleton: cron reconciler + reaper. Worker runs in a separate
-          # deployment that scales horizontally.
+          # Singleton: cron reconciler + queue worker + reaper run together.
+          # replicaCount must stay at 1 (cron + reaper are singletons).
           args:
             - app
             - --no-api
             - --cron
-            - --no-worker
+            - --worker
             - --reaper
             - --no-create-tables
           {{- with .Values.securityContext }}

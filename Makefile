@@ -1,4 +1,4 @@
-.PHONY: build
+.PHONY: build docker-build docker-build-linux docker-push docker-build-push
 
 
 # ###############
@@ -42,20 +42,20 @@ build-app:
 # DOCKER
 # ###############
 
-REGISTRY      := europe-docker.pkg.dev/dc-int-connectors-prd/docker/interloper
+REGISTRY      := europe-docker.pkg.dev/dc-int-connectors-prd/docker
 VERSION       := $(shell python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 CORE_EXTRAS   ?= google-cloud
 ASSETS_EXTRAS ?= bing,facebook,google
 
-# Image catalog. Two-tier:
-#   ROLES                  → one image per role, tag = "<v>-<role>"
+# Image catalog. Each component is its own repository: "interloper-<role>".
+#   ROLES                  → tag = "<version>"
 #   ROLES_LAUNCHER_AWARE   → one image per (role, launcher) pair:
-#                              base   (no launcher extras) → tag "<v>-<role>"
-#                              -k8s   → tag "<v>-<role>-k8s"
-#                              -docker→ tag "<v>-<role>-docker"
+#                              base   (no launcher extras) → tag "<version>"
+#                              -k8s                        → tag "<version>-k8s"
+#                              -docker                     → tag "<version>-docker"
 # The chart picks the suffix from config.launcher.type — no manual mapping.
 ROLES                := api frontend
-ROLES_LAUNCHER_AWARE := scheduler worker
+ROLES_LAUNCHER_AWARE := scheduler
 LAUNCHERS            := k8s docker
 
 # Concrete target stems built by `docker-build`.
@@ -67,6 +67,10 @@ TARGETS := $(ROLES) $(ROLES_LAUNCHER_AWARE) \
 # Launcher is empty for base targets ("scheduler", "api", …).
 launcher_of = $(if $(filter %-k8s %-docker,$(1)),$(lastword $(subst -, ,$(1))))
 role_of     = $(if $(call launcher_of,$(1)),$(patsubst %-$(call launcher_of,$(1)),%,$(1)),$(1))
+# Image coordinates derived from a stem.
+image_of    = interloper-$(call role_of,$(1))
+tag_of      = $(VERSION)$(if $(call launcher_of,$(1)),-$(call launcher_of,$(1)))
+tag_latest  = latest$(if $(call launcher_of,$(1)),-$(call launcher_of,$(1)))
 
 # Pattern rules. Order matters on macOS' GNU make 3.81 (no shortest-stem):
 # the more specific docker-build-linux-% must come first.
@@ -75,24 +79,24 @@ docker-build-linux-%:
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
 		--build-arg SCHEDULER_EXTRAS=$(call launcher_of,$*) \
-		-t interloper:$(VERSION)-$* \
-		-t interloper:latest-$* \
-		-t $(REGISTRY):$(VERSION)-$* \
-		-t $(REGISTRY):latest-$* .
+		-t $(call image_of,$*):$(call tag_of,$*) \
+		-t $(call image_of,$*):$(call tag_latest,$*) \
+		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \
+		-t $(REGISTRY)/$(call image_of,$*):$(call tag_latest,$*) .
 
 docker-build-%:
 	docker build --target $(call role_of,$*) \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
 		--build-arg SCHEDULER_EXTRAS=$(call launcher_of,$*) \
-		-t interloper:$(VERSION)-$* \
-		-t interloper:latest-$* \
-		-t $(REGISTRY):$(VERSION)-$* \
-		-t $(REGISTRY):latest-$* .
+		-t $(call image_of,$*):$(call tag_of,$*) \
+		-t $(call image_of,$*):$(call tag_latest,$*) \
+		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \
+		-t $(REGISTRY)/$(call image_of,$*):$(call tag_latest,$*) .
 
 docker-push-%:
-	docker push $(REGISTRY):$(VERSION)-$*
-	docker push $(REGISTRY):latest-$*
+	docker push $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*)
+	docker push $(REGISTRY)/$(call image_of,$*):$(call tag_latest,$*)
 
 docker-build:       $(addprefix docker-build-,$(TARGETS))
 docker-build-linux: $(addprefix docker-build-linux-,$(TARGETS))

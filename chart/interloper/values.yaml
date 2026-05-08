@@ -3,8 +3,12 @@
 # =============================================================================
 
 # Global image defaults (overridable per-component below).
+#
+# Images follow the convention "<registry>/interloper-<component>:<tag>".
+# For launcher-aware images (scheduler) the tag gets a "-k8s" or "-docker"
+# suffix derived from config.launcher.type.
 image:
-  registry: europe-docker.pkg.dev/dc-int-connectors-prd/docker/interloper
+  registry: europe-docker.pkg.dev/dc-int-connectors-prd/docker
   tag: ""  # defaults to Chart.appVersion
   pullPolicy: IfNotPresent
   pullSecrets: []
@@ -14,33 +18,14 @@ image:
 # Components
 # =============================================================================
 
-# ── Scheduler (cron + reaper; singleton) ───────────────────────────────────
-# Cron reconciler enqueues runs; reaper kills timed-out runs. Both are
-# singletons — replicaCount must stay at 1.
+# ── Scheduler (cron + worker + reaper; singleton) ──────────────────────────
+# Runs cron reconciler, the queue worker, and the reaper in one process.
+# replicaCount must stay at 1 — cron + reaper are singletons.
 scheduler:
   enabled: true
   replicaCount: 1
   image:
-    repository: ""  # defaults to {image.registry}:{tag}-scheduler
-    tag: ""
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      memory: 512Mi
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-  podAnnotations: {}
-  extraEnv: []
-
-# ── Worker (queue consumer; horizontally scalable) ─────────────────────────
-worker:
-  enabled: true
-  replicaCount: 2
-  image:
-    repository: ""  # defaults to {image.registry}:{tag}-worker
+    repository: ""  # defaults to {image.registry}/interloper-scheduler
     tag: ""
   resources:
     requests:
@@ -59,7 +44,7 @@ api:
   enabled: true
   replicaCount: 2
   image:
-    repository: ""  # defaults to {image.registry}:{tag}-api
+    repository: ""  # defaults to {image.registry}/interloper-api
     tag: ""
   resources:
     requests:
@@ -81,7 +66,7 @@ frontend:
   enabled: true
   replicaCount: 2
   image:
-    repository: ""  # defaults to {image.registry}:{tag}-frontend
+    repository: ""  # defaults to {image.registry}/interloper-frontend
     tag: ""
   resources:
     requests:

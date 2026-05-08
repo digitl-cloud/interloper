@@ -1,1 +1,40 @@
+# Version control
+.git
+.github
+.gitignore
+.gitattributes
+
+# Editor / IDE / Claude state
+.idea
+.vscode
+.claude
+.DS_Store
+
+# Python build / cache artefacts
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.egg-info
+**/.venv
 .venv
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.pyright_cache
+**/.coverage
+**/coverage.xml
+**/htmlcov
+**/dist
+**/build
+
+# Node / Nuxt build artefacts (the Dockerfile rebuilds these from source)
+**/node_modules
+**/.nuxt
+**/.output
+**/.cache
+
+# Docs and unrelated top-level files
+README.md
+LICENSE
+codecov.yml
+examples
