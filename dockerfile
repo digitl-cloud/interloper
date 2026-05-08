@@ -88,9 +88,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 
 # ── api ───────────────────────────────────────────────────────
+# The api never executes asset code — it only reads catalog metadata
+# (Catalog.from_paths runs definition() on each module, which is pure
+# introspection). interloper-assets is still installed so its modules
+# remain importable from the catalog, but the heavy SDK extras
+# (bing/google/facebook) are skipped.
 FROM base AS build-api
 ARG CORE_EXTRAS
-ARG ASSETS_EXTRAS
+ENV ASSETS_EXTRAS=""
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh --frozen interloper-core interloper-assets interloper-db interloper-api

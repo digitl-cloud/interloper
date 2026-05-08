@@ -8,9 +8,11 @@
 #   SCHEDULER_EXTRAS  → --extra {name} flags (scoped to interloper-scheduler)
 set -e
 
-MODE="--locked --no-editable"
+MODE="--locked --no-editable --no-dev"
+INSTALL=true
 if [ "$1" = "--frozen" ]; then
-    MODE="--frozen --no-install-workspace"
+    MODE="--frozen --no-install-workspace --no-dev"
+    INSTALL=false
     shift
 fi
 
@@ -31,7 +33,7 @@ uv sync $MODE $PACKAGES
 # Install extras. Must include ALL packages to avoid uv sync removing
 # previously installed deps (uv sync reconciles the full venv).
 # Only runs on the install pass (not --frozen).
-if [ "$MODE" = "--locked --no-editable" ]; then
+if $INSTALL; then
     EXTRA_FLAGS=""
 
     # ASSETS_EXTRAS → --extra flags (only when interloper-assets is included)
@@ -58,7 +60,7 @@ if [ "$MODE" = "--locked --no-editable" ]; then
 
     if [ -n "$EXTRA_FLAGS" ]; then
         # shellcheck disable=SC2086
-        uv sync --locked --no-editable $PACKAGES $EXTRA_FLAGS
+        uv sync --locked --no-editable --no-dev $PACKAGES $EXTRA_FLAGS
     fi
 
     # Slim the venv: drop test dirs, type stubs, and bundled tests inside
