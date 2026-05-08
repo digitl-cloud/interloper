@@ -100,6 +100,19 @@ Scheduler image reference (used as default for the K8s launcher).
 {{- end -}}
 
 {{/*
+Worker image reference (used as default for the K8s runner — leaf
+per-asset Jobs). No launcher suffix: the worker doesn't spawn sub-Jobs.
+*/}}
+{{- define "interloper.workerImage" -}}
+{{- $tag := default .Values.image.tag .Values.worker.image.tag | default .Chart.AppVersion -}}
+{{- if .Values.worker.image.repository -}}
+{{ .Values.worker.image.repository }}:{{ $tag }}
+{{- else -}}
+{{ .Values.image.registry }}/interloper-worker:{{ $tag }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Postgres host: either the bundled subchart service or external config.
 */}}
 {{- define "interloper.postgresHost" -}}

@@ -54,7 +54,7 @@ ASSETS_EXTRAS ?= bing,facebook,google
 #                              -k8s                        → tag "<version>-k8s"
 #                              -docker                     → tag "<version>-docker"
 # The chart picks the suffix from config.launcher.type — no manual mapping.
-ROLES                := api frontend
+ROLES                := api frontend worker
 ROLES_LAUNCHER_AWARE := scheduler
 LAUNCHERS            := k8s docker
 

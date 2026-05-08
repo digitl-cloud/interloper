@@ -6,7 +6,8 @@
 #
 #   core       interloper-core only (lightest)
 #   scheduler  core + db + scheduler + assets (cron + worker + reaper)
-#   api        core + db + api + assets
+#   worker     core + assets only (per-asset Job target for runner.type=k8s)
+#   api        core + db + api (assets installed; SDK extras skipped)
 #   frontend   pre-built Nuxt SPA served by nginx
 #
 # Tagging convention:
@@ -87,6 +88,21 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-scheduler
 
 
+# ── worker (leaf per-asset Job target) ────────────────────────
+# Used as runner.config.image when runner.type=k8s. Executes a single
+# mini-DAG via `interloper run --format inline`. No DB, no scheduler,
+# no launcher — just core + assets + destinations + pandas.
+FROM base AS build-worker
+ARG CORE_EXTRAS
+ARG ASSETS_EXTRAS
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh --frozen interloper-core interloper-assets
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh interloper-core interloper-assets
+
+
 # ── api ───────────────────────────────────────────────────────
 # The api never executes asset code — it only reads catalog metadata
 # (Catalog.from_paths runs definition() on each module, which is pure
@@ -131,6 +147,12 @@ FROM runtime AS scheduler
 COPY --from=build-scheduler --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
+
+# ── worker (per-asset Job target; runner.type=k8s only) ───────
+FROM runtime AS worker
+COPY --from=build-worker --chown=app:app /interloper/.venv /interloper/.venv
+USER app
+CMD ["interloper"]
 
 # ── api (HTTP backend; horizontally scalable) ─────────────────
 FROM runtime AS api

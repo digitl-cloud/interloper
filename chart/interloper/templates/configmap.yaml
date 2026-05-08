@@ -22,7 +22,7 @@ set them explicitly.
   {{- if not (hasKey $cfg "runner") -}}{{- $_ := set $cfg "runner" dict -}}{{- end -}}
   {{- if not (hasKey $cfg.runner "config") -}}{{- $_ := set $cfg.runner "config" dict -}}{{- end -}}
   {{- if not $cfg.runner.config.image -}}
-    {{- $_ := set $cfg.runner.config "image" (include "interloper.schedulerImage" .) -}}
+    {{- $_ := set $cfg.runner.config "image" (include "interloper.workerImage" .) -}}
   {{- end -}}
   {{- if not $cfg.runner.config.namespace -}}
     {{- $_ := set $cfg.runner.config "namespace" .Release.Namespace -}}
