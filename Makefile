@@ -48,11 +48,12 @@ CORE_EXTRAS   ?= google-cloud
 ASSETS_EXTRAS ?= bing,facebook,google
 
 # Image catalog. Each component is its own repository: "interloper-<role>".
-#   ROLES                  → tag = "<version>"
-#   ROLES_LAUNCHER_AWARE   → one image per (role, launcher) pair:
-#                              base   (no launcher extras) → tag "<version>"
-#                              -k8s                        → tag "<version>-k8s"
-#                              -docker                     → tag "<version>-docker"
+#   ROLES                  → image "interloper-<role>",         tag = "<version>"
+#   ROLES_LAUNCHER_AWARE   → one image per (role, launcher) pair, all tagged
+#                            "<version>", with the launcher in the image name:
+#                              interloper-<role>             (no launcher extras)
+#                              interloper-<role>-k8s
+#                              interloper-<role>-docker
 # The chart picks the suffix from config.launcher.type — no manual mapping.
 ROLES                := api frontend worker
 ROLES_LAUNCHER_AWARE := scheduler
@@ -67,10 +68,9 @@ TARGETS := $(ROLES) $(ROLES_LAUNCHER_AWARE) \
 # Launcher is empty for base targets ("scheduler", "api", …).
 launcher_of = $(if $(filter %-k8s %-docker,$(1)),$(lastword $(subst -, ,$(1))))
 role_of     = $(if $(call launcher_of,$(1)),$(patsubst %-$(call launcher_of,$(1)),%,$(1)),$(1))
-# Image coordinates derived from a stem.
-image_of    = interloper-$(call role_of,$(1))
-tag_of      = $(VERSION)$(if $(call launcher_of,$(1)),-$(call launcher_of,$(1)))
-tag_latest  = latest$(if $(call launcher_of,$(1)),-$(call launcher_of,$(1)))
+# Image name derived from a stem. Tag carries the version only;
+# launcher variants live in the image name.
+image_of    = interloper-$(call role_of,$(1))$(if $(call launcher_of,$(1)),-$(call launcher_of,$(1)))
 
 # Pattern rules. Order matters on macOS' GNU make 3.81 (no shortest-stem):
 # the more specific docker-build-linux-% must come first.
@@ -79,24 +79,24 @@ docker-build-linux-%:
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
 		--build-arg SCHEDULER_EXTRAS=$(call launcher_of,$*) \
-		-t $(call image_of,$*):$(call tag_of,$*) \
-		-t $(call image_of,$*):$(call tag_latest,$*) \
-		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \
-		-t $(REGISTRY)/$(call image_of,$*):$(call tag_latest,$*) .
+		-t $(call image_of,$*):$(VERSION) \
+		-t $(call image_of,$*):latest \
+		-t $(REGISTRY)/$(call image_of,$*):$(VERSION) \
+		-t $(REGISTRY)/$(call image_of,$*):latest .
 
 docker-build-%:
 	docker build --target $(call role_of,$*) \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
 		--build-arg SCHEDULER_EXTRAS=$(call launcher_of,$*) \
-		-t $(call image_of,$*):$(call tag_of,$*) \
-		-t $(call image_of,$*):$(call tag_latest,$*) \
-		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \
-		-t $(REGISTRY)/$(call image_of,$*):$(call tag_latest,$*) .
+		-t $(call image_of,$*):$(VERSION) \
+		-t $(call image_of,$*):latest \
+		-t $(REGISTRY)/$(call image_of,$*):$(VERSION) \
+		-t $(REGISTRY)/$(call image_of,$*):latest .
 
 docker-push-%:
-	docker push $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*)
-	docker push $(REGISTRY)/$(call image_of,$*):$(call tag_latest,$*)
+	docker push $(REGISTRY)/$(call image_of,$*):$(VERSION)
+	docker push $(REGISTRY)/$(call image_of,$*):latest
 
 docker-build:       $(addprefix docker-build-,$(TARGETS))
 docker-build-linux: $(addprefix docker-build-linux-,$(TARGETS))

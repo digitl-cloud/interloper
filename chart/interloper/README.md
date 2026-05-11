@@ -19,13 +19,14 @@ Each component is its own image, named `interloper-<component>`:
 
 ```
 <registry>/interloper-scheduler:<version>          # in-process launcher
-<registry>/interloper-scheduler:<version>-k8s      # kubernetes launcher
-<registry>/interloper-scheduler:<version>-docker   # docker launcher
+<registry>/interloper-scheduler-k8s:<version>      # kubernetes launcher
+<registry>/interloper-scheduler-docker:<version>   # docker launcher
 <registry>/interloper-api:<version>
 <registry>/interloper-frontend:<version>
+<registry>/interloper-worker:<version>             # k8s runner per-asset Job target
 ```
 
-The chart picks the scheduler tag suffix from `config.launcher.type`
+The chart picks the scheduler image suffix from `config.launcher.type`
 automatically — no manual mapping.
 
 ## Quick start (dev)

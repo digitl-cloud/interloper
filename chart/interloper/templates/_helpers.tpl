@@ -58,7 +58,7 @@ Secret name — either user-provided existingSecret or chart-generated.
 {{- end -}}
 
 {{/*
-Launcher suffix appended to the scheduler image tag. Maps the runtime
+Launcher suffix appended to the scheduler image NAME. Maps the runtime
 launcher choice (config.launcher.type) onto the build-time SCHEDULER_EXTRAS
 that produced each image variant.
 
@@ -75,7 +75,7 @@ that produced each image variant.
 
 {{/*
 Image reference for a component.
-Falls back to "<registry>/interloper-<component>:<tag>[-<launcher-suffix>]"
+Falls back to "<registry>/interloper-<component>[<launcher-suffix>]:<tag>"
 if repository is not set. Launcher suffix only applies to the scheduler.
 Usage: {{ include "interloper.image" (dict "root" . "component" "scheduler" "image" .Values.scheduler.image) }}
 */}}
@@ -88,7 +88,7 @@ Usage: {{ include "interloper.image" (dict "root" . "component" "scheduler" "ima
 {{- if eq .component "scheduler" -}}
 {{- $suffix = include "interloper.launcherSuffix" .root -}}
 {{- end -}}
-{{ .root.Values.image.registry }}/interloper-{{ .component }}:{{ $tag }}{{ $suffix }}
+{{ .root.Values.image.registry }}/interloper-{{ .component }}{{ $suffix }}:{{ $tag }}
 {{- end -}}
 {{- end -}}
 
