@@ -1,0 +1,16 @@
+# =============================================================================
+# CI test values
+#
+# Minimum overrides to make `helm template` render successfully against the
+# default chart values, which intentionally require Postgres connection
+# details up front so production installs can't silently drift.
+#
+# Used by the Helm lint job in .github/workflows/checks.yaml; mirrors the
+# convention picked up by chart-testing (`ct`).
+# =============================================================================
+
+externalPostgres:
+  host: postgres.example.com
+
+secrets:
+  postgresPassword: ci-test-password

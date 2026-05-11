@@ -132,7 +132,7 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Lint
-        run: helm lint chart/interloper
+        run: helm lint chart/interloper -f chart/interloper/ci/test-values.yaml
 
       - name: Template
-        run: helm template chart/interloper > /dev/null
+        run: helm template chart/interloper -f chart/interloper/ci/test-values.yaml > /dev/null
