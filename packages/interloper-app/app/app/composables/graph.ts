@@ -35,7 +35,7 @@ export interface DependencyPair {
 interface UseGraphConnectionRulesOptions {
     sources: Ref<Source[]>
     assetDependencies: Ref<AssetDependency[]>
-    assetToSource: Ref<Map<string, string>>
+    assetToSource: Ref<Map<string, string | null>>
     /** asset id → qualified key ("source_key.asset_key") */
     qualifiedKeyById: Ref<Map<string, string>>
     getAssetDefinition: (qualifiedKey: string) => AssetDefinition | undefined

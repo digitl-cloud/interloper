@@ -35,7 +35,7 @@ const emit = defineEmits<{
     'asset-click': [asset: SourceAsset | Asset, assetDefn: AssetDefinition | undefined, source: Source | null]
     'pane-click': []
     'delete-source': [sourceId: string]
-    'create-dependencies': [pairs: Array<{ upstreamAssetId: string; downstreamAssetId: string }>]
+    'create-dependencies': [pairs: Array<{ upstreamAssetId: string; downstreamAssetId: string; paramName: string }>]
     'delete-dependency': [payload: { upstreamAssetId: string; downstreamAssetId: string }]
 }>()
 

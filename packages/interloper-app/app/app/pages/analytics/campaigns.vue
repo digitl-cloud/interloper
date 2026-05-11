@@ -29,8 +29,14 @@ definePageMeta({ layout: 'analytics' })
 const colorMode = useColorMode()
 
 // ---------- palette helpers ----------
+type Palette10 = [string, string, string, string, string, string, string, string, string, string]
+
 const palette = computed(() => {
     const dark = colorMode.value === 'dark'
+    const colors: Palette10 = [
+        '#6366f1', '#22d3ee', '#f59e0b', '#ef4444', '#10b981',
+        '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b',
+    ]
     return {
         dark,
         text: dark ? '#e5e7eb' : '#1f2937',
@@ -39,10 +45,7 @@ const palette = computed(() => {
         split: dark ? '#374151' : '#f3f4f6',
         bg: dark ? '#111827' : '#ffffff',
         cardBg: dark ? 'rgba(17,24,39,0.6)' : 'rgba(255,255,255,0.6)',
-        colors: [
-            '#6366f1', '#22d3ee', '#f59e0b', '#ef4444', '#10b981',
-            '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b',
-        ],
+        colors,
     }
 })
 
@@ -87,7 +90,7 @@ const scatterOption = computed(() => ({
     yAxis: { name: 'Conversions', nameLocation: 'center', nameGap: 36, nameTextStyle: { color: palette.value.subtext, fontSize: 11 }, type: 'value', splitLine: { lineStyle: { color: palette.value.split } }, axisLabel: { color: palette.value.subtext, fontSize: 10 } },
     series: [{
         type: 'scatter',
-        symbolSize: (d: number[]) => Math.max(8, Math.min(32, d[2] * 0.6)),
+        symbolSize: (d: number[]) => Math.max(8, Math.min(32, (d[2] ?? 0) * 0.6)),
         data: [
             [12000, 340, 35.3, 'Spring Sale'],
             [8500, 210, 40.5, 'Brand Awareness'],

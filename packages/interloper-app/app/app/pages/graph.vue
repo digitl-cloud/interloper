@@ -42,8 +42,10 @@ const selectedAsset = ref<SourceAsset | undefined>()
 const selectedAssetDefn = ref<AssetDefinition | undefined>()
 const selectedSource = ref<Source | undefined>()
 
-function onAssetClick(asset: SourceAsset, assetDefn: AssetDefinition | undefined, source: Source) {
-    selectedAsset.value = asset
+function onAssetClick(asset: SourceAsset | Asset, assetDefn: AssetDefinition | undefined, source: Source | null) {
+    // Panel is only shown for source-owned assets; standalone assets have no source.
+    if (!source) return
+    selectedAsset.value = asset as SourceAsset
     selectedAssetDefn.value = assetDefn
     selectedSource.value = source
     panelOpen.value = true

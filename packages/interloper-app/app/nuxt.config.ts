@@ -75,6 +75,13 @@ export default defineNuxtConfig({
         },
     },
     ssr: false,
+    typescript: {
+        nodeTsConfig: {
+            compilerOptions: {
+                types: ['node'],
+            },
+        },
+    },
     devServer: {
         port: Number(process.env.INTERLOPER_SERVER_PORT) || 3000,
     },
