@@ -5,6 +5,14 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Use relative Location headers in redirects so the browser resolves
+    # them against the current URL (preserving scheme + host + port).
+    # Without this, nginx's trailing-slash auto-redirect (e.g.
+    # /sources → /sources/) emits an absolute URL built from $host and
+    # the request's recv port — which is always 80 inside the container,
+    # so the original port-forwarded port is dropped.
+    absolute_redirect off;
+
     # Proxy API calls to the backend so the SPA works regardless of how
     # external traffic is routed (ingress, port-forward, kubectl proxy).
     # API_UPSTREAM is templated by envsubst at container start (nginx-alpine
