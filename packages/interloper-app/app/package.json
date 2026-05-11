@@ -2,6 +2,7 @@
   "name": "nuxt-app",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -41,7 +42,13 @@
   "pnpm": {
     "patchedDependencies": {
       "vaul-vue@0.4.1": "patches/vaul-vue@0.4.1.patch"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "esbuild",
+      "unrs-resolver",
+      "vue-demi"
+    ]
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.1",
