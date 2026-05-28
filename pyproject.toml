@@ -118,6 +118,9 @@ exclude_also = [
 # ################
 [tool.semantic_release]
 allow_zero_version = true
+# Stay on 0.x: a breaking change bumps the minor (0.2.0 → 0.3.0) instead of
+# graduating to 1.0.0. Flip to true (the default) when ready to commit to 1.0.
+major_on_zero = false
 build_command = "uv build --all-packages"
 commit_message = "chore(release): {version} [skip ci]"
 version_toml = [
