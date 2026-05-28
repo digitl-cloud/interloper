@@ -40,14 +40,19 @@ dag.materialize()
 
 ## Packages
 
-| Package             | Description                                           |
-| ------------------- | ----------------------------------------------------- |
-| `interloper-core`   | Core: assets, sources, DAG, runners, IO, partitioning |
-| `interloper-sql`    | SQL IO backends (Postgres, MySQL, SQLite)             |
-| `interloper-assets` | Pre-built source definitions and registry             |
-| `interloper-dbos`   | DBOS durable execution                                |
-| `interloper-docker` | Docker runner and backfiller                          |
-| `interloper-k8s`    | Kubernetes runner and backfiller                      |
+| Package                   | Description                                              |
+| ------------------------- | -------------------------------------------------------- |
+| `interloper-core`         | Core: assets, sources, DAG, runners, IO, partitioning    |
+| `interloper-assets`       | Pre-built source definitions (bing, facebook, google, …) |
+| `interloper-pandas`       | pandas DataFrame normalizer and adapter                  |
+| `interloper-db`           | Database persistence layer                               |
+| `interloper-google-cloud` | Google Cloud integration: BigQuery destination           |
+| `interloper-docker`       | Docker runner and backfiller                             |
+| `interloper-k8s`          | Kubernetes runner and backfiller                         |
+| `interloper-scheduler`    | Cron scheduler, queue worker, and reaper                 |
+| `interloper-api`          | FastAPI HTTP backend (reads catalog metadata only)       |
+| `interloper-agent`        | AI agent (Google ADK)                                    |
+| `interloper-app`          | Web UI (Nuxt SPA, bundled as static assets)              |
 
 ## Development
 
