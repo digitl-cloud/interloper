@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.1 (2026-05-28)
+
+### Bug Fixes
+
+- **docker**: Reconcile uv.lock during image build
+  ([`1619ec9`](https://github.com/digitl-cloud/interloper/commit/1619ec9fcabc2d7225360b8eeea5eca9658edf02))
+
+
 ## v0.3.0 (2026-05-28)
 
 ### Bug Fixes
