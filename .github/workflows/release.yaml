@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type"
+        type: choice
+        options:
+          - stable
+          - release-candidate
+        default: stable
+
+jobs:
+  release:
+    name: Release (${{ inputs.release_type }})
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "write"
+      id-token: "write"
+
+    steps:
+      - name: Get GitHub App token
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.SEMANTIC_RELEASE_APP_ID }}
+          private-key: ${{ secrets.SEMANTIC_RELEASE_APP_KEY }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.10"
+          cache-suffix: "3.10"
+
+      - name: UV sync
+        run: uv sync --all-packages --all-extras
+
+      - name: Ruff
+        run: uv run ruff check packages
+
+      - name: Pyright
+        run: uv run pyright
+
+      - name: Pytest
+        run: uv run pytest
+
+      - name: Release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10
+        with:
+          prerelease: ${{ inputs.release_type == 'release-candidate' }}
+          prerelease_token: rc
+          build: false
+          changelog: ${{ inputs.release_type == 'stable' }}
+          commit: true
+          tag: true
+          vcs_release: true
+          github_token: ${{ steps.app-token.outputs.token }}
+          git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+          git_committer_name: "Semantic Release"
+
+      # Publish the library packages only. The app-layer packages
+      # (interloper-api, -scheduler, -agent, -app) ship as Docker images,
+      # not PyPI distributions, so they are built but not uploaded.
+      - name: Build & Publish
+        if: steps.release.outputs.released == 'true'
+        run: |
+          uv build --all-packages
+          uv publish --trusted-publishing always \
+            "dist/interloper_core-*" \
+            "dist/interloper_assets-*" \
+            "dist/interloper_pandas-*" \
+            "dist/interloper_db-*" \
+            "dist/interloper_google_cloud-*" \
+            "dist/interloper_docker-*" \
+            "dist/interloper_k8s-*"
