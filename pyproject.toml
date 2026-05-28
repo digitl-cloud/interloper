@@ -120,7 +120,20 @@ exclude_also = [
 allow_zero_version = true
 build_command = "uv build --all-packages"
 commit_message = "chore(release): {version} [skip ci]"
-version_toml = ["pyproject.toml:project.version"]
+version_toml = [
+    "pyproject.toml:project.version",
+    "packages/interloper-core/pyproject.toml:project.version",
+    "packages/interloper-assets/pyproject.toml:project.version",
+    "packages/interloper-pandas/pyproject.toml:project.version",
+    "packages/interloper-db/pyproject.toml:project.version",
+    "packages/interloper-google-cloud/pyproject.toml:project.version",
+    "packages/interloper-docker/pyproject.toml:project.version",
+    "packages/interloper-k8s/pyproject.toml:project.version",
+    "packages/interloper-scheduler/pyproject.toml:project.version",
+    "packages/interloper-api/pyproject.toml:project.version",
+    "packages/interloper-agent/pyproject.toml:project.version",
+    "packages/interloper-app/pyproject.toml:project.version",
+]
 
 [tool.semantic_release.branches.main]
 match = "main"
