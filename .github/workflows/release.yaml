@@ -75,18 +75,8 @@ jobs:
           git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
           git_committer_name: "Semantic Release"
 
-      # Publish the library packages only. The app-layer packages
-      # (interloper-api, -scheduler, -agent, -app) ship as Docker images,
-      # not PyPI distributions, so they are built but not uploaded.
       - name: Build & Publish
         if: steps.release.outputs.released == 'true'
         run: |
           uv build --all-packages
-          uv publish --trusted-publishing always \
-            "dist/interloper_core-*" \
-            "dist/interloper_assets-*" \
-            "dist/interloper_pandas-*" \
-            "dist/interloper_db-*" \
-            "dist/interloper_google_cloud-*" \
-            "dist/interloper_docker-*" \
-            "dist/interloper_k8s-*"
+          uv publish --trusted-publishing always
