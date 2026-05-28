@@ -48,6 +48,8 @@ CORE_EXTRAS   ?= google-cloud
 ASSETS_EXTRAS ?= bing,facebook,google
 
 # Image catalog. Each component is its own repository: "interloper-<role>".
+# NOTE: the `docker` job matrix in .github/workflows/release.yaml mirrors this
+# catalog — update both together when adding or removing a role.
 #   ROLES                  → image "interloper-<role>",         tag = "<version>"
 #   ROLES_LAUNCHER_AWARE   → one image per (role, launcher) pair, all tagged
 #                            "<version>", with the launcher in the image name:
