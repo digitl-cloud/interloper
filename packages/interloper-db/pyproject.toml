@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-db"
-version = "0.1.0-rc.1"
+version = "0.2.0"
 description = "Interloper database persistence layer"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
