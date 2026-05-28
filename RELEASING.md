@@ -22,9 +22,10 @@ match the release.
 
 Things to configure on the repo before the first release:
 
-- **GitHub App credentials** — variable `SEMANTIC_RELEASE_APP_ID` and secret
+- **GitHub App credentials** — secrets `SEMANTIC_RELEASE_APP_ID` and
   `SEMANTIC_RELEASE_APP_KEY` (a GitHub App with `contents: write`), used to author
-  the release commit and tag.
+  the release commit and tag. These may be set at the repo or org level; if set
+  on the org, make sure the `interloper` repository is granted access.
 - **PyPI trusted publishing** for each published package — see below.
 - **GitHub Pages** enabled with the `gh-pages` branch as source — see the Helm
   section below.
