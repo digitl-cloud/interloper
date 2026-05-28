@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-scheduler"
-version = "0.2.0"
+version = "0.3.0"
 description = "Interloper cron scheduler and queue worker"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
