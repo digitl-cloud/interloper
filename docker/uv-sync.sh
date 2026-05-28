@@ -8,7 +8,13 @@
 #   SCHEDULER_EXTRAS  → --extra {name} flags (scoped to interloper-scheduler)
 set -e
 
-MODE="--locked --no-editable --no-dev"
+# NOTE: the install pass intentionally omits --locked. semantic-release bumps
+# the workspace versions in every pyproject.toml at release time but does NOT
+# regenerate uv.lock, so at a release tag the lock lags by one version. With
+# --locked that mismatch aborts the build; without it `uv sync` reconciles the
+# (version-only) drift in-container. When the lock is already current this is a
+# no-op, so reproducibility of transitive deps is unaffected in practice.
+MODE="--no-editable --no-dev"
 INSTALL=true
 if [ "$1" = "--frozen" ]; then
     MODE="--frozen --no-install-workspace --no-dev"
@@ -60,7 +66,7 @@ if $INSTALL; then
 
     if [ -n "$EXTRA_FLAGS" ]; then
         # shellcheck disable=SC2086
-        uv sync --locked --no-editable --no-dev $PACKAGES $EXTRA_FLAGS
+        uv sync --no-editable --no-dev $PACKAGES $EXTRA_FLAGS
     fi
 
     # Slim the venv: drop test dirs, type stubs, and bundled tests inside
