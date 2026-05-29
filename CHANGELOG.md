@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.0 (2026-05-29)
+
+### Features
+
+- **chart**: Support serviceAccount.annotations
+  ([`d458cc8`](https://github.com/digitl-cloud/interloper/commit/d458cc8b5b7b67548e164cadc1d49a05af6fedfe))
+
+
 ## v0.3.1 (2026-05-28)
 
 ### Bug Fixes
