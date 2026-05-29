@@ -15,19 +15,22 @@ disabled via `<component>.enabled: false`.
 
 ## Images
 
-Each component is its own image, named `interloper-<component>`:
+Each component is its own image, named `interloper-<component>`. Images are
+published to GitHub Container Registry, which is the chart's default
+`image.registry` (`ghcr.io/digitl-cloud`):
 
 ```
-<registry>/interloper-scheduler:<version>          # in-process launcher
-<registry>/interloper-scheduler-k8s:<version>      # kubernetes launcher
-<registry>/interloper-scheduler-docker:<version>   # docker launcher
-<registry>/interloper-api:<version>
-<registry>/interloper-frontend:<version>
-<registry>/interloper-worker:<version>             # k8s runner per-asset Job target
+ghcr.io/digitl-cloud/interloper-scheduler:<version>          # in-process launcher
+ghcr.io/digitl-cloud/interloper-scheduler-k8s:<version>      # kubernetes launcher
+ghcr.io/digitl-cloud/interloper-scheduler-docker:<version>   # docker launcher
+ghcr.io/digitl-cloud/interloper-api:<version>
+ghcr.io/digitl-cloud/interloper-frontend:<version>
+ghcr.io/digitl-cloud/interloper-worker:<version>             # k8s runner per-asset Job target
 ```
 
 The chart picks the scheduler image suffix from `config.launcher.type`
-automatically — no manual mapping.
+automatically — no manual mapping. Override `image.registry` (and
+`image.pullSecrets` for a private registry) to pull from elsewhere.
 
 ## Quick start (dev)
 
