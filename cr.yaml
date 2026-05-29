@@ -1,0 +1,9 @@
+# chart-releaser (cr) configuration — consumed by helm/chart-releaser-action
+# in .github/workflows/release.yaml.
+#
+# Override the default release-name template ("{{ .Name }}-{{ .Version }}",
+# e.g. "interloper-0.3.1") so the chart's GitHub release/tag is just the
+# version (e.g. "0.3.1"). The `v`-prefixed tag/release (e.g. "v0.3.1") created
+# by python-semantic-release lives in a separate namespace, so there is no
+# collision.
+release-name-template: "{{ .Version }}"
