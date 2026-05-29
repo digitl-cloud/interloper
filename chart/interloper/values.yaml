@@ -4,12 +4,13 @@
 
 # Global image defaults (overridable per-component below).
 #
-# Images follow the convention "<registry>/interloper-<component>:<tag>".
-# For launcher-aware images (scheduler) the image name gets a "-k8s" or
-# "-docker" suffix derived from config.launcher.type (the tag is just the
-# version).
+# Images are published to GitHub Container Registry and follow the
+# convention "<registry>/interloper-<component>:<tag>" — e.g.
+# ghcr.io/digitl-cloud/interloper-api:0.3.1. For launcher-aware images
+# (scheduler) the image name gets a "-k8s" or "-docker" suffix derived from
+# config.launcher.type (the tag is just the version).
 image:
-  registry: europe-docker.pkg.dev/dc-int-connectors-prd/docker
+  registry: ghcr.io/digitl-cloud
   tag: ""  # defaults to Chart.appVersion
   pullPolicy: IfNotPresent
   pullSecrets: []
