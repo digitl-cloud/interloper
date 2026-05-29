@@ -261,6 +261,11 @@ serviceAccount:
   # When rbac.create is true, a ServiceAccount is created with this name
   # and bound to the Role.  If unset, defaults to "{{ .Release.Name }}-scheduler".
   name: ""
+  # Annotations added to the ServiceAccount.  Use for cloud IAM bindings such
+  # as GKE Workload Identity:
+  #   annotations:
+  #     iam.gke.io/gcp-service-account: my-sa@my-project.iam.gserviceaccount.com
+  annotations: {}
 
 # =============================================================================
 # Pod defaults
