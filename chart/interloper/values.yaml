@@ -53,7 +53,7 @@ worker:
 # ── API (REST + websocket backend) ─────────────────────────────────────────
 api:
   enabled: true
-  replicaCount: 2
+  replicaCount: 1
   image:
     repository: ""  # defaults to {image.registry}/interloper-api
     tag: ""
@@ -75,7 +75,7 @@ api:
 # ── Frontend (nginx serving the pre-built Nuxt SPA) ────────────────────────
 frontend:
   enabled: true
-  replicaCount: 2
+  replicaCount: 1
   image:
     repository: ""  # defaults to {image.registry}/interloper-frontend
     tag: ""
