@@ -47,6 +47,10 @@ spec:
               protocol: TCP
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
+            {{- with .Values.api.forwardedAllowIps }}
+            - name: FORWARDED_ALLOW_IPS
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.api.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
