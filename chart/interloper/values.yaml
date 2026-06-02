@@ -161,6 +161,17 @@ config:
   # auth:
   #   google_client_id: "..."
 
+  # Per-connector OAuth app config for the data-source connect flow.
+  # Set the public client_id + redirect_uri here (per provider); the matching
+  # client_secret goes in secrets.oauthClientSecrets. Providers: amazon, criteo,
+  # facebook, google, linkedin, microsoft, pinterest, snapchat, tiktok.
+  oauth: {}
+  # oauth:
+  #   amazon_client_id: "..."
+  #   amazon_redirect_uri: "https://app.example.com/auth/amazon"
+  #   facebook_client_id: "..."
+  #   facebook_redirect_uri: "https://app.example.com/auth/facebook"
+
 # =============================================================================
 # Secrets
 # =============================================================================
@@ -182,6 +193,12 @@ secrets:
   encryptionKey: ""  # recommended to generate: openssl rand -base64 32
   smtpPassword: ""
   googleClientSecret: ""  # OAuth client secret (paired with config.auth.google_client_id)
+  # Per-connector OAuth client secrets, keyed by provider. Each becomes
+  # INTERLOPER_OAUTH_<PROVIDER>_CLIENT_SECRET in the Secret and on the pod env.
+  oauthClientSecrets: {}
+  # oauthClientSecrets:
+  #   amazon: "..."
+  #   facebook: "..."
 
 # =============================================================================
 # Postgres
