@@ -56,7 +56,7 @@ def _cmd_launch(args: argparse.Namespace) -> None:
     catalog = Catalog.from_settings()
     logger.info(f"Catalog: {catalog.to_paths()}")
 
-    store = Store(catalog=catalog)
+    store = Store.from_settings(catalog=catalog)
 
     try:
         from interloper_scheduler import RunExecutor

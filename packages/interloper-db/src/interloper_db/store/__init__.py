@@ -9,7 +9,7 @@ Usage::
     from interloper_db import Store, init_engine
 
     init_engine("postgresql://...")
-    store = Store()
+    store = Store.from_settings(catalog)  # wires encryption from settings
 
     # Hydrate a source from DB
     source = store.load_source(source_id)
@@ -70,3 +70,33 @@ class Store(AuthMixin, ResourceMixin, SourceMixin, AssetMixin, JobMixin, RunMixi
         self._encrypt = encrypt
         self._decrypt = decrypt
         self._hydrator = Hydrator(catalog, decrypt=decrypt)
+
+    @classmethod
+    def from_settings(cls, catalog: Catalog) -> Store:
+        """Build a Store with encryption wired from runtime settings.
+
+        Reads ``SECRETS_ENCRYPTION_KEY`` via :class:`AppSettings`. When set, the
+        derived cipher is attached so resources marked ``encrypted=True`` are
+        encrypted at rest; when unset, the store falls back to plaintext and
+        rejects any attempt to persist an encrypted resource.
+
+        This is the canonical constructor for every long-lived process (API,
+        scheduler, runner, agent) — prefer it over ``Store(catalog)`` so the
+        crypto wiring stays consistent across entry points.
+
+        Args:
+            catalog: Catalog instance. Required for hydration.
+
+        Returns:
+            A configured Store.
+        """
+        from interloper.settings import AppSettings
+
+        key = AppSettings.get().secrets.encryption_key
+        if not key:
+            return cls(catalog=catalog)
+
+        from interloper_db.crypto import make_cipher
+
+        encrypt, decrypt = make_cipher(key)
+        return cls(catalog=catalog, encrypt=encrypt, decrypt=decrypt)

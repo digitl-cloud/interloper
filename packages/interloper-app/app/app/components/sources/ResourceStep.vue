@@ -103,7 +103,6 @@ async function handleCreate() {
             key: props.definition.key,
             name: newName.value.trim(),
             data: formData.value,
-            encrypted: false,
         })
         selectedId.value = resource.id
         drawerOpen.value = false

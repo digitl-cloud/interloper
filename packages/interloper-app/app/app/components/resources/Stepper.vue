@@ -124,7 +124,6 @@ async function submit() {
             key: selectedType.value,
             name: resourceName.value.trim(),
             data: formData.value,
-            encrypted: false,
         }
 
         if (isEditing.value && props.resource) {

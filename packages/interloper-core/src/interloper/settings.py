@@ -101,6 +101,20 @@ class OAuthSettings(BaseSettings):
     tiktok_redirect_uri: str = ""
 
 
+class SecretsSettings(BaseSettings):
+    """Secrets used to protect sensitive data at rest.
+
+    ``encryption_key`` enables symmetric encryption of resource ``data`` blobs
+    marked ``encrypted=True``. It is read from ``SECRETS_ENCRYPTION_KEY`` (no
+    ``INTERLOPER_`` prefix) to match the Helm chart and runner launchers, which
+    forward that exact variable into spawned containers.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SECRETS_")
+
+    encryption_key: str = ""
+
+
 class ServerSettings(BaseSettings):
     """HTTP server settings (API + frontend)."""
 
@@ -189,6 +203,7 @@ class AppSettings(BaseSettings):
     )
 
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    secrets: SecretsSettings = Field(default_factory=SecretsSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     oauth: OAuthSettings = Field(default_factory=OAuthSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)

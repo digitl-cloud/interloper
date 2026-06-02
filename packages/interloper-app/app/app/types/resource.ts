@@ -18,5 +18,4 @@ export interface ResourceInput {
     key: string
     name: string
     data: Record<string, any>
-    encrypted?: boolean
 }
