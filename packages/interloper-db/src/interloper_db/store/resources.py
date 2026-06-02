@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import HydrationError, ResourceNotFoundError
+from interloper.errors import ConfigError, HydrationError, ResourceNotFoundError
 from sqlmodel import Session, select
 
 from interloper_db.engine import get_engine
@@ -22,6 +22,33 @@ class ResourceMixin:
     _decrypt: Any
     _hydrator: Hydrator
 
+    def _encode_data(self, data: dict[str, Any], encrypted: bool | None) -> tuple[bytes, bool]:
+        """Serialise ``data`` and encrypt it according to ``encrypted``.
+
+        Args:
+            data: Resource configuration dict.
+            encrypted: ``True`` to require encryption, ``False`` to force
+                plaintext, or ``None`` (default) to encrypt only when an
+                encryption key is configured.
+
+        Returns:
+            A ``(blob, encrypted)`` tuple: the bytes to persist and whether
+            they are encrypted.
+
+        Raises:
+            ConfigError: If encryption is explicitly requested but no
+                encryption key is configured.
+        """
+        should_encrypt = self._encrypt is not None if encrypted is None else encrypted
+        raw = json.dumps(data).encode()
+        if should_encrypt:
+            if not self._encrypt:
+                raise ConfigError(
+                    "Cannot store an encrypted resource: SECRETS_ENCRYPTION_KEY is not configured"
+                )
+            raw = self._encrypt(raw)
+        return raw, should_encrypt
+
     def create_resource(
         self,
         org_id: UUID,
@@ -30,7 +57,7 @@ class ResourceMixin:
         key: str,
         name: str,
         data: dict[str, Any],
-        encrypted: bool = False,
+        encrypted: bool | None = None,
     ) -> Resource:
         """Create a new resource.
 
@@ -40,14 +67,14 @@ class ResourceMixin:
             key: Catalog key identifying the resource class.
             name: User-facing label.
             data: Resource configuration dict.
-            encrypted: Whether to encrypt the data before storing.
+            encrypted: ``True`` to require encryption, ``False`` to force
+                plaintext, or ``None`` (default) to encrypt when an
+                encryption key is configured.
 
         Returns:
             The saved Resource row.
         """
-        raw = json.dumps(data).encode()
-        if encrypted and self._encrypt:
-            raw = self._encrypt(raw)
+        raw, encrypted = self._encode_data(data, encrypted)
 
         with Session(get_engine()) as session:
             db_resource = Resource(
@@ -71,7 +98,7 @@ class ResourceMixin:
         key: str,
         name: str,
         data: dict[str, Any],
-        encrypted: bool = False,
+        encrypted: bool | None = None,
     ) -> Resource:
         """Update an existing resource.
 
@@ -81,7 +108,9 @@ class ResourceMixin:
             key: Catalog key.
             name: User-facing label.
             data: Resource configuration dict.
-            encrypted: Whether to encrypt the data before storing.
+            encrypted: ``True`` to require encryption, ``False`` to force
+                plaintext, or ``None`` (default) to encrypt when an
+                encryption key is configured.
 
         Returns:
             The updated Resource row.
@@ -89,9 +118,7 @@ class ResourceMixin:
         Raises:
             ResourceNotFoundError: If the resource is not found.
         """
-        raw = json.dumps(data).encode()
-        if encrypted and self._encrypt:
-            raw = self._encrypt(raw)
+        raw, encrypted = self._encode_data(data, encrypted)
 
         with Session(get_engine()) as session:
             db_resource = session.get(Resource, resource_id)

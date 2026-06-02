@@ -37,7 +37,7 @@ class RunExecutor:
         if store is None:
             from interloper.catalog import Catalog
 
-            store = Store(catalog=Catalog.from_settings())
+            store = Store.from_settings(catalog=Catalog.from_settings())
         self._store = store
         self._runner_type = runner_type
         self._runner_kwargs = runner_kwargs or {}

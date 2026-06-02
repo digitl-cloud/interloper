@@ -137,7 +137,7 @@ def _cmd_app(args: argparse.Namespace) -> None:
         create_all()
 
     catalog = Catalog.from_settings()
-    store = Store(catalog=catalog)
+    store = Store.from_settings(catalog=catalog)
 
     run_services(
         settings=settings,

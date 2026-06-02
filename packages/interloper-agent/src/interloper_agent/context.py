@@ -24,7 +24,7 @@ def init(database_url: str, catalog: Catalog) -> None:
     global _store, _catalog  # noqa: PLW0603
     init_engine(database_url)
     _catalog = catalog
-    _store = Store(catalog=catalog)
+    _store = Store.from_settings(catalog=catalog)
 
 
 def set_store(store: Store) -> None:

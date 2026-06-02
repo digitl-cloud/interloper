@@ -25,7 +25,9 @@ class ResourceCreateRequest(BaseModel):
     key: str
     name: str
     data: dict[str, Any]
-    encrypted: bool = False
+    # None (default) encrypts when an encryption key is configured; pass an
+    # explicit bool to force encryption on/off.
+    encrypted: bool | None = None
 
 
 class ResourceResponse(BaseModel):

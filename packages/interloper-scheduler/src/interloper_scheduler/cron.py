@@ -46,7 +46,7 @@ class CronController:
         if store is None:
             from interloper.catalog import Catalog
 
-            store = Store(catalog=Catalog.from_settings())
+            store = Store.from_settings(catalog=Catalog.from_settings())
         self._store = store
         self._batch_size = batch_size
         self._reconcile_interval = reconcile_interval or int(os.getenv("JOB_RECONCILE_INTERVAL", "10"))
