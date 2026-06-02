@@ -2,8 +2,9 @@
 
 Each provider has an explicit exchange function with its own URL,
 HTTP method, body encoding, and parameter names.  The ``client_id``
-and ``client_secret`` are read from environment variables and injected
-into the token response so they can be stored alongside the tokens.
+and ``client_secret`` are read from settings (:attr:`AppSettings.oauth`)
+and injected into the token response so they can be stored alongside
+the tokens.
 
 The ``GET /providers`` endpoint returns metadata for all providers
 that have credentials configured, so the frontend knows which
@@ -14,11 +15,11 @@ from __future__ import annotations
 
 import base64
 import logging
-import os
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from interloper.settings import AppSettings, OAuthSettings
 from pydantic import BaseModel
 
 from interloper_api.dependencies import get_catalog
@@ -34,14 +35,13 @@ router = APIRouter(prefix="/oauth", tags=["oauth"])
 
 
 class _ProviderConfig:
-    """Runtime provider config resolved from environment variables."""
+    """Runtime provider config resolved from :class:`OAuthSettings`."""
 
-    def __init__(self, key: str, *, env_prefix: str | None = None) -> None:
-        prefix = (env_prefix or key).upper()
+    def __init__(self, key: str, oauth: OAuthSettings) -> None:
         self.key = key
-        self.client_id = os.environ.get(f"{prefix}_CLIENT_ID", "")
-        self.client_secret = os.environ.get(f"{prefix}_CLIENT_SECRET", "")
-        self.redirect_uri = os.environ.get(f"{prefix}_REDIRECT_URI", "")
+        self.client_id = getattr(oauth, f"{key}_client_id", "")
+        self.client_secret = getattr(oauth, f"{key}_client_secret", "")
+        self.redirect_uri = getattr(oauth, f"{key}_redirect_uri", "")
 
     @property
     def configured(self) -> bool:
@@ -62,7 +62,8 @@ _PROVIDER_KEYS = [
 
 
 def _load_providers() -> dict[str, _ProviderConfig]:
-    return {k: _ProviderConfig(k) for k in _PROVIDER_KEYS}
+    oauth = AppSettings.get().oauth
+    return {k: _ProviderConfig(k, oauth) for k in _PROVIDER_KEYS}
 
 
 # ---------------------------------------------------------------------------
