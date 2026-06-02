@@ -177,4 +177,12 @@ Contains Postgres connection info + the encryption key secret.
       name: {{ include "interloper.secretName" . }}
       key: INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET
       optional: true
+{{- range $provider := (list "amazon" "criteo" "facebook" "google" "linkedin" "microsoft" "pinterest" "snapchat" "tiktok") }}
+- name: INTERLOPER_OAUTH_{{ $provider | upper }}_CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "interloper.secretName" $ }}
+      key: INTERLOPER_OAUTH_{{ $provider | upper }}_CLIENT_SECRET
+      optional: true
+{{- end }}
 {{- end -}}
