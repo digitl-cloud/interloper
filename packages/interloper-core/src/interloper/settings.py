@@ -49,6 +49,58 @@ class AuthSettings(BaseSettings):
     session_expiry_days: int = 30
 
 
+class OAuthSettings(BaseSettings):
+    """Per-connector OAuth *app* credentials for the data-source connect flow.
+
+    These are the ``client_id`` / ``client_secret`` / ``redirect_uri`` of the
+    OAuth apps used to authorize external ad-platform connectors (distinct from
+    the Google app-login credentials in :class:`AuthSettings`). One trio per
+    provider; a provider is only offered in the connect UI once all three are set.
+
+    ``client_id`` and ``redirect_uri`` are public and can live in YAML config;
+    ``client_secret`` is sensitive and should come from the environment, e.g.
+    ``INTERLOPER_OAUTH_AMAZON_CLIENT_SECRET``.
+    """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}OAUTH_")
+
+    amazon_client_id: str = ""
+    amazon_client_secret: str = ""
+    amazon_redirect_uri: str = ""
+
+    criteo_client_id: str = ""
+    criteo_client_secret: str = ""
+    criteo_redirect_uri: str = ""
+
+    facebook_client_id: str = ""
+    facebook_client_secret: str = ""
+    facebook_redirect_uri: str = ""
+
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
+
+    linkedin_client_id: str = ""
+    linkedin_client_secret: str = ""
+    linkedin_redirect_uri: str = ""
+
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_redirect_uri: str = ""
+
+    pinterest_client_id: str = ""
+    pinterest_client_secret: str = ""
+    pinterest_redirect_uri: str = ""
+
+    snapchat_client_id: str = ""
+    snapchat_client_secret: str = ""
+    snapchat_redirect_uri: str = ""
+
+    tiktok_client_id: str = ""
+    tiktok_client_secret: str = ""
+    tiktok_redirect_uri: str = ""
+
+
 class ServerSettings(BaseSettings):
     """HTTP server settings (API + frontend)."""
 
@@ -138,6 +190,7 @@ class AppSettings(BaseSettings):
 
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    oauth: OAuthSettings = Field(default_factory=OAuthSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     cron: CronSettings = Field(default_factory=CronSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
