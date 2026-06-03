@@ -53,12 +53,12 @@ class SecretsSettings(BaseSettings):
     """Secrets used to protect sensitive data at rest.
 
     ``encryption_key`` enables symmetric encryption of resource ``data`` blobs
-    marked ``encrypted=True``. It is read from ``SECRETS_ENCRYPTION_KEY`` (no
-    ``INTERLOPER_`` prefix) to match the Helm chart and runner launchers, which
-    forward that exact variable into spawned containers.
+    marked ``encrypted=True``. It is read from ``INTERLOPER_ENCRYPTION_KEY``;
+    the Helm chart and runner launchers forward that exact variable into
+    spawned containers.
     """
 
-    model_config = SettingsConfigDict(env_prefix="SECRETS_")
+    model_config = SettingsConfigDict(env_prefix=PREFIX)
 
     encryption_key: str = ""
 

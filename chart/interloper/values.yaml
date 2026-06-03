@@ -180,7 +180,7 @@ secrets:
   # Inline values (only used when existingSecret is empty).
   # Required keys:
   #   - INTERLOPER_POSTGRES_PASSWORD
-  #   - SECRETS_ENCRYPTION_KEY (used to encrypt resource secrets at rest)
+  #   - INTERLOPER_ENCRYPTION_KEY (used to encrypt resource secrets at rest)
   # Optional:
   #   - INTERLOPER_SMTP_PASSWORD
   postgresPassword: "postgres"
