@@ -78,13 +78,3 @@ smtp:
   host: smtp.gmail.com
   port: 465
   user: "no-reply@digitlcloud.com"
-
-# Per-connector OAuth app credentials for the data-source connect flow.
-# One trio per provider (amazon, criteo, facebook, google, linkedin, microsoft,
-# pinterest, snapchat, tiktok). Keep client_secret out of YAML — set it via env,
-# e.g. INTERLOPER_OAUTH_AMAZON_CLIENT_SECRET.
-# oauth:
-#   amazon_client_id: "..."
-#   amazon_redirect_uri: "https://app.example.com/auth/amazon"
-#   facebook_client_id: "..."
-#   facebook_redirect_uri: "https://app.example.com/auth/facebook"
