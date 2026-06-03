@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v0.5.0 (2026-06-03)
+
+### Chores
+
+- **app**: Remove dead oauth runtimeConfig from nuxt.config.ts
+  ([`01ed43f`](https://github.com/digitl-cloud/interloper/commit/01ed43fc8dde23d5aa7d28699e6e7ca511b9e2ec))
+
+- **chart**: Update replicaCounts
+  ([`d34dae2`](https://github.com/digitl-cloud/interloper/commit/d34dae20d80396c2ef3e164d6b1d67ac3f30ceb0))
+
+### Features
+
+- Encrypt resource data at rest with SECRETS_ENCRYPTION_KEY
+  ([`5b4a402`](https://github.com/digitl-cloud/interloper/commit/5b4a4020877954921b3257238cac606e96a9cc77))
+
+- **api**: Configure connector OAuth providers via settings
+  ([`9c498eb`](https://github.com/digitl-cloud/interloper/commit/9c498eb633852b0705245772dee1bb2ff4957814))
+
+- **chart**: Default FORWARDED_ALLOW_IPS on the API
+  ([`d2a50ac`](https://github.com/digitl-cloud/interloper/commit/d2a50accaf3e9f50fb3a61aa56d735163852b694))
+
+- **chart**: Surface connector OAuth config and secrets
+  ([`b884f32`](https://github.com/digitl-cloud/interloper/commit/b884f327dd4e9b6e15cd559dd578a6f8dd86a9fc))
+
+### Refactoring
+
+- Rename encryption key env var to INTERLOPER_ENCRYPTION_KEY
+  ([`ac66df9`](https://github.com/digitl-cloud/interloper/commit/ac66df9dc3d5b5f220f739d1d0f977e12fe2bc13))
+
+- **api**: Read connector OAuth credentials from provider env vars
+  ([`5cdd380`](https://github.com/digitl-cloud/interloper/commit/5cdd38051b57e077499d40150ca645cbde7b1c43))
+
+- **chart**: Drop connector OAuth config/secrets surface
+  ([`28de507`](https://github.com/digitl-cloud/interloper/commit/28de507d7184825da79230e0a3a0b9bc7bb08f49))
+
+
 ## v0.4.0 (2026-05-29)
 
 ### Features
