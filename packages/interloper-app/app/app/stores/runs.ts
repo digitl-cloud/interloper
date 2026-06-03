@@ -1,7 +1,7 @@
 import type { Run } from '~/types/run'
 
 export const useRunsStore = defineStore('runs', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch, apiFetchRaw } = useApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -66,7 +66,9 @@ export const useRunsStore = defineStore('runs', () => {
             if (filters?.jobId) params.set('job_id', filters.jobId)
             if (filters?.backfillId) params.set('backfill_id', filters.backfillId)
             if (filters?.status) params.set('status', filters.status)
-            runs.value = await apiFetch<Run[]>(`/runs?${params}`)
+            const res = await apiFetchRaw<Run[]>(`/runs?${params}`)
+            runs.value = res._data ?? []
+            total.value = Number(res.headers.get('X-Total-Count') ?? runs.value.length)
         }
         catch (e) {
             error.value = e as Error

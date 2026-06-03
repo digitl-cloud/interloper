@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
 from interloper_db.models import Event, Run
@@ -107,6 +107,7 @@ def _event_to_response(event: Event) -> EventResponse:
 
 @router.get("/")
 def list_runs(
+    response: Response,
     job_id: UUID | None = None,
     backfill_id: UUID | None = None,
     status: str | None = None,
@@ -116,7 +117,13 @@ def list_runs(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> list[RunResponse]:
-    """List runs with optional filters."""
+    """List runs with optional filters.
+
+    The total number of matching runs (ignoring ``limit``/``offset``) is
+    returned in the ``X-Total-Count`` response header so clients can paginate.
+    """
+    total = store.count_runs(org_id, job_id=job_id, backfill_id=backfill_id, status=status)
+    response.headers["X-Total-Count"] = str(total)
     runs = store.list_runs(
         org_id,
         job_id=job_id,
