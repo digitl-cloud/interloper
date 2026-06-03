@@ -9,7 +9,7 @@ from uuid import UUID
 
 import interloper as il
 from interloper.errors import NotFoundError, RunNotFoundError
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlmodel import Session, col, select
 
 from interloper_db.engine import get_engine
@@ -177,6 +177,35 @@ class RunMixin:
                 statement = statement.where(Run.status == status)
             statement = statement.order_by(col(Run.created_at).desc()).offset(offset).limit(limit)
             return list(session.exec(statement).all())
+
+    def count_runs(
+        self,
+        org_id: UUID,
+        *,
+        job_id: UUID | None = None,
+        backfill_id: UUID | None = None,
+        status: str | None = None,
+    ) -> int:
+        """Count runs matching the same filters as :meth:`list_runs`.
+
+        Args:
+            org_id: Organisation UUID.
+            job_id: Optional job filter.
+            backfill_id: Optional backfill filter.
+            status: Optional status filter.
+
+        Returns:
+            Total number of matching runs (ignoring limit/offset).
+        """
+        with Session(get_engine()) as session:
+            statement = select(func.count()).select_from(Run).where(Run.org_id == org_id)
+            if job_id:
+                statement = statement.where(Run.job_id == job_id)
+            if backfill_id:
+                statement = statement.where(Run.backfill_id == backfill_id)
+            if status:
+                statement = statement.where(Run.status == status)
+            return session.exec(statement).one()
 
     def complete_run(self, run_id: UUID, *, success: bool) -> Run:
         """Mark a run as completed and advance its backfill if applicable.
