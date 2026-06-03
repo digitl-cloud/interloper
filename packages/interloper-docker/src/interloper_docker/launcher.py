@@ -159,7 +159,7 @@ class DockerLauncher(Launcher):
             "INTERLOPER_RUNNER_TYPE": self._runner_type,
             "INTERLOPER_RUNNER_CONFIG": json.dumps(self._runner_config),
         }
-        encryption_key = os.environ.get("SECRETS_ENCRYPTION_KEY")
+        encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
         if encryption_key:
-            environment["SECRETS_ENCRYPTION_KEY"] = encryption_key
+            environment["INTERLOPER_ENCRYPTION_KEY"] = encryption_key
         return environment

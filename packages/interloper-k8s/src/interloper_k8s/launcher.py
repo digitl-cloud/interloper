@@ -233,9 +233,9 @@ class KubernetesLauncher(Launcher):
             "INTERLOPER_RUNNER_TYPE": self._runner_type,
             "INTERLOPER_RUNNER_CONFIG": json.dumps(self._runner_config),
         }
-        encryption_key = os.environ.get("SECRETS_ENCRYPTION_KEY")
+        encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
         if encryption_key:
-            env_map["SECRETS_ENCRYPTION_KEY"] = encryption_key
+            env_map["INTERLOPER_ENCRYPTION_KEY"] = encryption_key
 
         return [client.V1EnvVar(name=k, value=v) for k, v in env_map.items()]
 

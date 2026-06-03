@@ -165,11 +165,11 @@ Contains Postgres connection info + the encryption key secret.
     secretKeyRef:
       name: {{ include "interloper.secretName" . }}
       key: INTERLOPER_POSTGRES_PASSWORD
-- name: SECRETS_ENCRYPTION_KEY
+- name: INTERLOPER_ENCRYPTION_KEY
   valueFrom:
     secretKeyRef:
       name: {{ include "interloper.secretName" . }}
-      key: SECRETS_ENCRYPTION_KEY
+      key: INTERLOPER_ENCRYPTION_KEY
       optional: true
 - name: INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET
   valueFrom:

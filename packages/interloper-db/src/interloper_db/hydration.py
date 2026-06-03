@@ -105,7 +105,7 @@ class Hydrator:
         if db_resource.encrypted:
             if not self._decrypt:
                 raise HydrationError(
-                    f"Resource {db_resource.id} is encrypted but SECRETS_ENCRYPTION_KEY "
+                    f"Resource {db_resource.id} is encrypted but INTERLOPER_ENCRYPTION_KEY "
                     "is not configured; cannot decrypt"
                 )
             try:
@@ -113,7 +113,7 @@ class Hydrator:
             except Exception as e:
                 raise HydrationError(
                     f"Failed to decrypt resource {db_resource.id}; the configured "
-                    "SECRETS_ENCRYPTION_KEY may be wrong or the data was not encrypted "
+                    "INTERLOPER_ENCRYPTION_KEY may be wrong or the data was not encrypted "
                     f"with it: {e}"
                 ) from e
         return json.loads(raw)

@@ -1,6 +1,6 @@
 """Symmetric encryption for resource data at rest.
 
-A single configured secret (``SECRETS_ENCRYPTION_KEY``) is turned into a
+A single configured secret (``INTERLOPER_ENCRYPTION_KEY``) is turned into a
 pair of ``(bytes) -> bytes`` callables that the :class:`~interloper_db.store.Store`
 uses to encrypt/decrypt resource ``data`` blobs marked ``encrypted=True``.
 

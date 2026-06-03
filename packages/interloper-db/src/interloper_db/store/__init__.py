@@ -75,7 +75,7 @@ class Store(AuthMixin, ResourceMixin, SourceMixin, AssetMixin, JobMixin, RunMixi
     def from_settings(cls, catalog: Catalog) -> Store:
         """Build a Store with encryption wired from runtime settings.
 
-        Reads ``SECRETS_ENCRYPTION_KEY`` via :class:`AppSettings`. When set, the
+        Reads ``INTERLOPER_ENCRYPTION_KEY`` via :class:`AppSettings`. When set, the
         derived cipher is attached so resources marked ``encrypted=True`` are
         encrypted at rest; when unset, the store falls back to plaintext and
         rejects any attempt to persist an encrypted resource.

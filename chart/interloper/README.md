@@ -113,7 +113,7 @@ secrets:
   existingSecret: my-interloper-secret
 ```
 
-Expected keys: `INTERLOPER_POSTGRES_PASSWORD`, `SECRETS_ENCRYPTION_KEY`
+Expected keys: `INTERLOPER_POSTGRES_PASSWORD`, `INTERLOPER_ENCRYPTION_KEY`
 (recommended), `INTERLOPER_SMTP_PASSWORD` (optional).
 
 ### Ingress vs Gateway API

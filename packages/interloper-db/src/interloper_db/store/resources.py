@@ -44,7 +44,7 @@ class ResourceMixin:
         if should_encrypt:
             if not self._encrypt:
                 raise ConfigError(
-                    "Cannot store an encrypted resource: SECRETS_ENCRYPTION_KEY is not configured"
+                    "Cannot store an encrypted resource: INTERLOPER_ENCRYPTION_KEY is not configured"
                 )
             raw = self._encrypt(raw)
         return raw, should_encrypt
