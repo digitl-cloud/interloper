@@ -102,7 +102,7 @@ watch(orgId, loadData)
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <div class="px-4 pt-4 shrink-0">
+        <div class="px-4 pt-4 pb-2 shrink-0">
             <UBreadcrumb :items="breadcrumbs" />
         </div>
         <OrganizationMembersTable :members="rows"
