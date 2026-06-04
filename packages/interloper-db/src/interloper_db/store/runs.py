@@ -99,13 +99,19 @@ class RunMixin:
         run_id: UUID | None = None,
         org_id: UUID | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> list[Event]:
         """List events, optionally filtered by run.
+
+        Ordering is ``timestamp ASC, id ASC`` — stable and deterministic so
+        ``offset``/``limit`` paging never skips or repeats a row when several
+        events share a timestamp.
 
         Args:
             run_id: Optional run filter.
             org_id: Optional org filter.
             limit: Max results (default 100).
+            offset: Pagination offset.
 
         Returns:
             List of Event rows.
@@ -116,8 +122,33 @@ class RunMixin:
                 statement = statement.where(Event.run_id == run_id)
             if org_id:
                 statement = statement.where(Event.org_id == org_id)
-            statement = statement.order_by(col(Event.timestamp).asc()).limit(limit)
+            statement = (
+                statement.order_by(col(Event.timestamp).asc(), col(Event.id).asc()).offset(offset).limit(limit)
+            )
             return list(session.exec(statement).all())
+
+    def count_events(
+        self,
+        *,
+        run_id: UUID | None = None,
+        org_id: UUID | None = None,
+    ) -> int:
+        """Count events matching the same filters as :meth:`list_events`.
+
+        Args:
+            run_id: Optional run filter.
+            org_id: Optional org filter.
+
+        Returns:
+            Total number of matching events (ignoring limit/offset).
+        """
+        with Session(get_engine()) as session:
+            statement = select(func.count()).select_from(Event)
+            if run_id:
+                statement = statement.where(Event.run_id == run_id)
+            if org_id:
+                statement = statement.where(Event.org_id == org_id)
+            return session.exec(statement).one()
 
     def list_asset_executions(self, run_id: UUID) -> list[dict]:
         """List asset executions for a run from the ``asset_executions`` view.

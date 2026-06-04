@@ -11,11 +11,35 @@ const UButton = resolveComponent('UButton')
 const props = defineProps<{
     events: RunEvent[]
     loading?: boolean
+    loadingMore?: boolean
+    hasMore?: boolean
+}>()
+
+const emit = defineEmits<{
+    loadMore: []
 }>()
 
 const selectedAsset = defineModel<string | null>('selectedAsset', { default: null })
 const eventInFocus = defineModel<RunEvent | null>('eventInFocus', { default: null })
 const assetDisplayName = useAssetDisplayName()
+
+// UTable exposes its `<table>` element; its parent is the scrolling container
+// the sticky header sticks to. We attach infinite scroll to that element so
+// reaching the bottom pulls the next page (including the terminal events).
+const table = useTemplateRef('table')
+const scrollEl = computed<HTMLElement | null>(() => {
+    const el = unref(table.value?.tableRef) as HTMLTableElement | null | undefined
+    return el?.parentElement ?? null
+})
+
+useInfiniteScroll(
+    scrollEl,
+    () => emit('loadMore'),
+    {
+        distance: 200,
+        canLoadMore: () => !!props.hasMore && !props.loading && !props.loadingMore,
+    },
+)
 
 const overlay = useOverlay()
 
@@ -105,11 +129,21 @@ const columns: TableColumn<RunEvent>[] = [
 </script>
 
 <template>
-    <UTable :data="filteredEvents"
+    <UTable ref="table"
+            :data="filteredEvents"
             :columns="columns"
             :loading="loading"
             sticky
             :ui="{ tr: 'h-10' }"
             class="h-full"
-            :on-hover="onRowHover" />
+            :on-hover="onRowHover">
+        <template #body-bottom>
+            <div v-if="loadingMore"
+                 class="flex items-center justify-center gap-2 py-3 text-xs text-muted">
+                <UIcon name="i-lucide-loader-circle"
+                       class="size-4 animate-spin" />
+                Loading more events…
+            </div>
+        </template>
+    </UTable>
 </template>
