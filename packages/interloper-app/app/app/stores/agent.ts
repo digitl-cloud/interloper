@@ -59,6 +59,8 @@ export const useAgentStore = defineStore('agent', () => {
         error.value = null
     }
 
+    useOrgScopedRefetch(() => fetchSessions(), $reset)
+
     return {
         sessions,
         loading,

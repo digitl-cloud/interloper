@@ -86,6 +86,8 @@ export const useSourcesStore = defineStore('sources', () => {
         error.value = null
     }
 
+    useOrgScopedRefetch(() => fetch(), $reset)
+
     return {
         sources,
         loading,

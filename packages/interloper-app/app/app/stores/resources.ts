@@ -96,6 +96,8 @@ export const useResourcesStore = defineStore('resources', () => {
         error.value = null
     }
 
+    useOrgScopedRefetch(() => fetch(), $reset)
+
     return {
         resources,
         loading,

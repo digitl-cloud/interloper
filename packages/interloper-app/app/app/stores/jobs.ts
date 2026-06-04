@@ -109,6 +109,8 @@ export const useJobsStore = defineStore('jobs', () => {
         error.value = null
     }
 
+    useOrgScopedRefetch(() => fetch(), $reset)
+
     return {
         jobs,
         loading,
