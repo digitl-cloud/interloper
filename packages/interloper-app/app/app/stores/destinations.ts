@@ -86,6 +86,8 @@ export const useDestinationsStore = defineStore('destinations', () => {
         error.value = null
     }
 
+    useOrgScopedRefetch(() => fetch(), $reset)
+
     return {
         destinations,
         loading,

@@ -126,6 +126,8 @@ export const useAssetsStore = defineStore('assets', () => {
         error.value = null
     }
 
+    useOrgScopedRefetch(() => fetch(), $reset)
+
     return {
         assets,
         standalone,
