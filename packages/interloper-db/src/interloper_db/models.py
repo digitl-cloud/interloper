@@ -456,6 +456,12 @@ class Run(SQLModel, table=True):
     backfill_id: UUID | None = SQLField(default=None, foreign_key="backfills.id")
     partition_date: dt.date | None = None
     status: str = "queued"
+    retry_of: UUID | None = SQLField(
+        default=None,
+        sa_column=Column(ForeignKey("runs.id", ondelete="SET NULL"), index=True),
+    )
+    attempt: int = 1
+    retry_scope: str | None = None
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = _ts()

@@ -236,6 +236,49 @@ class RunMixin:
             session.refresh(db_run)
             return db_run
 
+    def retry_run(self, run_id: UUID, *, scope: str = "all") -> Run:
+        """Queue a new run that retries a failed one.
+
+        Each retry is a fresh ``Run`` row linked to its predecessor via
+        ``retry_of`` with an incremented ``attempt``. The new run is created
+        outside any backfill so backfill accounting is unaffected.
+
+        Args:
+            run_id: The failed run to retry.
+            scope: ``"all"`` to re-run the whole DAG, or ``"failed"`` to
+                re-run only the previously failed/cancelled assets.
+
+        Returns:
+            The newly created, queued Run row.
+
+        Raises:
+            RunNotFoundError: If the run is not found.
+            ValueError: If the run is not in a failed state or ``scope`` is invalid.
+        """
+        if scope not in ("all", "failed"):
+            raise ValueError(f"Invalid retry scope: {scope!r} (expected 'all' or 'failed')")
+
+        with Session(get_engine()) as session:
+            src = session.get(Run, run_id)
+            if not src:
+                raise RunNotFoundError(f"Run {run_id} not found")
+            if src.status != "failed":
+                raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
+
+            db_run = Run(
+                org_id=src.org_id,
+                job_id=src.job_id,
+                partition_date=src.partition_date,
+                status="queued",
+                retry_of=run_id,
+                attempt=src.attempt + 1,
+                retry_scope=scope,
+            )
+            session.add(db_run)
+            session.commit()
+            session.refresh(db_run)
+            return db_run
+
     # -- Backfills ------------------------------------------------------------
 
     def create_backfill(

@@ -82,6 +82,14 @@ export const useRunsStore = defineStore('runs', () => {
         return apiFetch<Run>(`/runs/${id}`)
     }
 
+    async function retryRun(id: string, scope: 'all' | 'failed'): Promise<string> {
+        const res = await apiFetch<{ run_id: string }>(`/runs/${id}/retry`, {
+            method: 'POST',
+            body: { scope },
+        })
+        return res.run_id
+    }
+
     async function goToPage(page: number) {
         pageIndex.value = page
         await fetch()
@@ -112,6 +120,7 @@ export const useRunsStore = defineStore('runs', () => {
         error,
         fetch,
         fetchOne,
+        retryRun,
         goToPage,
         findById,
         _upsert,
