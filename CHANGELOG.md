@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v0.6.0 (2026-06-04)
+
+### Bug Fixes
+
+- Paginate runs table on executions page
+  ([`b2abb2c`](https://github.com/digitl-cloud/interloper/commit/b2abb2ca8222b4d1cd0afc0b668cc013e7a69d58))
+
+- Refetch org-scoped stores when switching organisation
+  ([`bfac91c`](https://github.com/digitl-cloud/interloper/commit/bfac91cbe4087d5c1f7d45524758414adb56c9e6))
+
+### Code Style
+
+- Tighten admin breadcrumb spacing
+  ([`eb878ef`](https://github.com/digitl-cloud/interloper/commit/eb878eff02f7f40a147fd9369b02dda512443ba8))
+
+### Features
+
+- Add breadcrumbs to admin pages
+  ([`46837b9`](https://github.com/digitl-cloud/interloper/commit/46837b963f4fe1e55a74f0a15ee3eea1be6963a4))
+
+- Add platform-wide super-admin role
+  ([`196fcfa`](https://github.com/digitl-cloud/interloper/commit/196fcfa6bfce308f0cbe9d04b7a5371da2781a1e))
+
+### Refactoring
+
+- Restyle sidebar org & user controls as dropdown menus
+  ([`ef29d12`](https://github.com/digitl-cloud/interloper/commit/ef29d123061c116aec3709db2aeebdd7c9430e21))
+
+
 ## v0.5.0 (2026-06-03)
 
 ### Chores
