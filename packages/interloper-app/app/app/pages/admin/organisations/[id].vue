@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BreadcrumbItem } from '@nuxt/ui'
 import type { OrgMember } from '~/types/organisation'
 
 definePageMeta({ title: 'Manage organisation', middleware: 'super-admin' })
@@ -10,18 +11,28 @@ const adminStore = useAdminStore()
 const toast = useToast()
 
 const rows = ref<OrgMember[]>([])
+const orgName = ref<string | null>(null)
 const loading = ref(false)
 const inviteOpen = ref(false)
 
 const inviteEndpoint = computed(() => `/admin/organisations/${orgId.value}/invitations`)
 
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { label: 'Platform admin', icon: 'i-lucide-shield' },
+    { label: 'Organisations', icon: 'i-lucide-building-2', to: '/admin' },
+    { label: orgName.value ?? '…' },
+])
+
 async function loadData() {
     loading.value = true
     try {
-        const [members, invitations] = await Promise.all([
+        const [members, invitations, organisations] = await Promise.all([
             adminStore.listMembers(orgId.value),
             adminStore.listInvitations(orgId.value),
+            adminStore.listOrganisations(),
         ])
+
+        orgName.value = organisations.find(o => o.id === orgId.value)?.name ?? null
 
         const memberRows: OrgMember[] = members.map(m => ({
             id: m.id,
@@ -91,6 +102,9 @@ watch(orgId, loadData)
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
+        <div class="px-4 pt-4 shrink-0">
+            <UBreadcrumb :items="breadcrumbs" />
+        </div>
         <OrganizationMembersTable :members="rows"
                                   :loading="loading"
                                   is-admin
@@ -98,11 +112,6 @@ watch(orgId, loadData)
                                   @cancel-invite="cancelInvite"
                                   @resend-invite="resendInvite">
             <template #toolbar>
-                <UButton icon="i-lucide-arrow-left"
-                         label="All organisations"
-                         color="neutral"
-                         variant="ghost"
-                         @click="navigateTo('/admin')" />
                 <UButton icon="i-lucide-user-plus"
                          label="Invite"
                          @click="inviteOpen = true" />

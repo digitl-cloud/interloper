@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { h } from 'vue'
-import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
+import type { TableColumn, DropdownMenuItem, BreadcrumbItem } from '@nuxt/ui'
 import type { AdminOrganisation } from '~/types/admin'
 
 definePageMeta({ title: 'Organisations', middleware: 'super-admin' })
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { label: 'Platform admin', icon: 'i-lucide-shield' },
+    { label: 'Organisations', icon: 'i-lucide-building-2' },
+]
 
 const adminStore = useAdminStore()
 const toast = useToast()
@@ -125,6 +130,9 @@ onMounted(loadData)
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
+        <div class="px-4 pt-4 shrink-0">
+            <UBreadcrumb :items="breadcrumbs" />
+        </div>
         <DataTable :columns="columns"
                    :data="rows"
                    :loading="loading"
