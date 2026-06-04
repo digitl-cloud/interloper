@@ -73,6 +73,9 @@ class RunExecutor:
 
                 self._resolve_upstream_deps(db_run.job, assets)
 
+                if db_run.retry_scope == "failed" and db_run.retry_of:
+                    self._skip_succeeded_assets(db_run, assets)
+
                 dag = il.DAG(*assets)
                 partition = il.TimePartition(db_run.partition_date) if db_run.partition_date else None
 
@@ -140,6 +143,31 @@ class RunExecutor:
             assets.append(self._store.load_asset(db_asset.id))
 
         return assets
+
+    def _skip_succeeded_assets(self, db_run: Run, assets: list[il.Asset]) -> None:
+        """Mark assets that already succeeded in the retry lineage as non-materializable.
+
+        For a ``"failed"``-scope retry, assets that completed successfully in an
+        earlier attempt are read from their destination instead of recomputed;
+        only the previously failed/cancelled assets re-execute. Successes are
+        resolved by walking the ``retry_of`` chain back to the root attempt so
+        that assets skipped by an intermediate failed-only retry (which emit no
+        events) still carry their earlier success forward.
+        """
+        statuses: dict[str, str] = {}
+        parent_id: UUID | None = db_run.retry_of
+        with Session(get_engine()) as session:
+            while parent_id:
+                for row in self._store.list_asset_executions(parent_id):
+                    # Closest ancestor wins: only record a key the first time we see it.
+                    statuses.setdefault(row["asset_key"], row["status"])
+                parent = session.get(Run, parent_id)
+                parent_id = parent.retry_of if parent else None
+
+        success_keys = {key for key, status in statuses.items() if status == "success"}
+        for asset in assets:
+            if type(asset).key in success_keys:
+                asset.materializable = False
 
     def _resolve_upstream_deps(self, db_job: Job, assets: list[il.Asset]) -> None:
         """Add transitive upstream deps to *assets* as non-materializable."""

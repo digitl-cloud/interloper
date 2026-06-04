@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -11,7 +12,7 @@ from interloper_db import Profile, Store
 from interloper_db.models import Event, Run
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_org_id, get_store, require_viewer
+from interloper_api.dependencies import get_org_id, get_store, require_editor, require_viewer
 
 router = APIRouter()
 
@@ -25,9 +26,18 @@ class RunResponse(BaseModel):
     backfill_id: UUID | None
     partition_date: dt.date | None
     status: str
+    retry_of: UUID | None = None
+    attempt: int = 1
+    retry_scope: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
     created_at: str | None = None
+
+
+class RetryRequest(BaseModel):
+    """Request body for retrying a failed run."""
+
+    scope: Literal["all", "failed"] = "all"
 
 
 class AssetExecutionResponse(BaseModel):
@@ -75,6 +85,9 @@ def _run_to_response(run: Run) -> RunResponse:
         backfill_id=run.backfill_id,
         partition_date=run.partition_date,
         status=run.status,
+        retry_of=run.retry_of,
+        attempt=run.attempt,
+        retry_scope=run.retry_scope,
         started_at=str(run.started_at) if run.started_at else None,
         completed_at=str(run.completed_at) if run.completed_at else None,
         created_at=str(run.created_at) if run.created_at else None,
@@ -170,6 +183,29 @@ def list_asset_executions(
         )
         for row in rows
     ]
+
+
+@router.post("/{run_id}/retry")
+def retry_run(
+    run_id: UUID,
+    body: RetryRequest | None = None,
+    user: Profile = Depends(require_editor),
+    store: Store = Depends(get_store),
+) -> dict[str, str]:
+    """Queue a retry of a failed run.
+
+    Creates a new run linked to the original via ``retry_of``. With
+    ``scope="all"`` the whole DAG re-runs; with ``scope="failed"`` only the
+    previously failed/cancelled assets re-run.
+    """
+    scope = body.scope if body else "all"
+    try:
+        run = store.retry_run(run_id, scope=scope)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"status": "queued", "run_id": str(run.id)}
 
 
 @router.get("/{run_id}/events")
