@@ -16,6 +16,11 @@ from interloper_api.dependencies import get_org_id, get_store, require_editor, r
 
 router = APIRouter()
 
+#: Hard cap on the number of events returned in a single page, regardless of
+#: the requested ``limit``. Keeps a pathological ``?limit=1000000`` from loading
+#: an entire run's history into memory at once.
+MAX_EVENTS_PAGE_SIZE = 1000
+
 
 class RunResponse(BaseModel):
     """Response body for a run."""
@@ -211,10 +216,23 @@ def retry_run(
 @router.get("/{run_id}/events")
 def list_run_events(
     run_id: UUID,
+    response: Response,
     limit: int = 100,
+    offset: int = 0,
     user: Profile = Depends(require_viewer),
     store: Store = Depends(get_store),
 ) -> list[EventResponse]:
-    """List events for a run."""
-    events = store.list_events(run_id=run_id, limit=limit)
+    """List events for a run, oldest first.
+
+    Events are ordered ``timestamp ASC`` and paged with ``limit``/``offset``.
+    The total number of events for the run (ignoring ``limit``/``offset``) is
+    returned in the ``X-Total-Count`` response header so clients can page
+    through every event — including the terminal/outcome events
+    (``asset_completed``, ``asset_failed``, ``run_failed``, …) that sort last.
+    """
+    limit = max(1, min(limit, MAX_EVENTS_PAGE_SIZE))
+    offset = max(0, offset)
+    total = store.count_events(run_id=run_id)
+    response.headers["X-Total-Count"] = str(total)
+    events = store.list_events(run_id=run_id, limit=limit, offset=offset)
     return [_event_to_response(e) for e in events]

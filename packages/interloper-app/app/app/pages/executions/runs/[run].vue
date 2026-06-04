@@ -130,11 +130,26 @@ onUnmounted(() => {
             </SplitterResizeHandle>
 
             <SplitterPanel :default-size="60"
-                           :min-size="20">
-                <ExecutionsEventsTable v-model:selected-asset="selectedAsset"
-                                       v-model:event-in-focus="eventInFocus"
-                                       :events="eventsStore.events"
-                                       :loading="eventsStore.loading" />
+                           :min-size="20"
+                           class="flex flex-col min-h-0">
+                <div class="flex items-center gap-2 px-4 py-2 shrink-0">
+                    <span class="text-xs font-medium uppercase tracking-wide text-muted">Events</span>
+                    <UBadge v-if="!eventsStore.loading"
+                            color="neutral"
+                            variant="subtle"
+                            size="sm">
+                        {{ eventsStore.hasMore ? `${eventsStore.events.length} / ${eventsStore.total}` : eventsStore.events.length }}
+                    </UBadge>
+                </div>
+                <div class="flex-1 min-h-0">
+                    <ExecutionsEventsTable v-model:selected-asset="selectedAsset"
+                                           v-model:event-in-focus="eventInFocus"
+                                           :events="eventsStore.events"
+                                           :loading="eventsStore.loading"
+                                           :loading-more="eventsStore.loadingMore"
+                                           :has-more="eventsStore.hasMore"
+                                           @load-more="eventsStore.loadMore()" />
+                </div>
             </SplitterPanel>
         </SplitterGroup>
     </div>
