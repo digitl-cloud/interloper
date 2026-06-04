@@ -11,6 +11,7 @@ from interloper_db import Store
 
 from interloper_api.dependencies import set_auth_config, set_catalog, set_smtp_config, set_store
 from interloper_api.routes import (
+    admin,
     assets,
     auth,
     backfills,
@@ -72,6 +73,7 @@ def create_app(
     api = APIRouter(prefix="/api")
     api.include_router(auth.router, tags=["auth"])
     api.include_router(organisations.router, tags=["organisations"])
+    api.include_router(admin.router, tags=["admin"])
     api.include_router(catalog_routes.router, prefix="/catalog", tags=["catalog"])
     api.include_router(resources.router, prefix="/resources", tags=["resources"])
     api.include_router(sources.router, prefix="/sources", tags=["sources"])

@@ -291,3 +291,22 @@ def require_admin(
         HTTPException: 401/403 on auth or role failure.
     """
     return _check_role("admin", user, org_id, store)
+
+
+def require_super_admin(
+    user: Profile = Depends(get_current_user),
+) -> Profile:
+    """Require platform-wide super-admin privileges.
+
+    Unlike the org-scoped role dependencies, this is not bound to the session's
+    active organisation — it gates the cross-org admin surface.
+
+    Returns:
+        The authenticated Profile.
+
+    Raises:
+        HTTPException: 401 if not authenticated, 403 if not a super-admin.
+    """
+    if not user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Requires super-admin privileges")
+    return user

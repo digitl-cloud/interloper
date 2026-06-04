@@ -29,9 +29,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
     // Authenticated but no organisation:
     // - /invite/* and /welcome: allow through
+    // - /admin/*: allow super-admins through (they may belong to no org)
     // - All other routes: redirect to /welcome so user can create one
     if (!organisationStore.organisation) {
         if (to.path.startsWith('/invite/') || to.path === '/welcome')
+            return
+        if (to.path.startsWith('/admin') && userStore.isSuperAdmin)
             return
         return navigateTo('/welcome')
     }

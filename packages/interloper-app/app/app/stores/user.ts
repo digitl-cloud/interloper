@@ -10,6 +10,7 @@ export const useUserStore = defineStore('user', () => {
     const loading = ref(false)
     const error = ref<Error | null>(null)
     const authenticated = computed(() => !!user.value)
+    const isSuperAdmin = computed(() => !!user.value?.is_super_admin)
 
     /**********************
      * Actions
@@ -54,6 +55,7 @@ export const useUserStore = defineStore('user', () => {
         loading,
         error,
         authenticated,
+        isSuperAdmin,
         findProfile,
         requireProfile,
         fetchMe,

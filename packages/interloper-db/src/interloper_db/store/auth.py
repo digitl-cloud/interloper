@@ -7,6 +7,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from interloper_db.engine import get_engine
@@ -174,12 +175,14 @@ class AuthMixin:
 
     # -- Organisations --------------------------------------------------------
 
-    def create_organisation(self, name: str, creator_id: UUID) -> Organisation:
-        """Create an organisation and make the creator an admin.
+    def create_organisation(self, name: str, creator_id: UUID | None = None) -> Organisation:
+        """Create an organisation, optionally making the creator an admin.
 
         Args:
             name: Organisation name.
-            creator_id: Profile UUID of the creating user.
+            creator_id: Profile UUID of the creating user. When provided, the
+                user is added as an ``admin`` member. Pass ``None`` (e.g. for
+                super-admin provisioning) to create an org with no members.
 
         Returns:
             The created Organisation row.
@@ -189,14 +192,53 @@ class AuthMixin:
             session.add(db_organisation)
             session.flush()
 
-            session.add(UserOrganisation(
-                user_id=creator_id,
-                organisation_id=db_organisation.id,  # type: ignore[arg-type]
-                role="admin",
-            ))
+            if creator_id is not None:
+                session.add(UserOrganisation(
+                    user_id=creator_id,
+                    organisation_id=db_organisation.id,  # type: ignore[arg-type]
+                    role="admin",
+                ))
             session.commit()
             session.refresh(db_organisation)
             return db_organisation
+
+    def update_organisation(self, org_id: UUID, name: str) -> Organisation | None:
+        """Rename an organisation.
+
+        Args:
+            org_id: Organisation UUID.
+            name: New organisation name.
+
+        Returns:
+            The updated Organisation, or None if not found.
+        """
+        with Session(get_engine()) as session:
+            db_organisation = session.get(Organisation, org_id)
+            if not db_organisation:
+                return None
+            db_organisation.name = name
+            session.add(db_organisation)
+            session.commit()
+            session.refresh(db_organisation)
+            return db_organisation
+
+    def list_all_organisations(self) -> list[tuple[Organisation, int]]:
+        """List every organisation with its member count (super-admin only).
+
+        Returns:
+            List of ``(Organisation, member_count)`` tuples.
+        """
+        with Session(get_engine()) as session:
+            organisations = session.exec(select(Organisation)).all()
+            counts = dict(
+                session.exec(
+                    select(
+                        UserOrganisation.organisation_id,
+                        func.count(UserOrganisation.user_id),  # type: ignore[arg-type]
+                    ).group_by(UserOrganisation.organisation_id)  # type: ignore[arg-type]
+                ).all()
+            )
+            return [(org, counts.get(org.id, 0)) for org in organisations]  # type: ignore[arg-type]
 
     def get_organisation(self, org_id: UUID) -> Organisation | None:
         """Get an organisation by ID.
@@ -270,6 +312,31 @@ class AuthMixin:
                     session.expunge(db_profile)
                     results.append((db_profile, membership.role))
             return results
+
+    def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> bool:
+        """Update a member's role within an organisation.
+
+        Args:
+            org_id: Organisation UUID.
+            user_id: Profile UUID of the member.
+            role: New role to assign.
+
+        Returns:
+            True if updated, False if the user is not a member.
+        """
+        with Session(get_engine()) as session:
+            membership = session.exec(
+                select(UserOrganisation).where(
+                    UserOrganisation.user_id == user_id,
+                    UserOrganisation.organisation_id == org_id,
+                )
+            ).first()
+            if not membership:
+                return False
+            membership.role = role
+            session.add(membership)
+            session.commit()
+            return True
 
     def remove_org_member(self, org_id: UUID, user_id: UUID) -> bool:
         """Remove a member from an organisation.

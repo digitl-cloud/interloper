@@ -1,0 +1,116 @@
+<script setup lang="ts">
+import type { OrgMember } from '~/types/organisation'
+
+definePageMeta({ title: 'Manage organisation', middleware: 'super-admin' })
+
+const route = useRoute()
+const orgId = computed(() => route.params.id as string)
+
+const adminStore = useAdminStore()
+const toast = useToast()
+
+const rows = ref<OrgMember[]>([])
+const loading = ref(false)
+const inviteOpen = ref(false)
+
+const inviteEndpoint = computed(() => `/admin/organisations/${orgId.value}/invitations`)
+
+async function loadData() {
+    loading.value = true
+    try {
+        const [members, invitations] = await Promise.all([
+            adminStore.listMembers(orgId.value),
+            adminStore.listInvitations(orgId.value),
+        ])
+
+        const memberRows: OrgMember[] = members.map(m => ({
+            id: m.id,
+            email: m.email,
+            name: m.name,
+            avatar_url: m.avatar_url,
+            role: m.role,
+            status: 'active' as const,
+        }))
+
+        const inviteRows: OrgMember[] = invitations.map(i => ({
+            id: i.id,
+            email: i.email,
+            name: null,
+            avatar_url: null,
+            role: i.role,
+            status: 'invited' as const,
+        }))
+
+        rows.value = [...memberRows, ...inviteRows]
+    }
+    catch (err) {
+        console.error('[Admin] Failed to load members', err)
+    }
+    finally {
+        loading.value = false
+    }
+}
+
+async function removeMember(member: OrgMember) {
+    try {
+        await adminStore.removeMember(orgId.value, member.id)
+        toast.add({ title: `${member.name || member.email} removed`, color: 'success' })
+        await loadData()
+    }
+    catch (err: any) {
+        toast.add({ title: err?.data?.detail || 'Failed to remove member', color: 'error' })
+    }
+}
+
+async function cancelInvite(member: OrgMember) {
+    try {
+        await adminStore.cancelInvitation(orgId.value, member.id)
+        toast.add({ title: `Invitation to ${member.email} cancelled`, color: 'success' })
+        await loadData()
+    }
+    catch (err: any) {
+        toast.add({ title: err?.data?.detail || 'Failed to cancel invitation', color: 'error' })
+    }
+}
+
+async function resendInvite(member: OrgMember) {
+    try {
+        await adminStore.cancelInvitation(orgId.value, member.id)
+        await adminStore.inviteMember(orgId.value, member.email, member.role)
+        toast.add({ title: `Invitation resent to ${member.email}`, color: 'success' })
+        await loadData()
+    }
+    catch (err: any) {
+        toast.add({ title: err?.data?.detail || 'Failed to resend invitation', color: 'error' })
+    }
+}
+
+onMounted(loadData)
+watch(orgId, loadData)
+</script>
+
+<template>
+    <div class="flex flex-col flex-1 min-h-0">
+        <OrganizationMembersTable :members="rows"
+                                  :loading="loading"
+                                  is-admin
+                                  @remove-member="removeMember"
+                                  @cancel-invite="cancelInvite"
+                                  @resend-invite="resendInvite">
+            <template #toolbar>
+                <UButton icon="i-lucide-arrow-left"
+                         label="All organisations"
+                         color="neutral"
+                         variant="ghost"
+                         @click="navigateTo('/admin')" />
+                <UButton icon="i-lucide-user-plus"
+                         label="Invite"
+                         @click="inviteOpen = true" />
+            </template>
+        </OrganizationMembersTable>
+
+        <OrganizationInviteModal v-model:open="inviteOpen"
+                                 :endpoint="inviteEndpoint"
+                                 @invited="loadData" />
+    </div>
+</template>
