@@ -67,18 +67,19 @@ const items = computed<DropdownMenuItem[][]>(() => {
 
 <template>
     <UDropdownMenu :items="items"
-                   :content="{ align: 'end', side: 'right' }">
-        <UButton :avatar="{ text: initials }"
+                   :content="{ align: 'start', side: 'top' }"
+                   :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width)' }">
+        <UButton :avatar="{ src: userStore.user?.avatar_url ?? undefined, text: initials }"
                  :label="collapsed ? undefined : displayName"
-                 class="w-full justify-start"
+                 class="w-full justify-start data-[state=open]:bg-elevated"
                  variant="ghost"
                  color="neutral"
                  :square="collapsed"
                  truncate>
             <template v-if="!collapsed"
                       #trailing>
-                <UIcon name="i-lucide-chevron-right"
-                       class="size-4 ms-auto text-muted" />
+                <UIcon name="i-lucide-chevrons-up-down"
+                       class="size-4 ms-auto text-dimmed" />
             </template>
         </UButton>
     </UDropdownMenu>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { NavigationMenuItem, DropdownMenuItem } from '@nuxt/ui'
-import type { Organisation } from '~/types/organisation'
+import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
 
@@ -10,18 +9,8 @@ const modeItems = computed<NavigationMenuItem[]>(() => [
     { label: 'Agent', icon: 'i-lucide-sparkles', to: '/agent' },
 ])
 
-const orgStore = useOrganisationStore()
 const catalogStore = useCatalogStore()
 const { open: commandPaletteOpen, groups: commandPaletteGroups } = useCommandPalette()
-
-const userOrgs = ref<Organisation[]>([])
-const orgsLoaded = ref(false)
-
-async function loadUserOrgs() {
-    if (orgsLoaded.value) return
-    userOrgs.value = await orgStore.fetchOrganisations()
-    orgsLoaded.value = true
-}
 
 /** Icons for resource kinds — fallback to generic box. */
 const RESOURCE_KIND_ICONS: Record<string, string> = {
@@ -106,38 +95,6 @@ const items = computed<NavigationMenuItem[]>(() => {
 
     return nav
 })
-
-const switchChildren = computed<DropdownMenuItem[][]>(() => {
-    if (!orgsLoaded.value) return [[{ label: 'Loading...', disabled: true }]]
-    if (userOrgs.value.length === 0) return [[{ label: 'No organisations', disabled: true }]]
-
-    const currentId = orgStore.organisation?.id
-    return [userOrgs.value.map(org => ({
-        label: org.name,
-        disabled: org.id === currentId,
-        onSelect: () => {
-            orgStore.switchOrg(org.id)
-            orgsLoaded.value = false
-        },
-    }))]
-})
-
-const orgMenuItems = computed<DropdownMenuItem[][]>(() => [
-    [
-        {
-            label: 'Manage',
-            icon: 'i-lucide-users',
-            onSelect: () => navigateTo('/organization'),
-        },
-    ],
-    [
-        {
-            label: 'Switch',
-            icon: 'i-lucide-arrow-left-right',
-            children: switchChildren.value,
-        },
-    ],
-])
 </script>
 
 <template>
@@ -188,30 +145,13 @@ const orgMenuItems = computed<DropdownMenuItem[][]>(() => [
                         <UNavigationMenu :collapsed="collapsed"
                                          :items="items"
                                          orientation="vertical" />
-
-                        <div class="mt-auto flex flex-col gap-1">
-                            <UDropdownMenu :items="orgMenuItems"
-                                           :content="{ align: 'start', side: 'right' }"
-                                           @update:open="(open: boolean) => { if (open) loadUserOrgs() }">
-                                <UButton :label="collapsed ? undefined : (orgStore.organisation?.name || 'Organization')"
-                                         icon="i-lucide-building-2"
-                                         class="w-full justify-start"
-                                         variant="ghost"
-                                         color="neutral"
-                                         :square="collapsed"
-                                         :class="{ 'text-highlighted': route.path === '/organization' }">
-                                    <template v-if="!collapsed"
-                                              #trailing>
-                                        <UIcon name="i-lucide-chevron-right"
-                                               class="size-4 ms-auto text-muted" />
-                                    </template>
-                                </UButton>
-                            </UDropdownMenu>
-                        </div>
                     </template>
 
                     <template #footer="{ collapsed }">
-                        <NavUser :collapsed="collapsed" />
+                        <div class="flex flex-col gap-1 w-full">
+                            <NavOrganisation :collapsed="collapsed" />
+                            <NavUser :collapsed="collapsed" />
+                        </div>
                     </template>
                 </UDashboardSidebar>
 
