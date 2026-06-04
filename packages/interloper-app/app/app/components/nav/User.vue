@@ -24,30 +24,45 @@ const initials = computed(() => {
     return userStore.user?.email?.charAt(0).toUpperCase() ?? '?'
 })
 
-const items = computed<DropdownMenuItem[][]>(() => [
-    [{
-        label: displayName.value,
-        avatar: { text: initials.value },
-        type: 'label',
-    }],
-    [
-        {
-            label: 'Settings',
-            icon: 'i-lucide-sliders-horizontal',
-            onSelect: () => navigateTo('/settings'),
-        },
-        {
-            label: colorMode.value === 'dark' ? 'Light Mode' : 'Dark Mode',
-            icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
-            onSelect: toggleColorMode,
-        },
-    ],
-    [{
-        label: 'Log out',
-        icon: 'i-lucide-log-out',
-        onSelect: () => userStore.signOut(),
-    }],
-])
+const items = computed<DropdownMenuItem[][]>(() => {
+    const groups: DropdownMenuItem[][] = [
+        [{
+            label: displayName.value,
+            avatar: { text: initials.value },
+            type: 'label',
+        }],
+    ]
+
+    if (userStore.isSuperAdmin) {
+        groups.push([{
+            label: 'Platform admin',
+            icon: 'i-lucide-shield',
+            onSelect: () => navigateTo('/admin'),
+        }])
+    }
+
+    groups.push(
+        [
+            {
+                label: 'Settings',
+                icon: 'i-lucide-sliders-horizontal',
+                onSelect: () => navigateTo('/settings'),
+            },
+            {
+                label: colorMode.value === 'dark' ? 'Light Mode' : 'Dark Mode',
+                icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
+                onSelect: toggleColorMode,
+            },
+        ],
+        [{
+            label: 'Log out',
+            icon: 'i-lucide-log-out',
+            onSelect: () => userStore.signOut(),
+        }],
+    )
+
+    return groups
+})
 </script>
 
 <template>

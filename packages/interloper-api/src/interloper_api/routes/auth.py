@@ -37,6 +37,7 @@ class AuthUserResponse(BaseModel):
     name: str | None = None
     avatar_url: str | None = None
     role: str
+    is_super_admin: bool = False
     organisation: OrganisationResponse | None = None
     last_organisation_id: UUID | None = None
 
@@ -188,6 +189,7 @@ def get_me(
         name=profile.name,
         avatar_url=profile.avatar_url,
         role=role,
+        is_super_admin=profile.is_super_admin,
         organisation=OrganisationResponse.model_validate(org, from_attributes=True) if org else None,
         last_organisation_id=profile.last_organisation_id,
     )

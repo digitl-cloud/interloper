@@ -6,6 +6,7 @@ export interface User {
     name: string | null
     avatar_url: string | null
     role: string
+    is_super_admin: boolean
     organisation: Organisation | null
     last_organisation_id: string | null
 }

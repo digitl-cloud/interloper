@@ -1,6 +1,13 @@
 <script setup lang="ts">
 const open = defineModel<boolean>('open', { default: false })
 
+const props = withDefaults(defineProps<{
+    /** API path that accepts `{ email, role }` POST bodies. */
+    endpoint?: string
+}>(), {
+    endpoint: '/organisations/invite',
+})
+
 const { apiFetch } = useApi()
 const toast = useToast()
 
@@ -48,7 +55,7 @@ async function submit() {
 
     for (const invite of invites) {
         try {
-            await apiFetch('/organisations/invite', {
+            await apiFetch(props.endpoint, {
                 method: 'POST',
                 body: { email: invite.email.trim(), role: invite.role },
             })

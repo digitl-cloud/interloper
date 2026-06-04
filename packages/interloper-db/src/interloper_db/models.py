@@ -47,6 +47,7 @@ class Profile(SQLModel, table=True):
     name: str | None = None
     google_id: str = SQLField(index=True, unique=True)
     avatar_url: str | None = None
+    is_super_admin: bool = SQLField(default=False, sa_column_kwargs={"server_default": text("false")})
     last_organisation_id: UUID | None = SQLField(default=None, foreign_key="organisations.id")
     created_at: datetime | None = _ts()
 
