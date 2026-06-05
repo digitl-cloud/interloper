@@ -22,8 +22,8 @@ def _sink(handler: Callable[[httpx.Request], httpx.Response]) -> HttpEventSink:
     )
 
 
-def test_posts_buffered_events_and_excludes_run_level() -> None:
-    """Asset/log events are shipped; run-level events are not (host owns them)."""
+def test_posts_buffered_events_and_excludes_host_owned() -> None:
+    """Asset lifecycle/log events ship; host-owned events (run-level, queued) don't."""
     posted: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -34,6 +34,7 @@ def test_posts_buffered_events_and_excludes_run_level() -> None:
     sink = _sink(handler)
     sink(Event(type=EventType.LOG, metadata={"message": "a"}))
     sink(Event(type=EventType.RUN_STARTED))
+    sink(Event(type=EventType.ASSET_QUEUED, metadata={"asset_key": "x"}))
     sink(Event(type=EventType.ASSET_STARTED, metadata={"asset_key": "x"}))
     sink.close()
 
@@ -41,6 +42,7 @@ def test_posts_buffered_events_and_excludes_run_level() -> None:
     assert "log" in types
     assert "asset_started" in types
     assert "run_started" not in types
+    assert "asset_queued" not in types
 
 
 def test_targets_run_scoped_ingest_url() -> None:

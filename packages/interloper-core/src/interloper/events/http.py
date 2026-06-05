@@ -25,10 +25,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Run-level events are owned and persisted by the host orchestrator, not by the
-# per-asset child — shipping them here would duplicate them once per asset.
-_RUN_LEVEL_EVENTS = frozenset(
-    {EventType.RUN_STARTED, EventType.RUN_COMPLETED, EventType.RUN_FAILED}
+# Events the host orchestrator records itself: the run lifecycle, plus the bulk
+# asset-queued it emits at run start (which gives the UI every pending asset up
+# front). The per-asset child must not ship these or they'd be persisted twice.
+_HOST_OWNED_EVENTS = frozenset(
+    {
+        EventType.RUN_STARTED,
+        EventType.RUN_COMPLETED,
+        EventType.RUN_FAILED,
+        EventType.ASSET_QUEUED,
+    }
 )
 
 
@@ -48,7 +54,7 @@ class HttpEventSink:
         batch_size: int = 100,
         flush_interval: float = 0.5,
         shutdown_timeout: float = 30.0,
-        exclude_types: frozenset[EventType] = _RUN_LEVEL_EVENTS,
+        exclude_types: frozenset[EventType] = _HOST_OWNED_EVENTS,
         client: httpx.Client | None = None,
     ) -> None:
         """Initialize the sink and start its background flush thread.
