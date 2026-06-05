@@ -206,12 +206,19 @@ class KubernetesRunner(SyncRunner):
                 pass
 
     def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
-        """Process a completed job future and clean up.
+        """Process a completed job future and author the terminal event.
 
-        Updates internal state silently (``emit=False``) because the
-        container already emitted the real events.  The log thread is
-        joined with a longer timeout to ensure the final events
-        (especially ``ASSET_FAILED`` with traceback) are processed.
+        The host authors the terminal event itself (``emit=True``) from the
+        authoritative **Job status** (succeeded vs failed) instead of trusting
+        the child to have emitted one.  Deterministic event ids keep this
+        idempotent: when the child *did* stream its own (richer) terminal it was
+        persisted first and the host's emit dedups away
+        (``ON CONFLICT DO NOTHING``); when the child died without reporting one
+        (eviction / OOM / deadline mid-retry) the host's event is the only
+        terminal, so the asset no longer orphans as ``running``.
+
+        The log thread is joined with a longer timeout first so a child terminal
+        that is still in flight wins the race.
         """
         job_name = self._job_map.pop(future, None)
         if job_name is not None:
@@ -222,14 +229,19 @@ class KubernetesRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:
-                self.state.mark_asset_failed(asset, str(e), emit=False)
+                self.state.mark_asset_failed(asset, str(e), emit=True)
                 if self.fail_fast or self.reraise:
                     raise
             else:
-                self.state.mark_asset_completed(asset, emit=False)
+                self.state.mark_asset_completed(asset, emit=True)
 
     def _handle_flushed_future(self, future: Future[Any], asset: Asset) -> None:
-        """Clean up job after flush."""
+        """Clean up job after flush, authoring the terminal event.
+
+        Same host-authored-terminal contract as :meth:`_handle_completed`
+        (``emit=True``, idempotent via deterministic ids) so an asset still
+        in flight when the run aborts is not left orphaned as ``running``.
+        """
         job_name = self._job_map.pop(future, None)
         if job_name is not None:
             self._stop_job_log_streaming(job_name)
@@ -239,9 +251,9 @@ class KubernetesRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:  # noqa: BLE001
-                self.state.mark_asset_failed(asset, str(e), emit=False)
+                self.state.mark_asset_failed(asset, str(e), emit=True)
             else:
-                self.state.mark_asset_completed(asset, emit=False)
+                self.state.mark_asset_completed(asset, emit=True)
 
     # ------------------------------------------------------------------
     # Job polling
@@ -401,7 +413,7 @@ class KubernetesRunner(SyncRunner):
                                 event_asset_id = event.metadata.get("asset_id")
                                 if event_asset_id and event_asset_id != target_asset_id:
                                     continue
-                                EventBus.emit(event.type, metadata=event.metadata)
+                                EventBus.emit_event(event)
                         except Exception:  # noqa: BLE001, S110
                             pass
                 buf = buf.rstrip()
@@ -411,7 +423,7 @@ class KubernetesRunner(SyncRunner):
                         if event is not None and event.type not in _RUN_EVENTS:
                             event_asset_id = event.metadata.get("asset_id")
                             if not event_asset_id or event_asset_id == target_asset_id:
-                                EventBus.emit(event.type, metadata=event.metadata)
+                                EventBus.emit_event(event)
                     except Exception:  # noqa: BLE001, S110
                         pass
             except Exception:  # noqa: BLE001, S110
