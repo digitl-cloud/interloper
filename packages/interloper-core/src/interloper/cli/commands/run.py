@@ -90,7 +90,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
     import sys
 
     from interloper.dag.spec import DAGSpec
-    from interloper.events import EventBus, StderrEventHandler
+    from interloper.events import EventBus, HttpEventSink, StderrEventHandler
     from interloper.runner import ExecutionStatus, build_runner
     from interloper.settings import AppSettings
 
@@ -103,11 +103,25 @@ def _cmd_run(args: argparse.Namespace) -> None:
     settings = AppSettings.get()
     is_container = os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true"
 
-    # -- Subscribe stderr event handler (for container event forwarding) ------
+    # -- Event forwarding for child execution ---------------------------------
+    # stderr: legacy path (the host scrapes container logs and re-emits).
+    # http:   durable path (the child POSTs events to the ingest endpoint).
+    # Both persist idempotently on the event id, so running them together
+    # during rollout is safe.
     stderr_handler = None
     if is_container:
         stderr_handler = StderrEventHandler()
         EventBus.subscribe(stderr_handler)
+
+    http_sink = None
+    events_cfg = settings.events
+    if args.run_id and events_cfg.ingest_url and events_cfg.ingest_token:
+        http_sink = HttpEventSink(
+            base_url=events_cfg.ingest_url,
+            token=events_cfg.ingest_token,
+            run_id=args.run_id,
+        )
+        EventBus.subscribe(http_sink)
 
     try:
         # -- Build the DAG ----------------------------------------------------
@@ -149,8 +163,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
             raise SystemExit(1)
 
     finally:
-        if stderr_handler is not None:
+        if stderr_handler is not None or http_sink is not None:
             EventBus.flush(timeout=5.0)
+        if http_sink is not None:
+            http_sink.close()
+            EventBus.unsubscribe(http_sink)
+        if stderr_handler is not None:
             EventBus.unsubscribe(stderr_handler)
 
 

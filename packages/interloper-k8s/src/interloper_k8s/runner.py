@@ -9,6 +9,7 @@ without recomputing them.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -308,10 +309,15 @@ class KubernetesRunner(SyncRunner):
         return cmd
 
     def _build_env(self) -> list[client.V1EnvVar]:
-        """Build the environment variables for the container."""
-        env = [client.V1EnvVar(name=k, value=v) for k, v in self.env_vars.items()]
-        env.append(client.V1EnvVar(name="INTERLOPER_EVENTS_TO_STDERR", value="true"))
-        return env
+        """Build the environment variables for the per-asset container."""
+        env_map = dict(self.env_vars)
+        env_map["INTERLOPER_EVENTS_TO_STDERR"] = "true"
+        # Forward event-ingest config so the child can persist events directly.
+        for var in ("INTERLOPER_EVENTS_INGEST_URL", "INTERLOPER_EVENTS_INGEST_TOKEN"):
+            value = os.environ.get(var)
+            if value:
+                env_map[var] = value
+        return [client.V1EnvVar(name=k, value=v) for k, v in env_map.items()]
 
     def _build_resources(self) -> client.V1ResourceRequirements | None:
         """Build the resource requirements for the container."""
