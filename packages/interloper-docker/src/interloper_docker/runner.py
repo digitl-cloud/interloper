@@ -161,12 +161,16 @@ class DockerRunner(SyncRunner):
         return future
 
     def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
-        """Process a completed container future and clean up.
+        """Process a completed container future and author the terminal event.
 
-        Updates internal state silently (``emit=False``) because the
-        container already emitted the real events.  Assets already in a
-        terminal state (e.g. marked failed during ``_submit_asset``) are
-        skipped.
+        The host authors the terminal event itself (``emit=True``) from the
+        authoritative container exit status instead of trusting the child to
+        have emitted one.  Deterministic event ids keep this idempotent: the
+        child's own (richer) terminal was persisted first and the host's emit
+        dedups away (``ON CONFLICT DO NOTHING``); if the child died without
+        reporting one, the host's event is the only terminal, so the asset no
+        longer orphans as ``running``.  Assets already terminal (e.g. marked
+        failed during ``_submit_asset``) are skipped.
         """
         container = self._container_map.pop(future, None)
         if container is not None:
@@ -177,11 +181,11 @@ class DockerRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:
-                self.state.mark_asset_failed(asset, str(e), emit=False)
+                self.state.mark_asset_failed(asset, str(e), emit=True)
                 if self.fail_fast or self.reraise:
                     raise
             else:
-                self.state.mark_asset_completed(asset, emit=False)
+                self.state.mark_asset_completed(asset, emit=True)
 
         if container is not None and self.auto_remove:
             try:
@@ -190,7 +194,12 @@ class DockerRunner(SyncRunner):
                 pass
 
     def _handle_flushed_future(self, future: Future[Any], asset: Asset) -> None:
-        """Clean up container after flush."""
+        """Clean up container after flush, authoring the terminal event.
+
+        Same host-authored-terminal contract as :meth:`_handle_completed`
+        (``emit=True``, idempotent via deterministic ids) so an asset still
+        in flight when the run aborts is not left orphaned as ``running``.
+        """
         container = self._container_map.pop(future, None)
         if container is not None:
             self._stop_container_log_streaming(container)
@@ -200,9 +209,9 @@ class DockerRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:  # noqa: BLE001
-                self.state.mark_asset_failed(asset, str(e), emit=False)
+                self.state.mark_asset_failed(asset, str(e), emit=True)
             else:
-                self.state.mark_asset_completed(asset, emit=False)
+                self.state.mark_asset_completed(asset, emit=True)
 
         if container is not None and self.auto_remove:
             try:
@@ -318,7 +327,7 @@ class DockerRunner(SyncRunner):
                                 event_asset_id = event.metadata.get("asset_id")
                                 if event_asset_id and event_asset_id != target_asset_id:
                                     continue
-                                EventBus.emit(event.type, metadata=event.metadata)
+                                EventBus.emit_event(event)
                                 continue
                         except Exception:  # noqa: BLE001, S110
                             pass

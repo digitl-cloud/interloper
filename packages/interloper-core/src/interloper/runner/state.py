@@ -6,13 +6,36 @@ import datetime as dt
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from interloper.events import EventBus, EventType
+from interloper.events import Event, EventBus, EventType
 from interloper.runner.results import AssetExecutionInfo, ExecutionStatus
 
 if TYPE_CHECKING:
     from interloper.asset.base import Asset
     from interloper.dag.base import DAG
     from interloper.partitioning.base import Partition, PartitionWindow
+
+# Fixed namespace for deterministic asset-event ids. A given asset-lifecycle
+# event is uniquely identified by ``(run_id, asset_id, event_type)``; deriving
+# the event id from that triple makes the *same* logical event collapse to a
+# single row when it is produced more than once — e.g. a child container emits
+# its own ``asset_failed`` and the host also authors one as a fallback, or the
+# host bulk-emits ``asset_queued`` and the child re-emits it. Combined with the
+# idempotent (``ON CONFLICT (id) DO NOTHING``) ``save_event``, this dedups
+# without any cross-process coordination.
+_ASSET_EVENT_NS = uuid.UUID("a3f1c2d4-5b6e-4a7c-9d8f-0e1a2b3c4d5e")
+
+
+def _asset_event_id(run_id: str, asset_id: str, event_type: EventType) -> str:
+    """Derive a deterministic event id from a run/asset/type triple.
+
+    Both the host and the in-container child run this same code with the same
+    ``run_id`` (passed via ``--run-id``) and ``asset_id`` (carried in the
+    mini-DAG spec), so they compute identical ids and their events dedup.
+
+    Returns:
+        A stable UUID5 string for the event.
+    """
+    return str(uuid.uuid5(_ASSET_EVENT_NS, f"{run_id}:{asset_id}:{event_type.value}"))
 
 
 class RunState:
@@ -117,9 +140,9 @@ class RunState:
         for asset in self.dag.assets:
             info = self.asset_executions[asset.id]
             if info.status in (ExecutionStatus.QUEUED, ExecutionStatus.READY):
-                EventBus.emit(
+                self._emit_asset_event(
                     EventType.ASSET_QUEUED,
-                    metadata={
+                    {
                         **self._asset_event_metadata(asset),
                         "message": f"Asset '{type(asset).key}' queued",
                     },
@@ -179,9 +202,9 @@ class RunState:
         self.asset_executions[asset.id].mark_running()
 
         if emit:
-            EventBus.emit(
+            self._emit_asset_event(
                 EventType.ASSET_STARTED,
-                metadata={
+                {
                     **self._asset_event_metadata(asset),
                     "message": f"Asset '{type(asset).key}' started",
                 },
@@ -198,9 +221,9 @@ class RunState:
         self._promote_dependents(asset.id)
 
         if emit:
-            EventBus.emit(
+            self._emit_asset_event(
                 EventType.ASSET_COMPLETED,
-                metadata={
+                {
                     **self._asset_event_metadata(asset),
                     "message": f"Asset '{type(asset).key}' completed",
                 },
@@ -216,9 +239,9 @@ class RunState:
         self.asset_executions[asset.id].mark_canceled()
 
         if emit:
-            EventBus.emit(
+            self._emit_asset_event(
                 EventType.ASSET_CANCELED,
-                metadata={
+                {
                     **self._asset_event_metadata(asset),
                     "message": f"Asset '{type(asset).key}' canceled",
                 },
@@ -253,13 +276,13 @@ class RunState:
             }
             if tb:
                 metadata["traceback"] = tb
-            EventBus.emit(EventType.ASSET_FAILED, metadata=metadata)
+            self._emit_asset_event(EventType.ASSET_FAILED, metadata)
 
             for key in canceled:
                 canceled_asset = self.dag.asset_map[key]
-                EventBus.emit(
+                self._emit_asset_event(
                     EventType.ASSET_CANCELED,
-                    metadata={
+                    {
                         **self._asset_event_metadata(canceled_asset),
                         "message": f"Asset '{type(self.dag.asset_map[key]).key}' canceled (upstream failure)",
                     },
@@ -307,6 +330,20 @@ class RunState:
         if asset.source is not None:
             meta["source_id"] = asset.source.id
         return meta
+
+    def _emit_asset_event(self, event_type: EventType, metadata: dict[str, Any]) -> None:
+        """Emit an asset-lifecycle event with a deterministic id.
+
+        The id is derived from ``(run_id, asset_id, event_type)`` so the same
+        logical event dedups across producers (host fallback vs child, or the
+        duplicate ``asset_queued``).  ``metadata`` must carry ``asset_id``.
+        """
+        event = Event(
+            type=event_type,
+            metadata=metadata,
+            id=_asset_event_id(self.run_id, str(metadata["asset_id"]), event_type),
+        )
+        EventBus.emit_event(event)
 
     def _promote_dependents(self, completed_key: str) -> None:
         """Promote queued successors to READY if all their predecessors are done."""
