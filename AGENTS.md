@@ -72,14 +72,15 @@ Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS`, `SCHEDULER_EXTRA
 
 1. Branch from `main`: `git checkout -b feat/xxx`.
 2. Each commit on the branch is itself a valid Conventional Commit — it may land on `main` as-is.
-3. Keep up to date with `main` by rebase, never merge:
+3. **Squash as you go.** Keep the branch to its minimal set of logical commits — don't accumulate WIP/fixup commits. Amend the existing commit (`git commit --amend`) or squash into it (`git rebase -i`) as progress is made, so the branch is always in a clean, mergeable state.
+4. Keep up to date with `main` by rebase, never merge:
    ```
    git fetch origin
    git rebase origin/main
    ```
-4. After a rebase (or `rebase -i` cleanup), push with `--force-with-lease` — never plain `--force`.
-5. Merge the PR with **rebase-and-merge** (or squash, when the branch is one logical change). Never create a merge commit.
-6. Resolve conflicts during rebase rather than discarding work or abandoning the branch.
+5. After a rebase or squash, push with `--force-with-lease` — never plain `--force`.
+6. Merge the PR with **rebase-and-merge** (or squash, when the branch is one logical change). Never create a merge commit.
+7. Resolve conflicts during rebase rather than discarding work or abandoning the branch.
 
 ### Worktrees
 
