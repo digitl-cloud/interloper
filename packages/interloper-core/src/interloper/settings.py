@@ -101,6 +101,21 @@ class SmtpSettings(BaseSettings):
         return bool(self.host and self.user and self.password)
 
 
+class EventsSettings(BaseSettings):
+    """Event-ingest settings.
+
+    Used by the API to authenticate the internal event-ingest endpoint, and
+    by per-asset worker processes to reach it.  ``ingest_token`` is a shared
+    service secret; when empty the ingest endpoint is disabled.  ``ingest_url``
+    is the base API URL workers POST events to (e.g. the in-cluster service).
+    """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}EVENTS_")
+
+    ingest_token: str = ""
+    ingest_url: str = ""
+
+
 class LauncherSettings(BaseSettings):
     """Launcher settings (type + launcher-specific config)."""
 
@@ -158,6 +173,7 @@ class AppSettings(BaseSettings):
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     reaper: ReaperSettings = Field(default_factory=ReaperSettings)
+    events: EventsSettings = Field(default_factory=EventsSettings)
     launcher: LauncherSettings = Field(default_factory=LauncherSettings)
     runner: RunnerSettings = Field(default_factory=RunnerSettings)
     catalog: list[str] = Field(default_factory=list)

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import Any
 from uuid import UUID
 
-from fastapi import Cookie, Depends, HTTPException
+from fastapi import Cookie, Depends, Header, HTTPException
 from interloper.catalog.base import Catalog
 from interloper_db import Organisation, Profile, Store
 from interloper_db.models import Session as SessionModel
@@ -14,6 +15,7 @@ _store: Store | None = None
 _catalog: Catalog | None = None
 _auth_config: Any | None = None
 _smtp_config: Any | None = None
+_ingest_token: str | None = None
 
 # Role hierarchy: admin > editor > viewer
 _ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
@@ -108,6 +110,21 @@ def get_smtp_config() -> Any:
         The SmtpConfig instance, or None if not configured.
     """
     return _smtp_config
+
+
+def set_ingest_token(token: str | None) -> None:
+    """Set the shared service token that authenticates internal event ingest.
+
+    Args:
+        token: The secret, or ``None``/empty to disable the ingest endpoint.
+    """
+    global _ingest_token  # noqa: PLW0603
+    _ingest_token = token or None
+
+
+def get_ingest_token() -> str | None:
+    """Return the configured event-ingest token, or ``None`` if disabled."""
+    return _ingest_token
 
 
 # -- Auth dependencies -------------------------------------------------------
@@ -310,3 +327,36 @@ def require_super_admin(
     if not user.is_super_admin:
         raise HTTPException(status_code=403, detail="Requires super-admin privileges")
     return user
+
+
+# -- Service-token auth (internal machine-to-machine) ------------------------
+
+
+def _bearer_token(authorization: str | None) -> str | None:
+    """Extract the token from an ``Authorization: Bearer <token>`` header."""
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token
+
+
+def require_ingest_token(authorization: str | None = Header(default=None)) -> None:
+    """Authenticate an internal event-ingest request via a bearer service token.
+
+    This is machine-to-machine auth for trusted in-cluster callers (per-asset
+    worker processes), deliberately separate from the cookie-session user auth.
+    The token is a shared secret set via :func:`set_ingest_token`; when unset,
+    the ingest surface is disabled entirely.
+
+    Raises:
+        HTTPException: 503 if ingest is not configured, 401 if the token is
+            missing or wrong.
+    """
+    expected = get_ingest_token()
+    if not expected:
+        raise HTTPException(status_code=503, detail="Event ingest is not configured")
+    provided = _bearer_token(authorization)
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing ingest token")
