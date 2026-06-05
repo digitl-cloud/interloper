@@ -237,6 +237,13 @@ class KubernetesLauncher(Launcher):
         if encryption_key:
             env_map["INTERLOPER_ENCRYPTION_KEY"] = encryption_key
 
+        # Forward event-ingest config to the run pod, which in turn forwards it
+        # to per-asset child pods so they can persist events directly.
+        for var in ("INTERLOPER_EVENTS_INGEST_URL", "INTERLOPER_EVENTS_INGEST_TOKEN"):
+            value = os.environ.get(var)
+            if value:
+                env_map[var] = value
+
         return [client.V1EnvVar(name=k, value=v) for k, v in env_map.items()]
 
     def _build_resources(self) -> client.V1ResourceRequirements | None:

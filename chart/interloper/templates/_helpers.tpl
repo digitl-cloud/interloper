@@ -148,6 +148,18 @@ Postgres host: either the bundled subchart service or external config.
 {{- end -}}
 
 {{/*
+Base API URL that worker pods POST events to. Defaults to the in-cluster API
+service; override via events.ingestUrl.
+*/}}
+{{- define "interloper.eventIngestUrl" -}}
+{{- if .Values.events.ingestUrl -}}
+{{ .Values.events.ingestUrl }}
+{{- else -}}
+http://{{ include "interloper.fullname" . }}-api.{{ .Release.Namespace }}.svc:{{ .Values.api.service.port }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Environment variables shared by all interloper pods (scheduler, api, frontend).
 Contains Postgres connection info + the encryption key secret.
 */}}
@@ -176,5 +188,13 @@ Contains Postgres connection info + the encryption key secret.
     secretKeyRef:
       name: {{ include "interloper.secretName" . }}
       key: INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET
+      optional: true
+- name: INTERLOPER_EVENTS_INGEST_URL
+  value: {{ include "interloper.eventIngestUrl" . | quote }}
+- name: INTERLOPER_EVENTS_INGEST_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "interloper.secretName" . }}
+      key: INTERLOPER_EVENTS_INGEST_TOKEN
       optional: true
 {{- end -}}

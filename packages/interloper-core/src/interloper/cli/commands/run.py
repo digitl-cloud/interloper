@@ -90,7 +90,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
     import sys
 
     from interloper.dag.spec import DAGSpec
-    from interloper.events import EventBus, StderrEventHandler
+    from interloper.events import EventBus, HttpEventSink, StderrEventHandler
     from interloper.runner import ExecutionStatus, build_runner
     from interloper.settings import AppSettings
 
@@ -103,9 +103,26 @@ def _cmd_run(args: argparse.Namespace) -> None:
     settings = AppSettings.get()
     is_container = os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true"
 
-    # -- Subscribe stderr event handler (for container event forwarding) ------
+    # -- Event forwarding for child execution ---------------------------------
+    # http:   durable path — the child POSTs events to the ingest endpoint.
+    # stderr: fallback — the host scrapes container logs and re-emits; used for
+    #         local/dev runs and the docker runner when ingest isn't configured.
+    # The two are mutually exclusive: when ingest is configured the host stops
+    # re-emitting from logs, so writing @EVENT lines as well would just be noise.
+    events_cfg = settings.events
+    use_http = bool(args.run_id and events_cfg.ingest_url and events_cfg.ingest_token)
+
+    http_sink = None
+    if use_http:
+        http_sink = HttpEventSink(
+            base_url=events_cfg.ingest_url,
+            token=events_cfg.ingest_token,
+            run_id=args.run_id,
+        )
+        EventBus.subscribe(http_sink)
+
     stderr_handler = None
-    if is_container:
+    if is_container and not use_http:
         stderr_handler = StderrEventHandler()
         EventBus.subscribe(stderr_handler)
 
@@ -149,8 +166,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
             raise SystemExit(1)
 
     finally:
-        if stderr_handler is not None:
+        if stderr_handler is not None or http_sink is not None:
             EventBus.flush(timeout=5.0)
+        if http_sink is not None:
+            http_sink.close()
+            EventBus.unsubscribe(http_sink)
+        if stderr_handler is not None:
             EventBus.unsubscribe(stderr_handler)
 
 

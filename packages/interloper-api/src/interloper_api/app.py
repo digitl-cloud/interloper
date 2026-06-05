@@ -9,7 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from interloper.catalog.base import Catalog
 from interloper_db import Store
 
-from interloper_api.dependencies import set_auth_config, set_catalog, set_smtp_config, set_store
+from interloper_api.dependencies import (
+    set_auth_config,
+    set_catalog,
+    set_ingest_token,
+    set_smtp_config,
+    set_store,
+)
 from interloper_api.routes import (
     admin,
     assets,
@@ -17,6 +23,7 @@ from interloper_api.routes import (
     backfills,
     destinations,
     external,
+    internal,
     jobs,
     oauth,
     organisations,
@@ -33,6 +40,7 @@ def create_app(
     catalog: Catalog | None = None,
     auth_config: Any | None = None,
     smtp_config: Any | None = None,
+    event_ingest_token: str | None = None,
     cors_origins: list[str] | None = None,
     **kwargs: Any,
 ) -> FastAPI:
@@ -69,6 +77,7 @@ def create_app(
         set_auth_config(auth_config)
     if smtp_config:
         set_smtp_config(smtp_config)
+    set_ingest_token(event_ingest_token)
 
     api = APIRouter(prefix="/api")
     api.include_router(auth.router, tags=["auth"])
@@ -80,6 +89,7 @@ def create_app(
     api.include_router(destinations.router, prefix="/destinations", tags=["destinations"])
     api.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
     api.include_router(runs.router, prefix="/runs", tags=["runs"])
+    api.include_router(internal.router, prefix="/internal", tags=["internal"])
     api.include_router(backfills.router, prefix="/backfills", tags=["backfills"])
     api.include_router(assets.router, prefix="/assets", tags=["assets"])
     api.include_router(oauth.router, tags=["oauth"])

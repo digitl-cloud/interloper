@@ -9,6 +9,7 @@ without recomputing them.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -25,12 +26,15 @@ from kubernetes import client, config
 from kubernetes.client import V1Job
 from pydantic import Field, PrivateAttr
 
-# Events emitted by the container's inner run — not forwarded to the host.
-_RUN_EVENTS = frozenset(
+# Events the host orchestrator records itself — the run lifecycle plus the bulk
+# asset-queued emitted at run start. They are dropped from the child's log
+# stream so they aren't persisted twice.
+_HOST_OWNED_EVENTS = frozenset(
     {
         EventType.RUN_STARTED,
         EventType.RUN_COMPLETED,
         EventType.RUN_FAILED,
+        EventType.ASSET_QUEUED,
     }
 )
 
@@ -308,10 +312,15 @@ class KubernetesRunner(SyncRunner):
         return cmd
 
     def _build_env(self) -> list[client.V1EnvVar]:
-        """Build the environment variables for the container."""
-        env = [client.V1EnvVar(name=k, value=v) for k, v in self.env_vars.items()]
-        env.append(client.V1EnvVar(name="INTERLOPER_EVENTS_TO_STDERR", value="true"))
-        return env
+        """Build the environment variables for the per-asset container."""
+        env_map = dict(self.env_vars)
+        env_map["INTERLOPER_EVENTS_TO_STDERR"] = "true"
+        # Forward event-ingest config so the child can persist events directly.
+        for var in ("INTERLOPER_EVENTS_INGEST_URL", "INTERLOPER_EVENTS_INGEST_TOKEN"):
+            value = os.environ.get(var)
+            if value:
+                env_map[var] = value
+        return [client.V1EnvVar(name=k, value=v) for k, v in env_map.items()]
 
     def _build_resources(self) -> client.V1ResourceRequirements | None:
         """Build the resource requirements for the container."""
@@ -339,12 +348,27 @@ class KubernetesRunner(SyncRunner):
             for t in self.tolerations
         ]
 
+    @property
+    def _child_persists_directly(self) -> bool:
+        """Whether per-asset child pods persist their own events via the ingest endpoint.
+
+        When true, the host must not re-emit events parsed from container logs:
+        the child already wrote them (idempotently) to the API, so re-emitting
+        would be redundant work and a second, lossier persistence path.
+        """
+        return bool(
+            os.environ.get("INTERLOPER_EVENTS_INGEST_URL")
+            and os.environ.get("INTERLOPER_EVENTS_INGEST_TOKEN")
+        )
+
     def _start_log_streaming(self, job_name: str, *, target_asset_id: str) -> None:
         """Stream events from a K8s pod's logs to the host EventBus.
 
-        Only events for the **target asset** are forwarded.
-        Container-internal ``RUN_*`` events and events for
-        non-materializable parent assets are dropped.
+        Only events for the **target asset** are forwarded, and only when the
+        child is not persisting its own events directly (see
+        :attr:`_child_persists_directly`). Host-owned events (run lifecycle and
+        the bulk asset-queued) and events for non-materializable parent assets
+        are always dropped.
 
         Args:
             job_name: The K8s Job name to stream logs from.
@@ -356,6 +380,9 @@ class KubernetesRunner(SyncRunner):
         core_v1 = self._core_v1
 
         def stream_logs() -> None:
+            # When the child persists its own events directly, the host doesn't
+            # re-emit them — it just drains the log stream.
+            forward_events = not self._child_persists_directly
             pod_name: str | None = None
             while not self._stop_log_streaming.is_set():
                 try:
@@ -396,22 +423,24 @@ class KubernetesRunner(SyncRunner):
                         try:
                             event = parse_event_from_log_line(line)
                             if event is not None:
-                                if event.type in _RUN_EVENTS:
+                                if event.type in _HOST_OWNED_EVENTS:
                                     continue
                                 event_asset_id = event.metadata.get("asset_id")
                                 if event_asset_id and event_asset_id != target_asset_id:
                                     continue
-                                EventBus.emit(event.type, metadata=event.metadata)
+                                if forward_events:
+                                    EventBus.emit_event(event)
                         except Exception:  # noqa: BLE001, S110
                             pass
                 buf = buf.rstrip()
                 if buf:
                     try:
                         event = parse_event_from_log_line(buf)
-                        if event is not None and event.type not in _RUN_EVENTS:
+                        if event is not None and event.type not in _HOST_OWNED_EVENTS:
                             event_asset_id = event.metadata.get("asset_id")
                             if not event_asset_id or event_asset_id == target_asset_id:
-                                EventBus.emit(event.type, metadata=event.metadata)
+                                if forward_events:
+                                    EventBus.emit_event(event)
                     except Exception:  # noqa: BLE001, S110
                         pass
             except Exception:  # noqa: BLE001, S110

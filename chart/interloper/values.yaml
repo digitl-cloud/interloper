@@ -187,6 +187,20 @@ secrets:
   encryptionKey: ""  # recommended to generate: openssl rand -base64 32
   smtpPassword: ""
   googleClientSecret: ""  # OAuth client secret (paired with config.auth.google_client_id)
+  # Shared service token for the internal event-ingest endpoint. When set,
+  # per-asset worker pods POST their events to the API instead of relying on
+  # log-scraping. When empty, the ingest endpoint is disabled (workers fall
+  # back to the stderr path). Generate: openssl rand -base64 32
+  eventIngestToken: ""
+
+# =============================================================================
+# Events
+# =============================================================================
+
+events:
+  # Base API URL that worker pods POST events to. Defaults to the in-cluster
+  # API service; override only if workers must reach the API by another route.
+  ingestUrl: ""
 
 # =============================================================================
 # Postgres

@@ -83,6 +83,21 @@ class EventBus:
         EventBus()._enqueue(Event(type=event_type, metadata=metadata or {}))
 
     @staticmethod
+    def emit_event(event: Event) -> None:
+        """Emit an existing :class:`Event` as-is on the global bus.
+
+        Unlike :meth:`emit`, this preserves the event's ``id`` and
+        ``timestamp`` rather than creating a fresh event.  Use it to
+        re-emit an event received from another process (e.g. parsed from a
+        child container's stderr) so its identity survives end-to-end and
+        the event persists idempotently.
+
+        Args:
+            event: The event to enqueue unchanged.
+        """
+        EventBus()._enqueue(event)
+
+    @staticmethod
     def subscribe(
         handler: Callable[[Event], None],
         event_types: list[EventType] | None = None,
