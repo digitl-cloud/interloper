@@ -80,3 +80,12 @@ Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS`, `SCHEDULER_EXTRA
 4. After a rebase (or `rebase -i` cleanup), push with `--force-with-lease` — never plain `--force`.
 5. Merge the PR with **rebase-and-merge** (or squash, when the branch is one logical change). Never create a merge commit.
 6. Resolve conflicts during rebase rather than discarding work or abandoning the branch.
+
+### Worktrees
+
+Worktrees live under `.claude/worktrees/`. Keep the worktree **directory name matching its branch** (i.e. the feature), so `git worktree list` reads at a glance — never leave a worktree on a random generated name.
+
+1. **Decide the conventional branch name first** (`feat/xxx`, `fix/xxx`, …) from the task, then create the worktree with that exact name. With Claude Code's worktree tooling, pass it as the worktree `name` so the directory is `.claude/worktrees/<type>/<slug>` from the start; otherwise `git worktree add .claude/worktrees/<type>/<slug> -b <type>/<slug>`.
+2. The built-in tool creates the branch as `claude/<name>`. Rename it to drop the prefix so it follows the convention: `git branch -m claude/<type>/<slug> <type>/<slug>`. The directory then matches the branch.
+3. **Never rename or `git worktree move` the worktree you're currently working in** — moving the active directory breaks the session's working tree. Set the name at creation time instead.
+4. To realign a stale worktree from an earlier session, do it while that worktree is *not* in use: `git worktree move .claude/worktrees/<old> .claude/worktrees/<type>/<slug>` (rename the branch separately with `git branch -m`).
