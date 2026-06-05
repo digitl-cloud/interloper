@@ -401,7 +401,7 @@ class KubernetesRunner(SyncRunner):
                                 event_asset_id = event.metadata.get("asset_id")
                                 if event_asset_id and event_asset_id != target_asset_id:
                                     continue
-                                EventBus.emit(event.type, metadata=event.metadata)
+                                EventBus.emit_event(event)
                         except Exception:  # noqa: BLE001, S110
                             pass
                 buf = buf.rstrip()
@@ -411,7 +411,7 @@ class KubernetesRunner(SyncRunner):
                         if event is not None and event.type not in _RUN_EVENTS:
                             event_asset_id = event.metadata.get("asset_id")
                             if not event_asset_id or event_asset_id == target_asset_id:
-                                EventBus.emit(event.type, metadata=event.metadata)
+                                EventBus.emit_event(event)
                     except Exception:  # noqa: BLE001, S110
                         pass
             except Exception:  # noqa: BLE001, S110

@@ -318,7 +318,7 @@ class DockerRunner(SyncRunner):
                                 event_asset_id = event.metadata.get("asset_id")
                                 if event_asset_id and event_asset_id != target_asset_id:
                                     continue
-                                EventBus.emit(event.type, metadata=event.metadata)
+                                EventBus.emit_event(event)
                                 continue
                         except Exception:  # noqa: BLE001, S110
                             pass

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,13 +16,19 @@ from interloper.events.types import EventType
 class Event:
     """An event emitted during the framework lifecycle.
 
-    Carries a type, UTC timestamp, and an arbitrary metadata dict.
+    Carries a stable unique ``id``, a type, a UTC timestamp, and an
+    arbitrary metadata dict.  The ``id`` is assigned once by the producer
+    and preserved across serialization, so the same logical event can be
+    persisted idempotently even when it is delivered more than once (e.g.
+    re-emitted from a child process's log stream and also written directly).
+
     Supports JSON and dict serialization for forwarding and persistence.
     """
 
     type: EventType
     timestamp: dt.datetime = field(default_factory=lambda: dt.datetime.now(dt.timezone.utc))
     metadata: dict[str, Any] = field(default_factory=dict)
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def __str__(self) -> str:
         """Return a human-readable summary line for logging."""
@@ -36,13 +43,14 @@ class Event:
     # ------------------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to a flat dict with ``type``, ``timestamp``, and metadata fields.
+        """Serialize to a flat dict with ``event_id``, ``type``, ``timestamp``, and metadata.
 
         Returns:
-            Dict with ``type`` and ``timestamp`` as top-level keys, plus all
-            metadata entries inlined.
+            Dict with ``event_id``, ``type`` and ``timestamp`` as top-level
+            keys, plus all metadata entries inlined.
         """
         return {
+            "event_id": self.id,
             "type": self.type.value,
             "timestamp": self.timestamp.isoformat(),
             **self.metadata,
@@ -87,8 +95,11 @@ class Event:
         else:
             raise EventError(f"Invalid timestamp value for Event: {timestamp_val!r}")
 
-        metadata = {k: v for k, v in data.items() if k not in ("type", "timestamp")}
+        metadata = {k: v for k, v in data.items() if k not in ("event_id", "type", "timestamp")}
 
+        event_id = data.get("event_id")
+        if event_id is not None:
+            return cls(type=event_type, timestamp=timestamp, metadata=metadata, id=str(event_id))
         return cls(type=event_type, timestamp=timestamp, metadata=metadata)
 
     @classmethod
