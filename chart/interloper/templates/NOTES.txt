@@ -32,5 +32,12 @@ HTTPRoute hostnames: {{ join ", " .Values.httpRoute.hostnames }}
    Generate one and re-apply:   openssl rand -base64 32
 {{- end }}
 
+{{- if and (eq (default "" (dig "runner" "type" "" .Values.config)) "k8s") (not .Values.secrets.eventIngestToken) }}
+
+⚠  No secrets.eventIngestToken set — per-asset workers will persist events via
+   log-scraping (best-effort) instead of the durable ingest endpoint.
+   Generate one and re-apply:   openssl rand -base64 32
+{{- end }}
+
 Tail the scheduler logs:
   kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "interloper.fullname" . }}-scheduler

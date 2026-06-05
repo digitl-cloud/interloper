@@ -104,24 +104,27 @@ def _cmd_run(args: argparse.Namespace) -> None:
     is_container = os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true"
 
     # -- Event forwarding for child execution ---------------------------------
-    # stderr: legacy path (the host scrapes container logs and re-emits).
-    # http:   durable path (the child POSTs events to the ingest endpoint).
-    # Both persist idempotently on the event id, so running them together
-    # during rollout is safe.
-    stderr_handler = None
-    if is_container:
-        stderr_handler = StderrEventHandler()
-        EventBus.subscribe(stderr_handler)
+    # http:   durable path — the child POSTs events to the ingest endpoint.
+    # stderr: fallback — the host scrapes container logs and re-emits; used for
+    #         local/dev runs and the docker runner when ingest isn't configured.
+    # The two are mutually exclusive: when ingest is configured the host stops
+    # re-emitting from logs, so writing @EVENT lines as well would just be noise.
+    events_cfg = settings.events
+    use_http = bool(args.run_id and events_cfg.ingest_url and events_cfg.ingest_token)
 
     http_sink = None
-    events_cfg = settings.events
-    if args.run_id and events_cfg.ingest_url and events_cfg.ingest_token:
+    if use_http:
         http_sink = HttpEventSink(
             base_url=events_cfg.ingest_url,
             token=events_cfg.ingest_token,
             run_id=args.run_id,
         )
         EventBus.subscribe(http_sink)
+
+    stderr_handler = None
+    if is_container and not use_http:
+        stderr_handler = StderrEventHandler()
+        EventBus.subscribe(stderr_handler)
 
     try:
         # -- Build the DAG ----------------------------------------------------
