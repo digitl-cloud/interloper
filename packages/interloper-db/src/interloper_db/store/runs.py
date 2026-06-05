@@ -5,11 +5,12 @@ from __future__ import annotations
 import datetime as dt
 import logging
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import NotFoundError, RunNotFoundError
 from sqlalchemy import func, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
 
 from interloper_db.engine import get_engine
@@ -17,12 +18,42 @@ from interloper_db.models import Backfill, Event, Run
 
 logger = logging.getLogger(__name__)
 
+_MAX_EVENT_TEXT = 60_000
+"""Defensive cap for free-text event fields (well under Postgres limits)."""
+
+
+def _sanitize_text(value: str | None, *, max_len: int = _MAX_EVENT_TEXT) -> str | None:
+    """Make a free-text event field safe to persist.
+
+    Postgres ``text`` columns cannot store NUL bytes (``0x00``) — a single
+    one makes the whole INSERT raise, which (because event persistence is
+    best-effort) would silently drop the event.  Strip NULs and cap the
+    length so an oversized traceback can't fail the write either.
+
+    Returns:
+        The cleaned string, or ``None`` if *value* is ``None``.
+    """
+    if value is None:
+        return None
+    cleaned = value.replace("\x00", "")
+    if len(cleaned) > max_len:
+        cleaned = cleaned[:max_len] + "…[truncated]"
+    return cleaned
+
 
 class RunMixin:
     """Store methods for runs, events, and backfills."""
 
     def save_event(self, event: il.Event, org_id: UUID, run_id: UUID | None = None) -> Event:
-        """Persist a framework event to the database.
+        """Persist a framework event to the database, idempotently.
+
+        The event's producer-assigned ``id`` becomes the row primary key
+        and the insert is an upsert (``ON CONFLICT DO NOTHING``), so the
+        same event delivered more than once — e.g. re-emitted from a child
+        container's log stream and also written directly — yields a single
+        row rather than a duplicate or an error.  Free-text fields are
+        sanitized so a stray NUL byte or oversized traceback can't fail the
+        write and silently drop the event.
 
         Args:
             event: The framework Event.
@@ -32,25 +63,35 @@ class RunMixin:
         Returns:
             The saved Event row.
         """
+        meta = event.metadata
+        try:
+            event_id = UUID(event.id)
+        except (ValueError, TypeError):
+            event_id = uuid4()
+
+        values: dict[str, object | None] = {
+            "id": event_id,
+            "org_id": org_id,
+            "run_id": run_id,
+            "backfill_id": UUID(meta["backfill_id"]) if meta.get("backfill_id") else None,
+            "event_type": event.type.value,
+            "asset_id": UUID(meta["asset_id"]) if meta.get("asset_id") else None,
+            "asset_key": _sanitize_text(meta.get("asset_key")),
+            "partition_or_window": _sanitize_text(meta.get("partition_or_window")),
+            "error": _sanitize_text(meta.get("error")),
+            "traceback": _sanitize_text(meta.get("traceback")),
+            "message": _sanitize_text(meta.get("message")),
+            "timestamp": event.timestamp,
+        }
 
         with Session(get_engine()) as session:
-            db_event = Event(
-                org_id=org_id,
-                run_id=run_id,
-                backfill_id=UUID(event.metadata["backfill_id"]) if event.metadata.get("backfill_id") else None,
-                event_type=event.type.value,
-                asset_id=UUID(event.metadata["asset_id"]) if event.metadata.get("asset_id") else None,
-                asset_key=event.metadata.get("asset_key"),
-                partition_or_window=event.metadata.get("partition_or_window"),
-                error=event.metadata.get("error"),
-                traceback=event.metadata.get("traceback"),
-                message=event.metadata.get("message"),
-                timestamp=event.timestamp,
-            )
-            session.add(db_event)
+            stmt = pg_insert(Event).values(**values).on_conflict_do_nothing(index_elements=["id"])
+            session.execute(stmt)
             session.commit()
-            session.refresh(db_event)
-            return db_event
+            saved = session.get(Event, event_id)
+            if saved is None:  # pragma: no cover - only if the row was concurrently deleted
+                raise RuntimeError(f"Event {event_id} missing immediately after upsert")
+            return saved
 
     def list_events(
         self,
