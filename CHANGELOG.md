@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.7.0 (2026-06-05)
+
+### Bug Fixes
+
+- Author terminal asset events from the host to stop orphaned executions
+  ([`5ea5667`](https://github.com/digitl-cloud/interloper/commit/5ea5667e75dc915b511b2950b84f5dc442f2a24f))
+
+- Paginate run events so outcome events are reachable
+  ([`e7ae96f`](https://github.com/digitl-cloud/interloper/commit/e7ae96fe6a57c691146128f50fce80bd4c022dee))
+
+### Documentation
+
+- Document worktree naming convention in AGENTS.md
+  ([`06dc98e`](https://github.com/digitl-cloud/interloper/commit/06dc98ebd6be249424b03b7591296c46cdcfa097))
+
+- Require squashing branch commits as progress is made
+  ([`3819396`](https://github.com/digitl-cloud/interloper/commit/3819396ab23b807edb1c32b6622fa9a477f6f970))
+
+### Features
+
+- Add retry for failed runs
+  ([`d0b0934`](https://github.com/digitl-cloud/interloper/commit/d0b093440b74a592c34b730a9058a36f08b8d897))
+
+- Assign stable event ids and persist events idempotently
+  ([`ae0bd90`](https://github.com/digitl-cloud/interloper/commit/ae0bd90f72753ffbcf01a224e00f2a7e1c6fd411))
+
+
 ## v0.6.0 (2026-06-04)
 
 ### Bug Fixes
