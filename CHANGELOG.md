@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.8.0 (2026-06-08)
+
+### Bug Fixes
+
+- Create missing runs/events indexes and bound migration lock waits
+  ([`1fb1e86`](https://github.com/digitl-cloud/interloper/commit/1fb1e86df31794dd2b10e79cd25de4a1c7d8d570))
+
+- Stop infinite-scroll flicker at the end of the events list
+  ([`300d2d2`](https://github.com/digitl-cloud/interloper/commit/300d2d2353a851906c96d216f7822fad9c01faa5))
+
+- **db**: Apply CONCURRENTLY-index migrations during db init/reset
+  ([`8d4fe41`](https://github.com/digitl-cloud/interloper/commit/8d4fe411fe7efb6402d9fed7a365e3312969f0a0))
+
+### Features
+
+- Local dev harness with seeded instance (host + docker-compose)
+  ([`787c961`](https://github.com/digitl-cloud/interloper/commit/787c961d9da3d674d1b8a2969ea2c7f800ce8716))
+
+
 ## v0.7.0 (2026-06-05)
 
 ### Bug Fixes
