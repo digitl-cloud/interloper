@@ -32,10 +32,24 @@ def run_migrations_online() -> None:
         # This caps lock *acquisition* only, not statement runtime, so long
         # `CREATE INDEX CONCURRENTLY` builds (see migration 007) are unaffected.
         connection.exec_driver_sql("SET lock_timeout = '10s'")
+        # The SET above autobegins a transaction on the SQLAlchemy 2.0
+        # connection. Commit it before configuring Alembic: otherwise Alembic
+        # sees a pre-existing ("external") transaction, declines to manage
+        # transactions itself, and ``autocommit_block`` (migration 007) asserts
+        # on a transaction it never opened. The SET is a session GUC, so it
+        # persists past this commit.
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            # Wrap each migration in its own transaction. Required so that a
+            # migration can open an ``autocommit_block`` (migration 007 builds
+            # indexes ``CONCURRENTLY``, which Postgres forbids inside a
+            # transaction). Without per-migration transactions Alembic keeps a
+            # single transaction open for the whole run and ``autocommit_block``
+            # asserts there is a transaction to suspend, breaking ``db init``.
+            transaction_per_migration=True,
         )
         with context.begin_transaction():
             context.run_migrations()
