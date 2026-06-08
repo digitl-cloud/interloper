@@ -33,13 +33,17 @@ export const useEventsStore = defineStore('events', () => {
 
     // Offset of the next page to request. Tracks rows pulled from the server
     // only — realtime tail-inserts append to `events` but never advance this.
-    let nextOffset = 0
+    // Must be a ref: `hasMore` reads it inside a computed, so a plain variable
+    // would leave `hasMore` stale once `total` stops changing (the last page
+    // sets `total` to its existing value, firing no recompute) — which makes
+    // infinite scroll re-fire loadMore forever at the end of the list.
+    const nextOffset = ref(0)
 
     /**********************
      * Getters
      **********************/
     /** Whether more events remain on the server beyond what's been fetched. */
-    const hasMore = computed(() => nextOffset < total.value)
+    const hasMore = computed(() => nextOffset.value < total.value)
 
     /**********************
      * Internals
@@ -75,14 +79,14 @@ export const useEventsStore = defineStore('events', () => {
         if (!id) return
         const params = new URLSearchParams({
             limit: String(EVENTS_PAGE_SIZE),
-            offset: String(nextOffset),
+            offset: String(nextOffset.value),
         })
         const res = await apiFetchRaw<RunEvent[]>(`/runs/${id}/events?${params}`)
         const page = res._data ?? []
-        total.value = Number(res.headers.get('X-Total-Count') ?? nextOffset + page.length)
+        total.value = Number(res.headers.get('X-Total-Count') ?? nextOffset.value + page.length)
         // A short/empty page means the server has nothing more; pin the offset
         // to the total so `hasMore` settles false and we never loop forever.
-        nextOffset = page.length < EVENTS_PAGE_SIZE ? total.value : nextOffset + page.length
+        nextOffset.value = page.length < EVENTS_PAGE_SIZE ? total.value : nextOffset.value + page.length
         _mergePage(page)
     }
 
@@ -111,7 +115,7 @@ export const useEventsStore = defineStore('events', () => {
         runId.value = id
         events.value = []
         total.value = 0
-        nextOffset = 0
+        nextOffset.value = 0
         error.value = null
         loading.value = true
         try {
@@ -155,7 +159,7 @@ export const useEventsStore = defineStore('events', () => {
         runId.value = null
         events.value = []
         total.value = 0
-        nextOffset = 0
+        nextOffset.value = 0
         loading.value = false
         loadingMore.value = false
         error.value = null
