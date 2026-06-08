@@ -1,4 +1,5 @@
-.PHONY: build docker-build docker-build-linux docker-push docker-build-push
+.PHONY: build docker-build docker-build-linux docker-push docker-build-push \
+        dev dev-db dev-seed dev-reset dev-up compose-up compose-down compose-seed
 
 
 # ###############
@@ -110,11 +111,107 @@ docker-build-push:
 
 
 # ###############
-# GIT
+# DEV INSTANCE
 # ###############
+#
+# Stand up a running interloper instance with the DB migrated and seeded with a
+# minimal dataset (one super-admin + org + the demo source). Host path:
+#
+#   make dev      reset + seed + run the app (full bootstrap, one command).
+#   make dev-up   just run the app against the existing DB (no reset/seed).
+#   make dev-reset  reset + seed, no server.
+#
+# docker-compose path (Postgres + api + scheduler + frontend in containers, no
+# host Postgres/Python needed): make compose-up. See dev/seed.py.
 
-claude-commit:
-	claude --dangerously-skip-permissions --model haiku -p "Create a git commit for all staged changes. Use a single-line commit message following the Conventional Commits format (e.g. feat:, fix:, chore:, refactor, etc...). Keep it compact. Do not add co-author information. Do not push."
+# Run the CLI from dev/, whose interloper.yaml carries only the catalog so the
+# INTERLOPER_* vars below take effect (the repo-root interloper.yaml pins
+# postgres/launcher to prod/k8s, and YAML wins over env per submodel). The
+# encryption key is a throwaway dev secret — never use it outside local dev.
+DEV_DIR := dev
 
-codex-commit:
-	codex exec --dangerous-skip-permissions --model gpt-5-codex-mini "Create a git commit for all staged changes. Use a single-line commit message following the Conventional Commits format (e.g. feat:, fix:, chore:, refactor, etc...). Keep it compact. Do not add co-author information. Do not push."
+# Dev super-admin identity. INTERLOPER_DEV_USER_GOOGLE_ID (your Google subject
+# id) makes the seed write the exact profile your login resolves to — so you're
+# super-admin out of the box with no duplicate. Without it the seed falls back
+# to matching/creating by email. Resolved highest-first from: the make command
+# line, a repo-root .env (gitignored), the shell env, else the defaults below.
+# Set them once in .env, e.g.:
+#   INTERLOPER_DEV_USER_EMAIL=you@example.com
+#   INTERLOPER_DEV_USER_GOOGLE_ID=1234567890
+-include .env
+# Export every .env-loaded var to recipe environments, so the app subprocess
+# also sees vars the harness doesn't forward explicitly — connector OAuth creds
+# (<PROVIDER>_CLIENT_ID, …), GEMINI_API_KEY, INTERLOPER_SMTP_PASSWORD, etc. The
+# explicit INTERLOPER_* below still pin the harness-critical settings (they're
+# set inline on each recipe, which wins over the exported value).
+export
+INTERLOPER_DEV_USER_EMAIL ?= admin@dev.local
+INTERLOPER_DEV_USER_GOOGLE_ID ?=
+
+# Google OAuth for the app login (the /auth flow). Put your client id + secret
+# in .env (they're secrets). The redirect URI must be registered on the OAuth
+# client in Google Cloud; cookie_secure=false lets the session cookie stick over
+# local http. e.g. in .env:
+#   INTERLOPER_AUTH_GOOGLE_CLIENT_ID=...apps.googleusercontent.com
+#   INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=...
+INTERLOPER_AUTH_GOOGLE_CLIENT_ID ?=
+INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET ?=
+INTERLOPER_AUTH_GOOGLE_REDIRECT_URI ?= http://localhost:3000/api/auth/google/callback
+INTERLOPER_AUTH_COOKIE_SECURE ?= false
+
+DEV_ENV := INTERLOPER_POSTGRES_HOST=localhost \
+           INTERLOPER_POSTGRES_PORT=5432 \
+           INTERLOPER_POSTGRES_USER=postgres \
+           INTERLOPER_POSTGRES_PASSWORD=postgres \
+           INTERLOPER_POSTGRES_DATABASE=interloper \
+           INTERLOPER_LAUNCHER_TYPE=in_process \
+           INTERLOPER_RUNNER_TYPE=multi_thread \
+           INTERLOPER_ENCRYPTION_KEY=dev-encryption-key-not-for-production \
+           INTERLOPER_DEV_USER_EMAIL=$(INTERLOPER_DEV_USER_EMAIL) \
+           INTERLOPER_DEV_USER_GOOGLE_ID=$(INTERLOPER_DEV_USER_GOOGLE_ID) \
+           INTERLOPER_AUTH_GOOGLE_CLIENT_ID=$(INTERLOPER_AUTH_GOOGLE_CLIENT_ID) \
+           INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=$(INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET) \
+           INTERLOPER_AUTH_GOOGLE_REDIRECT_URI=$(INTERLOPER_AUTH_GOOGLE_REDIRECT_URI) \
+           INTERLOPER_AUTH_COOKIE_SECURE=$(INTERLOPER_AUTH_COOKIE_SECURE)
+
+dev-db:
+	cd $(DEV_DIR) && $(DEV_ENV) uv run interloper db reset --yes
+
+dev-seed:
+	cd $(DEV_DIR) && $(DEV_ENV) uv run python seed.py
+
+dev-reset: dev-db dev-seed
+
+# --dev runs the Nuxt dev server (hot reload) on :3000 and moves the API to a
+# free port it proxies to — so the app is at http://localhost:3000 with no SPA
+# build needed. It runs `pnpm dev`, so install the app deps first if missing.
+APP_DEPS := packages/interloper-app/app/node_modules
+
+$(APP_DEPS):
+	cd packages/interloper-app/app && pnpm install
+
+# Run the app only — non-destructive, so it keeps your data/session across
+# restarts. Use `make dev` (or dev-reset) when you want a fresh seeded DB.
+dev-up: $(APP_DEPS)
+	cd $(DEV_DIR) && $(DEV_ENV) uv run interloper app --api --cron --worker --reaper --dev
+
+# Full bootstrap: reset + seed + run.
+dev: dev-reset dev-up
+
+# Compose stack lives in dev/. Run from there and forward the dev-user identity
+# (resolved from .env / shell env above) into compose's env interpolation.
+COMPOSE_ENV := INTERLOPER_DEV_USER_EMAIL=$(INTERLOPER_DEV_USER_EMAIL) \
+               INTERLOPER_DEV_USER_GOOGLE_ID=$(INTERLOPER_DEV_USER_GOOGLE_ID) \
+               INTERLOPER_AUTH_GOOGLE_CLIENT_ID=$(INTERLOPER_AUTH_GOOGLE_CLIENT_ID) \
+               INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=$(INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET) \
+               INTERLOPER_AUTH_GOOGLE_REDIRECT_URI=$(INTERLOPER_AUTH_GOOGLE_REDIRECT_URI) \
+               INTERLOPER_AUTH_COOKIE_SECURE=$(INTERLOPER_AUTH_COOKIE_SECURE)
+
+compose-up:
+	cd $(DEV_DIR) && $(COMPOSE_ENV) docker compose up --build
+
+compose-down:
+	cd $(DEV_DIR) && docker compose down -v
+
+compose-seed:
+	cd $(DEV_DIR) && $(COMPOSE_ENV) docker compose up --build seed

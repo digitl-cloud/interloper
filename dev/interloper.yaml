@@ -1,0 +1,41 @@
+# Local dev/test config for the harness (make dev-up / docker compose).
+#
+# Deliberately contains ONLY the catalog. It omits the postgres / launcher /
+# runner / smtp blocks so the matching INTERLOPER_* env vars (set by the
+# Makefile's DEV_ENV and docker-compose.yml) take effect: when one of those
+# blocks is present, pydantic-settings lets the YAML win over env for that
+# whole submodel. The harness runs the CLI from this directory so this file
+# is the active ./interloper.yaml instead of the repo-root (k8s) one.
+
+catalog:
+  - interloper_assets.adservice.source.Adservice
+  - interloper_assets.adup.source.Adup
+  - interloper_assets.amazon_ads.source.AmazonAds
+  - interloper_assets.amazon_selling_partner.source.AmazonSellingPartner
+  - interloper_assets.awin.source.Awin
+  - interloper_assets.bing_ads.source.BingAds
+  - interloper_assets.brandwatch.source.Brandwatch
+  - interloper_assets.campaign_manager_360.source.CampaignManager360
+  - interloper_assets.campaign_performance_analysis.source.CampaignPerformanceAnalysis
+  - interloper_assets.criteo_marketing.source.CriteoMarketing
+  - interloper_assets.demo.source.DemoSource
+  - interloper_assets.demo.source.demo_asset
+  - interloper_assets.display_video_360.source.DisplayVideo360
+  - interloper_assets.double_click_bid_manager.source.DoubleClickBidManager
+  - interloper_assets.facebook_ads.source.FacebookAds
+  - interloper_assets.facebook_insights.source.FacebookInsights
+  - interloper_assets.google_ads.source.GoogleAds
+  - interloper_assets.impact.source.Impact
+  - interloper_assets.instagram_insights.source.InstagramInsights
+  - interloper_assets.linkedin_ads.source.LinkedinAds
+  - interloper_assets.linkedin_organic.source.LinkedinOrganic
+  - interloper_assets.marketing_mix_modeling.source.MarketingMixModeling
+  - interloper_assets.pinterest_ads.source.PinterestAds
+  - interloper_assets.search_ads_360.source.SearchAds360
+  - interloper_assets.search_console.source.SearchConsole
+  - interloper_assets.snapchat_ads.source.SnapchatAds
+  - interloper_assets.teads.source.Teads
+  - interloper_assets.thetradedesk.source.TheTradeDesk
+  - interloper_assets.tiktok_ads.source.TiktokAds
+  - interloper_assets.usercentrics.source.Usercentrics
+  - interloper_google_cloud.BigQueryDestination

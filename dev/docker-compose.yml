@@ -1,0 +1,167 @@
+# Local dev/test stack: Postgres + seed + api + scheduler + frontend.
+#
+# Lives under dev/ because it is dev-only — it mounts this directory's
+# interloper.yaml (catalog-only) and seed.py. Build context is the repo root
+# (..), where the multi-target dockerfile lives. The one-shot `seed` service
+# migrates the DB and inserts the minimal dataset (see seed.py) before
+# api/scheduler start.
+#
+#   make compose-up                # from the repo root (preferred), or:
+#   cd dev && docker compose up --build
+#   open http://localhost:3000     # the app (SPA via nginx; /api proxied to the
+#                                  # api container, which is also on :3001 direct)
+#   make compose-down              # stop + drop the volume
+#
+# This stack is for local development only. The encryption key and DB password
+# below are throwaway dev values — never reuse them anywhere real.
+
+name: interloper-dev
+
+# Shared interloper settings. The mounted interloper.yaml carries only the
+# catalog (no postgres/launcher/runner blocks), so these env vars drive the DB
+# connection and select the in-process launcher/runner.
+x-interloper-env: &interloper-env
+  INTERLOPER_POSTGRES_HOST: postgres
+  INTERLOPER_POSTGRES_PORT: "5432"
+  INTERLOPER_POSTGRES_USER: postgres
+  INTERLOPER_POSTGRES_PASSWORD: postgres
+  INTERLOPER_POSTGRES_DATABASE: interloper
+  INTERLOPER_LAUNCHER_TYPE: docker
+  INTERLOPER_RUNNER_TYPE: docker
+  # Docker launcher/runner config — nested dicts, parsed from JSON env. The
+  # launcher spawns a container per run; that container's DockerRunner spawns a
+  # container per asset. All run on the HOST daemon (via the socket mounted into
+  # the scheduler), so they reach Postgres at host.docker.internal:5433 (the
+  # published port) — they're not on this compose network. Both use the
+  # scheduler image (built with the `docker` extra; has `interloper launch`/`run`).
+  # Only the scheduler acts on these (it runs the worker/reaper); api/seed ignore
+  # them — and only the scheduler image carries interloper-docker.
+  INTERLOPER_LAUNCHER_CONFIG: '{"image":"interloper-scheduler:dev","postgres_host":"host.docker.internal","postgres_port":5433}'
+  INTERLOPER_RUNNER_CONFIG: '{"image":"interloper-scheduler:dev"}'
+  INTERLOPER_ENCRYPTION_KEY: dev-encryption-key-not-for-production
+  # Dev super-admin identity. Set INTERLOPER_DEV_USER_GOOGLE_ID (your Google
+  # subject id) so the seeded profile is the one your login resolves to.
+  # `make compose-*` forwards these from the repo-root .env / shell env.
+  INTERLOPER_DEV_USER_EMAIL: ${INTERLOPER_DEV_USER_EMAIL:-admin@dev.local}
+  INTERLOPER_DEV_USER_GOOGLE_ID: ${INTERLOPER_DEV_USER_GOOGLE_ID:-}
+  # Google OAuth for the app login. client id/secret come from .env / shell env
+  # (`make compose-*` forwards them); the rest default for local http.
+  INTERLOPER_AUTH_GOOGLE_CLIENT_ID: ${INTERLOPER_AUTH_GOOGLE_CLIENT_ID:-}
+  INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET: ${INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET:-}
+  INTERLOPER_AUTH_GOOGLE_REDIRECT_URI: ${INTERLOPER_AUTH_GOOGLE_REDIRECT_URI:-http://localhost:3000/api/auth/google/callback}
+  INTERLOPER_AUTH_COOKIE_SECURE: ${INTERLOPER_AUTH_COOKIE_SECURE:-false}
+
+# The api image (core + db + assets + api) is enough to run both the API and the
+# seed script. Reused by the `seed` and `api` services so it builds once.
+# Build context is the repo root (the dockerfile and packages live there).
+x-api-build: &api-build
+  context: ..
+  dockerfile: dockerfile
+  target: api
+
+# Mount the dev catalog so seed/api/scheduler all load the same sources.
+x-interloper-config: &interloper-config
+  - ./interloper.yaml:/interloper/interloper.yaml:ro
+
+# Load the repo-root .env into the Python services (connector OAuth creds,
+# GEMINI_API_KEY, SMTP password, …). Optional, so a missing .env is fine. The
+# `environment:` block above takes precedence, so infra-critical settings
+# (postgres host, launcher) stay correct regardless of what .env contains.
+x-dotenv: &dotenv
+  - path: ../.env
+    required: false
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: interloper
+    ports:
+      # Host 5433 → container 5432, so the stack coexists with a host Postgres
+      # already on 5432. Inside the compose network services still use 5432.
+      - "5433:5432"
+    volumes:
+      - interloper-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d interloper"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: migrate to head, then seed. api/scheduler wait for this to finish.
+  seed:
+    build: *api-build
+    image: interloper-api:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /interloper
+    environment: *interloper-env
+    env_file: *dotenv
+    volumes:
+      - ./interloper.yaml:/interloper/interloper.yaml:ro
+      - ./seed.py:/interloper/seed.py:ro
+    command: ["sh", "-c", "interloper db init && python seed.py"]
+    restart: "no"
+
+  api:
+    build: *api-build
+    image: interloper-api:dev
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    working_dir: /interloper
+    environment: *interloper-env
+    env_file: *dotenv
+    volumes: *interloper-config
+    ports:
+      # Direct API access for debugging. The SPA reaches it via nginx at :3000
+      # (/api/*), so this host port is only for hitting the API directly.
+      - "3001:3000"
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: dockerfile
+      target: scheduler
+      args:
+        # Install interloper-docker so the Docker launcher + runner are available
+        # (build_launcher does `from interloper_docker import DockerLauncher`).
+        SCHEDULER_EXTRAS: docker
+    image: interloper-scheduler:dev
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    working_dir: /interloper
+    environment: *interloper-env
+    env_file: *dotenv
+    # The image runs as the non-root `app` user, which can't access the
+    # root-owned docker socket. Run as root so the launcher can reach the daemon
+    # (dev-only; the launcher likewise runs spawned run-containers as root).
+    user: root
+    volumes:
+      - ./interloper.yaml:/interloper/interloper.yaml:ro
+      # Let the launcher spawn run/asset containers on the host Docker daemon.
+      # NOTE: those containers reach Postgres via host.docker.internal, which
+      # resolves on Docker Desktop (macOS/Windows) out of the box. On Linux it
+      # does not (the launcher can't pass --add-host to spawned containers).
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: dockerfile
+      target: frontend
+    image: interloper-frontend:dev
+    depends_on:
+      - api
+    environment:
+      API_UPSTREAM: http://api:3000
+    ports:
+      # The app lives here — matches `make dev-up` (:3000) for consistency.
+      - "3000:80"
+
+volumes:
+  interloper-pgdata:

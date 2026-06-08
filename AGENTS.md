@@ -45,6 +45,24 @@ Combined (from repo root):
 - `make build-app` — build the SPA and stage it inside the Python package
 - `make setup` — `pre-commit install` + `uv sync --all-packages --all-extras`
 
+## Local dev instance
+
+Stand up a running, seeded instance for trying out / verifying features. Both paths migrate the DB to head and seed the same minimal dataset via [dev/seed.py](dev/seed.py): a super-admin profile, one organisation (`Dev Org`), and the `demo` source with its `a → b,c,d → e` asset DAG. The seed is idempotent — re-running never duplicates.
+
+The dev super-admin is set via `INTERLOPER_DEV_USER_EMAIL` (default `admin@dev.local`) and `INTERLOPER_DEV_USER_GOOGLE_ID` — read from the `make` command line, a gitignored repo-root `.env`, or the shell env (compose reads `.env` natively). Login resolves a profile by Google `google_id`, **not** email, so set `INTERLOPER_DEV_USER_GOOGLE_ID` to your Google subject id and the seed writes the exact profile your login lands on: super-admin in `Dev Org` out of the box, no duplicate. To find your id, log in once and run `make dev-seed` with only the email set — it matches your profile by email and prints the `google_id` to drop into `.env`. With neither matching profile nor id, it creates a synthetic placeholder so the instance is still usable.
+
+- **Host** (local Postgres + CLI; fast inner loop). Needs a Postgres reachable at the [interloper.yaml](interloper.yaml) `postgres` creds (`localhost:5432`, `postgres/postgres/interloper`).
+  - `make dev` — full bootstrap: reset + seed + run (one command).
+  - `make dev-reset` — drop/recreate + migrate + seed (no server).
+  - `make dev-up` — run api + cron + worker + reaper plus the Nuxt dev server (hot reload) at `http://localhost:3000` (the API moves to a free port Nuxt proxies to) against the existing DB — non-destructive, keeps your data/session. Installs the app deps (`pnpm install`) on first use if missing.
+- **docker-compose** (Postgres + api + scheduler + frontend in containers; closest to prod). Only Docker required.
+  - `make compose-up` — build + start everything; the app is on `http://localhost:3000` (nginx serves the SPA, proxies `/api`), with the API also reachable directly on `:3001`.
+  - `make compose-down` — stop and drop the volume. `make compose-seed` — run only the one-shot seed.
+
+Logging in needs Google OAuth, which is off by default ("Google OAuth not configured"). Copy [.env.example](.env.example) to a gitignored repo-root `.env` and fill in `INTERLOPER_AUTH_GOOGLE_CLIENT_ID` / `INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET` (from a Google Cloud OAuth web client whose authorised redirect URI is `http://localhost:3000/api/auth/google/callback`); the Makefile forwards these (and the dev-user vars) into both the host and compose paths. `INTERLOPER_AUTH_COOKIE_SECURE` defaults to `false` so the session cookie sticks over local http.
+
+Both run against [dev/interloper.yaml](dev/interloper.yaml), which carries **only** the catalog. The repo-root [interloper.yaml](interloper.yaml) pins postgres + launcher to prod/k8s, and pydantic-settings lets a YAML block win over env for that whole submodel — so the dev config omits those blocks, letting the `INTERLOPER_*` vars in the Makefile's `DEV_ENV` / [dev/docker-compose.yml](dev/docker-compose.yml) select the in-process launcher and the right DB. The host targets `cd dev` so that file is the active `./interloper.yaml`; compose mounts it. The compose stack lives in `dev/` too (build context is the repo root, where the dockerfile is). The dev encryption key/DB password are throwaways — never reuse them.
+
 ## Docker images
 
 Built from a single multi-target [dockerfile](dockerfile). The image catalog is defined in the [Makefile](Makefile):
