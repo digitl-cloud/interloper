@@ -148,7 +148,7 @@ onUnmounted(() => {
                                            :loading="eventsStore.loading"
                                            :loading-more="eventsStore.loadingMore"
                                            :has-more="eventsStore.hasMore"
-                                           @load-more="eventsStore.loadMore()" />
+                                           :load-more="eventsStore.loadMore" />
                 </div>
             </SplitterPanel>
         </SplitterGroup>

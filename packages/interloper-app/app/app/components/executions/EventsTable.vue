@@ -13,10 +13,8 @@ const props = defineProps<{
     loading?: boolean
     loadingMore?: boolean
     hasMore?: boolean
-}>()
-
-const emit = defineEmits<{
-    loadMore: []
+    /** Loads the next page; returns the in-flight promise so infinite scroll awaits it. */
+    loadMore?: () => Promise<void>
 }>()
 
 const selectedAsset = defineModel<string | null>('selectedAsset', { default: null })
@@ -34,7 +32,7 @@ const scrollEl = computed<HTMLElement | null>(() => {
 
 useInfiniteScroll(
     scrollEl,
-    () => emit('loadMore'),
+    () => props.loadMore?.(),
     {
         distance: 200,
         canLoadMore: () => !!props.hasMore && !props.loading && !props.loadingMore,
