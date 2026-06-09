@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from interloper_db import Profile, Store
+from interloper_db import Organisation, Profile, Store
 from pydantic import BaseModel
 
 from interloper_api.dependencies import get_store, require_super_admin
@@ -86,7 +87,7 @@ class InvitationResponse(BaseModel):
 # -- Helpers ------------------------------------------------------------------
 
 
-def _require_org(store: Store, org_id: UUID) -> object:
+def _require_org(store: Store, org_id: UUID) -> Organisation:
     """Fetch an organisation or raise 404."""
     org = store.get_organisation(org_id)
     if not org:
@@ -103,7 +104,7 @@ def _validate_role(role: str) -> str:
 
 def _send_invitation_email(
     request: Request,
-    invitation: object,
+    invitation: Any,
     org_name: str,
     inviter_name: str,
 ) -> None:
@@ -111,11 +112,11 @@ def _send_invitation_email(
     from interloper_api.dependencies import get_smtp_config
 
     smtp_config = get_smtp_config()
-    if not smtp_config or not smtp_config.enabled:  # type: ignore[attr-defined]
+    if not smtp_config or not smtp_config.enabled:
         return
 
-    token = invitation.token  # type: ignore[attr-defined]
-    email = invitation.email  # type: ignore[attr-defined]
+    token = invitation.token
+    email = invitation.email
     base_url = str(request.base_url).rstrip("/")
     invite_url = f"{base_url}/invite/{token}"
 
@@ -142,7 +143,7 @@ def list_all_organisations(
     """List every organisation with its member count."""
     return [
         AdminOrganisationResponse(
-            id=org.id,  # type: ignore[arg-type]
+            id=org.id,
             name=org.name,
             member_count=count,
             created_at=org.created_at,
@@ -160,7 +161,7 @@ def create_organisation(
     """Create an organisation. The super-admin is not added as a member."""
     org = store.create_organisation(name=body.name)
     return AdminOrganisationResponse(
-        id=org.id,  # type: ignore[arg-type]
+        id=org.id,
         name=org.name,
         member_count=0,
         created_at=org.created_at,
@@ -180,7 +181,7 @@ def update_organisation(
         raise HTTPException(status_code=404, detail="Organisation not found")
     members = store.list_org_members(org_id)
     return AdminOrganisationResponse(
-        id=org.id,  # type: ignore[arg-type]
+        id=org.id,
         name=org.name,
         member_count=len(members),
         created_at=org.created_at,
@@ -201,7 +202,7 @@ def list_members(
     members = store.list_org_members(org_id)
     return [
         MemberResponse(
-            id=profile.id,  # type: ignore[arg-type]
+            id=profile.id,
             email=profile.email,
             name=profile.name,
             avatar_url=profile.avatar_url,
@@ -252,7 +253,7 @@ def list_invitations(
     _require_org(store, org_id)
     return [
         InvitationResponse(
-            id=inv.id,  # type: ignore[arg-type]
+            id=inv.id,
             email=inv.email,
             role=inv.role,
             created_at=inv.created_at,
@@ -277,14 +278,14 @@ def invite_member(
         org_id=org_id,
         email=body.email.strip(),
         role=body.role,
-        invited_by=user.id,  # type: ignore[arg-type]
+        invited_by=user.id,
     )
 
     inviter_name = user.name or user.email
-    _send_invitation_email(request, invitation, org.name, inviter_name)  # type: ignore[attr-defined]
+    _send_invitation_email(request, invitation, org.name, inviter_name)
 
     return InvitationResponse(
-        id=invitation.id,  # type: ignore[arg-type]
+        id=invitation.id,
         email=invitation.email,
         role=invitation.role,
         created_at=invitation.created_at,

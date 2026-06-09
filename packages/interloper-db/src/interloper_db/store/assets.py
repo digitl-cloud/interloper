@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 import interloper as il
@@ -27,8 +27,8 @@ def _load_asset_with_relations(session: Session, asset_id: UUID) -> Asset:
         select(Asset)
         .where(Asset.id == asset_id)
         .options(
-            selectinload(Asset.resources),  # type: ignore[arg-type]
-            selectinload(Asset.destinations).selectinload(Destination.resources),  # type: ignore[arg-type]
+            selectinload(Asset.resources),  # ty: ignore[invalid-argument-type]
+            selectinload(Asset.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
         )
     )
     db_asset = session.exec(statement).first()
@@ -44,7 +44,7 @@ def _sync_resource_bindings(session: Session, db_asset: Asset, resources: dict[s
         session.delete(binding)
     for key, resource_id in (resources or {}).items():
         session.add(
-            AssetResource(asset_id=db_asset.id, resource_id=UUID(resource_id), key=key)  # type: ignore[arg-type]
+            AssetResource(asset_id=db_asset.id, resource_id=UUID(resource_id), key=key)
         )
 
 
@@ -55,7 +55,7 @@ def _sync_destination_bindings(session: Session, db_asset: Asset, destination_id
         session.delete(binding)
     for destination_id in destination_ids or []:
         session.add(
-            AssetDestination(asset_id=db_asset.id, destination_id=UUID(destination_id))  # type: ignore[arg-type]
+            AssetDestination(asset_id=db_asset.id, destination_id=UUID(destination_id))
         )
 
 
@@ -63,6 +63,10 @@ class AssetMixin:
     """Store methods for asset management."""
 
     _hydrator: Hydrator
+
+    if TYPE_CHECKING:
+        # Provided by SourceMixin on the composed Store.
+        def load_source(self, source_id: UUID) -> il.Source: ...
 
 
     # ------------------------------------------------------------------
@@ -104,7 +108,7 @@ class AssetMixin:
             _sync_destination_bindings(session, db_asset, destination_ids)
             session.commit()
         with Session(get_engine()) as session:
-            return _load_asset_with_relations(session, created_id)  # type: ignore[arg-type]
+            return _load_asset_with_relations(session, created_id)
 
     def get_asset(self, asset_id: UUID) -> Asset:
         """Load an asset by ID with relationships.
@@ -196,8 +200,8 @@ class AssetMixin:
                 select(Asset)
                 .where(Asset.org_id == org_id)
                 .options(
-                    selectinload(Asset.resources),  # type: ignore[arg-type]
-                    selectinload(Asset.destinations).selectinload(Destination.resources),  # type: ignore[arg-type]
+                    selectinload(Asset.resources),  # ty: ignore[invalid-argument-type]
+                    selectinload(Asset.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
                 )
             )
             return list(session.exec(statement).all())
@@ -228,7 +232,7 @@ class AssetMixin:
 
             if db_asset.source_id is not None:
                 # Source-owned: hydrate via parent source and extract
-                source = self.load_source(db_asset.source_id)  # type: ignore[attr-defined]
+                source = self.load_source(db_asset.source_id)
                 for asset in source.assets:
                     if type(asset).key == db_asset.key:
                         return asset
@@ -238,7 +242,7 @@ class AssetMixin:
             spec = self._hydrator.build_asset_spec(session, db_asset)
 
         try:
-            return spec.reconstruct()  # type: ignore[return-value]
+            return cast(il.Asset, spec.reconstruct())
         except Exception as e:
             raise HydrationError(
                 f"Failed to hydrate standalone asset '{db_asset.key}' ({db_asset.id}): {e}"
@@ -302,7 +306,7 @@ class AssetMixin:
         with Session(get_engine()) as session:
             statement = (
                 select(AssetDependency)
-                .join(Asset, AssetDependency.asset_id == Asset.id)  # type: ignore[arg-type]
+                .join(Asset, AssetDependency.asset_id == Asset.id)  # ty: ignore[invalid-argument-type]
                 .where(Asset.org_id == org_id)
             )
             return list(session.exec(statement).all())

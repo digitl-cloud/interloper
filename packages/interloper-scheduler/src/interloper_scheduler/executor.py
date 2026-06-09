@@ -112,8 +112,8 @@ class RunExecutor:
             Run,
             run_id,
             options=[
-                selectinload(Run.job).selectinload(Job.sources).selectinload(Source.assets),  # type: ignore[arg-type]
-                selectinload(Run.job).selectinload(Job.assets),  # type: ignore[arg-type]
+                selectinload(Run.job).selectinload(Job.sources).selectinload(Source.assets),  # ty: ignore[invalid-argument-type]
+                selectinload(Run.job).selectinload(Job.assets),  # ty: ignore[invalid-argument-type]
             ],
         )
 
@@ -207,7 +207,7 @@ class RunExecutor:
         backfill_id: str | None,
     ) -> il.RunResult:
         def handle_event(event: il.Event) -> None:
-            self._store.save_event(event, org_id=org_id, run_id=run_id)  # type: ignore[arg-type]
+            self._store.save_event(event, org_id=org_id, run_id=run_id)
 
         with self._runner_type(
             **self._runner_kwargs,

@@ -28,7 +28,7 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
     conn = MagicMock(spec=GoogleCloudConnection)
     conn.service_account_key = _SA_KEY
 
-    dest = BigQueryDestination(  # type: ignore[call-arg]
+    dest = BigQueryDestination(  # ty: ignore[missing-argument]
         id="test",
         project=project,
         location="EU",

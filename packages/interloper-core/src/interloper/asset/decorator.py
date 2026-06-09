@@ -17,7 +17,7 @@ from interloper.schema import Schema
 @overload
 def asset(fn: Callable[..., Any], /) -> type[Asset]: ...
 @overload
-def asset(  # type: ignore[reportInconsistentOverload]
+def asset(
     *,
     resources: dict[str, type[Resource]] = ...,
     destinations: list[type[Destination]] = ...,
@@ -32,7 +32,7 @@ def asset(  # type: ignore[reportInconsistentOverload]
     materialization_strategy: MaterializationStrategy = ...,
     normalizer: Normalizer | None = ...,
 ) -> Callable[[Callable[..., Any]], type[Asset]]: ...
-def asset(  # type: ignore[reportInconsistentOverload]
+def asset(
     fn: Callable[..., Any] | None = None,
     /,
     *,
@@ -134,16 +134,16 @@ def _build_asset_class(
             source = self._source
             return fn(source, **kwargs)
 
-        data.__signature__ = data_sig  # type: ignore[attr-defined]
+        data.__signature__ = data_sig  # ty: ignore[unresolved-attribute]
     else:
         # Standalone function asset: prepend `self` for bound method compat.
         self_param = inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)
         data_sig = fn_sig.replace(parameters=[self_param, *fn_sig.parameters.values()])
 
-        def data(self: Asset, **kwargs: Any) -> Any:  # type: ignore[no-redef]
+        def data(self: Asset, **kwargs: Any) -> Any:
             return fn(**kwargs)
 
-        data.__signature__ = data_sig  # type: ignore[attr-defined]
+        data.__signature__ = data_sig  # ty: ignore[unresolved-attribute]
 
     namespace: dict[str, Any] = {"data": data, **classvars, **fields}
     namespace["__module__"] = fn.__module__
@@ -163,6 +163,6 @@ def _build_asset_class(
 
     # Mark method assets so the source can detect them
     if is_method:
-        cls._is_method_asset = True  # type: ignore[attr-defined]
+        cls._is_method_asset = True
 
     return cls

@@ -86,7 +86,7 @@ class RunMixin:
 
         with Session(get_engine()) as session:
             stmt = pg_insert(Event).values(**values).on_conflict_do_nothing(index_elements=["id"])
-            session.execute(stmt)
+            session.execute(stmt)  # ty: ignore[deprecated]
             session.commit()
             saved = session.get(Event, event_id)
             if saved is None:  # pragma: no cover - only if the row was concurrently deleted
@@ -161,7 +161,7 @@ class RunMixin:
             started_at, completed_at, created_at.
         """
         with Session(get_engine()) as session:
-            result = session.execute(  # type: ignore[deprecated]
+            result = session.execute(  # ty: ignore[deprecated]
                 text("SELECT * FROM asset_executions WHERE run_id = :run_id"),
                 {"run_id": str(run_id)},
             )
@@ -503,7 +503,7 @@ def _advance_backfill(session: Session, backfill_id: UUID, *, failed: bool) -> N
         ).all()
     )
     pending_runs = session.exec(
-        select(Run).where(Run.backfill_id == backfill_id, Run.status == "pending").order_by(Run.partition_date)  # type: ignore[arg-type]
+        select(Run).where(Run.backfill_id == backfill_id, Run.status == "pending").order_by(Run.partition_date)  # ty: ignore[invalid-argument-type]
     ).all()
 
     if in_flight_count == 0 and len(pending_runs) == 0:

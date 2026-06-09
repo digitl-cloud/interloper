@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 def register(
-    subparsers: argparse._SubParsersAction,  # type: ignore[type-arg]
+    subparsers: argparse._SubParsersAction,
 ) -> None:
     """Register the ``run`` command.
 
@@ -188,7 +188,7 @@ def _dag_from_paths(paths: list[str]) -> DAG:
 
         items.append(obj())
 
-    return DAG(*items)  # type: ignore[arg-type]
+    return DAG(*items)  # ty: ignore[invalid-argument-type]
 
 
 def _resolve_partition(args: argparse.Namespace) -> Partition | PartitionWindow | None:

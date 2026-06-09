@@ -54,15 +54,6 @@ convention = "google"
 "tests/**" = ["ANN", "D101", "D102", "B018"]
 
 # ###############
-# PYRIGHT
-# ###############
-[tool.pyright]
-include = ["src"]
-typeCheckingMode = "basic"
-reportMissingParameterType = true
-ignore = ["libs/**", "tests/**", "scripts/**"]
-
-# ###############
 # PYTEST
 # ###############
 [tool.pytest.ini_options]

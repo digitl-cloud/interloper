@@ -40,4 +40,4 @@ class DAGSpec(BaseModel):
         from interloper.dag.base import DAG
 
         reconstructed = [Component.from_spec(spec) for spec in self.items]
-        return DAG(*reconstructed)  # type: ignore[arg-type]
+        return DAG(*reconstructed)  # ty: ignore[invalid-argument-type]

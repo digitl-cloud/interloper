@@ -74,7 +74,7 @@ def list_resources(
     resources = store.list_resources(org_id, kind=kind)
     return [
         ResourceResponse(
-            id=r.id,  # type: ignore[arg-type]
+            id=r.id,
             org_id=r.org_id,
             kind=r.kind,
             key=r.key,
@@ -100,7 +100,7 @@ def get_resource(
         raise HTTPException(status_code=404, detail=f"Resource {resource_id} not found")
 
     return ResourceDetailResponse(
-        id=r.id,  # type: ignore[arg-type]
+        id=r.id,
         org_id=r.org_id,
         kind=r.kind,
         key=r.key,
@@ -129,7 +129,7 @@ def create_resource(
         encrypted=body.encrypted,
     )
     return ResourceResponse(
-        id=resource.id,  # type: ignore[arg-type]
+        id=resource.id,
         org_id=resource.org_id,
         kind=resource.kind,
         key=resource.key,
@@ -160,7 +160,7 @@ def update_resource(
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Resource {resource_id} not found")
     return ResourceResponse(
-        id=resource.id,  # type: ignore[arg-type]
+        id=resource.id,
         org_id=resource.org_id,
         kind=resource.kind,
         key=resource.key,

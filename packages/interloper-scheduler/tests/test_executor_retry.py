@@ -68,11 +68,11 @@ def test_succeeded_assets_are_marked_non_materializable(monkeypatch: pytest.Monk
     )
     _patch_session(monkeypatch, {parent_id: SimpleNamespace(retry_of=None)})
 
-    executor = RunExecutor(store=store)  # type: ignore[arg-type]
+    executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
     db_run = SimpleNamespace(retry_of=parent_id, retry_scope="failed")
     assets = [_AssetA(), _AssetB()]
 
-    executor._skip_succeeded_assets(db_run, assets)  # type: ignore[arg-type]
+    executor._skip_succeeded_assets(db_run, assets)  # ty: ignore[invalid-argument-type]
 
     by_key = {type(a).key: a for a in assets}
     assert by_key["a"].materializable is False  # succeeded → skipped
@@ -96,11 +96,11 @@ def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.Mo
         {mid_id: SimpleNamespace(retry_of=root_id), root_id: SimpleNamespace(retry_of=None)},
     )
 
-    executor = RunExecutor(store=store)  # type: ignore[arg-type]
+    executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
     db_run = SimpleNamespace(retry_of=mid_id, retry_scope="failed")
     assets = [_AssetA(), _AssetB()]
 
-    executor._skip_succeeded_assets(db_run, assets)  # type: ignore[arg-type]
+    executor._skip_succeeded_assets(db_run, assets)  # ty: ignore[invalid-argument-type]
 
     by_key = {type(a).key: a for a in assets}
     assert by_key["a"].materializable is False
@@ -123,10 +123,10 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
         {mid_id: SimpleNamespace(retry_of=root_id), root_id: SimpleNamespace(retry_of=None)},
     )
 
-    executor = RunExecutor(store=store)  # type: ignore[arg-type]
+    executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
     db_run = SimpleNamespace(retry_of=mid_id, retry_scope="failed")
     assets = [_AssetA()]
 
-    executor._skip_succeeded_assets(db_run, assets)  # type: ignore[arg-type]
+    executor._skip_succeeded_assets(db_run, assets)  # ty: ignore[invalid-argument-type]
 
     assert assets[0].materializable is False

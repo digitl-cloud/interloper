@@ -398,7 +398,7 @@ class Source(Component):
         """
         # Delegate private attrs and Pydantic internals to BaseModel
         if name.startswith("_"):
-            return super().__getattr__(name)  # type: ignore[misc]
+            return super().__getattr__(name)  # ty: ignore[unresolved-attribute]
         for asset in self.assets:
             if type(asset).key == name:
                 return asset

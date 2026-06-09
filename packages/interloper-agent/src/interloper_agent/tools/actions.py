@@ -14,7 +14,7 @@ from interloper_agent.context import get_org_id, get_store, serialize
 def trigger_run(
     job_id: str,
     partition_date: str | None = None,
-    tool_context: ToolContext = None,  # type: ignore[assignment]
+    tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Queue a single run for a job.
 
@@ -42,7 +42,7 @@ def trigger_backfill(
     end_date: str,
     concurrency: int = 1,
     fail_fast: bool = False,
-    tool_context: ToolContext = None,  # type: ignore[assignment]
+    tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Start a backfill for a job over a date range.
 
@@ -76,7 +76,7 @@ def trigger_backfill(
 def toggle_job(
     job_id: str,
     enabled: bool,
-    tool_context: ToolContext = None,  # type: ignore[assignment]
+    tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Enable or disable a scheduled job.
 
@@ -112,7 +112,7 @@ def toggle_job(
 def toggle_asset(
     asset_id: str,
     materializable: bool,
-    tool_context: ToolContext = None,  # type: ignore[assignment]
+    tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Enable or disable materialization for an asset.
 

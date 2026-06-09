@@ -37,7 +37,7 @@ async def _get_access_token(client: httpx.AsyncClient, body: GoogleAdsConnection
         },
     )
     resp.raise_for_status()
-    return resp.json()["access_token"]  # type: ignore[no-any-return]
+    return resp.json()["access_token"]
 
 
 def _auth_headers(access_token: str, developer_token: str) -> dict[str, str]:

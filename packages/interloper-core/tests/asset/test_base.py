@@ -228,7 +228,7 @@ class TestResources:
 
     def test_skips_params_without_annotation(self):
         class FakeAssetNoAnnotation(il.Asset):
-            def data(self, untyped) -> Any:  # type: ignore[no-untyped-def]  # pragma: no cover
+            def data(self, untyped) -> Any:  # pragma: no cover
                 return None
 
         assert FakeAssetNoAnnotation.resource_types == {}
@@ -295,7 +295,7 @@ class TestDestinations:
 
     def test_resolve_keeps_list_destination(self):
         dests = [FakeDestination(), FakeOtherDestination()]
-        asset = FakeAsset(destination=dests)
+        asset = FakeAsset(destination=dests)  # ty: ignore[invalid-argument-type]
         assert asset._resolve_destinations() == dests
 
     def test_resolve_falls_back_to_source_destination(self):

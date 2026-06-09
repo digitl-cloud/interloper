@@ -244,7 +244,7 @@ class Asset(Component):
         default_destination_key: str | None = None,
         materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
-        normalizer: Normalizer | None = _UNSET,  # type: ignore[assignment]
+        normalizer: Normalizer | None = _UNSET,  # ty: ignore[invalid-parameter-default]
         deps: dict[str, str] | None = None,
     ) -> Self:
         """Return a reconfigured copy of this asset."""

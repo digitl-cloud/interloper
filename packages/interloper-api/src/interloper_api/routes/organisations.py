@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
@@ -65,7 +66,7 @@ class InvitationResponse(BaseModel):
 # -- Helpers ------------------------------------------------------------------
 
 
-def _get_smtp_config() -> object | None:
+def _get_smtp_config() -> Any | None:
     """Return the SMTP config if available, without raising."""
     from interloper_api.dependencies import get_smtp_config
 
@@ -74,8 +75,8 @@ def _get_smtp_config() -> object | None:
 
 def _send_invitation_email(
     request: Request,
-    smtp_config: object,
-    invitation: object,
+    smtp_config: Any,
+    invitation: Any,
     org_name: str,
     inviter_name: str,
 ) -> None:
@@ -88,8 +89,8 @@ def _send_invitation_email(
         org_name: Organisation name.
         inviter_name: Inviter display name.
     """
-    token = invitation.token  # type: ignore[attr-defined]
-    email = invitation.email  # type: ignore[attr-defined]
+    token = invitation.token
+    email = invitation.email
     base_url = str(request.base_url).rstrip("/")
     invite_url = f"{base_url}/invite/{token}"
 
@@ -116,11 +117,11 @@ def create_organisation(
     session_token: str | None = Cookie(default=None),
 ) -> OrganisationResponse:
     """Create a new organisation. The creating user becomes its admin."""
-    org = store.create_organisation(name=body.name, creator_id=user.id)  # type: ignore[arg-type]
+    org = store.create_organisation(name=body.name, creator_id=user.id)
 
     # Set as active org in session
     if session_token:
-        store.set_session_org(session_token, org.id, user_id=user.id)  # type: ignore[arg-type]
+        store.set_session_org(session_token, org.id, user_id=user.id)
 
     return OrganisationResponse.model_validate(org, from_attributes=True)
 
@@ -131,7 +132,7 @@ def list_organisations(
     store: Store = Depends(get_store),
 ) -> list[OrganisationResponse]:
     """List all organisations the user belongs to."""
-    orgs = store.list_user_organisations(user.id)  # type: ignore[arg-type]
+    orgs = store.list_user_organisations(user.id)
     return [OrganisationResponse.model_validate(o, from_attributes=True) for o in orgs]
 
 
@@ -148,7 +149,7 @@ def list_members(
     members = store.list_org_members(org_id)
     return [
         MemberResponse(
-            id=profile.id,  # type: ignore[arg-type]
+            id=profile.id,
             email=profile.email,
             name=profile.name,
             avatar_url=profile.avatar_url,
@@ -188,7 +189,7 @@ def list_invitations(
     invitations = store.list_invitations(org_id)
     return [
         InvitationResponse(
-            id=inv.id,  # type: ignore[arg-type]
+            id=inv.id,
             email=inv.email,
             role=inv.role,
             created_at=inv.created_at,
@@ -211,19 +212,19 @@ def invite_member(
         org_id=org_id,
         email=body.email.strip(),
         role=body.role,
-        invited_by=user.id,  # type: ignore[arg-type]
+        invited_by=user.id,
     )
 
     # Send invitation email if SMTP is configured
     smtp_config = _get_smtp_config()
-    if smtp_config and smtp_config.enabled:  # type: ignore[attr-defined]
+    if smtp_config and smtp_config.enabled:
         org = store.get_organisation(org_id)
         org_name = org.name if org else "Unknown"
         inviter_name = user.name or user.email
         _send_invitation_email(request, smtp_config, invitation, org_name, inviter_name)
 
     return InvitationResponse(
-        id=invitation.id,  # type: ignore[arg-type]
+        id=invitation.id,
         email=invitation.email,
         role=invitation.role,
         created_at=invitation.created_at,
@@ -264,12 +265,12 @@ def resend_invitation(
         org_id=org_id,
         email=target.email,
         role=target.role,
-        invited_by=user.id,  # type: ignore[arg-type]
+        invited_by=user.id,
     )
 
     # Send invitation email if SMTP is configured
     smtp_config = _get_smtp_config()
-    if smtp_config and smtp_config.enabled:  # type: ignore[attr-defined]
+    if smtp_config and smtp_config.enabled:
         org = store.get_organisation(org_id)
         org_name = org.name if org else "Unknown"
         inviter_name = user.name or user.email

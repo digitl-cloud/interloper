@@ -34,7 +34,7 @@ def store() -> Iterator[RunMixin]:
     )
     # Only the events table is exercised here; creating the full schema would
     # pull in Postgres-only column types (e.g. ARRAY) that SQLite can't render.
-    Event.__table__.create(eng)  # type: ignore[attr-defined]
+    Event.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield RunMixin()
     finally:

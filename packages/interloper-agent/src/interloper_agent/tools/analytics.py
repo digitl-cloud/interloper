@@ -14,7 +14,7 @@ from interloper_agent.context import get_org_id, get_store, serialize
 def run_history_summary(
     job_id: str | None = None,
     days: int = 7,
-    tool_context: ToolContext = None,  # type: ignore[assignment]
+    tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Summarize run statistics over a period.
 
@@ -63,7 +63,7 @@ def partition_coverage(
     job_id: str,
     start_date: str,
     end_date: str,
-    tool_context: ToolContext = None,  # type: ignore[assignment]
+    tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Check partition coverage for a job over a date range.
 
@@ -131,7 +131,7 @@ def freshness_check(tool_context: ToolContext) -> dict[str, Any]:
         for job in jobs:
             if not job.enabled:
                 continue
-            job_id = job.id  # type: ignore[assignment]
+            job_id = job.id
             runs = store.list_runs(org_id, job_id=job_id, status="success", limit=1)
             last_success = runs[0] if runs else None
 

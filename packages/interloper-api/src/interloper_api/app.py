@@ -54,7 +54,7 @@ def create_app(
 
     if cors_origins:
         app.add_middleware(
-            CORSMiddleware,  # type: ignore[arg-type]
+            CORSMiddleware,
             allow_origins=cors_origins,
             allow_credentials=True,
             allow_methods=["*"],

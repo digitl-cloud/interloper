@@ -32,7 +32,7 @@ _SOURCE_PARAMS: dict[str, tuple[str, str]] = {
 @overload
 def source(target: type | Callable[..., Any], /) -> type[Source]: ...
 @overload
-def source(  # type: ignore[reportInconsistentOverload]
+def source(
     *,
     resources: dict[str, type[Resource]] = ...,
     destinations: list[type[Destination]] = ...,
@@ -46,7 +46,7 @@ def source(  # type: ignore[reportInconsistentOverload]
     normalizer: Normalizer | None = ...,
     materialization_strategy: MaterializationStrategy = ...,
 ) -> Callable[[type | Callable[..., Any]], type[Source]]: ...
-def source(  # type: ignore[reportInconsistentOverload]
+def source(
     target: type | Callable[..., Any] | None = None,
     /,
     *,
@@ -159,7 +159,7 @@ def _build_source_from_fn(
     namespace.update(classvars)
     namespace.update(fields)
     namespace["__module__"] = fn.__module__
-    namespace["__qualname__"] = fn.__qualname__  # type: ignore[attr-defined]
+    namespace["__qualname__"] = fn.__qualname__  # ty: ignore[unresolved-attribute]
 
     annotations: dict[str, Any] = {}
     for attr in fields:
@@ -182,7 +182,7 @@ def _build_source_from_fn(
     if annotations:
         namespace["__annotations__"] = annotations
 
-    source_cls = type(fn.__name__, (Source,), namespace)  # type: ignore[attr-defined]
+    source_cls = type(fn.__name__, (Source,), namespace)  # ty: ignore[unresolved-attribute]
 
     if fn.__doc__:
         source_cls.__doc__ = fn.__doc__

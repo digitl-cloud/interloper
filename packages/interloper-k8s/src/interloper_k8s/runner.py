@@ -371,9 +371,12 @@ class KubernetesRunner(SyncRunner):
             pod_name: str | None = None
             while not self._stop_log_streaming.is_set():
                 try:
-                    pods = core_v1.list_namespaced_pod(
-                        namespace=self.namespace,
-                        label_selector=f"job-name={job_name}",
+                    pods = cast(
+                        client.V1PodList,
+                        core_v1.list_namespaced_pod(
+                            namespace=self.namespace,
+                            label_selector=f"job-name={job_name}",
+                        ),
                     )
                     if pods.items:
                         pod = pods.items[0]
@@ -388,12 +391,15 @@ class KubernetesRunner(SyncRunner):
                 return
 
             try:
-                log_stream = core_v1.read_namespaced_pod_log(
-                    name=pod_name,
-                    namespace=self.namespace,
-                    follow=True,
-                    _preload_content=False,
-                    container="interloper",
+                log_stream = cast(
+                    Any,
+                    core_v1.read_namespaced_pod_log(
+                        name=pod_name,
+                        namespace=self.namespace,
+                        follow=True,
+                        _preload_content=False,
+                        container="interloper",
+                    ),
                 )
                 buf = ""
                 for chunk in log_stream:

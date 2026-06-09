@@ -211,7 +211,7 @@ def get_org_id(
     Returns:
         The organisation UUID.
     """
-    return org.id  # type: ignore[return-value]
+    return org.id
 
 
 # -- RBAC dependencies -------------------------------------------------------
@@ -237,7 +237,7 @@ def _check_role(
     Raises:
         HTTPException: 403 if insufficient permissions.
     """
-    role = store.get_user_role(user.id, org_id)  # type: ignore[arg-type]
+    role = store.get_user_role(user.id, org_id)
     if role is None:
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
     if _ROLE_RANK.get(role, -1) < _ROLE_RANK[minimum]:

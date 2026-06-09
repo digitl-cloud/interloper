@@ -49,7 +49,7 @@ def _resource_map(dest: Destination) -> dict[str, str]:
 
 def _to_response(dest: Destination) -> DestinationResponse:
     return DestinationResponse(
-        id=dest.id,  # type: ignore[arg-type]
+        id=dest.id,
         key=dest.key,
         name=dest.name,
         config=dest.config,

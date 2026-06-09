@@ -38,7 +38,7 @@ class Profile(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "profiles"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -57,7 +57,7 @@ class Organisation(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "organisations"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -82,7 +82,7 @@ class Invitation(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "invitations"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -101,7 +101,7 @@ class Session(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "sessions"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -234,7 +234,7 @@ class Resource(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "resources"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -265,7 +265,7 @@ class Source(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "sources"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -310,7 +310,7 @@ class Asset(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "assets"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -349,7 +349,7 @@ class Destination(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "destinations"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -374,7 +374,7 @@ class Job(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "jobs"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -407,7 +407,7 @@ class Backfill(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "backfills"
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -443,7 +443,7 @@ class Run(SQLModel, table=True):
         Index("ix_runs_backfill_id_status", "backfill_id", "status"),
     )
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
@@ -479,7 +479,7 @@ class Event(SQLModel, table=True):
         Index("ix_events_asset_lookup", "run_id", "asset_key", "event_type", "timestamp"),
     )
 
-    id: UUID | None = SQLField(
+    id: UUID = SQLField(
         default=None,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},

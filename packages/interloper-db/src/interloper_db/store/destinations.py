@@ -17,7 +17,7 @@ def _load_destination(session: Session, destination_id: UUID) -> Destination:
     statement = (
         select(Destination)
         .where(Destination.id == destination_id)
-        .options(selectinload(Destination.resources))  # type: ignore[arg-type]
+        .options(selectinload(Destination.resources))  # ty: ignore[invalid-argument-type]
     )
     db_destination = session.exec(statement).first()
     if not db_destination:
@@ -40,7 +40,7 @@ def _sync_resource_bindings(
         session.delete(binding)
     for key, resource_id in (resources or {}).items():
         session.add(
-            DestinationResource(destination_id=db_destination.id, resource_id=UUID(resource_id), key=key)  # type: ignore[arg-type]
+            DestinationResource(destination_id=db_destination.id, resource_id=UUID(resource_id), key=key)
         )
 
 
@@ -53,7 +53,7 @@ class DestinationMixin:
             statement = (
                 select(Destination)
                 .where(Destination.org_id == org_id)
-                .options(selectinload(Destination.resources))  # type: ignore[arg-type]
+                .options(selectinload(Destination.resources))  # ty: ignore[invalid-argument-type]
             )
             return list(session.exec(statement).all())
 
@@ -85,7 +85,7 @@ class DestinationMixin:
             _sync_resource_bindings(session, db_destination, resources)
             session.commit()
         with Session(get_engine()) as session:
-            return _load_destination(session, created_id)  # type: ignore[arg-type]
+            return _load_destination(session, created_id)
 
     def update_destination(
         self,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, TypeVar, cast
 
 from interloper.component.base import Component
 
@@ -50,7 +50,7 @@ def build_component_class(
         if fields:
             for name, value in fields.items():
                 setattr(cls, name, value)
-        return cls  # type: ignore[return-value]
+        return cast(type[C], cls)
 
     # Plain class — build a new class that inherits from base.
     namespace: dict[str, Any] = {}
@@ -86,4 +86,4 @@ def build_component_class(
     if cls.__doc__:
         result_cls.__doc__ = cls.__doc__
 
-    return result_cls  # type: ignore[return-value]
+    return cast(type[C], result_cls)

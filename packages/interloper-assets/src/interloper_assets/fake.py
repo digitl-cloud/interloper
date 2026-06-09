@@ -58,9 +58,10 @@ def fake_data(
     n_rows = random.randint(1, 10)
     rows: list[dict[str, Any]] = []
     for _ in range(n_rows):
-        row = {}
+        row: dict[str, Any] = {}
         for name, field_info in schema.model_fields.items():
             row[name] = _fake_value(field_info.annotation)
-        row[partition_column] = partition_date
+        if partition_column is not None:
+            row[partition_column] = partition_date
         rows.append(row)
     return pd.DataFrame(rows)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
@@ -194,7 +194,7 @@ class ResourceMixin:
         """
         spec = self._hydrator.build_resource_spec(db_resource)
         try:
-            return spec.reconstruct()  # type: ignore[return-value]
+            return cast(il.Resource, spec.reconstruct())
         except Exception as e:
             raise HydrationError(
                 f"Failed to hydrate resource '{db_resource.key}' ({db_resource.id}): {e}"

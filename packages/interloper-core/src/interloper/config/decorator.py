@@ -26,8 +26,8 @@ def config(
     name: str = ...,
     icon: str = ...,
     tags: list[str] = ...,
-) -> Callable[[type[ConfigT]], type[ConfigT]]: ...  # type: ignore[reportInconsistentOverload]
-def config(  # type: ignore[reportInconsistentOverload]
+) -> Callable[[type[ConfigT]], type[ConfigT]]: ...
+def config(
     cls: type | None = None,
     /,
     *,

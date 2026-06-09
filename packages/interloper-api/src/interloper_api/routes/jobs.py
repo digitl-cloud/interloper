@@ -72,7 +72,7 @@ def _job_to_response(job: Job) -> JobResponse:
         The response model.
     """
     return JobResponse(
-        id=job.id,  # type: ignore[arg-type]
+        id=job.id,
         org_id=job.org_id,
         name=job.name,
         cron=job.cron,
@@ -80,7 +80,7 @@ def _job_to_response(job: Job) -> JobResponse:
         enabled=job.enabled,
         partitioned=job.partitioned,
         backfill_days=job.backfill_days,
-        source_ids=[s.id for s in job.sources],  # type: ignore[misc]
+        source_ids=[s.id for s in job.sources],
         asset_ids=[a.id for a in job.assets if a.id],
         last_run_at=str(job.last_run_at) if job.last_run_at else None,
         next_run_at=str(job.next_run_at) if job.next_run_at else None,
@@ -132,7 +132,7 @@ def create_job(
         partitioned=body.partitioned,
         backfill_days=body.backfill_days,
     )
-    return _job_to_response(store.get_job(job.id))  # type: ignore[arg-type]
+    return _job_to_response(store.get_job(job.id))
 
 
 @router.put("/{job_id}")
@@ -157,7 +157,7 @@ def update_job(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    return _job_to_response(store.get_job(job.id))  # type: ignore[arg-type]
+    return _job_to_response(store.get_job(job.id))
 
 
 @router.delete("/{job_id}")

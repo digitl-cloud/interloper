@@ -17,7 +17,7 @@ setup:
 
 check-python:
 	uv run ruff check packages
-	uv run pyright
+	uv run ty check
 	uv run pytest
 
 check-typescript:

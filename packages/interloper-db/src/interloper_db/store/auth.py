@@ -150,13 +150,13 @@ class AuthMixin:
                 select(SessionModel).where(SessionModel.token_hash == token_hash)
             ).first()
             if db_session:
-                db_session.organisation_id = org_id  # type: ignore[assignment]
+                db_session.organisation_id = org_id
                 session.add(db_session)
 
             if user_id:
                 db_profile = session.get(Profile, user_id)
                 if db_profile:
-                    db_profile.last_organisation_id = org_id  # type: ignore[assignment]
+                    db_profile.last_organisation_id = org_id
                     session.add(db_profile)
 
             session.commit()
@@ -195,7 +195,7 @@ class AuthMixin:
             if creator_id is not None:
                 session.add(UserOrganisation(
                     user_id=creator_id,
-                    organisation_id=db_organisation.id,  # type: ignore[arg-type]
+                    organisation_id=db_organisation.id,
                     role="admin",
                 ))
             session.commit()
@@ -234,11 +234,11 @@ class AuthMixin:
                 session.exec(
                     select(
                         UserOrganisation.organisation_id,
-                        func.count(UserOrganisation.user_id),  # type: ignore[arg-type]
-                    ).group_by(UserOrganisation.organisation_id)  # type: ignore[arg-type]
+                        func.count(UserOrganisation.user_id),  # ty: ignore[invalid-argument-type]
+                    ).group_by(UserOrganisation.organisation_id)  # ty: ignore[invalid-argument-type]
                 ).all()
             )
-            return [(org, counts.get(org.id, 0)) for org in organisations]  # type: ignore[arg-type]
+            return [(org, counts.get(org.id, 0)) for org in organisations]
 
     def get_organisation(self, org_id: UUID) -> Organisation | None:
         """Get an organisation by ID.
@@ -269,7 +269,7 @@ class AuthMixin:
             if not organisation_ids:
                 return []
             organisations = session.exec(
-                select(Organisation).where(Organisation.id.in_(organisation_ids))  # type: ignore[union-attr]
+                select(Organisation).where(Organisation.id.in_(organisation_ids))  # ty: ignore[unresolved-attribute]
             ).all()
             return list(organisations)
 

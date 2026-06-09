@@ -51,7 +51,7 @@ class EventBus:
                     inst = super().__new__(cls)
                     inst._initialized = False
                     cls._instance = inst
-        return cls._instance  # type: ignore[return-value]
+        return cls._instance
 
     def __init__(self) -> None:
         """Initialize handlers, queue, and background worker (runs once)."""

@@ -84,7 +84,7 @@ class Schema(Component):
             field_type = _resolve_field_type(types_seen)
             field_definitions[key] = (field_type | None, None)
 
-        return create_model(name, __base__=cls, **field_definitions)  # type: ignore[return-value]
+        return create_model(name, __base__=cls, **field_definitions)
 
     @classmethod
     def validate_rows(
@@ -184,7 +184,7 @@ def _resolve_field_type(types_seen: set[type]) -> type:
         The resolved Pydantic-compatible field type.
     """
     if not types_seen:
-        return Any  # type: ignore[return-value]
+        return Any
 
     if len(types_seen) == 1:
         return types_seen.pop()
@@ -193,4 +193,4 @@ def _resolve_field_type(types_seen: set[type]) -> type:
     if types_seen == {int, float}:
         return float
 
-    return Any  # type: ignore[return-value]
+    return Any

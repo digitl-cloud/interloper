@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import Self
@@ -257,7 +257,7 @@ class Component(BaseModel):
         """
         if isinstance(spec, dict):
             spec = ComponentSpec(**spec)
-        return spec.reconstruct()  # type: ignore[return-value]
+        return cast(Self, spec.reconstruct())
 
     @classmethod
     def definition(cls) -> ComponentDefinition:

@@ -72,7 +72,9 @@ def get_downstream(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
-def get_full_lineage(asset_id: str, direction: str = "upstream", tool_context: ToolContext = None) -> dict[str, Any]:  # type: ignore[assignment]
+def get_full_lineage(
+    asset_id: str, direction: str = "upstream", tool_context: ToolContext | None = None
+) -> dict[str, Any]:
     """Recursively traverse the full lineage of an asset.
 
     Args:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -45,11 +46,11 @@ class AuthUserResponse(BaseModel):
 @router.get("/google")
 def google_login(
     redirect: str | None = None,
-    auth_config: object = Depends(get_auth_config),
+    auth_config: Any = Depends(get_auth_config),
 ) -> RedirectResponse:
     """Redirect user to Google's OAuth consent screen."""
-    client_id = auth_config.google_client_id  # type: ignore[attr-defined]
-    redirect_uri = auth_config.google_redirect_uri  # type: ignore[attr-defined]
+    client_id = auth_config.google_client_id
+    redirect_uri = auth_config.google_redirect_uri
 
     if not client_id:
         raise HTTPException(status_code=500, detail="Google OAuth not configured")
@@ -73,14 +74,14 @@ def google_callback(
     code: str,
     state: str | None = None,
     store: Store = Depends(get_store),
-    auth_config: object = Depends(get_auth_config),
+    auth_config: Any = Depends(get_auth_config),
 ) -> RedirectResponse:
     """Exchange Google authorization code for tokens, upsert profile, create session."""
-    client_id = auth_config.google_client_id  # type: ignore[attr-defined]
-    client_secret = auth_config.google_client_secret  # type: ignore[attr-defined]
-    redirect_uri = auth_config.google_redirect_uri  # type: ignore[attr-defined]
-    cookie_secure: bool = auth_config.cookie_secure  # type: ignore[attr-defined]
-    session_expiry_days: int = auth_config.session_expiry_days  # type: ignore[attr-defined]
+    client_id = auth_config.google_client_id
+    client_secret = auth_config.google_client_secret
+    redirect_uri = auth_config.google_redirect_uri
+    cookie_secure: bool = auth_config.cookie_secure
+    session_expiry_days: int = auth_config.session_expiry_days
 
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Google OAuth not configured")
@@ -130,7 +131,7 @@ def google_callback(
     )
 
     # Create session (no org context — frontend resolves org after login)
-    token = store.create_session(user_id=profile.id)  # type: ignore[arg-type]
+    token = store.create_session(user_id=profile.id)
 
     redirect_url = state if state and state.startswith("/") else "/"
     response = RedirectResponse(url=redirect_url, status_code=302)
@@ -153,7 +154,7 @@ def logout(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete all sessions for the current user and clear the cookie."""
-    store.delete_user_sessions(user.id)  # type: ignore[arg-type]
+    store.delete_user_sessions(user.id)
     response.delete_cookie("session_token", path="/")
     return {"status": "ok"}
 
@@ -179,12 +180,12 @@ def get_me(
         org = store.get_organisation(session_row.organisation_id)
 
     if org and profile.id:
-        user_role = store.get_user_role(profile.id, org.id)  # type: ignore[arg-type]
+        user_role = store.get_user_role(profile.id, org.id)
         if user_role:
             role = user_role
 
     return AuthUserResponse(
-        id=profile.id,  # type: ignore[arg-type]
+        id=profile.id,
         email=profile.email,
         name=profile.name,
         avatar_url=profile.avatar_url,
@@ -209,12 +210,12 @@ def switch_org(
     session_token: str | None = Cookie(default=None),
 ) -> dict[str, str]:
     """Switch the session's active organisation. User must be a member."""
-    role = store.get_user_role(user.id, body.organisation_id)  # type: ignore[arg-type]
+    role = store.get_user_role(user.id, body.organisation_id)
     if not role:
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
 
     if session_token:
-        store.set_session_org(session_token, body.organisation_id, user_id=user.id)  # type: ignore[arg-type]
+        store.set_session_org(session_token, body.organisation_id, user_id=user.id)
     return {"status": "ok"}
 
 
@@ -232,12 +233,12 @@ def accept_invite(
     session_token: str | None = Cookie(default=None),
 ) -> dict[str, str]:
     """Accept an organisation invitation using its token."""
-    org = store.accept_invitation(body.token, user.id)  # type: ignore[arg-type]
+    org = store.accept_invitation(body.token, user.id)
     if not org:
         raise HTTPException(status_code=400, detail="Invalid or expired invitation")
 
     # Switch to the new org
     if session_token:
-        store.set_session_org(session_token, org.id, user_id=user.id)  # type: ignore[arg-type]
+        store.set_session_org(session_token, org.id, user_id=user.id)
 
     return {"status": "ok"}

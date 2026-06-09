@@ -25,8 +25,8 @@ def connection(
     name: str = ...,
     icon: str = ...,
     tags: list[str] = ...,
-) -> Callable[[type[ConnectionT]], type[ConnectionT]]: ...  # type: ignore[reportInconsistentOverload]
-def connection(  # type: ignore[reportInconsistentOverload]
+) -> Callable[[type[ConnectionT]], type[ConnectionT]]: ...
+def connection(
     cls: type | None = None,
     /,
     *,

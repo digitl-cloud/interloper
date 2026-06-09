@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
@@ -26,6 +26,7 @@ class SourceMixin:
     """Store methods for source lifecycle and hydration."""
 
     _hydrator: Hydrator
+    _catalog: il.Catalog
 
     def create_source(
         self,
@@ -104,9 +105,9 @@ class SourceMixin:
                 select(Source)
                 .where(Source.org_id == org_id)
                 .options(
-                    selectinload(Source.assets),  # type: ignore[arg-type]
-                    selectinload(Source.resources),  # type: ignore[arg-type]
-                    selectinload(Source.destinations).selectinload(Destination.resources),  # type: ignore[arg-type]
+                    selectinload(Source.assets),  # ty: ignore[invalid-argument-type]
+                    selectinload(Source.resources),  # ty: ignore[invalid-argument-type]
+                    selectinload(Source.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
                 )
             )
             return list(session.exec(statement).all())
@@ -182,7 +183,7 @@ class SourceMixin:
         for asset_type in source_cls.asset_types:
             if asset_type.key in keys_to_ensure and asset_type.key not in existing_by_key:
                 db_asset = Asset(
-                    source_id=db_source.id,  # type: ignore[arg-type]
+                    source_id=db_source.id,
                     org_id=db_source.org_id,
                     key=asset_type.key,
                     materializable=True,
@@ -230,8 +231,8 @@ class SourceMixin:
                 if qualified_asset in asset_map:
                     session.add(
                         AssetDependency(
-                            asset_id=asset_map[asset_key].id,  # type: ignore[arg-type]
-                            upstream_asset_id=asset_map[qualified_asset].id,  # type: ignore[arg-type]
+                            asset_id=asset_map[asset_key].id,
+                            upstream_asset_id=asset_map[qualified_asset].id,
                             param_name=param_name,
                         )
                     )
@@ -270,7 +271,7 @@ class SourceMixin:
                 if upstream_id:
                     session.add(
                         AssetDependency(
-                            asset_id=db_asset.id,  # type: ignore[arg-type]
+                            asset_id=db_asset.id,
                             upstream_asset_id=UUID(upstream_id),
                             param_name=param_name,
                         )
@@ -292,10 +293,10 @@ class SourceMixin:
                 Source,
                 source_id,
                 options=[
-                    selectinload(Source.assets).selectinload(Asset.resources),  # type: ignore[arg-type]
-                    selectinload(Source.assets).selectinload(Asset.destinations).selectinload(Destination.resources),  # type: ignore[arg-type]
-                    selectinload(Source.resources),  # type: ignore[arg-type]
-                    selectinload(Source.destinations).selectinload(Destination.resources),  # type: ignore[arg-type]
+                    selectinload(Source.assets).selectinload(Asset.resources),  # ty: ignore[invalid-argument-type]
+                    selectinload(Source.assets).selectinload(Asset.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
+                    selectinload(Source.resources),  # ty: ignore[invalid-argument-type]
+                    selectinload(Source.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
                 ],
             )
             if not db_source:
@@ -304,7 +305,7 @@ class SourceMixin:
             spec = self._hydrator.build_source_spec(session, db_source)
 
         try:
-            return spec.reconstruct()  # type: ignore[return-value]
+            return cast(il.Source, spec.reconstruct())
         except Exception as e:
             raise HydrationError(f"Failed to hydrate source '{db_source.key}' ({db_source.id}): {e}") from e
 
@@ -324,7 +325,7 @@ class SourceMixin:
             session.delete(binding)
         for key, resource_id in (resources or {}).items():
             session.add(
-                SourceResource(source_id=db_source.id, resource_id=UUID(resource_id), key=key)  # type: ignore[arg-type]
+                SourceResource(source_id=db_source.id, resource_id=UUID(resource_id), key=key)
             )
 
     @staticmethod
@@ -341,15 +342,15 @@ class SourceMixin:
             session.delete(binding)
         for destination_id in destination_ids or []:
             session.add(
-                SourceDestination(source_id=db_source.id, destination_id=UUID(destination_id))  # type: ignore[arg-type]
+                SourceDestination(source_id=db_source.id, destination_id=UUID(destination_id))
             )
 
     def _resolve_source_cls(self, key: str) -> type[il.Source]:
         """Import the source class from the catalog."""
         from interloper.utils.imports import import_from_path
 
-        catalog = self._catalog  # type: ignore[attr-defined]
+        catalog = self._catalog
         definition = catalog.get(key)
         if not definition:
             raise CatalogKeyError(f"Unknown source key: {key}")
-        return import_from_path(definition.path)  # type: ignore[return-value]
+        return import_from_path(definition.path)

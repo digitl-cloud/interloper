@@ -12,8 +12,8 @@ from interloper_db.engine import get_engine
 from interloper_db.models import Job, JobAsset, JobSource
 
 _JOB_LOAD_OPTIONS = [
-    selectinload(Job.sources),  # type: ignore[arg-type]
-    selectinload(Job.assets),  # type: ignore[arg-type]
+    selectinload(Job.sources),  # ty: ignore[invalid-argument-type]
+    selectinload(Job.assets),  # ty: ignore[invalid-argument-type]
 ]
 
 
@@ -65,7 +65,7 @@ class JobMixin:
             for source_id in source_ids or []:
                 session.add(JobSource(job_id=db_job.id, source_id=source_id))
             for asset_id in asset_ids or []:
-                session.add(JobAsset(job_id=db_job.id, asset_id=asset_id))  # type: ignore[arg-type]
+                session.add(JobAsset(job_id=db_job.id, asset_id=asset_id))
             session.commit()
             session.refresh(db_job)
             return db_job
@@ -118,14 +118,14 @@ class JobMixin:
             for link in existing_source_links:
                 session.delete(link)
             for source_id in source_ids or []:
-                session.add(JobSource(job_id=db_job.id, source_id=source_id))  # type: ignore[arg-type]
+                session.add(JobSource(job_id=db_job.id, source_id=source_id))
 
             # Rebuild asset bindings
             existing_asset_links = session.exec(select(JobAsset).where(JobAsset.job_id == db_job.id)).all()
             for link in existing_asset_links:
                 session.delete(link)
             for asset_id in asset_ids or []:
-                session.add(JobAsset(job_id=db_job.id, asset_id=asset_id))  # type: ignore[arg-type]
+                session.add(JobAsset(job_id=db_job.id, asset_id=asset_id))
 
             session.commit()
             session.refresh(db_job)

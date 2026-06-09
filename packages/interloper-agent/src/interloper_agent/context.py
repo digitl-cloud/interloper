@@ -61,14 +61,17 @@ def get_catalog() -> dict[str, Any]:
     return _catalog.dump()
 
 
-def get_org_id(tool_context: ToolContext) -> UUID:
+def get_org_id(tool_context: ToolContext | None) -> UUID:
     """Extract the organisation ID from ADK session state.
 
     The caller must set ``session.state["org_id"]`` before invoking the agent.
 
     Args:
-        tool_context: Injected by ADK.
+        tool_context: Injected by ADK. ``None`` only if a tool is invoked
+            outside the ADK runtime, which is a programming error.
     """
+    if tool_context is None:
+        raise ValueError("tool_context not provided (must be invoked via the ADK runtime)")
     raw = tool_context.state.get("org_id")
     if raw is None:
         raise ValueError("org_id not set in session state")

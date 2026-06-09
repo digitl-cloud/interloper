@@ -6,7 +6,7 @@ import argparse
 import sys
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+def register(subparsers: argparse._SubParsersAction) -> None:
     """Register the ``db`` command group.
 
     Args:

@@ -67,31 +67,31 @@ def _resource_map(session: Session, junction_cls: type, fk_column: str, fk_value
     """Build a {slot_key: resource_id} map from junction rows."""
     col = getattr(junction_cls, fk_column)
     rows = session.exec(select(junction_cls).where(col == fk_value)).all()
-    return {r.key: str(r.resource_id) for r in rows}
+    return {r.key: str(r.resource_id) for r in rows}  # ty: ignore[unresolved-attribute]
 
 
 def _build_source_response(session: Session, source: Source) -> SourceResponse:
     """Convert a DB Source to a SourceResponse within a session."""
     return SourceResponse(
-        id=source.id,  # type: ignore[arg-type]
+        id=source.id,
         org_id=source.org_id,
         key=source.key,
         name=source.name,
         config=source.config,
-        resources=_resource_map(session, SourceResource, "source_id", source.id),  # type: ignore[arg-type]
+        resources=_resource_map(session, SourceResource, "source_id", source.id),
         destinations=[
             DestinationResponse(
-                id=d.id,  # type: ignore[arg-type]
+                id=d.id,
                 key=d.key,
                 name=d.name,
                 config=d.config,
-                resources=_resource_map(session, DestinationResource, "destination_id", d.id),  # type: ignore[arg-type]
+                resources=_resource_map(session, DestinationResource, "destination_id", d.id),
                 created_at=str(d.created_at) if d.created_at else None,
             )
             for d in source.destinations
         ],
         assets=[
-            AssetResponse(id=a.id, key=a.key, materializable=a.materializable)  # type: ignore[arg-type]
+            AssetResponse(id=a.id, key=a.key, materializable=a.materializable)
             for a in source.assets
         ],
         created_at=str(source.created_at) if source.created_at else None,
@@ -107,9 +107,9 @@ def _load_source_for_response(source_id: UUID) -> SourceResponse:
             Source,
             source_id,
             options=[
-                selectinload(Source.assets),  # type: ignore[arg-type]
-                selectinload(Source.resources),  # type: ignore[arg-type]
-                selectinload(Source.destinations).selectinload(Destination.resources),  # type: ignore[arg-type]
+                selectinload(Source.assets),  # ty: ignore[invalid-argument-type]
+                selectinload(Source.resources),  # ty: ignore[invalid-argument-type]
+                selectinload(Source.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
             ],
         )
         if not source:
@@ -149,7 +149,7 @@ def create_source(
         destination_ids=body.destination_ids,
         cross_deps=body.cross_deps,
     )
-    return _load_source_for_response(source.id)  # type: ignore[arg-type]
+    return _load_source_for_response(source.id)
 
 
 @router.put("/{source_id}")

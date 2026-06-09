@@ -9,28 +9,28 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "interloper-core",
-    "interloper-assets",
-    "interloper-pandas",
-    "interloper-docker",
-    "interloper-k8s",
-    "interloper-db",
-    "interloper-api",
-    "interloper-scheduler",
-    "interloper-google-cloud",
     "interloper-agent",
+    "interloper-api",
     "interloper-app",
+    "interloper-assets",
+    "interloper-core",
+    "interloper-db",
+    "interloper-docker",
+    "interloper-google-cloud",
+    "interloper-k8s",
+    "interloper-pandas",
+    "interloper-scheduler",
 ]
 
 [dependency-groups]
 dev = [
     "pre-commit>=4.2.0",
-    "pytest>=8.3.5",
     "pytest-cov>=6.0.0",
+    "pytest>=8.3.5",
     "python-dotenv>=1.1.1",
     "python-semantic-release>=10.0.0",
     "ruff>=0.9.4",
-    "pyright>=1.1.400",
+    "ty>=0.0.46",
     "zensical>=0.0.24",
 ]
 
@@ -54,12 +54,35 @@ interloper-app = { workspace = true }
 members = ["packages/*"]
 
 # ###############
-# PYRIGHT
+# TY
 # ###############
-[tool.pyright]
+[tool.ty.environment]
+python-version = "3.10"
+
+[tool.ty.src]
+# Scope to the workspace packages (their src/ + tests/).
 include = ["packages"]
-typeCheckingMode = "basic"
-reportMissingParameterType = true
+
+[tool.ty.rules]
+invalid-method-override = "ignore"
+unused-type-ignore-comment = "ignore"
+
+[tool.ty.analysis]
+# Optional vendor SDKs ship no type information and are only pulled in via
+# extras; their imports are guarded and assigned to `Any`-typed properties.
+# Treat them as `Any` instead of unresolved rather than disabling the rule globally.
+replace-imports-with-any = ["bingads.**", "googleapiclient.**", "google.ads.**"]
+
+[[tool.ty.overrides]]
+# Schema definitions intentionally redeclare the `id`/`name` identity attributes
+# inherited from Component as typed data columns (Component models them as class
+# metadata; a Schema subclass models them as instance fields). The runtime handles
+# this shadow deliberately (see schema/base.py). Scope the override here so the rule
+# still guards genuine incompatible attribute overrides elsewhere.
+include = ["**/schemas/**", "packages/interloper-core/src/interloper/schema/base.py", "**/tests/**"]
+
+[tool.ty.overrides.rules]
+invalid-attribute-override = "ignore"
 
 # ###############
 # RUFF
@@ -74,13 +97,6 @@ extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "tests/**" = ["ANN", "D102"]
-
-# ###############
-# TY
-# ###############
-[tool.ty.rules]
-invalid-method-override = "ignore"
-unused-type-ignore-comment = "ignore"
 
 # ###############
 # PYTEST

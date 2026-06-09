@@ -156,24 +156,24 @@ class TestResources:
 
     def test_trickle_fills_slot_by_name(self):
         shared = FakeResource(text="shared")
-        parent = FakeConsumer(resources={"resource": shared})  # type: ignore[call-arg]
-        child = FakeConsumer()  # type: ignore[call-arg]
+        parent = FakeConsumer(resources={"resource": shared})  # ty: ignore[missing-argument]
+        child = FakeConsumer()  # ty: ignore[missing-argument]
         parent.trickle_resources(child)
         assert child.resources["resource"] is shared
 
     def test_trickle_falls_back_to_type_match(self):
         shared = FakeResource(text="shared")
         # Parent holds the resource under a different slot name so name-match fails.
-        parent = FakeConsumer(resources={"other": shared})  # type: ignore[call-arg]
-        child = FakeConsumer()  # type: ignore[call-arg]
+        parent = FakeConsumer(resources={"other": shared})  # ty: ignore[missing-argument]
+        child = FakeConsumer()  # ty: ignore[missing-argument]
         parent.trickle_resources(child)
         assert child.resources["resource"] is shared
 
     def test_trickle_does_not_overwrite_existing_slot(self):
         existing = FakeResource(text="existing")
         override = FakeResource(text="override")
-        parent = FakeConsumer(resources={"resource": override})  # type: ignore[call-arg]
-        child = FakeConsumer(resources={"resource": existing})  # type: ignore[call-arg]
+        parent = FakeConsumer(resources={"resource": override})  # ty: ignore[missing-argument]
+        child = FakeConsumer(resources={"resource": existing})  # ty: ignore[missing-argument]
         parent.trickle_resources(child)
         assert child.resources["resource"] is existing
 

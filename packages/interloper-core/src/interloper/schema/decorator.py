@@ -12,12 +12,12 @@ from interloper.schema.base import Schema
 @overload
 def schema(cls: type, /) -> type[Schema]: ...
 @overload
-def schema(  # type: ignore[reportInconsistentOverload]
+def schema(
     *,
     key: str = ...,
     name: str = ...,
 ) -> Callable[[type], type[Schema]]: ...
-def schema(  # type: ignore[reportInconsistentOverload]
+def schema(
     cls: type | None = None,
     /,
     *,

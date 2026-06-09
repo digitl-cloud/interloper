@@ -88,7 +88,7 @@ def build_launcher(
                 catalog=catalog,
                 runner_type=runner.type,
                 runner_config=runner.config,
-                **kwargs,
+                **kwargs,  # ty: ignore[invalid-argument-type]
             )
         case "kubernetes":
             try:
@@ -110,7 +110,7 @@ def build_launcher(
                 catalog=catalog,
                 runner_type=runner.type,
                 runner_config=runner.config,
-                **kwargs,
+                **kwargs,  # ty: ignore[invalid-argument-type]
             )
         case _:
             raise ValueError(f"Unknown launcher: {launcher.type!r}. Available: in_process, docker, kubernetes")

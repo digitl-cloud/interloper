@@ -92,7 +92,7 @@ def require_import(import_name: str, error_message: str) -> Callable[[F | C], F 
                     return object.__new__(cls)
                 return original_new(cls, *args, **kwargs)
 
-            obj.__new__ = staticmethod(checked_new)
+            obj.__new__ = staticmethod(checked_new)  # ty: ignore[invalid-assignment]
             return cast(C, obj)
         else:
 

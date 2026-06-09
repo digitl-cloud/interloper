@@ -43,7 +43,7 @@ def _backfill_to_response(backfill: Backfill) -> BackfillResponse:
         The response model.
     """
     return BackfillResponse(
-        id=backfill.id,  # type: ignore[arg-type]
+        id=backfill.id,
         org_id=backfill.org_id,
         job_id=backfill.job_id,
         status=backfill.status,

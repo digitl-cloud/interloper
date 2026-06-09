@@ -6,7 +6,7 @@ from interloper.events import Event, EventBus, EventType
 from interloper.events.logger import EventLogger
 
 
-def _capture(emit: object) -> list[Event]:  # type: ignore[no-untyped-def]
+def _capture(emit: object) -> list[Event]:
     captured: list[Event] = []
 
     def handler(event: Event) -> None:
@@ -14,7 +14,7 @@ def _capture(emit: object) -> list[Event]:  # type: ignore[no-untyped-def]
 
     EventBus.subscribe(handler)
     try:
-        emit()  # type: ignore[operator]
+        emit()  # ty: ignore[call-non-callable]
         EventBus.flush(timeout=5.0)
     finally:
         EventBus.unsubscribe(handler)

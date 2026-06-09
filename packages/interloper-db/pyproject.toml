@@ -44,12 +44,3 @@ extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 script_location = "src/interloper_db/migrations"
 file_template = "%(rev)s_%(slug)s"
 # sqlalchemy.url is set programmatically in env.py from the engine singleton.
-
-# ###############
-# PYRIGHT
-# ###############
-[tool.pyright]
-include = ["src"]
-typeCheckingMode = "basic"
-reportMissingParameterType = true
-ignore = ["tests/**"]

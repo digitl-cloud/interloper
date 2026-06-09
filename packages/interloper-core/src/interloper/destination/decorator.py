@@ -28,8 +28,8 @@ def destination(
     tags: list[str] = ...,
     name: str = ...,
     icon: str = ...,
-) -> Callable[[type[DestinationT]], type[DestinationT]]: ...  # type: ignore[reportInconsistentOverload]
-def destination(  # type: ignore[reportInconsistentOverload]
+) -> Callable[[type[DestinationT]], type[DestinationT]]: ...
+def destination(
     cls: type | None = None,
     /,
     *,

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def register(
-    subparsers: argparse._SubParsersAction,  # type: ignore[type-arg]
+    subparsers: argparse._SubParsersAction,
 ) -> None:
     """Register the ``launch`` command.
 

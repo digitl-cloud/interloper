@@ -84,7 +84,7 @@ def _run_to_response(run: Run) -> RunResponse:
         The response model.
     """
     return RunResponse(
-        id=run.id,  # type: ignore[arg-type]
+        id=run.id,
         org_id=run.org_id,
         job_id=run.job_id,
         backfill_id=run.backfill_id,
@@ -109,7 +109,7 @@ def _event_to_response(event: Event) -> EventResponse:
         The response model.
     """
     return EventResponse(
-        id=event.id,  # type: ignore[arg-type]
+        id=event.id,
         org_id=event.org_id,
         run_id=event.run_id,
         event_type=event.event_type,

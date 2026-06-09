@@ -193,10 +193,17 @@ class KubernetesLauncher(Launcher):
 
     def _pod_failure_reason(self, job_name: str) -> str:
         """Build a short failure description from the pod's termination state."""
+        from typing import cast
+
+        from kubernetes.client import V1PodList
+
         try:
-            pods = self._core_v1.list_namespaced_pod(
-                namespace=self._namespace,
-                label_selector=f"job-name={job_name}",
+            pods = cast(
+                V1PodList,
+                self._core_v1.list_namespaced_pod(
+                    namespace=self._namespace,
+                    label_selector=f"job-name={job_name}",
+                ),
             )
         except Exception:
             return f"Job {job_name} failed"

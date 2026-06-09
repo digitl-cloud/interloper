@@ -14,7 +14,7 @@ def list_recent_runs(
     job_id: str | None = None,
     status: str | None = None,
     limit: int = 20,
-    tool_context: ToolContext = None,  # type: ignore[assignment]
+    tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """List recent runs with optional filters.
 
@@ -62,7 +62,7 @@ def get_run_detail(run_id: str, tool_context: ToolContext) -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
-def list_failures(limit: int = 20, tool_context: ToolContext = None) -> dict[str, Any]:  # type: ignore[assignment]
+def list_failures(limit: int = 20, tool_context: ToolContext | None = None) -> dict[str, Any]:
     """List recent failed runs with their error events.
 
     Args:
@@ -77,7 +77,7 @@ def list_failures(limit: int = 20, tool_context: ToolContext = None) -> dict[str
 
         results = []
         for run in failed_runs:
-            run_id = run.id  # type: ignore[assignment]
+            run_id = run.id
             events = store.list_events(run_id=run_id)
             errors = [
                 {"asset_key": e.asset_key, "error": e.error, "timestamp": serialize(e.timestamp)}
@@ -151,7 +151,7 @@ def list_jobs(tool_context: ToolContext) -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
-def list_backfills(active_only: bool = True, tool_context: ToolContext = None) -> dict[str, Any]:  # type: ignore[assignment]
+def list_backfills(active_only: bool = True, tool_context: ToolContext | None = None) -> dict[str, Any]:
     """List backfills, optionally filtered to active ones only.
 
     Args:

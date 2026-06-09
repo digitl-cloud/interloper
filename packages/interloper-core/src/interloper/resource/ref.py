@@ -100,7 +100,7 @@ class ResourceRef(ComponentDescriptor, Generic[T]):
                 f"{type(obj).__name__} requires a '{self.attr_name}' resource "
                 f"({self.resource_type.__name__}) but none was provided."
             )
-        return value  # type: ignore[return-value]
+        return value
 
     def __repr__(self) -> str:
         """Return a readable representation of this ResourceRef."""

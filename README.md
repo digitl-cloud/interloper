@@ -101,5 +101,5 @@ helm install interloper interloper/interloper
 uv sync --all-packages --all-extras
 uv run pytest
 uv run ruff check .
-uv run pyright
+uv run ty check
 ```

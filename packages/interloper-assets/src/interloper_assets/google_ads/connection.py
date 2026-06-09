@@ -27,7 +27,7 @@ class GoogleAdsConnection(il.Connection):
 
     @cached_property
     def client(self) -> "GoogleAdsClient":
-        from google.ads.googleads.client import GoogleAdsClient  # type: ignore[import-not-found]
+        from google.ads.googleads.client import GoogleAdsClient
 
         config = {
             "client_id": self.client_id,

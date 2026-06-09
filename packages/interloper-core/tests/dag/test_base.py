@@ -308,7 +308,7 @@ class TestConstruction:
 
     def test_invalid_item_type_raises(self):
         with pytest.raises(DAGError):
-            DAG("not an asset")  # type: ignore[arg-type]
+            DAG("not an asset")  # ty: ignore[invalid-argument-type]
 
     def test_duplicate_ids_raise(self):
         a = FakeAsset(id="same")

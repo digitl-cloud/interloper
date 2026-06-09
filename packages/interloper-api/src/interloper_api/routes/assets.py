@@ -102,16 +102,16 @@ def _resource_map(junction_cls: type, fk_column: str, fk_value: UUID) -> dict[st
     col = getattr(junction_cls, fk_column)
     with Session(get_engine()) as s:
         rows = s.exec(select(junction_cls).where(col == fk_value)).all()
-    return {r.key: str(r.resource_id) for r in rows}
+    return {r.key: str(r.resource_id) for r in rows}  # ty: ignore[unresolved-attribute]
 
 
 def _dest_to_response(dest: Destination) -> DestinationResponse:
     return DestinationResponse(
-        id=dest.id,  # type: ignore[arg-type]
+        id=dest.id,
         key=dest.key,
         name=dest.name,
         config=dest.config,
-        resources=_resource_map(DestinationResource, "destination_id", dest.id),  # type: ignore[arg-type]
+        resources=_resource_map(DestinationResource, "destination_id", dest.id),
         created_at=str(dest.created_at) if dest.created_at else None,
     )
 
@@ -119,13 +119,13 @@ def _dest_to_response(dest: Destination) -> DestinationResponse:
 def _asset_to_response(asset: Asset) -> AssetResponse:
     """Convert a DB Asset to an AssetResponse."""
     return AssetResponse(
-        id=asset.id,  # type: ignore[arg-type]
+        id=asset.id,
         source_id=asset.source_id,
         org_id=asset.org_id,
         key=asset.key,
         materializable=asset.materializable,
         config=asset.config,
-        resources=_resource_map(AssetResource, "asset_id", asset.id),  # type: ignore[arg-type]
+        resources=_resource_map(AssetResource, "asset_id", asset.id),
         destinations=[_dest_to_response(d) for d in asset.destinations],
         created_at=str(asset.created_at) if asset.created_at else None,
     )

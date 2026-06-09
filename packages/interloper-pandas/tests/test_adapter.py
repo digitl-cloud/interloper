@@ -24,7 +24,7 @@ class TestDataFrameAdapterToRows:
     def test_rejects_non_dataframe(self):
         adapter = DataFrameAdapter()
         with pytest.raises(TypeError, match="DataFrameAdapter expects a pandas DataFrame"):
-            adapter.to_rows([{"a": 1}])  # type: ignore[arg-type]
+            adapter.to_rows([{"a": 1}])  # ty: ignore[invalid-argument-type]
 
 
 class TestDataFrameAdapterFromRows:

@@ -188,7 +188,7 @@ class AppSettings(BaseSettings):
         Returns:
             Fully resolved runtime settings.
         """
-        return cls()  # type: ignore[call-arg]
+        return cls()
 
     @classmethod
     def get(cls) -> AppSettings:
