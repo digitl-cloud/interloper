@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.9.0 (2026-06-09)
+
+### Bug Fixes
+
+- Attribute LOG events to their asset so they filter and label correctly
+  ([`f9d5d65`](https://github.com/digitl-cloud/interloper/commit/f9d5d651183b99bb47c36de0f7f2f8104de80f06))
+
+### Features
+
+- Skip destination writes when an asset produces no data
+  ([`57d26b3`](https://github.com/digitl-cloud/interloper/commit/57d26b349cf9e0908f49172acc51df3e3bfcd6d0))
+
+
 ## v0.8.0 (2026-06-08)
 
 ### Bug Fixes
