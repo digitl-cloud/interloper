@@ -4,6 +4,7 @@
 # reads parameter annotations via ``inspect.signature`` and needs them as real
 # classes (not lazily-evaluated strings).
 
+import asyncio
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -14,6 +15,7 @@ import interloper as il
 from interloper.asset.base import AssetDefinition
 from interloper.component.base import Component, ComponentSpec
 from interloper.errors import AssetError, DestinationError, PartitionError
+from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 
 # ---------------------------------------------------------------------------
@@ -482,3 +484,63 @@ class TestSerialization:
         assert restored.dataset == "ds"
         assert isinstance(restored.destination, list)
         assert isinstance(restored.resources["config"], FakeResource)
+
+
+# ---------------------------------------------------------------------------
+# Destination write — empty-result handling
+# ---------------------------------------------------------------------------
+
+
+def _capture_log_events(run: Any) -> list[Event]:
+    captured: list[Event] = []
+
+    def handler(event: Event) -> None:
+        captured.append(event)
+
+    EventBus.subscribe(handler)
+    try:
+        run()
+        EventBus.flush(timeout=5.0)
+    finally:
+        EventBus.unsubscribe(handler)
+    return [e for e in captured if e.type == EventType.LOG]
+
+
+class TestDestinationWrite:
+    def test_empty_result_skips_write_and_warns(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+
+        @il.asset()
+        def empty() -> list[dict[str, Any]]:
+            return []
+
+        asset = empty(id="empty", destination=mem)
+        logs = _capture_log_events(lambda: asyncio.run(asset.materialize()))
+
+        # Nothing was written.
+        assert mem._storage == {}
+
+        warnings = [
+            e
+            for e in logs
+            if e.metadata.get("level") == "WARNING" and "produced no data" in (e.metadata.get("message") or "")
+        ]
+        assert len(warnings) == 1
+        # The warning is attributed to the asset so it filters/labels in the UI.
+        assert warnings[0].metadata.get("asset_id") == asset.id
+
+    def test_non_empty_result_is_written(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+
+        @il.asset()
+        def full() -> list[dict[str, Any]]:
+            return [{"a": 1}]
+
+        asset = full(id="full", destination=mem)
+        logs = _capture_log_events(lambda: asyncio.run(asset.materialize()))
+
+        # Data was written and no "no data" warning was emitted.
+        assert mem._storage
+        assert not [e for e in logs if "produced no data" in (e.metadata.get("message") or "")]
