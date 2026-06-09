@@ -296,6 +296,8 @@ class Asset(Component):
             partition_or_window=partition_or_window,
             partitioning=self.partitioning,
             metadata=metadata,
+            asset_id=self.id,
+            source_id=self._source.id if self._source is not None else None,
         )
 
         kwargs = await self._build_kwargs(context, partition_or_window, dag)
