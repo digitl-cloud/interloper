@@ -81,6 +81,7 @@ Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS`, `SCHEDULER_EXTRA
 - Branch names use the same type prefix with a slash: `feat/xxx`, `fix/xxx`, `chore/xxx`, …
 - PR titles follow Conventional Commits (`feat: …`, `fix: …`); every commit that lands on `main` feeds `python-semantic-release`.
 - Python ≥3.10, ruff line length 120, pyright `basic` mode.
+- Test files mirror the package layout one-to-one: a test for `src/interloper/<pkg>/<module>.py` lives in `tests/<pkg>/test_<module>.py`. Don't add standalone `test_<feature>.py` files — fold tests for an existing module into that module's test file (e.g. tests for `asset/base.py` go in `tests/asset/test_base.py`, not a new `test_<feature>.py`).
 - Pre-commit runs ruff + pyright + pytest on every commit ([.pre-commit-config.yaml](.pre-commit-config.yaml)).
 - All workspace packages share `version = "0.2.0"`, bumped by `python-semantic-release` from commit history.
 

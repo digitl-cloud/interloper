@@ -20,6 +20,7 @@ from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
 from interloper.resource import Resource
 from interloper.schema import Schema
+from interloper.utils.data import is_empty
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label
 
@@ -489,6 +490,20 @@ class Asset(Component):
         """Write the execution result to all configured destinations."""
         dests = self._resolve_destinations()
         if not dests:
+            return
+
+        if is_empty(result):
+            EventBus.emit(
+                EventType.LOG,
+                metadata={
+                    **self._event_metadata(metadata, partition_or_window),
+                    "level": "WARNING",
+                    "message": (
+                        f"Asset '{type(self).key}' produced no data; "
+                        f"skipping write to {len(dests)} destination(s)"
+                    ),
+                },
+            )
             return
 
         dest_context = IOContext(
