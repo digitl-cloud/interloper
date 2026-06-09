@@ -22,24 +22,41 @@ class EventLogger:
         context.logger.warning("Rate limited, retrying...")
     """
 
-    def __init__(self, asset_key: str, metadata: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        asset_key: str,
+        metadata: dict[str, Any],
+        asset_id: str | None = None,
+        source_id: str | None = None,
+    ) -> None:
         """Initialize the logger.
 
         Args:
             asset_key: Qualified key of the asset that owns this logger.
             metadata: Run metadata included in every emitted ``LOG`` event.
+            asset_id: Id of the asset that owns this logger. Carried on every
+                emitted ``LOG`` event so it can be attributed to the asset
+                (e.g. filtered alongside its lifecycle events).
+            source_id: Id of the source the asset belongs to, if any.
         """
         self._asset_key = asset_key
         self._metadata = metadata
+        self._asset_id = asset_id
+        self._source_id = source_id
 
     def _emit(self, level: int, message: str) -> None:
         """Emit a ``LOG`` event with the given level and message."""
-        EventBus.emit(EventType.LOG, metadata={
+        metadata: dict[str, Any] = {
             **self._metadata,
             "asset_key": self._asset_key,
             "message": message,
             "level": logging.getLevelName(level),
-        })
+        }
+        if self._asset_id is not None:
+            metadata["asset_id"] = self._asset_id
+        if self._source_id is not None:
+            metadata["source_id"] = self._source_id
+        EventBus.emit(EventType.LOG, metadata=metadata)
 
     def debug(self, message: str) -> None:
         """Emit a debug-level log event."""

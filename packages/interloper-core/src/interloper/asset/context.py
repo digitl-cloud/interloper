@@ -23,6 +23,8 @@ class ExecutionContext:
         partitioning: PartitionConfig | None = None,
         partition_or_window: Partition | PartitionWindow | None = None,
         metadata: dict[str, Any] | None = None,
+        asset_id: str | None = None,
+        source_id: str | None = None,
     ) -> None:
         """Initialize the execution context.
 
@@ -31,11 +33,15 @@ class ExecutionContext:
             partitioning: The partitioning configuration for the asset.
             partition_or_window: The partition or partition window for the asset.
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
+            asset_id: Id of the current asset, propagated onto ``LOG`` events.
+            source_id: Id of the source the asset belongs to, if any.
         """
         self._asset_key = asset_key
         self._partitioning = partitioning
         self._partition_or_window = partition_or_window
         self._metadata = metadata or {}
+        self._asset_id = asset_id
+        self._source_id = source_id
         self._logger: EventLogger | None = None
 
     @property
@@ -52,7 +58,12 @@ class ExecutionContext:
     def logger(self) -> EventLogger:
         """Logger that emits messages as events on the event bus."""
         if self._logger is None:
-            self._logger = EventLogger(self._asset_key, self._metadata)
+            self._logger = EventLogger(
+                self._asset_key,
+                self._metadata,
+                asset_id=self._asset_id,
+                source_id=self._source_id,
+            )
         return self._logger
 
     @property
