@@ -18,6 +18,9 @@ dependencies = [
 docker = ["interloper-docker"]
 k8s = ["interloper-k8s"]
 
+[project.entry-points."interloper.launchers"]
+in_process = "interloper_scheduler.launcher:InProcessLauncher"
+
 [build-system]
 requires = ["uv_build>=0.11.5,<0.12"]
 build-backend = "uv_build"

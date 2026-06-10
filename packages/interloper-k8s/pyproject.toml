@@ -14,6 +14,9 @@ dependencies = [
     "interloper-scheduler",
 ]
 
+[project.entry-points."interloper.launchers"]
+kubernetes = "interloper_k8s.launcher:KubernetesLauncher"
+
 [build-system]
 requires = ["uv_build>=0.11.5,<0.12"]
 build-backend = "uv_build"
