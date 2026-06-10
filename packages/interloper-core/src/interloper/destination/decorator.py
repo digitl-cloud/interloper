@@ -28,6 +28,7 @@ def destination(
     tags: list[str] = ...,
     name: str = ...,
     icon: str = ...,
+    read_representation: str = ...,
 ) -> Callable[[type[DestinationT]], type[DestinationT]]: ...
 def destination(
     cls: type | None = None,
@@ -38,6 +39,7 @@ def destination(
     tags: list[str] | None = None,
     name: str | None = None,
     icon: str | None = None,
+    read_representation: str | None = None,
 ) -> type[Destination] | Callable[[type], type[Destination]]:
     """Create a Destination subclass from a decorated class.
 
@@ -67,6 +69,8 @@ def destination(
     classvars: dict[str, Any] = {}
     if resources is not None:
         classvars["resource_types"] = resources
+    if read_representation is not None:
+        classvars["read_representation"] = read_representation
     if tags is not None:
         classvars["tags"] = tags
     if key is not None:

@@ -10,7 +10,7 @@ import warnings
 from collections.abc import Sequence
 from decimal import Decimal
 from functools import cached_property
-from typing import Any
+from typing import Any, ClassVar
 
 import google.auth
 import pandas as pd
@@ -40,7 +40,7 @@ class BigQueryDestination(DatabaseDestination):
     connection: GoogleCloudConnection
 
     # Reads materialize as DataFrames for downstream assets.
-    read_representation: str = "dataframe"
+    read_representation: ClassVar[str] = "dataframe"
 
     # Config fields (previously on BigQueryConfig)
     project: str = InputField(description="Google Cloud project ID")

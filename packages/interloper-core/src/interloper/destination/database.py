@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from interloper.destination.context import IOContext
 from interloper.destination.partitioned import PartitionedDestination
@@ -47,8 +47,10 @@ class DatabaseDestination(PartitionedDestination):
     (``"rows"`` by default; e.g. ``"dataframe"`` for pandas-native backends).
     """
 
-    write_disposition: WriteDisposition = WriteDisposition.REPLACE
-    read_representation: str = "rows"
+    # Backend traits, not instance configuration: class-level so they never
+    # appear in the destination's config schema (the UI form) or its specs.
+    write_disposition: ClassVar[WriteDisposition] = WriteDisposition.REPLACE
+    read_representation: ClassVar[str] = "rows"
 
     # ------------------------------------------------------------------
     # Transaction hook

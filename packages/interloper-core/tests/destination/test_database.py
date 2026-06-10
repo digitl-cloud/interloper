@@ -65,7 +65,10 @@ class TestWrite:
         assert dest.calls[1][1][2] == rows
 
     def test_append_skips_deletes(self):
-        dest = RecordingDB(id="db", write_disposition=WriteDisposition.APPEND)
+        class AppendDB(RecordingDB):
+            write_disposition = WriteDisposition.APPEND
+
+        dest = AppendDB(id="db")
         dest.write(make_ctx(plain_asset()), [{"a": 1}])
         assert [c[0] for c in dest.calls] == ["insert"]
 
@@ -134,6 +137,30 @@ class TestInsertDataHook:
         assert captured["schema"] is MySchema
 
 
+class TestClassLevelTraits:
+    """write_disposition / read_representation are backend traits, not config."""
+
+    def test_traits_are_not_config_schema_fields(self):
+        # Regression: as pydantic fields they leaked into the UI config form.
+        properties = RecordingDB.definition().config_schema.get("properties", {})
+        assert "read_representation" not in properties
+        assert "write_disposition" not in properties
+
+    def test_traits_are_not_model_fields(self):
+        assert "read_representation" not in RecordingDB.model_fields
+        assert "write_disposition" not in RecordingDB.model_fields
+
+    def test_read_representation_via_decorator(self):
+        from interloper.destination import destination
+
+        @destination(name="Traited", read_representation="dataframe")
+        class TraitedDB(RecordingDB):
+            pass
+
+        assert TraitedDB.read_representation == "dataframe"
+        assert "read_representation" not in TraitedDB.definition().config_schema.get("properties", {})
+
+
 class TestRecordsConversion:
     """Data converts to records through its representation."""
 
@@ -158,7 +185,7 @@ class TestRecordsConversion:
         pd = pytest.importorskip("pandas")
 
         class DataFrameReadDB(RecordingDB):
-            read_representation: str = "dataframe"
+            read_representation = "dataframe"
 
         out = DataFrameReadDB(id="db")._from_rows([{"a": 1}])
         assert isinstance(out, pd.DataFrame)
