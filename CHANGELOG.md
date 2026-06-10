@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v0.12.0 (2026-06-10)
+
+### Bug Fixes
+
+- Load filtered events from the server when a timeline asset is selected
+  ([`dcb9f6c`](https://github.com/digitl-cloud/interloper/commit/dcb9f6c7ac0b921cad5a73d97ba02cda8560c875))
+
+### Features
+
+- Persist and display log event level
+  ([`74456f0`](https://github.com/digitl-cloud/interloper/commit/74456f0a558f8eba332b9fdb2da8ce2c8d6e1747))
+
+### Refactoring
+
+- Destination backend traits are class-level, not instance config
+  ([`7da3999`](https://github.com/digitl-cloud/interloper/commit/7da3999bc60f04cf658f6a7044fc5cd56885b883))
+
+- Partition dispatch as a destination base-class template
+  ([`64f5243`](https://github.com/digitl-cloud/interloper/commit/64f524347f469bd526318f133d372c4b7a1f6cd5))
+
+
 ## v0.11.0 (2026-06-10)
 
 ### Features
