@@ -14,13 +14,13 @@ from typing_extensions import Self
 from interloper.asset.context import ExecutionContext
 from interloper.component import Component, ComponentDefinition
 from interloper.destination import Destination, IOContext
-from interloper.errors import AssetError, PartitionError
+from interloper.errors import AssetError, NormalizerError, PartitionError
 from interloper.events import EventBus, EventType
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
 from interloper.resource import Resource
 from interloper.schema import Schema
-from interloper.utils.data import is_empty
+from interloper.utils.data import dataframe_to_records, is_dataframe, is_empty
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label
 
@@ -29,6 +29,10 @@ if TYPE_CHECKING:
     from interloper.source import Source
 
 _UNSET = object()
+
+# Shared coercer for the no-normalizer conform path; only `_coerce` is used,
+# so the instance's transformation config is irrelevant.
+_COERCER = Normalizer()
 
 
 warnings.filterwarnings("ignore", message='Field name "schema" in "AssetDefinition"')
@@ -116,6 +120,9 @@ class Asset(Component):
 
     # Private
     _source: Source | None = PrivateAttr(default=None)
+    # Effective schema of the last conform: the declared schema, or the one
+    # inferred from the data. Carried to destinations via IOContext.schema.
+    _effective_schema: type[Schema] | None = PrivateAttr(default=None)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Infer ``resource_types`` from ``data()`` type annotations."""
@@ -326,8 +333,7 @@ class Asset(Component):
             )
             raise
 
-        if self.normalizer is not None:
-            result = self._apply_normalizer(result)
+        result = self._normalize_and_conform(result)
 
         return result
 
@@ -510,6 +516,7 @@ class Asset(Component):
             asset=self,
             partition_or_window=partition_or_window if self.partitioning is not None else None,
             metadata=metadata,
+            schema=self._effective_schema or self.schema,
         )
 
         for dest in dests:
@@ -562,6 +569,7 @@ class Asset(Component):
             asset=upstream_asset,
             partition_or_window=effective_partition,
             metadata=metadata,
+            schema=upstream_asset.schema,
         )
 
         dest_meta = self._event_metadata(metadata, effective_partition)
@@ -589,37 +597,108 @@ class Asset(Component):
 
         return result
 
-    def _apply_normalizer(self, result: Any) -> list[dict[str, Any]]:
-        """Apply normalizer transformations and strategy-driven schema handling.
+    def _normalize_and_conform(self, result: Any) -> Any:
+        """Apply optional normalization, then always conform to the schema.
+
+        Normalization (when a normalizer is configured) reshapes the data:
+        flattening, column renaming, missing-key fill.  Conform then enforces
+        the declared schema according to the materialization strategy — it
+        runs whether or not a normalizer is configured, so a declared schema
+        is always a checked contract.
 
         Returns:
-            Normalized list of row dicts.
+            The normalized and conformed result.
+        """
+        if self.normalizer is not None:
+            result = self.normalizer.normalize(result)
+        return self._conform(result)
+
+    def _conform(self, result: Any) -> Any:
+        """Enforce the asset's schema according to the materialization strategy.
+
+        AUTO: validate each row when a schema is declared, infer one otherwise.
+        STRICT: schema required; reject extra, missing, or mistyped fields.
+        RECONCILE: schema required; align columns and coerce values.
+
+        The effective schema (declared, or inferred under AUTO) is stored on
+        the asset and carried to destinations via ``IOContext.schema``.
+
+        Returns:
+            The conformed result.  Tabular non-DataFrame data (single dict,
+            generator) is coerced to ``list[dict]`` when a schema is declared.
 
         Raises:
-            AssetError: If strategy requires a schema but none is configured.
+            AssetError: If the strategy requires a schema but none is declared,
+                or if a schema is declared but the data is not tabular.
         """
-        normalizer = self.normalizer  # already checked non-None by caller
-        assert normalizer is not None
-
-        result = normalizer.normalize(result)
         strategy = self.materialization_strategy
+        schema = self.schema
+
+        if schema is None:
+            if strategy != MaterializationStrategy.AUTO:
+                raise AssetError(f"Asset '{type(self).key}': strategy='{strategy.value}' requires a schema.")
+            self._effective_schema = self._infer_schema(result)
+            return result
+
+        self._effective_schema = schema
+
+        # A normalizer knows the data's native type — delegate to it.
+        if self.normalizer is not None:
+            if strategy == MaterializationStrategy.RECONCILE:
+                return self.normalizer.reconcile(result, schema)
+            self.normalizer.validate_schema(result, schema, strict=strategy == MaterializationStrategy.STRICT)
+            return result
+
+        # No normalizer: conform on a records view of the data.
+        if is_dataframe(result):
+            records = dataframe_to_records(result)
+            if strategy == MaterializationStrategy.RECONCILE:
+                import pandas as pd
+
+                return pd.DataFrame(schema.reconcile(records))
+            schema.validate_rows(records, strict=strategy == MaterializationStrategy.STRICT)
+            return result
+
+        try:
+            records = _COERCER._coerce(result)
+        except NormalizerError as e:
+            raise AssetError(
+                f"Asset '{type(self).key}' declares a schema but returned data that cannot "
+                f"be checked against it: {e}"
+            ) from e
 
         if strategy == MaterializationStrategy.RECONCILE:
-            if self.schema is None:
-                raise AssetError(f"Asset '{self.key}': strategy='reconcile' requires a schema.")
-            result = normalizer.reconcile(result, self.schema)
+            return schema.reconcile(records)
+        schema.validate_rows(records, strict=strategy == MaterializationStrategy.STRICT)
+        return records
 
-        elif strategy == MaterializationStrategy.STRICT:
-            if self.schema is None:
-                raise AssetError(f"Asset '{self.key}': strategy='strict' requires a schema.")
-            normalizer.validate_schema(result, self.schema, strict=True)
+    def _infer_schema(self, result: Any) -> type[Schema] | None:
+        """Best-effort schema inference for the IO boundary (AUTO, no declared schema).
 
-        else:
-            # AUTO
-            if self.schema is not None:
-                normalizer.validate_schema(result, self.schema)
+        Inference is metadata for destinations (DDL, typed loads) — it must
+        never fail a materialization, so any inference error yields ``None``.
 
-        return result
+        Returns:
+            The inferred schema, or ``None`` when inference is disabled,
+            impossible (non-tabular data, generators), or fails.
+        """
+        if is_empty(result):
+            return None
+        if self.normalizer is not None:
+            if not self.normalizer.infer:
+                return None
+            try:
+                return self.normalizer.infer_schema(result)
+            except Exception:  # noqa: BLE001 — inference is best-effort metadata
+                return None
+        if isinstance(result, list) and result and isinstance(result[0], dict):
+            try:
+                return Schema.infer(result)
+            except Exception:  # noqa: BLE001 — inference is best-effort metadata
+                return None
+        # DataFrames without a normalizer are left to the destination's native
+        # type handling; other shapes are not inferable.
+        return None
 
     def _validate_partitioning(
         self,

@@ -7,6 +7,7 @@ import httpx
 import interloper as il
 import pandas as pd
 import tenacity as tc
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.amazon_ads import constants, schemas
 from interloper_assets.amazon_ads.connection import AmazonAdsConnection
@@ -164,6 +165,16 @@ def request_and_download_report(
     resources={"connection": AmazonAdsConnection},
     tags=["Advertising"],
     icon="icon:amazon",
+    normalizer=DataFrameNormalizer(
+        # Amazon reports name metrics camelCase with digit groups as words
+        # (acosClicks14d -> acos_clicks_14d); profiles nest accountInfo one level.
+        snake_case_digits=True,
+        flatten_max_level=1,
+        column_overrides={
+            "eCPAddToCart": "ecp_add_to_cart",
+            "eCPBrandSearch": "ecp_brand_search",
+        },
+    ),
 )
 class AmazonAds(il.Source):
     """Amazon Ads advertising platform integration."""

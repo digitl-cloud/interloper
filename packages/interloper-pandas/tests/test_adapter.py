@@ -43,3 +43,34 @@ class TestDataFrameAdapterFromRows:
         df = adapter.from_rows([])
         assert isinstance(df, pd.DataFrame)
         assert df.empty
+
+
+class TestNullSafety:
+    """Missing values convert to None, not NaN."""
+
+    def test_nan_and_nat_become_none(self):
+        import numpy as np
+
+        adapter = DataFrameAdapter()
+        df = pd.DataFrame(
+            {
+                "f": [1.5, np.nan],
+                "t": [pd.Timestamp("2024-01-01"), pd.NaT],
+                "s": ["x", None],
+            }
+        )
+        rows = adapter.to_rows(df)
+        assert rows[1]["f"] is None
+        assert rows[1]["t"] is None
+        assert rows[1]["s"] is None
+
+    def test_nullable_extension_dtypes_become_none(self):
+        adapter = DataFrameAdapter()
+        df = pd.DataFrame({"i": pd.array([1, None], dtype="Int64")})
+        rows = adapter.to_rows(df)
+        assert rows == [{"i": 1}, {"i": None}]
+
+    def test_can_handle(self):
+        adapter = DataFrameAdapter()
+        assert adapter.can_handle(pd.DataFrame())
+        assert not adapter.can_handle([{"a": 1}])

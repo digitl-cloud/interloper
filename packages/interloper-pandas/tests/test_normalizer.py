@@ -103,7 +103,7 @@ class TestDataFrameInferSchema:
     def test_empty_dataframe_raises(self):
         n = DataFrameNormalizer()
         df = pd.DataFrame()
-        with pytest.raises(ValueError, match="Cannot infer schema from empty data"):
+        with pytest.raises(ValueError, match="Cannot infer schema from a DataFrame with no columns"):
             n.infer_schema(df)
 
 
@@ -173,3 +173,106 @@ class TestDataFrameReconcile:
         result = n.reconcile(df, NameSchema)
         assert isinstance(result, pd.DataFrame)
         assert "extra" not in result.columns
+
+
+class TestVectorizedReconcile:
+    """Spec-driven column-wise reconcile."""
+
+    def _schema(self):
+        import datetime
+
+        from interloper.schema import Schema
+        from pydantic import Field
+
+        class S(Schema):
+            id: int | None = Field(...)
+            cost: float | None = Field(...)
+            day: datetime.date | None = Field(...)
+            name: str | None = Field(...)
+
+        return S
+
+    def test_casts_to_nullable_dtypes(self):
+        import numpy as np
+
+        n = DataFrameNormalizer()
+        df = pd.DataFrame(
+            {"id": [1.0, np.nan], "cost": ["1.5", None], "day": ["2024-01-01", None], "name": ["x", None]}
+        )
+        out = n.reconcile(df, self._schema())
+        assert str(out["id"].dtype) == "Int64"
+        assert out["id"].tolist()[0] == 1
+        assert out["cost"].tolist()[0] == 1.5
+        import datetime
+
+        assert out["day"].tolist()[0] == datetime.date(2024, 1, 1)
+        assert out["name"].tolist()[0] == "x"
+
+    def test_missing_nullable_column_added(self):
+        n = DataFrameNormalizer()
+        df = pd.DataFrame({"id": [1]})
+        out = n.reconcile(df, self._schema())
+        assert list(out.columns) == ["id", "cost", "day", "name"]
+        assert out["cost"].isna().all()
+
+    def test_missing_required_column_raises(self):
+        from interloper.errors import SchemaError
+        from interloper.schema import Schema
+
+        class Req(Schema):
+            must: int
+
+        n = DataFrameNormalizer()
+        with pytest.raises(SchemaError, match="required column 'must' is missing"):
+            n.reconcile(pd.DataFrame({"other": [1]}), Req)
+
+    def test_uncastable_value_raises(self):
+        from interloper.errors import SchemaError
+
+        n = DataFrameNormalizer()
+        df = pd.DataFrame({"id": ["abc"], "cost": [1.0], "day": ["2024-01-01"], "name": ["x"]})
+        with pytest.raises(SchemaError, match="cannot cast"):
+            n.reconcile(df, self._schema())
+
+
+class TestDtypeInference:
+    """infer_schema reads dtypes, not rows."""
+
+    def test_dtype_mapping(self):
+        import datetime
+
+        import numpy as np
+
+        n = DataFrameNormalizer()
+        df = pd.DataFrame(
+            {
+                "i": [1, 2],
+                "f": [1.0, np.nan],
+                "b": [True, False],
+                "t": pd.to_datetime(["2024-01-01", "2024-01-02"]),
+                "s": ["x", "y"],
+            }
+        )
+        specs = {s.name: s for s in n.infer_schema(df).field_specs()}
+        assert specs["i"].type is int
+        assert specs["f"].type is float
+        assert specs["b"].type is bool
+        assert specs["t"].type is datetime.datetime
+        assert specs["s"].type is str
+        assert all(s.nullable for s in specs.values())
+
+
+class TestNullSafeValidate:
+    """validate_schema tolerates NaN in nullable numeric columns."""
+
+    def test_nan_in_nullable_int_column_passes(self):
+        import numpy as np
+        from interloper.schema import Schema
+        from pydantic import Field
+
+        class S(Schema):
+            id: int | None = Field(...)
+
+        n = DataFrameNormalizer()
+        # NaN forces float64 dtype; the records view must yield None, not nan
+        n.validate_schema(pd.DataFrame({"id": [1.0, np.nan]}), S)

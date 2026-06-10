@@ -11,6 +11,9 @@ requires-python = ">=3.10"
 dependencies = [
     "google-cloud-bigquery>=3.0",
     "interloper-core",
+    "interloper-pandas",
+    "pyarrow>=14",
+    "db-dtypes>=1.0",
 ]
 
 [build-system]
@@ -19,6 +22,7 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 interloper-core = { workspace = true }
+interloper-pandas = { workspace = true }
 
 # ###############
 # RUFF

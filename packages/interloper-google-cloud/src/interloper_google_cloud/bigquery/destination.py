@@ -4,19 +4,23 @@ from __future__ import annotations
 
 import datetime
 import json
+import math
+import warnings
 from decimal import Decimal
 from functools import cached_property
 from typing import Any
 
 import google.auth
+import pandas as pd
 from google.cloud import bigquery
 from google.cloud.exceptions import Conflict, NotFound
 from google.oauth2 import service_account
-from interloper.destination import destination
+from interloper.destination import IOContext, destination
 from interloper.destination.adapter import DataAdapter
 from interloper.destination.database import DatabaseDestination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.resource.fields import InputField, SelectField
+from interloper.schema import FieldSpec, Schema
 from interloper_pandas import DataFrameAdapter
 
 from interloper_google_cloud.connection import GoogleCloudConnection
@@ -118,18 +122,14 @@ class BigQueryDestination(DatabaseDestination):
             return False
         return True
 
-    def _create_table(self, table: str, schema: str | None, rows: list[dict[str, Any]]) -> None:
-        """Create a BigQuery table from sample row data.
-
-        Column types are inferred from the Python values in the first row.
+    def _create_table(self, table: str, schema: str | None, bq_schema: list[bigquery.SchemaField]) -> None:
+        """Create a BigQuery table with an explicit schema.
 
         Args:
             table: Target table name.
             schema: Database schema (dataset).
-            rows: Row data (at least one row required for schema inference).
+            bq_schema: BigQuery field definitions.
         """
-        sample = rows[0]
-        bq_schema = [bigquery.SchemaField(name, _py_to_bq_type(value)) for name, value in sample.items()]
         bq_table = bigquery.Table(self._table_ref(table, schema), schema=bq_schema)
         self.client.create_table(bq_table)
 
@@ -155,30 +155,102 @@ class BigQueryDestination(DatabaseDestination):
     # DatabaseDestination hooks
     # ------------------------------------------------------------------
 
-    def _insert(self, table: str, schema: str | None, rows: list[dict[str, Any]]) -> None:
-        """Insert rows into BigQuery using a load job.
+    def _insert_data(self, table: str, schema: str | None, data: Any, context: IOContext) -> None:
+        """Insert data into BigQuery, schema-driven when a schema is available.
 
-        If the table does not exist yet, the dataset is ensured and the table is
-        created from the row data before loading.
+        The effective schema from the IO context (declared on the asset, or
+        inferred during conform) drives both table DDL and the load job's
+        schema, so the table shape is deterministic and stable across
+        partitions.  DataFrames load natively via Parquet
+        (``load_table_from_dataframe``); other data falls back to the
+        JSON-rows path.
+
+        Args:
+            table: Target table name.
+            schema: Database schema (dataset).
+            data: The data in its native format.
+            context: IO context carrying the asset and effective schema.
+        """
+        bq_schema = _schema_to_bq_fields(context.schema) if context.schema is not None else None
+
+        if not self._table_exists(table, schema):
+            self._ensure_dataset(schema)
+            if bq_schema is not None:
+                self._create_table(table, schema, bq_schema)
+            elif not isinstance(data, pd.DataFrame):
+                rows = self._to_rows(data)
+                if not rows:
+                    return
+                self._create_table(table, schema, _infer_bq_schema(rows))
+            # DataFrame without schema: the load job creates the table from dtypes.
+
+        ref = self._table_ref(table, schema)
+        if isinstance(data, pd.DataFrame):
+            self._load_dataframe(ref, data, bq_schema)
+        else:
+            rows = self._to_rows(data)
+            if rows:
+                self._load_rows(ref, rows, bq_schema)
+
+    def _load_dataframe(self, ref: str, df: pd.DataFrame, bq_schema: list[bigquery.SchemaField] | None) -> None:
+        """Load a DataFrame via a Parquet load job.
+
+        When a schema is available, columns are aligned to it: extra columns
+        are dropped (with a warning) and the load job receives explicit field
+        types, so pyarrow casts values (including ``NaN`` → ``NULL``) instead
+        of relying on dtype autodetection.
+
+        Args:
+            ref: Fully-qualified table reference.
+            df: The DataFrame to load.
+            bq_schema: BigQuery field definitions, or ``None`` to autodetect.
+        """
+        job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND)
+
+        if bq_schema is not None:
+            schema_columns = [field.name for field in bq_schema]
+            extras = [str(c) for c in df.columns if str(c) not in schema_columns]
+            if extras:
+                warnings.warn(
+                    f"Columns {extras} are not in the schema for '{ref}' and will not be written.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            present = [c for c in schema_columns if c in df.columns]
+            df = df[present]
+            job_config.schema = [field for field in bq_schema if field.name in present]
+
+        job = self.client.load_table_from_dataframe(df, ref, job_config=job_config)
+        job.result()
+
+    def _load_rows(self, ref: str, rows: list[dict[str, Any]], bq_schema: list[bigquery.SchemaField] | None) -> None:
+        """Load row dicts via a newline-delimited JSON load job.
+
+        Args:
+            ref: Fully-qualified table reference.
+            rows: Row data as list of dicts.
+            bq_schema: BigQuery field definitions, or ``None`` to autodetect.
+        """
+        job_config = bigquery.LoadJobConfig(
+            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        )
+        if bq_schema is not None:
+            job_config.schema = bq_schema
+        safe_rows = [_replace_non_finite(json.loads(json.dumps(row, default=_json_default))) for row in rows]
+
+        job = self.client.load_table_from_json(safe_rows, ref, job_config=job_config)
+        job.result()
+
+    def _insert(self, table: str, schema: str | None, rows: list[dict[str, Any]]) -> None:
+        """Insert rows into BigQuery using a JSON load job.
 
         Args:
             table: Target table name.
             schema: Database schema (dataset).
             rows: Row data as list of dicts.
         """
-        if not self._table_exists(table, schema):
-            self._ensure_dataset(schema)
-            self._create_table(table, schema, rows)
-
-        ref = self._table_ref(table, schema)
-        job_config = bigquery.LoadJobConfig(
-            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
-            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        )
-        safe_rows = [json.loads(json.dumps(row, default=_json_default)) for row in rows]
-
-        job = self.client.load_table_from_json(safe_rows, ref, job_config=job_config)
-        job.result()
+        self._load_rows(self._table_ref(table, schema), rows, None)
 
     def _delete_all(self, table: str, schema: str | None) -> None:
         """Truncate all rows from the BigQuery table.
@@ -310,6 +382,108 @@ class BigQueryDestination(DatabaseDestination):
 # ---------------------------------------------------------------------------
 # Utility functions
 # ---------------------------------------------------------------------------
+
+
+def _schema_to_bq_fields(schema: type[Schema]) -> list[bigquery.SchemaField]:
+    """Map an interloper Schema to BigQuery field definitions.
+
+    Args:
+        schema: The schema class to map.
+
+    Returns:
+        One ``SchemaField`` per data field, nested models as ``RECORD``.
+    """
+    return _specs_to_bq_fields(schema.field_specs())
+
+def _specs_to_bq_fields(specs: list[FieldSpec] | tuple[FieldSpec, ...]) -> list[bigquery.SchemaField]:
+    """Map field specs to BigQuery field definitions.
+
+    Returns:
+        One ``SchemaField`` per spec.
+    """
+    fields = []
+    for spec in specs:
+        mode = "REPEATED" if spec.repeated else ("NULLABLE" if spec.nullable else "REQUIRED")
+        if spec.fields is not None:
+            fields.append(
+                bigquery.SchemaField(spec.name, "RECORD", mode=mode, fields=_specs_to_bq_fields(spec.fields))
+            )
+        else:
+            fields.append(bigquery.SchemaField(spec.name, _py_type_to_bq_type(spec.type), mode=mode))
+    return fields
+
+
+def _py_type_to_bq_type(py_type: Any) -> str:
+    """Map a Python *type* (from a FieldSpec) to a BigQuery column type."""
+    if not isinstance(py_type, type):
+        return "STRING"  # typing.Any or unresolvable annotations
+    if issubclass(py_type, bool):
+        return "BOOLEAN"
+    if issubclass(py_type, int):
+        return "INTEGER"
+    if issubclass(py_type, float):
+        return "FLOAT"
+    if issubclass(py_type, Decimal):
+        return "NUMERIC"
+    if issubclass(py_type, datetime.datetime):
+        return "TIMESTAMP"
+    if issubclass(py_type, datetime.date):
+        return "DATE"
+    if issubclass(py_type, bytes):
+        return "BYTES"
+    return "STRING"
+
+
+def _infer_bq_schema(rows: list[dict[str, Any]]) -> list[bigquery.SchemaField]:
+    """Infer a BigQuery schema from row values, scanning all rows.
+
+    Unlike first-row inference, a column that is ``None`` in early rows takes
+    its type from the first non-null value anywhere; ``int`` widens to
+    ``FLOAT`` when mixed with floats.  All-null columns fall back to STRING.
+
+    Args:
+        rows: Row data (non-empty).
+
+    Returns:
+        Inferred field definitions, all NULLABLE.
+    """
+    types_seen: dict[str, set[str]] = {}
+    for row in rows:
+        for key, value in row.items():
+            seen = types_seen.setdefault(key, set())
+            if value is not None:
+                seen.add(_py_to_bq_type(value))
+
+    fields = []
+    for key, seen in types_seen.items():
+        if not seen:
+            bq_type = "STRING"
+        elif len(seen) == 1:
+            bq_type = next(iter(seen))
+        elif seen == {"INTEGER", "FLOAT"}:
+            bq_type = "FLOAT"
+        else:
+            bq_type = "STRING"
+        fields.append(bigquery.SchemaField(key, bq_type, mode="NULLABLE"))
+    return fields
+
+
+def _replace_non_finite(obj: Any) -> Any:
+    """Recursively replace non-finite floats (``NaN``, ``Infinity``) with ``None``.
+
+    pandas represents missing numeric values as ``float('nan')``. Python's
+    ``json.dumps`` (used by ``load_table_from_json``) serialises these to the
+    bare tokens ``NaN`` / ``Infinity``, which are invalid JSON — BigQuery's load
+    parser rejects them with "Parser terminated before end of string". BigQuery
+    has no NaN concept on the load path, so map non-finite floats to SQL ``NULL``.
+    """
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _replace_non_finite(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_replace_non_finite(v) for v in obj]
+    return obj
 
 
 def _json_default(o: Any) -> Any:

@@ -18,11 +18,17 @@ class DataAdapter(Component, Generic[T]):
     universal row format that any
     :class:`~interloper.destination.database.DatabaseDestination` works with internally.
 
-    Subclasses implement two methods:
+    Subclasses implement three methods:
 
+    * :meth:`can_handle` -- whether this adapter understands the data type
+      (used to dispatch among multiple adapters, replacing trial-and-error).
     * :meth:`to_rows` -- serialise typed data **into** rows (used during writes).
     * :meth:`from_rows` -- deserialise rows **back** to typed data (used during reads).
     """
+
+    @abstractmethod
+    def can_handle(self, data: Any) -> bool:
+        """Return whether this adapter can convert *data* to rows."""
 
     @abstractmethod
     def to_rows(self, data: T) -> list[dict[str, Any]]:
@@ -40,6 +46,14 @@ class RowAdapter(DataAdapter[list[dict[str, Any]]]):
     no adapter at all, but can be used to be explicit about the expected data
     format.
     """
+
+    def can_handle(self, data: Any) -> bool:
+        """Return whether *data* is a list (of row dicts).
+
+        Returns:
+            ``True`` for lists.
+        """
+        return isinstance(data, list)
 
     def to_rows(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Pass through row data unchanged.

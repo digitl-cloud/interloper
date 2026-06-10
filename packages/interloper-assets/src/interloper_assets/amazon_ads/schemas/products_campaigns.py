@@ -25,7 +25,7 @@ class ProductsCampaigns(Schema):
     campaign_applicable_budget_rule_name: float | None = Field(
         ..., description="The name of the applicable budget rule for the campaign"
     )
-    campaign_applicable_budget_ruleid: int | None = Field(
+    campaign_applicable_budget_rule_id: int | None = Field(
         ..., description="The ID of the applicable budget rule for the campaign"
     )
     campaign_bidding_strategy: str | None = Field(..., description="The bidding strategy of the campaign")
