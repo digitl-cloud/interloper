@@ -74,12 +74,19 @@ unused-type-ignore-comment = "ignore"
 replace-imports-with-any = ["bingads.**", "googleapiclient.**", "google.ads.**"]
 
 [[tool.ty.overrides]]
-# Schema definitions intentionally redeclare the `id`/`name` identity attributes
-# inherited from Component as typed data columns (Component models them as class
-# metadata; a Schema subclass models them as instance fields). The runtime handles
-# this shadow deliberately (see schema/base.py). Scope the override here so the rule
-# still guards genuine incompatible attribute overrides elsewhere.
-include = ["**/schemas/**", "packages/interloper-core/src/interloper/schema/base.py", "**/tests/**"]
+# Schema and Normalizer intentionally shadow the `id` identity attribute
+# inherited from Component as a ClassVar — they are pure structural/config
+# components, not runtime instances that need identity. Schema subclasses
+# additionally redeclare `id`/`name` as typed data columns. The runtime handles
+# this shadow deliberately (see schema/base.py, normalizer/base.py). Scope the
+# override here so the rule still guards genuine incompatible attribute
+# overrides elsewhere.
+include = [
+    "**/schemas/**",
+    "packages/interloper-core/src/interloper/schema/base.py",
+    "packages/interloper-core/src/interloper/normalizer/base.py",
+    "**/tests/**",
+]
 
 [tool.ty.overrides.rules]
 invalid-attribute-override = "ignore"

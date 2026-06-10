@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -15,7 +14,6 @@ from interloper.utils.data import dataframe_to_records
 from pydantic import create_model
 
 
-@dataclass
 class DataFrameNormalizer(Normalizer):
     """Type-native normalizer for pandas ``DataFrame`` asset data.
 

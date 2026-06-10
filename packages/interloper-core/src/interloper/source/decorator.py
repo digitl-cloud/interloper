@@ -203,24 +203,12 @@ def _build_source_from_class(
 
     Asset subclasses defined in the class body (via ``@asset`` on methods)
     are auto-collected by ``Source.__init_subclass__._collect_asset_types()``.
+    Field annotations are handled by ``build_component_class``.
 
     Returns:
         A dynamically created Source subclass.
     """
-    merged_classvars = dict(classvars)
-
-    annotations: dict[str, Any] = {}
-    for attr in fields:
-        if attr in Source.model_fields:
-            annotations[attr] = Source.model_fields[attr].annotation
-
-    # We need to inject field annotations; build_component_class merges
-    # cls.__dict__["__annotations__"], but we also need the field-type
-    # annotations.  Easiest to add them to classvars as __annotations__.
-    if annotations:
-        merged_classvars.setdefault("__annotations__", {}).update(annotations)
-
-    source_cls = build_component_class(cls, base=Source, classvars=merged_classvars, fields=fields)
+    source_cls = build_component_class(cls, base=Source, classvars=classvars, fields=fields)
 
     # Set _source_type backref on each asset.
     for asset_cls in source_cls.asset_types:

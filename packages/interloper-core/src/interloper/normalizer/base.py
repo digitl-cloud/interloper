@@ -5,24 +5,27 @@ from __future__ import annotations
 import re
 import types
 from collections.abc import Generator, Iterator
-from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from interloper.component import Component
 from interloper.errors import NormalizerError
 from interloper.schema import Schema
 from interloper.utils.text import to_snake_case
 
 
-@dataclass
-class Normalizer:
+class Normalizer(Component):
     """Type-native normalizer for ``list[dict]`` asset data.
 
     Accepts arbitrary return types (``dict``, ``list[dict]``, ``BaseModel``,
     ``list[BaseModel]``, ``Generator``), coerces to ``list[dict]``, then
     applies optional transformations (column-name normalization, nested-dict
     flattening, missing-column fill).
+
+    Normalizer is a :class:`Component` so configured instances round-trip
+    through ``ComponentSpec`` with their concrete subclass intact — e.g.
+    across the host → child-pod DAG-spec boundary.
 
     Usage::
 
@@ -52,6 +55,10 @@ class Normalizer:
             rule can handle (``eCPAddToCart`` → ``ecp_add_to_cart``).
     """
 
+    # Shadow Component.id — normalizers are pure configuration, not runtime
+    # instances that need identity. (Same pattern as Schema.)
+    id: ClassVar[str] = ""
+
     normalize_columns_names: bool = True
     flatten_max_level: int | None = 0
     flatten_separator: str = "_"
@@ -59,7 +66,11 @@ class Normalizer:
     infer: bool = True
     drop_na_columns: bool = False
     snake_case_digits: bool = False
-    column_overrides: dict[str, str] = field(default_factory=dict)
+    column_overrides: dict[str, str] = Field(default_factory=dict)
+
+    # Override Component.model_post_init to avoid setting an instance id.
+    def model_post_init(self, context: Any) -> None:
+        """No-op: normalizers don't need instance identity."""
 
     # ------------------------------------------------------------------
     # Public API
