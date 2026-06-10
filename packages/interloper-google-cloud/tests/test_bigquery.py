@@ -10,7 +10,6 @@ import interloper as il
 import pytest
 from google.cloud import bigquery
 from interloper.destination import IOContext
-from interloper.destination.database import WriteDisposition
 from interloper.errors import ConfigError
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
@@ -48,7 +47,6 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
         project=project,
         location="EU",
         default_dataset=overrides.get("dataset", None),
-        write_disposition=overrides.get("write_disposition", WriteDisposition.REPLACE),
         resources={"connection": conn},
     )
     object.__setattr__(dest, "client", mock_client)
