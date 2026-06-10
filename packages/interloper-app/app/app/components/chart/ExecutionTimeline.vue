@@ -357,12 +357,16 @@ function resize() {
 /**********************
  * Handlers
  **********************/
-function onAssetClick(params: any) {
+// Selection listens on mousedown, not click: while the run is live, `tick()`
+// rebuilds the series every `refreshRate` ms, so the element under the cursor
+// at mousedown no longer exists at mouseup and zrender suppresses the
+// synthetic click entirely. Mousedown carries no such down/up identity check.
+function onAssetMouseDown(params: any) {
     selectedAsset.value = params.data.id
 }
 
-function onBlankSpaceClick() {
-    selectedAsset.value = null
+function onBlankSpaceMouseDown(e: { target?: unknown }) {
+    if (!e.target) selectedAsset.value = null
 }
 
 /**********************
@@ -373,7 +377,7 @@ onMounted(() => {
     if (isRunning.value) {
         runInterval.value = setInterval(tick, props.refreshRate)
     }
-    chart.value?.chart?.getZr().on('click', onBlankSpaceClick)
+    chart.value?.chart?.getZr().on('mousedown', onBlankSpaceMouseDown)
 })
 
 onUnmounted(() => {
@@ -412,6 +416,6 @@ defineExpose({ tick, stop, resize })
          :style="{ height: chartHeight + 'px' }">
         <VChart ref="chart"
                 :manual-update="true"
-                @click="onAssetClick" />
+                @mousedown="onAssetMouseDown" />
     </div>
 </template>
