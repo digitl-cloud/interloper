@@ -151,7 +151,7 @@ class SyncRunner(Runner):
         Returns:
             The materialization result.
         """
-        effective_partition = partition_or_window if asset.partitioning is not None else None
+        effective_partition = asset.effective_partition(partition_or_window)
         return asyncio.run(
             asset.materialize(
                 partition_or_window=effective_partition,

@@ -5,6 +5,7 @@ from interloper.destination.database import DatabaseDestination, WriteDispositio
 from interloper.destination.decorator import destination
 from interloper.destination.file import FileDestination
 from interloper.destination.memory import MemoryDestination
+from interloper.destination.partitioned import PartitionedDestination
 
 __all__ = [
     "CSVDestination",
@@ -14,6 +15,7 @@ __all__ = [
     "FileDestination",
     "IOContext",
     "MemoryDestination",
+    "PartitionedDestination",
     "WriteDisposition",
     "destination",
 ]

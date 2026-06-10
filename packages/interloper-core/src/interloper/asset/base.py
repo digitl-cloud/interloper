@@ -163,6 +163,18 @@ class Asset(Component):
         """The source this asset belongs to, if any."""
         return self._source
 
+    def effective_partition(
+        self, partition_or_window: Partition | PartitionWindow | None
+    ) -> Partition | PartitionWindow | None:
+        """Return the partition scope this asset actually consumes.
+
+        Unpartitioned assets ignore any requested scope.
+
+        Returns:
+            The scope unchanged for partitioned assets, ``None`` otherwise.
+        """
+        return partition_or_window if self.partitioning is not None else None
+
     @property
     def qualified_key(self) -> str:
         """The fully qualified asset key: ``source_key.asset_key``."""
@@ -512,7 +524,7 @@ class Asset(Component):
 
         dest_context = IOContext(
             asset=self,
-            partition_or_window=partition_or_window if self.partitioning is not None else None,
+            partition_or_window=self.effective_partition(partition_or_window),
             metadata=metadata,
             schema=self._effective_schema or self.schema,
         )
@@ -562,7 +574,7 @@ class Asset(Component):
             raise AssetError(f"No destination found for upstream asset '{upstream_asset.key}'")
         dest = dests[0]
 
-        effective_partition = partition_or_window if upstream_asset.partitioning is not None else None
+        effective_partition = upstream_asset.effective_partition(partition_or_window)
         dest_context = IOContext(
             asset=upstream_asset,
             partition_or_window=effective_partition,

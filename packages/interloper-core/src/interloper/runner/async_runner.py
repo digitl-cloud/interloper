@@ -175,7 +175,7 @@ class AsyncRunner(Runner):
         self.state.mark_asset_running(asset)
 
         try:
-            effective_partition = partition_or_window if asset.partitioning is not None else None
+            effective_partition = asset.effective_partition(partition_or_window)
             result = await asset.materialize(
                 partition_or_window=effective_partition,
                 dag=self.state.dag,

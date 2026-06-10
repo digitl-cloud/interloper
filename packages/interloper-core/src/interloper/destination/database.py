@@ -9,8 +9,8 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any
 
-from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
+from interloper.destination.partitioned import PartitionedDestination
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.representation import representation, representation_for
 from interloper.utils.data import is_empty
@@ -29,7 +29,7 @@ class WriteDisposition(str, Enum):
     APPEND = "append"
 
 
-class DatabaseDestination(Destination):
+class DatabaseDestination(PartitionedDestination):
     """Abstract base class for database-backed destination implementations.
 
     Provides the partition-aware write/read dispatch logic that is common to any
@@ -153,8 +153,12 @@ class DatabaseDestination(Destination):
     def write(self, context: IOContext, data: Any) -> None:
         """Write data to the database table.
 
-        With ``REPLACE``, deletes matching rows before inserting.
-        With ``APPEND``, rows are inserted without any prior deletion.
+        Overrides the :class:`PartitionedDestination` template: database
+        backends delete per scope but insert the whole batch once (rows
+        carry the partition column), instead of storing per-partition
+        slices.  With ``REPLACE``, matching rows are deleted before
+        inserting; with ``APPEND``, rows are inserted without any prior
+        deletion.
         """
         table = type(context.asset).key
         schema = context.asset.dataset or None
@@ -197,26 +201,16 @@ class DatabaseDestination(Destination):
 
             self._insert_data(table, schema, data, context)
 
-    def read(self, context: IOContext) -> Any:
-        """Read data from the database table.
+    def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
+        """Load one scope from the database table.
 
         Returns:
-            A list of results for partition windows, single result otherwise.
+            The scope's rows, materialized into the read representation.
         """
         table = type(context.asset).key
         schema = context.asset.dataset or None
-
-        if context.partition_or_window is None:
+        if partition is None:
             return self._from_rows(self._select_all(table, schema))
-
-        if isinstance(context.partition_or_window, PartitionWindow):
-            assert context.asset.partitioning
-            col = context.asset.partitioning.column
-            return [
-                self._from_rows(self._select_partition(table, schema, col, p.id)) for p in context.partition_or_window
-            ]
-
-        assert isinstance(context.partition_or_window, Partition)
         assert context.asset.partitioning
-        col = context.asset.partitioning.column
-        return self._from_rows(self._select_partition(table, schema, col, context.partition_or_window.id))
+        column = context.asset.partitioning.column
+        return self._from_rows(self._select_partition(table, schema, column, partition.id))
