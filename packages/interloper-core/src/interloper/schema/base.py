@@ -34,6 +34,8 @@ class FieldSpec:
         nullable: Whether the field accepts ``None`` (declared as ``T | None``).
         repeated: Whether the field is a list of *type* (declared as ``list[T]``).
         fields: Sub-field specs when *type* is a nested model, else ``None``.
+        description: Human-readable field description (from ``Field(description=...)``),
+            else ``None``.
     """
 
     name: str
@@ -41,10 +43,11 @@ class FieldSpec:
     nullable: bool
     repeated: bool = False
     fields: tuple[FieldSpec, ...] | None = None
+    description: str | None = None
 
 
-def _field_spec(name: str, annotation: Any) -> FieldSpec:
-    """Build a FieldSpec from a field name and type annotation.
+def _field_spec(name: str, annotation: Any, description: str | None = None) -> FieldSpec:
+    """Build a FieldSpec from a field name, type annotation, and description.
 
     Returns:
         The extracted spec, with ``Optional``/``list`` wrappers unwrapped.
@@ -71,9 +74,11 @@ def _field_spec(name: str, annotation: Any) -> FieldSpec:
     # Nested model -> sub-field specs
     fields: tuple[FieldSpec, ...] | None = None
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-        fields = tuple(_field_spec(n, f.annotation) for n, f in annotation.model_fields.items())
+        fields = tuple(_field_spec(n, f.annotation, f.description) for n, f in annotation.model_fields.items())
 
-    return FieldSpec(name=name, type=annotation, nullable=nullable, repeated=repeated, fields=fields)
+    return FieldSpec(
+        name=name, type=annotation, nullable=nullable, repeated=repeated, fields=fields, description=description
+    )
 
 
 class Schema(Component):
@@ -124,7 +129,9 @@ class Schema(Component):
         names = [n for n in cls.model_fields if n in data_fields]
         own_order = [n for n in cls.__dict__.get("__annotations__", {}) if n in data_fields]
         ordered = own_order + [n for n in names if n not in own_order]
-        return [_field_spec(name, cls.model_fields[name].annotation) for name in ordered]
+        return [
+            _field_spec(name, cls.model_fields[name].annotation, cls.model_fields[name].description) for name in ordered
+        ]
 
     @classmethod
     def infer(

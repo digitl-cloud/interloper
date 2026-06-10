@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import datetime
+import inspect
 import json
 import math
 import warnings
+from collections.abc import Sequence
 from decimal import Decimal
 from functools import cached_property
 from typing import Any
@@ -18,6 +20,7 @@ from google.oauth2 import service_account
 from interloper.destination import IOContext, destination
 from interloper.destination.database import DatabaseDestination
 from interloper.errors import ConfigError, DataNotFoundError
+from interloper.partitioning import PartitionConfig, TimePartitionConfig
 from interloper.representation import representation_for
 from interloper.resource.fields import InputField, SelectField
 from interloper.schema import FieldSpec, Schema
@@ -104,6 +107,21 @@ class BigQueryDestination(DatabaseDestination):
         ds = self._resolve_dataset(schema)
         return f"{self.project}.{ds}.{table}"
 
+    def _get_table(self, table: str, schema: str | None) -> bigquery.Table | None:
+        """Fetch a BigQuery table.
+
+        Args:
+            table: Table name.
+            schema: Schema (dataset) override.
+
+        Returns:
+            The table, or ``None`` if it does not exist.
+        """
+        try:
+            return self.client.get_table(self._table_ref(table, schema))
+        except NotFound:
+            return None
+
     def _table_exists(self, table: str, schema: str | None) -> bool:
         """Check whether a BigQuery table exists.
 
@@ -114,22 +132,60 @@ class BigQueryDestination(DatabaseDestination):
         Returns:
             ``True`` if the table exists, ``False`` otherwise.
         """
-        try:
-            self.client.get_table(self._table_ref(table, schema))
-        except NotFound:
-            return False
-        return True
+        return self._get_table(table, schema) is not None
 
-    def _create_table(self, table: str, schema: str | None, bq_schema: list[bigquery.SchemaField]) -> None:
+    def _create_table(
+        self,
+        table: str,
+        schema: str | None,
+        bq_schema: list[bigquery.SchemaField],
+        time_partitioning: bigquery.TimePartitioning | None = None,
+        description: str | None = None,
+    ) -> None:
         """Create a BigQuery table with an explicit schema.
 
         Args:
             table: Target table name.
             schema: Database schema (dataset).
             bq_schema: BigQuery field definitions.
+            time_partitioning: Time partitioning spec, if the asset is partitioned.
+            description: Table description (the asset's description).
         """
         bq_table = bigquery.Table(self._table_ref(table, schema), schema=bq_schema)
+        bq_table.time_partitioning = time_partitioning
+        bq_table.description = description
         self.client.create_table(bq_table)
+
+    def _sync_table_metadata(
+        self,
+        bq_table: bigquery.Table,
+        bq_schema: list[bigquery.SchemaField] | None,
+        description: str | None,
+    ) -> None:
+        """Push field and table descriptions onto an existing table.
+
+        Keeps BigQuery metadata in sync when descriptions change on the asset
+        or its schema after the table was created.  Only descriptions are
+        updated (types, modes, and partitioning are immutable here), empty
+        descriptions never clear existing ones, and no API call is made when
+        nothing changed.
+
+        Args:
+            bq_table: The existing table.
+            bq_schema: Field definitions carrying the wanted descriptions.
+            description: Wanted table description (the asset's description).
+        """
+        update_fields = []
+        if bq_schema is not None:
+            merged, changed = _merge_field_descriptions(bq_table.schema, bq_schema)
+            if changed:
+                bq_table.schema = merged
+                update_fields.append("schema")
+        if description and bq_table.description != description:
+            bq_table.description = description
+            update_fields.append("description")
+        if update_fields:
+            self.client.update_table(bq_table, update_fields)
 
     def _ensure_dataset(self, schema: str | None) -> None:
         """Create the BigQuery dataset if it does not already exist.
@@ -163,6 +219,10 @@ class BigQueryDestination(DatabaseDestination):
         (``load_table_from_dataframe``); other data falls back to the
         JSON-rows path.
 
+        New tables are created with the asset's partitioning (daily time
+        partitioning on the partition column) and carry field and table
+        descriptions; on existing tables, descriptions are kept in sync.
+
         Args:
             table: Target table name.
             schema: Database schema (dataset).
@@ -170,27 +230,44 @@ class BigQueryDestination(DatabaseDestination):
             context: IO context carrying the asset and effective schema.
         """
         bq_schema = _schema_to_bq_fields(context.schema) if context.schema is not None else None
+        description = _asset_description(context.asset)
+        partitioning = context.asset.partitioning
 
-        if not self._table_exists(table, schema):
+        bq_table = self._get_table(table, schema)
+        creating = bq_table is None
+        if creating:
             self._ensure_dataset(schema)
             if bq_schema is not None:
-                self._create_table(table, schema, bq_schema)
+                tp = _time_partitioning(partitioning, bq_schema)
+                self._create_table(table, schema, bq_schema, time_partitioning=tp, description=description)
             elif not isinstance(data, pd.DataFrame):
                 rows = representation_for(data).to_records(data)
                 if not rows:
                     return
-                self._create_table(table, schema, _infer_bq_schema(rows))
-            # DataFrame without schema: the load job creates the table from dtypes.
+                inferred = _infer_bq_schema(rows)
+                tp = _time_partitioning(partitioning, inferred)
+                self._create_table(table, schema, inferred, time_partitioning=tp, description=description)
+            # DataFrame without schema: the load job creates the table from dtypes,
+            # with the partitioning spec passed on the job config below.
+        else:
+            self._sync_table_metadata(bq_table, bq_schema, description)
 
         ref = self._table_ref(table, schema)
         if isinstance(data, pd.DataFrame):
-            self._load_dataframe(ref, data, bq_schema)
+            tp = _time_partitioning(partitioning, bq_schema) if creating and bq_schema is None else None
+            self._load_dataframe(ref, data, bq_schema, time_partitioning=tp)
         else:
             rows = representation_for(data).to_records(data)
             if rows:
                 self._load_rows(ref, rows, bq_schema)
 
-    def _load_dataframe(self, ref: str, df: pd.DataFrame, bq_schema: list[bigquery.SchemaField] | None) -> None:
+    def _load_dataframe(
+        self,
+        ref: str,
+        df: pd.DataFrame,
+        bq_schema: list[bigquery.SchemaField] | None,
+        time_partitioning: bigquery.TimePartitioning | None = None,
+    ) -> None:
         """Load a DataFrame via a Parquet load job.
 
         When a schema is available, columns are aligned to it: extra columns
@@ -202,8 +279,12 @@ class BigQueryDestination(DatabaseDestination):
             ref: Fully-qualified table reference.
             df: The DataFrame to load.
             bq_schema: BigQuery field definitions, or ``None`` to autodetect.
+            time_partitioning: Partitioning spec for the table the load job is
+                about to create; ``None`` when the table already exists.
         """
         job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND)
+        if time_partitioning is not None:
+            job_config.time_partitioning = time_partitioning
 
         if bq_schema is not None:
             schema_columns = [field.name for field in bq_schema]
@@ -275,13 +356,12 @@ class BigQueryDestination(DatabaseDestination):
             column: Partition column name.
             value: Partition value to match.
         """
-        if not self._table_exists(table, schema):
+        bq_table = self._get_table(table, schema)
+        if bq_table is None:
             return
         ref = self._table_ref(table, schema)
         query = f"DELETE FROM `{ref}` WHERE `{column}` = @partition_value"
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("partition_value", _bq_to_py_type(value), value)],
-        )
+        job_config = bigquery.QueryJobConfig(query_parameters=[_partition_param(bq_table, column, value)])
         self.client.query(query, job_config=job_config).result()
 
     def _select_all(self, table: str, schema: str | None) -> list[dict[str, Any]]:
@@ -325,14 +405,13 @@ class BigQueryDestination(DatabaseDestination):
         Raises:
             DataNotFoundError: If the table does not exist.
         """
-        if not self._table_exists(table, schema):
+        bq_table = self._get_table(table, schema)
+        if bq_table is None:
             qualified = self._table_ref(table, schema)
             raise DataNotFoundError(f"Table '{qualified}' does not exist. Has the asset been materialized?")
         ref = self._table_ref(table, schema)
         query = f"SELECT * FROM `{ref}` WHERE `{column}` = @partition_value"
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("partition_value", _bq_to_py_type(value), value)],
-        )
+        job_config = bigquery.QueryJobConfig(query_parameters=[_partition_param(bq_table, column, value)])
         rows = self.client.query(query, job_config=job_config).result()
         return [dict(row) for row in rows]
 
@@ -393,22 +472,175 @@ def _schema_to_bq_fields(schema: type[Schema]) -> list[bigquery.SchemaField]:
     """
     return _specs_to_bq_fields(schema.field_specs())
 
+
 def _specs_to_bq_fields(specs: list[FieldSpec] | tuple[FieldSpec, ...]) -> list[bigquery.SchemaField]:
     """Map field specs to BigQuery field definitions.
 
     Returns:
-        One ``SchemaField`` per spec.
+        One ``SchemaField`` per spec, carrying the spec's description.
     """
     fields = []
     for spec in specs:
         mode = "REPEATED" if spec.repeated else ("NULLABLE" if spec.nullable else "REQUIRED")
+        # SchemaField's description default is a sentinel, not None — only pass it when set.
+        described: dict[str, Any] = {"description": spec.description} if spec.description else {}
         if spec.fields is not None:
             fields.append(
-                bigquery.SchemaField(spec.name, "RECORD", mode=mode, fields=_specs_to_bq_fields(spec.fields))
+                bigquery.SchemaField(
+                    spec.name, "RECORD", mode=mode, fields=_specs_to_bq_fields(spec.fields), **described
+                )
             )
         else:
-            fields.append(bigquery.SchemaField(spec.name, _py_type_to_bq_type(spec.type), mode=mode))
+            fields.append(bigquery.SchemaField(spec.name, _py_type_to_bq_type(spec.type), mode=mode, **described))
     return fields
+
+
+def _asset_description(asset: Any) -> str | None:
+    """Return the asset's description (its class docstring), cleaned.
+
+    This mirrors how ``Component.definition()`` derives descriptions.
+
+    Returns:
+        The cleaned docstring, or ``None`` when the asset has none.
+    """
+    doc = type(asset).__doc__
+    return inspect.cleandoc(doc) if doc else None
+
+
+# BigQuery time partitioning only supports DATE / DATETIME / TIMESTAMP columns.
+_TIME_PARTITIONABLE_TYPES = {"DATE", "DATETIME", "TIMESTAMP"}
+
+
+def _time_partitioning(
+    config: PartitionConfig | None,
+    bq_schema: list[bigquery.SchemaField] | None,
+) -> bigquery.TimePartitioning | None:
+    """Resolve the asset's partition config into a BigQuery time partitioning spec.
+
+    Daily partitioning on the partition column, when BigQuery supports it:
+    the column must be DATE / DATETIME / TIMESTAMP.  When the column type is
+    known (from the schema) and is not time-partitionable, or the config is
+    not time-based and no schema is available, returns ``None`` — the table
+    is created unpartitioned, which is always valid.
+
+    Args:
+        config: The asset's partition config, if any.
+        bq_schema: The table's field definitions, when known.
+
+    Returns:
+        A daily ``TimePartitioning`` on the partition column, or ``None``.
+    """
+    if config is None:
+        return None
+
+    if bq_schema is not None:
+        field = next((f for f in bq_schema if f.name == config.column), None)
+        if field is None or field.field_type not in _TIME_PARTITIONABLE_TYPES:
+            if isinstance(config, TimePartitionConfig):
+                warnings.warn(
+                    f"Partition column '{config.column}' is "
+                    f"{'missing from the schema' if field is None else f'of type {field.field_type}'}; "
+                    "the BigQuery table will not be time-partitioned.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            return None
+    elif not isinstance(config, TimePartitionConfig):
+        return None
+
+    return bigquery.TimePartitioning(type_=bigquery.TimePartitioningType.DAY, field=config.column)
+
+
+def _merge_field_descriptions(
+    existing: Sequence[bigquery.SchemaField],
+    desired: Sequence[bigquery.SchemaField],
+) -> tuple[list[bigquery.SchemaField], bool]:
+    """Overlay desired field descriptions onto an existing table schema.
+
+    Only descriptions are touched — types and modes stay as they are in the
+    table, so the result is always a valid ``update_table`` schema.  Empty
+    desired descriptions never clear an existing one (e.g. set manually in
+    the BigQuery console).
+
+    Args:
+        existing: The table's current field definitions.
+        desired: Field definitions carrying the wanted descriptions.
+
+    Returns:
+        The merged field list and whether anything changed.
+    """
+    desired_by_name = {f.name: f for f in desired}
+    merged: list[bigquery.SchemaField] = []
+    changed = False
+    for field in existing:
+        want = desired_by_name.get(field.name)
+        if want is None:
+            merged.append(field)
+            continue
+        api = field.to_api_repr()
+        if want.description and want.description != field.description:
+            api["description"] = want.description
+            changed = True
+        if field.field_type == "RECORD" and want.fields:
+            sub_fields, sub_changed = _merge_field_descriptions(field.fields, want.fields)
+            if sub_changed:
+                api["fields"] = [f.to_api_repr() for f in sub_fields]
+                changed = True
+        merged.append(bigquery.SchemaField.from_api_repr(api))
+    return merged, changed
+
+
+# BigQuery column type -> query parameter type, for partition predicates.
+_BQ_FIELD_TO_PARAM_TYPE = {
+    "BOOLEAN": "BOOL",
+    "BOOL": "BOOL",
+    "INTEGER": "INT64",
+    "INT64": "INT64",
+    "FLOAT": "FLOAT64",
+    "FLOAT64": "FLOAT64",
+    "NUMERIC": "NUMERIC",
+    "DATE": "DATE",
+    "DATETIME": "DATETIME",
+    "TIMESTAMP": "TIMESTAMP",
+    "BYTES": "BYTES",
+    "STRING": "STRING",
+}
+
+
+def _partition_param(
+    bq_table: bigquery.Table,
+    column: str,
+    value: Any,
+) -> bigquery.ScalarQueryParameter:
+    """Build the partition-predicate query parameter, typed from the table.
+
+    Partition values arrive as strings (``Partition.id``), but the column may
+    be DATE / TIMESTAMP / INTEGER — BigQuery does not coerce a STRING
+    parameter in an equality predicate, so the parameter type must match the
+    actual column type.  Falls back to inferring from the value when the
+    column is not in the table schema.
+
+    Args:
+        bq_table: The target table (for column type lookup).
+        column: Partition column name.
+        value: Partition value.
+
+    Returns:
+        A ``partition_value`` scalar parameter with the matching type.
+    """
+    field = next((f for f in bq_table.schema if f.name == column), None)
+    if field is not None:
+        param_type = _BQ_FIELD_TO_PARAM_TYPE.get(field.field_type, "STRING")
+    else:
+        param_type = _bq_to_py_type(value)
+    if param_type in ("TIMESTAMP", "DATETIME") and isinstance(value, str):
+        # The client serializes these from datetime objects; a date-only
+        # string like "2024-01-01" (a TimePartition id) fails to format.
+        try:
+            value = datetime.datetime.fromisoformat(value)
+        except ValueError:
+            pass
+    return bigquery.ScalarQueryParameter("partition_value", param_type, value)
 
 
 def _py_type_to_bq_type(py_type: Any) -> str:
