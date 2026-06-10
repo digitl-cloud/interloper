@@ -81,3 +81,54 @@ def test_host_does_not_reauthor_when_asset_already_terminal() -> None:
         runner._handle_completed(future, asset)
 
     assert not [e for e in events if e.type in (EventType.ASSET_COMPLETED, EventType.ASSET_FAILED)]
+
+
+def test_fail_fast_surfaces_child_error_when_child_reported_terminal() -> None:
+    """The run-level error must carry the child's rich error, not the bare Job status.
+
+    Regression: when the child streamed its own ``asset_failed`` (rich
+    SchemaError etc.), the host returned quietly and the run error ended up
+    being some other job's generic "Job ... failed" string.
+    """
+    runner, asset = _runner_with_asset("asset-4", "run-1")
+    runner.fail_fast = True
+    runner.state.mark_asset_failed(asset, "Schema validation failed on row 0: 41 errors", emit=False)
+    future: Future[None] = Future()
+    future.set_exception(RunnerError("Job interloper-run-x failed"))
+
+    try:
+        runner._handle_completed(future, asset)
+    except RunnerError as e:
+        assert "Schema validation failed on row 0" in str(e)
+        assert "_Asset".lower() in str(e).lower() or "asset" in str(e).lower()
+    else:
+        raise AssertionError("fail_fast must abort the run on a child-reported failure")
+
+
+def test_fail_fast_wraps_job_error_with_asset_key() -> None:
+    """The host fallback error names the asset, not just the Job."""
+    runner, asset = _runner_with_asset("asset-5", "run-1")
+    runner.fail_fast = True
+    future: Future[None] = Future()
+    future.set_exception(RunnerError("Job interloper-run-x failed"))
+
+    try:
+        runner._handle_completed(future, asset)
+    except RunnerError as e:
+        assert "Job interloper-run-x failed" in str(e)
+        assert "failed:" in str(e)
+    else:
+        raise AssertionError("fail_fast must re-raise on job failure")
+
+
+def test_no_fail_fast_keeps_quiet_on_child_reported_failure() -> None:
+    """Without fail-fast, a child-reported terminal needs no host action."""
+    runner, asset = _runner_with_asset("asset-6", "run-1")
+    runner.state.mark_asset_failed(asset, "child error", emit=False)
+    future: Future[None] = Future()
+    future.set_exception(RunnerError("Job interloper-run-x failed"))
+
+    with _capture() as events:
+        runner._handle_completed(future, asset)  # must not raise
+
+    assert not [e for e in events if e.type == EventType.ASSET_FAILED]

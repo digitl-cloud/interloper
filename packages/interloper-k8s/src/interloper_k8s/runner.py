@@ -20,6 +20,7 @@ from interloper.events import EventBus, EventType
 from interloper.events.event import parse_event_from_log_line
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.runner.results import ExecutionStatus
 from interloper.runner.sync_runner import SyncRunner
 from kubernetes import client, config
 from kubernetes.client import V1Job
@@ -219,21 +220,34 @@ class KubernetesRunner(SyncRunner):
 
         The log thread is joined with a longer timeout first so a child terminal
         that is still in flight wins the race.
+
+        When the run aborts on a failure, the raised error carries the asset's
+        terminal error (the child's rich report when available) rather than the
+        bare Job status — it becomes the run-level error shown in the UI.
+
+        Raises:
+            RunnerError: When the asset failed and fail-fast is enabled.
         """
         job_name = self._job_map.pop(future, None)
         if job_name is not None:
             self._stop_job_log_streaming(job_name, timeout=5.0)
 
         info = self.state.asset_executions.get(asset.id)
-        if not (info and info.is_terminal):
-            try:
-                future.result()
-            except Exception as e:
-                self.state.mark_asset_failed(asset, str(e), emit=True)
-                if self.fail_fast or self.reraise:
-                    raise
-            else:
-                self.state.mark_asset_completed(asset, emit=True)
+        if info and info.is_terminal:
+            # Child streamed its own terminal. If it failed, fail-fast must
+            # still abort the run — with the child's error as the cause.
+            if info.status == ExecutionStatus.FAILED and (self.fail_fast or self.reraise):
+                raise RunnerError(f"Asset '{type(asset).key}' failed: {info.error}")
+            return
+
+        try:
+            future.result()
+        except Exception as e:
+            self.state.mark_asset_failed(asset, str(e), emit=True)
+            if self.fail_fast or self.reraise:
+                raise RunnerError(f"Asset '{type(asset).key}' failed: {e}") from e
+        else:
+            self.state.mark_asset_completed(asset, emit=True)
 
     def _handle_flushed_future(self, future: Future[Any], asset: Asset) -> None:
         """Clean up job after flush, authoring the terminal event.
