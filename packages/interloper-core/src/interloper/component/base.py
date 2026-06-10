@@ -23,6 +23,27 @@ class ComponentDescriptor:
     """
 
 
+def dump_spec_value(value: Any) -> Any:
+    """Serialize a component field value for a :class:`ComponentSpec` init payload.
+
+    The wire format is uniform: **anything with class identity is a
+    Component** and serializes via its own spec; lists and dicts are walked;
+    everything else must be a JSON-able scalar.
+
+    Returns:
+        A JSON-able value understood by ``ComponentSpec.reconstruct``.
+    """
+    from pydantic_core import to_jsonable_python
+
+    if isinstance(value, Component):
+        return value.to_spec().model_dump(mode="json")
+    if isinstance(value, (list, tuple)):
+        return [dump_spec_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: dump_spec_value(v) for k, v in value.items()}
+    return to_jsonable_python(value)
+
+
 class ComponentDefinition(BaseModel):
     """Read-only view of a Component class's metadata.
 
@@ -226,17 +247,6 @@ class Component(BaseModel):
         Returns:
             A ComponentSpec capturing this instance's state.
         """
-        from pydantic_core import to_jsonable_python
-
-        def dump(value: Any) -> Any:
-            if isinstance(value, Component):
-                return value.to_spec().model_dump(mode="json")
-            if isinstance(value, (list, tuple)):
-                return [dump(v) for v in value]
-            if isinstance(value, dict):
-                return {k: dump(v) for k, v in value.items()}
-            return to_jsonable_python(value)
-
         init: dict[str, Any] = {}
         for name in type(self).model_fields:
             if name == "id":
@@ -244,7 +254,7 @@ class Component(BaseModel):
             value = getattr(self, name)
             if value is None:
                 continue
-            init[name] = dump(value)
+            init[name] = dump_spec_value(value)
 
         return ComponentSpec(path=self.path(), id=self.id, init=init or None)
 

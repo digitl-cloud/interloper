@@ -80,8 +80,8 @@ class TestIdentity:
         assert FakeSource.kind == "source"
 
     def test_dataset_default_equals_source_key(self):
-        # ``_init_defaults`` sets the default of the ``dataset`` field to ``cls.key``
-        # unless the subclass declares its own.
+        # ``_resolve`` fills an empty ``dataset`` with the source key at
+        # instance init — no class-level field mutation involved.
         assert FakeSource().dataset == FakeSource.key
 
     def test_explicit_dataset_default_is_preserved(self):

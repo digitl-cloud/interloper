@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, ClassVar, TypeVar, cast
 
+from pydantic import create_model
+
 from interloper.component.base import Component
 
 C = TypeVar("C", bound=Component)
@@ -18,39 +20,60 @@ def build_component_class(
 ) -> type[C]:
     """Build a Component subclass from a decorated class.
 
-    When the decorated class already extends the target base (or a subclass
-    of it), the decorator only needs to stamp ClassVars onto the existing
-    class — no rebuild required.  This preserves Pydantic field descriptors,
-    JSON Schema metadata, validators, and everything else the metaclass set
-    up during original class creation.
+    The invariant: **decorators build classes, they never mutate finalized
+    ones.**  Field defaults always pass through the Pydantic metaclass so
+    they become real field definitions — a plain ``setattr`` on a built
+    pydantic class would leave ``model_fields`` (and therefore every
+    instance) on the old default.
 
-    When the decorated class does **not** extend the base, a new class is
-    created via ``type()`` that inherits from *base* and carries over the
-    decorated class's members and annotations.
+    Two construction paths:
+
+    - The decorated class already extends *base*: field defaults (when
+      present) produce a new subclass via :func:`pydantic.create_model`
+      with the parent's annotations; ClassVars are stamped on the result
+      (plain class attributes — no pydantic machinery involved).
+    - The decorated class does **not** extend *base*: a new class is
+      created via ``type()`` that inherits from *base* and carries over the
+      decorated class's members and annotations, with decorator fields
+      annotated from the base's field definitions.
 
     Args:
         cls: The decorated class to transform.
         base: The Component subclass to inherit from.
         classvars: Class-level attributes (key, name, tags, …).
-        fields: Instance-level field defaults (dataset, normalizer, …).
+        fields: Field default overrides (dataset, normalizer, …); every key
+            must be an existing field on *base*.
 
     Returns:
         A Component subclass.
+
+    Raises:
+        TypeError: If a decorator field is not a field of *base*.
     """
-    already_subclass = any(
-        isinstance(b, type) and issubclass(b, base) for b in cls.__bases__
-    )
+    for field_name in fields or {}:
+        if field_name not in base.model_fields:
+            raise TypeError(f"Decorator field '{field_name}' is not a field of {base.__name__}.")
+
+    already_subclass = any(isinstance(b, type) and issubclass(b, base) for b in cls.__bases__)
 
     if already_subclass:
-        # The class is already properly constructed by Pydantic's metaclass.
-        # Just stamp the decorator-provided classvars and fields.
+        result_cls = cast(type[C], cls)
+        if fields:
+            field_definitions: dict[str, Any] = {
+                name: (result_cls.model_fields[name].annotation, value) for name, value in fields.items()
+            }
+            result_cls = create_model(
+                cls.__name__,
+                __base__=result_cls,
+                __module__=cls.__module__,
+                **field_definitions,
+            )
+            result_cls.__qualname__ = cls.__qualname__
+            result_cls.__doc__ = cls.__doc__
         if classvars:
             for name, value in classvars.items():
-                setattr(cls, name, value)
-        if fields:
-            for name, value in fields.items():
-                setattr(cls, name, value)
-        return cast(type[C], cls)
+                setattr(result_cls, name, value)
+        return result_cls
 
     # Plain class — build a new class that inherits from base.
     namespace: dict[str, Any] = {}
@@ -72,6 +95,14 @@ def build_component_class(
     if "__annotations__" in cls.__dict__:
         namespace.setdefault("__annotations__", {}).update(cls.__dict__["__annotations__"])
 
+    # Annotate decorator fields from the base's field definitions so the
+    # metaclass registers them as field default overrides.
+    if fields:
+        annotations = namespace.setdefault("__annotations__", {})
+        for field_name in fields:
+            if field_name not in annotations:
+                annotations[field_name] = base.model_fields[field_name].annotation
+
     # Annotate classvars as ClassVar so Pydantic doesn't treat them as
     # model fields.  Without this, a bare `tags = ["Cloud"]` in the
     # namespace triggers a PydanticUserError for non-annotated attributes.
@@ -86,4 +117,4 @@ def build_component_class(
     if cls.__doc__:
         result_cls.__doc__ = cls.__doc__
 
-    return cast(type[C], result_cls)
+    return cast("type[C]", result_cls)

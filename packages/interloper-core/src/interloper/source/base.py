@@ -11,7 +11,7 @@ from typing_extensions import Self
 from interloper.asset import Asset
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition
-from interloper.component.base import ComponentDescriptor, ComponentSpec
+from interloper.component.base import ComponentDescriptor, ComponentSpec, dump_spec_value
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.resource import Resource
@@ -107,7 +107,7 @@ class Source(Component):
     assets: list[Asset] = Field(default_factory=list)
 
     # Exposed fields
-    dataset: str = InputField(default="")
+    dataset: str = InputField(default="", description="Defaults to the source key when left empty")
     default_destination_key: str = SelectField(
         title="Default Destination",
         default="",
@@ -125,7 +125,6 @@ class Source(Component):
         level and the live instance at instance level.
         """
         super().__init_subclass__(**kwargs)
-        cls._init_defaults()
         cls._collect_asset_types()
         cls._infer_all_requires()
 
@@ -183,17 +182,6 @@ class Source(Component):
         Returns:
             A ``ComponentSpec`` capturing this source and its assets.
         """
-        from pydantic_core import to_jsonable_python
-
-        def dump(value: Any) -> Any:
-            if isinstance(value, Component):
-                return value.to_spec().model_dump(mode="json")
-            if isinstance(value, (list, tuple)):
-                return [dump(v) for v in value]
-            if isinstance(value, dict):
-                return {k: dump(v) for k, v in value.items()}
-            return to_jsonable_python(value)
-
         init: dict[str, Any] = {}
         for name in type(self).model_fields:
             if name == "id":
@@ -213,17 +201,9 @@ class Source(Component):
                 if overrides:
                     init["assets"] = overrides
                 continue
-            init[name] = dump(value)
+            init[name] = dump_spec_value(value)
 
         return ComponentSpec(path=self.path(), id=self.id, init=init or None)
-
-    @classmethod
-    def _init_defaults(cls) -> None:
-        """Initialize default values for the source's fields."""
-        if "dataset" not in cls.__dict__:
-            cls.model_fields["dataset"].default = cls.key
-
-        cls.model_rebuild()
 
     @classmethod
     def _collect_asset_types(cls) -> None:
@@ -347,12 +327,15 @@ class Source(Component):
 
     def _resolve(self) -> None:
         """Apply source-level defaults to assets that don't define their own."""
+        if not self.dataset:
+            self.dataset = self.key
+
         siblings: dict[str, Asset] = {type(a).key: a for a in self.assets}
 
         for asset in self.assets:
             asset._source = self
             if not asset.dataset:
-                asset.dataset = self.dataset or self.key
+                asset.dataset = self.dataset
             if not asset.default_destination_key and self.default_destination_key:
                 asset.default_destination_key = self.default_destination_key
             if asset.destination is None and self.destination is not None:
