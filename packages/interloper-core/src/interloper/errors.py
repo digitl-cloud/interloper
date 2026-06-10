@@ -90,8 +90,8 @@ class NormalizerError(InterloperError, TypeError):
     """The normalizer received data it cannot coerce to ``list[dict]``."""
 
 
-class ConformerError(InterloperError, TypeError):
-    """No conformer is available for the data's representation."""
+class RepresentationError(InterloperError, TypeError):
+    """No data representation is registered for the requested key."""
 
 
 # ---------------------------------------------------------------------------
@@ -105,10 +105,6 @@ class DestinationError(InterloperError):
 
 class DataNotFoundError(DestinationError):
     """No data was found in the destination backend for the requested key."""
-
-
-class AdapterError(DestinationError, TypeError):
-    """A data adapter could not convert the given data."""
 
 
 # ---------------------------------------------------------------------------

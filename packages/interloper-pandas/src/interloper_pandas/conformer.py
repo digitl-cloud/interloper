@@ -10,15 +10,14 @@ import pandas as pd
 from interloper.conformer import Conformer
 from interloper.errors import SchemaError
 from interloper.schema import FieldSpec, Schema
-from interloper.utils.data import dataframe_to_records
 from pydantic import create_model
 
 
 class DataFrameConformer(Conformer):
     """Schema operations on pandas DataFrames, vectorized over field specs.
 
-    Resolved by :func:`interloper.conformer.conformer_for` whenever the
-    materialized data is a DataFrame.
+    Reached through :class:`interloper_pandas.representation.DataFrameRepresentation`
+    whenever the materialized data is a DataFrame.
     """
 
     def prepare(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -143,3 +142,16 @@ def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
         raise SchemaError(f"Reconciliation failed for column '{spec.name}': cannot cast to {spec.type}: {e}") from e
 
     return series
+
+
+def dataframe_to_records(data: pd.DataFrame) -> list[dict[str, Any]]:
+    """Convert a DataFrame to a null-safe ``list[dict]`` records view.
+
+    Unlike ``DataFrame.to_dict("records")``, missing values (``NaN``, ``NaT``,
+    ``pd.NA``) are mapped to ``None`` so the rows are valid against nullable
+    schema fields and serialize to JSON ``null``.
+
+    Returns:
+        Rows as a list of dicts with ``None`` for missing values.
+    """
+    return data.astype(object).where(pd.notnull(data), None).to_dict("records")

@@ -16,12 +16,11 @@ from google.cloud import bigquery
 from google.cloud.exceptions import Conflict, NotFound
 from google.oauth2 import service_account
 from interloper.destination import IOContext, destination
-from interloper.destination.adapter import DataAdapter
 from interloper.destination.database import DatabaseDestination
 from interloper.errors import ConfigError, DataNotFoundError
+from interloper.representation import representation_for
 from interloper.resource.fields import InputField, SelectField
 from interloper.schema import FieldSpec, Schema
-from interloper_pandas import DataFrameAdapter
 
 from interloper_google_cloud.connection import GoogleCloudConnection
 
@@ -37,6 +36,9 @@ class BigQueryDestination(DatabaseDestination):
 
     connection: GoogleCloudConnection
 
+    # Reads materialize as DataFrames for downstream assets.
+    read_representation: str = "dataframe"
+
     # Config fields (previously on BigQueryConfig)
     project: str = InputField(description="Google Cloud project ID")
     location: str = SelectField(
@@ -47,10 +49,6 @@ class BigQueryDestination(DatabaseDestination):
         ],
     )
     default_dataset: str | None = InputField(default=None, description="Default BigQuery dataset")
-
-    @property
-    def adapters(self) -> list[DataAdapter]:
-        return [DataFrameAdapter()]
 
     @cached_property
     def client(self) -> bigquery.Client:
@@ -178,7 +176,7 @@ class BigQueryDestination(DatabaseDestination):
             if bq_schema is not None:
                 self._create_table(table, schema, bq_schema)
             elif not isinstance(data, pd.DataFrame):
-                rows = self._to_rows(data)
+                rows = representation_for(data).to_records(data)
                 if not rows:
                     return
                 self._create_table(table, schema, _infer_bq_schema(rows))
@@ -188,7 +186,7 @@ class BigQueryDestination(DatabaseDestination):
         if isinstance(data, pd.DataFrame):
             self._load_dataframe(ref, data, bq_schema)
         else:
-            rows = self._to_rows(data)
+            rows = representation_for(data).to_records(data)
             if rows:
                 self._load_rows(ref, rows, bq_schema)
 

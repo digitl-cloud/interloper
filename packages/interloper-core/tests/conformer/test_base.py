@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel, Field
 
-from interloper.conformer import RowsConformer, conformer_for
+from interloper.conformer import RowsConformer
 from interloper.errors import NormalizerError, SchemaError
 from interloper.schema import Schema
 
@@ -11,16 +11,6 @@ from interloper.schema import Schema
 class UserSchema(Schema):
     user_id: int | None = Field(...)
     name: str | None = Field(...)
-
-
-class TestConformerResolution:
-    """conformer_for resolves from the data's representation."""
-
-    def test_rows_for_lists(self):
-        assert isinstance(conformer_for([{"a": 1}]), RowsConformer)
-
-    def test_rows_for_non_tabular(self):
-        assert isinstance(conformer_for("anything"), RowsConformer)
 
 
 class TestRowsConformer:

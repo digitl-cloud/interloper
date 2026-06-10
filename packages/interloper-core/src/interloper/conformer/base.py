@@ -3,8 +3,8 @@
 The conform stage runs on every materialization, between normalization
 (optional reshaping) and the destination write. A :class:`Conformer` carries
 the schema operations — validate, reconcile, infer — for exactly one data
-representation, and :func:`conformer_for` resolves the right one from the
-data itself.
+representation; the matching conformer is reached through the data's
+:class:`~interloper.representation.Representation`.
 
 Conformers are pure mechanism: stateless, never serialized, and not
 user-configurable. User-facing configuration lives on
@@ -12,9 +12,8 @@ user-configurable. User-facing configuration lives on
 ``schema`` / ``materialization_strategy`` (the contract and how strictly to
 enforce it).
 
-Core ships the rows conformer; the DataFrame conformer lives in the
-``interloper-pandas`` package and is loaded lazily when DataFrame data
-appears.
+Core ships the rows conformer; integration packages ship theirs alongside
+their :class:`~interloper.representation.Representation`.
 """
 
 from __future__ import annotations
@@ -22,9 +21,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from interloper.errors import ConformerError
 from interloper.schema import Schema
-from interloper.utils.data import coerce_to_records, is_dataframe
+from interloper.utils.data import coerce_to_records
 
 
 class Conformer(ABC):
@@ -86,32 +84,3 @@ class RowsConformer(Conformer):
             A dynamically created Schema subclass.
         """
         return Schema.infer(data)
-
-
-_ROWS_CONFORMER = RowsConformer()
-
-
-def conformer_for(data: Any) -> Conformer:
-    """Resolve the conformer matching the data's representation.
-
-    DataFrames resolve to the conformer shipped by ``interloper-pandas``,
-    imported lazily — core references the integration without depending on
-    it. Everything else resolves to the rows conformer, whose ``prepare``
-    rejects non-tabular data.
-
-    Returns:
-        The conformer for *data*.
-
-    Raises:
-        ConformerError: If *data* is a DataFrame but ``interloper-pandas``
-            is not installed.
-    """
-    if is_dataframe(data):
-        try:
-            from interloper_pandas.conformer import DATAFRAME_CONFORMER
-        except ImportError as e:
-            raise ConformerError(
-                "DataFrame data requires the 'interloper-pandas' package for schema operations."
-            ) from e
-        return DATAFRAME_CONFORMER
-    return _ROWS_CONFORMER

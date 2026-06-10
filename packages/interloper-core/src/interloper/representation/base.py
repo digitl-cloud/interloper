@@ -1,0 +1,178 @@
+"""Representation: the seam between core and concrete table types.
+
+A :class:`Representation` answers "what kind of table is this, and how do I
+view it generically?" for exactly one data representation. It bundles the
+generic table views (records, columns, partition filtering) with the
+representation's :class:`~interloper.conformer.Conformer`, so core never
+names a concrete dataframe library anywhere.
+
+Core ships the rows representation (``list[dict]``). Integration packages
+ship theirs and declare them as package entry points under the
+``interloper.representations`` group::
+
+    [project.entry-points."interloper.representations"]
+    dataframe = "interloper_pandas.representation:DATAFRAME_REPRESENTATION"
+
+The registry is loaded lazily from installed-package metadata, so discovery
+works in any process where the integration is installed — no import-order
+dependence, no explicit registration calls.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from functools import cache
+from importlib.metadata import entry_points
+from typing import Any, ClassVar
+
+from interloper.conformer import Conformer, RowsConformer
+from interloper.errors import RepresentationError
+from interloper.utils.data import coerce_to_records
+
+_ENTRY_POINT_GROUP = "interloper.representations"
+
+
+class Representation(ABC):
+    """Generic table views and schema operations for one data representation.
+
+    Representations are pure mechanism: stateless, never serialized, and
+    not user-configurable. ``key`` identifies the representation in
+    configuration (e.g. a destination's preferred read representation).
+    """
+
+    key: ClassVar[str]
+
+    @abstractmethod
+    def matches(self, data: Any) -> bool:
+        """Return whether *data* is an instance of this representation."""
+
+    @abstractmethod
+    def to_records(self, data: Any) -> list[dict[str, Any]]:
+        """View *data* as ``list[dict]`` records (missing values as ``None``)."""
+
+    @abstractmethod
+    def from_records(self, rows: list[dict[str, Any]]) -> Any:
+        """Materialize records into this representation."""
+
+    @abstractmethod
+    def columns(self, data: Any) -> list[str]:
+        """Return the column names of *data* (empty when not discoverable)."""
+
+    @abstractmethod
+    def filter_eq(self, data: Any, column: str, value: Any) -> Any:
+        """Return the subset of *data* whose *column* equals *value* (compared as strings)."""
+
+    @property
+    @abstractmethod
+    def conformer(self) -> Conformer:
+        """The schema operations for this representation."""
+
+
+class RowsRepresentation(Representation):
+    """The built-in ``list[dict]`` records representation."""
+
+    key: ClassVar[str] = "rows"
+
+    def matches(self, data: Any) -> bool:
+        """Return whether *data* is a list (of row dicts).
+
+        Returns:
+            ``True`` for lists.
+        """
+        return isinstance(data, list)
+
+    def to_records(self, data: Any) -> list[dict[str, Any]]:
+        """Coerce dict / model / generator shapes to records.
+
+        Returns:
+            Data as a list of row dicts.
+        """
+        return coerce_to_records(data)
+
+    def from_records(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Records are already rows.
+
+        Returns:
+            The rows unchanged.
+        """
+        return rows
+
+    def columns(self, data: list[dict[str, Any]]) -> list[str]:
+        """Return the keys of the first row.
+
+        Returns:
+            Column names, or ``[]`` when the shape is not discoverable.
+        """
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            return [str(key) for key in data[0]]
+        return []
+
+    def filter_eq(self, data: list[dict[str, Any]], column: str, value: Any) -> list[dict[str, Any]]:
+        """Return the rows whose *column* equals *value* (compared as strings).
+
+        Returns:
+            The matching rows.
+        """
+        return [row for row in data if str(row.get(column)) == str(value)]
+
+    @property
+    def conformer(self) -> Conformer:
+        """The row-wise conformer.
+
+        Returns:
+            The shared :class:`RowsConformer` instance.
+        """
+        return _ROWS_CONFORMER
+
+
+_ROWS_CONFORMER = RowsConformer()
+_ROWS_REPRESENTATION = RowsRepresentation()
+
+
+@cache
+def representations() -> dict[str, Representation]:
+    """Load the representation registry: built-ins plus installed entry points.
+
+    Returns:
+        Mapping of representation key to instance.
+    """
+    registry: dict[str, Representation] = {RowsRepresentation.key: _ROWS_REPRESENTATION}
+    for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
+        loaded = entry_point.load()
+        instance: Representation = loaded() if isinstance(loaded, type) else loaded
+        registry[instance.key] = instance
+    return registry
+
+
+def representation(key: str) -> Representation:
+    """Return the representation registered under *key*.
+
+    Returns:
+        The registered representation.
+
+    Raises:
+        RepresentationError: If no representation is registered under *key*.
+    """
+    registry = representations()
+    if key not in registry:
+        raise RepresentationError(
+            f"No data representation registered under key '{key}' (available: {sorted(registry)}). "
+            f"Is the matching interloper integration package installed?"
+        )
+    return registry[key]
+
+
+def representation_for(data: Any) -> Representation:
+    """Resolve the representation matching *data*.
+
+    Non-rows representations are checked first; everything unmatched falls
+    back to rows, whose record coercion rejects non-tabular data with a
+    clear error.
+
+    Returns:
+        The representation for *data*.
+    """
+    for instance in representations().values():
+        if instance is not _ROWS_REPRESENTATION and instance.matches(data):
+            return instance
+    return _ROWS_REPRESENTATION
