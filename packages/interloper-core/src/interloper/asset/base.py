@@ -13,12 +13,13 @@ from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
 from interloper.component import Component, ComponentDefinition
-from interloper.conformer import Conformer, conformer_for
+from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
 from interloper.errors import AssetError, NormalizerError, PartitionError
 from interloper.events import EventBus, EventType
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
+from interloper.representation import representation_for
 from interloper.resource import Resource
 from interloper.schema import Schema
 from interloper.utils.data import is_empty
@@ -637,7 +638,7 @@ class Asset(Component):
         if schema is None and strategy != MaterializationStrategy.AUTO:
             raise AssetError(f"Asset '{type(self).key}': strategy='{strategy.value}' requires a schema.")
 
-        conformer = conformer_for(result)
+        conformer = representation_for(result).conformer
         try:
             result = conformer.prepare(result)
         except NormalizerError as e:

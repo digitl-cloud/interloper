@@ -4,8 +4,8 @@ import datetime
 
 import pandas as pd
 import pytest
-from interloper.conformer import conformer_for
 from interloper.errors import SchemaError
+from interloper.representation import representation_for
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -25,10 +25,10 @@ class TypedSchema(Schema):
 
 
 class TestResolution:
-    """conformer_for resolves DataFrames to the pandas conformer."""
+    """The DataFrame representation carries the pandas conformer."""
 
     def test_dataframe_resolves_to_dataframe_conformer(self):
-        assert isinstance(conformer_for(pd.DataFrame()), DataFrameConformer)
+        assert isinstance(representation_for(pd.DataFrame()).conformer, DataFrameConformer)
 
 
 class TestDataFrameConformerValidate:

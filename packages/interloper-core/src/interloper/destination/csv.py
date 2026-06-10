@@ -10,7 +10,7 @@ from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
 from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.utils.data import dataframe_to_records, is_dataframe
+from interloper.representation import representation_for
 
 
 @destination(name="CSV")
@@ -21,9 +21,9 @@ class CSVDestination(Destination):
     (or ``{base_path}/{asset_key}/data.csv`` when no dataset is set).
     Partitioned assets add a ``{column}={id}`` subdirectory.
 
-    Data must be ``list[dict]`` (each dict is a row; the keys of the first
-    dict determine the CSV headers) or a pandas DataFrame, which is converted
-    to rows on write.
+    Data is viewed as ``list[dict]`` records through its registered
+    representation on write (each dict is a row; the keys of the first dict
+    determine the CSV headers).
 
     CSV stores every value as a string.  When the IO context carries a schema,
     reads reconcile the rows against it, restoring the declared types.
@@ -83,12 +83,11 @@ class CSVDestination(Destination):
     def write(self, context: IOContext, data: Any) -> None:
         """Write row data to a CSV file, creating partition subdirectories as needed.
 
-        Accepts ``list[dict]`` or a DataFrame (converted to rows).  Partition
+        Data is converted to records through its representation.  Partition
         windows are split by the partition column so each partition directory
         only receives its own rows.
         """
-        if is_dataframe(data):
-            data = dataframe_to_records(data)
+        data = representation_for(data).to_records(data)
         base = self._asset_path(context)
 
         if context.partition_or_window is None:

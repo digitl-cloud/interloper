@@ -7,9 +7,8 @@ import pytest
 
 import interloper as il
 from interloper.destination import IOContext
-from interloper.destination.adapter import DataAdapter
 from interloper.destination.database import DatabaseDestination, WriteDisposition
-from interloper.errors import AdapterError
+from interloper.errors import NormalizerError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 
 
@@ -135,30 +134,32 @@ class TestInsertDataHook:
         assert captured["schema"] is MySchema
 
 
-class TestToRows:
-    """Adapter dispatch in _to_rows."""
+class TestRecordsConversion:
+    """Data converts to records through its representation."""
 
-    def test_adapter_dispatch_uses_can_handle(self):
-        class TupleAdapter(DataAdapter[tuple]):
-            def can_handle(self, data: Any) -> bool:
-                return isinstance(data, tuple)
+    def test_insert_data_converts_dataframe(self):
+        pd = pytest.importorskip("pandas")
 
-            def to_rows(self, data: tuple) -> list[dict[str, Any]]:
-                return [dict(item) for item in data]
+        dest = RecordingDB(id="db")
+        dest._insert_data("t", None, pd.DataFrame([{"a": 1}]), make_ctx(plain_asset()))
+        assert dest.calls == [("insert", ("t", None, [{"a": 1}]))]
 
-            def from_rows(self, rows: list[dict[str, Any]]) -> tuple:
-                return tuple(rows)
-
-        class TupleDB(RecordingDB):
-            @property
-            def adapters(self) -> list[DataAdapter]:
-                return [TupleAdapter()]
-
-        dest = TupleDB(id="db")
-        assert dest._to_rows(({"a": 1},)) == [{"a": 1}]
-        assert dest._to_rows([{"b": 2}]) == [{"b": 2}]  # list passthrough still works
+    def test_insert_data_passes_rows_through(self):
+        dest = RecordingDB(id="db")
+        dest._insert_data("t", None, [{"a": 1}], make_ctx(plain_asset()))
+        assert dest.calls == [("insert", ("t", None, [{"a": 1}]))]
 
     def test_unsupported_type_raises(self):
         dest = RecordingDB(id="db")
-        with pytest.raises(AdapterError, match="could not handle|could handle|No adapter"):
-            dest._to_rows(42)
+        with pytest.raises(NormalizerError, match="does not support type"):
+            dest._insert_data("t", None, 42, make_ctx(plain_asset()))
+
+    def test_from_rows_uses_read_representation(self):
+        pd = pytest.importorskip("pandas")
+
+        class DataFrameReadDB(RecordingDB):
+            read_representation: str = "dataframe"
+
+        out = DataFrameReadDB(id="db")._from_rows([{"a": 1}])
+        assert isinstance(out, pd.DataFrame)
+        assert RecordingDB(id="db")._from_rows([{"a": 1}]) == [{"a": 1}]

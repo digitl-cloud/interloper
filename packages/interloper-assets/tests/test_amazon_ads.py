@@ -20,9 +20,9 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from interloper.conformer import conformer_for
 from interloper.dag.base import DAG
 from interloper.dag.spec import DAGSpec
+from interloper.representation import representation_for
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.amazon_ads import constants, schemas
@@ -86,4 +86,4 @@ class TestSpecRoundtrip:
         normalizer = child_asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(df)
-        conformer_for(normalized).validate(normalized, schemas.ProductsCampaigns)  # must not raise
+        representation_for(normalized).conformer.validate(normalized, schemas.ProductsCampaigns)  # must not raise

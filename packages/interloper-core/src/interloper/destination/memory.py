@@ -9,23 +9,22 @@ from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-from interloper.utils.data import is_dataframe
+from interloper.representation import representation_for
 
 
 def _slice_for_partition(data: Any, column: str, partition: Partition) -> Any:
     """Return the subset of tabular data belonging to a partition.
 
-    Lists of rows and DataFrames are filtered on the partition column
-    (compared as strings); other shapes are stored as-is since they cannot
-    be split.
+    Data recognized by a registered representation is filtered on the
+    partition column (compared as strings); other shapes are stored as-is
+    since they cannot be split.
 
     Returns:
         The partition's slice of the data.
     """
-    if isinstance(data, list):
-        return [row for row in data if str(row.get(column)) == str(partition.id)]
-    if is_dataframe(data):
-        return data[data[column].astype(str) == str(partition.id)]
+    rep = representation_for(data)
+    if rep.matches(data):
+        return rep.filter_eq(data, column, partition.id)
     return data
 
 

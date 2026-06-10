@@ -9,12 +9,11 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any
 
-from interloper.destination.adapter import DataAdapter
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
-from interloper.errors import AdapterError
 from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.utils.data import dataframe_to_records, is_dataframe, is_empty
+from interloper.representation import representation, representation_for
+from interloper.utils.data import is_empty
 
 
 class WriteDisposition(str, Enum):
@@ -42,14 +41,14 @@ class DatabaseDestination(Destination):
     parameters to every hook.  The destination instance itself holds **no** table
     identity and can be safely shared across multiple assets.
 
-    One or more :class:`~interloper.destination.adapter.DataAdapter` instances can be
-    provided to convert between the asset's data type (e.g. a DataFrame) and
-    the universal ``list[dict]`` row format used internally by every database
-    hook.  When multiple adapters are configured, writes try each in order
-    until one succeeds; reads use the first adapter.
+    Data converts to the universal ``list[dict]`` row format through its
+    registered :class:`~interloper.representation.Representation`.  Reads
+    materialize rows into the representation named by ``read_representation``
+    (``"rows"`` by default; e.g. ``"dataframe"`` for pandas-native backends).
     """
 
     write_disposition: WriteDisposition = WriteDisposition.REPLACE
+    read_representation: str = "rows"
 
     # ------------------------------------------------------------------
     # Transaction hook
@@ -120,51 +119,13 @@ class DatabaseDestination(Destination):
     # Data conversion
     # ------------------------------------------------------------------
 
-    @property
-    def adapters(self) -> list[DataAdapter]:
-        """Return the list of adapters for this destination."""
-        return []
-
-    def _to_rows(self, data: Any) -> list[dict[str, Any]]:
-        """Convert input data to a list of row dicts.
-
-        Dispatches to the first adapter whose :meth:`DataAdapter.can_handle`
-        accepts the data.  Without a matching adapter, ``list[dict]`` passes
-        through and DataFrames convert via a null-safe records view (so any
-        database destination handles DataFrames out of the box).
-
-        Returns:
-            Data as list of dicts.
-
-        Raises:
-            AdapterError: If the data type is not supported.
-        """
-        for adapter in self.adapters:
-            if adapter.can_handle(data):
-                return adapter.to_rows(data)
-        if isinstance(data, list):
-            return data
-        if is_dataframe(data):
-            return dataframe_to_records(data)
-        configured = ", ".join(type(a).__name__ for a in self.adapters) if self.adapters else "none"
-        raise AdapterError(
-            f"No adapter on {type(self).__name__} could handle {type(data).__name__} "
-            f"(configured: [{configured}]). "
-            f"Either pass list[dict] or configure a suitable DataAdapter."
-        )
-
     def _from_rows(self, rows: list[dict[str, Any]]) -> Any:
-        """Convert database rows back to the configured data format.
-
-        When adapters are configured, the first adapter is used.
-        Otherwise returns the raw ``list[dict]``.
+        """Materialize database rows into the configured read representation.
 
         Returns:
-            Data in the first adapter's format, or raw ``list[dict]``.
+            Data in the ``read_representation`` format.
         """
-        if self.adapters:
-            return self.adapters[0].from_rows(rows)
-        return rows
+        return representation(self.read_representation).from_records(rows)
 
     # ------------------------------------------------------------------
     # Destination interface
@@ -173,8 +134,9 @@ class DatabaseDestination(Destination):
     def _insert_data(self, table: str, schema: str | None, data: Any, context: IOContext) -> None:
         """Insert data in its native format.
 
-        The default implementation converts to rows via :meth:`_to_rows` and
-        delegates to :meth:`_insert`.  Columnar backends can override this to
+        The default implementation views the data as records through its
+        representation and delegates to :meth:`_insert`.  Columnar backends
+        can override this to
         consume the data natively (e.g. a DataFrame straight into a Parquet
         load job) and use ``context.schema`` for typed loads.
 
@@ -184,22 +146,9 @@ class DatabaseDestination(Destination):
             data: The data in its native format (DataFrame, list[dict], ...).
             context: IO context carrying the asset and effective schema.
         """
-        rows = self._to_rows(data)
+        rows = representation_for(data).to_records(data)
         if rows:
             self._insert(table, schema, rows)
-
-    @staticmethod
-    def _columns_of(data: Any) -> list[str] | None:
-        """Return the column names of tabular data, if discoverable.
-
-        Returns:
-            Column names, or ``None`` when the data shape is unknown.
-        """
-        if is_dataframe(data):
-            return [str(c) for c in data.columns]
-        if isinstance(data, list) and data and isinstance(data[0], dict):
-            return [str(key) for key in data[0]]
-        return None
 
     def write(self, context: IOContext, data: Any) -> None:
         """Write data to the database table.
@@ -215,8 +164,8 @@ class DatabaseDestination(Destination):
 
         if context.partition_or_window is not None and context.asset.partitioning is not None:
             col = context.asset.partitioning.column
-            columns = self._columns_of(data)
-            if columns is not None and col not in columns:
+            columns = representation_for(data).columns(data)
+            if columns and col not in columns:
                 warnings.warn(
                     f"Partition column '{col}' not found in data for asset "
                     f"'{type(context.asset).key}'. Columns present: {sorted(columns)}. "
