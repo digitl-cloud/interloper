@@ -219,20 +219,22 @@ def list_run_events(
     response: Response,
     limit: int = 100,
     offset: int = 0,
+    asset_id: UUID | None = None,
     user: Profile = Depends(require_viewer),
     store: Store = Depends(get_store),
 ) -> list[EventResponse]:
     """List events for a run, oldest first.
 
     Events are ordered ``timestamp ASC`` and paged with ``limit``/``offset``.
-    The total number of events for the run (ignoring ``limit``/``offset``) is
-    returned in the ``X-Total-Count`` response header so clients can page
+    ``asset_id`` narrows the listing to one asset's events. The total number
+    of matching events (ignoring ``limit``/``offset``, honouring ``asset_id``)
+    is returned in the ``X-Total-Count`` response header so clients can page
     through every event — including the terminal/outcome events
     (``asset_completed``, ``asset_failed``, ``run_failed``, …) that sort last.
     """
     limit = max(1, min(limit, MAX_EVENTS_PAGE_SIZE))
     offset = max(0, offset)
-    total = store.count_events(run_id=run_id)
+    total = store.count_events(run_id=run_id, asset_id=asset_id)
     response.headers["X-Total-Count"] = str(total)
-    events = store.list_events(run_id=run_id, limit=limit, offset=offset)
+    events = store.list_events(run_id=run_id, asset_id=asset_id, limit=limit, offset=offset)
     return [_event_to_response(e) for e in events]

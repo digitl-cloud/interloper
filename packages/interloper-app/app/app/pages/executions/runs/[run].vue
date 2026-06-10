@@ -25,6 +25,10 @@ const run = computed(() => runsStore.findById(runId) ?? initialRun.value)
 
 const selectedAsset = ref<string | null>(null)
 const eventInFocus = ref<RunEvent | null>(null)
+
+// The events table is paged from the server, so the asset filter is applied
+// there (re-paged from offset 0) rather than over the loaded pages only.
+watch(selectedAsset, asset => eventsStore.filterByAsset(asset))
 const markerTime = computed(() => eventInFocus.value?.timestamp ? new Date(eventInFocus.value.timestamp) : null)
 const highlightedAsset = computed(() => eventInFocus.value?.asset_id ?? null)
 
@@ -142,8 +146,7 @@ onUnmounted(() => {
                     </UBadge>
                 </div>
                 <div class="flex-1 min-h-0">
-                    <ExecutionsEventsTable v-model:selected-asset="selectedAsset"
-                                           v-model:event-in-focus="eventInFocus"
+                    <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
                                            :events="eventsStore.events"
                                            :loading="eventsStore.loading"
                                            :loading-more="eventsStore.loadingMore"

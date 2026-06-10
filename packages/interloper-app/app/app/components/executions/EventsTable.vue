@@ -17,7 +17,6 @@ const props = defineProps<{
     loadMore?: () => Promise<void>
 }>()
 
-const selectedAsset = defineModel<string | null>('selectedAsset', { default: null })
 const eventInFocus = defineModel<RunEvent | null>('eventInFocus', { default: null })
 const assetDisplayName = useAssetDisplayName()
 
@@ -52,11 +51,6 @@ function showErrorDetail(event: RunEvent) {
     })
     modal.open()
 }
-
-const filteredEvents = computed(() => {
-    if (!selectedAsset.value) return props.events
-    return props.events.filter(e => e.asset_id === selectedAsset.value)
-})
 
 function formatTimestamp(value: string): string {
     const date = new Date(value)
@@ -128,7 +122,7 @@ const columns: TableColumn<RunEvent>[] = [
 
 <template>
     <UTable ref="table"
-            :data="filteredEvents"
+            :data="events"
             :columns="columns"
             :loading="loading"
             sticky
