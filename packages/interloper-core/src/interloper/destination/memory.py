@@ -4,100 +4,50 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
+from interloper.destination.partitioned import PartitionedDestination
 from interloper.errors import DataNotFoundError
-from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-from interloper.representation import representation_for
-
-
-def _slice_for_partition(data: Any, column: str, partition: Partition) -> Any:
-    """Return the subset of tabular data belonging to a partition.
-
-    Data recognized by a registered representation is filtered on the
-    partition column (compared as strings); other shapes are stored as-is
-    since they cannot be split.
-
-    Returns:
-        The partition's slice of the data.
-    """
-    rep = representation_for(data)
-    if rep.matches(data):
-        return rep.filter_eq(data, column, partition.id)
-    return data
+from interloper.partitioning.base import Partition, PartitionConfig
 
 
 @destination(name="Memory")
-class MemoryDestination(Destination):
+class MemoryDestination(PartitionedDestination):
     """Destination that stores data in a class-level dict keyed by ``{dataset}/{key}/{partition}``.
 
     All instances share a single ``_storage`` dict so data written by one
-    asset is visible to others.  Call :meth:`clear` between test runs.
+    asset is visible to others.  The partition dispatch (including window
+    splitting) comes from :class:`PartitionedDestination`.  Call
+    :meth:`clear` between test runs.
     """
 
     _storage: ClassVar[dict[str, Any]] = {}
 
-    def write(self, context: IOContext, data: Any) -> None:
-        """Store data in memory under a path-style key.
+    def _write_scope(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+        """Store one scope's data under its path-style key."""
+        self._storage[self._scope_key(context, partition)] = data
 
-        Partition windows are split by the partition column so each partition
-        key only stores its own rows.
-        """
-        if context.partition_or_window is None:
-            key = self._build_key(type(context.asset).key, context.asset.dataset, context.asset.partitioning, None)
-            self._storage[key] = data
-
-        elif isinstance(context.partition_or_window, PartitionWindow):
-            assert context.asset.partitioning
-            column = context.asset.partitioning.column
-            for partition in context.partition_or_window:
-                key = self._build_key(
-                    type(context.asset).key, context.asset.dataset, context.asset.partitioning, partition
-                )
-                self._storage[key] = _slice_for_partition(data, column, partition)
-
-        else:
-            assert isinstance(context.partition_or_window, Partition)
-            key = self._build_key(
-                type(context.asset).key, context.asset.dataset, context.asset.partitioning, context.partition_or_window
-            )
-            self._storage[key] = data
-
-    def read(self, context: IOContext) -> Any:
-        """Retrieve data from memory.
+    def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
+        """Retrieve one scope's data.
 
         Returns:
-            The stored data, or a list of results for partition windows.
+            The stored data.
 
         Raises:
             DataNotFoundError: If no data exists for the resolved key.
         """
-        if context.partition_or_window is None:
-            key = self._build_key(type(context.asset).key, context.asset.dataset, context.asset.partitioning, None)
-            if key not in self._storage:
-                raise DataNotFoundError(f"No data found in memory for: {key}")
-            return self._storage[key]
+        key = self._scope_key(context, partition)
+        if key not in self._storage:
+            raise DataNotFoundError(f"No data found in memory for: {key}")
+        return self._storage[key]
 
-        elif isinstance(context.partition_or_window, PartitionWindow):
-            results = []
-            for partition in context.partition_or_window:
-                key = self._build_key(
-                    type(context.asset).key, context.asset.dataset, context.asset.partitioning, partition
-                )
-                if key not in self._storage:
-                    raise DataNotFoundError(f"No data found in memory for: {key}")
-                results.append(self._storage[key])
-            return results
+    def _scope_key(self, context: IOContext, partition: Partition | None) -> str:
+        """Build the storage key for a scope.
 
-        else:
-            assert isinstance(context.partition_or_window, Partition)
-            key = self._build_key(
-                type(context.asset).key, context.asset.dataset, context.asset.partitioning, context.partition_or_window
-            )
-            if key not in self._storage:
-                raise DataNotFoundError(f"No data found in memory for: {key}")
-            return self._storage[key]
+        Returns:
+            The constructed storage key string.
+        """
+        return self._build_key(type(context.asset).key, context.asset.dataset, context.asset.partitioning, partition)
 
     def _build_key(
         self,
