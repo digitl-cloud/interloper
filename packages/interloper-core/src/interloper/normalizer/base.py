@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import types
 from collections.abc import Generator, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel
@@ -42,6 +43,13 @@ class Normalizer:
         replace_empty_dicts: Replace ``{}`` values with ``None``.
         replace_empty_strings: Replace ``""`` values with ``None``.
         drop_na_columns: Drop columns where every value is ``None``.
+        snake_case_digits: Treat digit groups as words when snake-casing
+            column names (``acosClicks14d`` → ``acos_clicks_14d`` instead of
+            ``acos_clicks14d``).  Off by default because the right convention
+            depends on the upstream API's naming semantics.
+        column_overrides: Explicit raw-name → normalized-name mapping, applied
+            before the snake_case conversion.  For API quirk names no general
+            rule can handle (``eCPAddToCart`` → ``ecp_add_to_cart``).
     """
 
     normalize_columns_names: bool = True
@@ -50,6 +58,8 @@ class Normalizer:
     fill_missing: bool = True
     infer: bool = True
     drop_na_columns: bool = False
+    snake_case_digits: bool = False
+    column_overrides: dict[str, str] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
     # Public API
@@ -132,7 +142,9 @@ class Normalizer:
     def column_name(self, name: str) -> str:
         """Transform a column name according to the normalizer's convention.
 
-        The default implementation converts to ``snake_case``.
+        Explicit ``column_overrides`` win; otherwise converts to
+        ``snake_case``, optionally splitting letter→digit boundaries
+        (see ``snake_case_digits``).
 
         Args:
             name: Original column name.
@@ -140,7 +152,12 @@ class Normalizer:
         Returns:
             Transformed column name.
         """
-        return to_snake_case(name)
+        if name in self.column_overrides:
+            return self.column_overrides[name]
+        name = to_snake_case(name)
+        if self.snake_case_digits:
+            name = re.sub(r"([a-z])(\d)", r"\1_\2", name)
+        return name
 
     # ------------------------------------------------------------------
     # Type coercion

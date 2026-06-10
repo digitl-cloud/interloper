@@ -10,6 +10,7 @@ from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
 from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.utils.data import dataframe_to_records, is_dataframe
 
 
 @destination(name="CSV")
@@ -20,8 +21,12 @@ class CSVDestination(Destination):
     (or ``{base_path}/{asset_key}/data.csv`` when no dataset is set).
     Partitioned assets add a ``{column}={id}`` subdirectory.
 
-    Data must be ``list[dict]`` — each dict represents a row, and the keys
-    of the first dict determine the CSV column headers.
+    Data must be ``list[dict]`` (each dict is a row; the keys of the first
+    dict determine the CSV headers) or a pandas DataFrame, which is converted
+    to rows on write.
+
+    CSV stores every value as a string.  When the IO context carries a schema,
+    reads reconcile the rows against it, restoring the declared types.
     """
 
     base_path: str = ""
@@ -42,8 +47,12 @@ class CSVDestination(Destination):
             writer.writeheader()
             writer.writerows(data)
 
-    def _read_csv(self, file_path: Path) -> list[dict[str, str]]:
+    def _read_csv(self, file_path: Path, context: IOContext) -> list[dict[str, Any]]:
         """Read a CSV file and return a list of row dicts.
+
+        When the context carries a schema, rows are reconciled against it to
+        restore types (CSV reads everything back as strings); empty strings
+        are treated as ``None``.
 
         Returns:
             Rows as a list of dicts.
@@ -55,10 +64,31 @@ class CSVDestination(Destination):
             raise FileNotFoundError(f"Data file not found: {file_path}")
         with file_path.open(newline="") as f:
             reader = csv.DictReader(f)
-            return list(reader)
+            rows: list[dict[str, Any]] = list(reader)
+        if context.schema is not None:
+            rows = [{k: (None if v == "" else v) for k, v in row.items()} for row in rows]
+            rows = context.schema.reconcile(rows)
+        return rows
 
-    def write(self, context: IOContext, data: list[dict[str, Any]]) -> None:
-        """Write row data to a CSV file, creating partition subdirectories as needed."""
+    @staticmethod
+    def _rows_for_partition(data: list[dict[str, Any]], column: str, partition: Partition) -> list[dict[str, Any]]:
+        """Return the subset of rows belonging to a partition.
+
+        Returns:
+            Rows whose partition column matches the partition id (compared as
+            strings, since partition ids stringify on disk).
+        """
+        return [row for row in data if str(row.get(column)) == str(partition.id)]
+
+    def write(self, context: IOContext, data: Any) -> None:
+        """Write row data to a CSV file, creating partition subdirectories as needed.
+
+        Accepts ``list[dict]`` or a DataFrame (converted to rows).  Partition
+        windows are split by the partition column so each partition directory
+        only receives its own rows.
+        """
+        if is_dataframe(data):
+            data = dataframe_to_records(data)
         base = self._asset_path(context)
 
         if context.partition_or_window is None:
@@ -66,9 +96,10 @@ class CSVDestination(Destination):
 
         elif isinstance(context.partition_or_window, PartitionWindow):
             assert context.asset.partitioning
+            column = context.asset.partitioning.column
             for partition in context.partition_or_window:
-                partition_path = base / f"{context.asset.partitioning.column}={partition.id}"
-                self._write_csv(partition_path / "data.csv", data)
+                partition_path = base / f"{column}={partition.id}"
+                self._write_csv(partition_path / "data.csv", self._rows_for_partition(data, column, partition))
 
         else:
             assert isinstance(context.partition_or_window, Partition)
@@ -76,7 +107,7 @@ class CSVDestination(Destination):
             partition_path = base / f"{context.asset.partitioning.column}={context.partition_or_window.id}"
             self._write_csv(partition_path / "data.csv", data)
 
-    def read(self, context: IOContext) -> list[dict[str, str]] | list[list[dict[str, str]]]:
+    def read(self, context: IOContext) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """Read row data from a CSV file.
 
         Returns:
@@ -85,12 +116,12 @@ class CSVDestination(Destination):
         base = self._asset_path(context)
 
         if context.partition_or_window is None:
-            return self._read_csv(base / "data.csv")
+            return self._read_csv(base / "data.csv", context)
 
         elif isinstance(context.partition_or_window, PartitionWindow):
             assert context.asset.partitioning
             return [
-                self._read_csv(base / f"{context.asset.partitioning.column}={p.id}" / "data.csv")
+                self._read_csv(base / f"{context.asset.partitioning.column}={p.id}" / "data.csv", context)
                 for p in context.partition_or_window
             ]
 
@@ -98,7 +129,7 @@ class CSVDestination(Destination):
             assert isinstance(context.partition_or_window, Partition)
             assert context.asset.partitioning
             return self._read_csv(
-                base / f"{context.asset.partitioning.column}={context.partition_or_window.id}" / "data.csv"
+                base / f"{context.asset.partitioning.column}={context.partition_or_window.id}" / "data.csv", context
             )
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
@@ -116,6 +147,6 @@ class CSVDestination(Destination):
                 partition_value = entry.name.split("=", 1)[1]
                 data_file = entry / "data.csv"
                 if data_file.exists():
-                    rows = self._read_csv(data_file)
-                    counts[partition_value] = len(rows)
+                    with data_file.open(newline="") as f:
+                        counts[partition_value] = sum(1 for _ in csv.DictReader(f))
         return counts

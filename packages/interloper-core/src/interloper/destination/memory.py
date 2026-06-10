@@ -9,6 +9,24 @@ from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
+from interloper.utils.data import is_dataframe
+
+
+def _slice_for_partition(data: Any, column: str, partition: Partition) -> Any:
+    """Return the subset of tabular data belonging to a partition.
+
+    Lists of rows and DataFrames are filtered on the partition column
+    (compared as strings); other shapes are stored as-is since they cannot
+    be split.
+
+    Returns:
+        The partition's slice of the data.
+    """
+    if isinstance(data, list):
+        return [row for row in data if str(row.get(column)) == str(partition.id)]
+    if is_dataframe(data):
+        return data[data[column].astype(str) == str(partition.id)]
+    return data
 
 
 @destination(name="Memory")
@@ -22,17 +40,23 @@ class MemoryDestination(Destination):
     _storage: ClassVar[dict[str, Any]] = {}
 
     def write(self, context: IOContext, data: Any) -> None:
-        """Store data in memory under a path-style key."""
+        """Store data in memory under a path-style key.
+
+        Partition windows are split by the partition column so each partition
+        key only stores its own rows.
+        """
         if context.partition_or_window is None:
             key = self._build_key(type(context.asset).key, context.asset.dataset, context.asset.partitioning, None)
             self._storage[key] = data
 
         elif isinstance(context.partition_or_window, PartitionWindow):
+            assert context.asset.partitioning
+            column = context.asset.partitioning.column
             for partition in context.partition_or_window:
                 key = self._build_key(
                     type(context.asset).key, context.asset.dataset, context.asset.partitioning, partition
                 )
-                self._storage[key] = data
+                self._storage[key] = _slice_for_partition(data, column, partition)
 
         else:
             assert isinstance(context.partition_or_window, Partition)

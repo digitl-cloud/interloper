@@ -2,16 +2,78 @@
 
 from __future__ import annotations
 
+import types
 import warnings
-from typing import Any, ClassVar
+from dataclasses import dataclass
+from typing import Any, ClassVar, Union, get_args, get_origin
 
-from pydantic import ConfigDict, ValidationError, create_model
+from pydantic import BaseModel, ConfigDict, ValidationError, create_model
 from typing_extensions import Self
 
 from interloper.component import Component
 from interloper.errors import SchemaError
 
 warnings.filterwarnings("ignore", message=r'Field name ".*" in ".*" shadows an attribute in parent "Schema"')
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    """Backend-agnostic description of a single schema field.
+
+    This is the canonical type contract extracted from a :class:`Schema` via
+    :meth:`Schema.field_specs`.  Integration packages map specs to their native
+    type systems (BigQuery ``SchemaField``, pandas dtypes, ...) so that the
+    type-mapping knowledge lives in exactly one place per backend.
+
+    Attributes:
+        name: Field name.
+        type: The unwrapped Python type (``int``, ``float``, ``str``, ``bool``,
+            ``datetime.date``, ``datetime.datetime``, ``Decimal``, ``bytes``,
+            a ``BaseModel`` subclass for nested records, ...) or ``typing.Any``
+            when the type is unknown or ambiguous.
+        nullable: Whether the field accepts ``None`` (declared as ``T | None``).
+        repeated: Whether the field is a list of *type* (declared as ``list[T]``).
+        fields: Sub-field specs when *type* is a nested model, else ``None``.
+    """
+
+    name: str
+    type: Any
+    nullable: bool
+    repeated: bool = False
+    fields: tuple[FieldSpec, ...] | None = None
+
+
+def _field_spec(name: str, annotation: Any) -> FieldSpec:
+    """Build a FieldSpec from a field name and type annotation.
+
+    Returns:
+        The extracted spec, with ``Optional``/``list`` wrappers unwrapped.
+    """
+    nullable = False
+
+    # Unwrap Optional / unions with None
+    if get_origin(annotation) in (Union, types.UnionType):
+        args = get_args(annotation)
+        non_none = [a for a in args if a is not type(None)]
+        nullable = len(non_none) < len(args)
+        annotation = non_none[0] if len(non_none) == 1 else Any
+
+    # Unwrap list[T] into a repeated field
+    repeated = False
+    if get_origin(annotation) is list:
+        repeated = True
+        inner = get_args(annotation)
+        annotation = inner[0] if inner else Any
+        if get_origin(annotation) in (Union, types.UnionType):
+            non_none = [a for a in get_args(annotation) if a is not type(None)]
+            annotation = non_none[0] if len(non_none) == 1 else Any
+
+    # Nested model -> sub-field specs
+    fields: tuple[FieldSpec, ...] | None = None
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        fields = tuple(_field_spec(n, f.annotation) for n, f in annotation.model_fields.items())
+
+    return FieldSpec(name=name, type=annotation, nullable=nullable, repeated=repeated, fields=fields)
 
 
 class Schema(Component):
@@ -43,6 +105,26 @@ class Schema(Component):
     # Override Component.model_post_init to avoid setting an instance id.
     def model_post_init(self, context: Any) -> None:
         """No-op: schemas don't need instance identity."""
+
+    @classmethod
+    def field_specs(cls) -> list[FieldSpec]:
+        """Extract backend-agnostic field specs from this schema.
+
+        Fields inherited from :class:`Component` (e.g. ``resources``) are
+        framework plumbing, not data columns, and are excluded.  Fields are
+        returned in the subclass's declaration order: pydantic positions a
+        field that shadows a ``Component`` attribute (``id``, ``name``, ...)
+        at the *parent's* annotation slot, so ``model_fields`` order alone
+        would scramble the author's column order.
+
+        Returns:
+            One :class:`FieldSpec` per declared data field, in declaration order.
+        """
+        data_fields = cls._data_fields()
+        names = [n for n in cls.model_fields if n in data_fields]
+        own_order = [n for n in cls.__dict__.get("__annotations__", {}) if n in data_fields]
+        ordered = own_order + [n for n in names if n not in own_order]
+        return [_field_spec(name, cls.model_fields[name].annotation) for name in ordered]
 
     @classmethod
     def infer(
@@ -105,7 +187,7 @@ class Schema(Component):
         Raises:
             SchemaError: If any row fails validation.
         """
-        schema_fields = set(cls.model_fields.keys()) if strict else None
+        schema_fields = cls._data_fields() if strict else None
         for i, row in enumerate(rows):
             if schema_fields is not None:
                 extra = set(row.keys()) - schema_fields
@@ -155,7 +237,7 @@ class Schema(Component):
         if not rows:
             return []
 
-        schema_fields = set(cls.model_fields.keys())
+        schema_fields = cls._data_fields()
 
         result: list[dict[str, Any]] = []
         for i, row in enumerate(rows):
@@ -167,8 +249,18 @@ class Schema(Component):
                 instance = cls.model_validate(filtered)
             except ValidationError as e:
                 raise SchemaError(f"Reconciliation failed on row {i}: {e}") from e
-            result.append(instance.model_dump())
+            result.append(instance.model_dump(include=schema_fields))
         return result
+
+    @classmethod
+    def _data_fields(cls) -> set[str]:
+        """Return the names of the schema's data fields.
+
+        Excludes fields inherited from :class:`Component` (e.g. ``resources``),
+        which are framework plumbing — they must not appear in reconciled rows
+        or count as schema columns.
+        """
+        return {name for name in cls.model_fields if name not in Schema.model_fields}
 
 
 def _resolve_field_type(types_seen: set[type]) -> type:

@@ -544,3 +544,143 @@ class TestDestinationWrite:
         # Data was written and no "no data" warning was emitted.
         assert mem._storage
         assert not [e for e in logs if "produced no data" in (e.metadata.get("message") or "")]
+
+
+# ---------------------------------------------------------------------------
+# Conform (schema enforcement decoupled from normalizer)
+# ---------------------------------------------------------------------------
+
+
+class ConformSchema(il.Schema):
+    user_id: int | None = None
+    name: str | None = None
+
+
+class StrictConformSchema(il.Schema):
+    user_id: int | None
+    name: str | None
+
+
+class TestConform:
+    """Schema enforcement runs whether or not a normalizer is configured."""
+
+    def test_schema_validates_without_normalizer(self):
+        @il.asset(schema=ConformSchema)
+        def users() -> list[dict[str, Any]]:
+            return [{"user_id": 1, "name": "a"}]
+
+        assert users().run() == [{"user_id": 1, "name": "a"}]
+
+    def test_mismatched_data_fails_fast(self):
+        from interloper.errors import SchemaError
+
+        @il.asset(schema=ConformSchema)
+        def users() -> list[dict[str, Any]]:
+            return [{"user_id": "not-an-int", "name": "a"}]
+
+        with pytest.raises(SchemaError):
+            users().run()
+
+    def test_dataframe_validated_without_normalizer(self):
+        pd = pytest.importorskip("pandas")
+        from interloper.errors import SchemaError
+
+        @il.asset(schema=StrictConformSchema)
+        def users() -> Any:
+            return pd.DataFrame([{"userId": 1, "Name": "a"}])  # wrong casing -> required fields missing
+
+        with pytest.raises(SchemaError):
+            users().run()
+
+    def test_dataframe_with_nan_validates_against_nullable_fields(self):
+        pd = pytest.importorskip("pandas")
+        import numpy as np
+
+        @il.asset(schema=ConformSchema)
+        def users() -> Any:
+            return pd.DataFrame([{"user_id": np.nan, "name": "a"}])
+
+        result = users().run()
+        assert isinstance(result, pd.DataFrame)
+
+    def test_strategy_requires_schema(self):
+        from interloper.normalizer import MaterializationStrategy
+
+        @il.asset(materialization_strategy=MaterializationStrategy.RECONCILE)
+        def users() -> list[dict[str, Any]]:
+            return [{"a": 1}]
+
+        with pytest.raises(AssetError, match="requires a schema"):
+            users().run()
+
+    def test_reconcile_without_normalizer(self):
+        from interloper.normalizer import MaterializationStrategy
+
+        @il.asset(schema=ConformSchema, materialization_strategy=MaterializationStrategy.RECONCILE)
+        def users() -> list[dict[str, Any]]:
+            return [{"user_id": "1", "name": "a", "extra": True}]
+
+        assert users().run() == [{"user_id": 1, "name": "a"}]
+
+    def test_generator_with_schema_is_coerced(self):
+        @il.asset(schema=ConformSchema)
+        def users() -> Any:
+            yield {"user_id": 1, "name": "a"}
+
+        assert users().run() == [{"user_id": 1, "name": "a"}]
+
+    def test_non_tabular_data_with_schema_fails(self):
+        @il.asset(schema=ConformSchema)
+        def users() -> Any:
+            return "not tabular"
+
+        with pytest.raises(AssetError, match="cannot[\\s\\S]*be checked"):
+            users().run()
+
+    def test_auto_without_schema_infers_effective_schema(self):
+        @il.asset
+        def users() -> list[dict[str, Any]]:
+            return [{"user_id": 1, "name": "a"}]
+
+        asset = users()
+        asset.run()
+        assert asset._effective_schema is not None
+        names = [s.name for s in asset._effective_schema.field_specs()]
+        assert names == ["user_id", "name"]
+
+    def test_iocontext_carries_schema_to_destination(self):
+        captured: dict[str, Any] = {}
+
+        class CapturingDestination(il.Destination):
+            def read(self, context: Any) -> Any:
+                return None
+
+            def write(self, context: Any, data: Any) -> None:
+                captured["schema"] = context.schema
+
+        @il.asset(schema=ConformSchema)
+        def users() -> list[dict[str, Any]]:
+            return [{"user_id": 1, "name": "a"}]
+
+        asset = users(destination=CapturingDestination(id="cap"))
+        asyncio.run(asset.materialize())
+        assert captured["schema"] is ConformSchema
+
+    def test_iocontext_carries_inferred_schema_when_undeclared(self):
+        captured: dict[str, Any] = {}
+
+        class CapturingDestination(il.Destination):
+            def read(self, context: Any) -> Any:
+                return None
+
+            def write(self, context: Any, data: Any) -> None:
+                captured["schema"] = context.schema
+
+        @il.asset
+        def users() -> list[dict[str, Any]]:
+            return [{"user_id": 1}]
+
+        asset = users(destination=CapturingDestination(id="cap"))
+        asyncio.run(asset.materialize())
+        assert captured["schema"] is not None
+        assert [s.name for s in captured["schema"].field_specs()] == ["user_id"]

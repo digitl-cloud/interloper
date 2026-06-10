@@ -1,4 +1,4 @@
-from interloper.schema.base import Schema
+from interloper.schema.base import FieldSpec, Schema
 from interloper.schema.decorator import schema
 
-__all__ = ["Schema", "schema"]
+__all__ = ["FieldSpec", "Schema", "schema"]

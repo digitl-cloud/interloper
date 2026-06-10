@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 from interloper.destination.adapter import DataAdapter
 from interloper.errors import AdapterError
+from interloper.utils.data import dataframe_to_records
 
 
 class DataFrameAdapter(DataAdapter["pd.DataFrame"]):
@@ -16,8 +17,19 @@ class DataFrameAdapter(DataAdapter["pd.DataFrame"]):
     :class:`~interloper.destination.database.DatabaseDestination`.
     """
 
+    def can_handle(self, data: Any) -> bool:
+        """Return whether *data* is a pandas ``DataFrame``.
+
+        Returns:
+            ``True`` for DataFrames.
+        """
+        return isinstance(data, pd.DataFrame)
+
     def to_rows(self, data: pd.DataFrame) -> list[dict[str, Any]]:
         """Convert a ``DataFrame`` to a list of row dicts.
+
+        Missing values (``NaN``, ``NaT``, ``pd.NA``) are mapped to ``None`` so
+        rows serialize to JSON ``null`` and validate against nullable fields.
 
         Args:
             data: A pandas ``DataFrame``.
@@ -30,7 +42,7 @@ class DataFrameAdapter(DataAdapter["pd.DataFrame"]):
         """
         if not isinstance(data, pd.DataFrame):
             raise AdapterError(f"DataFrameAdapter expects a pandas DataFrame, got {type(data).__name__}.")
-        return data.to_dict("records")
+        return dataframe_to_records(data)
 
     def from_rows(self, rows: list[dict[str, Any]]) -> pd.DataFrame:
         """Convert rows to a pandas ``DataFrame``.
