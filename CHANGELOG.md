@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v0.10.1 (2026-06-10)
+
+### Bug Fixes
+
+- Carry the asset's terminal error into run-level failures (k8s)
+  ([`6efe731`](https://github.com/digitl-cloud/interloper/commit/6efe73188b64d73ca3b8a3af7461b316b52d5610))
+
+- Decorators build through the metaclass; Normalizer becomes a Component
+  ([`df457ab`](https://github.com/digitl-cloud/interloper/commit/df457ab2af3d4801a5a61b548a6dbfe840236253))
+
+- Timeline asset clicks not filtering events while a run is live
+  ([`04682e0`](https://github.com/digitl-cloud/interloper/commit/04682e00bf4959303d8023ae7815b23112ce6675))
+
+
 ## v0.10.0 (2026-06-10)
 
 ### Chores
