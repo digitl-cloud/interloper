@@ -25,7 +25,7 @@ ghcr.io/digitl-cloud/interloper-scheduler-k8s:<version>      # kubernetes launch
 ghcr.io/digitl-cloud/interloper-scheduler-docker:<version>   # docker launcher
 ghcr.io/digitl-cloud/interloper-api:<version>
 ghcr.io/digitl-cloud/interloper-frontend:<version>
-ghcr.io/digitl-cloud/interloper-worker:<version>             # k8s runner per-asset Job target
+ghcr.io/digitl-cloud/interloper-worker:<version>             # kubernetes runner per-asset Job target
 ```
 
 The chart picks the scheduler image suffix from `config.launcher.type`

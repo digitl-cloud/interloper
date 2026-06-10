@@ -25,6 +25,11 @@ dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0"]
 [tool.uv.sources]
 interloper-google-cloud = { workspace = true }
 
+[project.entry-points."interloper.runners"]
+serial = "interloper.runner.serial:SerialRunner"
+multi_thread = "interloper.runner.multi_thread:MultiThreadRunner"
+multi_process = "interloper.runner.multi_process:MultiProcessRunner"
+
 [build-system]
 requires = ["uv_build>=0.11.5,<0.12"]
 build-backend = "uv_build"
