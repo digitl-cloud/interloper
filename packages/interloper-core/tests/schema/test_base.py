@@ -10,12 +10,12 @@ from interloper.schema import FieldSpec, Schema
 
 
 class Nested(BaseModel):
-    city: str
+    city: str = Field(description="City name")
     zip: str | None
 
 
 class FullSchema(Schema):
-    plain_int: int
+    plain_int: int = Field(description="A plain integer")
     nullable_float: float | None = Field(...)
     a_date: datetime.date | None
     a_datetime: datetime.datetime
@@ -82,6 +82,16 @@ class TestFieldSpecs:
 
     def test_any_type(self):
         assert spec_by_name(FullSchema, "untyped").type is Any
+
+    def test_description_extracted(self):
+        assert spec_by_name(FullSchema, "plain_int").description == "A plain integer"
+        assert spec_by_name(FullSchema, "nullable_float").description is None
+
+    def test_nested_description_extracted(self):
+        spec = spec_by_name(FullSchema, "nested")
+        assert spec.fields is not None
+        assert spec.fields[0].description == "City name"
+        assert spec.fields[1].description is None
 
     def test_component_fields_excluded(self):
         names = [s.name for s in FullSchema.field_specs()]
