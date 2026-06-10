@@ -1,4 +1,4 @@
-"""Launcher interface and in-process implementation."""
+"""Launcher interface, in-process implementation, and the launcher registry."""
 
 from __future__ import annotations
 
@@ -7,9 +7,12 @@ import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from functools import cache
+from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from interloper.errors import ConfigError
 from interloper_db import Store
 
 if TYPE_CHECKING:
@@ -36,18 +39,38 @@ class RunState:
     error: str | None = None
 
 
+_ENTRY_POINT_GROUP = "interloper.launchers"
+
+
+@cache
+def launchers() -> dict[str, type[Launcher]]:
+    """Load the launcher registry from installed entry points.
+
+    Every launcher — including the built-in in-process one — registers
+    through the ``interloper.launchers`` entry-point group; the entry name
+    is the launcher type key used in ``LauncherSettings.type``. Installed
+    means discovered: no import-order dependence, and a new launcher is one
+    new package with one entry point.
+
+    Returns:
+        Mapping of launcher type key to launcher class.
+    """
+    return {entry_point.name: entry_point.load() for entry_point in entry_points(group=_ENTRY_POINT_GROUP)}
+
+
 def build_launcher(
     launcher: LauncherSettings,
     *,
     postgres: PostgresSettings,
     runner: RunnerSettings,
-    catalog: Catalog,
+    catalog: Catalog | None,
     store: Any | None = None,
-) -> Any:
+) -> Launcher:
     """Build a launcher instance from settings.
 
-    The runner configuration is always forwarded so every launcher type
-    respects ``RunnerSettings`` uniformly.
+    Resolves the launcher class from the registry by ``launcher.type`` and
+    delegates construction to the class's own :meth:`Launcher.from_settings`
+    — each integration package owns its construction recipe.
 
     Args:
         launcher: Launcher settings (type + type-specific config).
@@ -55,65 +78,25 @@ def build_launcher(
             isolated processes (e.g. Docker).
         runner: Runner settings forwarded to every launcher.
         catalog: Catalog forwarded to launchers that spawn isolated
-            processes so they can reproduce an identical catalog.
+            processes so they can reproduce an identical catalog
+            (``None`` is accepted by launchers that don't consume it).
         store: Optional Store instance shared with in-process launchers.
 
     Returns:
         A scheduler ``Launcher`` instance.
 
     Raises:
-        ValueError: If the launcher type is unknown.
+        ConfigError: If no launcher is registered under ``launcher.type``.
     """
-    match launcher.type:
-        case "in_process":
-            from interloper_scheduler import InProcessLauncher
-
-            return InProcessLauncher(
-                store=store,
-                runner_type=runner.type,
-                runner_config=runner.config,
-            )
-        case "docker":
-            from interloper_docker import DockerLauncher
-
-            postgres_kwargs = {
-                "postgres_host": postgres.host,
-                "postgres_port": postgres.port,
-                "postgres_user": postgres.user,
-                "postgres_password": postgres.password,
-                "postgres_database": postgres.database,
-            }
-            kwargs = {**postgres_kwargs, **launcher.config}
-            return DockerLauncher(
-                catalog=catalog,
-                runner_type=runner.type,
-                runner_config=runner.config,
-                **kwargs,  # ty: ignore[invalid-argument-type]
-            )
-        case "kubernetes":
-            try:
-                from interloper_k8s import KubernetesLauncher
-            except ImportError as exc:
-                raise ValueError(
-                    "Launcher 'kubernetes' requires the 'interloper-k8s' package to be installed."
-                ) from exc
-
-            postgres_kwargs = {
-                "postgres_host": postgres.host,
-                "postgres_port": postgres.port,
-                "postgres_user": postgres.user,
-                "postgres_password": postgres.password,
-                "postgres_database": postgres.database,
-            }
-            kwargs = {**postgres_kwargs, **launcher.config}
-            return KubernetesLauncher(
-                catalog=catalog,
-                runner_type=runner.type,
-                runner_config=runner.config,
-                **kwargs,  # ty: ignore[invalid-argument-type]
-            )
-        case _:
-            raise ValueError(f"Unknown launcher: {launcher.type!r}. Available: in_process, docker, kubernetes")
+    registry = launchers()
+    if launcher.type not in registry:
+        raise ConfigError(
+            f"Unknown launcher: {launcher.type!r} (available: {sorted(registry)}). "
+            f"Is the matching interloper package installed?"
+        )
+    return registry[launcher.type].from_settings(
+        launcher, postgres=postgres, runner=runner, catalog=catalog, store=store
+    )
 
 
 class Launcher(ABC):
@@ -123,6 +106,24 @@ class Launcher(ABC):
     Every launcher carries a runner configuration that determines *how* the
     DAG is executed once it reaches the execution environment.
     """
+
+    @classmethod
+    @abstractmethod
+    def from_settings(
+        cls,
+        settings: LauncherSettings,
+        *,
+        postgres: PostgresSettings,
+        runner: RunnerSettings,
+        catalog: Catalog | None,
+        store: Any | None = None,
+    ) -> Launcher:
+        """Construct this launcher from scheduler settings.
+
+        The registry construction hook: each launcher owns its recipe
+        (which settings it consumes, how ``settings.config`` maps to its
+        constructor).
+        """
 
     def __init__(
         self,
@@ -181,6 +182,23 @@ class InProcessLauncher(Launcher):
         """
         super().__init__(runner_type=runner_type, runner_config=runner_config)
         self._store = store
+
+    @classmethod
+    def from_settings(
+        cls,
+        settings: LauncherSettings,
+        *,
+        postgres: PostgresSettings,
+        runner: RunnerSettings,
+        catalog: Catalog | None,
+        store: Any | None = None,
+    ) -> InProcessLauncher:
+        """Construct from settings; uses only the runner config and the shared store.
+
+        Returns:
+            The configured in-process launcher.
+        """
+        return cls(runner_type=runner.type, runner_config=runner.config, store=store)
 
     def launch(self, run_id: UUID) -> None:
         """Launch a run in a background thread.

@@ -10,6 +10,9 @@ authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
 dependencies = ["docker>=7.1.0", "interloper-core", "interloper-scheduler"]
 
+[project.entry-points."interloper.launchers"]
+docker = "interloper_docker.launcher:DockerLauncher"
+
 [build-system]
 requires = ["uv_build>=0.11.5,<0.12"]
 build-backend = "uv_build"

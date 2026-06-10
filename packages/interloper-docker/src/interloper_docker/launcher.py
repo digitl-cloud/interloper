@@ -5,11 +5,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import docker
 from interloper.catalog.base import Catalog
+from interloper.errors import ConfigError
+
+if TYPE_CHECKING:
+    from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
 from interloper_scheduler.launcher import Launcher, RunState, RunStatus
 
 logger = logging.getLogger(__name__)
@@ -31,6 +35,43 @@ class DockerLauncher(Launcher):
     (``_build_launcher``) injects the app-level defaults; any overrides
     from the launcher YAML config take precedence.
     """
+
+    @classmethod
+    def from_settings(
+        cls,
+        settings: LauncherSettings,
+        *,
+        postgres: PostgresSettings,
+        runner: RunnerSettings,
+        catalog: Catalog | None,
+        store: Any | None = None,
+    ) -> DockerLauncher:
+        """Construct from scheduler settings (registry construction hook).
+
+        Postgres credentials and the catalog are forwarded into the spawned
+        environment; ``settings.config`` supplies the launcher-specific
+        keyword arguments.
+
+        Returns:
+            The configured launcher.
+
+        Raises:
+            ConfigError: If no catalog is provided — this launcher spawns
+                isolated processes and must reproduce the catalog there.
+        """
+        if catalog is None:
+            raise ConfigError("The 'docker' launcher requires a catalog.")
+        return cls(
+            catalog=catalog,
+            postgres_host=postgres.host,
+            postgres_port=postgres.port,
+            postgres_user=postgres.user,
+            postgres_password=postgres.password,
+            postgres_database=postgres.database,
+            runner_type=runner.type,
+            runner_config=runner.config,
+            **settings.config,
+        )
 
     def __init__(
         self,
