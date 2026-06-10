@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.10.0 (2026-06-10)
+
+### Chores
+
+- Migrate type checking from pyright to ty
+  ([`9c921eb`](https://github.com/digitl-cloud/interloper/commit/9c921eb8bfadf8adf8389495bcd9913fbefc7d03))
+
+- Update deps
+  ([`2757963`](https://github.com/digitl-cloud/interloper/commit/275796352e81e16ab16c0f38d1d1402d5a33e44e))
+
+### Features
+
+- Schema-driven destinations with always-on conform and native DataFrame loads
+  ([`f209e24`](https://github.com/digitl-cloud/interloper/commit/f209e2447cd660783249bbbd006862a8589c7148))
+
+
 ## v0.9.0 (2026-06-09)
 
 ### Bug Fixes
