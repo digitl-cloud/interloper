@@ -494,4 +494,5 @@ class Event(SQLModel, table=True):
     asset_id: UUID | None = SQLField(default=None)
     asset_key: str | None = None
     message: str | None = None
+    level: str | None = None
     timestamp: datetime = SQLField(sa_column=Column(TZDateTime))

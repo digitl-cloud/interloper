@@ -62,6 +62,18 @@ export function eventTypeLabel(eventType: EventType): string {
     return labelMap[eventType] ?? eventType
 }
 
+const levelColorMap: Record<string, BadgeColor> = {
+    DEBUG: 'neutral',
+    INFO: 'info',
+    WARNING: 'warning',
+    ERROR: 'error',
+    CRITICAL: 'error',
+}
+
+export function logLevelColor(level: string): BadgeColor {
+    return levelColorMap[level.toUpperCase()] ?? 'neutral'
+}
+
 export function eventTypeColor(eventType: EventType): BadgeColor {
     if (eventType.includes('failed')) return 'error'
     if (eventType.includes('completed')) return 'success'
