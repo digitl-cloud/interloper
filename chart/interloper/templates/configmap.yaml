@@ -18,7 +18,7 @@ set them explicitly.
     {{- $_ := set $cfg.launcher.config "service_account_name" (include "interloper.serviceAccountName" .) -}}
   {{- end -}}
 {{- end -}}
-{{- if eq (default "" (dig "runner" "type" "" $cfg)) "k8s" -}}
+{{- if has (default "" (dig "runner" "type" "" $cfg)) (list "kubernetes" "k8s") -}}
   {{- if not (hasKey $cfg "runner") -}}{{- $_ := set $cfg "runner" dict -}}{{- end -}}
   {{- if not (hasKey $cfg.runner "config") -}}{{- $_ := set $cfg.runner "config" dict -}}{{- end -}}
   {{- if not $cfg.runner.config.image -}}

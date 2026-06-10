@@ -41,7 +41,7 @@ scheduler:
   podAnnotations: {}
   extraEnv: []
 
-# ── Worker (per-asset Job target; only consumed when config.runner.type=k8s) ─
+# ── Worker (per-asset Job target; only consumed when config.runner.type=kubernetes (or legacy alias k8s)) ─
 # Not deployed as a workload — this image is referenced by the Kubernetes
 # runner as the per-asset Job target. Slimmer than scheduler: no DB, no
 # scheduler/launcher packages, just core + assets + destinations + pandas.

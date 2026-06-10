@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import cache
+from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
 from pydantic import Field, PrivateAttr
 
 from interloper.component import Component
-from interloper.errors import PartitionError, RunnerError
+from interloper.errors import ConfigError, PartitionError, RunnerError
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
@@ -18,57 +20,47 @@ from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.runner.state import RunState
 
+_ENTRY_POINT_GROUP = "interloper.runners"
+
+
+@cache
+def runners() -> dict[str, type[SyncRunner]]:
+    """Load the runner registry from installed entry points.
+
+    Every runner — including the built-ins — registers through the
+    ``interloper.runners`` entry-point group; the entry name is the runner
+    type key used in ``RunnerSettings.type``. Installed means discovered: a
+    new runner is one new package with one entry point.
+
+    Returns:
+        Mapping of runner type key to runner class.
+    """
+    return {entry_point.name: entry_point.load() for entry_point in entry_points(group=_ENTRY_POINT_GROUP)}
+
 
 def build_runner(
     runner_type: str = "multi_thread",
     runner_config: dict[str, Any] | None = None,
 ) -> tuple[type[SyncRunner], dict[str, Any]]:
-    """Resolve a runner type string to a concrete class and forward its kwargs.
-
-    Supported types: ``serial``, ``multi_thread``, ``multi_process``, ``docker``.
-    ``docker`` requires the ``interloper-docker`` package to be installed.
+    """Resolve a runner type key to a concrete class and forward its kwargs.
 
     Args:
-        runner_type: Runner type name.
+        runner_type: Runner type key (an ``interloper.runners`` entry name).
         runner_config: Runner-specific kwargs forwarded to the constructor.
 
     Returns:
         A tuple of ``(runner_class, runner_kwargs)``.
 
     Raises:
-        ValueError: If ``runner_type`` is unknown or its package is missing.
+        ConfigError: If no runner is registered under ``runner_type``.
     """
-    cls: type[SyncRunner]
-    match runner_type:
-        case "serial":
-            from interloper.runner.serial import SerialRunner
-
-            cls = SerialRunner
-        case "multi_thread":
-            from interloper.runner.multi_thread import MultiThreadRunner
-
-            cls = MultiThreadRunner
-        case "multi_process":
-            from interloper.runner.multi_process import MultiProcessRunner
-
-            cls = MultiProcessRunner
-        case "docker":
-            try:
-                from interloper_docker import DockerRunner
-            except ImportError as exc:
-                raise ValueError("Runner 'docker' requires the 'interloper-docker' package to be installed.") from exc
-            cls = DockerRunner
-        case "k8s":
-            try:
-                from interloper_k8s import KubernetesRunner
-            except ImportError as exc:
-                raise ValueError("Runner 'k8s' requires the 'interloper-k8s' package to be installed.") from exc
-
-            cls = KubernetesRunner
-        case _:
-            raise ValueError(f"Unknown runner: {runner_type!r}. Available: serial, multi_thread, multi_process, docker")
-
-    return cls, dict(runner_config or {})
+    registry = runners()
+    if runner_type not in registry:
+        raise ConfigError(
+            f"Unknown runner: {runner_type!r} (available: {sorted(registry)}). "
+            f"Is the matching interloper package installed?"
+        )
+    return registry[runner_type], dict(runner_config or {})
 
 
 class Runner(Component):

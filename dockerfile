@@ -6,7 +6,7 @@
 #
 #   core       interloper-core only (lightest)
 #   scheduler  core + db + scheduler + assets (cron + worker + reaper)
-#   worker     core + assets only (per-asset Job target for runner.type=k8s)
+#   worker     core + assets only (per-asset Job target for runner.type=kubernetes)
 #   api        core + db + api (assets installed; SDK extras skipped)
 #   frontend   pre-built Nuxt SPA served by nginx
 #
@@ -89,7 +89,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 
 # ── worker (leaf per-asset Job target) ────────────────────────
-# Used as runner.config.image when runner.type=k8s. Executes a single
+# Used as runner.config.image when runner.type=kubernetes. Executes a single
 # mini-DAG via `interloper run --format inline`. No DB, no scheduler,
 # no launcher — just core + assets + destinations + pandas.
 FROM base AS build-worker
@@ -148,7 +148,7 @@ COPY --from=build-scheduler --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
 
-# ── worker (per-asset Job target; runner.type=k8s only) ───────
+# ── worker (per-asset Job target; runner.type=kubernetes only) ───────
 FROM runtime AS worker
 COPY --from=build-worker --chown=app:app /interloper/.venv /interloper/.venv
 USER app
