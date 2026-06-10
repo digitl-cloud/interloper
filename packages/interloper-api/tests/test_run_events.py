@@ -32,8 +32,16 @@ class FakeStore:
     def __init__(self, total: int = 777) -> None:
         self.total = total
         self.list_calls: list[tuple] = []
+        self.count_calls: list[UUID | None] = []
 
-    def count_events(self, *, run_id: UUID | None = None, org_id: UUID | None = None) -> int:
+    def count_events(
+        self,
+        *,
+        run_id: UUID | None = None,
+        org_id: UUID | None = None,
+        asset_id: UUID | None = None,
+    ) -> int:
+        self.count_calls.append(asset_id)
         return self.total
 
     def list_events(
@@ -41,10 +49,11 @@ class FakeStore:
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
+        asset_id: UUID | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list:
-        self.list_calls.append((run_id, limit, offset))
+        self.list_calls.append((run_id, limit, offset, asset_id))
         # Return as many fake events as the page would hold, capped at the total.
         n = max(0, min(limit, self.total - offset))
         return [
@@ -81,7 +90,7 @@ def test_returns_total_count_header(store: FakeStore) -> None:
 def test_forwards_limit_and_offset(store: FakeStore) -> None:
     resp = _client(store).get(f"/{_RUN_ID}/events?limit=100&offset=200")
     assert resp.status_code == 200
-    assert store.list_calls[-1] == (_RUN_ID, 100, 200)
+    assert store.list_calls[-1] == (_RUN_ID, 100, 200, None)
 
 
 def test_limit_is_clamped_to_max_page_size(store: FakeStore) -> None:
@@ -89,9 +98,23 @@ def test_limit_is_clamped_to_max_page_size(store: FakeStore) -> None:
     assert store.list_calls[-1][1] == MAX_EVENTS_PAGE_SIZE
 
 
+def test_forwards_asset_filter_to_list_and_count(store: FakeStore) -> None:
+    asset_id = uuid4()
+    resp = _client(store).get(f"/{_RUN_ID}/events?asset_id={asset_id}")
+    assert resp.status_code == 200
+    assert store.list_calls[-1] == (_RUN_ID, 100, 0, asset_id)
+    # X-Total-Count must reflect the same filter the listing used.
+    assert store.count_calls[-1] == asset_id
+
+
+def test_invalid_asset_filter_is_rejected(store: FakeStore) -> None:
+    resp = _client(store).get(f"/{_RUN_ID}/events?asset_id=not-a-uuid")
+    assert resp.status_code == 422
+
+
 def test_limit_and_offset_are_clamped_to_lower_bounds(store: FakeStore) -> None:
     _client(store).get(f"/{_RUN_ID}/events?limit=0&offset=-5")
-    _, limit, offset = store.list_calls[-1]
+    _, limit, offset, _ = store.list_calls[-1]
     assert limit == 1
     assert offset == 0
 

@@ -98,10 +98,11 @@ class RunMixin:
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
+        asset_id: UUID | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Event]:
-        """List events, optionally filtered by run.
+        """List events, optionally filtered by run and/or asset.
 
         Ordering is ``timestamp ASC, id ASC`` — stable and deterministic so
         ``offset``/``limit`` paging never skips or repeats a row when several
@@ -110,6 +111,7 @@ class RunMixin:
         Args:
             run_id: Optional run filter.
             org_id: Optional org filter.
+            asset_id: Optional asset filter.
             limit: Max results (default 100).
             offset: Pagination offset.
 
@@ -122,6 +124,8 @@ class RunMixin:
                 statement = statement.where(Event.run_id == run_id)
             if org_id:
                 statement = statement.where(Event.org_id == org_id)
+            if asset_id:
+                statement = statement.where(Event.asset_id == asset_id)
             statement = (
                 statement.order_by(col(Event.timestamp).asc(), col(Event.id).asc()).offset(offset).limit(limit)
             )
@@ -132,12 +136,14 @@ class RunMixin:
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
+        asset_id: UUID | None = None,
     ) -> int:
         """Count events matching the same filters as :meth:`list_events`.
 
         Args:
             run_id: Optional run filter.
             org_id: Optional org filter.
+            asset_id: Optional asset filter.
 
         Returns:
             Total number of matching events (ignoring limit/offset).
@@ -148,6 +154,8 @@ class RunMixin:
                 statement = statement.where(Event.run_id == run_id)
             if org_id:
                 statement = statement.where(Event.org_id == org_id)
+            if asset_id:
+                statement = statement.where(Event.asset_id == asset_id)
             return session.exec(statement).one()
 
     def list_asset_executions(self, run_id: UUID) -> list[dict]:

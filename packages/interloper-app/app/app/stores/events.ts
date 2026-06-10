@@ -25,11 +25,20 @@ export const useEventsStore = defineStore('events', () => {
      * State
      **********************/
     const runId = ref<string | null>(null)
+    // Server-side asset filter. Events are paged from the server, so filtering
+    // must happen there too — filtering only the loaded pages client-side would
+    // hide every matching event that hasn't been scrolled into view yet.
+    const assetId = ref<string | null>(null)
     const events = ref<RunEvent[]>([])
     const total = ref(0)
     const loading = ref(false) // initial page load
     const loadingMore = ref(false) // subsequent pages (infinite scroll)
     const error = ref<Error | null>(null)
+
+    // Bumped on every reset (run change, filter change, $reset) so a page
+    // response that was in flight across the reset is dropped instead of
+    // merging stale rows and clobbering total/nextOffset.
+    let fetchEpoch = 0
 
     // Offset of the next page to request. Tracks rows pulled from the server
     // only — realtime tail-inserts append to `events` but never advance this.
@@ -77,11 +86,14 @@ export const useEventsStore = defineStore('events', () => {
     async function _loadPage() {
         const id = runId.value
         if (!id) return
+        const epoch = fetchEpoch
         const params = new URLSearchParams({
             limit: String(EVENTS_PAGE_SIZE),
             offset: String(nextOffset.value),
         })
+        if (assetId.value) params.set('asset_id', assetId.value)
         const res = await apiFetchRaw<RunEvent[]>(`/runs/${id}/events?${params}`)
+        if (epoch !== fetchEpoch) return // state was reset while in flight
         const page = res._data ?? []
         total.value = Number(res.headers.get('X-Total-Count') ?? nextOffset.value + page.length)
         // A short/empty page means the server has nothing more; pin the offset
@@ -96,7 +108,8 @@ export const useEventsStore = defineStore('events', () => {
     useRealtimeSubscription({
         table: 'events',
         scope: () => runId.value ? orgStore.organisation?.id : null,
-        shouldHandle: (record: Record<string, any>) => record.run_id === runId.value,
+        shouldHandle: (record: Record<string, any>) =>
+            record.run_id === runId.value && (!assetId.value || record.asset_id === assetId.value),
         onInsert: (record: Record<string, any>) => _upsert(record as RunEvent),
     })
 
@@ -104,15 +117,17 @@ export const useEventsStore = defineStore('events', () => {
      * Actions
      **********************/
     /**
-     * Load the first page of events for a run.
+     * Load the first page of events for a run, optionally filtered to one asset.
      *
      * Events are ordered oldest-first, so the terminal/outcome events
      * (`asset_completed`, `asset_failed`, `run_failed`, …) live at the end.
      * The table reaches them by infinite-scrolling — see `loadMore` — rather
      * than loading the whole history up front.
      */
-    async function fetchForRun(id: string) {
+    async function fetchForRun(id: string, asset: string | null = null) {
         runId.value = id
+        assetId.value = asset
+        fetchEpoch++
         events.value = []
         total.value = 0
         nextOffset.value = 0
@@ -127,6 +142,12 @@ export const useEventsStore = defineStore('events', () => {
         finally {
             loading.value = false
         }
+    }
+
+    /** Re-page from the start with an asset filter (`null` clears it). */
+    async function filterByAsset(asset: string | null) {
+        if (!runId.value || asset === assetId.value) return
+        await fetchForRun(runId.value, asset)
     }
 
     /** Load the next page of events. Safe to call repeatedly (infinite scroll). */
@@ -157,6 +178,8 @@ export const useEventsStore = defineStore('events', () => {
 
     function $reset() {
         runId.value = null
+        assetId.value = null
+        fetchEpoch++
         events.value = []
         total.value = 0
         nextOffset.value = 0
@@ -167,6 +190,7 @@ export const useEventsStore = defineStore('events', () => {
 
     return {
         runId,
+        assetId,
         events,
         total,
         loading,
@@ -174,6 +198,7 @@ export const useEventsStore = defineStore('events', () => {
         hasMore,
         error,
         fetchForRun,
+        filterByAsset,
         loadMore,
         findById,
         byAssetKey,

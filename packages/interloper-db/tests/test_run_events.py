@@ -48,13 +48,14 @@ def _seed(events: list[Event]) -> None:
         session.commit()
 
 
-def _make_events(n: int, *, run_id: UUID = _RUN_ID, start: int = 0) -> list[Event]:
+def _make_events(n: int, *, run_id: UUID = _RUN_ID, start: int = 0, asset_id: UUID | None = None) -> list[Event]:
     """Build ``n`` events for a run, one second apart, oldest first."""
     return [
         Event(
             id=uuid4(),
             org_id=_ORG_ID,
             run_id=run_id,
+            asset_id=asset_id,
             event_type="asset_materializing" if i < n - 1 else "asset_completed",
             timestamp=_BASE_TS + timedelta(seconds=start + i),
         )
@@ -129,3 +130,24 @@ def test_filters_isolate_runs(store: RunMixin) -> None:
     assert store.count_events(run_id=_RUN_ID) == 5
     assert store.count_events(run_id=_OTHER_RUN_ID) == 3
     assert len(store.list_events(run_id=_RUN_ID)) == 5
+
+
+def test_asset_filter_lists_and_counts_only_that_asset(store: RunMixin) -> None:
+    asset_a, asset_b = uuid4(), uuid4()
+    _seed(_make_events(150, asset_id=asset_a))
+    _seed(_make_events(30, start=150, asset_id=asset_b))
+
+    assert store.count_events(run_id=_RUN_ID, asset_id=asset_a) == 150
+    assert store.count_events(run_id=_RUN_ID, asset_id=asset_b) == 30
+
+    # Paging honours the filter: asset_a events past the first unfiltered
+    # page are reachable through the filtered offsets.
+    page2 = store.list_events(run_id=_RUN_ID, asset_id=asset_a, limit=100, offset=100)
+    assert len(page2) == 50
+    assert all(e.asset_id == asset_a for e in page2)
+
+    # asset_b's events all live beyond the first 150 rows of the run, yet its
+    # filtered first page surfaces them.
+    page_b = store.list_events(run_id=_RUN_ID, asset_id=asset_b, limit=100, offset=0)
+    assert len(page_b) == 30
+    assert all(e.asset_id == asset_b for e in page_b)
