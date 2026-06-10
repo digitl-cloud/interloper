@@ -11,6 +11,7 @@ export interface RunEvent {
     error: string | null
     traceback: string | null
     message: string | null
+    level: string | null
     timestamp: string
 }
 

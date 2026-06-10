@@ -81,6 +81,7 @@ class RunMixin:
             "error": _sanitize_text(meta.get("error")),
             "traceback": _sanitize_text(meta.get("traceback")),
             "message": _sanitize_text(meta.get("message")),
+            "level": _sanitize_text(meta.get("level")),
             "timestamp": event.timestamp,
         }
 

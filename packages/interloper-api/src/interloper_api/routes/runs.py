@@ -71,6 +71,7 @@ class EventResponse(BaseModel):
     error: str | None
     traceback: str | None
     message: str | None
+    level: str | None
     timestamp: str
 
 
@@ -119,6 +120,7 @@ def _event_to_response(event: Event) -> EventResponse:
         error=event.error,
         traceback=event.traceback,
         message=event.message,
+        level=event.level,
         timestamp=str(event.timestamp),
     )
 

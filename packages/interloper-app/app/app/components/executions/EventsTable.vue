@@ -89,11 +89,17 @@ const columns: TableColumn<RunEvent>[] = [
         header: 'Event',
         cell: ({ row }) => {
             const et = row.getValue<EventType>('event_type')
-            return h(UBadge, {
+            const badge = h(UBadge, {
                 color: eventTypeColor(et),
                 variant: 'subtle',
                 icon: eventTypeIcon(et),
             }, () => eventTypeLabel(et))
+            const level = row.original.level
+            if (et !== 'log' || !level) return badge
+            return h('div', { class: 'flex items-center gap-1.5' }, [
+                badge,
+                h(UBadge, { color: logLevelColor(level), variant: 'subtle' }, () => level),
+            ])
         },
     },
     {
