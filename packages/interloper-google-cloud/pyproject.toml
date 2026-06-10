@@ -16,6 +16,9 @@ dependencies = [
     "db-dtypes>=1.0",
 ]
 
+[project.entry-points."interloper.components"]
+google_cloud = "interloper_google_cloud"
+
 [build-system]
 requires = ["uv_build>=0.11.5,<0.12"]
 build-backend = "uv_build"
