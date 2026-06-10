@@ -14,6 +14,9 @@ dependencies = [
     "interloper-scheduler",
 ]
 
+[project.entry-points."interloper.runners"]
+k8s = "interloper_k8s.runner:KubernetesRunner"
+
 [project.entry-points."interloper.launchers"]
 kubernetes = "interloper_k8s.launcher:KubernetesLauncher"
 
