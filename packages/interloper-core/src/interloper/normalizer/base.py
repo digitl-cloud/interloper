@@ -1,17 +1,14 @@
-"""Normalizer: type-native data normalization, transformation, and schema inference/validation."""
+"""Normalizer: data reshaping (coercion, flattening, column naming). Schema ops live in interloper.conformer."""
 
 from __future__ import annotations
 
 import re
-import types
-from collections.abc import Generator, Iterator
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from interloper.component import Component
-from interloper.errors import NormalizerError
-from interloper.schema import Schema
+from interloper.utils.data import coerce_to_records
 from interloper.utils.text import to_snake_case
 
 
@@ -41,8 +38,6 @@ class Normalizer(Component):
         flatten_separator: Separator for flattened key names.
         fill_missing: Fill missing keys across rows with ``None`` so every row
             has the same columns.
-        infer: When ``True`` and no schema is provided, infer a Pydantic model
-            from the data.
         replace_empty_dicts: Replace ``{}`` values with ``None``.
         replace_empty_strings: Replace ``""`` values with ``None``.
         drop_na_columns: Drop columns where every value is ``None``.
@@ -63,7 +58,6 @@ class Normalizer(Component):
     flatten_max_level: int | None = 0
     flatten_separator: str = "_"
     fill_missing: bool = True
-    infer: bool = True
     drop_na_columns: bool = False
     snake_case_digits: bool = False
     column_overrides: dict[str, str] = Field(default_factory=dict)
@@ -104,52 +98,6 @@ class Normalizer(Component):
 
         return rows
 
-    def infer_schema(self, data: list[dict[str, Any]]) -> type[Schema]:
-        """Infer a Schema subclass from normalized data.
-
-        Args:
-            data: Normalized list of row dicts (output of :meth:`normalize`).
-
-        Returns:
-            A dynamically created ``Schema`` subclass.
-        """
-        return Schema.infer(data)
-
-    def validate_schema(
-        self,
-        data: list[dict[str, Any]],
-        schema: type[Schema],
-        *,
-        strict: bool = False,
-    ) -> None:
-        """Validate normalized data against a Schema.
-
-        Args:
-            data: Normalized list of row dicts.
-            schema: Schema class to validate against.
-            strict: When ``True``, reject extra and missing required fields.
-        """
-        schema.validate_rows(data, strict=strict)
-
-    def reconcile(
-        self,
-        data: list[dict[str, Any]],
-        schema: type[Schema],
-    ) -> list[dict[str, Any]]:
-        """Reconcile normalized data against a Schema.
-
-        Aligns columns to the schema (drops extras, adds missing) and
-        coerces values to the schema's types via Pydantic ``model_validate``.
-
-        Args:
-            data: Normalized list of row dicts.
-            schema: Schema class describing the target shape.
-
-        Returns:
-            Reconciled list of row dicts.
-        """
-        return schema.reconcile(data)
-
     def column_name(self, name: str) -> str:
         """Transform a column name according to the normalizer's convention.
 
@@ -175,49 +123,12 @@ class Normalizer(Component):
     # ------------------------------------------------------------------
 
     def _coerce(self, data: Any) -> list[dict[str, Any]]:
-        """Coerce arbitrary data to ``list[dict]``.
-
-        Supported types: ``dict``, ``list[dict]``, ``BaseModel``,
-        ``list[BaseModel]``, ``Generator`` / ``Iterator``, ``None``.
+        """Coerce arbitrary data to ``list[dict]`` (raises ``NormalizerError`` when unsupported).
 
         Returns:
             The coerced list of row dicts.
-
-        Raises:
-            NormalizerError: If the data type is unsupported.
         """
-        if data is None:
-            return []
-
-        # Generator / Iterator -> consume then re-process
-        if isinstance(data, (Generator, Iterator, types.GeneratorType)):
-            return self._coerce(list(data))
-
-        # Single Pydantic model
-        if isinstance(data, BaseModel):
-            return [data.model_dump()]
-
-        # list
-        if isinstance(data, list):
-            if not data:
-                return []
-            first = data[0]
-            if isinstance(first, dict):
-                return data
-            if isinstance(first, BaseModel):
-                return [item.model_dump() for item in data]
-            raise NormalizerError(
-                f"Normalizer received list[{type(first).__name__}], expected list[dict] or list[BaseModel]."
-            )
-
-        # Single dict
-        if isinstance(data, dict):
-            return [data]
-
-        raise NormalizerError(
-            f"Normalizer does not support type {type(data).__name__}. "
-            "Supported: dict, list[dict], BaseModel, list[BaseModel], Generator."
-        )
+        return coerce_to_records(data)
 
     # ------------------------------------------------------------------
     # Transformations

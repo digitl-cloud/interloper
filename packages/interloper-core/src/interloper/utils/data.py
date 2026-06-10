@@ -3,7 +3,59 @@
 from __future__ import annotations
 
 import sys
+import types
+from collections.abc import Generator, Iterator
 from typing import Any
+
+from pydantic import BaseModel
+
+from interloper.errors import NormalizerError
+
+
+def coerce_to_records(data: Any) -> list[dict[str, Any]]:
+    """Coerce tabular-ish data to ``list[dict]`` records.
+
+    Supported types: ``dict``, ``list[dict]``, ``BaseModel``,
+    ``list[BaseModel]``, ``Generator`` / ``Iterator``, ``None``.
+
+    Returns:
+        The coerced list of row dicts.
+
+    Raises:
+        NormalizerError: If the data type is unsupported.
+    """
+    if data is None:
+        return []
+
+    # Generator / Iterator -> consume then re-process
+    if isinstance(data, (Generator, Iterator, types.GeneratorType)):
+        return coerce_to_records(list(data))
+
+    # Single Pydantic model
+    if isinstance(data, BaseModel):
+        return [data.model_dump()]
+
+    # list
+    if isinstance(data, list):
+        if not data:
+            return []
+        first = data[0]
+        if isinstance(first, dict):
+            return data
+        if isinstance(first, BaseModel):
+            return [item.model_dump() for item in data]
+        raise NormalizerError(
+            f"Normalizer received list[{type(first).__name__}], expected list[dict] or list[BaseModel]."
+        )
+
+    # Single dict
+    if isinstance(data, dict):
+        return [data]
+
+    raise NormalizerError(
+        f"Normalizer does not support type {type(data).__name__}. "
+        "Supported: dict, list[dict], BaseModel, list[BaseModel], Generator."
+    )
 
 
 def is_dataframe(data: Any) -> bool:

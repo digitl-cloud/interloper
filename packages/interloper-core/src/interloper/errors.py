@@ -90,6 +90,10 @@ class NormalizerError(InterloperError, TypeError):
     """The normalizer received data it cannot coerce to ``list[dict]``."""
 
 
+class ConformerError(InterloperError, TypeError):
+    """No conformer is available for the data's representation."""
+
+
 # ---------------------------------------------------------------------------
 # Destination
 # ---------------------------------------------------------------------------
