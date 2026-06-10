@@ -3,20 +3,29 @@
 The catalog collects definitions from sources, their assets, resources,
 and destinations into a single ``dict[str, ComponentDefinition]``.
 
+Discovery vs enablement: installed packages declare the components they
+provide through the ``interloper.components`` entry-point group (the
+*available universe*); the ``AppSettings.catalog`` import paths select what a
+deployment actually exposes. When no paths are configured, the catalog is
+the full discovered universe.
+
 Usage::
 
     import interloper as il
 
-    # From settings (falls back to auto-discovery)
+    # From settings; falls back to entry-point discovery when unset
     catalog = il.Catalog.from_settings()
 
-    # Auto-discover from interloper_assets directly
-    catalog = il.Catalog.from_interloper_assets()
+    # The full discovered universe, regardless of settings
+    catalog = il.Catalog.discover()
 """
 
 from __future__ import annotations
 
 import logging
+from functools import cache
+from importlib.metadata import entry_points
+from types import ModuleType
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -31,6 +40,34 @@ from interloper.source.base import Source
 logger = logging.getLogger(__name__)
 
 COMPONENT_TYPES = (Source, Destination, Asset, Resource)
+
+_ENTRY_POINT_GROUP = "interloper.components"
+
+
+@cache
+def _discovered_paths() -> tuple[str, ...]:
+    """Collect component import paths from installed entry points.
+
+    Each entry under ``interloper.components`` names a module whose public
+    attributes are scanned for component classes (or a component class
+    directly).
+
+    Returns:
+        Import paths of every discovered component class.
+    """
+    from interloper.utils.imports import get_object_path
+
+    paths: list[str] = []
+    for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
+        loaded = entry_point.load()
+        if isinstance(loaded, ModuleType):
+            for attr in dir(loaded):
+                obj = getattr(loaded, attr)
+                if isinstance(obj, type) and any(issubclass(obj, t) for t in COMPONENT_TYPES):
+                    paths.append(get_object_path(obj))
+        elif isinstance(loaded, type) and any(issubclass(loaded, t) for t in COMPONENT_TYPES):
+            paths.append(get_object_path(loaded))
+    return tuple(paths)
 
 
 class Catalog(BaseModel):
@@ -124,15 +161,17 @@ class Catalog(BaseModel):
     def from_settings(cls) -> Catalog:
         """Load catalog from the ``AppSettings.catalog`` import paths.
 
-        Falls back to :meth:`from_interloper_assets` when no paths are
-        configured.
+        The configured paths are the deployment's *enablement* list; when no
+        paths are configured, falls back to :meth:`discover` — everything the
+        installed packages declare.
 
         Returns:
             Catalog of all component definitions.
         """
         settings = AppSettings.get()
-
-        return cls.from_paths(settings.catalog)
+        if settings.catalog:
+            return cls.from_paths(settings.catalog)
+        return cls.discover()
 
     @classmethod
     def from_assets(cls, sources_or_assets: list[type[Source | Asset]]) -> Catalog:
@@ -146,24 +185,14 @@ class Catalog(BaseModel):
         )
 
     @classmethod
-    def from_interloper_assets(cls) -> Catalog:
-        """Load catalog from the ``interloper-assets`` package.
+    def discover(cls) -> Catalog:
+        """Load the catalog from installed ``interloper.components`` entry points.
+
+        The available universe: every component declared by every installed
+        package, discovered from package metadata — no hardcoded package
+        names, no import-order dependence.
 
         Returns:
-            Catalog of all component definitions.
+            Catalog of all discovered component definitions.
         """
-        from interloper.utils.imports import get_object_path
-
-        paths: list[str] = []
-
-        try:
-            import interloper_assets
-
-            for attr in dir(interloper_assets):
-                obj = getattr(interloper_assets, attr)
-                if isinstance(obj, type) and any(issubclass(obj, t) for t in COMPONENT_TYPES):
-                    paths.append(get_object_path(obj))
-        except ImportError:
-            pass
-
-        return cls.from_paths(paths)
+        return cls.from_paths(list(_discovered_paths()))
