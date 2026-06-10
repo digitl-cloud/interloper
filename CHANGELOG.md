@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v0.11.0 (2026-06-10)
+
+### Features
+
+- Write schema descriptions and partitioning to BigQuery tables
+  ([`8e6f665`](https://github.com/digitl-cloud/interloper/commit/8e6f665477516903b63633c1810d8420a77178c7))
+
+### Refactoring
+
+- Catalog discovery via entry points
+  ([`80f65dd`](https://github.com/digitl-cloud/interloper/commit/80f65ddae1b88d5011574d3f6c4a9b8c4bf049b4))
+
+- Launcher registry via entry points
+  ([`2c9d1a4`](https://github.com/digitl-cloud/interloper/commit/2c9d1a43927798420d7b7cb56568ac1a6785374d))
+
+- One conform seam — Conformer resolved from the data's representation
+  ([`81176b1`](https://github.com/digitl-cloud/interloper/commit/81176b1bc5fa4fd8606352c4bca22ca5fe452b97))
+
+- Representation seam — pandas-agnostic core, DataAdapter retired
+  ([`52eed48`](https://github.com/digitl-cloud/interloper/commit/52eed481c168de6e9c237ca13eda0450669ef93c))
+
+- Runner registry via entry points; canonicalize the kubernetes key
+  ([`5ff0ba6`](https://github.com/digitl-cloud/interloper/commit/5ff0ba6ee1f8f00e063ca9868c8768036f8aed4b))
+
+
 ## v0.10.1 (2026-06-10)
 
 ### Bug Fixes
