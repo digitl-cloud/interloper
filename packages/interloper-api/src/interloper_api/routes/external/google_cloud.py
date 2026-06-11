@@ -18,8 +18,13 @@ from interloper_api.routes.external import handle_error
 sub_router = APIRouter()
 
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
-_PROJECTS_URL = "https://cloudresourcemanager.googleapis.com/v1/projects"
-_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only"
+# BigQuery's own projects.list: returns the projects the credential holds a
+# BigQuery role on -- exactly the candidates for a BigQuery destination --
+# and only requires the BigQuery API, which is necessarily enabled wherever
+# the destination can work (unlike the Cloud Resource Manager API, which is
+# frequently disabled).
+_PROJECTS_URL = "https://bigquery.googleapis.com/bigquery/v2/projects"
+_SCOPE = "https://www.googleapis.com/auth/bigquery.readonly"
 
 
 class GoogleCloudConnectionRequest(BaseModel):
@@ -88,7 +93,7 @@ async def _get_access_token(client: httpx.AsyncClient, key_info: dict[str, Any])
 
 
 async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[dict[str, str]]:
-    """List the active projects visible to the credential, following pagination.
+    """List the projects the credential has BigQuery access to, following pagination.
 
     Returns:
         Project options with ``project_id`` and a display ``name``.
@@ -96,7 +101,7 @@ async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[d
     results: list[dict[str, str]] = []
     page_token: str | None = None
     while True:
-        params: dict[str, str] = {"filter": "lifecycleState:ACTIVE"}
+        params: dict[str, str] = {"maxResults": "500"}
         if page_token:
             params["pageToken"] = page_token
         resp = await client.get(
@@ -107,8 +112,8 @@ async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[d
         resp.raise_for_status()
         data = resp.json()
         for project in data.get("projects", []):
-            project_id = project["projectId"]
-            name = project.get("name") or project_id
+            project_id = project["id"]
+            name = project.get("friendlyName") or project_id
             results.append({"project_id": project_id, "name": f"{name} ({project_id})"})
         page_token = data.get("nextPageToken")
         if not page_token:

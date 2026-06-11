@@ -56,11 +56,11 @@ class TestListProjects:
         captured: list[httpx.Request] = []
         pages = [
             {
-                "projects": [{"projectId": "proj-b", "name": "Bravo"}],
+                "projects": [{"id": "proj-b", "friendlyName": "Bravo"}],
                 "nextPageToken": "page-2",
             },
             {
-                "projects": [{"projectId": "proj-a", "name": "alpha"}, {"projectId": "proj-c"}],
+                "projects": [{"id": "proj-a", "friendlyName": "alpha"}, {"id": "proj-c"}],
             },
         ]
 
@@ -77,7 +77,6 @@ class TestListProjects:
         ]
         assert len(captured) == 2
         assert captured[0].headers["Authorization"] == "Bearer the-token"
-        assert captured[0].url.params["filter"] == "lifecycleState:ACTIVE"
         assert "pageToken" not in captured[0].url.params
         assert captured[1].url.params["pageToken"] == "page-2"
 
