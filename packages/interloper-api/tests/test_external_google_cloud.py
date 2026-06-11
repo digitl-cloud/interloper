@@ -110,11 +110,13 @@ class TestRoute:
         resp = _client().post("/external/google-cloud/projects", json={"service_account_key": "not-json"})
         assert resp.status_code == 400
 
-    def test_auth_failure_maps_to_403(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(google_cloud_module, "_make_assertion", lambda key_info: "signed-jwt")
-
+    def test_auth_failure_surfaces_google_message(self, monkeypatch: pytest.MonkeyPatch):
         async def fail(client: httpx.AsyncClient, key_info: dict[str, Any]) -> str:
-            response = httpx.Response(403, request=httpx.Request("POST", google_cloud_module._TOKEN_URL))
+            response = httpx.Response(
+                403,
+                request=httpx.Request("GET", google_cloud_module._PROJECTS_URL),
+                json={"error": {"code": 403, "message": "Cloud Resource Manager API has not been used"}},
+            )
             raise httpx.HTTPStatusError("forbidden", request=response.request, response=response)
 
         monkeypatch.setattr(google_cloud_module, "_get_access_token", fail)
@@ -125,3 +127,23 @@ class TestRoute:
         )
 
         assert resp.status_code == 403
+        assert "Cloud Resource Manager API has not been used" in resp.json()["detail"]
+
+    def test_token_endpoint_400_maps_to_502_with_description(self, monkeypatch: pytest.MonkeyPatch):
+        async def fail(client: httpx.AsyncClient, key_info: dict[str, Any]) -> str:
+            response = httpx.Response(
+                400,
+                request=httpx.Request("POST", google_cloud_module._TOKEN_URL),
+                json={"error": "invalid_grant", "error_description": "Invalid JWT Signature."},
+            )
+            raise httpx.HTTPStatusError("bad request", request=response.request, response=response)
+
+        monkeypatch.setattr(google_cloud_module, "_get_access_token", fail)
+
+        resp = _client().post(
+            "/external/google-cloud/projects",
+            json={"service_account_key": json.dumps(_KEY_INFO)},
+        )
+
+        assert resp.status_code == 502
+        assert "Invalid JWT Signature." in resp.json()["detail"]

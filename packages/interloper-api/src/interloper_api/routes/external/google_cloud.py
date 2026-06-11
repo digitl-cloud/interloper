@@ -116,6 +116,26 @@ async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[d
     return sorted(results, key=lambda p: p["name"].lower())
 
 
+def _upstream_detail(exc: httpx.HTTPStatusError) -> str:
+    """Extract the human-readable error message from a Google error response.
+
+    The token endpoint answers ``{"error": ..., "error_description": ...}``;
+    the Cloud Resource Manager answers ``{"error": {"message": ...}}``.
+
+    Returns:
+        Google's error message, or the raw body as a fallback.
+    """
+    try:
+        payload = exc.response.json()
+    except ValueError:
+        return exc.response.text[:200]
+    error = payload.get("error")
+    if isinstance(error, dict):
+        return str(error.get("message") or error)
+    description = payload.get("error_description")
+    return str(description or error or exc.response.text[:200])
+
+
 @sub_router.post("/google-cloud/projects")
 async def google_cloud_projects(
     body: GoogleCloudConnectionRequest,
@@ -127,6 +147,16 @@ async def google_cloud_projects(
         async with httpx.AsyncClient(timeout=30) as client:
             access_token = await _get_access_token(client, key_info)
             return await _list_projects(client, access_token)
+    except httpx.HTTPStatusError as exc:
+        # Surface Google's own message (e.g. "Cloud Resource Manager API has
+        # not been used in project ...", "Invalid JWT Signature.") so the
+        # form error is actionable, instead of the generic handle_error text.
+        status = exc.response.status_code
+        detail = _upstream_detail(exc)
+        raise HTTPException(
+            status_code=status if status in (401, 403, 404) else 502,
+            detail=f"Google Cloud error while fetching projects: {detail}",
+        )
     except Exception as exc:
         handle_error(exc, "fetching Google Cloud projects")
         return []  # unreachable, but satisfies type checker
