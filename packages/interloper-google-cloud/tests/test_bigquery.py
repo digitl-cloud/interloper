@@ -674,3 +674,17 @@ class TestPartitionParam:
         # Date-only strings are coerced to datetime for client serialization
         # (which normalizes them to UTC).
         assert param.value == datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
+
+
+class TestDefinition:
+    def test_project_is_a_fetch_field(self):
+        """The project field resolves its options from the connection via x-fetch."""
+        properties = BigQueryDestination.definition().config_schema["properties"]
+
+        assert properties["project"]["x-widget"] == "fetch"
+        assert properties["project"]["x-fetch"] == {
+            "endpoint": "google-cloud/projects",
+            "depends_on": ["connection"],
+            "label_key": "name",
+            "value_key": "project_id",
+        }

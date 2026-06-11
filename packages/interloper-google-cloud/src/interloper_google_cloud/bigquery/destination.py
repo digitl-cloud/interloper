@@ -22,7 +22,7 @@ from interloper.destination.database import DatabaseDestination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionConfig, TimePartitionConfig
 from interloper.representation import representation_for
-from interloper.resource.fields import InputField, SelectField
+from interloper.resource.fields import FetchField, InputField, SelectField
 from interloper.schema import FieldSpec, Schema
 
 from interloper_google_cloud.connection import GoogleCloudConnection
@@ -43,7 +43,13 @@ class BigQueryDestination(DatabaseDestination):
     read_representation: ClassVar[str] = "dataframe"
 
     # Config fields (previously on BigQueryConfig)
-    project: str = InputField(description="Google Cloud project ID")
+    project: str = FetchField(
+        endpoint="google-cloud/projects",
+        depends_on="connection",
+        label_key="name",
+        value_key="project_id",
+        description="Google Cloud project ID",
+    )
     location: str = SelectField(
         description="BigQuery dataset location",
         options=[

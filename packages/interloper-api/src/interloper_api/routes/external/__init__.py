@@ -38,11 +38,13 @@ def handle_error(error: Exception, context: str) -> None:
 from interloper_api.routes.external.amazon_ads import sub_router as amazon_ads_router  # noqa: E402
 from interloper_api.routes.external.facebook_ads import sub_router as facebook_ads_router  # noqa: E402
 from interloper_api.routes.external.google_ads import sub_router as google_ads_router  # noqa: E402
+from interloper_api.routes.external.google_cloud import sub_router as google_cloud_router  # noqa: E402
 from interloper_api.routes.external.pinterest_ads import sub_router as pinterest_ads_router  # noqa: E402
 from interloper_api.routes.external.snapchat_ads import sub_router as snapchat_ads_router  # noqa: E402
 
 router.include_router(amazon_ads_router)
 router.include_router(facebook_ads_router)
 router.include_router(google_ads_router)
+router.include_router(google_cloud_router)
 router.include_router(pinterest_ads_router)
 router.include_router(snapchat_ads_router)
