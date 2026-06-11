@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.13.0 (2026-06-11)
+
+### Continuous Integration
+
+- Split docker/helm publishing into a tag-triggered publish workflow
+  ([`b7ecc6d`](https://github.com/digitl-cloud/interloper/commit/b7ecc6d4536013b159763987e26d03432937870f))
+
+### Features
+
+- Fetch BigQuery project options dynamically from the connection
+  ([`24137b7`](https://github.com/digitl-cloud/interloper/commit/24137b7b15ec4f5d568add0e921c374228c48869))
+
+- Oauth provider registry, OAuthConnection base, and decorator-level oauth config
+  ([`5f6745b`](https://github.com/digitl-cloud/interloper/commit/5f6745bbe0134e969f8173ff31764717c6a88c07))
+
+
 ## v0.12.0 (2026-06-10)
 
 ### Bug Fixes
