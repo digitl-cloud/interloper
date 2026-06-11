@@ -2,8 +2,9 @@ name: Release
 
 # Cuts the release only: checks, semantic-release (version bump, tag,
 # changelog, GitHub release) and the PyPI publish. Docker images and the
-# Helm chart are published by the Publish workflow, which fires on the tag
-# semantic-release pushes — and can be re-run for that tag independently.
+# Helm chart are published by the Publish workflow, which fires on the
+# GitHub release semantic-release publishes — and can be re-run for that
+# tag independently.
 
 on:
   workflow_dispatch:

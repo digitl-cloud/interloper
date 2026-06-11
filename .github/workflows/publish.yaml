@@ -6,8 +6,11 @@ name: Publish
 # release and skip everything).
 #
 # Triggers:
-#   - automatically when semantic-release pushes a `v*` tag (the tag is
-#     pushed with the GitHub App token, so the push event fires workflows);
+#   - automatically when semantic-release publishes the GitHub release
+#     (created with the GitHub App token, so the event fires workflows).
+#     Not the tag push: the release commit message carries `[skip ci]`,
+#     which suppresses the push event for the tag pointing at it — the
+#     `release` event is immune to skip instructions;
 #   - manually via workflow_dispatch with an existing tag, to re-publish
 #     after a transient failure.
 #
@@ -15,8 +18,8 @@ name: Publish
 # chart-releaser skips chart releases that already exist.
 
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -27,6 +30,10 @@ on:
 jobs:
   resolve:
     name: Resolve tag
+    # chart-releaser publishes its per-chart releases with GITHUB_TOKEN, which
+    # never triggers workflows — but guard on the `v` prefix anyway so only
+    # semantic-release tags are published.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
 
     outputs:
@@ -38,7 +45,7 @@ jobs:
       - name: Resolve tag
         id: resolve
         run: |
-          tag="${{ inputs.tag || github.ref_name }}"
+          tag="${{ inputs.tag || github.event.release.tag_name }}"
           version="${tag#v}"
           case "$version" in
             *-rc*) stable=false ;;
