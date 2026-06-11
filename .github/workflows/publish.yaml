@@ -1,0 +1,166 @@
+name: Publish
+
+# Publishes the artifacts for a released tag: Docker images and the Helm
+# chart. Decoupled from the Release workflow so a failed publish can be
+# replayed without re-running semantic-release (which would find nothing to
+# release and skip everything).
+#
+# Triggers:
+#   - automatically when semantic-release pushes a `v*` tag (the tag is
+#     pushed with the GitHub App token, so the push event fires workflows);
+#   - manually via workflow_dispatch with an existing tag, to re-publish
+#     after a transient failure.
+#
+# Every job is idempotent: Docker re-pushes the same image tags and
+# chart-releaser skips chart releases that already exist.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish"
+        required: true
+        type: string
+
+jobs:
+  resolve:
+    name: Resolve tag
+    runs-on: ubuntu-latest
+
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      stable: ${{ steps.resolve.outputs.stable }}
+
+    steps:
+      - name: Resolve tag
+        id: resolve
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          case "$version" in
+            *-rc*) stable=false ;;
+            *)     stable=true ;;
+          esac
+          {
+            echo "tag=${tag}"
+            echo "version=${version}"
+            echo "stable=${stable}"
+          } >> "$GITHUB_OUTPUT"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Docker images → GitHub Container Registry (ghcr.io)
+  #
+  # One image per component, tagged with the released version (plus `latest`
+  # on stable releases only). The matrix mirrors the image catalog in the
+  # Makefile (ROLES + ROLES_LAUNCHER_AWARE) — keep the two in sync.
+  # ────────────────────────────────────────────────────────────────────
+  docker:
+    name: Docker (${{ matrix.image }})
+    needs: resolve
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "read"
+      packages: "write"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: api,       image: interloper-api,              scheduler_extras: "" }
+          - { target: frontend,  image: interloper-frontend,         scheduler_extras: "" }
+          - { target: worker,    image: interloper-worker,           scheduler_extras: "" }
+          - { target: scheduler, image: interloper-scheduler,        scheduler_extras: "" }
+          - { target: scheduler, image: interloper-scheduler-k8s,    scheduler_extras: "k8s" }
+          - { target: scheduler, image: interloper-scheduler-docker, scheduler_extras: "docker" }
+
+    steps:
+      - name: Checkout (released tag)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Setup QEMU
+        # Registers binfmt handlers so the amd64 runner can build the
+        # linux/arm64 image via emulation.
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          repo="ghcr.io/${owner}/${{ matrix.image }}"
+          tags="${repo}:${{ needs.resolve.outputs.version }}"
+          if [ "${{ needs.resolve.outputs.stable }}" = "true" ]; then
+            tags="${tags},${repo}:latest"
+          fi
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & Push (${{ matrix.target }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfile
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            CORE_EXTRAS=google-cloud
+            ASSETS_EXTRAS=bing,facebook,google
+            SCHEDULER_EXTRAS=${{ matrix.scheduler_extras }}
+          cache-from: type=gha,scope=docker-${{ matrix.image }}
+          cache-to: type=gha,scope=docker-${{ matrix.image }},mode=max
+
+  # ────────────────────────────────────────────────────────────────────
+  # Helm chart → GitHub Pages (chart-releaser)
+  #
+  # Packages chart/interloper and publishes it to the gh-pages Helm repo,
+  # creating a per-chart GitHub release. Stable releases only — RC chart
+  # versions would clutter the public repo. Chart `version`/`appVersion`
+  # are bumped by semantic-release, so the checked-out tag is ready to ship.
+  # ────────────────────────────────────────────────────────────────────
+  helm:
+    name: Helm chart release
+    needs: resolve
+    if: needs.resolve.outputs.stable == 'true'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "write"
+
+    steps:
+      - name: Checkout (released tag)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Release chart
+        uses: helm/chart-releaser-action@v1
+        with:
+          charts_dir: chart
+          config: cr.yaml
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
