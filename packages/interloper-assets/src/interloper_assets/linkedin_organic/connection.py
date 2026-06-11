@@ -1,5 +1,4 @@
 from functools import cached_property
-from typing import ClassVar
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
@@ -11,23 +10,15 @@ from interloper_assets.linkedin_organic import constants
     name="LinkedIn Organic",
     icon="devicon:linkedin",
     tags=["Social"],
+    oauth=il.OAuthConfig(
+        "linkedin",
+        scope="r_organization_social,rw_organization_admin,r_organization_social_feed",
+    ),
 )
-class LinkedinOrganicConnection(il.Connection):
+class LinkedinOrganicConnection(il.OAuthConnection):
     """LinkedIn Organic API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="linkedin_organic_")
-
-    oauth: ClassVar[il.OAuthConfig] = il.OAuthConfig(
-        provider="linkedin",
-        auth_url="https://www.linkedin.com/oauth/v2/authorization",
-        scope="r_organization_social,rw_organization_admin,r_organization_social_feed",
-        label="LinkedIn",
-        icon="devicon:linkedin",
-    )
-
-    client_id: str = il.InputField(description="LinkedIn OAuth2 client ID")
-    client_secret: str = il.SecretField(description="LinkedIn OAuth2 client secret")
-    refresh_token: str = il.SecretField(description="LinkedIn OAuth2 refresh token")
 
     @cached_property
     def client(self) -> il.RESTClient:

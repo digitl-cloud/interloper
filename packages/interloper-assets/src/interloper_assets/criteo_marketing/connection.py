@@ -11,14 +11,11 @@ from interloper_assets.criteo_marketing import constants
     icon="icon:criteo",
     tags=["Advertising"],
 )
-class CriteoMarketingConnection(il.Connection):
+class CriteoMarketingConnection(il.OAuthConnection):
     """Criteo Marketing API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="criteo_marketing_")
 
-    client_id: str = il.InputField(description="OAuth2 client ID")
-    client_secret: str = il.SecretField(description="OAuth2 client secret")
-    refresh_token: str = il.SecretField(description="OAuth2 refresh token")
     advertiser_id: str = il.InputField(description="Criteo advertiser ID")
 
     @cached_property

@@ -1,6 +1,5 @@
 from enum import Enum
 from functools import cached_property
-from typing import ClassVar
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
@@ -32,19 +31,13 @@ class AmazonAdsAPILocation(Enum):
     name="Amazon Ads",
     icon="icon:amazon",
     tags=["Advertising"],
+    oauth=il.OAuthConfig("amazon", scope="advertising::campaign_management"),
 )
-class AmazonAdsConnection(il.Connection):
+class AmazonAdsConnection(il.OAuthConnection):
     """Amazon Ads API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="amazon_ads_")
 
-    oauth: ClassVar[il.OAuthConfig] = il.OAuthConfig(
-        provider="amazon",
-        auth_url="https://www.amazon.com/ap/oa",
-        scope="advertising::campaign_management",
-        label="Amazon",
-        icon="icon:amazon",
-    )
     location: str = il.SelectField(
         options=[
             {"label": "Europe", "value": "EU"},
@@ -53,9 +46,6 @@ class AmazonAdsConnection(il.Connection):
         ],
         description="API region",
     )
-    client_id: str = il.InputField(description="OAuth2 client ID")
-    client_secret: str = il.SecretField(description="OAuth2 client secret")
-    refresh_token: str = il.SecretField(description="OAuth2 refresh token")
 
     @cached_property
     def api_location(self) -> AmazonAdsAPILocation:

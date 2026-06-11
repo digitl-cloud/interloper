@@ -55,7 +55,8 @@ class Resource(Component):
         Returns:
             A ResourceDefinition with metadata and JSON Schema.
         """
-        from interloper.resource.fields import OAuthConfig, strip_internal_fields
+        from interloper.oauth import OAuthConfig
+        from interloper.resource.fields import strip_internal_fields
         from interloper.utils.imports import get_object_path
 
         raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}

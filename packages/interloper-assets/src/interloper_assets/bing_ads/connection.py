@@ -10,15 +10,12 @@ from pydantic_settings import SettingsConfigDict
     icon="icon:bing",
     tags=["Advertising"],
 )
-class BingAdsConnection(il.Connection):
+class BingAdsConnection(il.OAuthConnection):
     """Bing Ads API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="bing_ads_")
 
-    client_id: str = il.InputField(description="OAuth2 client ID")
-    client_secret: str = il.SecretField(description="OAuth2 client secret")
     developer_token: str = il.SecretField(description="Bing Ads developer token")
-    refresh_token: str = il.SecretField(description="OAuth2 refresh token")
     customer_id: str = il.InputField(description="Bing Ads customer ID")
     account_id: str = il.InputField(description="Bing Ads account ID")
 
