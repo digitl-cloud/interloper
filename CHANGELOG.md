@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.14.0 (2026-06-11)
+
+### Bug Fixes
+
+- List BigQuery projects via the BigQuery API instead of Resource Manager
+  ([`bfbac09`](https://github.com/digitl-cloud/interloper/commit/bfbac099e1771370a35cceac6d2c0f2deda3cea3))
+
+### Continuous Integration
+
+- Trigger publish on release published, not the tag push
+  ([`fcbacfb`](https://github.com/digitl-cloud/interloper/commit/fcbacfbbb234d949b43288ecd9ca11724441dc1c))
+
+### Features
+
+- Surface Google's error message in the projects fetch route
+  ([`ed367bd`](https://github.com/digitl-cloud/interloper/commit/ed367bd1863c5449cdaed33e21c3dbf7416d4c5b))
+
+
 ## v0.13.0 (2026-06-11)
 
 ### Continuous Integration

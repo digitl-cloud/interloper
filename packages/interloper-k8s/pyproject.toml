@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-k8s"
-version = "0.13.0"
+version = "0.14.0"
 description = "Interloper Kubernetes integration"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
