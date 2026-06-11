@@ -70,6 +70,8 @@ export const useBackfillsStore = defineStore('backfills', () => {
         error.value = null
     }
 
+    useOrgScopedRefetch(() => fetch(), $reset)
+
     return {
         backfills,
         loading,

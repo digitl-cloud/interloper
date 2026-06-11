@@ -12,7 +12,7 @@ from interloper_db import Profile, Store
 from interloper_db.models import Event, Run
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_org_id, get_store, require_editor, require_viewer
+from interloper_api.dependencies import authorize_org_member, get_current_user, get_org_id, get_store, require_viewer
 
 router = APIRouter()
 
@@ -100,6 +100,30 @@ def _run_to_response(run: Run) -> RunResponse:
     )
 
 
+def _load_authorized_run(run_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Run:
+    """Load a run and authorize the user by membership in its org.
+
+    Args:
+        run_id: The run UUID.
+        user: The authenticated user.
+        store: The Store instance.
+        minimum: Minimum role required in the run's organisation.
+
+    Returns:
+        The Run row.
+
+    Raises:
+        HTTPException: 404 if missing or the user is not a member of the
+            owning org, 403 if the role is insufficient.
+    """
+    try:
+        run = store.get_run(run_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    authorize_org_member(user, run.org_id, store, minimum=minimum, detail=f"Run {run_id} not found")
+    return run
+
+
 def _event_to_response(event: Event) -> EventResponse:
     """Convert a DB Event to an EventResponse.
 
@@ -158,24 +182,22 @@ def list_runs(
 @router.get("/{run_id}")
 def get_run(
     run_id: UUID,
-    user: Profile = Depends(require_viewer),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> RunResponse:
-    """Get a single run by ID."""
-    try:
-        run = store.get_run(run_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    """Get a single run by ID. Authorized by membership in the run's org."""
+    run = _load_authorized_run(run_id, user, store)
     return _run_to_response(run)
 
 
 @router.get("/{run_id}/asset-executions")
 def list_asset_executions(
     run_id: UUID,
-    user: Profile = Depends(require_viewer),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> list[AssetExecutionResponse]:
     """List asset executions for a run."""
+    _load_authorized_run(run_id, user, store)
     rows = store.list_asset_executions(run_id)
     return [
         AssetExecutionResponse(
@@ -196,7 +218,7 @@ def list_asset_executions(
 def retry_run(
     run_id: UUID,
     body: RetryRequest | None = None,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Queue a retry of a failed run.
@@ -205,6 +227,7 @@ def retry_run(
     ``scope="all"`` the whole DAG re-runs; with ``scope="failed"`` only the
     previously failed/cancelled assets re-run.
     """
+    _load_authorized_run(run_id, user, store, minimum="editor")
     scope = body.scope if body else "all"
     try:
         run = store.retry_run(run_id, scope=scope)
@@ -222,7 +245,7 @@ def list_run_events(
     limit: int = 100,
     offset: int = 0,
     asset_id: UUID | None = None,
-    user: Profile = Depends(require_viewer),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> list[EventResponse]:
     """List events for a run, oldest first.
@@ -234,6 +257,7 @@ def list_run_events(
     through every event — including the terminal/outcome events
     (``asset_completed``, ``asset_failed``, ``run_failed``, …) that sort last.
     """
+    _load_authorized_run(run_id, user, store)
     limit = max(1, min(limit, MAX_EVENTS_PAGE_SIZE))
     offset = max(0, offset)
     total = store.count_events(run_id=run_id, asset_id=asset_id)

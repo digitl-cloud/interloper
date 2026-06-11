@@ -18,6 +18,15 @@ async function loadUserOrgs() {
     orgsLoaded.value = true
 }
 
+async function selectOrg(org: Organisation) {
+    // Pages bespoke to one org's resource (run/backfill details) are
+    // meaningless in the new org — leave for their list page first.
+    const target = route.meta.orgSwitchTarget
+    if (typeof target === 'string') await navigateTo(target)
+    await orgStore.switchOrg(org.id)
+    orgsLoaded.value = false
+}
+
 const orgItems = computed<DropdownMenuItem[]>(() => {
     if (!orgsLoaded.value) return [{ label: 'Loading...', disabled: true }]
     if (userOrgs.value.length === 0) return [{ label: 'No organisations', disabled: true }]
@@ -35,10 +44,7 @@ const orgItems = computed<DropdownMenuItem[]>(() => {
         return {
             label: org.name,
             icon: 'i-lucide-building-2',
-            onSelect: () => {
-                orgStore.switchOrg(org.id)
-                orgsLoaded.value = false
-            },
+            onSelect: () => selectOrg(org),
         }
     })
 })

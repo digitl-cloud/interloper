@@ -13,7 +13,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
-from interloper_api.dependencies import get_org_id, get_store, require_editor, require_viewer
+from interloper_api.dependencies import (
+    authorize_org_member,
+    get_current_user,
+    get_org_id,
+    get_store,
+    require_editor,
+    require_viewer,
+)
 
 router = APIRouter()
 
@@ -152,15 +159,29 @@ def create_source(
     return _load_source_for_response(source.id)
 
 
+def _authorize_source(source_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> None:
+    """Authorize the user by membership in the source's org.
+
+    Raises:
+        HTTPException: 404 if missing or the user is not a member of the
+            owning org, 403 if the role is insufficient.
+    """
+    try:
+        source = store.get_source(source_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
+    authorize_org_member(user, source.org_id, store, minimum=minimum, detail=f"Source {source_id} not found")
+
+
 @router.put("/{source_id}")
 def update_source(
     source_id: UUID,
     body: SourceCreateRequest,
-    user: Profile = Depends(require_editor),
-    org_id: UUID = Depends(get_org_id),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> SourceResponse:
     """Update a source."""
+    _authorize_source(source_id, user, store, minimum="editor")
     try:
         store.update_source(
             source_id,
@@ -179,9 +200,10 @@ def update_source(
 @router.delete("/{source_id}")
 def delete_source(
     source_id: UUID,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete a source. Assets cascade via FK."""
+    _authorize_source(source_id, user, store, minimum="editor")
     store.delete_source(source_id)
     return {"status": "deleted"}
