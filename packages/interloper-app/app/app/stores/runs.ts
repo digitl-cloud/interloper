@@ -110,6 +110,8 @@ export const useRunsStore = defineStore('runs', () => {
         error.value = null
     }
 
+    useOrgScopedRefetch(() => fetch(), $reset)
+
     return {
         runs,
         total,

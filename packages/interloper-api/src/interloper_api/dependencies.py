@@ -217,6 +217,40 @@ def get_org_id(
 # -- RBAC dependencies -------------------------------------------------------
 
 
+def authorize_org_member(
+    user: Profile,
+    org_id: UUID,
+    store: Store,
+    *,
+    minimum: str = "viewer",
+    detail: str = "Not found",
+) -> None:
+    """Authorize access to a resource owned by ``org_id`` by membership.
+
+    Unlike the ``require_*`` dependencies, which bind to the session's *active*
+    organisation, this checks the user's role in the resource's organisation —
+    so ID-addressed endpoints work for members of the owning org regardless of
+    which org is currently selected. Non-members get a 404 carrying the same
+    ``detail`` as a missing resource, so IDs don't act as an existence oracle;
+    members with an insufficient role get a 403.
+
+    Args:
+        user: The authenticated user.
+        org_id: The organisation that owns the resource.
+        store: The Store instance.
+        minimum: Minimum role required (``viewer``, ``editor``, ``admin``).
+        detail: 404 detail, matching the route's missing-resource message.
+
+    Raises:
+        HTTPException: 404 if not a member, 403 if the role is insufficient.
+    """
+    role = store.get_user_role(user.id, org_id)
+    if role is None:
+        raise HTTPException(status_code=404, detail=detail)
+    if _ROLE_RANK.get(role, -1) < _ROLE_RANK[minimum]:
+        raise HTTPException(status_code=403, detail=f"Requires {minimum} role or higher")
+
+
 def _check_role(
     minimum: str,
     user: Profile,

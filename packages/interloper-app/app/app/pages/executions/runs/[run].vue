@@ -5,7 +5,9 @@ import type { Run } from '~/types/run'
 import type { ExecutionStatus } from '~/types/asset_execution'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
-definePageMeta({ title: 'Run' })
+// orgSwitchTarget: this page is bespoke to one org's run — switching org from
+// the nav lands on the runs list instead.
+definePageMeta({ title: 'Run', orgSwitchTarget: '/executions?tab=runs' })
 
 const route = useRoute()
 const runId = route.params.run!.toString()
@@ -62,17 +64,24 @@ const retryItems = computed<DropdownMenuItem[]>(() => [
     },
 ])
 
+const fetchError = ref<unknown>(null)
+
 onMounted(async () => {
-    const [fetchedRun] = await Promise.all([
-        runsStore.fetchOne(runId),
-        eventsStore.fetchForRun(runId),
-        assetExecutionsStore.fetchForRun(runId),
-        sourcesStore.sources.length === 0 ? sourcesStore.fetch() : Promise.resolve(),
-        catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
-    ])
-    initialRun.value = fetchedRun
-    // Seed the store so realtime updates can find and update it.
-    runsStore._upsert(fetchedRun)
+    try {
+        const [fetchedRun] = await Promise.all([
+            runsStore.fetchOne(runId),
+            eventsStore.fetchForRun(runId),
+            assetExecutionsStore.fetchForRun(runId),
+            sourcesStore.sources.length === 0 ? sourcesStore.fetch() : Promise.resolve(),
+            catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
+        ])
+        initialRun.value = fetchedRun
+        // Seed the store so realtime updates can find and update it.
+        runsStore._upsert(fetchedRun)
+    }
+    catch (e) {
+        fetchError.value = e
+    }
 })
 
 onUnmounted(() => {
@@ -82,8 +91,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div>
-        <div class="flex items-center gap-3 mb-4 shrink-0 px-4 pt-4">
+    <OrgGate :org-id="run?.org_id"
+             :error="fetchError"
+             back-to="/executions?tab=runs"
+             resource-label="run">
+        <div>
+            <div class="flex items-center gap-3 mb-4 shrink-0 px-4 pt-4">
             <NuxtLink to="/executions?tab=runs"
                       class="text-sm text-muted hover:text-default">
                 Runs
@@ -155,5 +168,6 @@ onUnmounted(() => {
                 </div>
             </SplitterPanel>
         </SplitterGroup>
-    </div>
+        </div>
+    </OrgGate>
 </template>

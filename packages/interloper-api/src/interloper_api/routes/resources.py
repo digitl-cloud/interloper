@@ -8,9 +8,18 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
+from interloper_db.models import Resource
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_catalog, get_org_id, get_store, require_editor, require_viewer
+from interloper_api.dependencies import (
+    authorize_org_member,
+    get_catalog,
+    get_current_user,
+    get_org_id,
+    get_store,
+    require_editor,
+    require_viewer,
+)
 
 router = APIRouter()
 
@@ -47,6 +56,30 @@ class ResourceDetailResponse(ResourceResponse):
     """Response body for a single resource, including its data payload."""
 
     data: dict[str, Any] = {}
+
+
+def _load_authorized_resource(resource_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Resource:
+    """Load a resource and authorize the user by membership in its org.
+
+    Args:
+        resource_id: The resource UUID.
+        user: The authenticated user.
+        store: The Store instance.
+        minimum: Minimum role required in the resource's organisation.
+
+    Returns:
+        The Resource row.
+
+    Raises:
+        HTTPException: 404 if missing or the user is not a member of the
+            owning org, 403 if the role is insufficient.
+    """
+    try:
+        resource = store.load_resource(resource_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Resource {resource_id} not found")
+    authorize_org_member(user, resource.org_id, store, minimum=minimum, detail=f"Resource {resource_id} not found")
+    return resource
 
 
 @router.get("/kinds")
@@ -90,14 +123,14 @@ def list_resources(
 @router.get("/{resource_id}")
 def get_resource(
     resource_id: UUID,
-    user: Profile = Depends(require_viewer),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> ResourceDetailResponse:
-    """Get a single resource by ID, including its data payload."""
-    try:
-        r = store.load_resource(resource_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Resource {resource_id} not found")
+    """Get a single resource by ID, including its data payload.
+
+    Authorized by membership in the resource's org.
+    """
+    r = _load_authorized_resource(resource_id, user, store)
 
     return ResourceDetailResponse(
         id=r.id,
@@ -144,10 +177,11 @@ def create_resource(
 def update_resource(
     resource_id: UUID,
     body: ResourceCreateRequest,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> ResourceResponse:
     """Update an existing resource."""
+    _load_authorized_resource(resource_id, user, store, minimum="editor")
     try:
         resource = store.update_resource(
             resource_id,
@@ -174,9 +208,10 @@ def update_resource(
 @router.delete("/{resource_id}")
 def delete_resource(
     resource_id: UUID,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete a resource."""
+    _load_authorized_resource(resource_id, user, store, minimum="editor")
     store.delete_resource(resource_id)
     return {"status": "deleted"}

@@ -12,7 +12,14 @@ from interloper_db.models import Asset, AssetResource, Destination, DestinationR
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from interloper_api.dependencies import get_org_id, get_store, require_editor, require_viewer
+from interloper_api.dependencies import (
+    authorize_org_member,
+    get_current_user,
+    get_org_id,
+    get_store,
+    require_editor,
+    require_viewer,
+)
 
 router = APIRouter()
 
@@ -116,6 +123,30 @@ def _dest_to_response(dest: Destination) -> DestinationResponse:
     )
 
 
+def _load_authorized_asset(asset_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Asset:
+    """Load an asset and authorize the user by membership in its org.
+
+    Args:
+        asset_id: The asset UUID.
+        user: The authenticated user.
+        store: The Store instance.
+        minimum: Minimum role required in the asset's organisation.
+
+    Returns:
+        The Asset row.
+
+    Raises:
+        HTTPException: 404 if missing or the user is not a member of the
+            owning org, 403 if the role is insufficient.
+    """
+    try:
+        asset = store.get_asset(asset_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
+    authorize_org_member(user, asset.org_id, store, minimum=minimum, detail=f"Asset {asset_id} not found")
+    return asset
+
+
 def _asset_to_response(asset: Asset) -> AssetResponse:
     """Convert a DB Asset to an AssetResponse."""
     return AssetResponse(
@@ -183,14 +214,11 @@ def list_dependencies(
 @router.get("/{asset_id}")
 def get_asset(
     asset_id: UUID,
-    user: Profile = Depends(require_viewer),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> AssetResponse:
-    """Get a single asset by ID."""
-    try:
-        asset = store.get_asset(asset_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
+    """Get a single asset by ID. Authorized by membership in the asset's org."""
+    asset = _load_authorized_asset(asset_id, user, store)
     return _asset_to_response(asset)
 
 
@@ -198,10 +226,11 @@ def get_asset(
 def update_asset(
     asset_id: UUID,
     body: AssetUpdateRequest,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> AssetResponse:
     """Update an asset's configuration, resources, or destinations."""
+    _load_authorized_asset(asset_id, user, store, minimum="editor")
     try:
         asset = store.update_asset(
             asset_id,
@@ -218,10 +247,11 @@ def update_asset(
 @router.delete("/{asset_id}")
 def delete_asset(
     asset_id: UUID,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete a standalone asset."""
+    _load_authorized_asset(asset_id, user, store, minimum="editor")
     try:
         store.delete_asset(asset_id)
     except NotFoundError:
@@ -238,10 +268,14 @@ def delete_asset(
 def add_dependency(
     asset_id: UUID,
     body: AddDependencyRequest,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> DependencyResponse:
-    """Add a dependency between two assets."""
+    """Add a dependency between two assets. Both must belong to the same org."""
+    asset = _load_authorized_asset(asset_id, user, store, minimum="editor")
+    upstream = _load_authorized_asset(body.upstream_asset_id, user, store, minimum="editor")
+    if upstream.org_id != asset.org_id:
+        raise HTTPException(status_code=404, detail=f"Asset {body.upstream_asset_id} not found")
     try:
         dep = store.add_dependency(asset_id, body.upstream_asset_id, body.param_name)
     except NotFoundError as e:
@@ -256,10 +290,11 @@ def add_dependency(
 def remove_dependency(
     asset_id: UUID,
     upstream_asset_id: UUID,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> None:
     """Remove an asset dependency."""
+    _load_authorized_asset(asset_id, user, store, minimum="editor")
     try:
         store.remove_dependency(asset_id, upstream_asset_id)
     except NotFoundError as e:
@@ -272,11 +307,11 @@ def remove_dependency(
 @router.get("/{asset_id}/partition-row-counts")
 def get_partition_row_counts(
     asset_id: UUID,
-    user: Profile = Depends(require_viewer),
-    org_id: UUID = Depends(get_org_id),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> PartitionRowCountsResponse:
     """Get row counts grouped by partition for an asset."""
+    _load_authorized_asset(asset_id, user, store)
     try:
         il_asset = store.load_asset(asset_id)
     except NotFoundError as e:
