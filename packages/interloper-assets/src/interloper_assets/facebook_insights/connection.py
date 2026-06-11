@@ -1,5 +1,4 @@
 from functools import cached_property
-from typing import ClassVar
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
@@ -11,19 +10,15 @@ from interloper_assets.facebook_insights import constants
     name="Facebook Insights",
     icon="logos:facebook",
     tags=["Social"],
+    oauth=il.OAuthConfig(
+        "facebook",
+        scope="pages_show_list,pages_read_engagement,pages_read_user_content,read_insights",
+    ),
 )
 class FacebookInsightsConnection(il.Connection):
     """Facebook Insights API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="facebook_insights_")
-
-    oauth: ClassVar[il.OAuthConfig] = il.OAuthConfig(
-        provider="facebook",
-        auth_url="https://www.facebook.com/v19.0/dialog/oauth",
-        scope="pages_show_list,pages_read_engagement,pages_read_user_content,read_insights",
-        label="Facebook",
-        icon="logos:facebook",
-    )
 
     client_id: str = il.InputField(description="Facebook App ID")
     client_secret: str = il.SecretField(description="Facebook App Secret")

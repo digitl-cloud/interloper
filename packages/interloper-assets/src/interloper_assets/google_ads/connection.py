@@ -15,15 +15,12 @@ if TYPE_CHECKING:
     icon="logos:google-ads",
     tags=["Advertising"],
 )
-class GoogleAdsConnection(il.Connection):
+class GoogleAdsConnection(il.OAuthConnection):
     """Google Ads API connection using the Google Ads Python client library."""
 
     model_config = SettingsConfigDict(env_prefix="google_ads_")
 
-    client_id: str = il.InputField(description="OAuth2 client ID")
-    client_secret: str = il.SecretField(description="OAuth2 client secret")
     developer_token: str = il.SecretField(description="Google Ads API developer token")
-    refresh_token: str = il.SecretField(description="OAuth2 refresh token")
 
     @cached_property
     def client(self) -> "GoogleAdsClient":

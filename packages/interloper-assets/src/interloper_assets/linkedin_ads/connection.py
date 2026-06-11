@@ -1,5 +1,4 @@
 from functools import cached_property
-from typing import ClassVar
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
@@ -11,22 +10,12 @@ from interloper_assets.linkedin_ads import constants
     name="LinkedIn Ads",
     icon="devicon:linkedin",
     tags=["Advertising"],
+    oauth=il.OAuthConfig("linkedin", scope="r_ads,r_ads_reporting"),
 )
-class LinkedinAdsConnection(il.Connection):
+class LinkedinAdsConnection(il.OAuthConnection):
     """LinkedIn Ads API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="linkedin_ads_")
-
-    oauth: ClassVar[il.OAuthConfig] = il.OAuthConfig(
-        provider="linkedin",
-        auth_url="https://www.linkedin.com/oauth/v2/authorization",
-        scope="r_ads,r_ads_reporting",
-        label="LinkedIn",
-        icon="devicon:linkedin",
-    )
-    client_id: str = il.InputField(description="OAuth2 client ID")
-    client_secret: str = il.SecretField(description="OAuth2 client secret")
-    refresh_token: str = il.SecretField(description="OAuth2 refresh token")
 
     @cached_property
     def client(self) -> il.RESTClient:

@@ -2,7 +2,7 @@ from interloper.asset import Asset, AssetDefinition, ExecutionContext, asset
 from interloper.catalog import Catalog
 from interloper.component import Component, ComponentDefinition, ComponentSpec
 from interloper.config import Config, config
-from interloper.connection import Connection, connection
+from interloper.connection import Connection, OAuthConnection, connection
 from interloper.dag import DAG
 from interloper.destination import (
     CSVDestination,
@@ -16,6 +16,7 @@ from interloper.destination import (
 )
 from interloper.events import Event, EventBus, EventType
 from interloper.normalizer import MaterializationStrategy, Normalizer
+from interloper.oauth import OAuthConfig, OAuthProvider
 from interloper.partitioning import (
     Partition,
     PartitionConfig,
@@ -29,7 +30,6 @@ from interloper.resource.fields import (
     FetchField,
     InputField,
     JsonField,
-    OAuthConfig,
     SecretField,
     SelectField,
     TextField,
@@ -72,6 +72,8 @@ __all__ = [
     "OAuth2ClientCredentialsAuth",
     "OAuth2RefreshTokenAuth",
     "OAuthConfig",
+    "OAuthConnection",
+    "OAuthProvider",
     "Partition",
     "PartitionConfig",
     "PartitionWindow",

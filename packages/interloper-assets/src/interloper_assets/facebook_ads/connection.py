@@ -1,5 +1,4 @@
 from functools import cached_property
-from typing import ClassVar
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
@@ -11,24 +10,20 @@ from interloper_assets.facebook_ads.constants import API_VERSION, BASE_URL
     name="Facebook Ads",
     icon="logos:facebook",
     tags=["Advertising"],
-)
-class FacebookAdsConnection(il.Connection):
-    """Facebook Ads (Meta Marketing) API connection with OAuth2 auth."""
-
-    model_config = SettingsConfigDict(env_prefix="facebook_ads_")
-
-    oauth: ClassVar[il.OAuthConfig] = il.OAuthConfig(
-        provider="facebook",
-        auth_url="https://www.facebook.com/v19.0/dialog/oauth",
+    oauth=il.OAuthConfig(
+        "facebook",
         scope="ads_read,ads_management",
-        label="Facebook",
-        icon="logos:facebook",
         fields={
             "access_token": "access_token",
             "client_id": "app_id",
             "client_secret": "app_secret",
         },
-    )
+    ),
+)
+class FacebookAdsConnection(il.Connection):
+    """Facebook Ads (Meta Marketing) API connection with OAuth2 auth."""
+
+    model_config = SettingsConfigDict(env_prefix="facebook_ads_")
 
     access_token: str = il.SecretField(description="Facebook access token")
     app_id: str = il.InputField(description="Facebook App ID")
