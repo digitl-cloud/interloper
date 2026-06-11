@@ -240,6 +240,9 @@ def cancel_invitation(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Cancel a pending invitation. Requires admin role."""
+    invitations = store.list_invitations(org_id)
+    if not any(inv.id == invitation_id for inv in invitations):
+        raise HTTPException(status_code=404, detail="Invitation not found")
     if not store.delete_invitation(invitation_id):
         raise HTTPException(status_code=404, detail="Invitation not found")
 

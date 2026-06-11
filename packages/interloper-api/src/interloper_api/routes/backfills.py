@@ -11,7 +11,7 @@ from interloper_db import Profile, Store
 from interloper_db.models import Backfill
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_org_id, get_store, require_viewer
+from interloper_api.dependencies import authorize_org_member, get_current_user, get_org_id, get_store, require_viewer
 
 router = APIRouter()
 
@@ -76,12 +76,13 @@ def list_backfills(
 @router.get("/{backfill_id}")
 def get_backfill(
     backfill_id: UUID,
-    user: Profile = Depends(require_viewer),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> BackfillResponse:
-    """Get a single backfill by ID."""
+    """Get a single backfill by ID. Authorized by membership in the backfill's org."""
     try:
         backfill = store.get_backfill(backfill_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
+    authorize_org_member(user, backfill.org_id, store, detail=f"Backfill {backfill_id} not found")
     return _backfill_to_response(backfill)

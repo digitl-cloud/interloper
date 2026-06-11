@@ -12,6 +12,22 @@ export const useOrganisationStore = defineStore('organisation', () => {
     const organisation = ref<Organisation | null>(null)
 
     /**********************
+     * Cross-tab sync
+     **********************/
+    // The active org lives in the shared session cookie, so a switch in one
+    // tab silently changes what every other tab's API calls return. Broadcast
+    // switches so other tabs re-sync their state; org-scoped stores and
+    // OrgGate react from there.
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('interloper-org') : null
+    channel?.addEventListener('message', async (event: MessageEvent) => {
+        const orgId: unknown = event.data?.orgId
+        if (typeof orgId === 'string' && orgId !== organisation.value?.id) {
+            await userStore.fetchMe()
+            organisation.value = userStore.user?.organisation ?? null
+        }
+    })
+
+    /**********************
      * Actions
      **********************/
     async function fetchOrganisations(): Promise<Organisation[]> {
@@ -43,6 +59,7 @@ export const useOrganisationStore = defineStore('organisation', () => {
         })
         await userStore.fetchMe()
         organisation.value = created
+        channel?.postMessage({ orgId: created.id })
         return created
     }
 
@@ -53,6 +70,7 @@ export const useOrganisationStore = defineStore('organisation', () => {
         })
         await userStore.fetchMe()
         organisation.value = userStore.user?.organisation ?? null
+        channel?.postMessage({ orgId })
     }
 
     function findOrganisation(): Organisation | null {

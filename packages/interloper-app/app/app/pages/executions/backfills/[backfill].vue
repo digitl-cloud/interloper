@@ -4,7 +4,9 @@ import type { TableColumn } from '@nuxt/ui'
 import type { Run } from '~/types/run'
 import type { Backfill } from '~/types/backfill'
 
-definePageMeta({ title: 'Backfill' })
+// orgSwitchTarget: this page is bespoke to one org's backfill — switching org
+// from the nav lands on the backfills list instead.
+definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions?tab=backfills' })
 
 const UBadge = resolveComponent('UBadge')
 
@@ -23,16 +25,25 @@ const backfillJobName = computed(() =>
     backfill.value?.job?.name ?? jobsStore.findById(backfill.value?.job_id ?? '')?.name ?? 'Deleted job',
 )
 
+const fetchError = ref<unknown>(null)
+
 onMounted(async () => {
     runsLoading.value = true
     jobsStore.fetch()
-    const [fetchedBackfill, runs] = await Promise.all([
-        backfillsStore.fetchOne(backfillId),
-        apiFetch<Run[]>(`/runs?backfill_id=${backfillId}`),
-    ])
-    backfill.value = fetchedBackfill
-    backfillRuns.value = runs
-    runsLoading.value = false
+    try {
+        const [fetchedBackfill, runs] = await Promise.all([
+            backfillsStore.fetchOne(backfillId),
+            apiFetch<Run[]>(`/runs?backfill_id=${backfillId}`),
+        ])
+        backfill.value = fetchedBackfill
+        backfillRuns.value = runs
+    }
+    catch (e) {
+        fetchError.value = e
+    }
+    finally {
+        runsLoading.value = false
+    }
 })
 
 const columns: TableColumn<Run>[] = [
@@ -76,8 +87,12 @@ const columns: TableColumn<Run>[] = [
 </script>
 
 <template>
-    <div>
-        <div class="flex items-center gap-3 mb-4 shrink-0 px-4 pt-4">
+    <OrgGate :org-id="backfill?.org_id"
+             :error="fetchError"
+             back-to="/executions?tab=backfills"
+             resource-label="backfill">
+        <div>
+            <div class="flex items-center gap-3 mb-4 shrink-0 px-4 pt-4">
             <NuxtLink to="/executions?tab=backfills"
                       class="text-sm text-muted hover:text-default">
                 Backfills
@@ -123,5 +138,6 @@ const columns: TableColumn<Run>[] = [
                 sticky
                 class="flex-1"
                 @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
-    </div>
+        </div>
+    </OrgGate>
 </template>

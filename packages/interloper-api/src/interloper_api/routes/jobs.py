@@ -11,7 +11,14 @@ from interloper_db import Profile, Store
 from interloper_db.models import Job
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_org_id, get_store, require_editor, require_viewer
+from interloper_api.dependencies import (
+    authorize_org_member,
+    get_current_user,
+    get_org_id,
+    get_store,
+    require_editor,
+    require_viewer,
+)
 
 router = APIRouter()
 
@@ -62,6 +69,30 @@ class BackfillRequest(BaseModel):
     fail_fast: bool = False
 
 
+def _load_authorized_job(job_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Job:
+    """Load a job and authorize the user by membership in its org.
+
+    Args:
+        job_id: The job UUID.
+        user: The authenticated user.
+        store: The Store instance.
+        minimum: Minimum role required in the job's organisation.
+
+    Returns:
+        The Job row.
+
+    Raises:
+        HTTPException: 404 if missing or the user is not a member of the
+            owning org, 403 if the role is insufficient.
+    """
+    try:
+        job = store.get_job(job_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    authorize_org_member(user, job.org_id, store, minimum=minimum, detail=f"Job {job_id} not found")
+    return job
+
+
 def _job_to_response(job: Job) -> JobResponse:
     """Convert a DB Job to a JobResponse.
 
@@ -102,14 +133,11 @@ def list_jobs(
 @router.get("/{job_id}")
 def get_job(
     job_id: UUID,
-    user: Profile = Depends(require_viewer),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> JobResponse:
-    """Get a single job by ID."""
-    try:
-        job = store.get_job(job_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    """Get a single job by ID. Authorized by membership in the job's org."""
+    job = _load_authorized_job(job_id, user, store)
     return _job_to_response(job)
 
 
@@ -139,10 +167,11 @@ def create_job(
 def update_job(
     job_id: UUID,
     body: JobCreateRequest,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> JobResponse:
     """Update an existing job."""
+    _load_authorized_job(job_id, user, store, minimum="editor")
     try:
         job = store.update_job(
             job_id,
@@ -163,10 +192,11 @@ def update_job(
 @router.delete("/{job_id}")
 def delete_job(
     job_id: UUID,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete a job."""
+    _load_authorized_job(job_id, user, store, minimum="editor")
     store.delete_job(job_id)
     return {"status": "deleted"}
 
@@ -175,14 +205,11 @@ def delete_job(
 def queue_run(
     job_id: UUID,
     body: RunRequest | None = None,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Queue a single run for a job."""
-    try:
-        job = store.get_job(job_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = _load_authorized_job(job_id, user, store, minimum="editor")
 
     run = store.create_run(
         job.org_id,
@@ -196,14 +223,11 @@ def queue_run(
 def queue_backfill(
     job_id: UUID,
     body: BackfillRequest,
-    user: Profile = Depends(require_editor),
+    user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Queue a backfill for a job."""
-    try:
-        job = store.get_job(job_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = _load_authorized_job(job_id, user, store, minimum="editor")
 
     backfill = store.create_backfill(
         job.org_id,
