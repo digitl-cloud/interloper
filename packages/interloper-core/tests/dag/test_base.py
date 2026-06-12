@@ -495,6 +495,22 @@ class TestTraversal:
         assert len(levels) == 1
         assert len(levels[0]) == 4
 
+    def test_topological_generations_skips_non_materializable_parent(self):
+        # Mini-DAG shape: a skipped parent upstream of a live target. The
+        # parent's edge counts as satisfied, and only the target appears.
+        a = FakeAsset()
+        b = FakeOtherAsset(deps={"a": a.id})
+        dag = DAG(a(materializable=False), b)
+        levels = dag.topological_generations()
+        assert [[asset.id for asset in level] for level in levels] == [[b.id]]
+
+    def test_topological_generations_on_mini_dag(self):
+        a = FakeAsset()
+        b = FakeOtherAsset(deps={"a": a.id})
+        mini = DAG(a, b).mini_dag(b.id)
+        levels = mini.topological_generations()
+        assert [[asset.id for asset in level] for level in levels] == [[b.id]]
+
     def test_get_predecessors_returns_upstream_ids(self):
         upstream = FakeAsset()
         downstream = FakeOtherAsset(deps={"upstream": upstream.id})

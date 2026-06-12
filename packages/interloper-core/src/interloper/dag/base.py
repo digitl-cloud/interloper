@@ -195,13 +195,20 @@ class DAG:
         Lists are ordered so that all dependencies of a level appear in
         previous levels (Kahn's algorithm).
 
+        Only materializable assets appear in the generations.  Edges from
+        non-materializable assets count as already satisfied — mirroring
+        the runners, which mark those assets as skipped (e.g. the parents
+        in a :meth:`mini_dag`).
+
         Returns:
             A list of asset groups ordered by dependency level.
 
         Raises:
             CircularDependencyError: If a cycle is detected.
         """
-        in_degree = {key: len(preds) for key, preds in self.predecessors.items()}
+        in_degree = {
+            key: sum(1 for pred in preds if pred in self.predecessors) for key, preds in self.predecessors.items()
+        }
         current_level = sorted(key for key, degree in in_degree.items() if degree == 0)
         levels: list[list[Asset]] = []
 

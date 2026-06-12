@@ -15,6 +15,7 @@ from interloper.destination import (
     destination,
 )
 from interloper.events import Event, EventBus, EventType
+from interloper.manifest import RunManifest, RunPlan
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.oauth import OAuthConfig, OAuthProvider
 from interloper.partitioning import (
@@ -82,6 +83,8 @@ __all__ = [
     "Resource",
     "ResourceDefinition",
     "ResourceRef",
+    "RunManifest",
+    "RunPlan",
     "RunResult",
     "Runner",
     "Schema",
