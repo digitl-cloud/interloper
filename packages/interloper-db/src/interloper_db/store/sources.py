@@ -98,6 +98,24 @@ class SourceMixin:
             session.refresh(db_source)
             return db_source
 
+    def get_source(self, source_id: UUID) -> Source:
+        """Load a source row by ID.
+
+        Args:
+            source_id: The source UUID.
+
+        Returns:
+            The Source row.
+
+        Raises:
+            SourceNotFoundError: If the source is not found.
+        """
+        with Session(get_engine()) as session:
+            db_source = session.get(Source, source_id)
+            if not db_source:
+                raise SourceNotFoundError(f"Source {source_id} not found")
+            return db_source
+
     def list_sources(self, org_id: UUID) -> list[Source]:
         """List all sources with assets and destinations loaded."""
         with Session(get_engine()) as session:

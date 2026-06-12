@@ -12,13 +12,14 @@ tests. The properties under test:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from interloper_api.dependencies import get_store, require_viewer
+from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import runs as runs_module
 from interloper_api.routes.runs import MAX_EVENTS_PAGE_SIZE
 
@@ -33,6 +34,12 @@ class FakeStore:
         self.total = total
         self.list_calls: list[tuple] = []
         self.count_calls: list[UUID | None] = []
+
+    def get_run(self, run_id: UUID):
+        return SimpleNamespace(id=run_id, org_id=_ORG_ID)
+
+    def get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
+        return "viewer"
 
     def count_events(
         self,
@@ -72,7 +79,7 @@ def _client(store: FakeStore) -> TestClient:
     app = FastAPI()
     app.include_router(runs_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[require_viewer] = lambda: None
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
     return TestClient(app)
 
 
