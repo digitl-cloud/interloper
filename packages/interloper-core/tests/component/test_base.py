@@ -30,6 +30,12 @@ class FakeResource(il.Resource):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class FakeAltResource(il.Resource):
+    """Second Resource type, used to exercise type-mismatch scenarios."""
+
+    token: str = ""
+
+
 class FakeComponent(Component):
     """Primary test component covering every serialization shape the base layer handles."""
 
@@ -176,6 +182,60 @@ class TestResources:
         child = FakeConsumer(resources={"resource": existing})  # ty: ignore[missing-argument]
         parent.trickle_resources(child)
         assert child.resources["resource"] is existing
+
+    def test_trickle_by_name_skipped_on_type_mismatch(self):
+        """A same-named resource of the wrong type must not fill the slot."""
+        parent = FakeConsumer(resources={"resource": FakeAltResource()})  # ty: ignore[missing-argument]
+        child = FakeConsumer()  # ty: ignore[missing-argument]
+        parent.trickle_resources(child)
+        assert "resource" not in child.resources
+
+    def test_trickle_by_name_mismatch_falls_back_to_type_match(self):
+        shared = FakeResource(text="shared")
+        parent = FakeConsumer(resources={"resource": FakeAltResource(), "other": shared})  # ty: ignore[missing-argument]
+        child = FakeConsumer()  # ty: ignore[missing-argument]
+        parent.trickle_resources(child)
+        assert child.resources["resource"] is shared
+
+    def test_init_kwarg_routed_into_resources(self):
+        """A Resource passed under a ResourceRef slot name lands in ``resources``."""
+        res = FakeResource(text="direct")
+        c = FakeConsumer(resource=res)
+        assert c.resources["resource"] is res
+        assert c.resource is res
+
+    def test_init_kwarg_wrong_type_rejected(self):
+        with pytest.raises(TypeError, match="resource 'resource' must be an instance of FakeResource"):
+            FakeConsumer(resource=FakeAltResource())  # ty: ignore[invalid-argument-type]
+
+    def test_init_kwarg_conflicting_with_resources_entry_rejected(self):
+        with pytest.raises(ValueError, match="both as a keyword argument and in 'resources'"):
+            FakeConsumer(resource=FakeResource(), resources={"resource": FakeResource()})
+
+    def test_init_kwarg_merges_with_other_resources(self):
+        other = FakeAltResource()
+        res = FakeResource()
+        c = FakeConsumer(resource=res, resources={"extra": other})
+        assert c.resources == {"resource": res, "extra": other}
+
+    def test_init_kwarg_for_explicit_model_field_untouched(self):
+        """A slot that is also a real pydantic field goes through pydantic, not ``resources``."""
+        from typing import ClassVar
+
+        class FakeExplicitFieldConsumer(Component):
+            resource_types: ClassVar[dict[str, type]] = {"slot": FakeResource}
+            slot: FakeResource | None = None
+
+        res = FakeResource()
+        c = FakeExplicitFieldConsumer(slot=res)
+        assert c.slot is res
+        assert "slot" not in c.resources
+
+    def test_init_kwarg_roundtrips_via_spec(self):
+        c = FakeConsumer(resource=FakeResource(text="abc"))
+        restored = Component.from_spec(c.to_spec())
+        assert isinstance(restored.resources["resource"], FakeResource)
+        assert restored.resources["resource"].text == "abc"
 
 
 # ---------------------------------------------------------------------------

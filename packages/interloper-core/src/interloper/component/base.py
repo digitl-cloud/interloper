@@ -183,6 +183,39 @@ class Component(BaseModel):
                 # Remove from annotations so Pydantic doesn't see it as a field.
                 del raw_annotations[attr_name]
 
+    def __init__(self, /, **data: Any) -> None:
+        """Route kwargs named after declared resource slots into ``resources``.
+
+        Resource-typed annotations are converted to ``ResourceRef`` descriptors
+        and removed from the pydantic model, so a kwarg like
+        ``BigQueryDestination(connection=...)`` would otherwise be silently
+        dropped by pydantic. Such kwargs are validated against the slot's
+        declared type and stored in ``resources`` instead.
+
+        Raises:
+            TypeError: If a slot kwarg doesn't satisfy the slot's declared type.
+            ValueError: If a slot is given both as a kwarg and in ``resources``.
+        """
+        slot_names = [n for n in data if n in type(self).resource_types and n not in type(self).model_fields]
+        if slot_names:
+            resources = data.get("resources")
+            resources = dict(resources) if isinstance(resources, dict) else {}
+            for name in slot_names:
+                value = data.pop(name)
+                expected = type(self).resource_types[name]
+                if not isinstance(value, expected):
+                    raise TypeError(
+                        f"{type(self).__name__} resource '{name}' must be an instance of "
+                        f"{expected.__name__}, got {type(value).__name__}"
+                    )
+                if name in resources:
+                    raise ValueError(
+                        f"{type(self).__name__} got resource '{name}' both as a keyword argument and in 'resources'"
+                    )
+                resources[name] = value
+            data["resources"] = resources
+        super().__init__(**data)
+
     def model_post_init(self, context: Any) -> None:
         """Default ``id`` to a generated UUID if not provided."""
         if not self.id:
@@ -192,7 +225,8 @@ class Component(BaseModel):
         """Fill a child component's empty resource slots from this component's resources.
 
         Resolution order per slot:
-        1. By name — if this component has a resource with the same slot name.
+        1. By name — if this component has a resource with the same slot name
+           that satisfies the slot's declared type.
         2. By type — if any of this component's resources is an instance of the
            required type.
 
@@ -204,9 +238,10 @@ class Component(BaseModel):
         for name, res_type in type(target).resource_types.items():
             if name in target.resources:
                 continue
-            # Match by name first.
+            # Match by name first; a same-named resource of the wrong type
+            # falls through to the type match rather than filling the slot.
             source_res = self.resources.get(name)
-            if source_res is not None:
+            if isinstance(source_res, res_type):
                 target.resources[name] = source_res
             else:
                 # Fall back to type match.
