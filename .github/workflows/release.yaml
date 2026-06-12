@@ -72,7 +72,10 @@ jobs:
         with:
           prerelease: ${{ inputs.release_type == 'release-candidate' }}
           prerelease_token: rc
-          build: false
+          # Runs the configured build_command (`uv lock`) so the release
+          # commit carries a lock file consistent with the stamped versions.
+          # The actual package build happens in the publish step below.
+          build: true
           changelog: ${{ inputs.release_type == 'stable' }}
           commit: true
           tag: true
