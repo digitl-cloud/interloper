@@ -1,6 +1,7 @@
 """Tests for ``interloper.cli.commands.run`` (manifest input mode)."""
 
 import argparse
+import json
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,9 @@ def _args(**overrides: Any) -> argparse.Namespace:
         "start_date": None,
         "end_date": None,
         "target": [],
+        "events": "pretty",
+        "quiet": False,
+        "verbose": False,
     }
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -100,7 +104,46 @@ class TestRunManifestMode:
             _cmd_run(_args(file=str(manifest)))
 
     def test_manifest_run_materializes(self, tmp_path: Path) -> None:
-        manifest = _write_manifest(
+        manifest = self._materializing_manifest(tmp_path)
+        _cmd_run(_args(file=str(manifest)))
+
+        assert (tmp_path / "data" / "fake_run_source" / "one" / "data.pkl").exists()
+
+    def test_run_prints_lifecycle_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        manifest = self._materializing_manifest(tmp_path)
+        _cmd_run(_args(file=str(manifest)))
+
+        err = capsys.readouterr().err
+        assert "RUN_STARTED" in err
+        assert "ASSET_COMPLETED" in err
+        assert "RUN_COMPLETED" in err
+        # Default filter drops destination I/O chatter.
+        assert "DEST_WRITE_STARTED" not in err
+
+    def test_verbose_includes_io_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        manifest = self._materializing_manifest(tmp_path)
+        _cmd_run(_args(file=str(manifest), verbose=True))
+
+        assert "DEST_WRITE_STARTED" in capsys.readouterr().err
+
+    def test_quiet_suppresses_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        manifest = self._materializing_manifest(tmp_path)
+        _cmd_run(_args(file=str(manifest), quiet=True))
+
+        assert "ASSET_COMPLETED" not in capsys.readouterr().err
+
+    def test_events_json_streams_to_stdout(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        manifest = self._materializing_manifest(tmp_path)
+        _cmd_run(_args(file=str(manifest), events="json"))
+
+        lines = [line for line in capsys.readouterr().out.splitlines() if line]
+        types = {json.loads(line)["type"] for line in lines}
+        assert "run_started" in types
+        assert "asset_completed" in types
+
+    @staticmethod
+    def _materializing_manifest(tmp_path: Path) -> Path:
+        return _write_manifest(
             tmp_path,
             f"""
             runner:
@@ -113,6 +156,3 @@ class TestRunManifestMode:
               - source: {SOURCE_PATH}
             """,
         )
-        _cmd_run(_args(file=str(manifest)))
-
-        assert (tmp_path / "data" / "fake_run_source" / "one" / "data.pkl").exists()
