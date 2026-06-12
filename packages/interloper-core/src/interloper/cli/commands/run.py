@@ -7,6 +7,9 @@ both for direct user invocation and as the entry point that
 Input formats
 -------------
 
+* ``--file/-f <manifest.yaml>`` — a declarative run manifest
+  (:class:`~interloper.manifest.RunManifest`): sources/assets with their
+  config, destinations, an optional runner override, and a partition.
 * ``--format inline <json>`` — a serialized :class:`DAGSpec` as JSON.
   This is the mode used by the ``DockerRunner`` to pass a mini-DAG to a
   child container.
@@ -14,9 +17,15 @@ Input formats
   resolve to Source, Asset, or Destination classes.  The resolved
   classes are instantiated and passed to ``DAG(*items)``.
 
-The runner used is always the one configured in ``AppSettings.runner``
-(top-level ``runner`` key in ``interloper.yaml`` or
-``INTERLOPER_RUNNER_*`` environment variables).
+The runner is the one configured in ``AppSettings.runner`` (top-level
+``runner`` key in ``interloper.yaml`` or ``INTERLOPER_RUNNER_*``
+environment variables), unless a manifest provides its own ``runner``
+block.  Likewise the CLI date flags take precedence over a manifest's
+``partition`` block.
+
+``--dry-run`` validates and prints the resolved plan (assets grouped by
+execution generation, runner, partition) without materializing anything —
+useful for checking a curated set of manifests.
 """
 
 from __future__ import annotations
@@ -52,6 +61,17 @@ def register(
         help="Input format: 'inline' for a DAGSpec JSON string, 'paths' for dotted import paths",
     )
     run_parser.add_argument(
+        "-f",
+        "--file",
+        default=None,
+        help="Path to a declarative run manifest (YAML). Mutually exclusive with positional targets.",
+    )
+    run_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and print the resolved run plan without executing",
+    )
+    run_parser.add_argument(
         "--run-id",
         default=None,
         help="Optional run identifier, forwarded as metadata to the runner",
@@ -73,7 +93,7 @@ def register(
     )
     run_parser.add_argument(
         "target",
-        nargs="+",
+        nargs="*",
         help="Inline DAGSpec JSON (when --format inline) or one or more dotted import paths",
     )
     run_parser.set_defaults(func=_cmd_run)
@@ -111,7 +131,19 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     try:
         # -- Build the DAG ----------------------------------------------------
-        if args.format == "inline":
+        plan = None
+        if args.file is not None:
+            if args.target:
+                raise SystemExit("Error: --file cannot be combined with positional targets.")
+            from interloper.errors import ManifestError
+            from interloper.manifest import RunManifest
+
+            try:
+                plan = RunManifest.from_yaml_file(args.file).compile()
+            except ManifestError as exc:
+                raise SystemExit(f"Error: {exc}") from exc
+            dag = plan.dag
+        elif args.format == "inline":
             if len(args.target) != 1:
                 raise SystemExit("Error: --format inline expects exactly one positional argument (the JSON spec).")
             try:
@@ -120,13 +152,25 @@ def _cmd_run(args: argparse.Namespace) -> None:
                 raise SystemExit(f"Error: failed to parse inline DAGSpec: {exc}") from exc
             dag = spec.reconstruct()
         else:
+            if not args.target:
+                raise SystemExit("Error: provide one or more import paths, or a manifest via --file.")
             dag = _dag_from_paths(args.target)
 
-        # -- Resolve the partition --------------------------------------------
+        # -- Resolve the partition (CLI flags win over the manifest) ----------
         partition = _resolve_partition(args)
+        if partition is None and plan is not None:
+            partition = plan.partition
 
-        # -- Build the runner from settings -----------------------------------
-        runner_cls, runner_kwargs = build_runner(settings.runner.type, settings.runner.config)
+        # -- Build the runner (manifest override wins over settings) ----------
+        if plan is not None and plan.runner is not None:
+            runner_cls, runner_kwargs = build_runner(plan.runner.type, plan.runner.config)
+        else:
+            runner_cls, runner_kwargs = build_runner(settings.runner.type, settings.runner.config)
+
+        # -- Dry run: print the plan and stop ----------------------------------
+        if args.dry_run:
+            _print_plan(dag, partition, runner_cls.__name__, plan.name if plan else "")
+            return
 
         metadata: dict[str, str] = {}
         if args.run_id:
@@ -189,6 +233,26 @@ def _dag_from_paths(paths: list[str]) -> DAG:
         items.append(obj())
 
     return DAG(*items)  # ty: ignore[invalid-argument-type]
+
+
+def _print_plan(
+    dag: DAG,
+    partition: Partition | PartitionWindow | None,
+    runner_name: str,
+    name: str,
+) -> None:
+    """Print the resolved run plan to stdout without executing it."""
+    materializable = [a for a in dag.assets if a.materializable]
+    lines: list[str] = []
+    if name:
+        lines.append(f"Run:       {name}")
+    lines.append(f"Runner:    {runner_name}")
+    lines.append(f"Partition: {partition if partition is not None else '(none)'}")
+    lines.append(f"Assets:    {len(materializable)} materializable / {len(dag.assets)} total")
+    lines.append("")
+    for level, generation in enumerate(dag.topological_generations(), start=1):
+        lines.append(f"  {level}. {', '.join(asset.qualified_key for asset in generation)}")
+    print("\n".join(lines))
 
 
 def _resolve_partition(args: argparse.Namespace) -> Partition | PartitionWindow | None:
