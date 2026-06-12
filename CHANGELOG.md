@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.15.0 (2026-06-12)
+
+### Features
+
+- Declarative run manifest for ad-hoc DAG materialization
+  ([`aa53003`](https://github.com/digitl-cloud/interloper/commit/aa53003c041fa63fdcfd16ed020650a0eedc3d9c))
+
+- Stream run events through the logger in the run CLI
+  ([`43ddd59`](https://github.com/digitl-cloud/interloper/commit/43ddd594d56d844892fdb9618b8a9409246ffa0b))
+
+### Testing
+
+- Drain in-flight events before capturing in k8s terminal-event tests
+  ([`082d22a`](https://github.com/digitl-cloud/interloper/commit/082d22a021466071d97edbdb89e1d3c35164fbe4))
+
+
 ## v0.14.0 (2026-06-11)
 
 ### Bug Fixes
