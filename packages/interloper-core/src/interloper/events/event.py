@@ -34,9 +34,12 @@ class Event:
         """Return a human-readable summary line for logging."""
         m = self.metadata
         ts = self.timestamp.strftime("%H:%M:%S.%f")[:-3]
-        asset_key = m.get("asset_qualified_key", "-")
-        message = m.get("message", "-")
-        return f"{ts}  {self.type.value.upper():<30}  {asset_key}  {message}"
+        asset_key = m.get("asset_qualified_key") or m.get("asset_key") or "-"
+        message = m.get("message") or m.get("error") or "-"
+        label = self.type.value.upper()
+        if self.type is EventType.LOG and m.get("level"):
+            label = f"LOG.{m['level']}"
+        return f"{ts}  {label:<30}  {asset_key}  {message}"
 
     # ------------------------------------------------------------------
     # Serialization

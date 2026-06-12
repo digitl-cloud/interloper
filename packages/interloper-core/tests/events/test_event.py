@@ -62,3 +62,26 @@ def test_emit_event_preserves_identity() -> None:
     match = [e for e in captured if e.id == original.id]
     assert match, "emit_event should deliver an event preserving its id"
     assert match[0].timestamp == original.timestamp
+
+
+def test_str_prefers_qualified_key_then_bare_key() -> None:
+    """``__str__`` falls back to ``asset_key`` when no qualified key is set."""
+    qualified = Event(type=EventType.ASSET_STARTED, metadata={"asset_qualified_key": "src.foo", "asset_key": "foo"})
+    bare = Event(type=EventType.ASSET_STARTED, metadata={"asset_key": "foo"})
+    neither = Event(type=EventType.RUN_STARTED)
+
+    assert "src.foo" in str(qualified)
+    assert "  foo  " in str(bare)
+    assert "  -  " in str(neither)
+
+
+def test_str_falls_back_to_error_when_no_message() -> None:
+    """Failure events without a ``message`` show their ``error`` instead."""
+    event = Event(type=EventType.ASSET_FAILED, metadata={"asset_key": "foo", "error": "boom"})
+    assert "boom" in str(event)
+
+
+def test_str_labels_log_events_with_level() -> None:
+    """LOG events render as ``LOG.<LEVEL>`` instead of the bare type."""
+    event = Event(type=EventType.LOG, metadata={"asset_key": "foo", "message": "hi", "level": "WARNING"})
+    assert "LOG.WARNING" in str(event)

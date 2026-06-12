@@ -26,6 +26,16 @@ block.  Likewise the CLI date flags take precedence over a manifest's
 ``--dry-run`` validates and prints the resolved plan (assets grouped by
 execution generation, runner, partition) without materializing anything —
 useful for checking a curated set of manifests.
+
+During execution, run/asset lifecycle events and ``context.logger``
+messages flow through the standard logging stack (via
+:class:`~interloper.events.console.ConsoleEventHandler`), sharing one
+format and stream with regular log lines.  Verbosity is the logging
+level: ``-v`` shows DEBUG (execution / destination-I/O events), ``-q``
+shows only warnings and errors.  ``--events json`` streams raw event
+JSON lines to stdout instead, unaffected by the level.  In container
+mode (``INTERLOPER_EVENTS_TO_STDERR``) the ``@EVENT:`` forwarding lines
+are emitted instead.
 """
 
 from __future__ import annotations
@@ -72,6 +82,26 @@ def register(
         help="Validate and print the resolved run plan without executing",
     )
     run_parser.add_argument(
+        "--events",
+        choices=["pretty", "json"],
+        default="pretty",
+        help="Event output: 'pretty' renders events through the logger (default); "
+        "'json' streams raw event JSON lines to stdout",
+    )
+    run_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Only show warnings and errors (takes precedence over --verbose; "
+        "does not affect --events json output)",
+    )
+    run_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Debug verbosity: include execution and destination I/O events",
+    )
+    run_parser.add_argument(
         "--run-id",
         default=None,
         help="Optional run identifier, forwarded as metadata to the runner",
@@ -114,10 +144,16 @@ def _cmd_run(args: argparse.Namespace) -> None:
     from interloper.runner import ExecutionStatus, build_runner
     from interloper.settings import AppSettings
 
+    # One logging setup for everything the command prints: framework log
+    # lines and run events share the same format, stream, and level.
+    # ``force=True`` rebinds the handler to the current stderr on every
+    # invocation (repeated in-process calls, captured streams in tests).
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        level=logging.WARNING if args.quiet else logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s.%(msecs)03d %(levelname)-7s %(message)s",
+        datefmt="%H:%M:%S",
         stream=sys.stderr,
+        force=True,
     )
 
     settings = AppSettings.get()
@@ -172,6 +208,19 @@ def _cmd_run(args: argparse.Namespace) -> None:
             _print_plan(dag, partition, runner_cls.__name__, plan.name if plan else "")
             return
 
+        # -- Console event output (interactive mode only) ----------------------
+        # Events become records on the ``interloper.run`` logger, so the
+        # basicConfig above governs their visibility and format.  In
+        # container mode the StderrEventHandler already owns stderr with
+        # ``@EVENT:`` lines for the host to re-parse; printing on the host
+        # side covers child events too, since cross-process runners re-emit
+        # them on the host bus.
+        on_event = None
+        if not is_container:
+            from interloper.events import ConsoleEventHandler
+
+            on_event = ConsoleEventHandler(json_lines=args.events == "json")
+
         metadata: dict[str, str] = {}
         if args.run_id:
             metadata["run_id"] = args.run_id
@@ -184,7 +233,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
             runner_cls.__name__,
         )
 
-        with runner_cls(**runner_kwargs) as runner:
+        with runner_cls(**runner_kwargs, on_event=on_event) as runner:
             result = runner.run(dag, partition, metadata=metadata or None)
 
         logger.info("Run completed: %s", result.status.name)
