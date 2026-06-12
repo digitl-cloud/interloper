@@ -27,6 +27,9 @@ class _Asset(il.Asset):
 @contextmanager
 def _capture() -> Iterator[list[Event]]:
     captured: list[Event] = []
+    # Drain events still in flight from earlier tests (e.g. ones that emit
+    # without flushing) so they don't leak into this capture.
+    EventBus.flush(timeout=5.0)
     EventBus.subscribe(captured.append)
     try:
         yield captured
