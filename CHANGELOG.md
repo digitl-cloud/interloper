@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.15.1 (2026-06-12)
+
+### Bug Fixes
+
+- Route resource kwargs into slots and type-check by-name trickle
+  ([`e7540ce`](https://github.com/digitl-cloud/interloper/commit/e7540cef7d275e570d1ac4ad10fe2b40f0857ee9))
+
+### Chores
+
+- Sync uv.lock with released workspace versions
+  ([`7e818c0`](https://github.com/digitl-cloud/interloper/commit/7e818c0e75c3ed34cfd81d2d04373edef7e84dc7))
+
+### Continuous Integration
+
+- Regenerate uv.lock in the release commit
+  ([`cbf2b27`](https://github.com/digitl-cloud/interloper/commit/cbf2b276c398d3183f2d98104bbede2b1b3eceb7))
+
+
 ## v0.15.0 (2026-06-12)
 
 ### Features
