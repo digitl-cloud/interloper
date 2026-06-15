@@ -1,5 +1,5 @@
-from .ad_performance import AdPerformance
+from .ads import Ads
 
 __all__ = [
-    "AdPerformance",
+    "Ads",
 ]

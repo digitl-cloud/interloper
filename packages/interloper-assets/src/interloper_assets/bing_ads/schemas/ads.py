@@ -1,0 +1,52 @@
+import datetime as dt
+
+from interloper.schema import Schema
+from pydantic import Field
+
+
+class Ads(Schema):
+    """Bing Ads ad performance report with impressions, clicks, conversions, and revenue metrics."""
+
+    account_name: str | None = Field(..., description="The account name")
+    account_number: str | None = Field(..., description="The account number")
+    account_id: int | None = Field(..., description="The account ID")
+    time_period: dt.date | None = Field(..., description="The date of the record")
+    campaign_name: str | None = Field(..., description="The campaign name")
+    campaign_id: int | None = Field(..., description="The campaign ID")
+    ad_group_name: str | None = Field(..., description="The ad group name")
+    ad_id: int | None = Field(..., description="The ad ID")
+    ad_group_id: int | None = Field(..., description="The ad group ID")
+    ad_title: str | None = Field(..., description="The ad title")
+    ad_description: str | None = Field(..., description="The ad description")
+    ad_description2: str | None = Field(..., description="The second ad description")
+    ad_type: str | None = Field(..., description="The ad type")
+    currency_code: str | None = Field(..., description="The currency code")
+    ad_distribution: str | None = Field(..., description="The ad distribution channel")
+    impressions: int | None = Field(..., description="Number of impressions")
+    clicks: int | None = Field(..., description="Number of clicks")
+    ctr: str | None = Field(..., description="Click-through rate")
+    average_cpc: float | None = Field(..., description="Average cost per click")
+    spend: float | None = Field(..., description="Total spend")
+    average_position: float | None = Field(..., description="Average ad position")
+    conversions: float | None = Field(..., description="Number of conversions")
+    conversion_rate: str | None = Field(..., description="Conversion rate")
+    cost_per_conversion: float | None = Field(..., description="Cost per conversion")
+    device_type: str | None = Field(..., description="The device type")
+    language: str | None = Field(..., description="The language")
+    ad_status: str | None = Field(..., description="The ad status")
+    network: str | None = Field(..., description="The network")
+    assists: int | None = Field(..., description="Number of assists")
+    revenue: float | None = Field(..., description="Total revenue")
+    return_on_ad_spend: float | None = Field(..., description="Return on ad spend")
+    all_conversions: float | None = Field(..., description="All conversions including cross-device")
+    all_revenue: float | None = Field(..., description="All revenue including cross-device")
+    all_conversion_rate: str | None = Field(..., description="All conversion rate")
+    all_cost_per_conversion: float | None = Field(..., description="All cost per conversion")
+    all_return_on_ad_spend: float | None = Field(..., description="All return on ad spend")
+    view_through_conversions: float | None = Field(..., description="View-through conversions")
+    absolute_top_impression_rate_percent: str | None = Field(..., description="Absolute top impression rate percentage")
+    top_impression_rate_percent: str | None = Field(..., description="Top impression rate percentage")
+    average_cpm: float | None = Field(..., description="Average cost per thousand impressions")
+    conversions_qualified: float | None = Field(..., description="Qualified conversions")
+    all_conversions_qualified: float | None = Field(..., description="All qualified conversions")
+    view_through_revenue: float | None = Field(..., description="View-through revenue")
