@@ -106,3 +106,29 @@ class TestFieldSpecs:
         assert specs["a"].type is int
         assert specs["a"].nullable is True  # inferred fields are always optional
         assert specs["b"].type is str
+
+
+class TestJsonSchema:
+    """JSON Schema generation restricted to data fields."""
+
+    def test_component_fields_excluded(self):
+        # The inherited ``resources`` field is framework plumbing; raw pydantic
+        # leaks it (and at the parent's slot, first), json_schema() must not.
+        assert "resources" in FullSchema.model_json_schema()["properties"]
+        assert "resources" not in FullSchema.json_schema()["properties"]
+
+    def test_properties_in_declaration_order(self):
+        props = list(ShadowingSchema.json_schema()["properties"])
+        assert props == ["id", "cost", "name", "day"]
+
+    def test_required_excludes_component_fields(self):
+        assert "resources" not in FullSchema.json_schema().get("required", [])
+
+    def test_required_dropped_when_empty(self):
+        # A schema whose only required field is the inherited ``resources``
+        # must not surface a ``required`` key referencing it.
+        class AllOptional(Schema):
+            a: int | None = None
+            b: str | None = None
+
+        assert "required" not in AllOptional.json_schema()

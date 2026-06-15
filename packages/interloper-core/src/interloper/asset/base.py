@@ -226,8 +226,8 @@ class Asset(Component):
         """
         res_types: dict[str, type[Resource]] = cls.__dict__.get("resource_types", {})
         schema_dict: dict[str, Any] | None = None
-        if cls.schema is not None and hasattr(cls.schema, "model_json_schema"):
-            schema_dict = cls.schema.model_json_schema()
+        if cls.schema is not None and hasattr(cls.schema, "json_schema"):
+            schema_dict = cls.schema.json_schema()
 
         partitioning_dict: dict[str, Any] | None = None
         if cls.partitioning is not None:

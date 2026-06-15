@@ -134,6 +134,31 @@ class Schema(Component):
         ]
 
     @classmethod
+    def json_schema(cls) -> dict[str, Any]:
+        """JSON Schema for this schema's data fields only.
+
+        Like :meth:`pydantic.BaseModel.model_json_schema` but excludes the
+        fields inherited from :class:`Component` (e.g. ``resources``), which are
+        framework plumbing rather than data columns, and orders ``properties``
+        by declaration order (see :meth:`field_specs`) so the column order
+        matches the author's intent rather than pydantic's parent-first layout.
+
+        Returns:
+            A JSON Schema dict whose ``properties`` are the data columns.
+        """
+        schema = cls.model_json_schema()
+        data_order = [spec.name for spec in cls.field_specs()]
+        properties = schema.get("properties", {})
+        schema["properties"] = {name: properties[name] for name in data_order if name in properties}
+        if "required" in schema:
+            required = [name for name in schema["required"] if name in properties]
+            if required:
+                schema["required"] = required
+            else:
+                del schema["required"]
+        return schema
+
+    @classmethod
     def infer(
         cls,
         rows: list[dict[str, Any]],
