@@ -24,11 +24,17 @@ def _has_package(name: str) -> bool:
 
 
 def _load_dotenv() -> None:
-    """Load .env file if python-dotenv is available."""
-    try:
-        from dotenv import load_dotenv
+    """Load .env file if python-dotenv is available.
 
-        load_dotenv()
+    Resolve ``.env`` from the current working directory rather than the
+    package location, so it is found relative to where the CLI is invoked
+    (e.g. a manifests repo) regardless of how interloper is installed —
+    an editable/local checkout otherwise anchors the search to its own tree.
+    """
+    try:
+        from dotenv import find_dotenv, load_dotenv
+
+        load_dotenv(find_dotenv(usecwd=True))
     except ImportError:
         pass
 
