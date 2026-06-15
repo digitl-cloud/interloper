@@ -10,7 +10,7 @@ import warnings
 from collections.abc import Sequence
 from decimal import Decimal
 from functools import cached_property
-from typing import Any, ClassVar
+from typing import Any
 
 import google.auth
 import pandas as pd
@@ -33,16 +33,13 @@ from interloper_google_cloud.connection import GoogleCloudConnection
     name="BigQuery",
     icon="icon:bigquery",
     tags=["Cloud"],
+    read_representation="dataframe",
 )
 class BigQueryDestination(DatabaseDestination):
     """BigQuery destination."""
 
     connection: GoogleCloudConnection
 
-    # Reads materialize as DataFrames for downstream assets.
-    read_representation: ClassVar[str] = "dataframe"
-
-    # Config fields (previously on BigQueryConfig)
     project: str = FetchField(
         endpoint="google-cloud/projects",
         depends_on="connection",

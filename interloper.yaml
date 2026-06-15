@@ -16,30 +16,32 @@ worker:
   poll_interval: 5
 
 launcher:
-  # type: in_process
+  type: in_process
 
   # type: docker
   # config:
   #   image: interloper-scheduler-docker:latest
   #   postgres_host: host.docker.internal
 
-  type: kubernetes
-  config:
-    image: interloper-scheduler-k8s:latest
-    namespace: interloper
-    image_pull_policy: Never
+  # type: kubernetes
+  # config:
+  #   image: interloper-scheduler-k8s:latest
+  #   namespace: interloper
+  #   image_pull_policy: Never
 
 runner:
+  type: multi_thread
+
   # type: docker
   # config:
   #   image: interloper-scheduler-docker:latest
   #   auto_remove: false
   #   image_pull_policy: Never
 
-  type: kubernetes
-  config:
-    image: interloper-scheduler-k8s:latest
-    namespace: interloper
+  # type: kubernetes
+  # config:
+  #   image: interloper-scheduler-k8s:latest
+  #   namespace: interloper
 
 catalog:
   - interloper_assets.adservice.source.Adservice
