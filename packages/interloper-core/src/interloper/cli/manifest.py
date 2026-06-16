@@ -20,29 +20,54 @@ Example::
       config:
         max_concurrency: 4
 
-    destination:                  # default destination for all items
-      type: file_destination      # catalog key or dotted import path
-      config:
-        base_path: /tmp/data
+    resources:                    # reusable Resources (connections, …), by alias
+      gcp:
+        type: google_cloud_connection
+        config:
+          service_account_key: ${GCP_KEY}
+
+    destinations:                 # reusable Destinations, by alias
+      bq:
+        type: bigquery_destination
+        auto: true                # used by any item that declares no destinations
+        config:
+          connection: {ref: gcp}  # refs may nest
 
     assets:
       - source: facebook_ads      # catalog key or dotted import path
         config:                   # init kwargs for the source
           dataset: raw_facebook
-        select: [campaigns, ads]  # subset of assets; omit for all
+        select: [campaigns, ads]  # no destinations → writes to the auto 'bq'
       - asset: demo_asset         # standalone assets work too
+        destinations: [{ref: bq}] # explicit (one or more; writes fan out)
 
     partition:
       date: 2026-06-01            # or start/end for a window
 
+Auto-use
+--------
+
+A ``resources``/``destinations`` entry marked ``auto: true`` is applied to
+every source/standalone asset that does not provide its own: an auto
+destination becomes the item's destination when it declares none, and an auto
+resource fills any empty resource slot it satisfies by type.  Explicit
+``destinations`` and ``config`` resources always take precedence.
+
 Component references
 --------------------
 
-Wherever a component instance is expected (``destination`` blocks, or any
-value nested inside a ``config`` block), a mapping of the shape
-``{type: <ref>, config: {...}}`` is recognized and instantiated.  The
-``type`` reference is resolved against the catalog when it is a bare key
-(no dots), or imported directly when it is a dotted/composite path.
+Wherever a component instance is expected (a ``destinations`` entry, or any
+value nested inside a ``config`` block), two forms are recognized:
+
+* ``{type: <ref>, config: {...}}`` — an inline definition.  The ``type`` is
+  resolved against the catalog when it is a bare key (no dots), or imported
+  directly when it is a dotted/composite path.
+* ``{ref: <alias>}`` — a reference to a component declared in the top-level
+  ``resources`` or ``destinations`` block.  Each alias is instantiated once
+  and the *same instance* is reused everywhere it is referenced, so a single
+  client or auth token is shared across sources.  (Sharing is in-process:
+  runners that serialize a per-asset sub-DAG to a child process rebuild their
+  own instances there.)
 
 Environment interpolation
 -------------------------
@@ -66,9 +91,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from interloper.errors import ManifestError
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from interloper.asset.base import Asset
     from interloper.component import Component
     from interloper.dag.base import DAG
+    from interloper.destination import Destination
     from interloper.partitioning import Partition, PartitionWindow
     from interloper.source.base import Source
 
@@ -118,16 +146,111 @@ def _is_component_ref(value: Any) -> bool:
     )
 
 
+def _is_ref(value: Any) -> bool:
+    """Check whether a value references a ``resources``/``destinations`` component.
+
+    Returns:
+        True for mappings shaped like ``{ref: <alias>}``.
+    """
+    return isinstance(value, dict) and set(value) == {"ref"} and isinstance(value.get("ref"), str)
+
+
 class _Resolver:
     """Resolve component type references to classes and build instances.
 
     Bare keys (no ``.`` or ``:``) are looked up in the catalog built from
     ``AppSettings.catalog`` (loaded lazily, at most once); dotted or
     composite paths are imported directly.
+
+    The named ``resources`` and ``destinations`` blocks share a single alias
+    namespace, resolved on demand via :meth:`resolve_ref`; each alias is built
+    at most once and the instance is cached, so every ``{ref: <alias>}``
+    returns the same object.  An entry must satisfy the kind of the block it is
+    declared under (``resources`` → :class:`Resource`, ``destinations`` →
+    :class:`Destination`).
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        resources: Mapping[str, ComponentManifest] | None = None,
+        destinations: Mapping[str, ComponentManifest] | None = None,
+    ) -> None:
         self._catalog: Any = None
+        self._instances: dict[str, Component] = {}
+        self._resolving: set[str] = set()
+        # Merge the two named blocks into one alias namespace, recording the
+        # block each alias came from so its built instance can be kind-checked.
+        self._registry: dict[str, ComponentManifest] = {}
+        self._kinds: dict[str, str] = {}
+        for block, entries in (("resources", resources or {}), ("destinations", destinations or {})):
+            for alias, manifest in entries.items():
+                if alias in self._registry:
+                    raise ManifestError(
+                        f"Alias '{alias}' is declared in both 'resources' and 'destinations'"
+                    )
+                self._registry[alias] = manifest
+                self._kinds[alias] = block
+
+    def resolve_ref(self, alias: str) -> Component:
+        """Resolve an alias to its (cached) component instance.
+
+        Returns:
+            The referenced component instance, built once and memoized.
+
+        Raises:
+            ManifestError: If the alias is undefined, part of a reference cycle,
+                or does not match the kind of its declaring block.
+        """
+        if alias in self._instances:
+            return self._instances[alias]
+        if alias not in self._registry:
+            raise ManifestError(f"Unknown reference '{alias}'. Declared: {sorted(self._registry) or 'none'}")
+        if alias in self._resolving:
+            raise ManifestError(f"Circular reference involving '{alias}'")
+        self._resolving.add(alias)
+        try:
+            instance = self.build_component(self._registry[alias])
+        finally:
+            self._resolving.discard(alias)
+        self._check_kind(alias, instance)
+        self._instances[alias] = instance
+        return instance
+
+    def _check_kind(self, alias: str, instance: Component) -> None:
+        """Ensure a resolved alias matches the kind of its declaring block.
+
+        Raises:
+            ManifestError: If a ``resources`` alias is not a ``Resource`` or a
+                ``destinations`` alias is not a ``Destination``.
+        """
+        from interloper.destination import Destination
+        from interloper.resource import Resource
+
+        if self._kinds[alias] == "resources" and not isinstance(instance, Resource):
+            raise ManifestError(f"'{alias}' is declared under 'resources' but is not a Resource")
+        if self._kinds[alias] == "destinations" and not isinstance(instance, Destination):
+            raise ManifestError(f"'{alias}' is declared under 'destinations' but is not a Destination")
+
+    def build_destination(self, entry: RefManifest | ComponentManifest) -> Destination:
+        """Resolve a ``destinations`` entry (ref or inline) to a Destination.
+
+        Returns:
+            The destination instance.
+
+        Raises:
+            ManifestError: If the entry does not resolve to a ``Destination``.
+        """
+        from interloper.destination import Destination
+
+        if isinstance(entry, RefManifest):
+            instance: Component = self.resolve_ref(entry.ref)
+            label = f"reference '{entry.ref}'"
+        else:
+            instance = self.build_component(entry)
+            label = f"'{entry.type}'"
+        if not isinstance(instance, Destination):
+            raise ManifestError(f"{label} is not a Destination")
+        return instance
 
     def resolve(self, ref: str) -> type:
         """Resolve a type reference to a class.
@@ -194,6 +317,8 @@ class _Resolver:
         return {k: self._build_value(v) for k, v in config.items()}
 
     def _build_value(self, value: Any) -> Any:
+        if _is_ref(value):
+            return self.resolve_ref(value["ref"])
         if _is_component_ref(value):
             return self.build_component(ComponentManifest.model_validate(value))
         if isinstance(value, dict):
@@ -215,6 +340,23 @@ class ComponentManifest(_ManifestModel):
     type: str
     config: dict[str, Any] = Field(default_factory=dict)
     id: str = ""
+
+
+class RegistryEntryManifest(ComponentManifest):
+    """A ``resources``/``destinations`` registry entry.
+
+    ``auto`` opts the component into automatic use: an auto destination becomes
+    the destination of any item that declares none, and an auto resource fills
+    any empty resource slot it satisfies by type. Explicit references always win.
+    """
+
+    auto: bool = False
+
+
+class RefManifest(_ManifestModel):
+    """Reference to a component declared in the manifest's ``resources``/``destinations`` blocks."""
+
+    ref: str
 
 
 class RunnerManifest(_ManifestModel):
@@ -262,7 +404,7 @@ class AssetItemManifest(_ManifestModel):
     source: str | None = None
     asset: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
-    destination: ComponentManifest | None = None
+    destinations: list[RefManifest | ComponentManifest] | None = None
     select: list[str] | None = None
 
     @model_validator(mode="after")
@@ -293,7 +435,8 @@ class RunManifest(_ManifestModel):
 
     name: str = ""
     runner: RunnerManifest | None = None
-    destination: ComponentManifest | None = None
+    resources: dict[str, RegistryEntryManifest] = Field(default_factory=dict)
+    destinations: dict[str, RegistryEntryManifest] = Field(default_factory=dict)
     assets: list[AssetItemManifest] = Field(min_length=1)
     partition: PartitionManifest | None = None
 
@@ -366,10 +509,12 @@ class RunManifest(_ManifestModel):
         from interloper.dag.base import DAG
         from interloper.source.base import Source
 
-        resolver = _Resolver()
-        default_destination = (
-            resolver.build_component(self.destination) if self.destination is not None else None
-        )
+        resolver = _Resolver(resources=self.resources, destinations=self.destinations)
+
+        # Components opted into automatic use. resolve_ref kind-checks them, so
+        # auto_resources are Resources and auto_destinations are Destinations.
+        auto_resources = [resolver.resolve_ref(alias) for alias, entry in self.resources.items() if entry.auto]
+        auto_destinations = [resolver.resolve_ref(alias) for alias, entry in self.destinations.items() if entry.auto]
 
         items: list[Source | Asset] = []
         for item in self.assets:
@@ -381,11 +526,17 @@ class RunManifest(_ManifestModel):
                 raise ManifestError(f"'{ref}' is not a {expected.__name__} subclass")
 
             kwargs = resolver.build_init(item.config)
-            if "destination" not in kwargs:
-                if item.destination is not None:
-                    kwargs["destination"] = resolver.build_component(item.destination)
-                elif default_destination is not None:
-                    kwargs["destination"] = default_destination
+            if item.destinations is not None:
+                if "destination" in kwargs:
+                    raise ManifestError(
+                        f"'{ref}' sets a destination in both 'config' and the 'destinations' field"
+                    )
+                kwargs["destination"] = [resolver.build_destination(d) for d in item.destinations]
+            elif "destination" not in kwargs and auto_destinations:
+                kwargs["destination"] = list(auto_destinations)
+
+            if auto_resources:
+                _apply_auto_resources(cls, kwargs, auto_resources)
 
             try:
                 instance = cls(**kwargs)
@@ -407,6 +558,28 @@ class RunManifest(_ManifestModel):
             runner=self.runner,
             name=self.name,
         )
+
+
+def _apply_auto_resources(cls: type, kwargs: dict[str, Any], auto_resources: list[Component]) -> None:
+    """Fill *cls*'s empty resource slots in *kwargs* from auto-use resources.
+
+    A slot is left untouched when already provided (via ``resources`` or a
+    slot-named kwarg from ``config``); otherwise it is filled by the first
+    auto resource that satisfies the slot's declared type. Mutates *kwargs*.
+    """
+    resource_types: dict[str, type] = getattr(cls, "resource_types", {})
+    provided = set(kwargs.get("resources") or {}) | (set(kwargs) & set(resource_types))
+
+    additions: dict[str, Component] = {}
+    for name, res_type in resource_types.items():
+        if name in provided:
+            continue
+        match = next((res for res in auto_resources if isinstance(res, res_type)), None)
+        if match is not None:
+            additions[name] = match
+
+    if additions:
+        kwargs["resources"] = {**(kwargs.get("resources") or {}), **additions}
 
 
 def _select_assets(source: Source, select: list[str]) -> list[Asset]:

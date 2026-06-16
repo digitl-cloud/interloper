@@ -8,7 +8,7 @@ Input formats
 -------------
 
 * ``--file/-f <manifest.yaml>`` — a declarative run manifest
-  (:class:`~interloper.manifest.RunManifest`): sources/assets with their
+  (:class:`~interloper.cli.manifest.RunManifest`): sources/assets with their
   config, destinations, an optional runner override, and a partition.
 * ``--format inline <json>`` — a serialized :class:`DAGSpec` as JSON.
   This is the mode used by the ``DockerRunner`` to pass a mini-DAG to a
@@ -171,8 +171,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
         if args.file is not None:
             if args.target:
                 raise SystemExit("Error: --file cannot be combined with positional targets.")
+            from interloper.cli.manifest import RunManifest
             from interloper.errors import ManifestError
-            from interloper.manifest import RunManifest
 
             try:
                 plan = RunManifest.from_yaml_file(args.file).compile()

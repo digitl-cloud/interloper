@@ -1,5 +1,6 @@
 from interloper.asset import Asset, AssetDefinition, ExecutionContext, asset
 from interloper.catalog import Catalog
+from interloper.cli.manifest import RunManifest, RunPlan
 from interloper.component import Component, ComponentDefinition, ComponentSpec
 from interloper.config import Config, config
 from interloper.connection import Connection, OAuthConnection, connection
@@ -15,7 +16,6 @@ from interloper.destination import (
     destination,
 )
 from interloper.events import Event, EventBus, EventType
-from interloper.manifest import RunManifest, RunPlan
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.oauth import OAuthConfig, OAuthProvider
 from interloper.partitioning import (

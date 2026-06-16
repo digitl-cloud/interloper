@@ -148,11 +148,11 @@ class TestRunManifestMode:
             f"""
             runner:
               type: serial
-            destination:
-              type: interloper.destination.file.FileDestination
-              config:
-                base_path: {tmp_path}/data
             assets:
               - source: {SOURCE_PATH}
+                destinations:
+                  - type: interloper.destination.file.FileDestination
+                    config:
+                      base_path: {tmp_path}/data
             """,
         )
