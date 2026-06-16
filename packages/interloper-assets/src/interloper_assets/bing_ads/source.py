@@ -128,7 +128,7 @@ def _ad_performance_report(connection: BingAdsConnection, date: dt.date) -> pd.D
     resources={"connection": BingAdsConnection},
     tags=["Advertising"],
     icon="icon:bing",
-    normalizer=DataFrameNormalizer(),
+    normalizer=DataFrameNormalizer(snake_case_digits=True),
 )
 class BingAds(il.Source):
     """Bing Ads (Microsoft Advertising) platform integration."""
