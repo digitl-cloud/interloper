@@ -1,4 +1,4 @@
-"""Tests for ``interloper.manifest``."""
+"""Tests for ``interloper.cli.manifest``."""
 
 # Note: no ``from __future__ import annotations`` — the fixtures below define
 # methods whose parameter annotations must be real classes (not lazy strings)
@@ -12,12 +12,12 @@ import pytest
 
 import interloper as il
 from interloper.catalog import Catalog
-from interloper.errors import ManifestError
-from interloper.manifest import (
+from interloper.cli.manifest import (
     AssetItemManifest,
     PartitionManifest,
     RunManifest,
 )
+from interloper.errors import ManifestError
 from interloper.partitioning import TimePartition, TimePartitionWindow
 
 # ---------------------------------------------------------------------------
@@ -51,8 +51,28 @@ class FakeStandaloneAsset(il.Asset):
         return [{"x": 1}]
 
 
+class FakeManifestResource(il.Resource):
+    """Resource fixture (no required fields) for auto-use tests."""
+
+    token: str = ""
+
+
+class FakeResourceSource(il.Source):
+    """Source with a ``conn`` resource slot, for auto-resource tests."""
+
+    conn: FakeManifestResource
+
+    class Solo(il.Asset):
+        """Single asset."""
+
+        def data(self) -> Any:  # pragma: no cover
+            return [{"x": 1}]
+
+
 SOURCE_PATH = f"{FakeManifestSource.__module__}.FakeManifestSource"
 ASSET_PATH = f"{FakeStandaloneAsset.__module__}.FakeStandaloneAsset"
+RESOURCE_SOURCE_PATH = f"{FakeResourceSource.__module__}.FakeResourceSource"
+RESOURCE_PATH = f"{FakeManifestResource.__module__}.FakeManifestResource"
 MEMORY_DESTINATION_PATH = "interloper.destination.memory.MemoryDestination"
 FILE_DESTINATION_PATH = "interloper.destination.file.FileDestination"
 
@@ -171,16 +191,16 @@ class TestAssetItemManifest:
 class TestCompile:
     """Manifest compilation into a run plan."""
 
-    def test_source_with_config_and_default_destination(self) -> None:
+    def test_source_with_config_and_destination(self) -> None:
         plan = _manifest(
             f"""
             name: test-run
-            destination:
-              type: {MEMORY_DESTINATION_PATH}
             assets:
               - source: {SOURCE_PATH}
                 config:
                   greeting: hi
+                destinations:
+                  - type: {MEMORY_DESTINATION_PATH}
             """
         ).compile()
 
@@ -189,7 +209,8 @@ class TestCompile:
         for asset in plan.dag.assets:
             assert asset.source is not None
             assert asset.source.greeting == "hi"
-            assert isinstance(asset.destination, il.MemoryDestination)
+            assert isinstance(asset.destination, list)
+            assert isinstance(asset.destination[0], il.MemoryDestination)
 
     def test_select_marks_unselected_non_materializable(self) -> None:
         plan = _manifest(
@@ -221,33 +242,197 @@ class TestCompile:
     def test_standalone_asset(self) -> None:
         plan = _manifest(
             f"""
-            destination:
-              type: {MEMORY_DESTINATION_PATH}
             assets:
               - asset: {ASSET_PATH}
+                destinations:
+                  - type: {MEMORY_DESTINATION_PATH}
             """
         ).compile()
 
         assert len(plan.dag.assets) == 1
         assert type(plan.dag.assets[0]).key == "fake_standalone_asset"
-        assert isinstance(plan.dag.assets[0].destination, il.MemoryDestination)
+        assert isinstance(plan.dag.assets[0].destination, list)
+        assert isinstance(plan.dag.assets[0].destination[0], il.MemoryDestination)
 
-    def test_item_destination_overrides_default(self, tmp_path: Any) -> None:
+    def test_multiple_destinations_fan_out(self, tmp_path: Any) -> None:
         plan = _manifest(
             f"""
-            destination:
-              type: {MEMORY_DESTINATION_PATH}
+            destinations:
+              mem: {{type: {MEMORY_DESTINATION_PATH}}}
             assets:
               - source: {SOURCE_PATH}
-                destination:
-                  type: {FILE_DESTINATION_PATH}
-                  config:
-                    base_path: {tmp_path}
+                destinations:
+                  - {{ref: mem}}
+                  - type: {FILE_DESTINATION_PATH}
+                    config:
+                      base_path: {tmp_path}
             """
         ).compile()
 
         for asset in plan.dag.assets:
-            assert isinstance(asset.destination, il.FileDestination)
+            assert isinstance(asset.destination, list)
+            types = {type(d) for d in asset.destination}
+            assert types == {il.MemoryDestination, il.FileDestination}
+
+    def test_ref_reuses_one_instance(self) -> None:
+        plan = _manifest(
+            f"""
+            destinations:
+              mem: {{type: {MEMORY_DESTINATION_PATH}}}
+            assets:
+              - source: {SOURCE_PATH}
+                destinations: [{{ref: mem}}]
+              - asset: {ASSET_PATH}
+                destinations: [{{ref: mem}}]
+            """
+        ).compile()
+
+        instances = set()
+        for a in plan.dag.assets:
+            assert isinstance(a.destination, list)
+            instances.add(id(a.destination[0]))
+        assert len(instances) == 1  # same instance across both items and all assets
+
+    def test_ref_resolved_inside_config(self) -> None:
+        plan = _manifest(
+            f"""
+            destinations:
+              mem: {{type: {MEMORY_DESTINATION_PATH}}}
+            assets:
+              - source: {SOURCE_PATH}
+                config:
+                  destination: {{ref: mem}}
+            """
+        ).compile()
+
+        for asset in plan.dag.assets:
+            assert isinstance(asset.destination, il.MemoryDestination)
+
+    def test_unknown_ref_raises(self) -> None:
+        with pytest.raises(ManifestError, match="Unknown reference 'nope'"):
+            _manifest(
+                f"""
+                assets:
+                  - source: {SOURCE_PATH}
+                    destinations: [{{ref: nope}}]
+                """
+            ).compile()
+
+    def test_resources_alias_must_be_a_resource(self) -> None:
+        # A Destination declared under 'resources' is rejected when referenced.
+        with pytest.raises(ManifestError, match="is not a Resource"):
+            _manifest(
+                f"""
+                resources:
+                  mem: {{type: {MEMORY_DESTINATION_PATH}}}
+                assets:
+                  - source: {SOURCE_PATH}
+                    destinations: [{{ref: mem}}]
+                """
+            ).compile()
+
+    def test_duplicate_alias_across_blocks_raises(self) -> None:
+        with pytest.raises(ManifestError, match="declared in both 'resources' and 'destinations'"):
+            _manifest(
+                f"""
+                resources:
+                  dup: {{type: {MEMORY_DESTINATION_PATH}}}
+                destinations:
+                  dup: {{type: {MEMORY_DESTINATION_PATH}}}
+                assets:
+                  - source: {SOURCE_PATH}
+                    destinations: [{{ref: dup}}]
+                """
+            ).compile()
+
+    def test_auto_destination_used_when_item_declares_none(self) -> None:
+        plan = _manifest(
+            f"""
+            destinations:
+              mem:
+                type: {MEMORY_DESTINATION_PATH}
+                auto: true
+            assets:
+              - source: {SOURCE_PATH}
+            """
+        ).compile()
+
+        for asset in plan.dag.assets:
+            assert isinstance(asset.destination, list)
+            assert isinstance(asset.destination[0], il.MemoryDestination)
+
+    def test_explicit_destinations_override_auto(self, tmp_path: Any) -> None:
+        plan = _manifest(
+            f"""
+            destinations:
+              mem:
+                type: {MEMORY_DESTINATION_PATH}
+                auto: true
+            assets:
+              - source: {SOURCE_PATH}
+                destinations:
+                  - type: {FILE_DESTINATION_PATH}
+                    config:
+                      base_path: {tmp_path}
+            """
+        ).compile()
+
+        for asset in plan.dag.assets:
+            assert isinstance(asset.destination, list)
+            assert {type(d) for d in asset.destination} == {il.FileDestination}  # auto 'mem' not applied
+
+    def test_auto_resource_fills_empty_slot(self) -> None:
+        plan = _manifest(
+            f"""
+            resources:
+              tok:
+                type: {RESOURCE_PATH}
+                auto: true
+            assets:
+              - source: {RESOURCE_SOURCE_PATH}
+            """
+        ).compile()
+
+        source = plan.dag.assets[0].source
+        assert source is not None
+        assert isinstance(source.resources["conn"], FakeManifestResource)
+
+    def test_explicit_resource_overrides_auto(self) -> None:
+        plan = _manifest(
+            f"""
+            resources:
+              auto_tok:
+                type: {RESOURCE_PATH}
+                auto: true
+                config: {{token: auto}}
+              explicit_tok:
+                type: {RESOURCE_PATH}
+                config: {{token: explicit}}
+            assets:
+              - source: {RESOURCE_SOURCE_PATH}
+                config:
+                  resources:
+                    conn: {{ref: explicit_tok}}
+            """
+        ).compile()
+
+        source = plan.dag.assets[0].source
+        assert source is not None
+        assert source.resources["conn"].token == "explicit"
+
+    def test_destinations_and_config_destination_conflict_raises(self, tmp_path: Any) -> None:
+        with pytest.raises(ManifestError, match="both 'config' and the 'destinations' field"):
+            _manifest(
+                f"""
+                assets:
+                  - source: {SOURCE_PATH}
+                    config:
+                      destination:
+                        type: {MEMORY_DESTINATION_PATH}
+                    destinations:
+                      - type: {MEMORY_DESTINATION_PATH}
+                """
+            ).compile()
 
     def test_nested_component_ref_in_config(self, tmp_path: Any) -> None:
         plan = _manifest(
@@ -300,10 +485,22 @@ class TestCompile:
         with pytest.raises(ManifestError, match="not an interloper component"):
             _manifest(
                 f"""
-                destination:
-                  type: interloper.manifest.RunManifest
                 assets:
                   - source: {SOURCE_PATH}
+                    destinations:
+                      - type: interloper.cli.manifest.RunManifest
+                """
+            ).compile()
+
+    def test_destination_must_be_a_destination(self) -> None:
+        # A real Component that is not a Destination (a Source) is rejected.
+        with pytest.raises(ManifestError, match="is not a Destination"):
+            _manifest(
+                f"""
+                assets:
+                  - source: {SOURCE_PATH}
+                    destinations:
+                      - type: {SOURCE_PATH}
                 """
             ).compile()
 
