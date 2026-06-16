@@ -220,7 +220,7 @@ AD_ENTITY_FIELDS = [
     "configured_status",
     "conversion_domain",
     "created_time",
-    "creative{id, name, thumbnail_url}",
+    "creative{id, name, body, title, thumbnail_url, effective_object_story_id, effective_instagram_story_id, instagram_permalink_url}",  # noqa: E501
     "effective_status",
     "issues_info",
     "last_updated_by_app_id",

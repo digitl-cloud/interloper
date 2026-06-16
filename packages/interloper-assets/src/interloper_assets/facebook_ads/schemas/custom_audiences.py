@@ -3,11 +3,11 @@ from pydantic import Field
 
 
 class CustomAudiences(Schema):
-    """Facebook custom audiences with approximate size bounds."""
+    """The Facebook Custom Audiences report provides information about custom audiences volume for a given account id"""
 
-    id: str = Field(description="The ID of the custom audience")
-    name: str = Field(description="The name of the custom audience")
+    account_id: str | None = Field(default=None, description="The ID of the Facebook account")
+    approximate_count_lower_bound: int | None = Field(default=None, description="The lower bound of the approximate count of custom audiences")
+    approximate_count_upper_bound: int | None = Field(default=None, description="The upper bound of the approximate count of custom audiences")
     description: str | None = Field(default=None, description="The description of the custom audience")
-    account_id: str = Field(description="The ID of the Facebook account")
-    approximate_count_lower_bound: int | None = Field(default=None, description="The lower bound of the approximate count")
-    approximate_count_upper_bound: int | None = Field(default=None, description="The upper bound of the approximate count")
+    id: str | None = Field(default=None, description="The ID of the custom audience")
+    name: str | None = Field(default=None, description="The name of the custom audience")
