@@ -3,18 +3,19 @@ from functools import cached_property
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
-from interloper_assets.criteo_marketing import constants
+from interloper_assets.criteo import constants
 
 
 @il.connection(
-    name="Criteo Marketing",
+    name="Criteo",
     icon="icon:criteo",
     tags=["Advertising"],
+    oauth=il.OAuthConfig("criteo"),
 )
-class CriteoMarketingConnection(il.OAuthConnection):
-    """Criteo Marketing API connection with OAuth2 refresh token auth."""
+class CriteoConnection(il.OAuthConnection):
+    """Criteo API connection with OAuth2 refresh token auth."""
 
-    model_config = SettingsConfigDict(env_prefix="criteo_marketing_")
+    model_config = SettingsConfigDict(env_prefix="criteo_")
 
     advertiser_id: str = il.InputField(description="Criteo advertiser ID")
 

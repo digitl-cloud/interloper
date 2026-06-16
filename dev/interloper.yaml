@@ -17,7 +17,7 @@ catalog:
   - interloper_assets.brandwatch.source.Brandwatch
   - interloper_assets.campaign_manager_360.source.CampaignManager360
   - interloper_assets.campaign_performance_analysis.source.CampaignPerformanceAnalysis
-  - interloper_assets.criteo_marketing.source.CriteoMarketing
+  - interloper_assets.criteo.source.Criteo
   - interloper_assets.demo.source.DemoSource
   - interloper_assets.demo.source.demo_asset
   - interloper_assets.display_video_360.source.DisplayVideo360

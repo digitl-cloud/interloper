@@ -7,7 +7,7 @@ from interloper_assets.bing_ads.source import BingAds, BingAdsConnection
 from interloper_assets.brandwatch.source import Brandwatch, BrandwatchConnection
 from interloper_assets.campaign_manager_360.source import CampaignManager360, CampaignManager360Connection
 from interloper_assets.campaign_performance_analysis.source import CampaignPerformanceAnalysis
-from interloper_assets.criteo_marketing.source import CriteoMarketing, CriteoMarketingConnection
+from interloper_assets.criteo.source import Criteo, CriteoConnection
 from interloper_assets.demo.source import DemoSource, demo_asset
 from interloper_assets.display_video_360.source import DisplayVideo360, DisplayVideo360Connection
 from interloper_assets.double_click_bid_manager.source import DoubleClickBidManager, DoubleClickBidManagerConnection
@@ -46,8 +46,8 @@ __all__ = [
     "CampaignManager360",
     "CampaignManager360Connection",
     "CampaignPerformanceAnalysis",
-    "CriteoMarketing",
-    "CriteoMarketingConnection",
+    "Criteo",
+    "CriteoConnection",
     "DemoSource",
     "demo_asset",
     "DisplayVideo360",
