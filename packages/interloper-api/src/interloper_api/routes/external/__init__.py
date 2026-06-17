@@ -42,6 +42,7 @@ from interloper_api.routes.external.google_cloud import sub_router as google_clo
 from interloper_api.routes.external.impact import sub_router as impact_router  # noqa: E402
 from interloper_api.routes.external.pinterest_ads import sub_router as pinterest_ads_router  # noqa: E402
 from interloper_api.routes.external.snapchat_ads import sub_router as snapchat_ads_router  # noqa: E402
+from interloper_api.routes.external.tiktok_ads import sub_router as tiktok_ads_router  # noqa: E402
 
 router.include_router(amazon_ads_router)
 router.include_router(facebook_ads_router)
@@ -50,3 +51,4 @@ router.include_router(google_cloud_router)
 router.include_router(impact_router)
 router.include_router(pinterest_ads_router)
 router.include_router(snapchat_ads_router)
+router.include_router(tiktok_ads_router)
