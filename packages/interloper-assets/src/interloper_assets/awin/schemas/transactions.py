@@ -7,6 +7,7 @@ from pydantic import Field
 class Transactions(Schema):
     """Awin advertiser transaction data including commission, sale amounts, and click attribution."""
 
+    date: dt.date | None = Field(default=None, description="Date of the transaction")
     id: int = Field(description="Transaction ID")
     url: str | None = Field(default=None, description="Referring URL")
     advertiser_id: int | None = Field(default=None, description="Advertiser ID")
@@ -47,4 +48,3 @@ class Transactions(Schema):
     original_commission_amount: float | None = Field(
         default=None, description="Original commission amount before adjustments"
     )
-    date: dt.date | None = Field(default=None, description="Date of the transaction")

@@ -5,6 +5,7 @@ from pydantic import Field
 class Publishers(Schema):
     """Awin advertiser report by publisher with performance metrics."""
 
+    date: str | None = Field(default=None, description="Report date")
     publisher_id: int | None = Field(default=None, description="Publisher ID")
     publisher_name: str | None = Field(default=None, description="Publisher name")
     impressions: int | None = Field(default=None, description="Number of impressions")
@@ -15,4 +16,3 @@ class Publishers(Schema):
     total_number_of_leads: int | None = Field(default=None, description="Total number of leads")
     total_number_of_bounties: int | None = Field(default=None, description="Total number of bounties")
     currency: str | None = Field(default=None, description="Currency code")
-    date: str | None = Field(default=None, description="Report date")
