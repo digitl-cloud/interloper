@@ -31,7 +31,9 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
 
     Each row nests its requested dimensions under ``dimensions`` and its metrics
     under ``metrics``; merge both into a single flat record (dropping the parent
-    prefix) before the base ``DataFrameNormalizer`` runs.
+    prefix) before the base ``DataFrameNormalizer`` runs. ``stat_time_day`` comes
+    back as a midnight datetime string (``2026-01-01 00:00:00``) — coerce it to a
+    plain date so it lands on the ``date``-typed schema column.
     """
 
     def normalize(self, data: Any) -> pd.DataFrame:
@@ -45,7 +47,11 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
                 if key not in ("dimensions", "metrics"):
                     merged[key] = value
             flat.append(merged)
-        return super().normalize(flat)
+
+        df = super().normalize(flat)
+        if "stat_time_day" in df.columns:
+            df["stat_time_day"] = pd.to_datetime(df["stat_time_day"], errors="coerce").dt.date
+        return df
 
 
 class TiktokMetadataNormalizer(DataFrameNormalizer):
