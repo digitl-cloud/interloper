@@ -48,13 +48,19 @@ class TestSource:
 
 
 class TestFraming:
-    def test_to_df_stamps_date_and_blanks_empty_strings(self):
-        df = _to_df([{"Id": "1", "ReferringDomain": ""}], dt.date(2026, 6, 10))
+    def test_to_df_stamps_date(self):
+        df = _to_df([{"Id": "1"}], dt.date(2026, 6, 10))
         assert df.loc[0, "date"] == dt.date(2026, 6, 10)
-        assert pd.isna(df.loc[0, "ReferringDomain"])  # empty string -> null
 
     def test_to_df_empty_records(self):
         assert "date" in _to_df([], dt.date(2026, 6, 10)).columns
+
+    def test_normalizer_blanks_empty_strings(self):
+        # Empty-string blanking is the normalizer's job, opted into on the source.
+        norm = _source().normalizer
+        assert norm.replace_empty_strings is True
+        out = norm.normalize(_to_df([{"Id": "1", "ReferringDomain": ""}], dt.date(2026, 6, 10)))
+        assert pd.isna(out.loc[0, "referring_domain"])
 
 
 class TestSpecRoundtripAndReconcile:

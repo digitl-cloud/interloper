@@ -61,6 +61,8 @@ class Normalizer(Component):
     drop_na_columns: bool = False
     snake_case_digits: bool = False
     column_overrides: dict[str, str] = Field(default_factory=dict)
+    replace_empty_dicts: bool = False
+    replace_empty_strings: bool = False
 
     # Override Component.model_post_init to avoid setting an instance id.
     def model_post_init(self, context: Any) -> None:
@@ -84,8 +86,14 @@ class Normalizer(Component):
         """
         rows = self._coerce(data)
 
+        if self.replace_empty_dicts:
+            rows = [{k: (None if isinstance(v, dict) and not v else v) for k, v in row.items()} for row in rows]
+
         if self.flatten_max_level is None or self.flatten_max_level > 0:
             rows = [self._flatten_dict(row) for row in rows]
+
+        if self.replace_empty_strings:
+            rows = [{k: (None if v == "" else v) for k, v in row.items()} for row in rows]
 
         if self.drop_na_columns and rows:
             rows = self._drop_na_columns(rows)

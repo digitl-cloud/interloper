@@ -34,3 +34,11 @@ class TestColumnName:
         n = Normalizer(column_overrides={"eCPAddToCart": "ecp_add_to_cart"})
         rows = n.normalize([{"eCPAddToCart": 1.0, "campaignName": "x"}])
         assert rows == [{"ecp_add_to_cart": 1.0, "campaign_name": "x"}]
+
+    def test_replace_empty_strings(self):
+        n = Normalizer(normalize_columns_names=False, fill_missing=False, replace_empty_strings=True)
+        assert n.normalize([{"a": "", "b": "x"}]) == [{"a": None, "b": "x"}]
+
+    def test_replace_empty_dicts(self):
+        n = Normalizer(normalize_columns_names=False, fill_missing=False, flatten_max_level=0, replace_empty_dicts=True)
+        assert n.normalize([{"a": {}, "b": {"k": 1}}]) == [{"a": None, "b": {"k": 1}}]

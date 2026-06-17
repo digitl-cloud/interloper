@@ -52,8 +52,14 @@ class DataFrameNormalizer(Normalizer):
         if df.empty:
             return df
 
+        if self.replace_empty_dicts:
+            df = df.map(lambda v: None if isinstance(v, dict) and len(v) == 0 else v)
+
         if self.flatten_max_level is None or self.flatten_max_level > 0:
             df = self._flatten_dataframe(df)
+
+        if self.replace_empty_strings:
+            df = df.replace("", None)
 
         if self.drop_na_columns:
             df = df.dropna(axis=1, how="all")
