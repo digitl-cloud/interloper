@@ -2,6 +2,77 @@
 
 <!-- version list -->
 
+## v0.16.0 (2026-06-17)
+
+### Bug Fixes
+
+- Exclude framework resources field from asset schema
+  ([`5e7ff08`](https://github.com/digitl-cloud/interloper/commit/5e7ff08372953a7e8c960c5dedd3ecec117ddb64))
+
+- Normalize columns + return native records for adservice/adup/awin
+  ([`5e96949`](https://github.com/digitl-cloud/interloper/commit/5e9694958c00bbddcce56b5521c14f2ff5a8718c))
+
+- Normalize mixed-timezone datetimes to UTC in the conformer
+  ([`a583e80`](https://github.com/digitl-cloud/interloper/commit/a583e805566d175d14c4b8f1a8858a42ae2255c1))
+
+- Port the full Bing Ads report schema
+  ([`d366b59`](https://github.com/digitl-cloud/interloper/commit/d366b59741a757b941f344a61b05033414a7ed4a))
+
+- Resolve .env from working directory in CLI
+  ([`fc2f51e`](https://github.com/digitl-cloud/interloper/commit/fc2f51ef71f451c1de250705b8e9868713394de6))
+
+### Chores
+
+- **google-cloud**: Read_representation on decorator
+  ([`fdb2ace`](https://github.com/digitl-cloud/interloper/commit/fdb2ace4a5691ab3d208e6be3874c3b8abfd98bf))
+
+### Features
+
+- Add impact/programs external API route
+  ([`ac4ef74`](https://github.com/digitl-cloud/interloper/commit/ac4ef7418a658b3307ffe5ef3bc5d5392784b3bd))
+
+- Implement bing_ads ad performance report
+  ([`c94df6e`](https://github.com/digitl-cloud/interloper/commit/c94df6e1182801cf356729da495d753e985e685b))
+
+- Implement criteo source
+  ([`a218acd`](https://github.com/digitl-cloud/interloper/commit/a218acd889bb9b9fe8ae49f11451a8743b0769cf))
+
+- Implement facebook ads source
+  ([`1fa674b`](https://github.com/digitl-cloud/interloper/commit/1fa674bb66c3763ae42686910f692ee7e29e658c))
+
+- Implement impact source
+  ([`a9ae182`](https://github.com/digitl-cloud/interloper/commit/a9ae182baabe169947b2e17c837d3dfe955ca041))
+
+- Implement replace_empty_strings/replace_empty_dicts normalizer options
+  ([`0e5d268`](https://github.com/digitl-cloud/interloper/commit/0e5d268865e2408666d587e8d4fc0bdcef726fff))
+
+- Implement snapchat ads source
+  ([`716bdf3`](https://github.com/digitl-cloud/interloper/commit/716bdf3a18f01f283b73c34d766d10d99c17c7bc))
+
+- Implement tiktok ads source
+  ([`ffe4c45`](https://github.com/digitl-cloud/interloper/commit/ffe4c452e8977544eda9ad993d780965a7ac0fc4))
+
+- Manifest resources/destinations registry with refs and auto-use
+  ([`08a468f`](https://github.com/digitl-cloud/interloper/commit/08a468f559d780f35fcdf66681aed32b59a1cf5a))
+
+- **api**: Add tiktok-ads/advertisers FetchField endpoint
+  ([`b1ef2c7`](https://github.com/digitl-cloud/interloper/commit/b1ef2c7990aecf4e585ebf9482f9927134ccb8dd))
+
+### Refactoring
+
+- Inline impact report-export IDs into the assets
+  ([`e6d52e3`](https://github.com/digitl-cloud/interloper/commit/e6d52e358aa7a632fdec6511ba20f5e02d5dff80))
+
+- Move facebook actions-pivot into a custom normalizer
+  ([`845c459`](https://github.com/digitl-cloud/interloper/commit/845c459e301c01f50b5bfd5e2ba567bdd30c25a7))
+
+- Move snapchat report framing into a custom normalizer
+  ([`a5fef78`](https://github.com/digitl-cloud/interloper/commit/a5fef786959d75ad5790bbbda269d6c04d420457))
+
+- Return native records from amazon/criteo assets
+  ([`2ad0e36`](https://github.com/digitl-cloud/interloper/commit/2ad0e3617f79db6cb062578b033c86c51a603d30))
+
+
 ## v0.15.1 (2026-06-12)
 
 ### Bug Fixes
