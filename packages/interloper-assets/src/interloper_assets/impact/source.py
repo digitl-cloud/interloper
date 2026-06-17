@@ -8,7 +8,7 @@ import pandas as pd
 import tenacity as tc
 from interloper_pandas import DataFrameNormalizer
 
-from interloper_assets.impact import constants, schemas
+from interloper_assets.impact import schemas
 from interloper_assets.impact.connection import ImpactConnection
 
 logger = logging.getLogger(__name__)
@@ -186,7 +186,7 @@ class Impact(il.Source):
     def actions_by_sku(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Conversion actions broken down by product SKU."""
         records = _report_export(
-            connection, constants.REPORT_EXPORT_IDS["actions_by_sku"], self.program_id, context.partition_date
+            connection, "adv_action_list_sku_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -199,7 +199,7 @@ class Impact(il.Source):
     def performance(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Daily performance metrics (clicks, actions, revenue)."""
         records = _report_export(
-            connection, constants.REPORT_EXPORT_IDS["performance"], self.program_id, context.partition_date
+            connection, "att_adv_performance_by_day_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -207,7 +207,7 @@ class Impact(il.Source):
     def performance_by_ad(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Performance metrics broken down by ad."""
         records = _report_export(
-            connection, constants.REPORT_EXPORT_IDS["performance_by_ad"], self.program_id, context.partition_date
+            connection, "adv_performance_by_ad_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -215,7 +215,7 @@ class Impact(il.Source):
     def performance_by_domain(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Performance metrics broken down by referring domain."""
         records = _report_export(
-            connection, constants.REPORT_EXPORT_IDS["performance_by_domain"], self.program_id, context.partition_date
+            connection, "att_adv_performance_by_ref_domain_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -223,7 +223,7 @@ class Impact(il.Source):
     def performance_by_shared_id(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Performance metrics broken down by shared ID."""
         records = _report_export(
-            connection, constants.REPORT_EXPORT_IDS["performance_by_shared_id"], self.program_id, context.partition_date
+            connection, "att_adv_performance_by_shared_id_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -231,6 +231,6 @@ class Impact(il.Source):
     def performance_by_io(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Performance metrics broken down by insertion order."""
         records = _report_export(
-            connection, constants.REPORT_EXPORT_IDS["performance_by_io"], self.program_id, context.partition_date
+            connection, "att_adv_performance_by_IO", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
