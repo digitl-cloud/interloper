@@ -86,3 +86,16 @@ class TestDataFrameNormalize:
         df = pd.DataFrame({"userData": [{"firstName": "alice"}]})
         result = n.normalize(df)
         assert "user_data_first_name" in result.columns
+
+    def test_replace_empty_strings(self):
+        n = DataFrameNormalizer(normalize_columns_names=False, fill_missing=False, replace_empty_strings=True)
+        result = n.normalize(pd.DataFrame({"a": ["", "x"]}))
+        assert pd.isna(result["a"].iloc[0])
+        assert result["a"].iloc[1] == "x"
+
+    def test_replace_empty_dicts(self):
+        n = DataFrameNormalizer(
+            normalize_columns_names=False, fill_missing=False, flatten_max_level=0, replace_empty_dicts=True
+        )
+        result = n.normalize(pd.DataFrame({"a": [{}, {"k": 1}]}))
+        assert result["a"].iloc[0] is None

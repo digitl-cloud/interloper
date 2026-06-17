@@ -133,10 +133,12 @@ def _clicks_export(connection: ImpactConnection, program_id: str, date: dt.date)
 # HELPERS — framing
 # ------------------------------------------------------------------
 def _to_df(records: list[_RECORD], date: dt.date) -> pd.DataFrame:
-    """Build a DataFrame, blank empty strings to null, and stamp the partition date."""
+    """Build a DataFrame and stamp the partition date.
+
+    Empty-string blanking and column normalization are handled by the source's
+    normalizer (``replace_empty_strings``).
+    """
     df = pd.DataFrame(records)
-    if not df.empty:
-        df = df.replace("", None)
     df["date"] = date
     return df
 
@@ -148,8 +150,9 @@ def _to_df(records: list[_RECORD], date: dt.date) -> pd.DataFrame:
     resources={"connection": ImpactConnection},
     tags=["Affiliate"],
     icon="fluent:connector-24-filled",
-    # Impact returns PascalCase fields with digit groups (SubId1 -> sub_id_1).
-    normalizer=DataFrameNormalizer(snake_case_digits=True),
+    # Impact returns PascalCase fields with digit groups (SubId1 -> sub_id_1) and
+    # blanks as empty strings.
+    normalizer=DataFrameNormalizer(snake_case_digits=True, replace_empty_strings=True),
 )
 class Impact(il.Source):
     """Impact.com affiliate and partnership platform integration."""
