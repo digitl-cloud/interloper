@@ -1,7 +1,8 @@
 import datetime as dt
+from typing import Any
 
 import interloper as il
-import pandas as pd
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.adup import constants
 from interloper_assets.adup.connection import AdupConnection
@@ -37,6 +38,9 @@ def get_report(client: il.RESTClient, report_type: str, start_date: dt.date, end
     resources={"connection": AdupConnection},
     tags=["Advertising"],
     icon="icon:adup",
+    # The AdWords-style report returns PascalCase columns (Date, AdgroupId, …);
+    # snake-case them onto the schema.
+    normalizer=DataFrameNormalizer(),
 )
 class Adup(il.Source):
     """Adup advertising platform integration."""
@@ -45,19 +49,19 @@ class Adup(il.Source):
         tags=["Entity"],
         schema=Account,
     )
-    def account(self, connection: AdupConnection) -> pd.DataFrame:
+    def account(self, connection: AdupConnection) -> list[dict[str, Any]]:
         """Advertiser account information."""
         response = connection.client.get("/advertisers/me")
         response.raise_for_status()
-        return pd.DataFrame([response.json()])
+        return [response.json()]
 
     @il.asset(
-        partitioning=il.TimePartitionConfig(column="Date", allow_window=True),
+        partitioning=il.TimePartitionConfig(column="date", allow_window=True),
         tags=["Report"],
         schema=Ads,
     )
-    def ads(self, context: il.ExecutionContext, connection: AdupConnection) -> pd.DataFrame:
+    def ads(self, context: il.ExecutionContext, connection: AdupConnection) -> list[dict[str, Any]]:
         """Ad performance insights with metrics like impressions, clicks, conversions, and cost."""
         start_date, end_date = context.partition_date_window
         data = get_report(connection.client, "AD_PERFORMANCE_REPORT", start_date, end_date)
-        return pd.DataFrame(data["rows"])
+        return data["rows"]

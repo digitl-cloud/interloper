@@ -1,8 +1,9 @@
 import datetime as dt
 import logging
+from typing import Any
 
 import interloper as il
-import pandas as pd
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.adservice.connection import AdserviceConnection
 from interloper_assets.adservice.schemas import (
@@ -55,6 +56,8 @@ def get_report(
     resources={"connection": AdserviceConnection},
     tags=["Advertising"],
     icon="carbon:analytics",
+    # Adservice returns snake_case fields already; the normalizer coerces to a frame.
+    normalizer=DataFrameNormalizer(),
 )
 class Adservice(il.Source):
     """Adservice advertising platform integration."""
@@ -63,7 +66,7 @@ class Adservice(il.Source):
         schema=Campaigns,
         partitioning=il.TimePartitionConfig(column="date"),
     )
-    def campaigns(self, context: il.ExecutionContext, connection: AdserviceConnection) -> pd.DataFrame:
+    def campaigns(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
         """Campaign performance statistics with metrics like impressions, clicks, and conversions."""
         response = get_report(
             client=connection.client,
@@ -75,13 +78,13 @@ class Adservice(il.Source):
             sales_amount=1,
         )
         data = response["data"]["rows"]
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=ConversionsReport,
         partitioning=il.TimePartitionConfig(column="date"),
     )
-    def conversions(self, context: il.ExecutionContext, connection: AdserviceConnection) -> pd.DataFrame:
+    def conversions(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
         """Conversion events and attribution data."""
         response = get_report(
             client=connection.client,
@@ -90,13 +93,15 @@ class Adservice(il.Source):
             report_type="conversions",
         )
         data = response["data"]
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=ConversionsByTimeOfDay,
         partitioning=il.TimePartitionConfig(column="date"),
     )
-    def conversions_time_of_day(self, context: il.ExecutionContext, connection: AdserviceConnection) -> pd.DataFrame:
+    def conversions_time_of_day(
+        self, context: il.ExecutionContext, connection: AdserviceConnection
+    ) -> list[dict[str, Any]]:
         """Conversion events broken down by time of day."""
         response = get_report(
             client=connection.client,
@@ -105,13 +110,13 @@ class Adservice(il.Source):
             report_type="statistics/conversions/timeofday",
         )
         data = response["data"]
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=CampaignsByCity,
         partitioning=il.TimePartitionConfig(column="date"),
     )
-    def campaigns_by_city(self, context: il.ExecutionContext, connection: AdserviceConnection) -> pd.DataFrame:
+    def campaigns_by_city(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
         """Campaign performance segmented by city."""
         response = get_report(
             client=connection.client,
@@ -121,13 +126,15 @@ class Adservice(il.Source):
             group_by="city",
         )
         data = response["data"]
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=CampaignsByBrowser,
         partitioning=il.TimePartitionConfig(column="date"),
     )
-    def campaigns_by_browser(self, context: il.ExecutionContext, connection: AdserviceConnection) -> pd.DataFrame:
+    def campaigns_by_browser(
+        self, context: il.ExecutionContext, connection: AdserviceConnection
+    ) -> list[dict[str, Any]]:
         """Campaign performance segmented by browser."""
         response = get_report(
             client=connection.client,
@@ -137,13 +144,15 @@ class Adservice(il.Source):
             group_by="browser",
         )
         data = response["data"]
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=CampaignsByDeviceType,
         partitioning=il.TimePartitionConfig(column="date"),
     )
-    def campaigns_by_device_type(self, context: il.ExecutionContext, connection: AdserviceConnection) -> pd.DataFrame:
+    def campaigns_by_device_type(
+        self, context: il.ExecutionContext, connection: AdserviceConnection
+    ) -> list[dict[str, Any]]:
         """Campaign performance segmented by device type."""
         response = get_report(
             client=connection.client,
@@ -153,4 +162,4 @@ class Adservice(il.Source):
             group_by="device_type",
         )
         data = response["data"]
-        return pd.DataFrame(data)
+        return data
