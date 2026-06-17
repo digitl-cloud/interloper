@@ -8,15 +8,12 @@ from pydantic_settings import SettingsConfigDict
     name="Snapchat Ads",
     icon="mdi:snapchat",
     tags=["Advertising"],
+    oauth=il.OAuthConfig("snapchat", scope="snapchat-marketing-api"),
 )
-class SnapchatAdsConnection(il.Connection):
+class SnapchatAdsConnection(il.OAuthConnection):
     """Snapchat Ads API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="snapchat_ads_")
-
-    client_id: str = il.InputField(description="OAuth2 client ID")
-    client_secret: str = il.SecretField(description="OAuth2 client secret")
-    refresh_token: str = il.SecretField(description="OAuth2 refresh token")
 
     @cached_property
     def client(self) -> il.RESTClient:
