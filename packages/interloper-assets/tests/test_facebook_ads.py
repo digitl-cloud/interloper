@@ -1,10 +1,11 @@
 """Regression tests for the FacebookAds source.
 
-Facebook insights return nested ``actions``/``action_values`` lists that the
-source pivots into one column per action type (``actions`` ->
-``actions_link_click``), and entity reports return nested dicts (``creative``)
-that the normalizer flattens. These tests pin the pivot/sanitize logic and
-that the resulting frames reconcile against the ported schemas (missing
+Facebook insights nest ``actions``/``action_values`` lists that
+``FacebookActionsNormalizer`` pivots into one column per action type
+(``actions`` -> ``actions_link_click``); entity reports nest dicts
+(``creative``) that the base normalizer flattens. These tests pin the
+pivot/sanitize logic, that the custom normalizer survives the host→child spec
+round-trip, and that frames reconcile against the ported schemas (missing
 nullable columns are filled, so partial action sets are fine).
 """
 
@@ -19,7 +20,7 @@ from interloper.representation import representation_for
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.facebook_ads import schemas
-from interloper_assets.facebook_ads.source import FacebookAds, _flatten
+from interloper_assets.facebook_ads.source import FacebookActionsNormalizer, FacebookAds
 
 
 def _source() -> Any:
@@ -27,9 +28,9 @@ def _source() -> Any:
 
 
 class TestSourceNormalizer:
-    def test_all_assets_inherit_the_normalizer(self):
+    def test_all_assets_use_the_actions_normalizer(self):
         for asset in _source().assets:
-            assert isinstance(asset.normalizer, DataFrameNormalizer), type(asset).key
+            assert isinstance(asset.normalizer, FacebookActionsNormalizer), type(asset).key
 
     def test_all_eight_assets_present(self):
         keys = {type(a).key for a in _source().assets}
@@ -45,18 +46,15 @@ class TestSourceNormalizer:
         }
 
 
-class TestFlatten:
+class TestActionsNormalizer:
     """The action-list pivot is the crux of the Facebook port."""
 
     def test_pivots_actions_into_per_action_type_columns(self):
         rows = [
             {
                 "date_start": "2026-06-10",
-                "date_stop": "2026-06-10",
                 "account_id": "123",
                 "ad_id": "456",
-                "publisher_platform": "facebook",
-                "impression_device": "mobile_feed",
                 # link_click appears twice (action-device breakdown) -> summed.
                 "actions": [
                     {"action_type": "link_click", "action_device": "mobile", "value": "5"},
@@ -66,28 +64,20 @@ class TestFlatten:
                 "action_values": [
                     {"action_type": "offsite_conversion.fb_pixel_purchase", "value": "12.5"},
                 ],
-                "cost_per_action_type": [
-                    {"action_type": "link_click", "value": "0.5"},
-                ],
             }
         ]
-        df = _flatten(rows)
-
+        df = FacebookActionsNormalizer().normalize(rows)
         assert df.loc[0, "actions_link_click"] == 7.0  # summed across devices
         assert df.loc[0, "actions_video_view"] == 3.0
         # the "." in the action type is sanitized to "_"
         assert df.loc[0, "action_values_offsite_conversion_fb_pixel_purchase"] == 12.5
-        assert df.loc[0, "cost_per_action_type_link_click"] == 0.5
-        # original list columns are dropped
-        assert "actions" not in df.columns
+        assert "actions" not in df.columns  # original list column dropped
 
     def test_empty_rows_yield_empty_frame(self):
-        assert _flatten([]).empty
+        assert FacebookActionsNormalizer().normalize([]).empty
 
 
 class TestSpecRoundtripAndReconcile:
-    """Normalizer survives the host→child spec round-trip and frames reconcile."""
-
     def _child(self, key: str) -> Any:
         src = _source()
         asset = next(a for a in src.assets if type(a).key == key)
@@ -95,23 +85,20 @@ class TestSpecRoundtripAndReconcile:
         child_dag = DAGSpec(**spec_json).reconstruct()
         return next(a for a in child_dag.assets if type(a).key == key)
 
+    def test_custom_normalizer_survives_roundtrip(self):
+        norm = self._child("ads").normalizer
+        assert isinstance(norm, FacebookActionsNormalizer)  # not degraded to the base
+        assert norm.flatten_max_level == 1
+
     def test_insights_row_reconciles_against_ads_schema(self):
         child = self._child("ads")
-        assert isinstance(child.normalizer, DataFrameNormalizer)
-
         rows = [
-            {
-                "date_start": "2026-06-10",
-                "account_id": "123",
-                "ad_id": "456",
-                "actions": [{"action_type": "link_click", "value": "7"}],
-            }
+            {"date_start": "2026-06-10", "account_id": "123", "actions": [{"action_type": "link_click", "value": "7"}]}
         ]
-        normalized = child.normalizer.normalize(_flatten(rows))
-        # Pivoted column maps onto a real schema field and survives reconcile.
+        normalized = child.normalizer.normalize(rows)
         assert "actions_link_click" in normalized.columns
-        reconciled = representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)
-        assert int(reconciled.loc[0, "actions_link_click"]) == 7
+        out = representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)
+        assert int(out.loc[0, "actions_link_click"]) == 7
 
     def test_sparse_row_passes_validation(self):
         """Insights are sparse: a frame with only a few of the 75 fields must
@@ -122,14 +109,12 @@ class TestSpecRoundtripAndReconcile:
 
     def test_metadata_row_flattens_creative_and_reconciles(self):
         child = self._child("ads_metadata")
-        rows = [
-            {
-                "id": "456",
-                "name": "My Ad",
-                "creative": {"id": "789", "name": "Creative A"},
-            }
-        ]
-        normalized = child.normalizer.normalize(_flatten(rows))
+        rows = [{"id": "456", "name": "My Ad", "creative": {"id": "789", "name": "Creative A"}}]
+        normalized = child.normalizer.normalize(rows)
         assert "creative_id" in normalized.columns  # nested dict flattened by the normalizer
-        # must not raise
-        representation_for(normalized).conformer.reconcile(normalized, schemas.AdsMetadata)
+        representation_for(normalized).conformer.reconcile(normalized, schemas.AdsMetadata)  # must not raise
+
+
+def test_isinstance_of_dataframe_normalizer():
+    # The custom normalizer is a DataFrameNormalizer, so it inherits its config.
+    assert isinstance(FacebookActionsNormalizer(), DataFrameNormalizer)

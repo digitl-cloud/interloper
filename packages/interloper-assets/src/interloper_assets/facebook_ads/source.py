@@ -82,27 +82,36 @@ def _pivot_cell(column: str, cell: Any) -> dict[str, float]:
     return out
 
 
-def _flatten(rows: list[dict]) -> pd.DataFrame:
-    """Pivot the action-list columns and sanitize all column names."""
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return df
+class FacebookActionsNormalizer(DataFrameNormalizer):
+    """Pivot Facebook insight action-lists into per-action-type columns.
 
-    for column in PIVOT_COLUMNS:
-        if column not in df.columns:
-            continue
-        pivoted = pd.DataFrame(list(df[column].map(lambda cell: _pivot_cell(column, cell))), index=df.index)
-        df = pd.concat([df.drop(columns=[column]), pivoted], axis=1)
+    Each ``actions``/``action_values``/… cell is a list of ``{action_type,
+    value}``; pivot it into one ``<column>_<action_type>`` column (summed across
+    the action-device breakdown), sanitize the names, coerce custom-conversion
+    columns to float, then defer to the base ``DataFrameNormalizer`` to flatten
+    nested entity dicts (``creative``) and snake-case the rest.
+    """
 
-    df.columns = [_sanitize(c) for c in df.columns]
+    def normalize(self, data: Any) -> pd.DataFrame:
+        df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
+        if df.empty:
+            return df
 
-    # Custom-conversion columns are not in the schema; coerce to float so mixed
-    # int/NaN values don't surface as objects.
-    for column in df.columns:
-        if re.match(r".*_custom(_.+)?$", column):
-            df[column] = pd.to_numeric(df[column], errors="coerce").astype(float)
+        for column in PIVOT_COLUMNS:
+            if column not in df.columns:
+                continue
+            pivoted = pd.DataFrame(list(df[column].map(lambda cell: _pivot_cell(column, cell))), index=df.index)
+            df = pd.concat([df.drop(columns=[column]), pivoted], axis=1)
 
-    return df
+        df.columns = [_sanitize(c) for c in df.columns]
+
+        # Custom-conversion columns are not in the schema; coerce to float so
+        # mixed int/NaN values don't surface as objects.
+        for column in df.columns:
+            if re.match(r".*_custom(_.+)?$", column):
+                df[column] = pd.to_numeric(df[column], errors="coerce").astype(float)
+
+        return super().normalize(df)
 
 
 # ------------------------------------------------------------------
@@ -273,9 +282,9 @@ def _time_range(date: dt.date) -> dict[str, str]:
     resources={"connection": FacebookAdsConnection},
     tags=["Advertising"],
     icon="logos:facebook",
-    # Action lists are pivoted in the source; the normalizer flattens nested
-    # entity dicts (e.g. ``creative``) and snake-cases the remaining columns.
-    normalizer=DataFrameNormalizer(flatten_max_level=1),
+    # Pivots action-lists, flattens nested entity dicts (e.g. ``creative``),
+    # and snake-cases the columns.
+    normalizer=FacebookActionsNormalizer(flatten_max_level=1),
 )
 class FacebookAds(il.Source):
     """Facebook Ads (Meta Marketing) advertising platform integration."""
@@ -293,7 +302,7 @@ class FacebookAds(il.Source):
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def campaigns(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> pd.DataFrame:
+    def campaigns(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Campaign-level performance insights with metrics, engagement, and cost breakdowns."""
         rows = _get_ads_insights(
             connection,
@@ -306,14 +315,14 @@ class FacebookAds(il.Source):
                 "action_breakdown": _ACTION_BREAKDOWNS,
             },
         )
-        return _flatten(rows)
+        return rows
 
     @il.asset(
         schema=schemas.Ads,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def ads(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> pd.DataFrame:
+    def ads(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Ad-level performance insights with platform, device, and action breakdowns."""
         rows = _get_ads_insights(
             connection,
@@ -326,14 +335,16 @@ class FacebookAds(il.Source):
                 "action_breakdown": _ACTION_BREAKDOWNS,
             },
         )
-        return _flatten(rows)
+        return rows
 
     @il.asset(
         schema=schemas.AdsByAgeGender,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def ads_by_age_gender(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> pd.DataFrame:
+    def ads_by_age_gender(
+        self, context: il.ExecutionContext, connection: FacebookAdsConnection
+    ) -> list[dict[str, Any]]:
         """Ad-level performance insights broken down by age and gender demographics."""
         rows = _get_ads_insights(
             connection,
@@ -346,14 +357,14 @@ class FacebookAds(il.Source):
                 "action_breakdown": _ACTION_BREAKDOWNS,
             },
         )
-        return _flatten(rows)
+        return rows
 
     @il.asset(
         schema=schemas.AdsByCountry,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def ads_by_country(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> pd.DataFrame:
+    def ads_by_country(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Ad-level performance insights broken down by country and region."""
         rows = _get_ads_insights(
             connection,
@@ -366,14 +377,14 @@ class FacebookAds(il.Source):
                 "action_breakdown": _ACTION_BREAKDOWNS,
             },
         )
-        return _flatten(rows)
+        return rows
 
     @il.asset(
         schema=schemas.Videos,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def videos(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> pd.DataFrame:
+    def videos(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Video ad performance with view retention, engagement, and conversion metrics."""
         rows = _get_ads_insights(
             connection,
@@ -386,13 +397,13 @@ class FacebookAds(il.Source):
                 "action_breakdown": _ACTION_BREAKDOWNS,
             },
         )
-        return _flatten(rows)
+        return rows
 
     @il.asset(
         schema=schemas.CustomAudiences,
         tags=["Entity"],
     )
-    def custom_audiences(self, connection: FacebookAdsConnection) -> pd.DataFrame:
+    def custom_audiences(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Custom audiences with approximate size bounds for the account."""
         rows = _get_custom_audiences(
             connection,
@@ -400,20 +411,20 @@ class FacebookAds(il.Source):
             fields=constants.CUSTOM_AUDIENCES_FIELDS,
             params={},
         )
-        return _flatten(rows)
+        return rows
 
     @il.asset(
         schema=schemas.AdsMetadata,
         tags=["Entity"],
     )
-    def ads_metadata(self, connection: FacebookAdsConnection) -> pd.DataFrame:
+    def ads_metadata(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Ad metadata including creative, status, and configuration."""
-        return _flatten(_get_ads(connection, self.account_id))
+        return _get_ads(connection, self.account_id)
 
     @il.asset(
         schema=schemas.CampaignsMetadata,
         tags=["Entity"],
     )
-    def campaigns_metadata(self, connection: FacebookAdsConnection) -> pd.DataFrame:
+    def campaigns_metadata(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Campaign metadata including objective, budget, and status configuration."""
-        return _flatten(_get_campaigns(connection, self.account_id))
+        return _get_campaigns(connection, self.account_id)
