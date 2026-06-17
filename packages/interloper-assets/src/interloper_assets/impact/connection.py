@@ -24,7 +24,7 @@ class ImpactConnection(il.Connection):
     def client(self) -> il.RESTClient:
         auth = httpx.BasicAuth(username=self.account_sid, password=self.auth_token)
         return il.RESTClient(
-            BASE_URL,
+            f"{BASE_URL}/Advertisers/{self.account_sid}",
             auth,
             headers={"Accept": "application/json"},
         )
