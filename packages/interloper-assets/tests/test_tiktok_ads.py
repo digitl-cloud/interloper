@@ -1,0 +1,112 @@
+"""Regression tests for the TikTok Ads source.
+
+TikTok integrated reports return each row as ``{"dimensions": {...},
+"metrics": {...}}``; the source's ``TiktokStatsNormalizer`` merges both into a
+flat record (de-prefixed) before column normalization. Entity (metadata)
+records carry list/dict fields (``ad_texts``, ``image_ids``, …) that the flat
+schemas type as strings, so ``TiktokMetadataNormalizer`` JSON-encodes any
+non-scalar value first. These tests pin both reshapes, that every asset gets
+the right normalizer, and that the normalizer survives the host→child spec
+round-trip and reconciles against the ported schemas.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from interloper.dag.base import DAG
+from interloper.dag.spec import DAGSpec
+from interloper.representation import representation_for
+
+from interloper_assets.tiktok_ads import schemas
+from interloper_assets.tiktok_ads.source import TiktokAds, TiktokMetadataNormalizer, TiktokStatsNormalizer
+
+
+def _source() -> Any:
+    return TiktokAds(id="src-1", advertiser_id="123")  # ty: ignore[unknown-argument]
+
+
+class TestSourceNormalizer:
+    def test_all_eight_assets_present(self):
+        keys = {type(a).key for a in _source().assets}
+        assert keys == {
+            "ads",
+            "ads_by_country",
+            "ads_by_age_gender",
+            "ads_by_platform",
+            "videos_by_platform",
+            "ads_metadata",
+            "campaigns_metadata",
+            "advertisers_metadata",
+        }
+
+    def test_stats_assets_use_the_stats_normalizer(self):
+        for key in ("ads", "ads_by_country", "ads_by_age_gender", "ads_by_platform", "videos_by_platform"):
+            asset = next(a for a in _source().assets if type(a).key == key)
+            assert isinstance(asset.normalizer, TiktokStatsNormalizer), key
+
+    def test_metadata_assets_use_the_metadata_normalizer(self):
+        for key in ("ads_metadata", "campaigns_metadata", "advertisers_metadata"):
+            asset = next(a for a in _source().assets if type(a).key == key)
+            assert isinstance(asset.normalizer, TiktokMetadataNormalizer), key
+
+
+class TestStatsNormalizer:
+    """Merging the dimensions/metrics envelope is the crux of the report port."""
+
+    def test_dimensions_and_metrics_merge_into_flat_columns(self):
+        rows = [
+            {
+                "dimensions": {"ad_id": "456", "stat_time_day": "2026-06-14 00:00:00"},
+                "metrics": {"spend": "12.50", "clicks": "3"},
+                "date": "2026-06-14",
+            }
+        ]
+        df = TiktokStatsNormalizer().normalize(rows)
+        assert "ad_id" in df.columns and "spend" in df.columns
+        assert "dimensions" not in df.columns and "metrics" not in df.columns
+        assert df.loc[0, "ad_id"] == "456"
+        assert df.loc[0, "spend"] == "12.50"
+        assert df.loc[0, "date"] == "2026-06-14"
+
+
+class TestMetadataNormalizer:
+    def test_list_and_dict_fields_are_json_encoded(self):
+        rows = [{"ad_id": "1", "ad_texts": ["a", "b"], "image_ids": ["x"]}]
+        df = TiktokMetadataNormalizer().normalize(rows)
+        assert df.loc[0, "ad_texts"] == '["a", "b"]'
+        assert df.loc[0, "image_ids"] == '["x"]'
+
+
+class TestSpecRoundtripAndReconcile:
+    """Normalizers survive the host→child spec round-trip and rows reconcile."""
+
+    def _child(self, key: str) -> Any:
+        src = _source()
+        asset = next(a for a in src.assets if type(a).key == key)
+        spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
+        child_dag = DAGSpec(**spec_json).reconstruct()
+        return next(a for a in child_dag.assets if type(a).key == key)
+
+    def test_report_row_reconciles_against_ads_schema(self):
+        child = self._child("ads")
+        assert isinstance(child.normalizer, TiktokStatsNormalizer)
+        rows = [
+            {
+                "dimensions": {"ad_id": "456", "stat_time_day": "2026-06-14 00:00:00"},
+                "metrics": {"spend": "12.50", "clicks": "3", "cpc": "4.16"},
+                "date": "2026-06-14",
+            }
+        ]
+        normalized = child.normalizer.normalize(rows)
+        reconciled = representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)
+        assert float(reconciled.loc[0, "spend"]) == 12.5
+        assert int(reconciled.loc[0, "clicks"]) == 3
+
+    def test_metadata_row_reconciles_against_ads_metadata_schema(self):
+        child = self._child("ads_metadata")
+        assert isinstance(child.normalizer, TiktokMetadataNormalizer)
+        rows = [{"ad_id": "456", "ad_name": "My Ad", "ad_texts": ["hello"], "image_ids": ["img1"]}]
+        normalized = child.normalizer.normalize(rows)
+        # must not raise; list fields land as JSON strings on the str-typed schema columns
+        representation_for(normalized).conformer.reconcile(normalized, schemas.AdsMetadata)
