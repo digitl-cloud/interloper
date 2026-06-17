@@ -1,10 +1,11 @@
 """Regression tests for the SnapchatAds source.
 
-Snapchat stats rows nest metrics under a ``stats`` dict (flattened and
-de-prefixed) or, for dimensioned reports, a ``dimension_stats`` list (exploded
-into one row per dimension). The source frames those and stamps a ``date``
-partition column; metadata records are JSON-normalized. These tests pin the
-framing helpers and that the results reconcile against the ported schemas.
+Stats rows nest metrics under a ``stats`` dict (flattened and de-prefixed) or,
+for dimensioned reports, a ``dimension_stats`` list (exploded into one row per
+dimension) — reshaped by ``SnapchatStatsNormalizer``. Metadata records are
+flattened by a configured ``DataFrameNormalizer``. These tests pin the
+normalizers, that they survive the host→child spec round-trip (the AmazonAds
+failure mode), and that results reconcile against the ported schemas.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from interloper.representation import representation_for
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.snapchat_ads import schemas
-from interloper_assets.snapchat_ads.source import SnapchatAds, _frame_metadata, _frame_report
+from interloper_assets.snapchat_ads.source import SnapchatAds, SnapchatStatsNormalizer, _with_date
 
 
 def _source() -> Any:
@@ -26,10 +27,6 @@ def _source() -> Any:
 
 
 class TestSource:
-    def test_all_assets_inherit_the_normalizer(self):
-        for asset in _source().assets:
-            assert isinstance(asset.normalizer, DataFrameNormalizer), type(asset).key
-
     def test_nine_assets_present(self):
         keys = {type(a).key for a in _source().assets}
         assert keys == {
@@ -44,39 +41,41 @@ class TestSource:
             "campaigns_metadata",
         }
 
+    def test_stats_assets_use_stats_normalizer(self):
+        by_key = {type(a).key: a for a in _source().assets}
+        for key in ("ads", "campaigns", "ads_by_country", "videos_by_os"):
+            assert isinstance(by_key[key].normalizer, SnapchatStatsNormalizer), key
 
-class TestFraming:
-    def test_report_strips_stats_prefix_and_stamps_date(self):
-        # Non-dimensioned report row: metrics nested under "stats".
-        rows = [{"id": "ad1", "type": "AD", "stats": {"impressions": "100", "spend": "5", "swipes": "3"}}]
-        df = _frame_report(rows, dt.date(2026, 6, 10))
-        assert {"id", "type", "impressions", "spend", "swipes", "date"} <= set(df.columns)
+    def test_metadata_assets_use_flattening_normalizer(self):
+        by_key = {type(a).key: a for a in _source().assets}
+        for key in ("ads_metadata", "ad_squads_metadata", "campaigns_metadata", "ad_account_metadata"):
+            norm = by_key[key].normalizer
+            assert isinstance(norm, DataFrameNormalizer) and not isinstance(norm, SnapchatStatsNormalizer), key
+            assert norm.flatten_max_level == 3
+            assert norm.drop_na_columns is True
+
+
+class TestStatsNormalizer:
+    def test_strips_stats_prefix_and_keeps_date(self):
+        rows = _with_date(
+            [{"id": "ad1", "type": "AD", "stats": {"impressions": "100", "spend": "5"}}], dt.date(2026, 6, 10)
+        )
+        df = SnapchatStatsNormalizer().normalize(rows)
+        assert {"id", "type", "impressions", "spend", "date"} <= set(df.columns)
         assert "stats_impressions" not in df.columns
-        assert df.loc[0, "date"] == dt.date(2026, 6, 10)
 
-    def test_report_explodes_dimension_stats(self):
-        # Dimensioned report row: one entry per dimension value under "dimension_stats".
-        rows = [
-            {
-                "id": "ad1",
-                "type": "AD",
-                "dimension_stats": [
-                    {"country": "us", "impressions": "10"},
-                    {"country": "fr", "impressions": "7"},
-                ],
-            }
-        ]
-        df = _frame_report(rows, dt.date(2026, 6, 10))
+    def test_explodes_dimension_stats(self):
+        rows = _with_date(
+            [{"id": "ad1", "dimension_stats": [{"country": "us"}, {"country": "fr"}]}],
+            dt.date(2026, 6, 10),
+        )
+        df = SnapchatStatsNormalizer().normalize(rows)
         assert len(df) == 2
         assert set(df["country"]) == {"us", "fr"}
         assert (df["date"] == dt.date(2026, 6, 10)).all()
 
-    def test_report_empty_rows(self):
-        assert "date" in _frame_report([], dt.date(2026, 6, 10)).columns
-
-    def test_metadata_flattens_nested_records(self):
-        df = _frame_metadata([{"id": "ad1", "name": "My Ad", "creative_id": "c1"}])
-        assert {"id", "name", "creative_id"} <= set(df.columns)
+    def test_empty(self):
+        assert SnapchatStatsNormalizer().normalize([]).empty
 
 
 class TestSpecRoundtripAndReconcile:
@@ -87,15 +86,23 @@ class TestSpecRoundtripAndReconcile:
         child_dag = DAGSpec(**spec_json).reconstruct()
         return next(a for a in child_dag.assets if type(a).key == key)
 
+    def test_stats_normalizer_survives_roundtrip(self):
+        # The custom subclass must reconstruct in the child (not degrade to the base).
+        assert isinstance(self._child("ads").normalizer, SnapchatStatsNormalizer)
+
+    def test_metadata_normalizer_survives_roundtrip(self):
+        norm = self._child("ads_metadata").normalizer
+        assert isinstance(norm, DataFrameNormalizer) and not isinstance(norm, SnapchatStatsNormalizer)
+        assert norm.flatten_max_level == 3 and norm.drop_na_columns is True
+
     def test_ads_row_conforms_after_roundtrip(self):
         child = self._child("ads")
-        assert isinstance(child.normalizer, DataFrameNormalizer)
-        rows = [{"id": "ad1", "type": "AD", "stats": {"impressions": "100", "spend": "5"}}]
-        normalized = child.normalizer.normalize(_frame_report(rows, dt.date(2026, 6, 10)))
+        rows = _with_date([{"id": "ad1", "type": "AD", "stats": {"impressions": "100"}}], dt.date(2026, 6, 10))
+        normalized = child.normalizer.normalize(rows)
         out = representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)
         assert int(out.loc[0, "impressions"]) == 100
 
     def test_ads_metadata_conforms_after_roundtrip(self):
         child = self._child("ads_metadata")
-        normalized = child.normalizer.normalize(_frame_metadata([{"id": "ad1", "name": "My Ad"}]))
+        normalized = child.normalizer.normalize([{"id": "ad1", "name": "My Ad"}])
         representation_for(normalized).conformer.reconcile(normalized, schemas.AdsMetadata)  # must not raise
