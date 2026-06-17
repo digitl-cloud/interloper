@@ -1,8 +1,8 @@
 import datetime as dt
 import logging
+from typing import Any
 
 import interloper as il
-import pandas as pd
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.criteo import constants
@@ -66,7 +66,7 @@ class Criteo(il.Source):
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    def ads(self, context: il.ExecutionContext, connection: CriteoConnection) -> pd.DataFrame:
+    def ads(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
         """Ad-level performance statistics with daily breakdowns."""
         rows = _statistics_report(
             connection,
@@ -75,14 +75,14 @@ class Criteo(il.Source):
             end_date=context.partition_date,
             dimensions=["Day", "AdId", "AdsetId", "CampaignId"],
         )
-        return pd.DataFrame(rows)
+        return rows
 
     @il.asset(
         schema=Campaigns,
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    def campaigns(self, context: il.ExecutionContext, connection: CriteoConnection) -> pd.DataFrame:
+    def campaigns(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
         """Campaign-level performance statistics with daily breakdowns."""
         rows = _statistics_report(
             connection,
@@ -91,4 +91,4 @@ class Criteo(il.Source):
             end_date=context.partition_date,
             dimensions=["Day", "CampaignId"],
         )
-        return pd.DataFrame(rows)
+        return rows
