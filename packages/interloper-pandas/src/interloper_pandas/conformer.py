@@ -110,6 +110,19 @@ def _dtype_to_py_type(series: pd.Series) -> Any:
     return type(non_null.iloc[0])
 
 
+def _to_datetime(series: pd.Series) -> pd.Series:
+    """Parse a Series to datetime, normalizing to UTC when offsets are mixed.
+
+    Plain ``to_datetime`` raises on mixed-timezone strings (common in API
+    responses spanning a DST boundary or differing offsets); retry with
+    ``utc=True`` to coerce those to a single UTC timezone.
+    """
+    try:
+        return pd.to_datetime(series, errors="raise")
+    except ValueError:
+        return pd.to_datetime(series, errors="raise", utc=True)
+
+
 def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
     """Cast a Series to the pandas dtype matching a field spec.
 
@@ -133,9 +146,9 @@ def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
         if spec.type is str:
             return series.astype("string")
         if spec.type is datetime.datetime:
-            return pd.to_datetime(series, errors="raise")
+            return _to_datetime(series)
         if spec.type is datetime.date:
-            return pd.to_datetime(series, errors="raise").dt.date
+            return _to_datetime(series).dt.date
         if spec.type is Decimal:
             return series.map(lambda v: v if isinstance(v, Decimal) or pd.isna(v) else Decimal(str(v)))
     except (ValueError, TypeError) as e:
