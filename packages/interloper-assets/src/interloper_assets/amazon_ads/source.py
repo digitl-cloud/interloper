@@ -2,10 +2,10 @@ import datetime as dt
 import gzip
 import json
 from functools import partial
+from typing import Any
 
 import httpx
 import interloper as il
-import pandas as pd
 import tenacity as tc
 from interloper_pandas import DataFrameNormalizer
 
@@ -189,11 +189,11 @@ class AmazonAds(il.Source):
     )
 
     @il.asset(schema=schemas.Profiles, tags=["Entity"])
-    def profiles(self, connection: AmazonAdsConnection) -> pd.DataFrame:
+    def profiles(self, connection: AmazonAdsConnection) -> list[dict[str, Any]]:
         """Advertising profiles associated with the account."""
         response = connection.client.get("/v2/profiles")
         response.raise_for_status()
-        return pd.DataFrame(response.json())
+        return response.json()
 
     # --- Sponsored Products ---
 
@@ -204,7 +204,7 @@ class AmazonAds(il.Source):
     )
     def products_advertised_products(
         self, context: il.ExecutionContext, connection: AmazonAdsConnection
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Performance of advertised products."""
         data = request_and_download_report(
             connection,
@@ -217,7 +217,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.ProductsCampaigns,
@@ -228,7 +228,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Campaign performance for sponsored products."""
         data = request_and_download_report(
             connection,
@@ -241,7 +241,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.ProductsSearchTerms,
@@ -252,7 +252,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Performance of search terms in sponsored products campaigns."""
         data = request_and_download_report(
             connection,
@@ -265,7 +265,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.ProductsTargeting,
@@ -276,7 +276,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Performance based on targeting criteria in sponsored products campaigns."""
         data = request_and_download_report(
             connection,
@@ -289,7 +289,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.ProductsPurchasedProducts,
@@ -300,7 +300,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Products purchased through sponsored products campaigns."""
         data = request_and_download_report(
             connection,
@@ -313,7 +313,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.ProductsGrossAndInvalidTraffic,
@@ -324,7 +324,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Gross and invalid traffic metrics for sponsored products campaigns."""
         data = request_and_download_report(
             connection,
@@ -337,7 +337,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     # --- Sponsored Display ---
 
@@ -350,7 +350,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Display advertising campaign performance."""
         data = request_and_download_report(
             connection,
@@ -363,7 +363,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.DisplayAdvertisedProducts,
@@ -374,7 +374,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Performance of advertised products within display campaigns."""
         data = request_and_download_report(
             connection,
@@ -387,7 +387,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.DisplayPurchasedProducts,
@@ -398,7 +398,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Products purchased through display campaigns."""
         data = request_and_download_report(
             connection,
@@ -411,7 +411,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.DisplayTargeting,
@@ -422,7 +422,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Display campaign performance based on targeting criteria."""
         data = request_and_download_report(
             connection,
@@ -435,7 +435,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.DisplayGrossAndInvalidTraffic,
@@ -446,7 +446,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Traffic quality metrics for display campaigns."""
         data = request_and_download_report(
             connection,
@@ -459,7 +459,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.DisplayAdGroups,
@@ -470,7 +470,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Ad group performance within display campaigns."""
         data = request_and_download_report(
             connection,
@@ -483,7 +483,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     # --- Sponsored Brands ---
 
@@ -496,7 +496,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Brand promotion campaign performance."""
         data = request_and_download_report(
             connection,
@@ -509,7 +509,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.BrandsAds,
@@ -520,7 +520,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Individual ad performance within brand campaigns."""
         data = request_and_download_report(
             connection,
@@ -533,7 +533,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.BrandsSearchTerms,
@@ -544,7 +544,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Search term performance in brand campaigns."""
         data = request_and_download_report(
             connection,
@@ -557,7 +557,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.BrandsTargeting,
@@ -568,7 +568,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Brand campaign performance based on targeting criteria."""
         data = request_and_download_report(
             connection,
@@ -581,7 +581,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.BrandsPurchasedProducts,
@@ -592,7 +592,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Products purchased through brand campaigns."""
         data = request_and_download_report(
             connection,
@@ -605,7 +605,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.BrandsGrossAndInvalidTraffic,
@@ -616,7 +616,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Traffic quality metrics for brand campaigns."""
         data = request_and_download_report(
             connection,
@@ -629,7 +629,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.BrandsPlacements,
@@ -640,7 +640,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Campaign performance by ad placement."""
         data = request_and_download_report(
             connection,
@@ -653,7 +653,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         schema=schemas.BrandsAdGroups,
@@ -664,7 +664,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Ad group performance within brand campaigns."""
         data = request_and_download_report(
             connection,
@@ -677,7 +677,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     # --- Sponsored Television ---
 
@@ -689,7 +689,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Television campaign performance."""
         data = request_and_download_report(
             connection,
@@ -702,7 +702,7 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
 
     @il.asset(
         partitioning=il.TimePartitionConfig(column="date"),
@@ -712,7 +712,7 @@ class AmazonAds(il.Source):
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
-    ) -> pd.DataFrame:
+    ) -> list[dict[str, Any]]:
         """Television campaign performance by targeting."""
         data = request_and_download_report(
             connection,
@@ -725,4 +725,4 @@ class AmazonAds(il.Source):
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
-        return pd.DataFrame(data)
+        return data
