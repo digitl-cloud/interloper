@@ -1,0 +1,85 @@
+import datetime as dt
+
+from interloper.schema import Schema
+from pydantic import Field
+
+
+class VideosStatsByDevice(Schema):
+    """Pinterest video ad performance report segmented by device type and placement."""
+
+    date: dt.date = Field(description="The date of the report")
+    # Identifiers
+    pin_id: str = Field(description="Unique identifier for the pin")
+    ad_name: str = Field(description="The name of the advertisement")
+    pin_promotion_id: str = Field(description="The unique ID of the advertisement (Pin Promotion ID)")
+    ad_group_name: str = Field(description="The name of the ad group")
+    ad_group_id: str = Field(description="The unique ID of the ad group")
+    campaign_name: str = Field(description="The name of the campaign")
+    campaign_id: str = Field(description="The unique ID of the campaign")
+    ad_account_id: str = Field(description="The unique ID of the advertiser account")
+    advertiser_id: str = Field(description="The unique ID of the advertiser account")
+    # Targeting
+    targeting_type: str = Field(description="The dimension type (APPTYPE for device, PLACEMENT for position)")
+    targeting_value: str = Field(description="The specific value of the targeting type (e.g., mobile, web, SEARCH)")
+    # Engagement
+    engagement_1: int = Field(description="Engagement count (paid)")
+    engagement_2: int = Field(description="Engagement count (earned)")
+    engagement_rate: float = Field(description="Engagements divided by impressions")
+    engagements: int = Field(description="Total engagements (paid + earned)")
+    impressions: int = Field(description="Total impressions (paid + earned)")
+    paid_impression: int = Field(description="Number of times the paid ad was served")
+    paid_impressions: int = Field(description="Number of paid impressions")
+    outbound_click_1: int = Field(description="Outbound click count (paid)")
+    outbound_click_2: int = Field(description="Outbound click count (earned)")
+    repin_1: int = Field(description="Number of saves (paid)")
+    spend_in_micro_dollar: float = Field(description="Total spend in micro dollars")
+    spend_in_account_currency: float = Field(description="Total spend in the advertiser's currency")
+    pin_clicks: int = Field(description="Total clicks on the Pin (internal and outbound)")
+    organic_pin_id: str = Field(description="The ID of the organic Pin associated with this ad")
+    # Earned metrics
+    earned_engagements: int = Field(description="Organic engagements resulting from the ad")
+    earned_outbound_clicks: int = Field(description="Organic outbound clicks resulting from the ad")
+    earned_3s_video_views: int = Field(description="Organic views lasting at least 3 seconds resulting from the ad")
+    earned_15s_video_views: int = Field(description="Organic views lasting at least 15 seconds resulting from the ad")
+    earned_video_starts: int = Field(description="Organic video starts resulting from the ad")
+    earned_video_views: int = Field(description="Total organic video views resulting from the ad")
+    earned_video_played_at_25pct: int = Field(description="Organic video views to 25% resulting from the ad")
+    earned_video_played_at_50pct: int = Field(description="Organic video views to 50% resulting from the ad")
+    earned_video_played_at_75pct: int = Field(description="Organic video views to 75% resulting from the ad")
+    earned_video_played_at_95pct: int = Field(description="Organic video views to 95% resulting from the ad")
+    earned_video_played_at_100pct: int = Field(description="Organic video completions (100%) resulting from the ad")
+    # Paid video
+    paid_engagements: int = Field(description="Direct engagements on the paid ad")
+    paid_outbound_clicks: int = Field(description="Direct clicks to the destination URL from the paid ad")
+    paid_saves: int = Field(description="Number of times the paid ad was saved (Repinned)")
+    paid_3s_video_views: int = Field(description="Paid views lasting at least 3 seconds")
+    paid_15s_video_views: int = Field(description="Paid views lasting at least 15 seconds")
+    paid_video_viewable_rate: float = Field(description="Percentage of paid video views that were viewable")
+    paid_video_views: int = Field(description="Total number of paid video views")
+    # Video metrics
+    video_3sec_views_1: int = Field(description="3-second video views (paid)")
+    video_15sec_unique_views_1: int = Field(description="15-second unique video views (paid)")
+    video_mrc_views_1: int = Field(description="MRC video views (paid)")
+    video_3sec_views_2: int = Field(description="3-second video views (earned)")
+    video_15sec_unique_views_2: int = Field(description="15-second unique video views (earned)")
+    video_p100_complete_2: int = Field(description="Video completions (earned)")
+    video_p0_combined_2: int = Field(description="Video starts (earned)")
+    video_p25_combined_2: int = Field(description="Video views to 25% (earned)")
+    video_p50_combined_2: int = Field(description="Video views to 50% (earned)")
+    video_p75_combined_2: int = Field(description="Video views to 75% (earned)")
+    video_p95_combined_2: int = Field(description="Video views to 95% (earned)")
+    video_mrc_views_2: int = Field(description="MRC video views (earned)")
+    video_length: int = Field(description="Length of the video in milliseconds")
+    video_spend: float = Field(description="Spend specifically attributed to video views")
+    video_views: int = Field(description="Total video views (paid + earned)")
+    average_video_play_time: float = Field(description="The average time in seconds the video was played")
+    fifteen_sec_video_views: int = Field(description="Total views lasting at least 15 seconds (paid + earned)")
+    three_sec_video_views: int = Field(description="Total views lasting at least 3 seconds (paid + earned)")
+    # Total video metrics
+    total_video_played_at_25pct: int = Field(description="Total video views to 25%")
+    total_video_played_at_50pct: int = Field(description="Total video views to 50%")
+    total_video_played_at_75pct: int = Field(description="Total video views to 75%")
+    total_video_played_at_95pct: int = Field(description="Total video views to 95%")
+    total_video_played_at_100pct: int = Field(description="Total video completions (100%)")
+    total_video_starts: int = Field(description="Total number of video starts")
+    total_save_rate: float = Field(description="Total saves divided by impressions")

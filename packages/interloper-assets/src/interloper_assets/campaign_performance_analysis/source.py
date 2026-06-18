@@ -21,10 +21,10 @@ class CampaignPerformanceAnalysis(il.Source):
         schema=schemas.CampaignMatcher,
         partitioning=partitioning,
         requires={
-            "facebook_ads_campaigns": FacebookAds.asset_def("campaigns").qualified_key,
-            "google_ads_campaigns": GoogleAds.asset_def("campaigns").qualified_key,
-            "snapchat_ads_campaigns": SnapchatAds.asset_def("campaigns").qualified_key,
-            "pinterest_ads_campaigns": PinterestAds.asset_def("campaigns").qualified_key,
+            "facebook_ads_campaigns": FacebookAds.asset_def("campaigns_stats").qualified_key,
+            "google_ads_campaigns": GoogleAds.asset_def("campaigns_stats").qualified_key,
+            "snapchat_ads_campaigns": SnapchatAds.asset_def("campaigns_stats").qualified_key,
+            "pinterest_ads_campaigns": PinterestAds.asset_def("campaigns_stats").qualified_key,
         },
     )
     def campaign_matcher(

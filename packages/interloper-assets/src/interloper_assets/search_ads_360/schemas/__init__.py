@@ -1,11 +1,11 @@
-from .ad_groups import AdGroups
-from .ads import Ads
-from .campaigns import Campaigns
-from .conversions import Conversions
+from .ad_groups_stats import AdGroupsStats
+from .ads_stats import AdsStats
+from .campaigns_stats import CampaignsStats
+from .conversions_stats import ConversionsStats
 
 __all__ = [
-    "AdGroups",
-    "Ads",
-    "Campaigns",
-    "Conversions",
+    "AdGroupsStats",
+    "AdsStats",
+    "CampaignsStats",
+    "ConversionsStats",
 ]

@@ -1,5 +1,5 @@
-from .channel_insights import ChannelInsights
+from .channel_stats import ChannelStats
 
 __all__ = [
-    "ChannelInsights",
+    "ChannelStats",
 ]

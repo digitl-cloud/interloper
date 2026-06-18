@@ -20,7 +20,7 @@ from interloper.representation import representation_for
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.bing_ads import constants
-from interloper_assets.bing_ads.schemas import Ads
+from interloper_assets.bing_ads.schemas import AdsStats
 from interloper_assets.bing_ads.source import BingAds
 
 
@@ -46,22 +46,22 @@ class TestSpecRoundtrip:
 
     def test_child_asset_keeps_dataframe_normalizer(self):
         src = _source()
-        asset = next(a for a in src.assets if type(a).key == "ads")
+        asset = next(a for a in src.assets if type(a).key == "ads_stats")
 
         # Exactly what the k8s runner ships to the child pod.
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
         child_dag = DAGSpec(**spec_json).reconstruct()
-        child_asset = next(a for a in child_dag.assets if type(a).key == "ads")
+        child_asset = next(a for a in child_dag.assets if type(a).key == "ads_stats")
 
         assert isinstance(child_asset.normalizer, DataFrameNormalizer)
 
     def test_pascalcase_report_row_conforms_after_roundtrip(self):
         """A raw API-shaped row must normalize and validate against the schema."""
         src = _source()
-        asset = next(a for a in src.assets if type(a).key == "ads")
+        asset = next(a for a in src.assets if type(a).key == "ads_stats")
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
         child_dag = DAGSpec(**spec_json).reconstruct()
-        child_asset = next(a for a in child_dag.assets if type(a).key == "ads")
+        child_asset = next(a for a in child_dag.assets if type(a).key == "ads_stats")
 
         # One row with every requested report column, as Bing returns them.
         # All schema fields are required-nullable, so None is valid everywhere.
@@ -72,4 +72,4 @@ class TestSpecRoundtrip:
         normalizer = child_asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(df)
-        representation_for(normalized).conformer.validate(normalized, Ads)  # must not raise
+        representation_for(normalized).conformer.validate(normalized, AdsStats)  # must not raise

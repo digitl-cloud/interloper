@@ -1,7 +1,7 @@
-from .page_insights import PageInsights
-from .post_insights import PostInsights
+from .page_stats import PageStats
+from .post_stats import PostStats
 
 __all__ = [
-    "PageInsights",
-    "PostInsights",
+    "PageStats",
+    "PostStats",
 ]

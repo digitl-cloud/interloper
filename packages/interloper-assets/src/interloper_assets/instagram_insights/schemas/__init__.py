@@ -1,15 +1,15 @@
-from .account_insights import AccountInsights
-from .demographics import DemographicsByAgeGender, DemographicsByCity, DemographicsByCountry
-from .engagement import Engagement
-from .media_insights import MediaInsights
+from .account_stats import AccountStats
+from .demographics import DemographicsStatsByAgeGender, DemographicsStatsByCity, DemographicsStatsByCountry
+from .engagement_stats import EngagementStats
+from .media import Media
 from .profiles import Profiles
 
 __all__ = [
-    "AccountInsights",
-    "DemographicsByAgeGender",
-    "DemographicsByCity",
-    "DemographicsByCountry",
-    "Engagement",
-    "MediaInsights",
+    "AccountStats",
+    "DemographicsStatsByAgeGender",
+    "DemographicsStatsByCity",
+    "DemographicsStatsByCountry",
+    "EngagementStats",
+    "Media",
     "Profiles",
 ]

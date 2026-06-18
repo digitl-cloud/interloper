@@ -30,25 +30,25 @@ class TestSource:
     def test_nine_assets_present(self):
         keys = {type(a).key for a in _source().assets}
         assert keys == {
+            "ads_stats",
+            "campaigns_stats",
+            "ads_stats_by_country",
+            "videos_stats_by_os",
+            "ad_account",
+            "ad_accounts",
             "ads",
+            "ad_squads",
             "campaigns",
-            "ads_by_country",
-            "videos_by_os",
-            "ad_account_metadata",
-            "ad_accounts_metadata",
-            "ads_metadata",
-            "ad_squads_metadata",
-            "campaigns_metadata",
         }
 
     def test_stats_assets_use_stats_normalizer(self):
         by_key = {type(a).key: a for a in _source().assets}
-        for key in ("ads", "campaigns", "ads_by_country", "videos_by_os"):
+        for key in ("ads_stats", "campaigns_stats", "ads_stats_by_country", "videos_stats_by_os"):
             assert isinstance(by_key[key].normalizer, SnapchatStatsNormalizer), key
 
     def test_metadata_assets_use_flattening_normalizer(self):
         by_key = {type(a).key: a for a in _source().assets}
-        for key in ("ads_metadata", "ad_squads_metadata", "campaigns_metadata", "ad_account_metadata"):
+        for key in ("ads", "ad_squads", "campaigns", "ad_account"):
             norm = by_key[key].normalizer
             assert isinstance(norm, DataFrameNormalizer) and not isinstance(norm, SnapchatStatsNormalizer), key
             assert norm.flatten_max_level == 3
@@ -88,21 +88,21 @@ class TestSpecRoundtripAndReconcile:
 
     def test_stats_normalizer_survives_roundtrip(self):
         # The custom subclass must reconstruct in the child (not degrade to the base).
-        assert isinstance(self._child("ads").normalizer, SnapchatStatsNormalizer)
+        assert isinstance(self._child("ads_stats").normalizer, SnapchatStatsNormalizer)
 
     def test_metadata_normalizer_survives_roundtrip(self):
-        norm = self._child("ads_metadata").normalizer
+        norm = self._child("ads").normalizer
         assert isinstance(norm, DataFrameNormalizer) and not isinstance(norm, SnapchatStatsNormalizer)
         assert norm.flatten_max_level == 3 and norm.drop_na_columns is True
 
     def test_ads_row_conforms_after_roundtrip(self):
-        child = self._child("ads")
+        child = self._child("ads_stats")
         rows = _with_date([{"id": "ad1", "type": "AD", "stats": {"impressions": "100"}}], dt.date(2026, 6, 10))
         normalized = child.normalizer.normalize(rows)
-        out = representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)
+        out = representation_for(normalized).conformer.reconcile(normalized, schemas.AdsStats)
         assert int(out.loc[0, "impressions"]) == 100
 
     def test_ads_metadata_conforms_after_roundtrip(self):
-        child = self._child("ads_metadata")
+        child = self._child("ads")
         normalized = child.normalizer.normalize([{"id": "ad1", "name": "My Ad"}])
-        representation_for(normalized).conformer.reconcile(normalized, schemas.AdsMetadata)  # must not raise
+        representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)  # must not raise

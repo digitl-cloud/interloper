@@ -35,14 +35,14 @@ class TestSourceNormalizer:
     def test_all_eight_assets_present(self):
         keys = {type(a).key for a in _source().assets}
         assert keys == {
-            "campaigns",
-            "ads",
-            "ads_by_age_gender",
-            "ads_by_country",
-            "videos",
+            "campaigns_stats",
+            "ads_stats",
+            "ads_stats_by_age_gender",
+            "ads_stats_by_country",
+            "videos_stats",
             "custom_audiences",
-            "ads_metadata",
-            "campaigns_metadata",
+            "ads",
+            "campaigns",
         }
 
 
@@ -86,18 +86,18 @@ class TestSpecRoundtripAndReconcile:
         return next(a for a in child_dag.assets if type(a).key == key)
 
     def test_custom_normalizer_survives_roundtrip(self):
-        norm = self._child("ads").normalizer
+        norm = self._child("ads_stats").normalizer
         assert isinstance(norm, FacebookActionsNormalizer)  # not degraded to the base
         assert norm.flatten_max_level == 1
 
     def test_insights_row_reconciles_against_ads_schema(self):
-        child = self._child("ads")
+        child = self._child("ads_stats")
         rows = [
             {"date_start": "2026-06-10", "account_id": "123", "actions": [{"action_type": "link_click", "value": "7"}]}
         ]
         normalized = child.normalizer.normalize(rows)
         assert "actions_link_click" in normalized.columns
-        out = representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)
+        out = representation_for(normalized).conformer.reconcile(normalized, schemas.AdsStats)
         assert int(out.loc[0, "actions_link_click"]) == 7
 
     def test_sparse_row_passes_validation(self):
@@ -105,14 +105,14 @@ class TestSpecRoundtripAndReconcile:
         pass the asset's (non-strict) validation — every schema field is
         optional, so absent action types are not 'Field required' errors."""
         df = pd.DataFrame([{"date_start": "2026-06-10", "account_id": "123", "actions_link_click": 7}])
-        representation_for(df).conformer.validate(df, schemas.Ads)  # must not raise
+        representation_for(df).conformer.validate(df, schemas.AdsStats)  # must not raise
 
     def test_metadata_row_flattens_creative_and_reconciles(self):
-        child = self._child("ads_metadata")
+        child = self._child("ads")
         rows = [{"id": "456", "name": "My Ad", "creative": {"id": "789", "name": "Creative A"}}]
         normalized = child.normalizer.normalize(rows)
         assert "creative_id" in normalized.columns  # nested dict flattened by the normalizer
-        representation_for(normalized).conformer.reconcile(normalized, schemas.AdsMetadata)  # must not raise
+        representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)  # must not raise
 
 
 def test_isinstance_of_dataframe_normalizer():

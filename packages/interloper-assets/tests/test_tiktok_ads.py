@@ -30,23 +30,29 @@ class TestSourceNormalizer:
     def test_all_eight_assets_present(self):
         keys = {type(a).key for a in _source().assets}
         assert keys == {
+            "ads_stats",
+            "ads_stats_by_country",
+            "ads_stats_by_age_gender",
+            "ads_stats_by_platform",
+            "videos_stats_by_platform",
             "ads",
-            "ads_by_country",
-            "ads_by_age_gender",
-            "ads_by_platform",
-            "videos_by_platform",
-            "ads_metadata",
-            "campaigns_metadata",
-            "advertisers_metadata",
+            "campaigns",
+            "advertisers",
         }
 
     def test_stats_assets_use_the_stats_normalizer(self):
-        for key in ("ads", "ads_by_country", "ads_by_age_gender", "ads_by_platform", "videos_by_platform"):
+        for key in (
+            "ads_stats",
+            "ads_stats_by_country",
+            "ads_stats_by_age_gender",
+            "ads_stats_by_platform",
+            "videos_stats_by_platform",
+        ):
             asset = next(a for a in _source().assets if type(a).key == key)
             assert isinstance(asset.normalizer, TiktokStatsNormalizer), key
 
     def test_metadata_assets_use_the_metadata_normalizer(self):
-        for key in ("ads_metadata", "campaigns_metadata", "advertisers_metadata"):
+        for key in ("ads", "campaigns", "advertisers"):
             asset = next(a for a in _source().assets if type(a).key == key)
             assert isinstance(asset.normalizer, TiktokMetadataNormalizer), key
 
@@ -89,7 +95,7 @@ class TestSpecRoundtripAndReconcile:
         return next(a for a in child_dag.assets if type(a).key == key)
 
     def test_report_row_reconciles_against_ads_schema(self):
-        child = self._child("ads")
+        child = self._child("ads_stats")
         assert isinstance(child.normalizer, TiktokStatsNormalizer)
         rows = [
             {
@@ -99,14 +105,14 @@ class TestSpecRoundtripAndReconcile:
             }
         ]
         normalized = child.normalizer.normalize(rows)
-        reconciled = representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)
+        reconciled = representation_for(normalized).conformer.reconcile(normalized, schemas.AdsStats)
         assert float(reconciled.loc[0, "spend"]) == 12.5
         assert int(reconciled.loc[0, "clicks"]) == 3
 
     def test_metadata_row_reconciles_against_ads_metadata_schema(self):
-        child = self._child("ads_metadata")
+        child = self._child("ads")
         assert isinstance(child.normalizer, TiktokMetadataNormalizer)
         rows = [{"ad_id": "456", "ad_name": "My Ad", "ad_texts": ["hello"], "image_ids": ["img1"]}]
         normalized = child.normalizer.normalize(rows)
         # must not raise; list fields land as JSON strings on the str-typed schema columns
-        representation_for(normalized).conformer.reconcile(normalized, schemas.AdsMetadata)
+        representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)

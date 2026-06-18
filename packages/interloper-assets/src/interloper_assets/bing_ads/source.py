@@ -9,7 +9,7 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.bing_ads import constants
 from interloper_assets.bing_ads.connection import BingAdsConnection
-from interloper_assets.bing_ads.schemas import Ads
+from interloper_assets.bing_ads.schemas import AdsStats
 
 logger = logging.getLogger(__name__)
 
@@ -134,10 +134,10 @@ class BingAds(il.Source):
     """Bing Ads (Microsoft Advertising) platform integration."""
 
     @il.asset(
-        schema=Ads,
+        schema=AdsStats,
         partitioning=il.TimePartitionConfig(column="time_period"),
         tags=["Report"],
     )
-    def ads(self, context: il.ExecutionContext, connection: BingAdsConnection) -> pd.DataFrame:
+    def ads_stats(self, context: il.ExecutionContext, connection: BingAdsConnection) -> pd.DataFrame:
         """Ad performance report with impressions, clicks, conversions, and revenue metrics."""
         return _ad_performance_report(connection, context.partition_date)

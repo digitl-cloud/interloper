@@ -11,13 +11,13 @@ from interloper_assets.tiktok_ads import constants
 from interloper_assets.tiktok_ads.connection import TiktokAdsConnection
 from interloper_assets.tiktok_ads.schemas import (
     Ads,
-    AdsByAgeGender,
-    AdsByCountry,
-    AdsByPlatform,
-    AdsMetadata,
-    AdvertisersMetadata,
-    CampaignsMetadata,
-    VideosByPlatform,
+    AdsStats,
+    AdsStatsByAgeGender,
+    AdsStatsByCountry,
+    AdsStatsByPlatform,
+    Advertisers,
+    Campaigns,
+    VideosStatsByPlatform,
 )
 
 logger = logging.getLogger(__name__)
@@ -150,8 +150,8 @@ class TiktokAds(il.Source):
 
     # --- Time-series reports (TiktokStatsNormalizer from the source) ---
 
-    @il.asset(schema=Ads, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def ads(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def ads_stats(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
         """Ad-level performance with basic metrics including spend, clicks, and conversions."""
         rows = _request_report(
             connection,
@@ -163,8 +163,10 @@ class TiktokAds(il.Source):
         )
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=AdsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def ads_by_country(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(schema=AdsStatsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def ads_stats_by_country(
+        self, context: il.ExecutionContext, connection: TiktokAdsConnection
+    ) -> list[dict[str, Any]]:
         """Ad performance segmented by country."""
         rows = _request_report(
             connection,
@@ -176,8 +178,10 @@ class TiktokAds(il.Source):
         )
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=AdsByAgeGender, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def ads_by_age_gender(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(schema=AdsStatsByAgeGender, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def ads_stats_by_age_gender(
+        self, context: il.ExecutionContext, connection: TiktokAdsConnection
+    ) -> list[dict[str, Any]]:
         """Ad performance segmented by age and gender demographics."""
         rows = _request_report(
             connection,
@@ -189,8 +193,10 @@ class TiktokAds(il.Source):
         )
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=AdsByPlatform, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def ads_by_platform(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(schema=AdsStatsByPlatform, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def ads_stats_by_platform(
+        self, context: il.ExecutionContext, connection: TiktokAdsConnection
+    ) -> list[dict[str, Any]]:
         """Ad performance segmented by platform."""
         rows = _request_report(
             connection,
@@ -202,8 +208,10 @@ class TiktokAds(il.Source):
         )
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=VideosByPlatform, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def videos_by_platform(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(schema=VideosStatsByPlatform, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def videos_stats_by_platform(
+        self, context: il.ExecutionContext, connection: TiktokAdsConnection
+    ) -> list[dict[str, Any]]:
         """Video ad performance segmented by platform."""
         rows = _request_report(
             connection,
@@ -217,18 +225,18 @@ class TiktokAds(il.Source):
 
     # --- Entity (metadata) assets (TiktokMetadataNormalizer) ---
 
-    @il.asset(schema=AdsMetadata, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
-    def ads_metadata(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(schema=Ads, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    def ads(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
         """Metadata for all ads in the advertiser account."""
         return _paginate(connection, "/ad/get/", {"advertiser_id": self.advertiser_id})
 
-    @il.asset(schema=CampaignsMetadata, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
-    def campaigns_metadata(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(schema=Campaigns, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    def campaigns(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
         """Metadata for all campaigns in the advertiser account."""
         return _paginate(connection, "/campaign/get/", {"advertiser_id": self.advertiser_id})
 
-    @il.asset(schema=AdvertisersMetadata, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
-    def advertisers_metadata(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(schema=Advertisers, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    def advertisers(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
         """Metadata for the advertiser account."""
         response = connection.client.get(
             "/advertiser/info/",

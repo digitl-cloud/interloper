@@ -1,13 +1,13 @@
-from .page import Page
-from .search_appearance import SearchAppearance
-from .site import Site
-from .site_by_country_device import SiteByCountryDevice
-from .site_by_country_page import SiteByCountryPage
+from .page_stats import PageStats
+from .search_appearance_stats import SearchAppearanceStats
+from .site_stats import SiteStats
+from .site_stats_by_country_device import SiteStatsByCountryDevice
+from .site_stats_by_country_page import SiteStatsByCountryPage
 
 __all__ = [
-    "Page",
-    "SearchAppearance",
-    "Site",
-    "SiteByCountryDevice",
-    "SiteByCountryPage",
+    "PageStats",
+    "SearchAppearanceStats",
+    "SiteStats",
+    "SiteStatsByCountryDevice",
+    "SiteStatsByCountryPage",
 ]
