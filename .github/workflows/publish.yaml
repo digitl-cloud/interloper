@@ -60,12 +60,13 @@ jobs:
   # ────────────────────────────────────────────────────────────────────
   # Docker images → GitHub Container Registry (ghcr.io)
   #
-  # One image per component, tagged with the released version (plus `latest`
-  # on stable releases only). The matrix mirrors the image catalog in the
-  # Makefile (ROLES + ROLES_LAUNCHER_AWARE) — keep the two in sync.
+  # One image per role, tagged with the released version (plus `latest` on
+  # stable releases only). Flavors (extra-bearing variants) ride the tag as a
+  # "-<flavor>" suffix rather than a separate image. The matrix mirrors the
+  # image catalog in the Makefile (ROLES + FLAVORS_*) — keep the two in sync.
   # ────────────────────────────────────────────────────────────────────
   docker:
-    name: Docker (${{ matrix.image }})
+    name: Docker (${{ matrix.role }}${{ matrix.flavor && format('-{0}', matrix.flavor) || '' }})
     needs: resolve
     runs-on: ubuntu-latest
 
@@ -76,13 +77,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # role  → dockerfile target + image name (interloper-<role>)
+        # flavor → tag suffix; api_extras/scheduler_extras feed the build args
         include:
-          - { target: api,       image: interloper-api,              scheduler_extras: "" }
-          - { target: frontend,  image: interloper-frontend,         scheduler_extras: "" }
-          - { target: worker,    image: interloper-worker,           scheduler_extras: "" }
-          - { target: scheduler, image: interloper-scheduler,        scheduler_extras: "" }
-          - { target: scheduler, image: interloper-scheduler-k8s,    scheduler_extras: "k8s" }
-          - { target: scheduler, image: interloper-scheduler-docker, scheduler_extras: "docker" }
+          - { role: api,       flavor: "",       api_extras: "",      scheduler_extras: "" }
+          - { role: api,       flavor: agent,    api_extras: "agent", scheduler_extras: "" }
+          - { role: frontend,  flavor: "",       api_extras: "",      scheduler_extras: "" }
+          - { role: worker,    flavor: "",       api_extras: "",      scheduler_extras: "" }
+          - { role: scheduler, flavor: "",       api_extras: "",      scheduler_extras: "" }
+          - { role: scheduler, flavor: k8s,      api_extras: "",      scheduler_extras: "k8s" }
+          - { role: scheduler, flavor: docker,   api_extras: "",      scheduler_extras: "docker" }
 
     steps:
       - name: Checkout (released tag)
@@ -109,29 +113,31 @@ jobs:
         id: tags
         run: |
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          repo="ghcr.io/${owner}/${{ matrix.image }}"
-          tags="${repo}:${{ needs.resolve.outputs.version }}"
+          repo="ghcr.io/${owner}/interloper-${{ matrix.role }}"
+          suffix=""
+          [ -n "${{ matrix.flavor }}" ] && suffix="-${{ matrix.flavor }}"
+          tags="${repo}:${{ needs.resolve.outputs.version }}${suffix}"
           if [ "${{ needs.resolve.outputs.stable }}" = "true" ]; then
-            tags="${tags},${repo}:latest"
+            tags="${tags},${repo}:latest${suffix}"
           fi
           echo "tags=${tags}" >> "$GITHUB_OUTPUT"
 
-      - name: Build & Push (${{ matrix.target }})
+      - name: Build & Push (${{ matrix.role }}${{ matrix.flavor && format('-{0}', matrix.flavor) || '' }})
         uses: docker/build-push-action@v6
         with:
           context: .
           file: dockerfile
-          target: ${{ matrix.target }}
+          target: ${{ matrix.role }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
             CORE_EXTRAS=google-cloud
             ASSETS_EXTRAS=bing,facebook,google
-            API_EXTRAS=agent
+            API_EXTRAS=${{ matrix.api_extras }}
             SCHEDULER_EXTRAS=${{ matrix.scheduler_extras }}
-          cache-from: type=gha,scope=docker-${{ matrix.image }}
-          cache-to: type=gha,scope=docker-${{ matrix.image }},mode=max
+          cache-from: type=gha,scope=docker-${{ matrix.role }}-${{ matrix.flavor }}
+          cache-to: type=gha,scope=docker-${{ matrix.role }}-${{ matrix.flavor }},mode=max
 
   # ────────────────────────────────────────────────────────────────────
   # Helm chart → GitHub Pages (chart-releaser)

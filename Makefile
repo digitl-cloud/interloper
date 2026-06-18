@@ -47,34 +47,47 @@ REGISTRY      := europe-docker.pkg.dev/dc-int-connectors-prd/docker
 VERSION       := $(shell python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 CORE_EXTRAS   ?= google-cloud
 ASSETS_EXTRAS ?= bing,facebook,google
-API_EXTRAS    ?= agent
 
-# Image catalog. Each component is its own repository: "interloper-<role>".
-# NOTE: the `docker` job matrix in .github/workflows/release.yaml mirrors this
-# catalog — update both together when adding or removing a role.
-#   ROLES                  → image "interloper-<role>",         tag = "<version>"
-#   ROLES_LAUNCHER_AWARE   → one image per (role, launcher) pair, all tagged
-#                            "<version>", with the launcher in the image name:
-#                              interloper-<role>             (no launcher extras)
-#                              interloper-<role>-k8s
-#                              interloper-<role>-docker
-# The chart picks the suffix from config.launcher.type — no manual mapping.
-ROLES                := api frontend worker
-ROLES_LAUNCHER_AWARE := scheduler
-LAUNCHERS            := k8s docker
+# Image catalog. Each role is its own repository "interloper-<role>"; flavors
+# (extra-bearing variants) ride the TAG, not the image name:
+#   interloper-<role>:<version>            base image (no flavor extras)
+#   interloper-<role>:<version>-<flavor>   flavored variant
+# plus the matching "latest" / "latest-<flavor>" tags on stable releases.
+# NOTE: the `docker` job matrix in .github/workflows/publish.yaml mirrors this
+# catalog — update both together when adding or removing a role or flavor.
+ROLES := api frontend worker scheduler
 
-# Concrete target stems built by `docker-build`.
-TARGETS := $(ROLES) $(ROLES_LAUNCHER_AWARE) \
-           $(foreach r,$(ROLES_LAUNCHER_AWARE), \
-             $(foreach l,$(LAUNCHERS),$(r)-$(l)))
+# Flavors per role, and the build-arg that carries a flavor's extra. A role
+# with no FLAVORS_<role> builds only its base image.
+FLAVORS_api          := agent
+FLAVORS_scheduler    := k8s docker
+EXTRAS_ARG_api       := API_EXTRAS
+EXTRAS_ARG_scheduler := SCHEDULER_EXTRAS
 
-# Parse a target stem (e.g. "scheduler-k8s") into role + launcher.
-# Launcher is empty for base targets ("scheduler", "api", …).
-launcher_of = $(if $(filter %-k8s %-docker,$(1)),$(lastword $(subst -, ,$(1))))
-role_of     = $(if $(call launcher_of,$(1)),$(patsubst %-$(call launcher_of,$(1)),%,$(1)),$(1))
-# Image name derived from a stem. Tag carries the version only;
-# launcher variants live in the image name.
-image_of    = interloper-$(call role_of,$(1))$(if $(call launcher_of,$(1)),-$(call launcher_of,$(1)))
+# All flavor tokens, used to split a "<role>-<flavor>" stem back apart.
+ALL_FLAVORS := $(sort $(foreach r,$(ROLES),$(FLAVORS_$(r))))
+
+# Concrete target stems built by `docker-build`: every role plus each
+# "<role>-<flavor>" pair → api api-agent frontend worker scheduler
+# scheduler-k8s scheduler-docker.
+TARGETS := $(ROLES) \
+           $(foreach r,$(ROLES),$(foreach f,$(FLAVORS_$(r)),$(r)-$(f)))
+
+# Parse a stem (e.g. "scheduler-k8s") into flavor + role. Flavor is empty for
+# base stems ("scheduler", "api", …).
+flavor_of = $(lastword $(filter $(ALL_FLAVORS),$(subst -, ,$(1))))
+role_of   = $(if $(call flavor_of,$(1)),$(patsubst %-$(call flavor_of,$(1)),%,$(1)),$(1))
+
+# One image name per role; the flavor (when any) rides the tag.
+image_of  = interloper-$(call role_of,$(1))
+tag_of    = $(VERSION)$(if $(call flavor_of,$(1)),-$(call flavor_of,$(1)))
+latest_of = latest$(if $(call flavor_of,$(1)),-$(call flavor_of,$(1)))
+
+# Build-arg injecting the flavor's extra, scoped to the role that defines it
+# (e.g. "--build-arg API_EXTRAS=agent"). Roles with an extras arg always get
+# it set — empty for the base stem — so the dockerfile default can't leak in
+# (SCHEDULER_EXTRAS defaults to "docker" there).
+extras_arg = $(if $(EXTRAS_ARG_$(call role_of,$(1))),--build-arg $(EXTRAS_ARG_$(call role_of,$(1)))=$(call flavor_of,$(1)))
 
 # Pattern rules. Order matters on macOS' GNU make 3.81 (no shortest-stem):
 # the more specific docker-build-linux-% must come first.
@@ -82,27 +95,25 @@ docker-build-linux-%:
 	docker build --target $(call role_of,$*) --platform linux/amd64 \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
-		--build-arg API_EXTRAS=$(API_EXTRAS) \
-		--build-arg SCHEDULER_EXTRAS=$(call launcher_of,$*) \
-		-t $(call image_of,$*):$(VERSION) \
-		-t $(call image_of,$*):latest \
-		-t $(REGISTRY)/$(call image_of,$*):$(VERSION) \
-		-t $(REGISTRY)/$(call image_of,$*):latest .
+		$(call extras_arg,$*) \
+		-t $(call image_of,$*):$(call tag_of,$*) \
+		-t $(call image_of,$*):$(call latest_of,$*) \
+		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \
+		-t $(REGISTRY)/$(call image_of,$*):$(call latest_of,$*) .
 
 docker-build-%:
 	docker build --target $(call role_of,$*) \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
-		--build-arg API_EXTRAS=$(API_EXTRAS) \
-		--build-arg SCHEDULER_EXTRAS=$(call launcher_of,$*) \
-		-t $(call image_of,$*):$(VERSION) \
-		-t $(call image_of,$*):latest \
-		-t $(REGISTRY)/$(call image_of,$*):$(VERSION) \
-		-t $(REGISTRY)/$(call image_of,$*):latest .
+		$(call extras_arg,$*) \
+		-t $(call image_of,$*):$(call tag_of,$*) \
+		-t $(call image_of,$*):$(call latest_of,$*) \
+		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \
+		-t $(REGISTRY)/$(call image_of,$*):$(call latest_of,$*) .
 
 docker-push-%:
-	docker push $(REGISTRY)/$(call image_of,$*):$(VERSION)
-	docker push $(REGISTRY)/$(call image_of,$*):latest
+	docker push $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*)
+	docker push $(REGISTRY)/$(call image_of,$*):$(call latest_of,$*)
 
 docker-build:       $(addprefix docker-build-,$(TARGETS))
 docker-build-linux: $(addprefix docker-build-linux-,$(TARGETS))

@@ -15,22 +15,25 @@ disabled via `<component>.enabled: false`.
 
 ## Images
 
-Each component is its own image, named `interloper-<component>`. Images are
-published to GitHub Container Registry, which is the chart's default
-`image.registry` (`ghcr.io/digitl-cloud`):
+Each component is its own image, named `interloper-<component>`. Flavored
+variants ride the **tag** as a `-<flavor>` suffix on the same image (not a
+separate image name). Images are published to GitHub Container Registry, which
+is the chart's default `image.registry` (`ghcr.io/digitl-cloud`):
 
 ```
 ghcr.io/digitl-cloud/interloper-scheduler:<version>          # in-process launcher
-ghcr.io/digitl-cloud/interloper-scheduler-k8s:<version>      # kubernetes launcher
-ghcr.io/digitl-cloud/interloper-scheduler-docker:<version>   # docker launcher
-ghcr.io/digitl-cloud/interloper-api:<version>
+ghcr.io/digitl-cloud/interloper-scheduler:<version>-k8s      # kubernetes launcher
+ghcr.io/digitl-cloud/interloper-scheduler:<version>-docker   # docker launcher
+ghcr.io/digitl-cloud/interloper-api:<version>                # base (no /agent routes)
+ghcr.io/digitl-cloud/interloper-api:<version>-agent          # bundles the ADK agent
 ghcr.io/digitl-cloud/interloper-frontend:<version>
 ghcr.io/digitl-cloud/interloper-worker:<version>             # kubernetes runner per-asset Job target
 ```
 
-The chart picks the scheduler image suffix from `config.launcher.type`
-automatically — no manual mapping. Override `image.registry` (and
-`image.pullSecrets` for a private registry) to pull from elsewhere.
+The chart picks the scheduler tag suffix from `config.launcher.type`
+automatically, and the api `-agent` tag when `api.agent.enabled=true` — no
+manual mapping. Override `image.registry` (and `image.pullSecrets` for a
+private registry) to pull from elsewhere.
 
 ## Quick start (dev)
 

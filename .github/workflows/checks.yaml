@@ -93,15 +93,19 @@ jobs:
         run: pnpm exec nuxt typecheck
 
   docker:
-    name: Docker smoke (${{ matrix.target }})
+    name: Docker smoke (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Light smoke set: `core` exercises the Python build path;
-        # `frontend` exercises the Node/Nuxt build path. Full matrix
-        # (worker/scheduler/api + launcher variants) runs on release.
-        target: [core, frontend]
+        # Light smoke set: `core` exercises the Python build path; `frontend`
+        # the Node/Nuxt build path; `api-agent` the optional agent extra (the
+        # only release flavor whose dep resolution isn't otherwise built in CI).
+        # Full matrix + launcher tag variants run on release (publish.yaml).
+        include:
+          - { name: core,      target: core,     api_extras: "" }
+          - { name: frontend,  target: frontend, api_extras: "" }
+          - { name: api-agent, target: api,      api_extras: agent }
     permissions:
       contents: read
     steps:
@@ -111,7 +115,7 @@ jobs:
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build (${{ matrix.target }})
+      - name: Build (${{ matrix.name }})
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -120,8 +124,11 @@ jobs:
           platforms: linux/amd64
           push: false
           load: false
-          cache-from: type=gha,scope=docker-${{ matrix.target }}
-          cache-to: type=gha,scope=docker-${{ matrix.target }},mode=max
+          build-args: |
+            CORE_EXTRAS=google-cloud
+            API_EXTRAS=${{ matrix.api_extras }}
+          cache-from: type=gha,scope=docker-${{ matrix.name }}
+          cache-to: type=gha,scope=docker-${{ matrix.name }},mode=max
 
   helm:
     name: Helm lint

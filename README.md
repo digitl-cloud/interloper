@@ -70,19 +70,19 @@ pip install interloper-core
 
 ### Docker images (GHCR)
 
-Container images are published to the [GitHub Container Registry](https://github.com/orgs/digitl-cloud/packages?repo_name=interloper), tagged with the release version and `latest`.
+Container images are published to the [GitHub Container Registry](https://github.com/orgs/digitl-cloud/packages?repo_name=interloper), tagged with the release version and `latest`. There's one image per role; flavored variants ride the tag as a `-<flavor>` suffix (e.g. `:<version>-k8s`).
 
-| Image                                                                                                            | Role                              |
-| ---------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| [`ghcr.io/digitl-cloud/interloper-api`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-api)                             | FastAPI HTTP backend              |
-| [`ghcr.io/digitl-cloud/interloper-frontend`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-frontend)                   | Web UI (nginx-served SPA)         |
-| [`ghcr.io/digitl-cloud/interloper-worker`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-worker)                       | Queue worker                      |
-| [`ghcr.io/digitl-cloud/interloper-scheduler`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-scheduler)                 | Scheduler (local launcher)        |
-| [`ghcr.io/digitl-cloud/interloper-scheduler-k8s`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-scheduler-k8s)         | Scheduler (Kubernetes launcher)   |
-| [`ghcr.io/digitl-cloud/interloper-scheduler-docker`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-scheduler-docker)   | Scheduler (Docker launcher)       |
+| Image                                                                                                            | Role                              | Flavor tags (`:<version>-<flavor>`)            |
+| ---------------------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------- |
+| [`ghcr.io/digitl-cloud/interloper-api`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-api)                             | FastAPI HTTP backend              | `-agent` (bundles the ADK agent / `/agent` routes) |
+| [`ghcr.io/digitl-cloud/interloper-frontend`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-frontend)                   | Web UI (nginx-served SPA)         | —                                              |
+| [`ghcr.io/digitl-cloud/interloper-worker`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-worker)                       | Queue worker                      | —                                              |
+| [`ghcr.io/digitl-cloud/interloper-scheduler`](https://github.com/digitl-cloud/interloper/pkgs/container/interloper-scheduler)                 | Scheduler (cron + worker + reaper) | `-k8s` (Kubernetes launcher), `-docker` (Docker launcher) |
 
 ```bash
 docker pull ghcr.io/digitl-cloud/interloper-api:latest
+docker pull ghcr.io/digitl-cloud/interloper-api:latest-agent
+docker pull ghcr.io/digitl-cloud/interloper-scheduler:latest-k8s
 ```
 
 ### Helm chart

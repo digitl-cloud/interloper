@@ -10,8 +10,12 @@
 #   api        core + db + api (assets installed; SDK extras skipped)
 #   frontend   pre-built Nuxt SPA served by nginx
 #
-# Tagging convention:
-#   docker build --target scheduler -t interloper-scheduler:0.2.0 .
+# Tagging convention: one image per role, flavors ride the tag.
+#   docker build --target scheduler -t interloper-scheduler:0.2.0 .        # base
+#   docker build --target scheduler --build-arg SCHEDULER_EXTRAS=k8s \
+#       -t interloper-scheduler:0.2.0-k8s .                                # flavored
+#   docker build --target api --build-arg API_EXTRAS=agent \
+#       -t interloper-api:0.2.0-agent .
 #
 # Build args:
 #   CORE_EXTRAS       comma-separated interloper-core extras (default: google-cloud)
@@ -21,7 +25,11 @@
 #                     Pass "" to disable.
 #   SCHEDULER_EXTRAS  comma-separated interloper-scheduler extras (default: docker)
 #                     Supported: docker, k8s.  Each extra pulls in the
-#                     corresponding launcher/runner package.
+#                     corresponding launcher/runner package. Pass "" for the
+#                     base scheduler (in-process launcher, no extras).
+#   API_EXTRAS        comma-separated interloper-api extras (default: none).
+#                     Supported: agent (bundles interloper-agent so the
+#                     /agent routes mount). Each maps to --extra {name}.
 #
 # ================================================================
 

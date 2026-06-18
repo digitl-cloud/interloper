@@ -96,21 +96,25 @@ All workspace packages are published:
 
 ## Docker images (GitHub Container Registry)
 
-The `docker` job builds one image per component and pushes it to GHCR. The
-matrix mirrors the image catalog in the [`Makefile`](Makefile) — keep the two in
-sync if a role is added or removed.
+The `docker` job builds one image per role and pushes it to GHCR. Flavored
+variants (extra-bearing builds) ride the **tag** as a `-<flavor>` suffix on the
+same image rather than a separate image name. The matrix mirrors the image
+catalog in the [`Makefile`](Makefile) (`ROLES` + `FLAVORS_*`) — keep the two in
+sync if a role or flavor is added or removed.
 
-| Image | Dockerfile target | Notes |
+| Image:tag | Dockerfile target | Build arg |
 | --- | --- | --- |
-| `ghcr.io/<owner>/interloper-api` | `api` | |
-| `ghcr.io/<owner>/interloper-frontend` | `frontend` | nginx serving the built SPA |
-| `ghcr.io/<owner>/interloper-worker` | `worker` | |
-| `ghcr.io/<owner>/interloper-scheduler` | `scheduler` | no launcher extras |
-| `ghcr.io/<owner>/interloper-scheduler-k8s` | `scheduler` | `SCHEDULER_EXTRAS=k8s` |
-| `ghcr.io/<owner>/interloper-scheduler-docker` | `scheduler` | `SCHEDULER_EXTRAS=docker` |
+| `ghcr.io/<owner>/interloper-api:<version>` | `api` | — |
+| `ghcr.io/<owner>/interloper-api:<version>-agent` | `api` | `API_EXTRAS=agent` |
+| `ghcr.io/<owner>/interloper-frontend:<version>` | `frontend` | nginx serving the built SPA |
+| `ghcr.io/<owner>/interloper-worker:<version>` | `worker` | — |
+| `ghcr.io/<owner>/interloper-scheduler:<version>` | `scheduler` | no launcher extras |
+| `ghcr.io/<owner>/interloper-scheduler:<version>-k8s` | `scheduler` | `SCHEDULER_EXTRAS=k8s` |
+| `ghcr.io/<owner>/interloper-scheduler:<version>-docker` | `scheduler` | `SCHEDULER_EXTRAS=docker` |
 
-Each image is tagged with the released version. On **stable** releases the
-`latest` tag is also moved; release candidates push the version tag only.
+Each image is tagged with the released version (and `-<flavor>` variants). On
+**stable** releases the `latest` / `latest-<flavor>` tags are also moved;
+release candidates push the version tags only.
 
 One-time setup: the first push creates each package as **private** and not yet
 linked to the repository. After the first release, for each package go to the

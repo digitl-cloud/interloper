@@ -54,10 +54,14 @@ x-interloper-env: &interloper-env
 # The api image (core + db + assets + api) is enough to run both the API and the
 # seed script. Reused by the `seed` and `api` services so it builds once.
 # Build context is the repo root (the dockerfile and packages live there).
+# API_EXTRAS=agent bundles interloper-agent so the /agent routes mount in dev
+# (chat needs GEMINI_API_KEY, loaded from the repo-root .env below).
 x-api-build: &api-build
   context: ..
   dockerfile: dockerfile
   target: api
+  args:
+    API_EXTRAS: agent
 
 # Mount the dev catalog so seed/api/scheduler all load the same sources.
 x-interloper-config: &interloper-config
