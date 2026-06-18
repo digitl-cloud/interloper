@@ -6,9 +6,9 @@
 #
 # Images are published to GitHub Container Registry and follow the
 # convention "<registry>/interloper-<component>:<tag>" — e.g.
-# ghcr.io/digitl-cloud/interloper-api:0.3.1. For launcher-aware images
-# (scheduler) the image name gets a "-k8s" or "-docker" suffix derived from
-# config.launcher.type (the tag is just the version).
+# ghcr.io/digitl-cloud/interloper-api:0.3.1. Flavored variants ride the TAG as
+# a "-<flavor>" suffix on the same image: the scheduler gets "-k8s"/"-docker"
+# from config.launcher.type, and the api gets "-agent" when api.agent.enabled.
 image:
   registry: ghcr.io/digitl-cloud
   tag: ""  # defaults to Chart.appVersion
@@ -54,6 +54,13 @@ worker:
 api:
   enabled: true
   replicaCount: 1
+  # Agent (ADK chat) support. When true, the chart deploys the
+  # `interloper-api:<tag>-agent` image, which bundles interloper-agent so the
+  # /agent routes mount (the base image omits them → those routes 404). The
+  # agent also needs Google/Gemini credentials at runtime — supply them via
+  # api.extraEnv (e.g. GOOGLE_API_KEY / GEMINI_API_KEY).
+  agent:
+    enabled: false
   image:
     repository: ""  # defaults to {image.registry}/interloper-api
     tag: ""

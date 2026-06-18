@@ -65,15 +65,15 @@ Both run against [dev/interloper.yaml](dev/interloper.yaml), which carries **onl
 
 ## Docker images
 
-Built from a single multi-target [dockerfile](dockerfile). The image catalog is defined in the [Makefile](Makefile):
+Built from a single multi-target [dockerfile](dockerfile). The image catalog is defined in the [Makefile](Makefile): one image per role (`interloper-<role>`), with **flavors** (extra-bearing variants) riding the **tag** as a `-<flavor>` suffix — not a separate image name.
 
-- `ROLES` (`api`, `frontend`, `worker`) → image `interloper-<role>:<version>`.
-- `ROLES_LAUNCHER_AWARE` (`scheduler`) builds one image per launcher: `interloper-scheduler`, `interloper-scheduler-k8s`, `interloper-scheduler-docker`. The launcher lives in the **image name**, not the tag; the Helm chart picks the suffix from `config.launcher.type`.
-- Build one target: `make docker-build-<role>` or `make docker-build-<role>-<launcher>`.
+- `ROLES` (`api`, `frontend`, `worker`, `scheduler`) → image `interloper-<role>:<version>` (base, no flavor extras).
+- `FLAVORS_<role>` defines the per-role flavors and `EXTRAS_ARG_<role>` the build arg that carries them: `scheduler` → `k8s`, `docker` (via `SCHEDULER_EXTRAS`); `api` → `agent` (via `API_EXTRAS`). These build `interloper-scheduler:<version>-k8s`, `interloper-api:<version>-agent`, etc. (plus matching `latest-<flavor>` tags). The Helm chart picks the scheduler tag suffix from `config.launcher.type` and the api `-agent` tag from `api.agent.enabled`.
+- Build one target: `make docker-build-<role>` (base) or `make docker-build-<role>-<flavor>` (e.g. `docker-build-scheduler-k8s`, `docker-build-api-agent`).
 - Build everything: `make docker-build` (host arch) or `make docker-build-linux` (linux/amd64 for the registry).
 - Push: `make docker-push`, or `make docker-build-push` to build linux + push in one step.
 
-Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS`, `SCHEDULER_EXTRAS`.
+Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS` (flavor extras come from the target stem, not these).
 
 ## Conventions
 

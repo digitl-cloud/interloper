@@ -28,7 +28,7 @@ spec:
       {{- end }}
       containers:
         - name: api
-          image: {{ include "interloper.image" (dict "root" . "component" "api" "image" .Values.api.image) }}
+          image: {{ include "interloper.image" (dict "root" . "component" "api" "image" .Values.api.image "flavor" (include "interloper.apiFlavor" .)) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["interloper"]
           args:

@@ -31,7 +31,7 @@ spec:
       {{- end }}
       containers:
         - name: scheduler
-          image: {{ include "interloper.image" (dict "root" . "component" "scheduler" "image" .Values.scheduler.image) }}
+          image: {{ include "interloper.image" (dict "root" . "component" "scheduler" "image" .Values.scheduler.image "flavor" (include "interloper.schedulerFlavor" .)) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["interloper"]
           # Singleton: cron reconciler + queue worker + reaper run together.
