@@ -47,6 +47,7 @@ REGISTRY      := europe-docker.pkg.dev/dc-int-connectors-prd/docker
 VERSION       := $(shell python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 CORE_EXTRAS   ?= google-cloud
 ASSETS_EXTRAS ?= bing,facebook,google
+API_EXTRAS    ?= agent
 
 # Image catalog. Each component is its own repository: "interloper-<role>".
 # NOTE: the `docker` job matrix in .github/workflows/release.yaml mirrors this
@@ -81,6 +82,7 @@ docker-build-linux-%:
 	docker build --target $(call role_of,$*) --platform linux/amd64 \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
+		--build-arg API_EXTRAS=$(API_EXTRAS) \
 		--build-arg SCHEDULER_EXTRAS=$(call launcher_of,$*) \
 		-t $(call image_of,$*):$(VERSION) \
 		-t $(call image_of,$*):latest \
@@ -91,6 +93,7 @@ docker-build-%:
 	docker build --target $(call role_of,$*) \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
+		--build-arg API_EXTRAS=$(API_EXTRAS) \
 		--build-arg SCHEDULER_EXTRAS=$(call launcher_of,$*) \
 		-t $(call image_of,$*):$(VERSION) \
 		-t $(call image_of,$*):latest \

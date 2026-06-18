@@ -111,6 +111,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # (bing/google/facebook) are skipped.
 FROM base AS build-api
 ARG CORE_EXTRAS
+ARG API_EXTRAS
 ENV ASSETS_EXTRAS=""
 
 RUN --mount=type=cache,target=/root/.cache/uv \

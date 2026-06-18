@@ -6,6 +6,7 @@
 #   CORE_EXTRAS       → --package interloper-{name} flags
 #   ASSETS_EXTRAS     → --extra {name} flags (scoped to interloper-assets)
 #   SCHEDULER_EXTRAS  → --extra {name} flags (scoped to interloper-scheduler)
+#   API_EXTRAS        → --extra {name} flags (scoped to interloper-api)
 set -e
 
 # NOTE: the install pass intentionally omits --locked. semantic-release bumps
@@ -60,6 +61,17 @@ if $INSTALL; then
     done
     if $HAS_SCHEDULER && [ -n "${SCHEDULER_EXTRAS:-}" ]; then
         for e in $(echo "$SCHEDULER_EXTRAS" | tr ',' ' '); do
+            EXTRA_FLAGS="$EXTRA_FLAGS --extra $e"
+        done
+    fi
+
+    # API_EXTRAS → --extra flags (only when interloper-api is included)
+    HAS_API=false
+    for p in "$@"; do
+        [ "$p" = "interloper-api" ] && HAS_API=true
+    done
+    if $HAS_API && [ -n "${API_EXTRAS:-}" ]; then
+        for e in $(echo "$API_EXTRAS" | tr ',' ' '); do
             EXTRA_FLAGS="$EXTRA_FLAGS --extra $e"
         done
     fi
