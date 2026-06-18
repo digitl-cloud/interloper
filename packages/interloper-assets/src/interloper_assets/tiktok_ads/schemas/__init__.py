@@ -1,19 +1,19 @@
 from .ads import Ads
-from .ads_by_age_gender import AdsByAgeGender
-from .ads_by_country import AdsByCountry
-from .ads_by_platform import AdsByPlatform
-from .ads_metadata import AdsMetadata
-from .advertisers_metadata import AdvertisersMetadata
-from .campaigns_metadata import CampaignsMetadata
-from .videos_by_platform import VideosByPlatform
+from .ads_stats import AdsStats
+from .ads_stats_by_age_gender import AdsStatsByAgeGender
+from .ads_stats_by_country import AdsStatsByCountry
+from .ads_stats_by_platform import AdsStatsByPlatform
+from .advertisers import Advertisers
+from .campaigns import Campaigns
+from .videos_stats_by_platform import VideosStatsByPlatform
 
 __all__ = [
     "Ads",
-    "AdsByAgeGender",
-    "AdsByCountry",
-    "AdsByPlatform",
-    "AdsMetadata",
-    "AdvertisersMetadata",
-    "CampaignsMetadata",
-    "VideosByPlatform",
+    "AdsStats",
+    "AdsStatsByAgeGender",
+    "AdsStatsByCountry",
+    "AdsStatsByPlatform",
+    "Advertisers",
+    "Campaigns",
+    "VideosStatsByPlatform",
 ]

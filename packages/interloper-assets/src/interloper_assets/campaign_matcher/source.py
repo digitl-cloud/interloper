@@ -20,8 +20,8 @@ class CampaignPerformanceAnalysis(il.Source):
         schema=schemas.CampaignMatcher,
         tags=["Report"],
         requires={
-            "facebook_ads_campaigns": FacebookAds.asset_def("campaigns").qualified_key,
-            # "google_ads_campaigns": GoogleAds.asset_def("campaigns").qualified_key,
+            "facebook_ads_campaigns": FacebookAds.asset_def("campaigns_stats").qualified_key,
+            # "google_ads_campaigns": GoogleAds.asset_def("campaigns_stats").qualified_key,
         },
         partitioning=il.TimePartitionConfig(column="date"),
     )

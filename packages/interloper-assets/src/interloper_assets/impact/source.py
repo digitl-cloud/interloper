@@ -195,40 +195,50 @@ class Impact(il.Source):
         """Click events for the program."""
         return _to_df(_clicks_export(connection, self.program_id, context.partition_date), context.partition_date)
 
-    @il.asset(schema=schemas.Performance, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def performance(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    @il.asset(schema=schemas.PerformanceStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def performance_stats(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Daily performance metrics (clicks, actions, revenue)."""
         records = _report_export(
             connection, "att_adv_performance_by_day_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
-    @il.asset(schema=schemas.PerformanceByAd, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def performance_by_ad(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    @il.asset(schema=schemas.PerformanceStatsByAd, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def performance_stats_by_ad(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Performance metrics broken down by ad."""
         records = _report_export(
             connection, "adv_performance_by_ad_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
-    @il.asset(schema=schemas.PerformanceByDomain, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def performance_by_domain(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    @il.asset(
+        schema=schemas.PerformanceStatsByDomain,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
+    )
+    def performance_stats_by_domain(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Performance metrics broken down by referring domain."""
         records = _report_export(
             connection, "att_adv_performance_by_ref_domain_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
-    @il.asset(schema=schemas.PerformanceBySharedId, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def performance_by_shared_id(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    @il.asset(
+        schema=schemas.PerformanceStatsBySharedId,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
+    )
+    def performance_stats_by_shared_id(
+        self, context: il.ExecutionContext, connection: ImpactConnection
+    ) -> pd.DataFrame:
         """Performance metrics broken down by shared ID."""
         records = _report_export(
             connection, "att_adv_performance_by_shared_id_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
-    @il.asset(schema=schemas.PerformanceByIo, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def performance_by_io(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    @il.asset(schema=schemas.PerformanceStatsByIo, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def performance_stats_by_io(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
         """Performance metrics broken down by insertion order."""
         records = _report_export(
             connection, "att_adv_performance_by_IO", self.program_id, context.partition_date

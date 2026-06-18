@@ -1,15 +1,15 @@
-from .campaigns import Campaigns
-from .campaigns_by_browser import CampaignsByBrowser
-from .campaigns_by_city import CampaignsByCity
-from .campaigns_by_device_type import CampaignsByDeviceType
-from .conversions import ConversionsReport
-from .conversions_by_time_of_day import ConversionsByTimeOfDay
+from .campaigns_stats import CampaignsStats
+from .campaigns_stats_by_browser import CampaignsStatsByBrowser
+from .campaigns_stats_by_city import CampaignsStatsByCity
+from .campaigns_stats_by_device_type import CampaignsStatsByDeviceType
+from .conversions import Conversions
+from .conversions_stats_by_time_of_day import ConversionsStatsByTimeOfDay
 
 __all__ = [
-    "Campaigns",
-    "CampaignsByBrowser",
-    "CampaignsByCity",
-    "CampaignsByDeviceType",
-    "ConversionsReport",
-    "ConversionsByTimeOfDay",
+    "CampaignsStats",
+    "CampaignsStatsByBrowser",
+    "CampaignsStatsByCity",
+    "CampaignsStatsByDeviceType",
+    "Conversions",
+    "ConversionsStatsByTimeOfDay",
 ]

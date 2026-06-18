@@ -6,8 +6,8 @@ import pandas as pd
 from interloper_assets.fake import fake_data
 from interloper_assets.thetradedesk.connection import TheTradeDeskConnection
 from interloper_assets.thetradedesk.schemas import (
-    AdGroups,
-    Campaigns,
+    AdGroupsStats,
+    CampaignsStats,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,19 +31,19 @@ class TheTradeDesk(il.Source):
     )
 
     @il.asset(
-        schema=Campaigns,
+        schema=CampaignsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def campaigns(self, context: il.ExecutionContext, connection: TheTradeDeskConnection) -> pd.DataFrame:
+    def campaigns_stats(self, context: il.ExecutionContext, connection: TheTradeDeskConnection) -> pd.DataFrame:
         """Campaign performance metrics including impressions, clicks, conversions, and costs."""
-        return fake_data(Campaigns, partition_column="date", partition_date=context.partition_date)
+        return fake_data(CampaignsStats, partition_column="date", partition_date=context.partition_date)
 
     @il.asset(
-        schema=AdGroups,
+        schema=AdGroupsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def ad_groups(self, context: il.ExecutionContext, connection: TheTradeDeskConnection) -> pd.DataFrame:
+    def ad_groups_stats(self, context: il.ExecutionContext, connection: TheTradeDeskConnection) -> pd.DataFrame:
         """Ad group performance metrics including impressions, clicks, conversions, and costs."""
-        return fake_data(AdGroups, partition_column="date", partition_date=context.partition_date)
+        return fake_data(AdGroupsStats, partition_column="date", partition_date=context.partition_date)

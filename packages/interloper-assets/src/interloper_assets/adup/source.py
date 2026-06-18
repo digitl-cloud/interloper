@@ -6,7 +6,7 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.adup import constants
 from interloper_assets.adup.connection import AdupConnection
-from interloper_assets.adup.schemas import Account, Ads
+from interloper_assets.adup.schemas import Account, AdsStats
 
 
 def get_report(client: il.RESTClient, report_type: str, start_date: dt.date, end_date: dt.date) -> dict:
@@ -58,9 +58,9 @@ class Adup(il.Source):
     @il.asset(
         partitioning=il.TimePartitionConfig(column="date", allow_window=True),
         tags=["Report"],
-        schema=Ads,
+        schema=AdsStats,
     )
-    def ads(self, context: il.ExecutionContext, connection: AdupConnection) -> list[dict[str, Any]]:
+    def ads_stats(self, context: il.ExecutionContext, connection: AdupConnection) -> list[dict[str, Any]]:
         """Ad performance insights with metrics like impressions, clicks, conversions, and cost."""
         start_date, end_date = context.partition_date_window
         data = get_report(connection.client, "AD_PERFORMANCE_REPORT", start_date, end_date)

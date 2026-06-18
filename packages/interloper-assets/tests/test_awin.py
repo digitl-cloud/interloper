@@ -34,7 +34,7 @@ class TestSourceNormalizer:
         assert isinstance(asset.normalizer, AwinTransactionsNormalizer)
 
     def test_publishers_uses_the_plain_normalizer(self):
-        asset = next(a for a in _source().assets if type(a).key == "publishers")
+        asset = next(a for a in _source().assets if type(a).key == "publishers_stats")
         assert isinstance(asset.normalizer, DataFrameNormalizer)
         assert not isinstance(asset.normalizer, AwinTransactionsNormalizer)
 

@@ -7,12 +7,12 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.adservice.connection import AdserviceConnection
 from interloper_assets.adservice.schemas import (
-    Campaigns,
-    CampaignsByBrowser,
-    CampaignsByCity,
-    CampaignsByDeviceType,
-    ConversionsByTimeOfDay,
-    ConversionsReport,
+    CampaignsStats,
+    CampaignsStatsByBrowser,
+    CampaignsStatsByCity,
+    CampaignsStatsByDeviceType,
+    Conversions,
+    ConversionsStatsByTimeOfDay,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,10 +63,11 @@ class Adservice(il.Source):
     """Adservice advertising platform integration."""
 
     @il.asset(
-        schema=Campaigns,
+        schema=CampaignsStats,
         partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
     )
-    def campaigns(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
+    def campaigns_stats(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
         """Campaign performance statistics with metrics like impressions, clicks, and conversions."""
         response = get_report(
             client=connection.client,
@@ -81,8 +82,9 @@ class Adservice(il.Source):
         return data
 
     @il.asset(
-        schema=ConversionsReport,
+        schema=Conversions,
         partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
     )
     def conversions(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
         """Conversion events and attribution data."""
@@ -96,10 +98,11 @@ class Adservice(il.Source):
         return data
 
     @il.asset(
-        schema=ConversionsByTimeOfDay,
+        schema=ConversionsStatsByTimeOfDay,
         partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
     )
-    def conversions_time_of_day(
+    def conversions_stats_by_time_of_day(
         self, context: il.ExecutionContext, connection: AdserviceConnection
     ) -> list[dict[str, Any]]:
         """Conversion events broken down by time of day."""
@@ -113,10 +116,13 @@ class Adservice(il.Source):
         return data
 
     @il.asset(
-        schema=CampaignsByCity,
+        schema=CampaignsStatsByCity,
         partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
     )
-    def campaigns_by_city(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
+    def campaigns_stats_by_city(
+        self, context: il.ExecutionContext, connection: AdserviceConnection
+    ) -> list[dict[str, Any]]:
         """Campaign performance segmented by city."""
         response = get_report(
             client=connection.client,
@@ -129,10 +135,11 @@ class Adservice(il.Source):
         return data
 
     @il.asset(
-        schema=CampaignsByBrowser,
+        schema=CampaignsStatsByBrowser,
         partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
     )
-    def campaigns_by_browser(
+    def campaigns_stats_by_browser(
         self, context: il.ExecutionContext, connection: AdserviceConnection
     ) -> list[dict[str, Any]]:
         """Campaign performance segmented by browser."""
@@ -147,10 +154,11 @@ class Adservice(il.Source):
         return data
 
     @il.asset(
-        schema=CampaignsByDeviceType,
+        schema=CampaignsStatsByDeviceType,
         partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
     )
-    def campaigns_by_device_type(
+    def campaigns_stats_by_device_type(
         self, context: il.ExecutionContext, connection: AdserviceConnection
     ) -> list[dict[str, Any]]:
         """Campaign performance segmented by device type."""

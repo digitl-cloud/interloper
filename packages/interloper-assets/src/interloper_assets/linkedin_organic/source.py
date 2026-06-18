@@ -6,9 +6,9 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.fake import fake_data
 from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnection
 from interloper_assets.linkedin_organic.schemas import (
-    FollowerStatistics,
-    PageStatistics,
-    ShareStatistics,
+    FollowerDemographics,
+    PageStats,
+    ShareStats,
 )
 
 # ------------------------------------------------------------------
@@ -34,24 +34,24 @@ class LinkedinOrganic(il.Source):
     )
 
     @il.asset(
-        schema=PageStatistics,
+        schema=PageStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def page_statistics(self, context: il.ExecutionContext, connection: LinkedinOrganicConnection) -> pd.DataFrame:
+    def page_stats(self, context: il.ExecutionContext, connection: LinkedinOrganicConnection) -> pd.DataFrame:
         """Daily organization page statistics including views and clicks across sections and devices."""
-        return fake_data(PageStatistics, partition_column="date", partition_date=context.partition_date)
+        return fake_data(PageStats, partition_column="date", partition_date=context.partition_date)
 
     @il.asset(
-        schema=ShareStatistics,
+        schema=ShareStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def share_statistics(self, context: il.ExecutionContext, connection: LinkedinOrganicConnection) -> pd.DataFrame:
+    def share_stats(self, context: il.ExecutionContext, connection: LinkedinOrganicConnection) -> pd.DataFrame:
         """Daily organic share statistics including impressions, clicks, and engagement."""
-        return fake_data(ShareStatistics, partition_column="date", partition_date=context.partition_date)
+        return fake_data(ShareStats, partition_column="date", partition_date=context.partition_date)
 
-    @il.asset(schema=FollowerStatistics, tags=["Entity"])
-    def follower_statistics(self, connection: LinkedinOrganicConnection) -> pd.DataFrame:
+    @il.asset(schema=FollowerDemographics, tags=["Entity"])
+    def follower_demographics(self, connection: LinkedinOrganicConnection) -> pd.DataFrame:
         """Follower counts broken down by association type, function, geo, industry, and seniority."""
-        return fake_data(FollowerStatistics)
+        return fake_data(FollowerDemographics)

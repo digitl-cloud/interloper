@@ -1,7 +1,7 @@
-from .lineitems import Lineitems
-from .lineitems_by_country import LineitemsByCountry
+from .lineitems_stats import LineitemsStats
+from .lineitems_stats_by_country import LineitemsStatsByCountry
 
 __all__ = [
-    "Lineitems",
-    "LineitemsByCountry",
+    "LineitemsStats",
+    "LineitemsStatsByCountry",
 ]
