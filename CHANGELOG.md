@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.17.0 (2026-06-18)
+
+### Bug Fixes
+
+- Coerce tiktok stat_time_day to a date for the destination
+  ([`4b03e16`](https://github.com/digitl-cloud/interloper/commit/4b03e16fbed4dce7f2df66368c76f1a14f558cf9))
+
+- **api**: Install agent extra in api image so /agent routes mount
+  ([`0c26689`](https://github.com/digitl-cloud/interloper/commit/0c266892d8d49f007726c4774a59389f1113d236))
+
+### Features
+
+- Enable oauth sign-in for tiktok ads connection
+  ([`08124ee`](https://github.com/digitl-cloud/interloper/commit/08124ee3bf6d14b49dd4f660ebd3641f000207ec))
+
+- **api**: Add criteo/advertisers FetchField endpoint
+  ([`8032ba3`](https://github.com/digitl-cloud/interloper/commit/8032ba3845d62f53062ffa1d3662065262fb0ab8))
+
+
 ## v0.16.0 (2026-06-17)
 
 ### Bug Fixes
