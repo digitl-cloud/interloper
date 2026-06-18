@@ -17,8 +17,6 @@ class CriteoConnection(il.OAuthConnection):
 
     model_config = SettingsConfigDict(env_prefix="criteo_")
 
-    advertiser_id: str = il.InputField(description="Criteo advertiser ID")
-
     @cached_property
     def client(self) -> il.RESTClient:
         return il.RESTClient(
