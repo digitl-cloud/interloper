@@ -33,7 +33,7 @@ CAMPAIGNS_COLUMNS = ["Day", "CampaignId", "Campaign", "Currency", *constants.STA
 
 
 def _source() -> Any:
-    return Criteo(id="src-1")
+    return Criteo(id="src-1", advertiser_id="123")  # ty: ignore[unknown-argument]
 
 
 class TestSourceNormalizer:

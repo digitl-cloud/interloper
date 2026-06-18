@@ -61,6 +61,14 @@ def _statistics_report(
 class Criteo(il.Source):
     """Criteo advertising platform integration."""
 
+    advertiser_id: str = il.FetchField(
+        endpoint="criteo/advertisers",
+        depends_on="connection",
+        label_key="name",
+        value_key="id",
+        description="Criteo advertiser account",
+    )
+
     @il.asset(
         schema=Ads,
         partitioning=il.TimePartitionConfig(column="day"),
@@ -70,7 +78,7 @@ class Criteo(il.Source):
         """Ad-level performance statistics with daily breakdowns."""
         rows = _statistics_report(
             connection,
-            advertiser_id=connection.advertiser_id,
+            advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,
             dimensions=["Day", "AdId", "AdsetId", "CampaignId"],
@@ -86,7 +94,7 @@ class Criteo(il.Source):
         """Campaign-level performance statistics with daily breakdowns."""
         rows = _statistics_report(
             connection,
-            advertiser_id=connection.advertiser_id,
+            advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,
             dimensions=["Day", "CampaignId"],
