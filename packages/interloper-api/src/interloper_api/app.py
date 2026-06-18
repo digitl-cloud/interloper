@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, FastAPI
@@ -26,6 +27,8 @@ from interloper_api.routes import (
     ws,
 )
 from interloper_api.routes import catalog as catalog_routes
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(
@@ -91,7 +94,10 @@ def create_app(
 
         api.include_router(agent_routes.router, prefix="/agent", tags=["agent"])
     except ImportError:
-        pass
+        logger.warning(
+            "Agent routes not mounted: the 'agent' extra is not installed "
+            "(install interloper-api[agent]); /agent endpoints will return 404."
+        )
 
     @api.get("/health")
     def health() -> dict[str, str]:

@@ -128,6 +128,7 @@ jobs:
           build-args: |
             CORE_EXTRAS=google-cloud
             ASSETS_EXTRAS=bing,facebook,google
+            API_EXTRAS=agent
             SCHEDULER_EXTRAS=${{ matrix.scheduler_extras }}
           cache-from: type=gha,scope=docker-${{ matrix.image }}
           cache-to: type=gha,scope=docker-${{ matrix.image }},mode=max
