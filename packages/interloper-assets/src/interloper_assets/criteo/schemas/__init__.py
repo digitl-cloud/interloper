@@ -1,7 +1,7 @@
-from .ads import Ads
-from .campaigns import Campaigns
+from .ads_stats import AdsStats
+from .campaigns_stats import CampaignsStats
 
 __all__ = [
-    "Ads",
-    "Campaigns",
+    "AdsStats",
+    "CampaignsStats",
 ]

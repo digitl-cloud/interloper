@@ -4,7 +4,7 @@ from interloper.schema import Schema
 from pydantic import Field
 
 
-class DemographicsByCountry(Schema):
+class DemographicsStatsByCountry(Schema):
     """Instagram follower demographics broken down by country."""
 
     date: dt.date = Field(description="The date of the record")
@@ -13,7 +13,7 @@ class DemographicsByCountry(Schema):
     value: int = Field(description="The metric value")
 
 
-class DemographicsByCity(Schema):
+class DemographicsStatsByCity(Schema):
     """Instagram follower demographics broken down by city."""
 
     date: dt.date = Field(description="The date of the record")
@@ -22,7 +22,7 @@ class DemographicsByCity(Schema):
     value: int = Field(description="The metric value")
 
 
-class DemographicsByAgeGender(Schema):
+class DemographicsStatsByAgeGender(Schema):
     """Instagram follower demographics broken down by age and gender."""
 
     date: dt.date = Field(description="The date of the record")

@@ -20,7 +20,7 @@ from interloper.representation import representation_for
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.criteo import constants
-from interloper_assets.criteo.schemas import Ads, Campaigns
+from interloper_assets.criteo.schemas import AdsStats, CampaignsStats
 from interloper_assets.criteo.source import Criteo
 
 # Raw API column names per asset, as Criteo returns them: the requested id
@@ -60,19 +60,19 @@ class TestSpecRoundtrip:
         return next(a for a in child_dag.assets if type(a).key == key)
 
     def test_ads_row_conforms_after_roundtrip(self):
-        child = self._child_asset("ads")
+        child = self._child_asset("ads_stats")
         assert isinstance(child.normalizer, DataFrameNormalizer)
 
         row: dict[str, object] = {col: None for col in ADS_COLUMNS}
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
-        representation_for(normalized).conformer.validate(normalized, Ads)  # must not raise
+        representation_for(normalized).conformer.validate(normalized, AdsStats)  # must not raise
 
     def test_campaigns_row_conforms_after_roundtrip(self):
-        child = self._child_asset("campaigns")
+        child = self._child_asset("campaigns_stats")
         assert isinstance(child.normalizer, DataFrameNormalizer)
 
         row: dict[str, object] = {col: None for col in CAMPAIGNS_COLUMNS}
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
-        representation_for(normalized).conformer.validate(normalized, Campaigns)  # must not raise
+        representation_for(normalized).conformer.validate(normalized, CampaignsStats)  # must not raise

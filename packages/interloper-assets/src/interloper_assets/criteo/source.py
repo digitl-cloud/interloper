@@ -7,7 +7,7 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.criteo import constants
 from interloper_assets.criteo.connection import CriteoConnection
-from interloper_assets.criteo.schemas import Ads, Campaigns
+from interloper_assets.criteo.schemas import AdsStats, CampaignsStats
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +70,11 @@ class Criteo(il.Source):
     )
 
     @il.asset(
-        schema=Ads,
+        schema=AdsStats,
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    def ads(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
+    def ads_stats(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
         """Ad-level performance statistics with daily breakdowns."""
         rows = _statistics_report(
             connection,
@@ -86,11 +86,11 @@ class Criteo(il.Source):
         return rows
 
     @il.asset(
-        schema=Campaigns,
+        schema=CampaignsStats,
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    def campaigns(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
+    def campaigns_stats(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
         """Campaign-level performance statistics with daily breakdowns."""
         rows = _statistics_report(
             connection,

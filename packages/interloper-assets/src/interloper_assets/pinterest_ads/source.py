@@ -38,55 +38,55 @@ class PinterestAds(il.Source):
         """Ad account metadata including ownership and billing details."""
         return fake_data(schemas.AdAccounts)
 
-    @il.asset(schema=schemas.AdsMetadata, tags=["Entity"])
-    def ads_metadata(self, connection: PinterestAdsConnection) -> pd.DataFrame:
+    @il.asset(schema=schemas.Ads, tags=["Entity"])
+    def ads(self, connection: PinterestAdsConnection) -> pd.DataFrame:
         """Ad entity metadata including creative details and review status."""
-        return fake_data(schemas.AdsMetadata)
+        return fake_data(schemas.Ads)
 
-    @il.asset(schema=schemas.AdGroupsMetadata, tags=["Entity"])
-    def ad_groups_metadata(self, connection: PinterestAdsConnection) -> pd.DataFrame:
+    @il.asset(schema=schemas.AdGroups, tags=["Entity"])
+    def ad_groups(self, connection: PinterestAdsConnection) -> pd.DataFrame:
         """Ad group metadata including targeting, budget, and scheduling details."""
-        return fake_data(schemas.AdGroupsMetadata)
+        return fake_data(schemas.AdGroups)
 
-    @il.asset(schema=schemas.CampaignsMetadata, tags=["Entity"])
-    def campaigns_metadata(self, connection: PinterestAdsConnection) -> pd.DataFrame:
+    @il.asset(schema=schemas.Campaigns, tags=["Entity"])
+    def campaigns(self, connection: PinterestAdsConnection) -> pd.DataFrame:
         """Campaign metadata including budget and scheduling details."""
-        return fake_data(schemas.CampaignsMetadata)
+        return fake_data(schemas.Campaigns)
 
     # --- Time-series report assets ---
 
     @il.asset(
-        schema=schemas.Ads,
+        schema=schemas.AdsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def ads(self, context: il.ExecutionContext, connection: PinterestAdsConnection) -> pd.DataFrame:
+    def ads_stats(self, context: il.ExecutionContext, connection: PinterestAdsConnection) -> pd.DataFrame:
         """Ad-level performance report with engagement, cost, and conversion metrics."""
-        return fake_data(schemas.Ads, partition_column="date", partition_date=context.partition_date)
+        return fake_data(schemas.AdsStats, partition_column="date", partition_date=context.partition_date)
 
     @il.asset(
-        schema=schemas.Campaigns,
+        schema=schemas.CampaignsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def campaigns(self, context: il.ExecutionContext, connection: PinterestAdsConnection) -> pd.DataFrame:
+    def campaigns_stats(self, context: il.ExecutionContext, connection: PinterestAdsConnection) -> pd.DataFrame:
         """Campaign-level performance report with engagement, cost, and conversion metrics."""
-        return fake_data(schemas.Campaigns, partition_column="date", partition_date=context.partition_date)
+        return fake_data(schemas.CampaignsStats, partition_column="date", partition_date=context.partition_date)
 
     @il.asset(
-        schema=schemas.AdsConversions,
+        schema=schemas.AdsConversionsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def ads_conversions(self, context: il.ExecutionContext, connection: PinterestAdsConnection) -> pd.DataFrame:
+    def ads_conversions_stats(self, context: il.ExecutionContext, connection: PinterestAdsConnection) -> pd.DataFrame:
         """Detailed conversion report with attribution breakdowns across channels and devices."""
-        return fake_data(schemas.AdsConversions, partition_column="date", partition_date=context.partition_date)
+        return fake_data(schemas.AdsConversionsStats, partition_column="date", partition_date=context.partition_date)
 
     @il.asset(
-        schema=schemas.VideosByDevice,
+        schema=schemas.VideosStatsByDevice,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def videos_by_device(self, context: il.ExecutionContext, connection: PinterestAdsConnection) -> pd.DataFrame:
+    def videos_stats_by_device(self, context: il.ExecutionContext, connection: PinterestAdsConnection) -> pd.DataFrame:
         """Video ad performance report segmented by device type and placement."""
-        return fake_data(schemas.VideosByDevice, partition_column="date", partition_date=context.partition_date)
+        return fake_data(schemas.VideosStatsByDevice, partition_column="date", partition_date=context.partition_date)

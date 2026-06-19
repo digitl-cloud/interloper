@@ -7,7 +7,7 @@ import pandas as pd
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.awin.connection import AwinConnection
-from interloper_assets.awin.schemas import Publishers, Transactions
+from interloper_assets.awin.schemas import PublishersStats, Transactions
 
 # ------------------------------------------------------------------
 # NORMALIZER
@@ -130,11 +130,11 @@ class Awin(il.Source):
         return [{**row, "date": context.partition_date} for row in data]
 
     @il.asset(
-        schema=Publishers,
+        schema=PublishersStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def publishers(self, context: il.ExecutionContext, connection: AwinConnection) -> list[dict[str, Any]]:
+    def publishers_stats(self, context: il.ExecutionContext, connection: AwinConnection) -> list[dict[str, Any]]:
         """Advertiser performance reports aggregated by publisher."""
         data = get_advertiser_reports_by_publisher(
             client=connection.client,

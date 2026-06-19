@@ -1,5 +1,5 @@
-from .campaigns import Campaigns
+from .campaigns_stats import CampaignsStats
 
 __all__ = [
-    "Campaigns",
+    "CampaignsStats",
 ]

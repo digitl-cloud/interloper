@@ -2,7 +2,7 @@ from interloper.schema import Schema
 from pydantic import Field
 
 
-class ConversionsReport(Schema):
+class Conversions(Schema):
     """Conversion events and attribution data including IP geolocation and user device information."""
 
     agent_id: int = Field(description="Agent ID")

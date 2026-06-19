@@ -39,11 +39,11 @@ class TestSource:
             "action_inquiries",
             "actions_by_sku",
             "clicks",
-            "performance",
-            "performance_by_ad",
-            "performance_by_domain",
-            "performance_by_shared_id",
-            "performance_by_io",
+            "performance_stats",
+            "performance_stats_by_ad",
+            "performance_stats_by_domain",
+            "performance_stats_by_shared_id",
+            "performance_stats_by_io",
         }
 
 

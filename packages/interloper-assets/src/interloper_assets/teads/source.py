@@ -5,7 +5,7 @@ import pandas as pd
 
 from interloper_assets.fake import fake_data
 from interloper_assets.teads.connection import TeadsConnection
-from interloper_assets.teads.schemas import Campaigns
+from interloper_assets.teads.schemas import CampaignsStats
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +24,10 @@ class Teads(il.Source):
     """Teads advertising platform integration."""
 
     @il.asset(
-        schema=Campaigns,
+        schema=CampaignsStats,
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    def campaigns(self, context: il.ExecutionContext, connection: TeadsConnection) -> pd.DataFrame:
+    def campaigns_stats(self, context: il.ExecutionContext, connection: TeadsConnection) -> pd.DataFrame:
         """Campaign performance report with delivery, click, and video completion metrics."""
-        return fake_data(Campaigns, partition_column="day", partition_date=context.partition_date)
+        return fake_data(CampaignsStats, partition_column="day", partition_date=context.partition_date)

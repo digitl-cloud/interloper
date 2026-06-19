@@ -1,19 +1,19 @@
 from .ads import Ads
-from .ads_by_age_gender import AdsByAgeGender
-from .ads_by_country import AdsByCountry
-from .ads_metadata import AdsMetadata
+from .ads_stats import AdsStats
+from .ads_stats_by_age_gender import AdsStatsByAgeGender
+from .ads_stats_by_country import AdsStatsByCountry
 from .campaigns import Campaigns
-from .campaigns_metadata import CampaignsMetadata
+from .campaigns_stats import CampaignsStats
 from .custom_audiences import CustomAudiences
-from .videos import Videos
+from .videos_stats import VideosStats
 
 __all__ = [
     "Ads",
-    "AdsByAgeGender",
-    "AdsByCountry",
-    "AdsMetadata",
+    "AdsStats",
+    "AdsStatsByAgeGender",
+    "AdsStatsByCountry",
     "Campaigns",
-    "CampaignsMetadata",
+    "CampaignsStats",
     "CustomAudiences",
-    "Videos",
+    "VideosStats",
 ]

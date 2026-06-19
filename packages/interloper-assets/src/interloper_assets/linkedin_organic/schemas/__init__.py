@@ -1,9 +1,9 @@
-from .follower_statistics import FollowerStatistics
-from .page_statistics import PageStatistics
-from .share_statistics import ShareStatistics
+from .follower_stats import FollowerStats
+from .page_stats import PageStats
+from .share_stats import ShareStats
 
 __all__ = [
-    "FollowerStatistics",
-    "PageStatistics",
-    "ShareStatistics",
+    "FollowerStats",
+    "PageStats",
+    "ShareStats",
 ]

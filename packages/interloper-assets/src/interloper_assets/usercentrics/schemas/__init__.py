@@ -1,7 +1,7 @@
-from .granular import Granular
-from .interaction import Interaction
+from .granular_stats import GranularStats
+from .interaction_stats import InteractionStats
 
 __all__ = [
-    "Granular",
-    "Interaction",
+    "GranularStats",
+    "InteractionStats",
 ]

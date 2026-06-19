@@ -298,11 +298,11 @@ class FacebookAds(il.Source):
     )
 
     @il.asset(
-        schema=schemas.Campaigns,
+        schema=schemas.CampaignsStats,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def campaigns(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def campaigns_stats(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Campaign-level performance insights with metrics, engagement, and cost breakdowns."""
         rows = _get_ads_insights(
             connection,
@@ -318,11 +318,11 @@ class FacebookAds(il.Source):
         return rows
 
     @il.asset(
-        schema=schemas.Ads,
+        schema=schemas.AdsStats,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def ads(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def ads_stats(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Ad-level performance insights with platform, device, and action breakdowns."""
         rows = _get_ads_insights(
             connection,
@@ -338,11 +338,11 @@ class FacebookAds(il.Source):
         return rows
 
     @il.asset(
-        schema=schemas.AdsByAgeGender,
+        schema=schemas.AdsStatsByAgeGender,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def ads_by_age_gender(
+    def ads_stats_by_age_gender(
         self, context: il.ExecutionContext, connection: FacebookAdsConnection
     ) -> list[dict[str, Any]]:
         """Ad-level performance insights broken down by age and gender demographics."""
@@ -360,11 +360,13 @@ class FacebookAds(il.Source):
         return rows
 
     @il.asset(
-        schema=schemas.AdsByCountry,
+        schema=schemas.AdsStatsByCountry,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def ads_by_country(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def ads_stats_by_country(
+        self, context: il.ExecutionContext, connection: FacebookAdsConnection
+    ) -> list[dict[str, Any]]:
         """Ad-level performance insights broken down by country and region."""
         rows = _get_ads_insights(
             connection,
@@ -380,11 +382,11 @@ class FacebookAds(il.Source):
         return rows
 
     @il.asset(
-        schema=schemas.Videos,
+        schema=schemas.VideosStats,
         partitioning=il.TimePartitionConfig(column="date_start"),
         tags=["Report"],
     )
-    def videos(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def videos_stats(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Video ad performance with view retention, engagement, and conversion metrics."""
         rows = _get_ads_insights(
             connection,
@@ -414,17 +416,17 @@ class FacebookAds(il.Source):
         return rows
 
     @il.asset(
-        schema=schemas.AdsMetadata,
+        schema=schemas.Ads,
         tags=["Entity"],
     )
-    def ads_metadata(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def ads(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Ad metadata including creative, status, and configuration."""
         return _get_ads(connection, self.account_id)
 
     @il.asset(
-        schema=schemas.CampaignsMetadata,
+        schema=schemas.Campaigns,
         tags=["Entity"],
     )
-    def campaigns_metadata(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def campaigns(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Campaign metadata including objective, budget, and status configuration."""
         return _get_campaigns(connection, self.account_id)

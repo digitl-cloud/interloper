@@ -58,14 +58,14 @@ class LinkedinAds(il.Source):
         return fake_data(schemas.AdCampaigns)
 
     @il.asset(
-        schema=schemas.Ads,
+        schema=schemas.AdsStats,
         partitioning=il.TimePartitionConfig(column="date_range_start"),
         tags=["Report"],
     )
-    def ads(
+    def ads_stats(
         self,
         context: il.ExecutionContext,
         connection: LinkedinAdsConnection,
     ) -> pd.DataFrame:
         """Daily ad analytics with performance, engagement, and conversion metrics."""
-        return fake_data(schemas.Ads, partition_column="date_range_start", partition_date=context.partition_date)
+        return fake_data(schemas.AdsStats, partition_column="date_range_start", partition_date=context.partition_date)

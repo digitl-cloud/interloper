@@ -9,15 +9,15 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.snapchat_ads import constants
 from interloper_assets.snapchat_ads.connection import SnapchatAdsConnection
 from interloper_assets.snapchat_ads.schemas import (
-    AdAccountMetadata,
-    AdAccountsMetadata,
+    AdAccount,
+    AdAccounts,
     Ads,
-    AdsByCountry,
-    AdsMetadata,
-    AdSquadsMetadata,
+    AdSquads,
+    AdsStats,
+    AdsStatsByCountry,
     Campaigns,
-    CampaignsMetadata,
-    VideosByOs,
+    CampaignsStats,
+    VideosStatsByOs,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,22 +140,22 @@ class SnapchatAds(il.Source):
 
     # --- Time-series reports (SnapchatStatsNormalizer from the source) ---
 
-    @il.asset(schema=Ads, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def ads(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def ads_stats(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Ad-level performance with core, additional, and conversion metrics."""
         rows = _request_report(connection, self.account_id, context.partition_date, _REPORT_METRICS, breakdown="ad")
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=Campaigns, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def campaigns(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=CampaignsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def campaigns_stats(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Campaign-level performance with core, additional, and conversion metrics."""
         rows = _request_report(
             connection, self.account_id, context.partition_date, _REPORT_METRICS, breakdown="campaign"
         )
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=AdsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def ads_by_country(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=AdsStatsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def ads_stats_by_country(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Ad performance segmented by country with delivery and conversion metrics."""
         rows = _request_report(
             connection,
@@ -166,8 +166,8 @@ class SnapchatAds(il.Source):
         )
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=VideosByOs, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def videos_by_os(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=VideosStatsByOs, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    def videos_stats_by_os(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Video ad performance segmented by operating system."""
         rows = _request_report(
             connection,
@@ -180,14 +180,14 @@ class SnapchatAds(il.Source):
 
     # --- Entity (metadata) assets (flattening normalizer) ---
 
-    @il.asset(schema=AdAccountMetadata, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
-    def ad_account_metadata(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=AdAccount, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    def ad_account(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Metadata for a single ad account."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
         return _metadata_records(connection, path, "adaccounts", "adaccount")
 
-    @il.asset(schema=AdAccountsMetadata, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
-    def ad_accounts_metadata(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=AdAccounts, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    def ad_accounts(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Metadata for all ad accounts in the organization owning this account."""
         account_path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
         accounts = _metadata_records(connection, account_path, "adaccounts", "adaccount")
@@ -197,20 +197,20 @@ class SnapchatAds(il.Source):
         path = f"/{constants.API_VERSION}/organizations/{organization_id}/adaccounts"
         return _metadata_records(connection, path, "adaccounts", "adaccount")
 
-    @il.asset(schema=AdsMetadata, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
-    def ads_metadata(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=Ads, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    def ads(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Metadata for all ads in the ad account."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/ads"
         return _metadata_records(connection, path, "ads", "ad")
 
-    @il.asset(schema=AdSquadsMetadata, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
-    def ad_squads_metadata(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=AdSquads, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    def ad_squads(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Metadata for all ad squads in the ad account."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/adsquads"
         return _metadata_records(connection, path, "adsquads", "adsquad")
 
-    @il.asset(schema=CampaignsMetadata, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
-    def campaigns_metadata(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(schema=Campaigns, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    def campaigns(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """Metadata for all campaigns in the ad account."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/campaigns"
         return _metadata_records(connection, path, "campaigns", "campaign")
