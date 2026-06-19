@@ -6,7 +6,7 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.fake import fake_data
 from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnection
 from interloper_assets.linkedin_organic.schemas import (
-    FollowerDemographics,
+    FollowerStats,
     PageStats,
     ShareStats,
 )
@@ -51,7 +51,15 @@ class LinkedinOrganic(il.Source):
         """Daily organic share statistics including impressions, clicks, and engagement."""
         return fake_data(ShareStats, partition_column="date", partition_date=context.partition_date)
 
-    @il.asset(schema=FollowerDemographics, tags=["Entity"])
-    def follower_demographics(self, connection: LinkedinOrganicConnection) -> pd.DataFrame:
-        """Follower counts broken down by association type, function, geo, industry, and seniority."""
-        return fake_data(FollowerDemographics)
+    @il.asset(
+        schema=FollowerStats,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Report"],
+    )
+    def follower_stats(self, context: il.ExecutionContext, connection: LinkedinOrganicConnection) -> pd.DataFrame:
+        """Follower counts broken down by association type, function, geo, industry, and seniority.
+
+        LinkedIn returns a current snapshot with no date; the ``date`` column is stamped from the
+        partition value so successive runs accumulate a daily history.
+        """
+        return fake_data(FollowerStats, partition_column="date", partition_date=context.partition_date)

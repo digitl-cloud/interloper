@@ -1,10 +1,17 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
 
-class FollowerDemographics(Schema):
-    """LinkedIn organization follower counts by various dimensions (function, geo, industry, seniority)."""
+class FollowerStats(Schema):
+    """LinkedIn organization follower counts by various dimensions (function, geo, industry, seniority).
 
+    The LinkedIn API returns a single current snapshot (no time dimension); the ``date`` column is
+    stamped from the partition value so successive runs accumulate a daily history.
+    """
+
+    date: dt.date = Field(description="The date of the record (partition value)")
     follower_counts_by_association_type: str = Field(description="Counts of followers by association type")
     follower_counts_by_function: str = Field(description="Counts of followers by function")
     follower_counts_by_geo: str = Field(description="Counts of followers by geographic location")

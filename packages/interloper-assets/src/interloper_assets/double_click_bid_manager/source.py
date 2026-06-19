@@ -4,7 +4,7 @@ import interloper as il
 import pandas as pd
 
 from interloper_assets.double_click_bid_manager.connection import DoubleClickBidManagerConnection
-from interloper_assets.double_click_bid_manager.schemas import LineitemsStats, LineitemsStatsByCountry
+from interloper_assets.double_click_bid_manager.schemas import LineItemsStats, LineItemsStatsByCountry
 from interloper_assets.fake import fake_data
 
 logger = logging.getLogger(__name__)
@@ -24,27 +24,27 @@ class DoubleClickBidManager(il.Source):
     advertiser_id: str = il.InputField(description="DV360 advertiser ID for report filtering (optional)")
 
     @il.asset(
-        schema=LineitemsStats,
+        schema=LineItemsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def lineitems_stats(
+    def line_items_stats(
         self,
         context: il.ExecutionContext,
         connection: DoubleClickBidManagerConnection,
     ) -> pd.DataFrame:
         """Line item performance report with full metrics and fee breakdown."""
-        return fake_data(LineitemsStats, partition_column="date", partition_date=context.partition_date)
+        return fake_data(LineItemsStats, partition_column="date", partition_date=context.partition_date)
 
     @il.asset(
-        schema=LineitemsStatsByCountry,
+        schema=LineItemsStatsByCountry,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def lineitems_stats_by_country(
+    def line_items_stats_by_country(
         self,
         context: il.ExecutionContext,
         connection: DoubleClickBidManagerConnection,
     ) -> pd.DataFrame:
         """Line item performance report segmented by country."""
-        return fake_data(LineitemsStatsByCountry, partition_column="date", partition_date=context.partition_date)
+        return fake_data(LineItemsStatsByCountry, partition_column="date", partition_date=context.partition_date)
