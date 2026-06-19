@@ -85,6 +85,16 @@ Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS` (flavor extras co
 - Pre-commit runs ruff + ty + pytest on every commit ([.pre-commit-config.yaml](.pre-commit-config.yaml)).
 - All workspace packages share `version = "0.2.0"`, bumped by `python-semantic-release` from commit history.
 
+### Asset naming
+
+Assets in `interloper-assets` are named for **what the asset is**, decided by its actual row grain (not the upstream/vendor report name). Three categories:
+
+- **Entity** — one row per object (a dimension snapshot, e.g. an ad or campaign and its attributes). Name is a **bare plural noun**, `tags=["Entity"]`, unpartitioned. Examples: `ads`, `campaigns`, `advertisers`, `custom_audiences`.
+- **Report** — metrics aggregated over a date/dimension grain. Name is **`<base>_stats`**, with any `_by_<dim>` breakdown *after* `stats`; `tags=["Report"]`, time-partitioned. Examples: `ads_stats`, `ads_stats_by_country`, `page_stats`, `performance_stats`.
+- **Event / fact** — one row per event/record (per-row identifiers like `order_id`/`event_date`, no aggregation). Name is a **bare plural noun**, `tags=["Report"]`, time-partitioned. Examples: `orders`, `transactions`, `conversions`, `clicks`, `actions`.
+
+Schema classes follow the asset name: one class per file, the file named after the asset and the class its `PascalCase` (asset `ads_stats` → `class AdsStats` in `schemas/ads_stats.py`). The `demo` source is a test fixture and is exempt from these rules.
+
 ### Git flow
 
 `main` is kept strictly linear — no merge commits. Feature branches rebase onto `main`; merges into `main` are rebase-merges.
