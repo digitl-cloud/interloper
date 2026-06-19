@@ -1,14 +1,7 @@
-import logging
 
 import interloper as il
-import pandas as pd
 
-from interloper_assets.fake import fake_data
 from interloper_assets.google_ads.connection import GoogleAdsConnection
-from interloper_assets.google_ads.schemas import AdsStats, CampaignsStats
-
-logger = logging.getLogger(__name__)
-
 
 # ------------------------------------------------------------------
 # SOURCE
@@ -34,29 +27,3 @@ class GoogleAds(il.Source):
         default=None,
         description="Manager account customer ID (required if accessing through a manager account)",
     )
-
-    @il.asset(
-        schema=CampaignsStats,
-        partitioning=il.TimePartitionConfig(column="date"),
-        tags=["Report"],
-    )
-    def campaigns_stats(
-        self,
-        context: il.ExecutionContext,
-        connection: GoogleAdsConnection,
-    ) -> pd.DataFrame:
-        """Campaign performance metrics including impressions, clicks, conversions, and cost."""
-        return fake_data(CampaignsStats, partition_column="date", partition_date=context.partition_date)
-
-    @il.asset(
-        schema=AdsStats,
-        partitioning=il.TimePartitionConfig(column="date"),
-        tags=["Report"],
-    )
-    def ads_stats(
-        self,
-        context: il.ExecutionContext,
-        connection: GoogleAdsConnection,
-    ) -> pd.DataFrame:
-        """Ad group ad performance metrics segmented by device, click type, and keyword."""
-        return fake_data(AdsStats, partition_column="date", partition_date=context.partition_date)

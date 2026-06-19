@@ -1,17 +1,7 @@
-import logging
 
 import interloper as il
-import pandas as pd
 
 from interloper_assets.amazon_selling_partner.connection import AmazonSellingPartnerConnection
-from interloper_assets.amazon_selling_partner.schemas import (
-    Orders,
-    Settlements,
-)
-from interloper_assets.fake import fake_data
-
-logger = logging.getLogger(__name__)
-
 
 # ------------------------------------------------------------------
 # SOURCE
@@ -53,29 +43,3 @@ class AmazonSellingPartner(il.Source):
         ],
         description="Amazon marketplace",
     )
-
-    @il.asset(
-        schema=Orders,
-        partitioning=il.TimePartitionConfig(column="date"),
-        tags=["Report"],
-    )
-    def orders(
-        self,
-        context: il.ExecutionContext,
-        connection: AmazonSellingPartnerConnection,
-    ) -> pd.DataFrame:
-        """Order data including purchase details, shipping, and fulfillment information."""
-        return fake_data(Orders, partition_column="date", partition_date=context.partition_date)
-
-    @il.asset(
-        schema=Settlements,
-        partitioning=il.TimePartitionConfig(column="date"),
-        tags=["Report"],
-    )
-    def settlements(
-        self,
-        context: il.ExecutionContext,
-        connection: AmazonSellingPartnerConnection,
-    ) -> pd.DataFrame:
-        """Settlement data including fees, refunds, and disbursements."""
-        return fake_data(Settlements, partition_column="date", partition_date=context.partition_date)
