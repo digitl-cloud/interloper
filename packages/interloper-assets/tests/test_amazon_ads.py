@@ -53,12 +53,12 @@ class TestSpecRoundtrip:
 
     def test_child_asset_keeps_dataframe_normalizer(self):
         src = _source()
-        asset = next(a for a in src.assets if type(a).key == "products_campaigns")
+        asset = next(a for a in src.assets if type(a).key == "products_campaigns_stats")
 
         # Exactly what the k8s runner ships to the child pod.
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
         child_dag = DAGSpec(**spec_json).reconstruct()
-        child_asset = next(a for a in child_dag.assets if type(a).key == "products_campaigns")
+        child_asset = next(a for a in child_dag.assets if type(a).key == "products_campaigns_stats")
 
         normalizer = child_asset.normalizer
         assert isinstance(normalizer, DataFrameNormalizer)
@@ -72,10 +72,10 @@ class TestSpecRoundtrip:
     def test_camelcase_report_row_conforms_after_roundtrip(self):
         """A raw API-shaped row must normalize and validate against the schema."""
         src = _source()
-        asset = next(a for a in src.assets if type(a).key == "products_campaigns")
+        asset = next(a for a in src.assets if type(a).key == "products_campaigns_stats")
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
         child_dag = DAGSpec(**spec_json).reconstruct()
-        child_asset = next(a for a in child_dag.assets if type(a).key == "products_campaigns")
+        child_asset = next(a for a in child_dag.assets if type(a).key == "products_campaigns_stats")
 
         # One row with every requested report column, as Amazon returns them.
         # All schema fields are required-nullable, so None is valid everywhere.
@@ -86,4 +86,4 @@ class TestSpecRoundtrip:
         normalizer = child_asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(df)
-        representation_for(normalized).conformer.validate(normalized, schemas.ProductsCampaigns)  # must not raise
+        representation_for(normalized).conformer.validate(normalized, schemas.ProductsCampaignsStats)  # must not raise

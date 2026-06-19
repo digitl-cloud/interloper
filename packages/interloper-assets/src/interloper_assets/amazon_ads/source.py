@@ -198,11 +198,11 @@ class AmazonAds(il.Source):
     # --- Sponsored Products ---
 
     @il.asset(
-        schema=schemas.ProductsAdvertisedProducts,
+        schema=schemas.ProductsAdvertisedProductsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def products_advertised_products(
+    def products_advertised_products_stats(
         self, context: il.ExecutionContext, connection: AmazonAdsConnection
     ) -> list[dict[str, Any]]:
         """Performance of advertised products."""
@@ -220,11 +220,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.ProductsCampaigns,
+        schema=schemas.ProductsCampaignsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def products_campaigns(
+    def products_campaigns_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -244,11 +244,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.ProductsSearchTerms,
+        schema=schemas.ProductsSearchTermsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def products_search_terms(
+    def products_search_terms_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -268,11 +268,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.ProductsTargeting,
+        schema=schemas.ProductsTargetingStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def products_targeting(
+    def products_targeting_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -292,11 +292,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.ProductsPurchasedProducts,
+        schema=schemas.ProductsPurchasedProductsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def products_purchased_products(
+    def products_purchased_products_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -316,11 +316,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.ProductsGrossAndInvalidTraffic,
+        schema=schemas.ProductsGrossAndInvalidTrafficStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def products_gross_and_invalid_traffic(
+    def products_gross_and_invalid_traffic_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -342,11 +342,11 @@ class AmazonAds(il.Source):
     # --- Sponsored Display ---
 
     @il.asset(
-        schema=schemas.DisplayCampaigns,
+        schema=schemas.DisplayCampaignsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def display_campaigns(
+    def display_campaigns_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -366,11 +366,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.DisplayAdvertisedProducts,
+        schema=schemas.DisplayAdvertisedProductsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def display_advertised_products(
+    def display_advertised_products_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -390,11 +390,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.DisplayPurchasedProducts,
+        schema=schemas.DisplayPurchasedProductsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def display_purchased_products(
+    def display_purchased_products_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -414,11 +414,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.DisplayTargeting,
+        schema=schemas.DisplayTargetingStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def display_targeting(
+    def display_targeting_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -438,11 +438,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.DisplayGrossAndInvalidTraffic,
+        schema=schemas.DisplayGrossAndInvalidTrafficStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def display_gross_and_invalid_traffic(
+    def display_gross_and_invalid_traffic_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -462,11 +462,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.DisplayAdGroups,
+        schema=schemas.DisplayAdGroupsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def display_ad_groups(
+    def display_ad_groups_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -488,11 +488,11 @@ class AmazonAds(il.Source):
     # --- Sponsored Brands ---
 
     @il.asset(
-        schema=schemas.BrandsCampaigns,
+        schema=schemas.BrandsCampaignsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def brands_campaigns(
+    def brands_campaigns_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -512,11 +512,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.BrandsAds,
+        schema=schemas.BrandsAdsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def brands_ads(
+    def brands_ads_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -536,11 +536,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.BrandsSearchTerms,
+        schema=schemas.BrandsSearchTermsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def brands_search_terms(
+    def brands_search_terms_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -560,11 +560,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.BrandsTargeting,
+        schema=schemas.BrandsTargetingStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def brands_targeting(
+    def brands_targeting_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -584,11 +584,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.BrandsPurchasedProducts,
+        schema=schemas.BrandsPurchasedProductsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def brands_purchased_products(
+    def brands_purchased_products_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -608,11 +608,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.BrandsGrossAndInvalidTraffic,
+        schema=schemas.BrandsGrossAndInvalidTrafficStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def brands_gross_and_invalid_traffic(
+    def brands_gross_and_invalid_traffic_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -632,11 +632,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.BrandsPlacements,
+        schema=schemas.BrandsPlacementsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def brands_placements(
+    def brands_placements_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -656,11 +656,11 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
-        schema=schemas.BrandsAdGroups,
+        schema=schemas.BrandsAdGroupsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def brands_ad_groups(
+    def brands_ad_groups_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -685,7 +685,7 @@ class AmazonAds(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def television_campaigns(
+    def television_campaigns_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,
@@ -708,7 +708,7 @@ class AmazonAds(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def television_targeting(
+    def television_targeting_stats(
         self,
         context: il.ExecutionContext,
         connection: AmazonAdsConnection,

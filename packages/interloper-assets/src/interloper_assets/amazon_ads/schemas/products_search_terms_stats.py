@@ -4,13 +4,14 @@ from interloper.schema import Schema
 from pydantic import Field
 
 
-class ProductsTargeting(Schema):
-    """Products targeting performance metrics including click-through rate, sales, purchases, and targeting criteria."""
+class ProductsSearchTermsStats(Schema):
+    """Products search term performance metrics including click-through rate, sales, purchases, and keyword details."""
 
     acos_clicks_14d: float | None = Field(..., description="The advertising cost of sales for clicks within 14 days")
     acos_clicks_7d: float | None = Field(..., description="The advertising cost of sales for clicks within 7 days")
     ad_group_id: int | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
+    ad_keyword_status: str | None = Field(..., description="The status of the ad keyword")
     attributed_sales_same_sku_14d: float | None = Field(
         ..., description="The attributed sales for the same SKU within 14 days"
     )
@@ -35,7 +36,7 @@ class ProductsTargeting(Schema):
     cost_per_click: float | None = Field(..., description="The cost per click")
     date: datetime.date | None = Field(..., description="The date of the record")
     impressions: float | None = Field(..., description="The number of impressions")
-    keyword: str | None = Field(..., description="The keyword used for targeting")
+    keyword: str | None = Field(..., description="The keyword used for the ad")
     keyword_bid: float | None = Field(..., description="The bid for the keyword")
     keyword_id: int | None = Field(..., description="The ID of the keyword")
     keyword_type: str | None = Field(..., description="The type of the keyword")
@@ -62,8 +63,8 @@ class ProductsTargeting(Schema):
     sales_30d: float | None = Field(..., description="The sales within 30 days")
     sales_7d: float | None = Field(..., description="The sales within 7 days")
     sales_other_sku_7d: float | None = Field(..., description="The sales for other SKUs within 7 days")
+    search_term: str | None = Field(..., description="The search term used for the ad")
     targeting: str | None = Field(..., description="The targeting used for the ad")
-    top_of_search_impression_share: float | None = Field(..., description="The impression share for top of search")
     units_sold_clicks_14d: float | None = Field(..., description="The units sold for clicks within 14 days")
     units_sold_clicks_1d: float | None = Field(..., description="The units sold for clicks within 1 day")
     units_sold_clicks_30d: float | None = Field(..., description="The units sold for clicks within 30 days")
