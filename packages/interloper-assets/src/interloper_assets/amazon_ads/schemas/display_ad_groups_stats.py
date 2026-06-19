@@ -4,7 +4,7 @@ from interloper.schema import Schema
 from pydantic import Field
 
 
-class DisplayAdGroups(Schema):
+class DisplayAdGroupsStats(Schema):
     """Display ad group performance metrics including clicks, impressions, purchases, sales, and viewability rates."""
 
     ad_group_id: int | None = Field(..., description="The ID of the ad group.")

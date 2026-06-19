@@ -4,7 +4,7 @@ from interloper.schema import Schema
 from pydantic import Field
 
 
-class ProductsAdvertisedProducts(Schema):
+class ProductsAdvertisedProductsStats(Schema):
     """Products advertised product performance metrics including ACoS, ROAS, and attribution across time windows."""
 
     acos_clicks_14d: float | None = Field(

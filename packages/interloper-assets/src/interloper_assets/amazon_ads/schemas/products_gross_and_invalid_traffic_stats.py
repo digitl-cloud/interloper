@@ -4,7 +4,7 @@ from interloper.schema import Schema
 from pydantic import Field
 
 
-class ProductsGrossAndInvalidTraffic(Schema):
+class ProductsGrossAndInvalidTrafficStats(Schema):
     """Products traffic quality metrics including gross impressions, invalid click-throughs, and invalid impressions."""
 
     campaign_name: str | None = Field(..., description="The name of the campaign")

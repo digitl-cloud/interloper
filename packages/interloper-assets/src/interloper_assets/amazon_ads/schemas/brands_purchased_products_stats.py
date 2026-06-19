@@ -4,7 +4,7 @@ from interloper.schema import Schema
 from pydantic import Field
 
 
-class BrandsPurchasedProducts(Schema):
+class BrandsPurchasedProductsStats(Schema):
     """Brands purchased product metrics including purchases, sales, and units sold with new-to-brand breakdowns."""
 
     ad_group_id: int | None = Field(..., description="The ID of the ad group")
