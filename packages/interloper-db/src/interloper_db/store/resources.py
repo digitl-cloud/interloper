@@ -27,24 +27,26 @@ class ResourceMixin:
 
         Args:
             data: Resource configuration dict.
-            encrypted: ``True`` to require encryption, ``False`` to force
-                plaintext, or ``None`` (default) to encrypt only when an
-                encryption key is configured.
+            encrypted: ``True`` or ``None`` (default) to encrypt — both require
+                a configured key; ``False`` to opt out and store plaintext.
 
         Returns:
             A ``(blob, encrypted)`` tuple: the bytes to persist and whether
             they are encrypted.
 
         Raises:
-            ConfigError: If encryption is explicitly requested but no
-                encryption key is configured.
+            ConfigError: If encryption is required (the default, or an explicit
+                ``True``) but no encryption key is configured. Fails closed so
+                secrets are never silently written in plaintext.
         """
-        should_encrypt = self._encrypt is not None if encrypted is None else encrypted
+        should_encrypt = True if encrypted is None else encrypted
         raw = json.dumps(data).encode()
         if should_encrypt:
             if not self._encrypt:
                 raise ConfigError(
-                    "Cannot store an encrypted resource: INTERLOPER_ENCRYPTION_KEY is not configured"
+                    "Refusing to store a resource without encryption at rest: "
+                    "INTERLOPER_ENCRYPTION_KEY is not configured. Set it, or pass "
+                    "encrypted=false to store this resource in plaintext."
                 )
             raw = self._encrypt(raw)
         return raw, should_encrypt
@@ -67,9 +69,8 @@ class ResourceMixin:
             key: Catalog key identifying the resource class.
             name: User-facing label.
             data: Resource configuration dict.
-            encrypted: ``True`` to require encryption, ``False`` to force
-                plaintext, or ``None`` (default) to encrypt when an
-                encryption key is configured.
+            encrypted: ``True`` or ``None`` (default) to encrypt (requires a
+                configured key); ``False`` to opt out and store plaintext.
 
         Returns:
             The saved Resource row.
@@ -108,9 +109,8 @@ class ResourceMixin:
             key: Catalog key.
             name: User-facing label.
             data: Resource configuration dict.
-            encrypted: ``True`` to require encryption, ``False`` to force
-                plaintext, or ``None`` (default) to encrypt when an
-                encryption key is configured.
+            encrypted: ``True`` or ``None`` (default) to encrypt (requires a
+                configured key); ``False`` to opt out and store plaintext.
 
         Returns:
             The updated Resource row.
