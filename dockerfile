@@ -130,7 +130,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 
 # ── frontend (Nuxt SPA, built static) ────────────────────────
-FROM node:22-alpine AS build-spa
+# Pin this stage to the *build* platform (the runner's native arch) rather
+# than the target. The SPA output is static, architecture-independent assets,
+# so there is no reason to run the heavy Vite/Rollup/Tailwind build under
+# QEMU for the linux/arm64 target — emulating that bundler is what made the
+# multi-arch frontend build hang. Only the final nginx runtime stage below
+# is built per-target-arch (a trivial COPY).
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build-spa
 
 WORKDIR /app
 RUN corepack enable
