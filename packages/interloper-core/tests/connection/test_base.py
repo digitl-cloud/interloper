@@ -3,6 +3,7 @@
 from typing import ClassVar
 
 import pytest
+from pydantic_settings import SettingsConfigDict
 
 from interloper.connection import Connection, OAuthConnection
 from interloper.oauth import OAuthConfig
@@ -58,3 +59,34 @@ class TestOAuthConnection:
         properties = definition.config_schema["properties"]
         assert {"client_id", "client_secret", "refresh_token", "account_id"} <= set(properties)
         assert properties["client_secret"]["x-widget"] == "password"
+
+    def test_default_mapping_auto_fills_only_refresh_token(self):
+        # The app credentials are not pulled from the token exchange; only the
+        # per-user refresh token is, so the in-house secret never round-trips.
+        assert OAuthConfig("amazon").fields == {"refresh_token": "refresh_token"}
+
+    def test_app_credentials_resolved_from_provider_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AMAZON_CLIENT_ID", "in-house-id")
+        monkeypatch.setenv("AMAZON_CLIENT_SECRET", "in-house-secret")
+
+        class AmazonConn(OAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("amazon")
+            model_config = SettingsConfigDict(env_prefix="amazon_conn_test_")
+
+        conn = AmazonConn(refresh_token="rt")
+
+        assert (conn.client_id, conn.client_secret) == ("in-house-id", "in-house-secret")
+        assert conn.refresh_token == "rt"
+
+    def test_explicit_app_credentials_override_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AMAZON_CLIENT_ID", "in-house-id")
+        monkeypatch.setenv("AMAZON_CLIENT_SECRET", "in-house-secret")
+
+        class AmazonConn(OAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("amazon")
+            model_config = SettingsConfigDict(env_prefix="amazon_conn_test2_")
+
+        conn = AmazonConn(refresh_token="rt", client_id="my-id", client_secret="my-secret")
+
+        # A per-connection override always wins over the in-house env app.
+        assert (conn.client_id, conn.client_secret) == ("my-id", "my-secret")
