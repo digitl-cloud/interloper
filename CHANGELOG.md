@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v0.18.0 (2026-06-22)
+
+### Bug Fixes
+
+- Bump tailwindcss to 4.3.1 to silence Node 26 module.register deprecation
+  ([`16cbc1e`](https://github.com/digitl-cloud/interloper/commit/16cbc1e962cfdbd29760b03d9cdfee55ccaab4a3))
+
+- Encrypt resources by default and fail closed without an encryption key
+  ([`9f59aa5`](https://github.com/digitl-cloud/interloper/commit/9f59aa5495b8d99263f288563789eb131f468429))
+
+- Resolve in-house oauth app secret from env, never ship it to the browser
+  ([`b2dc156`](https://github.com/digitl-cloud/interloper/commit/b2dc156968c9b268f157b2bab31c3860606a952a))
+
+### Documentation
+
+- Add asset naming map (interloper <-> digitlcloud-connectors)
+  ([`1e6017c`](https://github.com/digitl-cloud/interloper/commit/1e6017c1fe5e72bf4310b0342df4faa45e28a6c2))
+
+### Features
+
+- Gate org-bespoke content on the selected organisation
+  ([`6f418c3`](https://github.com/digitl-cloud/interloper/commit/6f418c326be0dacff814fa38ff6d5ef5c306871a))
+
+### Refactoring
+
+- Publish one image per role, flavors as tag suffixes
+  ([`7f8a465`](https://github.com/digitl-cloud/interloper/commit/7f8a465d2eda113fc8416070847100fa1edad5fb))
+
+- Reduce unimplemented (fake_data) sources to empty source classes
+  ([`54327f0`](https://github.com/digitl-cloud/interloper/commit/54327f09e46a67fa5ccdc00e57bc97700b80e958))
+
+- Rename assets to stats/entity/event convention
+  ([`aba8ac8`](https://github.com/digitl-cloud/interloper/commit/aba8ac8d1717ef7552049824faaf107d71b89a5a))
+
+
 ## v0.17.0 (2026-06-18)
 
 ### Bug Fixes
