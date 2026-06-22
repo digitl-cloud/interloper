@@ -96,9 +96,9 @@ class OAuthConnection(Connection):
     use your own OAuth client.
     """
 
-    client_id: str = InputField("", description="OAuth2 client ID (defaults to the in-house app)")
-    client_secret: str = SecretField("", description="OAuth2 client secret (defaults to the in-house app)")
-    refresh_token: str = SecretField(description="OAuth2 refresh token")
+    client_id: str = InputField("")
+    client_secret: str = SecretField("")
+    refresh_token: str = SecretField()
 
     @model_validator(mode="after")
     def _resolve_app_credentials(self) -> OAuthConnection:
