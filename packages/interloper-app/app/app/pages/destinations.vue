@@ -48,7 +48,10 @@ const columns: TableColumn<Destination>[] = [
         cell: ({ row }) => h(UBadge, {
             color: 'neutral',
             variant: 'subtle',
-        }, () => typeName(row.original.key)),
+        }, () => h('span', { class: 'flex items-center gap-1.5' }, [
+            h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
+            typeName(row.original.key),
+        ])),
     },
     {
         accessorKey: 'resources',

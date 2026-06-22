@@ -16,6 +16,10 @@ function typeIcon(key: string): string {
     return componentIcon(key)
 }
 
+function typeName(key: string): string {
+    return catalogStore.catalog[key]?.name ?? key
+}
+
 const drawerOpen = ref(false)
 const editingSource = ref<Source | null>(null)
 const stepperRef = ref<any>(null)
@@ -42,6 +46,17 @@ const columns: TableColumn<Source>[] = [
             h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
             row.original.name,
         ]),
+    },
+    {
+        accessorKey: 'type',
+        header: 'Type',
+        cell: ({ row }) => h(UBadge, {
+            color: 'neutral',
+            variant: 'subtle',
+        }, () => h('span', { class: 'flex items-center gap-1.5' }, [
+            h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
+            typeName(row.original.key),
+        ])),
     },
     {
         accessorKey: 'assets',
