@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.19.0 (2026-06-22)
+
+### Bug Fixes
+
+- **ci**: Build frontend SPA on native arch to stop multi-arch hang
+  ([`ba58c24`](https://github.com/digitl-cloud/interloper/commit/ba58c2488223d0eb8aa869988e69341bfc5180dd))
+
+### Features
+
+- **app**: Add type column with logo to sources and destinations tables
+  ([`782a2a8`](https://github.com/digitl-cloud/interloper/commit/782a2a8a1e13e2a7b8261c65e85b3a2b2a8f126a))
+
+
 ## v0.18.0 (2026-06-22)
 
 ### Bug Fixes
