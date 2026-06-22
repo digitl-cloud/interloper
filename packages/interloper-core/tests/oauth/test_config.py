@@ -32,14 +32,12 @@ class TestOAuthConfig:
         assert cfg.auth_url == "https://nope/auth"
         assert cfg.label == "Nope"
 
-    def test_default_fields_mapping_is_standard_trio(self):
+    def test_default_fields_mapping_auto_fills_only_refresh_token(self):
+        # The app credentials are resolved from env at runtime, never from the
+        # token exchange, so only the per-user refresh token is auto-filled.
         cfg = OAuthConfig("amazon")
 
-        assert cfg.fields == {
-            "client_id": "client_id",
-            "client_secret": "client_secret",
-            "refresh_token": "refresh_token",
-        }
+        assert cfg.fields == {"refresh_token": "refresh_token"}
 
     def test_to_schema_ext(self):
         cfg = OAuthConfig("facebook", scope="ads_read", fields={"access_token": "access_token"})

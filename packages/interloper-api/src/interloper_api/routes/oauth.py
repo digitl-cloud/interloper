@@ -24,9 +24,12 @@ import os
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from interloper.oauth import OAuthProvider, providers
+from interloper_db import Profile
 from pydantic import BaseModel
+
+from interloper_api.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +80,10 @@ async def _exchange(
         code: The authorization code.
 
     Returns:
-        The token response, with ``client_id`` / ``client_secret`` injected
-        so they can be stored alongside the tokens.
+        The provider's raw token response (e.g. ``refresh_token``). The app
+        credentials are *not* injected: they are the in-house per-provider
+        values resolved from env at runtime, so the secret never leaves the
+        server.
     """
     logical_values = {
         "grant_type": "authorization_code",
@@ -103,10 +108,7 @@ async def _exchange(
         resp = await client.post(spec.token_url, json=params, headers=headers)
     resp.raise_for_status()
 
-    result = resp.json()
-    result["client_id"] = cfg.client_id
-    result["client_secret"] = cfg.client_secret
-    return result
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -155,11 +157,16 @@ def list_providers() -> list[ProviderInfo]:
 
 
 @router.post("/{provider}")
-async def exchange_token(provider: str, body: TokenExchangeRequest) -> dict[str, Any]:
-    """Exchange an authorization code for tokens.
+async def exchange_token(
+    provider: str,
+    body: TokenExchangeRequest,
+    _user: Profile = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Exchange an authorization code for tokens. Requires authentication.
 
-    The response includes ``client_id`` and ``client_secret`` so they
-    can be stored alongside the tokens in the connection data.
+    Returns only the provider's token response (e.g. ``refresh_token``); the
+    in-house app credentials are never included — connections resolve them
+    from env at runtime.
     """
     spec = providers().get(provider)
     if spec is None:

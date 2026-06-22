@@ -26,8 +26,9 @@ class OAuthConfig:
         provider: OAuth provider key (e.g. ``"amazon"``, ``"facebook"``).
         scope: OAuth scope string to request.
         fields: Mapping of ``{token_response_key: model_field_name}``.
-            Defaults to the standard trio: client_id, client_secret,
-            refresh_token (the fields ``OAuthConnection`` declares).
+            Defaults to ``{"refresh_token": "refresh_token"}`` — only the
+            per-user refresh token is filled from the exchange; the app
+            credentials come from env at runtime.
         auth_url: Authorization endpoint override.  Required when the
             provider is not in the registry.
         label: Display label override.
@@ -84,11 +85,11 @@ class OAuthConfig:
         self.scope = scope
         self.label = label or (spec.label if spec else "") or provider.title()
         self.icon = icon or (spec.icon if spec else "")
-        self.fields = fields or {
-            "client_id": "client_id",
-            "client_secret": "client_secret",
-            "refresh_token": "refresh_token",
-        }
+        # Only the per-user refresh token is auto-filled from the token
+        # exchange. The app credentials (client_id/client_secret) are the
+        # in-house per-provider values resolved from env at runtime, so they
+        # are never returned to the browser or stored per connection.
+        self.fields = fields or {"refresh_token": "refresh_token"}
 
     def to_schema_ext(self) -> dict[str, Any]:
         """Serialize to a JSON Schema ``x-oauth`` extension dict.

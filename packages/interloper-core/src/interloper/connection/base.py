@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, ClassVar
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 from interloper.oauth import OAuthConfig
@@ -84,8 +86,38 @@ class OAuthConnection(Connection):
     Connections with a non-standard token response shape (e.g. Facebook's
     app_id/app_secret/access_token) declare their own fields on a plain
     ``Connection`` and pass a custom ``fields=`` mapping to ``OAuthConfig``.
+
+    ``client_id`` / ``client_secret`` are the *app* credentials. They are
+    optional and default to the in-house per-provider credentials resolved
+    from the ``<PROVIDER>_CLIENT_ID`` / ``<PROVIDER>_CLIENT_SECRET``
+    environment (the same vars the API's token-exchange endpoint reads), so
+    the in-house secret is never sent to the browser or stored per
+    connection. Setting them explicitly overrides the in-house app — e.g. to
+    use your own OAuth client.
     """
 
-    client_id: str = InputField(description="OAuth2 client ID")
-    client_secret: str = SecretField(description="OAuth2 client secret")
+    client_id: str = InputField("", description="OAuth2 client ID (defaults to the in-house app)")
+    client_secret: str = SecretField("", description="OAuth2 client secret (defaults to the in-house app)")
     refresh_token: str = SecretField(description="OAuth2 refresh token")
+
+    @model_validator(mode="after")
+    def _resolve_app_credentials(self) -> OAuthConnection:
+        """Fall back to the in-house per-provider app credentials from env.
+
+        Only fills blanks: an explicitly set ``client_id`` / ``client_secret``
+        (a per-connection override) always wins. Keyed on the provider from
+        ``oauth`` — not the connection's settings ``env_prefix`` — so it reads
+        the same ``<PROVIDER>_CLIENT_ID`` / ``_CLIENT_SECRET`` vars the token
+        exchange uses.
+
+        Returns:
+            The connection instance (self), with app credentials filled in.
+        """
+        if self.oauth is None:
+            return self
+        prefix = self.oauth.provider.upper()
+        if not self.client_id:
+            self.client_id = os.environ.get(f"{prefix}_CLIENT_ID", "")
+        if not self.client_secret:
+            self.client_secret = os.environ.get(f"{prefix}_CLIENT_SECRET", "")
+        return self

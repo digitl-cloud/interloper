@@ -2,8 +2,10 @@
 /**
  * "Sign in with X" button that triggers the OAuth popup flow.
  *
- * When the flow completes, emits `success` with the token response
- * (includes client_id, client_secret, refresh_token, etc.).
+ * When the flow completes, emits `success` with the provider's token
+ * response (e.g. refresh_token). The in-house app credentials are never
+ * returned — connections resolve them from env at runtime — so a per-user
+ * override of client_id/client_secret stays blank unless filled manually.
  */
 
 const props = defineProps<{

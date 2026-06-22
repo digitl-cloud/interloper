@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -18,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.oauth import provider, providers
 
+from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import oauth as oauth_module
 
 _SUFFIXES = ("CLIENT_ID", "CLIENT_SECRET", "REDIRECT_URI")
@@ -39,6 +42,8 @@ def _configure(monkeypatch: pytest.MonkeyPatch, provider: str, **vals: str) -> N
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(oauth_module.router)
+    # Stand in for an authenticated user; auth itself is covered separately.
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
     return TestClient(app)
 
 
@@ -95,6 +100,17 @@ def test_exchange_unconfigured_provider_is_rejected() -> None:
     assert resp.status_code == 400
 
 
+def test_exchange_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Fully configured provider, but no session: the token exchange must not
+    # be reachable anonymously (it spends the in-house app credentials).
+    _configure(monkeypatch, "amazon", client_id="id", client_secret="secret", redirect_uri="uri")
+    app = FastAPI()
+    app.include_router(oauth_module.router)
+    app.dependency_overrides[get_store] = lambda: SimpleNamespace()
+    resp = TestClient(app).post("/oauth/amazon", json={"code": "x"})
+    assert resp.status_code == 401
+
+
 # ---------------------------------------------------------------------------
 # Generic exchange request shaping
 # ---------------------------------------------------------------------------
@@ -133,8 +149,8 @@ def test_exchange_post_json(monkeypatch: pytest.MonkeyPatch) -> None:
         "client_id": "cid",
         "client_secret": "cs",
     }
-    # app credentials are injected into the token response for storage
-    assert result == {"refresh_token": "rt", "client_id": "cid", "client_secret": "cs"}
+    # The app secret is never returned: only the provider's token response.
+    assert result == {"refresh_token": "rt"}
 
 
 def test_exchange_post_form(monkeypatch: pytest.MonkeyPatch) -> None:
