@@ -32,10 +32,10 @@ def test_default_encrypts_when_key_is_configured() -> None:
     assert raw == b"ENC:" + json.dumps({"a": 1}).encode()
 
 
-def test_default_is_plaintext_when_no_key() -> None:
-    raw, encrypted = _Encoder(encrypt=None)._encode_data({"a": 1}, None)
-    assert encrypted is False
-    assert raw == json.dumps({"a": 1}).encode()
+def test_default_without_key_raises() -> None:
+    # Fail closed: the default must never silently store a resource in plaintext.
+    with pytest.raises(ConfigError):
+        _Encoder(encrypt=None)._encode_data({"a": 1}, None)
 
 
 def test_explicit_true_without_key_raises() -> None:
@@ -45,5 +45,12 @@ def test_explicit_true_without_key_raises() -> None:
 
 def test_explicit_false_stays_plaintext_even_with_key() -> None:
     raw, encrypted = _Encoder(encrypt=_fake_encrypt)._encode_data({"a": 1}, False)
+    assert encrypted is False
+    assert raw == json.dumps({"a": 1}).encode()
+
+
+def test_explicit_false_without_key_stays_plaintext() -> None:
+    # Opting out explicitly still works without a key (for non-secret resources).
+    raw, encrypted = _Encoder(encrypt=None)._encode_data({"a": 1}, False)
     assert encrypted is False
     assert raw == json.dumps({"a": 1}).encode()

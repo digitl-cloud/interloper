@@ -29,6 +29,7 @@ Implementation is split across domain-specific mixins:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from interloper.catalog.base import Catalog
@@ -41,6 +42,8 @@ from interloper_db.store.jobs import JobMixin
 from interloper_db.store.resources import ResourceMixin
 from interloper_db.store.runs import RunMixin
 from interloper_db.store.sources import SourceMixin
+
+logger = logging.getLogger(__name__)
 
 
 class Store(AuthMixin, ResourceMixin, SourceMixin, AssetMixin, JobMixin, RunMixin, DestinationMixin):
@@ -76,9 +79,9 @@ class Store(AuthMixin, ResourceMixin, SourceMixin, AssetMixin, JobMixin, RunMixi
         """Build a Store with encryption wired from runtime settings.
 
         Reads ``INTERLOPER_ENCRYPTION_KEY`` via :class:`AppSettings`. When set, the
-        derived cipher is attached so resources marked ``encrypted=True`` are
-        encrypted at rest; when unset, the store falls back to plaintext and
-        rejects any attempt to persist an encrypted resource.
+        derived cipher is attached so resources are encrypted at rest; when
+        unset, the store has no cipher and resource persistence fails closed
+        (raising rather than writing secrets in plaintext).
 
         This is the canonical constructor for every long-lived process (API,
         scheduler, runner, agent) — prefer it over ``Store(catalog)`` so the
@@ -94,6 +97,11 @@ class Store(AuthMixin, ResourceMixin, SourceMixin, AssetMixin, JobMixin, RunMixi
 
         key = AppSettings.get().secrets.encryption_key
         if not key:
+            logger.warning(
+                "INTERLOPER_ENCRYPTION_KEY is not configured; resource persistence will "
+                "fail closed (writes are rejected rather than stored in plaintext). Set it "
+                "to enable encrypted resources at rest."
+            )
             return cls(catalog=catalog)
 
         from interloper_db.crypto import make_cipher
