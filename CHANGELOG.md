@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v0.20.0 (2026-06-23)
+
+### Chores
+
+- Remove oauthconnection field description
+  ([`3b0c781`](https://github.com/digitl-cloud/interloper/commit/3b0c7811e59af23d756a2ed2a563f999e5f577b9))
+
+### Documentation
+
+- Document the asset naming/tag convention in AGENTS.md
+  ([`86657b2`](https://github.com/digitl-cloud/interloper/commit/86657b2691ace4a6a48dc1c6ec1610d75ba9d866))
+
+### Features
+
+- **app**: Add interactive column sorting to client-side tables
+  ([`10e774e`](https://github.com/digitl-cloud/interloper/commit/10e774e3863d8fee268d32677908a426705ad83b))
+
+### Refactoring
+
+- Apply _stats convention to amazon_ads reports
+  ([`68cec68`](https://github.com/digitl-cloud/interloper/commit/68cec68d4c49001c8e3fe8b20722014b1417e5f8))
+
+
 ## v0.19.0 (2026-06-22)
 
 ### Bug Fixes
