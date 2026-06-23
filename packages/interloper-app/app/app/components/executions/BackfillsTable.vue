@@ -33,9 +33,10 @@ function jobName(backfill: Backfill): string {
 }
 
 const pagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
+const sorting = ref([{ id: 'started_at', desc: true }])
 const totalPages = computed(() => Math.ceil(backfills.value.length / PAGE_SIZE))
 
-const columns: TableColumn<Backfill>[] = [
+const columns: TableColumn<Backfill>[] = withSortableHeaders([
     {
         accessorKey: 'id',
         header: 'ID',
@@ -83,16 +84,16 @@ const columns: TableColumn<Backfill>[] = [
             return h('span', { class: 'text-muted' }, formatElapsed(backfill.started_at, backfill.completed_at) || '—')
         },
     },
-]
+])
 </script>
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
         <UTable v-model:pagination="pagination"
+                v-model:sorting="sorting"
                 :data="backfills"
                 :columns="columns"
                 :loading="loading"
-                :sorting="[{ id: 'started_at', desc: true }]"
                 :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
                 sticky
                 @select="(_e: Event, row: any) => navigateTo(`/executions/backfills/${row.original.id}`)" />

@@ -88,9 +88,10 @@ function buildRowActions(item: TData): DropdownMenuItem[][] {
 // ── Append actions column ──
 
 const columnsWithActions = computed<TableColumn<TData>[]>(() => {
-    if (props.noActions) return props.columns
+    const sortable = withSortableHeaders(props.columns)
+    if (props.noActions) return sortable
     return [
-        ...props.columns,
+        ...sortable,
         {
             id: 'actions',
             header: '',
