@@ -20,6 +20,7 @@ const jobsStore = useJobsStore()
 const backfill = ref<Backfill | null>(null)
 const backfillRuns = ref<Run[]>([])
 const runsLoading = ref(false)
+const sorting = ref([{ id: 'partition_date', desc: false }])
 
 const backfillJobName = computed(() =>
     backfill.value?.job?.name ?? jobsStore.findById(backfill.value?.job_id ?? '')?.name ?? 'Deleted job',
@@ -46,7 +47,7 @@ onMounted(async () => {
     }
 })
 
-const columns: TableColumn<Run>[] = [
+const columns: TableColumn<Run>[] = withSortableHeaders([
     {
         accessorKey: 'id',
         header: 'ID',
@@ -83,7 +84,7 @@ const columns: TableColumn<Run>[] = [
             return h('span', { class: 'text-muted' }, formatElapsed(run.started_at, run.completed_at) || '—')
         },
     },
-]
+])
 </script>
 
 <template>
@@ -131,10 +132,10 @@ const columns: TableColumn<Run>[] = [
             </div>
         </div>
 
-        <UTable :data="backfillRuns"
+        <UTable v-model:sorting="sorting"
+                :data="backfillRuns"
                 :columns="columns"
                 :loading="runsLoading"
-                :sorting="[{ id: 'partition_date', desc: false }]"
                 sticky
                 class="flex-1"
                 @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
