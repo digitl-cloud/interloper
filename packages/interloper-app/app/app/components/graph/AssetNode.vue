@@ -6,9 +6,11 @@ import type { Connection } from '@vue-flow/core'
 const props = defineProps<{
     asset: SourceAsset
     assetDefn: AssetDefinition | undefined
-    /** Derived node status (used by the Status view mode; see Phase 3). */
+    /** Derived node status (used by the Status view mode). */
     status?: NodeStatus
     viewMode?: ViewMode
+    /** VueFlow selection state — drives the blue selection ring. */
+    selected?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -90,9 +92,11 @@ const isRunnable = computed(() => {
 const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value || isValidTarget.value)
 const showSourceHandle = computed(() => hasDownstream.value || isValidSource.value)
 
-const statusRing = computed(() =>
-    props.viewMode === 'status' && props.status ? statusRingClass(props.status.state) : '',
-)
+const ringClass = computed(() => {
+    if (props.selected) return 'ring-2 ring-primary'
+    if (props.viewMode === 'status' && props.status) return statusRingClass(props.status.state)
+    return ''
+})
 
 const contextMenuItems = computed<ContextMenuItem[][]>(() => {
     const items: ContextMenuItem[][] = [
@@ -211,7 +215,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
             </div>
 
             <div class="overflow-hidden rounded-xl border border-[var(--ui-border-accented)] bg-muted shadow-[0_10px_30px_-10px_rgba(0,0,0,0.55)]"
-                 :class="statusRing">
+                 :class="ringClass">
                 <div class="flex items-center gap-2.5 px-3.5 py-3">
                     <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-elevated">
                         <UIcon :name="icon"
@@ -222,9 +226,6 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                         <div v-if="tags.length"
                              class="truncate text-xs text-muted">{{ tags.join(' · ') }}</div>
                     </div>
-                    <span v-if="status"
-                          class="size-2 shrink-0 rounded-full"
-                          :class="statusDotClass(status.state)" />
                 </div>
                 <div v-if="description"
                      class="line-clamp-2 border-t border-[var(--ui-border-accented)] bg-default px-3.5 py-2.5 text-xs leading-snug text-muted">
