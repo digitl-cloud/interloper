@@ -13,6 +13,10 @@ const jobsStore = useJobsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
+// Canvas view controls (toolbar-owned)
+const expandMode = ref<ExpandMode>('nodes')
+const viewMode = ref<ViewMode>('topology')
+
 onMounted(() => {
     if (!sourcesStore.loading) sourcesStore.fetch()
     if (!assetsStore.loading) assetsStore.fetch()
@@ -96,14 +100,17 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
 </script>
 
 <template>
-    <div>
+    <div class="flex flex-col flex-1 min-h-0">
+        <GraphToolbar v-model:expand-mode="expandMode" />
         <SplitterGroup direction="horizontal"
                        auto-save-id="graph-panels"
                        class="flex-1 min-h-0">
             <SplitterPanel :default-size="panelVisible ? 70 : 100"
                            :min-size="30"
                            class="flex">
-                <GraphAssetGraph @add-source="onCreateSource"
+                <GraphAssetGraph :expand-mode="expandMode"
+                                 :view-mode="viewMode"
+                                 @add-source="onCreateSource"
                                  @edit-source="onEditSource"
                                  @asset-click="onAssetClick"
                                  @delete-source="onDeleteSource"

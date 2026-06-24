@@ -69,6 +69,16 @@ const SRC_HEADER_H = 50
 const COLLAPSED_W = 232
 const COLLAPSED_H = 76
 
+// In-card expand modes (list / graph)
+const MINI_W = 108
+const MINI_H = 30
+const MINI_GAP_X = 22
+const MINI_GAP_Y = 22
+const MINI_PAD = 16
+const LIST_W = 256
+const LIST_ROW_H = 34
+const LIST_PAD_Y = 8
+
 // Actual measured heights from VueFlow's ResizeObserver
 const measuredHeights = ref(new Map<string, number>())
 
@@ -124,16 +134,52 @@ function isNodesExpanded(sourceId: string): boolean {
     return props.expandMode === 'nodes' && expandedSources.value.has(sourceId)
 }
 
-/** Compute each source node's dimensions. */
-function getSourceDimensions(sourceId: string): { width: number; height: number } {
+/** Mini DAG layout for the in-card "graph" expand mode. */
+function getMiniGraph(sourceId: string) {
     const children = childEntries(sourceId)
-    if (!isNodesExpanded(sourceId) || children.length === 0) {
+    const ids = new Set(children.map(c => c.asset.id))
+    const intra = dependencies.value.filter(d => ids.has(d.upstreamAssetId) && ids.has(d.downstreamAssetId))
+    const layout = layoutDag(
+        children.map(c => ({ id: c.asset.id, width: MINI_W, height: MINI_H })),
+        intra.map(d => ({ source: d.upstreamAssetId, target: d.downstreamAssetId })),
+        { gapX: MINI_GAP_X, gapY: MINI_GAP_Y },
+    )
+    return {
+        width: layout.width,
+        height: layout.height,
+        nodes: children.map(c => ({ entry: c, pos: layout.positions.get(c.asset.id) ?? { x: 0, y: 0 } })),
+        edges: intra.map(d => ({ from: d.upstreamAssetId, to: d.downstreamAssetId })),
+    }
+}
+
+/** Compute each source node's dimensions for the active expand mode. */
+function getSourceDimensions(sourceId: string): { width: number; height: number } {
+    const open = expandedSources.value.has(sourceId)
+    const children = childEntries(sourceId)
+    if (!open || children.length === 0) {
         return { width: COLLAPSED_W, height: COLLAPSED_H }
     }
-    const dag = getInnerLayout(sourceId)
+
+    if (props.expandMode === 'nodes') {
+        const dag = getInnerLayout(sourceId)
+        return {
+            width: dag.width + SRC_PADDING * 2,
+            height: dag.height + SRC_HEADER_H + SRC_PADDING * 2,
+        }
+    }
+
+    if (props.expandMode === 'list') {
+        return {
+            width: LIST_W,
+            height: SRC_HEADER_H + children.length * LIST_ROW_H + LIST_PAD_Y * 2,
+        }
+    }
+
+    // graph
+    const mini = getMiniGraph(sourceId)
     return {
-        width: dag.width + SRC_PADDING * 2,
-        height: dag.height + SRC_HEADER_H + SRC_PADDING * 2,
+        width: Math.max(COLLAPSED_W, mini.width + MINI_PAD * 2),
+        height: SRC_HEADER_H + mini.height + MINI_PAD * 2,
     }
 }
 
@@ -184,7 +230,9 @@ const nodes = computed<Node[]>(() => {
     for (const entry of sourceEntries.value) {
         const source = entry.source
         const pos = sourceLayout.value.positions.get(source.id) ?? { x: 0, y: 0 }
-        const expanded = isNodesExpanded(source.id)
+        const open = expandedSources.value.has(source.id)
+        const container = isNodesExpanded(source.id)
+        const inCard = open && props.expandMode !== 'nodes'
         const dims = getSourceDimensions(source.id)
 
         result.push({
@@ -193,16 +241,19 @@ const nodes = computed<Node[]>(() => {
             position: { x: pos.x, y: pos.y },
             width: dims.width,
             height: dims.height,
-            connectable: !expanded,
+            connectable: !container,
             data: {
                 source,
                 sourceDefn: entry.sourceDefn,
                 status: entry.status,
-                expanded,
+                open,
+                mode: props.expandMode,
+                children: inCard ? childEntries(source.id) : [],
+                miniGraph: (open && props.expandMode === 'graph') ? getMiniGraph(source.id) : undefined,
             },
         })
 
-        if (expanded) {
+        if (container) {
             const children = childEntries(source.id)
             if (children.length > 0) {
                 const innerLayout = getInnerLayout(source.id)
@@ -469,9 +520,13 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                                  :source-defn="data.sourceDefn"
                                  :status="data.status"
                                  :view-mode="viewMode"
-                                 :expanded="data.expanded"
+                                 :open="data.open"
+                                 :mode="data.mode"
+                                 :children="data.children"
+                                 :mini-graph="data.miniGraph"
                                  @edit="emit('edit-source', $event)"
-                                 @delete="onDeleteSource" />
+                                 @delete="onDeleteSource"
+                                 @asset-click="(a, d, s) => emit('asset-click', a, d, s)" />
             </template>
             <template #node-asset="{ data }">
                 <GraphAssetNode :asset="data.asset"
