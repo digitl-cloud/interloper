@@ -132,65 +132,60 @@ function formatType(type?: string, format?: string): string {
     return type
 }
 
-// ── Status hero, metric tiles & recent runs ─────────────────────
+// ── Latest materialization + schedule ───────────────────────────
 const { getSourceSchedule, jobsForSource } = useSchedule()
-const { getWarnings } = useAssetWarnings()
 
 const schedule = computed(() => getSourceSchedule(props.source))
-const assetWarnings = computed(() => getWarnings(props.asset.id, props.asset.key))
 const hasRequires = computed(() => Object.keys(props.assetDefn?.requires ?? {}).length > 0)
 
-/** Cadence shown in the Refresh tile — adapted to the data we actually have. */
-const refreshLabel = computed(() => {
+/** What triggers a materialization — shown beside the last-run time. */
+const triggerLabel = computed(() => {
+    if (hasRequires.value) return 'After upstreams'
     if (schedule.value?.paused) return 'Paused'
     if (schedule.value) return schedule.value.label
-    if (hasRequires.value) return 'On dependencies'
     return 'Manual'
 })
 
-// Recent runs of the job that materialises this asset (per-job, not per-asset —
-// the closest real signal). Fetched directly to avoid clobbering the runs store.
-const recentRuns = ref<Run[]>([])
+// Latest run of the job that materialises this asset (per-job — the closest
+// real signal). Fetched directly to avoid clobbering the runs store.
+const latestRun = ref<Run | undefined>()
 
-async function fetchRecentRuns() {
+async function fetchLatestRun() {
     const job = jobsForSource(props.source)[0]
     if (!job) {
-        recentRuns.value = []
+        latestRun.value = undefined
         return
     }
     try {
-        recentRuns.value = await apiFetch<Run[]>(`/runs?job_id=${job.id}&limit=14`)
+        latestRun.value = (await apiFetch<Run[]>(`/runs?job_id=${job.id}&limit=1`))[0]
     }
     catch {
-        recentRuns.value = []
+        latestRun.value = undefined
     }
 }
-watch(() => props.asset.id, fetchRecentRuns, { immediate: true })
-
-/** API returns newest first. */
-const latestRun = computed(() => recentRuns.value[0])
-/** Oldest → newest for the sparkline. */
-const sparklineRuns = computed(() => [...recentRuns.value].reverse())
+watch(() => props.asset.id, fetchLatestRun, { immediate: true })
 
 const lastRunText = computed(() => {
     const at = latestRun.value?.completed_at ?? latestRun.value?.started_at
     return at ? `${timeSince(new Date(at))} ago` : null
 })
 
-const statusChip = computed<{ label: string; color: 'success' | 'error' | 'info' | 'warning' | 'neutral' }>(() => {
-    if (latestRun.value) return { label: statusLabel(latestRun.value.status), color: statusColor(latestRun.value.status) }
-    if (assetWarnings.value.length > 0) return { label: 'Attention', color: 'warning' }
-    return { label: 'No runs yet', color: 'neutral' }
+/** Latest-materialization presentation: icon, label, colour. */
+const materialization = computed(() => {
+    switch (latestRun.value?.status) {
+        case 'success': return { label: 'Healthy', icon: 'i-lucide-circle-check', color: 'text-[var(--ui-success)]', spin: false }
+        case 'failed': return { label: 'Failed', icon: 'i-lucide-circle-x', color: 'text-[var(--ui-error)]', spin: false }
+        case 'running': return { label: 'Running', icon: 'i-lucide-loader-circle', color: 'text-[var(--ui-info)]', spin: true }
+        case 'canceled': return { label: 'Canceled', icon: 'i-lucide-circle-slash', color: 'text-[var(--ui-warning)]', spin: false }
+        case undefined: return { label: 'Not materialized', icon: 'i-lucide-circle-dashed', color: 'text-dimmed', spin: false }
+        default: return { label: statusLabel(latestRun.value!.status), icon: 'i-lucide-circle-dot', color: 'text-muted', spin: false }
+    }
 })
 
-const compactNumber = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 })
-
-/** Rows = sum of partition row counts when available, else null (we have no total-row endpoint). */
-const rowsLabel = computed(() => {
-    if (!partitionData.value.length) return null
-    return compactNumber.format(partitionData.value.reduce((s, p) => s + p.rowCount, 0))
+const materializationMeta = computed(() => {
+    const head = lastRunText.value ? `Last run ${lastRunText.value}` : 'Not yet materialized'
+    return `${head} · ${triggerLabel.value}`
 })
-const columnsLabel = computed(() => schemaFields.value.length || null)
 
 /** Upstream dependencies as display rows (param → resolved upstream asset). */
 const dependencyRows = computed(() => {
@@ -206,32 +201,6 @@ const dependencyRows = computed(() => {
         }
     })
 })
-
-function barColor(status: string): string {
-    return `var(--ui-${statusColor(status)})`
-}
-
-const maxDurationMs = computed(() => {
-    let max = 0
-    for (const r of recentRuns.value) {
-        if (r.started_at && r.completed_at) {
-            max = Math.max(max, new Date(r.completed_at).getTime() - new Date(r.started_at).getTime())
-        }
-    }
-    return max
-})
-
-/** Bar height encodes run duration (min 30%); flat for in-flight/unknown. */
-function barHeight(run: Run): string {
-    if (!run.started_at || !run.completed_at || maxDurationMs.value === 0) return '100%'
-    const d = new Date(run.completed_at).getTime() - new Date(run.started_at).getTime()
-    return `${Math.round(30 + 70 * (d / maxDurationMs.value))}%`
-}
-
-function barTooltip(run: Run): string {
-    const elapsed = formatElapsed(run.started_at, run.completed_at)
-    return `${statusLabel(run.status)}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(run.started_at)}`
-}
 </script>
 
 <template>
@@ -261,44 +230,19 @@ function barTooltip(run: Run): string {
         </div>
 
         <div class="flex-1 min-h-0 border-l border-t border-default overflow-auto">
-            <!-- Status hero + metric tiles + recent runs -->
-            <div class="space-y-4 border-b border-default px-5 py-4">
-                <div class="flex items-center gap-2">
-                    <UBadge :color="statusChip.color"
-                            variant="subtle"
-                            class="capitalize">
-                        {{ statusChip.label }}
-                    </UBadge>
-                    <span v-if="lastRunText"
-                          class="text-xs text-muted">Last run {{ lastRunText }}</span>
-                </div>
-
-                <div class="grid grid-cols-3 gap-2">
-                    <div class="rounded-lg bg-muted px-3 py-2">
-                        <div class="text-[10px] uppercase tracking-wide text-dimmed">Rows</div>
-                        <div class="text-sm font-semibold">{{ rowsLabel ?? '—' }}</div>
-                    </div>
-                    <div class="rounded-lg bg-muted px-3 py-2">
-                        <div class="text-[10px] uppercase tracking-wide text-dimmed">Columns</div>
-                        <div class="text-sm font-semibold">{{ columnsLabel ?? '—' }}</div>
-                    </div>
-                    <div class="min-w-0 rounded-lg bg-muted px-3 py-2">
-                        <div class="text-[10px] uppercase tracking-wide text-dimmed">Refresh</div>
-                        <div class="truncate text-sm font-semibold"
-                             :title="refreshLabel">
-                            {{ refreshLabel }}
+            <!-- Latest materialization -->
+            <div class="border-b border-default px-5 py-4">
+                <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Latest materialization</div>
+                <div class="flex items-center gap-3 rounded-xl border border-[var(--ui-border-accented)] bg-elevated px-4 py-3">
+                    <UIcon :name="materialization.icon"
+                           class="size-5 shrink-0"
+                           :class="[materialization.color, materialization.spin && 'animate-spin']" />
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold"
+                             :class="materialization.color">
+                            {{ materialization.label }}
                         </div>
-                    </div>
-                </div>
-
-                <div v-if="sparklineRuns.length">
-                    <div class="mb-1.5 text-[10px] uppercase tracking-wide text-dimmed">Recent runs</div>
-                    <div class="flex h-10 items-end gap-1">
-                        <div v-for="run in sparklineRuns"
-                             :key="run.id"
-                             class="min-w-[3px] flex-1 rounded-sm"
-                             :style="{ height: barHeight(run), backgroundColor: barColor(run.status) }"
-                             :title="barTooltip(run)" />
+                        <div class="truncate text-xs text-muted">{{ materializationMeta }}</div>
                     </div>
                 </div>
             </div>
