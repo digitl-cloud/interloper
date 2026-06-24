@@ -66,8 +66,8 @@ const ASSET_W = 220
 const ASSET_H = 160
 const SRC_PADDING = 26
 const SRC_HEADER_H = 50
-const COLLAPSED_W = 232
-const COLLAPSED_H = 76
+const COLLAPSED_W = 244
+const COLLAPSED_H = 112
 
 // In-card expand modes (list / graph)
 const MINI_W = 108

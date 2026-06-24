@@ -236,40 +236,45 @@ const statusRing = computed(() =>
             </div>
 
             <!-- Main card -->
-            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-default bg-muted"
-                 :class="statusRing">
-                <!-- Collapsed: full card with meta line -->
-                <div v-if="collapsed"
-                     class="flex h-full items-center gap-3 p-4">
-                    <UIcon :name="icon"
-                           class="size-8 shrink-0" />
-                    <div class="min-w-0 flex-1">
-                        <div class="truncate text-sm font-semibold">{{ source.name }}</div>
-                        <div v-if="sourceDefn"
-                             class="truncate text-xs text-muted">
-                            {{ sourceDefn.name }}
+            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-[var(--ui-border-accented)] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.55)]"
+                 :class="[collapsed ? 'bg-muted' : 'bg-default', statusRing]">
+                <!-- Collapsed: header + divided meta row -->
+                <template v-if="collapsed">
+                    <div class="flex flex-1 items-center gap-3 px-4">
+                        <div class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-elevated">
+                            <UIcon :name="icon"
+                                   class="size-6 text-muted" />
                         </div>
-                        <div class="mt-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-dimmed">
-                            <UIcon name="i-lucide-box"
-                                   class="size-3 shrink-0" />
-                            <span>{{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}</span>
-                            <template v-if="metaSuffix">
-                                <span>·</span>
-                                <span :class="schedule?.paused ? 'text-warning' : ''"
-                                      class="truncate">{{ metaSuffix }}</span>
-                            </template>
+                        <div class="min-w-0 flex-1">
+                            <div class="truncate text-sm font-semibold text-highlighted">{{ source.name }}</div>
+                            <div v-if="sourceDefn"
+                                 class="truncate text-xs text-muted">
+                                {{ sourceDefn.name }}
+                            </div>
                         </div>
+                        <UIcon name="i-lucide-chevron-right"
+                               class="size-4 shrink-0 text-dimmed" />
                     </div>
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-4 shrink-0 text-dimmed" />
-                </div>
+                    <div class="flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap border-t border-[var(--ui-border-accented)] bg-default px-4 py-2.5 text-xs text-muted">
+                        <UIcon name="i-lucide-box"
+                               class="size-3.5 shrink-0 text-dimmed" />
+                        <span>{{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}</span>
+                        <template v-if="metaSuffix">
+                            <span class="text-dimmed">·</span>
+                            <span :class="schedule?.paused ? 'text-warning' : ''"
+                                  class="truncate">{{ metaSuffix }}</span>
+                        </template>
+                    </div>
+                </template>
 
                 <!-- Expanded: compact header + optional in-card body -->
                 <template v-else>
-                    <div class="flex h-12 shrink-0 items-center gap-2 border-b border-default px-4">
-                        <UIcon :name="icon"
-                               class="size-5 shrink-0" />
-                        <span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ source.name }}</span>
+                    <div class="flex h-12 shrink-0 items-center gap-2.5 border-b border-[var(--ui-border-accented)] px-4">
+                        <div class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-elevated">
+                            <UIcon :name="icon"
+                                   class="size-4 text-muted" />
+                        </div>
+                        <span class="min-w-0 flex-1 truncate text-sm font-semibold text-highlighted">{{ source.name }}</span>
                         <span class="shrink-0 text-[11px] text-dimmed">{{ assetCount }} assets</span>
                         <UIcon name="i-lucide-chevron-down"
                                class="size-4 shrink-0 text-dimmed" />

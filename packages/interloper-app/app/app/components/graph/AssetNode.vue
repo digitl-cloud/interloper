@@ -210,35 +210,27 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                 </UTooltip>
             </div>
 
-            <UCard variant="outline"
-                   class="rounded-xl !bg-muted"
-                   :class="statusRing"
-                   :ui="{ header: '!px-4 !py-3 !bg-elevated', body: '!px-4 !py-4 border-0', footer: '!px-4 !py-0 !pb-3' }">
-                <template #header>
-                    <div class="flex items-center gap-2">
+            <div class="overflow-hidden rounded-xl border border-[var(--ui-border-accented)] bg-muted shadow-[0_10px_30px_-10px_rgba(0,0,0,0.55)]"
+                 :class="statusRing">
+                <div class="flex items-center gap-2.5 px-3.5 py-3">
+                    <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-elevated">
                         <UIcon :name="icon"
-                               class="size-6 shrink-0" />
-                        <span class="truncate text-sm font-semibold">{{ label }}</span>
+                               class="size-5 text-muted" />
                     </div>
-                </template>
-
-                <p v-if="description"
-                   class="line-clamp-2 text-xs leading-snug text-muted">
+                    <div class="min-w-0 flex-1">
+                        <div class="truncate text-sm font-semibold text-highlighted">{{ label }}</div>
+                        <div v-if="tags.length"
+                             class="truncate text-xs text-muted">{{ tags.join(' · ') }}</div>
+                    </div>
+                    <span v-if="status"
+                          class="size-2 shrink-0 rounded-full"
+                          :class="statusDotClass(status.state)" />
+                </div>
+                <div v-if="description"
+                     class="line-clamp-2 border-t border-[var(--ui-border-accented)] bg-default px-3.5 py-2.5 text-xs leading-snug text-muted">
                     {{ description }}
-                </p>
-
-                <template v-if="tags.length"
-                          #footer>
-                    <div class="flex flex-wrap gap-1">
-                        <UBadge v-for="tag in tags"
-                                :key="tag"
-                                variant="subtle"
-                                size="sm">
-                            {{ tag }}
-                        </UBadge>
-                    </div>
-                </template>
-            </UCard>
+                </div>
+            </div>
 
             <Handle v-if="showSourceHandle"
                     type="source"
