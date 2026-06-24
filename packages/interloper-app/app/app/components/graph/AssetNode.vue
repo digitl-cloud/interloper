@@ -90,6 +90,10 @@ const isRunnable = computed(() => {
 const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value || isValidTarget.value)
 const showSourceHandle = computed(() => hasDownstream.value || isValidSource.value)
 
+const statusRing = computed(() =>
+    props.viewMode === 'status' && props.status ? statusRingClass(props.status.state) : '',
+)
+
 const contextMenuItems = computed<ContextMenuItem[][]>(() => {
     const items: ContextMenuItem[][] = [
         [
@@ -208,6 +212,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
 
             <UCard variant="outline"
                    class="rounded-xl !bg-muted"
+                   :class="statusRing"
                    :ui="{ header: '!px-4 !py-3 !bg-elevated', body: '!px-4 !py-4 border-0', footer: '!px-4 !py-0 !pb-3' }">
                 <template #header>
                     <div class="flex items-center gap-2">

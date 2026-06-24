@@ -12,11 +12,15 @@ const props = withDefaults(defineProps<{
     readonly?: boolean
     expandMode?: ExpandMode
     viewMode?: ViewMode
+    statusFilter?: StatusFilter
+    showNewSourceButton?: boolean
 }>(), {
     sourceIds: undefined,
     readonly: false,
     expandMode: 'nodes',
     viewMode: 'topology',
+    statusFilter: 'all',
+    showNewSourceButton: true,
 })
 
 const emit = defineEmits<{
@@ -58,6 +62,31 @@ function getAssetDefinition(qk: string): AssetDefinition | undefined {
     return catalogStore.getAssetDefinition(qk)
 }
 
+// Filtered model for display (the status filter narrows which sources render).
+const displayModel = computed<GraphModel>(() => {
+    const m = model.value
+    if (props.statusFilter === 'all') return m
+
+    const keep = new Set(
+        m.sources
+            .filter((s) => {
+                const state = s.status?.state ?? 'idle'
+                if (props.statusFilter === 'healthy') return state === 'idle'
+                if (props.statusFilter === 'attention') return state === 'attention'
+                if (props.statusFilter === 'paused') return state === 'paused'
+                return true
+            })
+            .map(s => s.source.id),
+    )
+
+    return {
+        sources: m.sources.filter(s => keep.has(s.source.id)),
+        // Keep standalone assets (no source) regardless of the source filter.
+        assets: m.assets.filter(a => a.source === null || keep.has(a.source.id)),
+        dependencies: m.dependencies,
+    }
+})
+
 const { resolveConnectionPairs, isValidConnection } = useGraphConnectionRules({
     sources,
     assetDependencies,
@@ -73,11 +102,12 @@ function onConnect(connection: Connection) {
 </script>
 
 <template>
-    <GraphCanvas :model="model"
+    <GraphCanvas :model="displayModel"
                  :editable="!readonly"
                  :loading="loading"
                  :expand-mode="expandMode"
                  :view-mode="viewMode"
+                 :show-new-source-button="showNewSourceButton"
                  :is-valid-connection="isValidConnection"
                  @add-source="emit('add-source')"
                  @edit-source="emit('edit-source', $event)"

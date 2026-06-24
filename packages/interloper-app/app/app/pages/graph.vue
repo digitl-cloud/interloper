@@ -16,6 +16,20 @@ const toast = useToast()
 // Canvas view controls (toolbar-owned)
 const expandMode = ref<ExpandMode>('nodes')
 const viewMode = ref<ViewMode>('topology')
+const statusFilter = ref<StatusFilter>('all')
+
+const { sourceStatus } = useNodeStatus()
+const statusCounts = computed<Record<StatusFilter, number>>(() => {
+    const c: Record<StatusFilter, number> = { all: 0, healthy: 0, attention: 0, paused: 0 }
+    for (const s of sourcesStore.sources) {
+        c.all++
+        const state = sourceStatus(s).state
+        if (state === 'paused') c.paused++
+        else if (state === 'attention') c.attention++
+        else c.healthy++
+    }
+    return c
+})
 
 onMounted(() => {
     if (!sourcesStore.loading) sourcesStore.fetch()
@@ -101,7 +115,17 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <GraphToolbar v-model:expand-mode="expandMode" />
+        <GraphToolbar v-model:expand-mode="expandMode"
+                      v-model:view-mode="viewMode"
+                      v-model:status-filter="statusFilter"
+                      :counts="statusCounts">
+            <template #end>
+                <UButton icon="i-lucide-plus"
+                         label="New Source"
+                         size="sm"
+                         @click="onCreateSource" />
+            </template>
+        </GraphToolbar>
         <SplitterGroup direction="horizontal"
                        auto-save-id="graph-panels"
                        class="flex-1 min-h-0">
@@ -110,6 +134,8 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                            class="flex">
                 <GraphAssetGraph :expand-mode="expandMode"
                                  :view-mode="viewMode"
+                                 :status-filter="statusFilter"
+                                 :show-new-source-button="false"
                                  @add-source="onCreateSource"
                                  @edit-source="onEditSource"
                                  @asset-click="onAssetClick"
