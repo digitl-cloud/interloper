@@ -1,9 +1,11 @@
+import type { ComponentStatus } from './component'
 import type { Destination } from './destination'
 
 export interface SourceAsset {
     id: string
     key: string
     materializable: boolean
+    status: ComponentStatus
 }
 
 export interface Source {
@@ -12,6 +14,7 @@ export interface Source {
     key: string
     name: string
     config: Record<string, any> | null
+    status: ComponentStatus
     resources: Record<string, string>
     destinations: Destination[]
     assets: SourceAsset[]

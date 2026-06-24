@@ -93,6 +93,11 @@ const { confirm } = useConfirm()
 const { getWarnings } = useAssetWarnings()
 const { getBadgeForSource } = useDestinationBadge()
 const { getSourceSchedule } = useSchedule()
+const { sourceDrift, statusBadge } = useDrift()
+
+const driftStatus = computed(() => sourceDrift(props.source))
+const driftBadge = computed(() => statusBadge(driftStatus.value))
+const isDrift = computed(() => driftStatus.value === 'missing' || driftStatus.value === 'partial')
 
 const sourceWarnings = computed(() => {
     const all = props.source.assets.flatMap(a => getWarnings(a.id, a.key))
@@ -188,8 +193,25 @@ const ringClass = computed(() => {
                 </UTooltip>
             </div>
 
+            <!-- Drift badge (collapsed) — takes precedence over warnings: the source
+                 or one of its assets no longer resolves against the catalog. -->
+            <UTooltip v-if="isDrift && collapsed"
+                      :delay-duration="0"
+                      :content="{ side: 'top', sideOffset: 6 }"
+                      class="absolute -right-2.5 -top-2.5 z-10">
+                <div class="flex size-7 items-center justify-center rounded-full border"
+                     :class="driftStatus === 'missing' ? 'border-error/40 bg-error/25' : 'border-warning/40 bg-warning/25'">
+                    <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
+                           class="size-4 shrink-0"
+                           :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
+                </div>
+                <template #content>
+                    <div class="text-xs">{{ driftBadge?.label }}</div>
+                </template>
+            </UTooltip>
+
             <!-- Warning badge (collapsed only) -->
-            <UTooltip v-if="hasWarning && collapsed"
+            <UTooltip v-if="hasWarning && !isDrift && collapsed"
                       :delay-duration="0"
                       :content="{ side: 'top', sideOffset: 6 }"
                       :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
@@ -280,6 +302,16 @@ const ringClass = computed(() => {
                                    class="size-4 text-muted" />
                         </div>
                         <span class="min-w-0 flex-1 truncate text-sm font-semibold text-highlighted">{{ source.name }}</span>
+                        <UTooltip v-if="isDrift"
+                                  :delay-duration="0"
+                                  :content="{ side: 'top', sideOffset: 6 }">
+                            <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
+                                   class="size-4 shrink-0"
+                                   :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
+                            <template #content>
+                                <div class="text-xs">{{ driftBadge?.label }}</div>
+                            </template>
+                        </UTooltip>
                         <span class="shrink-0 text-[11px] text-dimmed">{{ assetCount }} assets</span>
                         <UIcon name="i-lucide-chevron-down"
                                class="size-4 shrink-0 text-dimmed" />

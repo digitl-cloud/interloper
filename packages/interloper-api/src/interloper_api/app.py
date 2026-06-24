@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from interloper.catalog.base import Catalog
+from interloper.errors import ComponentDriftError
 from interloper_db import Store
 
 from interloper_api.dependencies import set_auth_config, set_catalog, set_smtp_config, set_store
@@ -54,6 +56,15 @@ def create_app(
         The configured FastAPI application.
     """
     app = FastAPI(title="Interloper API", lifespan=ws.realtime_lifespan, **kwargs)
+
+    @app.exception_handler(ComponentDriftError)
+    async def _component_drift_handler(_request: Request, exc: ComponentDriftError) -> JSONResponse:
+        """A stored component whose catalog key has drifted is a conflict, not a 500.
+
+        Hydrating or running a drifted source/asset can't succeed until the
+        user resolves the drift, so surface it as a clean 409 the UI can act on.
+        """
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
 
     if cors_origins:
         app.add_middleware(

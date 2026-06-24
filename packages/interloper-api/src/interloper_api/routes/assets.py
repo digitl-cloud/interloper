@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.errors import DataNotFoundError, NotFoundError
-from interloper_db import Profile, Store
+from interloper_db import ComponentStatus, Profile, Store
 from interloper_db.models import Asset, AssetResource, Destination, DestinationResource
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -64,6 +64,7 @@ class AssetResponse(BaseModel):
     org_id: UUID
     key: str
     materializable: bool
+    status: ComponentStatus
     config: dict[str, Any] | None = None
     resources: dict[str, str] = {}
     destinations: list[DestinationResponse] = []
@@ -147,14 +148,21 @@ def _load_authorized_asset(asset_id: UUID, user: Profile, store: Store, *, minim
     return asset
 
 
-def _asset_to_response(asset: Asset) -> AssetResponse:
-    """Convert a DB Asset to an AssetResponse."""
+def _asset_to_response(asset: Asset, store: Store) -> AssetResponse:
+    """Convert a DB Asset to an AssetResponse.
+
+    Carries the asset's catalog-resolution ``status`` (derived from the same
+    resolver hydration uses) so the UI can flag drifted assets. Source-owned
+    assets resolve through their parent, so ``asset.source`` must be loaded.
+    """
+    source_key = asset.source.key if asset.source else None
     return AssetResponse(
         id=asset.id,
         source_id=asset.source_id,
         org_id=asset.org_id,
         key=asset.key,
         materializable=asset.materializable,
+        status=store.asset_status(asset.key, source_key=source_key),
         config=asset.config,
         resources=_resource_map(AssetResource, "asset_id", asset.id),
         destinations=[_dest_to_response(d) for d in asset.destinations],
@@ -173,7 +181,7 @@ def list_assets(
 ) -> list[AssetResponse]:
     """List all assets for the current organisation."""
     assets = store.list_assets(org_id)
-    return [_asset_to_response(a) for a in assets]
+    return [_asset_to_response(a, store) for a in assets]
 
 
 @router.post("/", status_code=201)
@@ -191,7 +199,7 @@ def create_asset(
         resources=body.resources,
         destination_ids=body.destination_ids,
     )
-    return _asset_to_response(asset)
+    return _asset_to_response(asset, store)
 
 
 @router.get("/dependencies")
@@ -219,7 +227,7 @@ def get_asset(
 ) -> AssetResponse:
     """Get a single asset by ID. Authorized by membership in the asset's org."""
     asset = _load_authorized_asset(asset_id, user, store)
-    return _asset_to_response(asset)
+    return _asset_to_response(asset, store)
 
 
 @router.put("/{asset_id}")
@@ -241,7 +249,7 @@ def update_asset(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
-    return _asset_to_response(asset)
+    return _asset_to_response(asset, store)
 
 
 @router.delete("/{asset_id}")

@@ -83,6 +83,7 @@ function onCreateSource() {
 
 <template>
     <div class="flex flex-col min-h-0 flex-1">
+        <DriftBanner />
         <SplitterGroup direction="horizontal"
                        auto-save-id="catalog-panels"
                        class="flex-1 min-h-0">

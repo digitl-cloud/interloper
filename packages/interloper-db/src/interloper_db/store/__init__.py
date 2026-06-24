@@ -34,6 +34,7 @@ from typing import Any
 
 from interloper.catalog.base import Catalog
 
+from interloper_db.drift import DriftMixin
 from interloper_db.hydration import Hydrator
 from interloper_db.store.assets import AssetMixin
 from interloper_db.store.auth import AuthMixin
@@ -46,7 +47,7 @@ from interloper_db.store.sources import SourceMixin
 logger = logging.getLogger(__name__)
 
 
-class Store(AuthMixin, ResourceMixin, SourceMixin, AssetMixin, JobMixin, RunMixin, DestinationMixin):
+class Store(AuthMixin, ResourceMixin, SourceMixin, AssetMixin, JobMixin, RunMixin, DestinationMixin, DriftMixin):
     """Framework-level persistence layer.
 
     Bridges catalog definitions and database rows to hydrate and persist

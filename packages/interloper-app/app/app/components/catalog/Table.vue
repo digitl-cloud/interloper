@@ -17,6 +17,7 @@ const { destinations } = storeToRefs(destinationsStore)
 const { jobs } = storeToRefs(jobsStore)
 const { runs } = storeToRefs(runsStore)
 const { getWarnings, filterByCategory } = useAssetWarnings()
+const { statusBadge } = useDrift()
 const { data, sourceInfoById, assetCount } = useCatalogRows({
     sources,
     assets,
@@ -26,6 +27,11 @@ const { data, sourceInfoById, assetCount } = useCatalogRows({
     runs,
     getWarnings,
 })
+
+/** Drift badge meta for a source's rollup status, or null when healthy. */
+function sourceDriftBadge(sourceId: string) {
+    return statusBadge(sourceInfoById.value.get(sourceId)?.drift ?? 'ok')
+}
 
 const statusColor: Record<string, 'error' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'neutral'> = {
     success: 'success',
@@ -268,6 +274,12 @@ function onRowClick(row: any) {
                             variant="subtle">
                         {{ sourceInfoById.get(row.original.sourceId)?.assetCount ?? 0 }}
                     </UBadge>
+                    <UBadge v-if="sourceDriftBadge(row.original.sourceId)"
+                            :color="sourceDriftBadge(row.original.sourceId)!.color"
+                            :icon="sourceDriftBadge(row.original.sourceId)!.icon"
+                            variant="subtle">
+                        {{ sourceDriftBadge(row.original.sourceId)!.label }}
+                    </UBadge>
                 </div>
                 <!-- Asset group header (depth 1) -->
                 <div v-else-if="row.getIsGrouped() && row.depth === 1"
@@ -280,6 +292,12 @@ function onRowClick(row: any) {
                     <UIcon :name="row.original.icon"
                            class="size-4.5 shrink-0 text-dimmed" />
                     <span>{{ row.original.name }}</span>
+                    <UBadge v-if="statusBadge(row.original.assetStatus)"
+                            :color="statusBadge(row.original.assetStatus)!.color"
+                            :icon="statusBadge(row.original.assetStatus)!.icon"
+                            variant="subtle">
+                        {{ statusBadge(row.original.assetStatus)!.label }}
+                    </UBadge>
                 </div>
                 <!-- Destination leaf row -->
                 <div v-else

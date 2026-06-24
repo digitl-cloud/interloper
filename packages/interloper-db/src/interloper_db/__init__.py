@@ -1,3 +1,4 @@
+from interloper_db.drift import ComponentStatus
 from interloper_db.engine import get_engine, init_engine
 from interloper_db.models import (
     Asset,
@@ -31,6 +32,7 @@ __all__ = [
     "AssetDestination",
     "AssetResource",
     "Backfill",
+    "ComponentStatus",
     "Destination",
     "DestinationResource",
     "Event",

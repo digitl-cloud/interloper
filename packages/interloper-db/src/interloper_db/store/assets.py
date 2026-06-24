@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import HydrationError, NotFoundError
+from interloper.errors import ComponentDriftError, HydrationError, NotFoundError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
+from interloper_db.drift import ComponentStatus, asset_status
 from interloper_db.engine import get_engine
 from interloper_db.hydration import Hydrator
 from interloper_db.models import (
@@ -27,6 +28,7 @@ def _load_asset_with_relations(session: Session, asset_id: UUID) -> Asset:
         select(Asset)
         .where(Asset.id == asset_id)
         .options(
+            selectinload(Asset.source),  # ty: ignore[invalid-argument-type]
             selectinload(Asset.resources),  # ty: ignore[invalid-argument-type]
             selectinload(Asset.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
         )
@@ -63,6 +65,7 @@ class AssetMixin:
     """Store methods for asset management."""
 
     _hydrator: Hydrator
+    _catalog: il.Catalog
 
     if TYPE_CHECKING:
         # Provided by SourceMixin on the composed Store.
@@ -200,6 +203,7 @@ class AssetMixin:
                 select(Asset)
                 .where(Asset.org_id == org_id)
                 .options(
+                    selectinload(Asset.source),  # ty: ignore[invalid-argument-type]
                     selectinload(Asset.resources),  # ty: ignore[invalid-argument-type]
                     selectinload(Asset.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
                 )
@@ -231,14 +235,26 @@ class AssetMixin:
             db_asset = _load_asset_with_relations(session, asset_id)
 
             if db_asset.source_id is not None:
-                # Source-owned: hydrate via parent source and extract
+                # Source-owned: hydrate via parent source and extract. A drifted
+                # parent raises ComponentDriftError from load_source; if the
+                # parent is live but no longer declares this key, the asset key
+                # itself has drifted out of the source.
                 source = self.load_source(db_asset.source_id)
                 for asset in source.assets:
                     if type(asset).key == db_asset.key:
                         return asset
-                raise HydrationError(f"Asset '{db_asset.key}' not found in hydrated source")
+                raise ComponentDriftError(
+                    f"Asset '{db_asset.key}' ({db_asset.id}) is no longer declared "
+                    f"by source '{type(source).key}'; its catalog key has drifted."
+                )
 
-            # Standalone: build spec and reconstruct
+            # Standalone: drift-check then build spec and reconstruct.
+            status = asset_status(self._catalog, db_asset.key)
+            if status is not ComponentStatus.OK:
+                raise ComponentDriftError(
+                    f"Asset '{db_asset.key}' ({db_asset.id}) cannot be hydrated: "
+                    f"its catalog key is {status.value}."
+                )
             spec = self._hydrator.build_asset_spec(session, db_asset)
 
         try:
