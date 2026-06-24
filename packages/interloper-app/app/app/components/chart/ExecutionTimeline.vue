@@ -1,11 +1,5 @@
 <script setup lang="ts">
 import type { AssetExecution, ExecutionStatus } from '~/types/asset_execution'
-import type { ECBasicOption } from 'echarts/types/dist/shared'
-import { CustomChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import VChart from 'vue-echarts'
 
 /**********************
  * Models
@@ -24,7 +18,9 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    refreshRate: 10,
+    // 0 → advance every animation frame (display refresh rate). A positive value
+    // throttles the layout updates to at most once per `refreshRate` ms.
+    refreshRate: 0,
     markerTime: null,
     highlightedAsset: null,
     status: 'pending',
@@ -33,16 +29,7 @@ const props = withDefaults(defineProps<Props>(), {
 const isRunning = computed(() => props.status === 'running')
 
 const assetDisplayName = useAssetDisplayName()
-
-/**********************
- * ECharts Registration
- **********************/
-use([
-    CanvasRenderer,
-    CustomChart,
-    GridComponent,
-    TooltipComponent,
-])
+const assetIcon = useAssetIcon()
 
 /**********************
  * Colors
@@ -60,24 +47,41 @@ function getStatusColor(status: string) {
     }
 }
 
-function getAxisColor() {
-    return isDark.value ? '#9ca3af' : '#6b7280'
-}
+/**********************
+ * Layout constants
+ **********************/
+const BAR_HEIGHT = 28
+const ROW_HEIGHT = 40
+const AXIS_HEIGHT = 28
+const OVERSCAN = 4
+const MAX_ZOOM = 200
 
-function getTextColor() {
-    return isDark.value ? '#e5e7eb' : '#1f2937'
+const DEFAULT_ICON = 'i-lucide-box'
+
+function clamp(v: number, min: number, max: number) {
+    return Math.min(Math.max(v, min), max)
 }
 
 /**********************
  * Data Processing
+ *
+ * `baseRows` is purely data-driven — it does NOT read the live clock, so it only
+ * recomputes when `assetExecutions` change. Per-frame growth of running bars is
+ * handled downstream (axisMax + the template), keeping animation work scoped to
+ * the running rows rather than re-deriving the whole list every frame.
  **********************/
-interface Execution {
-    asset_id: string | null
-    asset_key: string
-    asset_name: string
-    startTime?: number
-    endTime?: number
+interface BaseRow {
+    id: string | null
+    name: string
+    icon: string
     status: ExecutionStatus
+    /** Has a start time → render a time bar; otherwise a not-started placeholder. */
+    timed: boolean
+    running: boolean
+    /** Relative ms from baseTime. */
+    start: number
+    /** Relative ms from baseTime; undefined for running (grows live) and untimed rows. */
+    fixedEnd?: number
 }
 
 /** Sort weight: assets that ran sort first, non-started assets sink to the bottom. */
@@ -91,9 +95,18 @@ const STATUS_WEIGHT: Record<string, number> = {
     pending: 5,
 }
 
-const executions = computed<Execution[]>(() => {
+interface Parsed {
+    id: string | null
+    name: string
+    icon: string
+    status: ExecutionStatus
+    startTime?: number
+    endTime?: number
+}
+
+const parsed = computed<Parsed[]>(() => {
     return props.assetExecutions
-        .map(transformAssetExecution)
+        .map(parseExecution)
         .sort((a, b) => {
             const wa = STATUS_WEIGHT[a.status] ?? 9
             const wb = STATUS_WEIGHT[b.status] ?? 9
@@ -102,320 +115,410 @@ const executions = computed<Execution[]>(() => {
         })
 })
 
-function transformAssetExecution(record: AssetExecution): Execution {
-    const displayName = record.asset_id
-        ? assetDisplayName.value.get(record.asset_id)
-        : undefined
+function parseExecution(record: AssetExecution): Parsed {
+    const displayName = record.asset_id ? assetDisplayName.value.get(record.asset_id) : undefined
     return {
-        asset_id: record.asset_id,
-        asset_key: record.asset_key,
-        asset_name: displayName ?? record.asset_key,
+        id: record.asset_id,
+        name: displayName ?? record.asset_key,
+        icon: (record.asset_id ? assetIcon.value.get(record.asset_id) : undefined) ?? DEFAULT_ICON,
+        status: record.status ?? 'pending',
         startTime: record.started_at ? new Date(record.started_at).getTime() : undefined,
         endTime: record.completed_at ? new Date(record.completed_at).getTime() : undefined,
-        status: record.status ?? 'pending',
     }
 }
 
-/**********************
- * Chart
- **********************/
-const chart = ref<InstanceType<typeof VChart>>()
-const now = ref(Date.now())
-const runInterval = ref<ReturnType<typeof setInterval> | null>(null)
-
+/** Earliest start across the run; the zero of the relative time axis. */
 const baseTime = computed(() => {
-    if (executions.value.length === 0) return 0
-    const startTimes = executions.value.map(a => a.startTime).filter((t): t is number => t !== undefined)
-    if (startTimes.length === 0) return now.value - 5000
-    return Math.min(...startTimes)
+    const starts = parsed.value.map(p => p.startTime).filter((t): t is number => t !== undefined)
+    return starts.length ? Math.min(...starts) : 0
 })
 
-const relativeNow = computed(() => now.value - baseTime.value)
-
-const rawMax = computed(() => {
-    if (executions.value.length === 0) return 0
-
-    const times: number[] = []
-    for (const a of executions.value) {
-        if (a.status === 'running') {
-            times.push(now.value - baseTime.value)
-        }
-        else if (a.endTime) {
-            times.push(a.endTime - baseTime.value)
-        }
-        else if (a.startTime) {
-            times.push(a.startTime - baseTime.value)
-        }
+/**
+ * Largest relative end across all *settled* timed rows (running rows grow live and
+ * are folded in via `axisMax`). Drives the min-visual-duration floor and the axis
+ * extent without depending on the clock.
+ */
+const staticMaxEnd = computed(() => {
+    let max = 0
+    for (const p of parsed.value) {
+        if (p.startTime === undefined || p.status === 'running') continue
+        const end = (p.endTime ?? p.startTime) - baseTime.value
+        if (end > max) max = end
     }
-
-    return times.length > 0 ? Math.max(...times) : 5000
+    return max
 })
 
-const minVisualDuration = computed(() => rawMax.value * 0.05)
+const minVisualDuration = computed(() => Math.max(staticMaxEnd.value * 0.05, 1))
 
-const assetData = computed(() => {
-    return executions.value.map((execution, index) => {
-        const { start, end } = getAssetTimeRange(execution)
-        return {
-            id: execution.asset_id,
-            name: execution.asset_name,
-            value: [index, start, end, end - start],
-            itemStyle: { color: getStatusColor(execution.status) },
+const baseRows = computed<BaseRow[]>(() => {
+    return parsed.value.map((p) => {
+        const timed = p.startTime !== undefined
+        const running = p.status === 'running'
+        const start = timed ? p.startTime! - baseTime.value : 0
+        let fixedEnd: number | undefined
+        if (timed && !running) {
+            const rawEnd = (p.endTime ?? p.startTime!) - baseTime.value
+            fixedEnd = Math.max(rawEnd, start + minVisualDuration.value)
         }
+        return { id: p.id, name: p.name, icon: p.icon, status: p.status, timed, running, start, fixedEnd }
     })
 })
 
-const minMax = computed(() => {
-    if (assetData.value.length === 0) return [0, 0]
-    const maxEnd = Math.max(...assetData.value.map(d => d.value[2] ?? 0))
-    return [0, maxEnd]
+const hasRunning = computed(() => baseRows.value.some(r => r.running))
+
+/**********************
+ * Live clock (running bars only)
+ **********************/
+const now = ref(Date.now())
+const rafId = ref<number | null>(null)
+let lastTick = 0
+
+const relativeNow = computed(() => now.value - baseTime.value)
+
+/** Live end of a row in relative ms — only running rows depend on the clock. */
+function rowEnd(row: BaseRow): number {
+    if (row.running) return relativeNow.value
+    return row.fixedEnd ?? row.start
+}
+
+/** Right edge of the data (100% when fitted). Only moves while something runs. */
+const axisMax = computed(() => {
+    const settled = staticMaxEnd.value
+    const live = hasRunning.value ? Math.max(settled, relativeNow.value) : settled
+    return Math.max(live, 1)
 })
 
-const markerData = computed(() => {
-    return props.markerTime ? [{ value: [props.markerTime.getTime() - baseTime.value] }] : []
+/**********************
+ * Time viewport (zoom / pan) — #6
+ *
+ * When `fitted`, the viewport tracks [0, axisMax] and follows the run live. Any
+ * zoom/pan freezes it to an explicit [start, start+span] window in ms, so the
+ * view stays put as the run grows to the right.
+ **********************/
+const fitted = ref(true)
+const viewStart = ref(0)
+const viewSpan = ref(0)
+
+const view = computed(() => {
+    if (fitted.value) return { start: 0, end: axisMax.value, span: axisMax.value }
+    const span = clamp(viewSpan.value, 1, axisMax.value)
+    const start = clamp(viewStart.value, 0, Math.max(0, axisMax.value - span))
+    return { start, end: start + span, span }
 })
 
-const chartHeight = computed(() => {
-    const rows = Math.max(1, executions.value.length)
-    return rows * ROW_HEIGHT + BAR_HEIGHT
-})
-
-const options = computed<ECBasicOption>(() => {
-    return {
-        series: [
-            {
-                type: 'custom',
-                renderItem: renderAsset,
-                data: assetData.value,
-                encode: { x: [1, 2], y: 0 },
-            },
-            ...(markerData.value.length
-                ? [{
-                    type: 'custom' as const,
-                    renderItem: renderVerticalMarker,
-                    data: markerData.value,
-                    z: 10,
-                }]
-                : []),
-        ],
-        xAxis: {
-            type: 'value',
-            position: 'top',
-            min: minMax.value[0],
-            max: minMax.value[1],
-            axisLabel: {
-                color: getAxisColor(),
-                formatter: (val: number) => {
-                    if (val === 0) return '0'
-                    if (val < 1000) return `${Math.round(val)}ms`
-                    if (val < 60000) return `${(val / 1000).toFixed(1)}s`
-                    if (val < 3600000) return `${(val / 60000).toFixed(1)}m`
-                    return `${(val / 3600000).toFixed(1)}h`
-                },
-            },
-            axisLine: { lineStyle: { color: isDark.value ? '#374151' : '#e5e7eb' } },
-            splitLine: { lineStyle: { color: isDark.value ? '#1f2937' : '#f3f4f6' } },
-        },
-        yAxis: {
-            type: 'category',
-            data: executions.value.map(e => e.asset_name),
-            show: false,
-            inverse: true,
-        },
-        grid: {
-            left: 0,
-            right: 0,
-            top: BAR_HEIGHT / 2,
-            bottom: BAR_HEIGHT / 2,
-        },
-        tooltip: {
-            backgroundColor: isDark.value ? '#1f2937' : '#ffffff',
-            borderColor: isDark.value ? '#374151' : '#e5e7eb',
-            textStyle: { color: getTextColor() },
-            formatter(params: any) {
-                const duration = params.value[3]
-                return `${params.marker} ${params.name}<br/>Duration: ${(duration / 1000).toFixed(1)}s`
-            },
-        },
-        animationDuration: props.refreshRate,
-        animationDurationUpdate: props.refreshRate,
-        animationEasingUpdate: 'linear',
-    }
-})
-
-function getAssetTimeRange(asset: Execution): { start: number; end: number } {
-    const relativeStartTime = asset.startTime ? asset.startTime - baseTime.value : 0
-    const relativeEndTime = asset.endTime ? asset.endTime - baseTime.value : relativeNow.value
-
-    switch (asset.status) {
-        case 'success':
-        case 'failed':
-            return {
-                start: relativeStartTime,
-                end: Math.max(relativeEndTime, relativeStartTime + minVisualDuration.value),
-            }
-        case 'running':
-            return {
-                start: relativeStartTime,
-                end: relativeNow.value,
-            }
-        default:
-            return {
-                start: 0,
-                end: minVisualDuration.value,
-            }
-    }
+function toPercent(relativeTime: number): number {
+    const { start, span } = view.value
+    return ((relativeTime - start) / span) * 100
 }
 
-const BAR_HEIGHT = 35
-const ROW_HEIGHT = 45
-
-function renderAsset(params: any, api: any) {
-    const categoryIndex = api.value(0)
-    const start = api.coord([api.value(1), categoryIndex])
-    const end = api.coord([api.value(2), categoryIndex])
-    const width = end[0] - start[0]
-    const height = BAR_HEIGHT
-    const textPadding = 8
-    const execution = executions.value[categoryIndex]
-    const focusedAsset = selectedAsset.value ?? props.highlightedAsset
-    const isFocused = focusedAsset === execution!.asset_id
-
-    const shape = {
-        type: 'rect',
-        transition: ['shape'],
-        shape: {
-            x: start[0],
-            y: start[1] - height / 2,
-            width,
-            height,
-            r: 10,
-        },
-        style: {
-            fill: api.visual('color'),
-            opacity: focusedAsset ? (isFocused ? 0.8 : 0.3) : 0.8,
-        },
-    }
-
-    const label = {
-        type: 'text',
-        position: [start[0] + textPadding, start[1]],
-        style: {
-            width: width - textPadding * 2,
-            text: execution!.asset_name,
-            textAlign: 'left' as const,
-            textVerticalAlign: 'middle' as const,
-            fontSize: 11,
-            fontWeight: 'bold' as const,
-            fill: '#ffffff',
-            overflow: 'truncate',
-            ellipsis: '...',
-        },
-    }
-
-    return {
-        type: 'group',
-        children: [shape, label],
-    }
+function resetZoom() {
+    fitted.value = true
+    viewStart.value = 0
+    viewSpan.value = 0
 }
 
-function renderVerticalMarker(params: any, api: any) {
-    const markerTime = api.value(0)
-    const x = api.coord([markerTime, 0])[0]
-
-    return {
-        type: 'line',
-        transition: ['shape'],
-        shape: { x1: x, y1: 0, x2: x, y2: api.getHeight() },
-        style: {
-            stroke: isDark.value ? '#60a5fa' : '#2563eb',
-            lineWidth: 3,
-            opacity: 0.5,
-        },
+function zoomAt(fraction: number, factor: number) {
+    const v = view.value
+    const anchor = v.start + fraction * v.span
+    const span = clamp(v.span * factor, axisMax.value / MAX_ZOOM, axisMax.value)
+    if (span >= axisMax.value) {
+        resetZoom()
+        return
     }
+    fitted.value = false
+    viewSpan.value = span
+    viewStart.value = clamp(anchor - fraction * span, 0, axisMax.value - span)
 }
 
-function tick() {
-    if (chart.value) {
-        if (isRunning.value)
-            now.value = Date.now()
-        chart.value.setOption(options.value, { replaceMerge: ['series'] })
-    }
-}
-
-function stop() {
-    if (runInterval.value) {
-        clearInterval(runInterval.value)
-        runInterval.value = null
-    }
-}
-
-function resize() {
-    chart.value?.resize()
+function panByMs(deltaMs: number) {
+    if (fitted.value) return
+    const span = view.value.span
+    viewStart.value = clamp(view.value.start + deltaMs, 0, axisMax.value - span)
 }
 
 /**********************
- * Handlers
+ * Axis ticks
  **********************/
-// Selection listens on mousedown, not click: while the run is live, `tick()`
-// rebuilds the series every `refreshRate` ms, so the element under the cursor
-// at mousedown no longer exists at mouseup and zrender suppresses the
-// synthetic click entirely. Mousedown carries no such down/up identity check.
-function onAssetMouseDown(params: any) {
-    selectedAsset.value = params.data.id
+function formatTime(val: number): string {
+    if (val === 0) return '0'
+    if (val < 1000) return `${Math.round(val)}ms`
+    if (val < 60000) return `${(val / 1000).toFixed(1)}s`
+    if (val < 3600000) return `${(val / 60000).toFixed(1)}m`
+    return `${(val / 3600000).toFixed(1)}h`
 }
 
-function onBlankSpaceMouseDown(e: { target?: unknown }) {
-    if (!e.target) selectedAsset.value = null
+/** "Nice" evenly-spaced ticks across the current viewport. */
+const ticks = computed(() => {
+    const { start, end, span } = view.value
+    const rawStep = span / 6
+    const magnitude = 10 ** Math.floor(Math.log10(rawStep))
+    const normalized = rawStep / magnitude
+    const step = (normalized < 1.5 ? 1 : normalized < 3 ? 2 : normalized < 7 ? 5 : 10) * magnitude
+
+    const result: { value: number; percent: number; label: string }[] = []
+    for (let v = Math.ceil(start / step) * step; v <= end + step * 0.001; v += step) {
+        result.push({ value: v, percent: toPercent(v), label: formatTime(v) })
+    }
+    return result
+})
+
+/**********************
+ * Marker
+ **********************/
+const markerPercent = computed(() => {
+    if (!props.markerTime) return null
+    const pct = toPercent(props.markerTime.getTime() - baseTime.value)
+    if (pct < 0 || pct > 100) return null
+    return pct
+})
+
+/**********************
+ * Virtualization — #5
+ **********************/
+const scrollEl = ref<HTMLElement | null>(null)
+const scrollTop = ref(0)
+const viewportH = ref(600)
+
+function onScroll() {
+    if (scrollEl.value) scrollTop.value = scrollEl.value.scrollTop
+}
+
+const totalHeight = computed(() => baseRows.value.length * ROW_HEIGHT)
+
+/** Index range of rows intersecting the viewport (plus a small overscan). */
+const visibleRange = computed(() => {
+    const total = baseRows.value.length
+    const first = Math.floor((scrollTop.value - AXIS_HEIGHT) / ROW_HEIGHT) - OVERSCAN
+    const last = Math.ceil((scrollTop.value + viewportH.value - AXIS_HEIGHT) / ROW_HEIGHT) + OVERSCAN
+    return { start: clamp(first, 0, total), end: clamp(last, 0, total) }
+})
+
+const visibleRows = computed(() => {
+    const { start, end } = visibleRange.value
+    return baseRows.value.slice(start, end).map((row, i) => ({ row, index: start + i }))
+})
+
+/**********************
+ * Focus / selection
+ **********************/
+const focusedAsset = computed(() => selectedAsset.value ?? props.highlightedAsset)
+
+function rowOpacity(id: string | null): number {
+    if (!focusedAsset.value) return 1
+    return id === focusedAsset.value ? 1 : 0.25
+}
+
+function onBarClick(id: string | null) {
+    selectedAsset.value = id
+}
+
+function onBlankClick() {
+    selectedAsset.value = null
+}
+
+/**********************
+ * Interaction: wheel zoom/pan + drag-to-pan the ruler
+ **********************/
+function onWheel(e: WheelEvent) {
+    if (!scrollEl.value) return
+    const rect = scrollEl.value.getBoundingClientRect()
+
+    if (e.ctrlKey || e.metaKey) {
+        // Ctrl/⌘ + wheel (and trackpad pinch) → zoom at the cursor.
+        e.preventDefault()
+        const fraction = clamp((e.clientX - rect.left) / rect.width, 0, 1)
+        zoomAt(fraction, e.deltaY > 0 ? 1.15 : 1 / 1.15)
+        return
+    }
+
+    const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)
+    if (horizontal && !fitted.value) {
+        // Horizontal / shift wheel → pan (only meaningful when zoomed in).
+        e.preventDefault()
+        const delta = e.shiftKey ? e.deltaY : e.deltaX
+        panByMs((delta / rect.width) * view.value.span)
+    }
+    // Otherwise: let the container scroll vertically natively.
+}
+
+const dragging = ref(false)
+let dragX = 0
+
+function onRulerPointerDown(e: PointerEvent) {
+    if (fitted.value) return
+    dragging.value = true
+    dragX = e.clientX
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+
+function onRulerPointerMove(e: PointerEvent) {
+    if (!dragging.value || !scrollEl.value) return
+    const width = scrollEl.value.getBoundingClientRect().width
+    const dx = e.clientX - dragX
+    dragX = e.clientX
+    // Dragging right reveals earlier time → viewStart decreases.
+    panByMs((-dx / width) * view.value.span)
+}
+
+function onRulerPointerUp() {
+    dragging.value = false
+}
+
+/**********************
+ * Live ticking — advance running bars on requestAnimationFrame
+ **********************/
+function frame(timestamp: number) {
+    if (!isRunning.value) return
+    if (timestamp - lastTick >= props.refreshRate) {
+        now.value = Date.now()
+        lastTick = timestamp
+    }
+    rafId.value = requestAnimationFrame(frame)
+}
+
+function start() {
+    stop()
+    now.value = Date.now()
+    lastTick = 0
+    rafId.value = requestAnimationFrame(frame)
+}
+
+function stop() {
+    if (rafId.value !== null) {
+        cancelAnimationFrame(rafId.value)
+        rafId.value = null
+    }
 }
 
 /**********************
  * Lifecycle
  **********************/
+let resizeObserver: ResizeObserver | null = null
+
 onMounted(() => {
-    tick()
-    if (isRunning.value) {
-        runInterval.value = setInterval(tick, props.refreshRate)
+    if (scrollEl.value) {
+        viewportH.value = scrollEl.value.clientHeight
+        scrollEl.value.addEventListener('wheel', onWheel, { passive: false })
+        resizeObserver = new ResizeObserver(() => {
+            if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight
+        })
+        resizeObserver.observe(scrollEl.value)
     }
-    chart.value?.chart?.getZr().on('mousedown', onBlankSpaceMouseDown)
+    if (isRunning.value) start()
 })
 
 onUnmounted(() => {
     stop()
+    resizeObserver?.disconnect()
+    scrollEl.value?.removeEventListener('wheel', onWheel)
 })
 
 watch(isRunning, (running) => {
-    if (running) {
-        runInterval.value = setInterval(tick, props.refreshRate)
-    }
-    else {
-        stop()
-    }
+    if (running) start()
+    else stop()
 })
 
-watch(selectedAsset, () => tick())
-watch(() => props.assetExecutions, () => {
-    nextTick(() => {
-        resize()
-        tick()
-    })
-}, { deep: true })
-watch(() => props.markerTime, () => tick())
-watch(() => props.highlightedAsset, () => tick())
-
-/**********************
- * Expose
- **********************/
-defineExpose({ tick, stop, resize })
+// A shrinking dataset can leave the viewport scrolled past the new end.
+watch(axisMax, () => {
+    if (!fitted.value && viewStart.value > axisMax.value) resetZoom()
+})
 </script>
 
-<!-- The VChart component is not using the `options` prop on purpose as it makes the chart glitchy.
-     Instead, we use the `setOption` method to update the chart in the `tick` function. -->
 <template>
-    <div class="w-full"
-         :style="{ height: chartHeight + 'px' }">
-        <VChart ref="chart"
-                :manual-update="true"
-                @mousedown="onAssetMouseDown" />
+    <div ref="scrollEl"
+         class="relative h-full w-full overflow-y-auto overflow-x-hidden"
+         @scroll="onScroll"
+         @click="onBlankClick"
+         @dblclick="resetZoom">
+        <!-- Time axis / ruler: sticky, and the drag-to-pan surface when zoomed. -->
+        <div class="sticky top-0 z-20 flex select-none border-b border-default bg-default"
+             :class="fitted ? '' : 'cursor-ew-resize'"
+             :style="{ height: AXIS_HEIGHT + 'px' }"
+             @pointerdown="onRulerPointerDown"
+             @pointermove="onRulerPointerMove"
+             @pointerup="onRulerPointerUp"
+             @pointercancel="onRulerPointerUp">
+            <div v-for="t in ticks"
+                 :key="t.value"
+                 class="absolute top-0 flex h-full items-center whitespace-nowrap text-[10px] text-muted"
+                 :style="{
+                     left: `min(${t.percent}%, calc(100% - 1px))`,
+                     transform: t.percent >= 99 ? 'translateX(-100%)' : 'translateX(-50%)',
+                 }">
+                {{ t.label }}
+            </div>
+
+            <UButton v-if="!fitted"
+                     icon="i-lucide-zoom-out"
+                     label="Reset zoom"
+                     size="xs"
+                     color="neutral"
+                     variant="subtle"
+                     class="absolute right-2 top-1/2 z-30 -translate-y-1/2"
+                     @click.stop="resetZoom"
+                     @pointerdown.stop
+                     @dblclick.stop />
+        </div>
+
+        <!-- Rows -->
+        <div v-if="baseRows.length"
+             class="relative"
+             :style="{ height: totalHeight + 'px' }">
+            <!-- Gridlines -->
+            <div v-for="t in ticks"
+                 :key="`grid-${t.value}`"
+                 class="absolute top-0 bottom-0 w-px bg-default"
+                 :style="{ left: `${t.percent}%` }" />
+
+            <!-- Bars (virtualized: only rows intersecting the viewport are rendered) -->
+            <template v-for="{ row, index } in visibleRows"
+                      :key="row.id ?? row.name">
+                <!-- Not-started placeholder (#3) -->
+                <div v-if="!row.timed"
+                     class="absolute flex max-w-[45%] items-center gap-1.5 overflow-hidden rounded-md border border-dashed border-default px-2 cursor-pointer text-muted transition-opacity"
+                     :style="{
+                         top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
+                         left: '0',
+                         height: BAR_HEIGHT + 'px',
+                         opacity: rowOpacity(row.id),
+                     }"
+                     :title="`${row.name} — ${row.status}`"
+                     @click.stop="onBarClick(row.id)">
+                    <UIcon :name="row.icon"
+                           class="size-3.5 shrink-0" />
+                    <span class="truncate text-[11px] font-medium">{{ row.name }}</span>
+                </div>
+
+                <!-- Time bar -->
+                <div v-else
+                     class="absolute flex items-center gap-1.5 overflow-hidden rounded-md px-2 cursor-pointer transition-opacity"
+                     :style="{
+                         top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
+                         left: `${toPercent(row.start)}%`,
+                         width: `${Math.max(toPercent(rowEnd(row)) - toPercent(row.start), 0)}%`,
+                         minWidth: '2px',
+                         height: BAR_HEIGHT + 'px',
+                         backgroundColor: getStatusColor(row.status),
+                         opacity: rowOpacity(row.id) * 0.95,
+                     }"
+                     :title="`${row.name} — ${((rowEnd(row) - row.start) / 1000).toFixed(1)}s`"
+                     @click.stop="onBarClick(row.id)">
+                    <UIcon :name="row.icon"
+                           class="size-3.5 shrink-0 text-white" />
+                    <span class="truncate text-[11px] font-bold text-white">{{ row.name }}</span>
+                </div>
+            </template>
+
+            <!-- Marker -->
+            <div v-if="markerPercent !== null"
+                 class="pointer-events-none absolute top-0 bottom-0 z-10 w-0.5 bg-primary/50"
+                 :style="{ left: `${markerPercent}%` }" />
+        </div>
+
+        <!-- Empty state -->
+        <div v-else
+             class="flex h-full items-center justify-center text-sm text-muted">
+            No asset executions yet
+        </div>
     </div>
 </template>
