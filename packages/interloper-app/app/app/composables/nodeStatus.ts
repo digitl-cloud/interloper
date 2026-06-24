@@ -19,6 +19,24 @@ export function statusDotClass(state: GraphNodeState): string {
     return STATUS_DOT[state]
 }
 
+/** Ring/border tint applied to a node in the Status view mode. */
+const STATUS_RING: Record<GraphNodeState, string> = {
+    idle: 'ring-2 ring-[var(--ui-success)]/40',
+    attention: 'ring-2 ring-[var(--ui-warning)]/70',
+    paused: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
+    queued: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
+    pending: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
+    running: 'ring-2 ring-[var(--ui-info)]/70',
+    success: 'ring-2 ring-[var(--ui-success)]/60',
+    failed: 'ring-2 ring-[var(--ui-error)]/70',
+    skipped: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
+    canceled: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
+}
+
+export function statusRingClass(state: GraphNodeState): string {
+    return STATUS_RING[state]
+}
+
 /**
  * Derives {@link NodeStatus} for catalog graph nodes from data that
  * actually exists today: configuration warnings ({@link useAssetWarnings})

@@ -146,6 +146,10 @@ const metaSuffix = computed(() => {
 function onAssetSelect(entry: GraphAssetEntry) {
     emit('asset-click', entry.asset, entry.assetDefn, entry.source)
 }
+
+const statusRing = computed(() =>
+    props.viewMode === 'status' && props.status ? statusRingClass(props.status.state) : '',
+)
 </script>
 
 <template>
@@ -232,7 +236,8 @@ function onAssetSelect(entry: GraphAssetEntry) {
             </div>
 
             <!-- Main card -->
-            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-default bg-muted">
+            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-default bg-muted"
+                 :class="statusRing">
                 <!-- Collapsed: full card with meta line -->
                 <div v-if="collapsed"
                      class="flex h-full items-center gap-3 p-4">

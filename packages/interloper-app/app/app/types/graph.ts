@@ -40,6 +40,9 @@ export type ExpandMode = 'list' | 'graph' | 'nodes'
 /** Which dimension the canvas decorates nodes by. */
 export type ViewMode = 'topology' | 'status'
 
+/** Source health filter for the catalog graph (derived states only). */
+export type StatusFilter = 'all' | 'healthy' | 'attention' | 'paused'
+
 /** A directed asset→asset dependency, normalised away from the store shape. */
 export interface GraphDependency {
     upstreamAssetId: string
