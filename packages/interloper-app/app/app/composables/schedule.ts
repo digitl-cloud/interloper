@@ -12,6 +12,39 @@ export function cronLabel(cron: string): string {
     }
 }
 
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/**
+ * Compact cadence label for common crons, e.g. "Daily · 06:00", "Hourly",
+ * "Weekly · Mon 06:00". Falls back to {@link cronLabel} for anything exotic.
+ */
+export function scheduleSummary(cron: string): string {
+    const parts = cron.trim().split(/\s+/)
+    if (parts.length !== 5) return cronLabel(cron)
+
+    const [min, hour, dom, mon, dow] = parts as [string, string, string, string, string]
+    const num = (s: string) => (/^\d+$/.test(s) ? Number(s) : null)
+    const hh = num(hour)
+    const mm = num(min)
+    const time = hh !== null && mm !== null
+        ? `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+        : null
+
+    if (dom === '*' && mon === '*') {
+        if (dow === '*') {
+            if (hour === '*' && mm === 0) return 'Hourly'
+            if (time) return `Daily · ${time}`
+        }
+        else if (num(dow) !== null && time) {
+            return `Weekly · ${DOW[num(dow)!] ?? dow} ${time}`
+        }
+    }
+    if (num(dom) !== null && mon === '*' && dow === '*' && time) {
+        return `Monthly · ${dom} ${time}`
+    }
+    return cronLabel(cron)
+}
+
 export interface SourceSchedule {
     /** Display label: a single cron description, or "Multiple schedules". */
     label: string
@@ -46,7 +79,7 @@ export function useSchedule() {
             .sort()[0] ?? null
 
         if (jobs.length === 1) {
-            return { label: cronLabel(jobs[0]!.cron), paused, jobCount: 1, nextRunAt }
+            return { label: scheduleSummary(jobs[0]!.cron), paused, jobCount: 1, nextRunAt }
         }
         return { label: 'Multiple schedules', paused, jobCount: jobs.length, nextRunAt }
     }
