@@ -24,6 +24,8 @@ const props = withDefaults(defineProps<{
     /** Derived node status (used by the Status view mode; see Phase 3). */
     status?: NodeStatus
     viewMode?: ViewMode
+    /** VueFlow selection state — drives the blue selection ring. */
+    selected?: boolean
 }>(), {
     open: false,
     mode: 'nodes',
@@ -31,6 +33,7 @@ const props = withDefaults(defineProps<{
     miniGraph: undefined,
     status: undefined,
     viewMode: 'topology',
+    selected: false,
 })
 
 const emit = defineEmits<{
@@ -147,9 +150,11 @@ function onAssetSelect(entry: GraphAssetEntry) {
     emit('asset-click', entry.asset, entry.assetDefn, entry.source)
 }
 
-const statusRing = computed(() =>
-    props.viewMode === 'status' && props.status ? statusRingClass(props.status.state) : '',
-)
+const ringClass = computed(() => {
+    if (props.selected) return 'ring-2 ring-primary'
+    if (props.viewMode === 'status' && props.status) return statusRingClass(props.status.state)
+    return ''
+})
 </script>
 
 <template>
@@ -237,7 +242,7 @@ const statusRing = computed(() =>
 
             <!-- Main card -->
             <div class="relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-[var(--ui-border-accented)] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.55)]"
-                 :class="[collapsed ? 'bg-muted' : 'bg-default', statusRing]">
+                 :class="[collapsed ? 'bg-muted' : 'bg-default', ringClass]">
                 <!-- Collapsed: header + divided meta row -->
                 <template v-if="collapsed">
                     <div class="flex flex-1 items-center gap-3 px-4">

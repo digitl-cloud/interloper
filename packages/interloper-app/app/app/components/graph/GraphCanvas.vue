@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ContextMenuItem } from '@nuxt/ui'
-import { VueFlow, useVueFlow, Panel, MarkerType } from '@vue-flow/core'
+import { VueFlow, useVueFlow, Panel } from '@vue-flow/core'
 import type { Node, Edge, Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -223,6 +223,87 @@ const sourceLayout = computed(() => {
     return layoutDag(layoutNodes, topLevelEdges.value, { gapX: 60, gapY: 60 })
 })
 
+/** Structural edges (id/source/target/handles); styling + focus applied in `edges`. */
+const baseEdges = computed(() => {
+    const result: Array<{ id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }> = []
+    const seen = new Set<string>()
+
+    for (const dep of dependencies.value) {
+        const upstreamSourceId = assetToSource.value.get(dep.upstreamAssetId)
+        const downstreamSourceId = assetToSource.value.get(dep.downstreamAssetId)
+        if (upstreamSourceId === undefined || downstreamSourceId === undefined) continue
+
+        const upstreamExpanded = upstreamSourceId === null || isNodesExpanded(upstreamSourceId)
+        const downstreamExpanded = downstreamSourceId === null || isNodesExpanded(downstreamSourceId)
+        const isSameSource = upstreamSourceId !== null
+            && downstreamSourceId !== null
+            && upstreamSourceId === downstreamSourceId
+
+        if (isSameSource) {
+            if (upstreamExpanded) {
+                result.push({
+                    id: `asset:${dep.upstreamAssetId}->${dep.downstreamAssetId}`,
+                    source: dep.upstreamAssetId,
+                    target: dep.downstreamAssetId,
+                })
+            }
+        }
+        else {
+            const edgeSource = upstreamExpanded ? dep.upstreamAssetId : upstreamSourceId!
+            const edgeTarget = downstreamExpanded ? dep.downstreamAssetId : downstreamSourceId!
+            const key = `${edgeSource}->${edgeTarget}`
+            if (seen.has(key)) continue
+            seen.add(key)
+            result.push({
+                id: key,
+                source: edgeSource,
+                target: edgeTarget,
+                sourceHandle: upstreamExpanded ? undefined : 'source-source',
+                targetHandle: downstreamExpanded ? undefined : 'source-target',
+            })
+        }
+    }
+    return result
+})
+
+// ── Selection focus ──
+// Default edges are faint; selecting a node turns its incident edges blue and
+// fades every node that isn't the selection or one of its direct neighbours.
+const selectedIds = computed(() => new Set(vueFlow.getSelectedNodes.value.map(n => n.id)))
+
+/** Selected ids, plus the child assets of any selected (expanded) source. */
+const selectionGroup = computed(() => {
+    if (!selectedIds.value.size) return null
+    const group = new Set(selectedIds.value)
+    for (const id of selectedIds.value) {
+        if (sourceEntries.value.some(e => e.source.id === id)) {
+            for (const c of childEntries(id)) group.add(c.asset.id)
+        }
+    }
+    return group
+})
+
+const focus = computed(() => {
+    const group = selectionGroup.value
+    if (!group) return null
+    const edgeKeys = new Set<string>()
+    const nodeIds = new Set<string>(group)
+    for (const e of baseEdges.value) {
+        if (group.has(e.source) || group.has(e.target)) {
+            edgeKeys.add(e.id)
+            nodeIds.add(e.source)
+            nodeIds.add(e.target)
+        }
+    }
+    // A source container must stay un-faded when it holds a focused asset —
+    // CSS opacity cascades to children, which would otherwise dim the asset too.
+    for (const id of [...nodeIds]) {
+        const parent = assetEntryById.value.get(id)?.source
+        if (parent) nodeIds.add(parent.id)
+    }
+    return { edgeKeys, nodeIds }
+})
+
 /** Flat node array: source nodes + asset child nodes + standalone asset nodes. */
 const nodes = computed<Node[]>(() => {
     const result: Node[] = []
@@ -291,65 +372,42 @@ const nodes = computed<Node[]>(() => {
         })
     }
 
-    return result
-})
-
-/** Unified edge list from all asset dependencies. */
-const edges = computed<Edge[]>(() => {
-    const result: Edge[] = []
-    const seen = new Set<string>()
-
-    for (const dep of dependencies.value) {
-        const upstreamSourceId = assetToSource.value.get(dep.upstreamAssetId)
-        const downstreamSourceId = assetToSource.value.get(dep.downstreamAssetId)
-        if (upstreamSourceId === undefined || downstreamSourceId === undefined) continue
-
-        const upstreamIsStandalone = upstreamSourceId === null
-        const downstreamIsStandalone = downstreamSourceId === null
-        const upstreamExpanded = upstreamIsStandalone || isNodesExpanded(upstreamSourceId!)
-        const downstreamExpanded = downstreamIsStandalone || isNodesExpanded(downstreamSourceId!)
-        const isSameSource = upstreamSourceId !== null
-            && downstreamSourceId !== null
-            && upstreamSourceId === downstreamSourceId
-
-        if (isSameSource) {
-            if (upstreamExpanded) {
-                result.push({
-                    id: `asset:${dep.upstreamAssetId}->${dep.downstreamAssetId}`,
-                    type: 'dependency',
-                    source: dep.upstreamAssetId,
-                    target: dep.downstreamAssetId,
-                    animated: true,
-                    markerEnd: MarkerType.ArrowClosed,
-                    zIndex: 1002,
-                })
+    // Selection focus. Set opacity explicitly on EVERY node each pass — only
+    // setting it on faded nodes leaves a stale 0.28 that VueFlow never clears,
+    // so nodes would stay dimmed after the selection moves. Likewise always set
+    // the child-ring flag (true/false) rather than only when true.
+    const f = focus.value
+    for (const node of result) {
+        const faded = f ? !f.nodeIds.has(node.id) : false
+        node.style = { opacity: faded ? '0.28' : '1', transition: 'opacity 0.2s ease' }
+        if (node.type === 'asset' && node.parentNode) {
+            node.data = {
+                ...node.data,
+                parentSelected: !!f && selectedIds.value.has(node.parentNode),
             }
-        }
-        else {
-            const edgeSource = upstreamExpanded ? dep.upstreamAssetId : upstreamSourceId!
-            const edgeTarget = downstreamExpanded ? dep.downstreamAssetId : downstreamSourceId!
-            const sourceHandle = upstreamExpanded ? undefined : 'source-source'
-            const targetHandle = downstreamExpanded ? undefined : 'source-target'
-
-            const key = `${edgeSource}->${edgeTarget}`
-            if (seen.has(key)) continue
-            seen.add(key)
-
-            result.push({
-                id: key,
-                type: 'dependency',
-                source: edgeSource,
-                target: edgeTarget,
-                sourceHandle,
-                targetHandle,
-                animated: true,
-                markerEnd: MarkerType.ArrowClosed,
-                zIndex: 1002,
-            })
         }
     }
 
     return result
+})
+
+/** Styled edges: faint gray by default; the selection's incident edges go blue, the rest dim. */
+const edges = computed<Edge[]>(() => {
+    const f = focus.value
+    return baseEdges.value.map((e) => {
+        const active = f?.edgeKeys.has(e.id) ?? false
+        const style = !f
+            ? { stroke: 'var(--ui-border-accented)', strokeWidth: 1.5 }
+            : active
+                ? { stroke: 'var(--ui-primary)', strokeWidth: 2.5 }
+                : { stroke: 'var(--ui-border-accented)', strokeWidth: 1.5, opacity: '0.15' }
+        return {
+            ...e,
+            type: 'dependency',
+            zIndex: active ? 1003 : 1001,
+            style,
+        }
+    })
 })
 
 function onNodeClick({ node }: { node: Node }) {
@@ -515,7 +573,7 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                  @edge-context-menu="onEdgeContextMenu"
                  @pane-click="emit('pane-click')"
                  @pane-context-menu="onPaneContextMenu">
-            <template #node-source="{ data }">
+            <template #node-source="{ data, selected }">
                 <GraphSourceNode :source="data.source"
                                  :source-defn="data.sourceDefn"
                                  :status="data.status"
@@ -524,15 +582,17 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                                  :mode="data.mode"
                                  :children="data.children"
                                  :mini-graph="data.miniGraph"
+                                 :selected="selected"
                                  @edit="emit('edit-source', $event)"
                                  @delete="onDeleteSource"
                                  @asset-click="(a, d, s) => emit('asset-click', a, d, s)" />
             </template>
-            <template #node-asset="{ data }">
+            <template #node-asset="{ data, selected }">
                 <GraphAssetNode :asset="data.asset"
                                 :asset-defn="data.assetDefn"
                                 :status="data.status"
                                 :view-mode="viewMode"
+                                :selected="selected || data.parentSelected"
                                 @view="emit('asset-click', data.asset, data.assetDefn, data.source)" />
             </template>
             <template #edge-dependency="edgeProps">
