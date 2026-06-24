@@ -3,7 +3,9 @@ import type { Asset, AssetDependency } from '~/types/asset'
 import type { Job } from '~/types/job'
 import type { Run } from '~/types/run'
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
+import type { ComponentStatus } from '~/types/component'
 import type { AssetWarning } from '~/composables/warnings'
+import type { SourceDriftStatus } from '~/composables/drift'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -14,6 +16,7 @@ export interface CatalogRow {
     name: string
     icon: string
     sourceKey: string
+    assetStatus: ComponentStatus
     tags: string[]
     dependencies: Array<{ name: string; icon: string }>
     warnings: AssetWarning[]
@@ -43,6 +46,7 @@ interface UseCatalogRowsOptions {
 
 export function useCatalogRows(options: UseCatalogRowsOptions) {
     const catalogStore = useCatalogStore()
+    const { sourceDrift } = useDrift()
 
     /** Asset id → Asset record (for created_at etc.) */
     const assetById = computed(() => {
@@ -178,6 +182,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
                     name: assetDefn?.name ?? asset.key,
                     icon: componentIcon(asset.key),
                     sourceKey: source.key,
+                    assetStatus: asset.status,
                     tags: assetDefn?.tags ?? [],
                     dependencies: dependenciesByAssetId.value.get(asset.id) ?? [],
                     warnings: options.getWarnings(asset.id, asset.key),
@@ -222,6 +227,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
                     name: '(no assets)',
                     icon: 'i-lucide-box',
                     sourceKey: source.key,
+                    assetStatus: 'ok',
                     tags: [],
                     dependencies: [],
                     warnings: [],
@@ -247,6 +253,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
             icon: string
             assetCount: number
             warnings: AssetWarning[]
+            drift: SourceDriftStatus
         }>()
         for (const source of options.sources.value) {
             const sourceDefn = catalogStore.getSourceDefinition(source.key)
@@ -265,6 +272,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
                 icon: componentIcon(source.key, 'i-lucide-database'),
                 assetCount: source.assets.length,
                 warnings,
+                drift: sourceDrift(source),
             })
         }
         return map

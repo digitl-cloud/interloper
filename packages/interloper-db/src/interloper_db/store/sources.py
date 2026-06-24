@@ -6,10 +6,11 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import CatalogKeyError, HydrationError, SourceNotFoundError
+from interloper.errors import CatalogKeyError, ComponentDriftError, HydrationError, SourceNotFoundError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
+from interloper_db.drift import ComponentStatus, resolve_source_cls, source_status
 from interloper_db.engine import get_engine
 from interloper_db.hydration import Hydrator
 from interloper_db.models import (
@@ -320,6 +321,13 @@ class SourceMixin:
             if not db_source:
                 raise SourceNotFoundError(f"Source {source_id} not found")
 
+            status = source_status(self._catalog, db_source.key)
+            if status is not ComponentStatus.OK:
+                raise ComponentDriftError(
+                    f"Source '{db_source.key}' ({db_source.id}) cannot be hydrated: "
+                    f"its catalog key is {status.value}."
+                )
+
             spec = self._hydrator.build_source_spec(session, db_source)
 
         try:
@@ -364,11 +372,12 @@ class SourceMixin:
             )
 
     def _resolve_source_cls(self, key: str) -> type[il.Source]:
-        """Import the source class from the catalog."""
-        from interloper.utils.imports import import_from_path
+        """Import the source class from the catalog (raise-on-miss).
 
-        catalog = self._catalog
-        definition = catalog.get(key)
-        if not definition:
+        Shares the value-based resolver used for drift detection so the write
+        path and the read/status path can never disagree on what resolves.
+        """
+        source_cls = resolve_source_cls(self._catalog, key)
+        if source_cls is None:
             raise CatalogKeyError(f"Unknown source key: {key}")
-        return import_from_path(definition.path)
+        return source_cls

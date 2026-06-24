@@ -11,6 +11,7 @@ const UBadge = resolveComponent('UBadge')
 const catalogStore = useCatalogStore()
 const sourcesStore = useSourcesStore()
 const destinationsStore = useDestinationsStore()
+const { statusBadge, sourceDrift } = useDrift()
 
 function typeIcon(key: string): string {
     return componentIcon(key)
@@ -42,10 +43,25 @@ const columns: TableColumn<Source>[] = [
     {
         accessorKey: 'name',
         header: 'Source',
-        cell: ({ row }) => h('span', { class: 'flex items-center gap-2' }, [
-            h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
-            row.original.name,
-        ]),
+        cell: ({ row }) => {
+            const children: any[] = [
+                h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
+                row.original.name,
+            ]
+            const badge = statusBadge(sourceDrift(row.original))
+            if (badge) {
+                children.push(h(UBadge, {
+                    color: badge.color,
+                    variant: 'subtle',
+                    size: 'sm',
+                    class: 'ml-1',
+                }, () => h('span', { class: 'flex items-center gap-1' }, [
+                    h(UIcon, { name: badge.icon, class: 'size-3 shrink-0' }),
+                    badge.label,
+                ])))
+            }
+            return h('span', { class: 'flex items-center gap-2' }, children)
+        },
     },
     {
         accessorKey: 'type',
@@ -111,6 +127,8 @@ async function handleDelete(ids: string[]) {
 
 <template>
     <div>
+        <DriftBanner />
+
         <div class="flex flex-col h-full">
             <DataTable :columns="columns"
                        :data="sourcesStore.sources"

@@ -1,3 +1,4 @@
+import type { ComponentStatus } from './component'
 import type { Destination } from './destination'
 
 export interface Asset {
@@ -6,6 +7,7 @@ export interface Asset {
     org_id: string
     key: string
     materializable: boolean
+    status: ComponentStatus
     config: Record<string, any> | null
     resources: Record<string, string>
     destinations: Destination[]

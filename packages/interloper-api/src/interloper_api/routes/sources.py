@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.errors import NotFoundError
-from interloper_db import Profile, Store
+from interloper_db import ComponentStatus, Profile, Store
 from interloper_db.models import Destination, DestinationResource, Source, SourceResource
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
@@ -43,6 +43,7 @@ class AssetResponse(BaseModel):
     id: UUID
     key: str
     materializable: bool
+    status: ComponentStatus
 
 
 class DestinationResponse(BaseModel):
@@ -64,6 +65,7 @@ class SourceResponse(BaseModel):
     key: str
     name: str
     config: dict[str, Any] | None = None
+    status: ComponentStatus
     resources: dict[str, str] = {}
     destinations: list[DestinationResponse] = []
     assets: list[AssetResponse] = []
@@ -77,14 +79,20 @@ def _resource_map(session: Session, junction_cls: type, fk_column: str, fk_value
     return {r.key: str(r.resource_id) for r in rows}  # ty: ignore[unresolved-attribute]
 
 
-def _build_source_response(session: Session, source: Source) -> SourceResponse:
-    """Convert a DB Source to a SourceResponse within a session."""
+def _build_source_response(session: Session, source: Source, store: Store) -> SourceResponse:
+    """Convert a DB Source to a SourceResponse within a session.
+
+    Each source and asset carries its catalog-resolution ``status`` so the
+    UI can flag drift. Status is derived from the same resolver hydration
+    uses — detection is just building the response, not a separate pass.
+    """
     return SourceResponse(
         id=source.id,
         org_id=source.org_id,
         key=source.key,
         name=source.name,
         config=source.config,
+        status=store.source_status(source.key),
         resources=_resource_map(session, SourceResource, "source_id", source.id),
         destinations=[
             DestinationResponse(
@@ -98,14 +106,19 @@ def _build_source_response(session: Session, source: Source) -> SourceResponse:
             for d in source.destinations
         ],
         assets=[
-            AssetResponse(id=a.id, key=a.key, materializable=a.materializable)
+            AssetResponse(
+                id=a.id,
+                key=a.key,
+                materializable=a.materializable,
+                status=store.asset_status(a.key, source_key=source.key),
+            )
             for a in source.assets
         ],
         created_at=str(source.created_at) if source.created_at else None,
     )
 
 
-def _load_source_for_response(source_id: UUID) -> SourceResponse:
+def _load_source_for_response(source_id: UUID, store: Store) -> SourceResponse:
     """Load a source with relations and build the response."""
     from interloper_db.engine import get_engine
 
@@ -121,7 +134,7 @@ def _load_source_for_response(source_id: UUID) -> SourceResponse:
         )
         if not source:
             raise NotFoundError(f"Source {source_id} not found")
-        return _build_source_response(session, source)
+        return _build_source_response(session, source, store)
 
 
 @router.get("/")
@@ -135,7 +148,7 @@ def list_sources(
 
     sources = store.list_sources(org_id)
     with Session(get_engine()) as session:
-        return [_build_source_response(session, s) for s in sources]
+        return [_build_source_response(session, s, store) for s in sources]
 
 
 @router.post("/")
@@ -156,7 +169,7 @@ def create_source(
         destination_ids=body.destination_ids,
         cross_deps=body.cross_deps,
     )
-    return _load_source_for_response(source.id)
+    return _load_source_for_response(source.id, store)
 
 
 def _authorize_source(source_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> None:
@@ -194,7 +207,7 @@ def update_source(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
-    return _load_source_for_response(source_id)
+    return _load_source_for_response(source_id, store)
 
 
 @router.delete("/{source_id}")

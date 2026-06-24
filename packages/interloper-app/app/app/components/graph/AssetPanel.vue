@@ -15,7 +15,10 @@ const emit = defineEmits<{
 
 const catalogStore = useCatalogStore()
 const { apiFetch } = useApi()
+const { statusBadge } = useDrift()
 const sourceDefn = computed(() => catalogStore.getSourceDefinition(props.source.key))
+
+const driftBadge = computed(() => statusBadge(props.asset.status))
 
 const icon = computed(() => props.assetDefn ? componentIcon(props.assetDefn.key) : 'i-lucide-box')
 const sourceIcon = computed(() => componentIcon(props.source.key))
@@ -237,6 +240,17 @@ const dependencyRows = computed(() => {
         </div>
 
         <div class="flex-1 min-h-0 border-l border-t border-default overflow-auto">
+            <!-- Drift notice — this asset no longer resolves against the catalog. -->
+            <UAlert v-if="driftBadge"
+                    :color="driftBadge.color"
+                    :icon="driftBadge.icon"
+                    variant="subtle"
+                    class="m-5 mb-0"
+                    :title="driftBadge.label"
+                    :description="asset.status === 'missing'
+                        ? 'Its catalog key was renamed or removed in code. It can\'t materialize — remove the source (or edit it to drop this asset), or restore the catalog entry.'
+                        : 'This component is not enabled in the current deployment.'" />
+
             <!-- Materialization -->
             <UCollapsible default-open
                           class="border-b border-default">

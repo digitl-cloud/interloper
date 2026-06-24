@@ -20,7 +20,11 @@ const emit = defineEmits<{
 const assetsStore = useAssetsStore()
 const { getWarnings } = useAssetWarnings()
 const { getBadgeForAssetId } = useDestinationBadge()
+const { statusBadge } = useDrift()
 const { confirm } = useConfirm()
+
+const isMissing = computed(() => props.asset.status === 'missing')
+const driftBadge = computed(() => statusBadge(props.asset.status))
 const nodeId = useNodeId()
 const { connectionStartHandle } = useVueFlow()
 
@@ -94,6 +98,7 @@ const showSourceHandle = computed(() => hasDownstream.value || isValidSource.val
 
 const ringClass = computed(() => {
     if (props.selected) return 'ring-2 ring-primary'
+    if (isMissing.value) return 'ring-1 ring-[var(--ui-error)]/60'
     if (props.viewMode === 'status' && props.status) return statusRingClass(props.status.state)
     return ''
 })
@@ -162,8 +167,22 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                 </UTooltip>
             </div>
 
+            <!-- Drift badge — the asset key no longer resolves against the catalog. -->
+            <UTooltip v-if="isMissing"
+                      :delay-duration="0"
+                      :content="{ side: 'top', sideOffset: 6 }"
+                      class="absolute -right-3 -top-3 z-10">
+                <div class="flex size-7 items-center justify-center rounded-full border border-error/80 bg-error/20">
+                    <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
+                           class="size-4 shrink-0 text-error" />
+                </div>
+                <template #content>
+                    <div class="text-xs">{{ driftBadge?.label }}</div>
+                </template>
+            </UTooltip>
+
             <!-- Warning badge -->
-            <UTooltip v-if="warnings.length > 0"
+            <UTooltip v-if="warnings.length > 0 && !isMissing"
                       :delay-duration="0"
                       :content="{ side: 'top', sideOffset: 6 }"
                       :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
@@ -230,6 +249,10 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                 <div v-if="description"
                      class="line-clamp-2 border-t border-[var(--ui-border-accented)] bg-default px-3.5 py-2.5 text-xs leading-snug text-muted">
                     {{ description }}
+                </div>
+                <div v-else-if="isMissing"
+                     class="border-t border-[var(--ui-border-accented)] bg-default px-3.5 py-2.5 text-xs italic leading-snug text-dimmed">
+                    No catalog definition
                 </div>
             </div>
 

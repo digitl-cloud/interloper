@@ -194,6 +194,19 @@ class CatalogKeyError(ConfigError):
     """
 
 
+class ComponentDriftError(InterloperError):
+    """A persisted component references a catalog key that no longer resolves.
+
+    Raised when hydrating a stored source or asset whose catalog key has
+    *drifted* — the underlying class was renamed or removed from the code
+    (``missing``), or is not exposed by this deployment's catalog
+    (``disabled``). Distinct from :class:`HydrationError` (which signals a
+    reconstruction failure for a key that *does* resolve) so callers and
+    the API layer can treat drift as a recoverable, user-resolvable state
+    rather than a hard failure.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Scheduling
 # ---------------------------------------------------------------------------
