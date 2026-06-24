@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { JsonSchemaProperty } from '~/types/catalog'
+import { parseQualifiedKey } from '~/types/catalog'
+import type { Run } from '~/types/run'
 
 const props = defineProps<{
     asset: SourceAsset
@@ -129,6 +131,107 @@ function formatType(type?: string, format?: string): string {
     if (format === 'uri') return 'uri'
     return type
 }
+
+// ── Status hero, metric tiles & recent runs ─────────────────────
+const { getSourceSchedule, jobsForSource } = useSchedule()
+const { getWarnings } = useAssetWarnings()
+
+const schedule = computed(() => getSourceSchedule(props.source))
+const assetWarnings = computed(() => getWarnings(props.asset.id, props.asset.key))
+const hasRequires = computed(() => Object.keys(props.assetDefn?.requires ?? {}).length > 0)
+
+/** Cadence shown in the Refresh tile — adapted to the data we actually have. */
+const refreshLabel = computed(() => {
+    if (schedule.value?.paused) return 'Paused'
+    if (schedule.value) return schedule.value.label
+    if (hasRequires.value) return 'On dependencies'
+    return 'Manual'
+})
+
+// Recent runs of the job that materialises this asset (per-job, not per-asset —
+// the closest real signal). Fetched directly to avoid clobbering the runs store.
+const recentRuns = ref<Run[]>([])
+
+async function fetchRecentRuns() {
+    const job = jobsForSource(props.source)[0]
+    if (!job) {
+        recentRuns.value = []
+        return
+    }
+    try {
+        recentRuns.value = await apiFetch<Run[]>(`/runs?job_id=${job.id}&limit=14`)
+    }
+    catch {
+        recentRuns.value = []
+    }
+}
+watch(() => props.asset.id, fetchRecentRuns, { immediate: true })
+
+/** API returns newest first. */
+const latestRun = computed(() => recentRuns.value[0])
+/** Oldest → newest for the sparkline. */
+const sparklineRuns = computed(() => [...recentRuns.value].reverse())
+
+const lastRunText = computed(() => {
+    const at = latestRun.value?.completed_at ?? latestRun.value?.started_at
+    return at ? `${timeSince(new Date(at))} ago` : null
+})
+
+const statusChip = computed<{ label: string; color: 'success' | 'error' | 'info' | 'warning' | 'neutral' }>(() => {
+    if (latestRun.value) return { label: statusLabel(latestRun.value.status), color: statusColor(latestRun.value.status) }
+    if (assetWarnings.value.length > 0) return { label: 'Attention', color: 'warning' }
+    return { label: 'No runs yet', color: 'neutral' }
+})
+
+const compactNumber = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 })
+
+/** Rows = sum of partition row counts when available, else null (we have no total-row endpoint). */
+const rowsLabel = computed(() => {
+    if (!partitionData.value.length) return null
+    return compactNumber.format(partitionData.value.reduce((s, p) => s + p.rowCount, 0))
+})
+const columnsLabel = computed(() => schemaFields.value.length || null)
+
+/** Upstream dependencies as display rows (param → resolved upstream asset). */
+const dependencyRows = computed(() => {
+    const reqs = props.assetDefn?.requires ?? {}
+    return Object.entries(reqs).map(([param, qk]) => {
+        const { sourceKey } = parseQualifiedKey(qk)
+        return {
+            param,
+            qk,
+            name: catalogStore.getAssetDefinition(qk)?.name ?? qk,
+            icon: componentIcon(sourceKey || qk),
+            sourceKey,
+        }
+    })
+})
+
+function barColor(status: string): string {
+    return `var(--ui-${statusColor(status)})`
+}
+
+const maxDurationMs = computed(() => {
+    let max = 0
+    for (const r of recentRuns.value) {
+        if (r.started_at && r.completed_at) {
+            max = Math.max(max, new Date(r.completed_at).getTime() - new Date(r.started_at).getTime())
+        }
+    }
+    return max
+})
+
+/** Bar height encodes run duration (min 30%); flat for in-flight/unknown. */
+function barHeight(run: Run): string {
+    if (!run.started_at || !run.completed_at || maxDurationMs.value === 0) return '100%'
+    const d = new Date(run.completed_at).getTime() - new Date(run.started_at).getTime()
+    return `${Math.round(30 + 70 * (d / maxDurationMs.value))}%`
+}
+
+function barTooltip(run: Run): string {
+    const elapsed = formatElapsed(run.started_at, run.completed_at)
+    return `${statusLabel(run.status)}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(run.started_at)}`
+}
 </script>
 
 <template>
@@ -158,6 +261,48 @@ function formatType(type?: string, format?: string): string {
         </div>
 
         <div class="flex-1 min-h-0 border-l border-t border-default overflow-auto">
+            <!-- Status hero + metric tiles + recent runs -->
+            <div class="space-y-4 border-b border-default px-5 py-4">
+                <div class="flex items-center gap-2">
+                    <UBadge :color="statusChip.color"
+                            variant="subtle"
+                            class="capitalize">
+                        {{ statusChip.label }}
+                    </UBadge>
+                    <span v-if="lastRunText"
+                          class="text-xs text-muted">Last run {{ lastRunText }}</span>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="rounded-lg bg-muted px-3 py-2">
+                        <div class="text-[10px] uppercase tracking-wide text-dimmed">Rows</div>
+                        <div class="text-sm font-semibold">{{ rowsLabel ?? '—' }}</div>
+                    </div>
+                    <div class="rounded-lg bg-muted px-3 py-2">
+                        <div class="text-[10px] uppercase tracking-wide text-dimmed">Columns</div>
+                        <div class="text-sm font-semibold">{{ columnsLabel ?? '—' }}</div>
+                    </div>
+                    <div class="min-w-0 rounded-lg bg-muted px-3 py-2">
+                        <div class="text-[10px] uppercase tracking-wide text-dimmed">Refresh</div>
+                        <div class="truncate text-sm font-semibold"
+                             :title="refreshLabel">
+                            {{ refreshLabel }}
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="sparklineRuns.length">
+                    <div class="mb-1.5 text-[10px] uppercase tracking-wide text-dimmed">Recent runs</div>
+                    <div class="flex h-10 items-end gap-1">
+                        <div v-for="run in sparklineRuns"
+                             :key="run.id"
+                             class="min-w-[3px] flex-1 rounded-sm"
+                             :style="{ height: barHeight(run), backgroundColor: barColor(run.status) }"
+                             :title="barTooltip(run)" />
+                    </div>
+                </div>
+            </div>
+
             <!-- Description -->
             <UCollapsible default-open
                           class="border-b border-default">
@@ -220,39 +365,37 @@ function formatType(type?: string, format?: string): string {
             </UCollapsible>
 
             <!-- Dependencies -->
-            <UCollapsible v-if="assetDefn?.requires && Object.keys(assetDefn.requires).length > 0"
+            <UCollapsible v-if="dependencyRows.length"
                           default-open
                           class="border-b border-default">
                 <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
                     <UIcon name="i-lucide-chevron-right"
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Dependencies</span>
+                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Upstream dependencies</span>
                     <UBadge color="neutral"
                             variant="subtle"
                             class="ml-auto">
-                        {{ Object.keys(assetDefn.requires).length }}
+                        {{ dependencyRows.length }}
                     </UBadge>
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
-                        <div class="bg-muted rounded-md p-2">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b border-default text-left text-xs text-muted">
-                                        <th class="p-1.5 font-medium">Parameter</th>
-                                        <th class="p-1.5 font-medium">Asset</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="(assetKey, param) in assetDefn.requires"
-                                        :key="param"
-                                        class="border-b border-default last:border-0">
-                                        <td class="p-1.5 font-mono text-xs">{{ param }}</td>
-                                        <td class="p-1.5 text-xs">{{ assetKey }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                    <div class="px-5 pb-4 flex flex-col gap-1.5">
+                        <div v-for="dep in dependencyRows"
+                             :key="dep.param"
+                             class="flex items-center gap-2.5 rounded-md bg-muted px-3 py-2">
+                            <UIcon :name="dep.icon"
+                                   class="size-4 shrink-0 text-muted" />
+                            <div class="min-w-0 flex-1">
+                                <div class="truncate text-sm">{{ dep.name }}</div>
+                                <div class="truncate font-mono text-xs text-dimmed">{{ dep.qk }}</div>
+                            </div>
+                            <UBadge color="neutral"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="shrink-0 font-mono">
+                                {{ dep.param }}
+                            </UBadge>
                         </div>
                     </div>
                 </template>
