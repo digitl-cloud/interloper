@@ -300,40 +300,48 @@ const dependencyRows = computed(() => {
                 </template>
             </UCollapsible>
 
-            <!-- Destinations -->
-            <UCollapsible default-open
+            <!-- Schema -->
+            <UCollapsible v-if="schemaFields.length"
+                          default-open
                           class="border-b border-default">
                 <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
                     <UIcon name="i-lucide-chevron-right"
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Destinations</span>
-                    <UBadge v-if="destinations.length"
-                            color="neutral"
+                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Schema</span>
+                    <UBadge color="neutral"
                             variant="subtle"
                             class="ml-auto">
-                        {{ destinations.length }}
+                        {{ schemaFields.length }}
                     </UBadge>
                 </button>
 
                 <template #content>
                     <div class="px-5 pb-4">
-                        <div v-if="destinations.length"
-                             class="flex flex-col gap-2">
-                            <UCard v-for="dest in destinations"
-                                   :key="dest.id"
-                                   :ui="{ body: 'flex items-center gap-4 !p-4' }">
-                                <UIcon :name="dest.icon"
-                                       class="size-10 shrink-0" />
-                                <div class="min-w-0 flex-1">
-                                    <div class="text-sm font-medium">{{ dest.label }}</div>
-                                    <div class="text-xs text-muted">{{ dest.key }}</div>
-                                </div>
-                            </UCard>
+                        <div class="bg-muted rounded-md p-2 overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-default text-left text-xs text-muted">
+                                        <th class="p-1.5 font-medium whitespace-nowrap">Name</th>
+                                        <th class="p-1.5 font-medium whitespace-nowrap">Type</th>
+                                        <th class="p-1.5 font-medium whitespace-nowrap">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="field in schemaFields"
+                                        :key="field.name"
+                                        class="border-b border-default last:border-0">
+                                        <td class="p-1.5 font-mono text-xs whitespace-nowrap">{{ field.name }}</td>
+                                        <td class="p-1.5 whitespace-nowrap">
+                                            <UBadge color="neutral"
+                                                    variant="subtle">
+                                                {{ field.type }}
+                                            </UBadge>
+                                        </td>
+                                        <td class="p-1.5 text-muted whitespace-nowrap">{{ field.description }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
-                        <p v-else
-                           class="text-sm text-dimmed italic">
-                            No destinations configured
-                        </p>
                     </div>
                 </template>
             </UCollapsible>
@@ -371,6 +379,44 @@ const dependencyRows = computed(() => {
                                 {{ dep.param }}
                             </UBadge>
                         </div>
+                    </div>
+                </template>
+            </UCollapsible>
+
+            <!-- Destinations -->
+            <UCollapsible default-open
+                          class="border-b border-default">
+                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
+                    <UIcon name="i-lucide-chevron-right"
+                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
+                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Destinations</span>
+                    <UBadge v-if="destinations.length"
+                            color="neutral"
+                            variant="subtle"
+                            class="ml-auto">
+                        {{ destinations.length }}
+                    </UBadge>
+                </button>
+
+                <template #content>
+                    <div class="px-5 pb-4">
+                        <div v-if="destinations.length"
+                             class="flex flex-col gap-2">
+                            <UCard v-for="dest in destinations"
+                                   :key="dest.id"
+                                   :ui="{ body: 'flex items-center gap-4 !p-4' }">
+                                <UIcon :name="dest.icon"
+                                       class="size-10 shrink-0" />
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-sm font-medium">{{ dest.label }}</div>
+                                    <div class="text-xs text-muted">{{ dest.key }}</div>
+                                </div>
+                            </UCard>
+                        </div>
+                        <p v-else
+                           class="text-sm text-dimmed italic">
+                            No destinations configured
+                        </p>
                     </div>
                 </template>
             </UCollapsible>
@@ -423,52 +469,6 @@ const dependencyRows = computed(() => {
                            class="text-sm text-dimmed italic">
                             No partition data available.
                         </p>
-                    </div>
-                </template>
-            </UCollapsible>
-
-            <!-- Schema -->
-            <UCollapsible v-if="schemaFields.length"
-                          default-open
-                          class="border-b border-default">
-                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Schema</span>
-                    <UBadge color="neutral"
-                            variant="subtle"
-                            class="ml-auto">
-                        {{ schemaFields.length }}
-                    </UBadge>
-                </button>
-
-                <template #content>
-                    <div class="px-5 pb-4">
-                        <div class="bg-muted rounded-md p-2 overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b border-default text-left text-xs text-muted">
-                                        <th class="p-1.5 font-medium whitespace-nowrap">Name</th>
-                                        <th class="p-1.5 font-medium whitespace-nowrap">Type</th>
-                                        <th class="p-1.5 font-medium whitespace-nowrap">Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="field in schemaFields"
-                                        :key="field.name"
-                                        class="border-b border-default last:border-0">
-                                        <td class="p-1.5 font-mono text-xs whitespace-nowrap">{{ field.name }}</td>
-                                        <td class="p-1.5 whitespace-nowrap">
-                                            <UBadge color="neutral"
-                                                    variant="subtle">
-                                                {{ field.type }}
-                                            </UBadge>
-                                        </td>
-                                        <td class="p-1.5 text-muted whitespace-nowrap">{{ field.description }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
                     </div>
                 </template>
             </UCollapsible>
