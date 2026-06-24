@@ -10,9 +10,13 @@ import { qualifiedKey } from '~/types/catalog'
 const props = withDefaults(defineProps<{
     sourceIds?: string[]
     readonly?: boolean
+    expandMode?: ExpandMode
+    viewMode?: ViewMode
 }>(), {
     sourceIds: undefined,
     readonly: false,
+    expandMode: 'nodes',
+    viewMode: 'topology',
 })
 
 const emit = defineEmits<{
@@ -72,6 +76,8 @@ function onConnect(connection: Connection) {
     <GraphCanvas :model="model"
                  :editable="!readonly"
                  :loading="loading"
+                 :expand-mode="expandMode"
+                 :view-mode="viewMode"
                  :is-valid-connection="isValidConnection"
                  @add-source="emit('add-source')"
                  @edit-source="emit('edit-source', $event)"

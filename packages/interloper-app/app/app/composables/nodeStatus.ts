@@ -1,5 +1,23 @@
 import type { Source } from '~/types/source'
-import type { NodeStatus } from '~/types/graph'
+import type { NodeStatus, GraphNodeState } from '~/types/graph'
+
+/** Tailwind class for a status indicator dot, keyed by node state. */
+const STATUS_DOT: Record<GraphNodeState, string> = {
+    idle: 'bg-[var(--ui-success)]',
+    attention: 'bg-[var(--ui-warning)]',
+    paused: 'bg-[var(--ui-text-dimmed)]',
+    queued: 'bg-[var(--ui-text-dimmed)]',
+    pending: 'bg-[var(--ui-text-dimmed)]',
+    running: 'bg-[var(--ui-info)] animate-pulse',
+    success: 'bg-[var(--ui-success)]',
+    failed: 'bg-[var(--ui-error)]',
+    skipped: 'bg-[var(--ui-text-dimmed)]',
+    canceled: 'bg-[var(--ui-text-dimmed)]',
+}
+
+export function statusDotClass(state: GraphNodeState): string {
+    return STATUS_DOT[state]
+}
 
 /**
  * Derives {@link NodeStatus} for catalog graph nodes from data that
