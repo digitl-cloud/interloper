@@ -133,18 +133,7 @@ function formatType(type?: string, format?: string): string {
 }
 
 // ── Latest materialization + schedule ───────────────────────────
-const { getSourceSchedule, jobsForSource } = useSchedule()
-
-const schedule = computed(() => getSourceSchedule(props.source))
-const hasRequires = computed(() => Object.keys(props.assetDefn?.requires ?? {}).length > 0)
-
-/** What triggers a materialization — shown beside the last-run time. */
-const triggerLabel = computed(() => {
-    if (hasRequires.value) return 'After upstreams'
-    if (schedule.value?.paused) return 'Paused'
-    if (schedule.value) return schedule.value.label
-    return 'Manual'
-})
+const { jobsForSource } = useSchedule()
 
 // Latest run of the job that materialises this asset (per-job — the closest
 // real signal). Fetched directly to avoid clobbering the runs store.
@@ -182,9 +171,12 @@ const materialization = computed(() => {
     }
 })
 
+/** Job that materialises this asset (from the latest run, else the source's first job). */
+const jobName = computed(() => latestRun.value?.job?.name ?? jobsForSource(props.source)[0]?.name ?? null)
+
 const materializationMeta = computed(() => {
     const head = lastRunText.value ? `Last run ${lastRunText.value}` : 'Not yet materialized'
-    return `${head} · ${triggerLabel.value}`
+    return jobName.value ? `${head} · ${jobName.value}` : head
 })
 
 /** Upstream dependencies as display rows (param → resolved upstream asset). */
