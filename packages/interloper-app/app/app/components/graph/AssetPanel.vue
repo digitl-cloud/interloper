@@ -135,24 +135,28 @@ function formatType(type?: string, format?: string): string {
 // ── Latest materialization + schedule ───────────────────────────
 const { jobsForSource } = useSchedule()
 
-// Latest run of the job that materialises this asset (per-job — the closest
-// real signal). Fetched directly to avoid clobbering the runs store.
-const latestRun = ref<Run | undefined>()
+// Recent runs of the job that materialises this asset (newest first, max 7).
+// Fetched directly to avoid clobbering the runs store.
+const recentRuns = ref<Run[]>([])
 
-async function fetchLatestRun() {
+async function fetchRecentRuns() {
     const job = jobsForSource(props.source)[0]
     if (!job) {
-        latestRun.value = undefined
+        recentRuns.value = []
         return
     }
     try {
-        latestRun.value = (await apiFetch<Run[]>(`/runs?job_id=${job.id}&limit=1`))[0]
+        recentRuns.value = await apiFetch<Run[]>(`/runs?job_id=${job.id}&limit=7`)
     }
     catch {
-        latestRun.value = undefined
+        recentRuns.value = []
     }
 }
-watch(() => props.asset.id, fetchLatestRun, { immediate: true })
+watch(() => props.asset.id, fetchRecentRuns, { immediate: true })
+
+const latestRun = computed(() => recentRuns.value[0])
+/** Oldest → newest, for the materialization history heatmap. */
+const history = computed(() => [...recentRuns.value].reverse())
 
 const lastRunText = computed(() => {
     const at = latestRun.value?.completed_at ?? latestRun.value?.started_at
@@ -178,6 +182,17 @@ const materializationMeta = computed(() => {
     const head = lastRunText.value ? `Last run ${lastRunText.value}` : 'Not yet materialized'
     return jobName.value ? `${head} · ${jobName.value}` : head
 })
+
+/** Heatmap cell colour for a run status. */
+function heatColor(status: string): string {
+    const color = statusColor(status)
+    return color === 'neutral' ? 'var(--ui-text-dimmed)' : `var(--ui-${color})`
+}
+
+function historyTooltip(run: Run): string {
+    const elapsed = formatElapsed(run.started_at, run.completed_at)
+    return `${statusLabel(run.status)}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(run.started_at)}`
+}
 
 /** Upstream dependencies as display rows (param → resolved upstream asset). */
 const dependencyRows = computed(() => {
@@ -222,22 +237,45 @@ const dependencyRows = computed(() => {
         </div>
 
         <div class="flex-1 min-h-0 border-l border-t border-default overflow-auto">
-            <!-- Latest materialization -->
-            <div class="border-b border-default px-5 py-4">
-                <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Latest materialization</div>
-                <UCard :ui="{ body: 'flex items-center gap-4 !p-4' }">
-                    <UIcon :name="materialization.icon"
-                           class="size-10 shrink-0"
-                           :class="[materialization.color, materialization.spin && 'animate-spin']" />
-                    <div class="min-w-0 flex-1">
-                        <div class="text-sm font-medium"
-                             :class="materialization.color">
-                            {{ materialization.label }}
-                        </div>
-                        <div class="truncate text-xs text-muted">{{ materializationMeta }}</div>
+            <!-- Materialization -->
+            <UCollapsible default-open
+                          class="border-b border-default">
+                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
+                    <UIcon name="i-lucide-chevron-right"
+                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
+                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Materialization</span>
+                </button>
+
+                <template #content>
+                    <div class="px-5 pb-4 flex flex-col gap-2">
+                        <!-- Latest materialization -->
+                        <UCard :ui="{ body: 'flex items-center gap-4 !p-4' }">
+                            <UIcon :name="materialization.icon"
+                                   class="size-10 shrink-0"
+                                   :class="[materialization.color, materialization.spin && 'animate-spin']" />
+                            <div class="min-w-0 flex-1">
+                                <div class="text-sm font-medium text-highlighted">
+                                    Latest materialization: <span :class="materialization.color">{{ materialization.label }}</span>
+                                </div>
+                                <div class="truncate text-xs text-muted">{{ materializationMeta }}</div>
+                            </div>
+                        </UCard>
+
+                        <!-- History heatmap (max last 7 runs) -->
+                        <UCard v-if="history.length"
+                               :ui="{ body: '!p-4' }">
+                            <div class="mb-2.5 text-xs font-medium text-muted">Materialization history</div>
+                            <div class="flex gap-1.5">
+                                <div v-for="run in history"
+                                     :key="run.id"
+                                     class="size-7 rounded-md"
+                                     :style="{ backgroundColor: heatColor(run.status) }"
+                                     :title="historyTooltip(run)" />
+                            </div>
+                        </UCard>
                     </div>
-                </UCard>
-            </div>
+                </template>
+            </UCollapsible>
 
             <!-- Description -->
             <UCollapsible default-open
