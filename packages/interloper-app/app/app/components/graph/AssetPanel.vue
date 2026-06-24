@@ -233,18 +233,18 @@ const dependencyRows = computed(() => {
             <!-- Latest materialization -->
             <div class="border-b border-default px-5 py-4">
                 <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Latest materialization</div>
-                <div class="flex items-center gap-3 rounded-xl border border-[var(--ui-border-accented)] bg-elevated px-4 py-3">
+                <UCard :ui="{ body: 'flex items-center gap-4 !p-4' }">
                     <UIcon :name="materialization.icon"
-                           class="size-5 shrink-0"
+                           class="size-10 shrink-0"
                            :class="[materialization.color, materialization.spin && 'animate-spin']" />
-                    <div class="min-w-0">
-                        <div class="text-sm font-semibold"
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm font-medium"
                              :class="materialization.color">
                             {{ materialization.label }}
                         </div>
                         <div class="truncate text-xs text-muted">{{ materializationMeta }}</div>
                     </div>
-                </div>
+                </UCard>
             </div>
 
             <!-- Description -->
