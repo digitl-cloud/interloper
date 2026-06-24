@@ -7,8 +7,13 @@ const props = withDefaults(defineProps<{
     source: Source
     sourceDefn: SourceDefinition | undefined
     expanded?: boolean
+    /** Derived node status (used by the Status view mode; see Phase 3). */
+    status?: NodeStatus
+    viewMode?: ViewMode
 }>(), {
     expanded: false,
+    status: undefined,
+    viewMode: 'topology',
 })
 
 const emit = defineEmits<{

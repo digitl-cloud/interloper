@@ -6,6 +6,9 @@ import type { Connection } from '@vue-flow/core'
 const props = defineProps<{
     asset: SourceAsset
     assetDefn: AssetDefinition | undefined
+    /** Derived node status (used by the Status view mode; see Phase 3). */
+    status?: NodeStatus
+    viewMode?: ViewMode
 }>()
 
 const emit = defineEmits<{
