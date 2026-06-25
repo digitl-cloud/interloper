@@ -14,6 +14,8 @@ const props = withDefaults(defineProps<{
     viewMode?: ViewMode
     statusFilter?: StatusFilter
     showNewSourceButton?: boolean
+    /** Asset id whose panel is open — the only highlighted node. */
+    selectedId?: string | null
 }>(), {
     sourceIds: undefined,
     readonly: false,
@@ -21,6 +23,7 @@ const props = withDefaults(defineProps<{
     viewMode: 'topology',
     statusFilter: 'all',
     showNewSourceButton: true,
+    selectedId: null,
 })
 
 const emit = defineEmits<{
@@ -108,6 +111,7 @@ function onConnect(connection: Connection) {
                  :expand-mode="expandMode"
                  :view-mode="viewMode"
                  :show-new-source-button="showNewSourceButton"
+                 :selected-id="selectedId"
                  :is-valid-connection="isValidConnection"
                  @add-source="emit('add-source')"
                  @edit-source="emit('edit-source', $event)"

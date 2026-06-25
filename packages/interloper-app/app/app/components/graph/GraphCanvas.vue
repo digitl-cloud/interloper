@@ -23,6 +23,8 @@ const props = withDefaults(defineProps<{
     materializingAssetIds?: Set<string>
     /** Show the in-canvas "New Source" button (off once a toolbar owns it). */
     showNewSourceButton?: boolean
+    /** Asset id whose detail panel is open — the only node that gets the selection highlight. */
+    selectedId?: string | null
 }>(), {
     editable: false,
     expandMode: 'nodes',
@@ -31,6 +33,7 @@ const props = withDefaults(defineProps<{
     isValidConnection: undefined,
     materializingAssetIds: undefined,
     showNewSourceButton: true,
+    selectedId: null,
 })
 
 const emit = defineEmits<{
@@ -267,40 +270,26 @@ const baseEdges = computed(() => {
 })
 
 // ── Selection focus ──
-// Default edges are faint; selecting a node turns its incident edges blue and
-// fades every node that isn't the selection or one of its direct neighbours.
-const selectedIds = computed(() => new Set(vueFlow.getSelectedNodes.value.map(n => n.id)))
-
-/** Selected ids, plus the child assets of any selected (expanded) source. */
-const selectionGroup = computed(() => {
-    if (!selectedIds.value.size) return null
-    const group = new Set(selectedIds.value)
-    for (const id of selectedIds.value) {
-        if (sourceEntries.value.some(e => e.source.id === id)) {
-            for (const c of childEntries(id)) group.add(c.asset.id)
-        }
-    }
-    return group
-})
-
+// Driven solely by the open panel (selectedId), never by VueFlow node
+// selection — expanding a source is not a selection. When an asset's panel is
+// open its incident edges turn blue and nodes outside its neighbourhood fade;
+// default (nothing open) leaves every edge faint and nothing dimmed.
 const focus = computed(() => {
-    const group = selectionGroup.value
-    if (!group) return null
+    const id = props.selectedId
+    if (!id) return null
     const edgeKeys = new Set<string>()
-    const nodeIds = new Set<string>(group)
+    const nodeIds = new Set<string>([id])
     for (const e of baseEdges.value) {
-        if (group.has(e.source) || group.has(e.target)) {
+        if (e.source === id || e.target === id) {
             edgeKeys.add(e.id)
             nodeIds.add(e.source)
             nodeIds.add(e.target)
         }
     }
-    // A source container must stay un-faded when it holds a focused asset —
-    // CSS opacity cascades to children, which would otherwise dim the asset too.
-    for (const id of [...nodeIds]) {
-        const parent = assetEntryById.value.get(id)?.source
-        if (parent) nodeIds.add(parent.id)
-    }
+    // Keep the selected asset's container un-faded — CSS opacity cascades to
+    // children, which would otherwise dim the asset itself.
+    const parent = assetEntryById.value.get(id)?.source
+    if (parent) nodeIds.add(parent.id)
     return { edgeKeys, nodeIds }
 })
 
@@ -374,18 +363,11 @@ const nodes = computed<Node[]>(() => {
 
     // Selection focus. Set opacity explicitly on EVERY node each pass — only
     // setting it on faded nodes leaves a stale 0.28 that VueFlow never clears,
-    // so nodes would stay dimmed after the selection moves. Likewise always set
-    // the child-ring flag (true/false) rather than only when true.
+    // so nodes would stay dimmed after the selection moves.
     const f = focus.value
     for (const node of result) {
         const faded = f ? !f.nodeIds.has(node.id) : false
         node.style = { opacity: faded ? '0.28' : '1', transition: 'opacity 0.2s ease' }
-        if (node.type === 'asset' && node.parentNode) {
-            node.data = {
-                ...node.data,
-                parentSelected: !!f && selectedIds.value.has(node.parentNode),
-            }
-        }
     }
 
     return result
@@ -573,7 +555,7 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                  @edge-context-menu="onEdgeContextMenu"
                  @pane-click="emit('pane-click')"
                  @pane-context-menu="onPaneContextMenu">
-            <template #node-source="{ data, selected }">
+            <template #node-source="{ data }">
                 <GraphSourceNode :source="data.source"
                                  :source-defn="data.sourceDefn"
                                  :status="data.status"
@@ -582,17 +564,17 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                                  :mode="data.mode"
                                  :children="data.children"
                                  :mini-graph="data.miniGraph"
-                                 :selected="selected"
+                                 :selected="false"
                                  @edit="emit('edit-source', $event)"
                                  @delete="onDeleteSource"
                                  @asset-click="(a, d, s) => emit('asset-click', a, d, s)" />
             </template>
-            <template #node-asset="{ data, selected }">
+            <template #node-asset="{ data }">
                 <GraphAssetNode :asset="data.asset"
                                 :asset-defn="data.assetDefn"
                                 :status="data.status"
                                 :view-mode="viewMode"
-                                :selected="selected || data.parentSelected"
+                                :selected="data.asset.id === selectedId"
                                 @view="emit('asset-click', data.asset, data.assetDefn, data.source)" />
             </template>
             <template #edge-dependency="edgeProps">
