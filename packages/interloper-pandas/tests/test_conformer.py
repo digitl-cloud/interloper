@@ -1,6 +1,7 @@
 """Tests for the DataFrame conformer."""
 
 import datetime
+import json
 
 import pandas as pd
 import pytest
@@ -84,6 +85,41 @@ class TestDataFrameConformerReconcile:
         df = pd.DataFrame({"id": ["abc"], "cost": [1.0], "day": ["2024-01-01"], "name": ["x"]})
         with pytest.raises(SchemaError, match="cannot cast"):
             DataFrameConformer().reconcile(df, TypedSchema)
+
+
+class JsonSchema(Schema):
+    """A scalar ``str`` field that receives nested API values."""
+
+    id: str | None = Field(...)
+    tracking_specs: str | None = Field(...)
+
+
+class TestDataFrameConformerJsonEncoding:
+    """``str``-typed fields receiving list/dict values are JSON-encoded."""
+
+    def test_validate_accepts_list_for_str_field(self):
+        df = pd.DataFrame({"id": ["1"], "tracking_specs": [[{"action.type": ["x"]}]]})
+        DataFrameConformer().validate(df, JsonSchema)
+
+    def test_validate_accepts_dict_for_str_field(self):
+        df = pd.DataFrame({"id": ["1"], "tracking_specs": [{"a": 1}]})
+        DataFrameConformer().validate(df, JsonSchema)
+
+    def test_reconcile_serializes_to_valid_json_not_repr(self):
+        df = pd.DataFrame({"id": ["1"], "tracking_specs": [[{"a": 1}]]})
+        out = DataFrameConformer().reconcile(df, JsonSchema)
+        assert out["tracking_specs"].dtype == "string"
+        encoded = out["tracking_specs"].iloc[0]
+        # Valid JSON (double-quoted) round-trips; a Python repr would not.
+        assert json.loads(encoded) == [{"a": 1}]
+        assert "'" not in encoded
+
+    def test_scalar_strings_and_nulls_pass_through(self):
+        df = pd.DataFrame({"id": ["1", "2"], "tracking_specs": ["plain", None]})
+        DataFrameConformer().validate(df, JsonSchema)
+        out = DataFrameConformer().reconcile(df, JsonSchema)
+        assert out["tracking_specs"].iloc[0] == "plain"
+        assert pd.isna(out["tracking_specs"].iloc[1])
 
 
 class TestDataFrameConformerInfer:

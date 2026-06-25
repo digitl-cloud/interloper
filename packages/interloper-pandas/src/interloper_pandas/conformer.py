@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 from decimal import Decimal
 from typing import Any
 
@@ -34,6 +35,7 @@ class DataFrameConformer(Conformer):
         Missing values in numeric columns validate correctly against
         nullable fields instead of failing as ``nan`` floats.
         """
+        data = _encode_json_str_columns(data, schema)
         schema.validate_rows(dataframe_to_records(data), strict=strict)
 
     def reconcile(self, data: pd.DataFrame, schema: type[Schema]) -> pd.DataFrame:
@@ -50,6 +52,7 @@ class DataFrameConformer(Conformer):
             SchemaError: If a column cannot be cast to its declared type, or
                 a required non-nullable column is missing.
         """
+        data = _encode_json_str_columns(data, schema)
         columns: dict[str, pd.Series] = {}
         for spec in schema.field_specs():
             if spec.name in data.columns:
@@ -121,6 +124,44 @@ def _to_datetime(series: pd.Series) -> pd.Series:
         return pd.to_datetime(series, errors="raise")
     except ValueError:
         return pd.to_datetime(series, errors="raise", utc=True)
+
+
+def _json_encode_value(value: Any) -> Any:
+    """JSON-encode a ``list``/``dict``; pass scalars (and ``NA``) through."""
+    if isinstance(value, (list, dict)):
+        return json.dumps(value)
+    return value
+
+
+def _encode_json_str_columns(data: pd.DataFrame, schema: type[Schema]) -> pd.DataFrame:
+    """JSON-encode nested values in columns declared as a scalar ``str``.
+
+    A field typed ``str`` that receives a ``list``/``dict`` (e.g. a Facebook
+    ``tracking_specs`` array or TikTok ``ad_texts``) is serialized to a JSON
+    string so it satisfies the declared type — without this, ``validate``
+    rejects the row and ``reconcile``'s ``astype("string")`` would store the
+    Python ``repr`` instead of valid JSON. Repeated/nested fields are left
+    untouched. Only ``object``-dtype columns are scanned, preserving the
+    vectorized fast path; the input frame is copied only when a column is
+    actually rewritten.
+
+    Returns:
+        The frame with nested ``str``-field cells JSON-encoded (the original
+        when nothing needed encoding).
+    """
+    encoded = data
+    for spec in schema.field_specs():
+        if spec.repeated or spec.fields is not None or spec.type is not str:
+            continue
+        if spec.name not in encoded.columns:
+            continue
+        series = encoded[spec.name]
+        if series.dtype != object or not series.map(lambda v: isinstance(v, (list, dict))).any():
+            continue
+        if encoded is data:
+            encoded = data.copy()
+        encoded[spec.name] = series.map(_json_encode_value)
+    return encoded
 
 
 def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
