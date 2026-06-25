@@ -54,24 +54,10 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
         return df
 
 
-class TiktokMetadataNormalizer(DataFrameNormalizer):
-    """Normalize TikTok entity records onto the flat metadata schemas.
-
-    Metadata carries list/dict fields (``ad_texts``, ``image_ids``,
-    ``special_industries``, …) that the schemas type as strings; JSON-encode any
-    non-scalar value so it casts cleanly, then defer to the base normalizer.
-    """
-
-    def normalize(self, data: Any) -> pd.DataFrame:
-        records = data.to_dict("records") if isinstance(data, pd.DataFrame) else data
-        encoded = [
-            {key: (json.dumps(value) if isinstance(value, (list, dict)) else value) for key, value in row.items()}
-            for row in records
-        ]
-        return super().normalize(encoded)
-
-
-_METADATA_NORMALIZER = TiktokMetadataNormalizer(drop_na_columns=True)
+# Metadata carries list/dict fields (``ad_texts``, ``image_ids``,
+# ``special_industries``, …) that the schemas type as strings; the conformer
+# JSON-encodes those nested values when casting to the declared ``str`` type.
+_METADATA_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 
 
 # ------------------------------------------------------------------
@@ -223,7 +209,7 @@ class TiktokAds(il.Source):
         )
         return _with_date(rows, context.partition_date)
 
-    # --- Entity (metadata) assets (TiktokMetadataNormalizer) ---
+    # --- Entity (metadata) assets (_METADATA_NORMALIZER) ---
 
     @il.asset(schema=Ads, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
     def ads(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
