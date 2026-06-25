@@ -54,10 +54,10 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
         return df
 
 
-# Metadata carries list/dict fields (``ad_texts``, ``image_ids``,
+# Entity records carry list/dict fields (``ad_texts``, ``image_ids``,
 # ``special_industries``, …) that the schemas type as strings; the conformer
 # JSON-encodes those nested values when casting to the declared ``str`` type.
-_METADATA_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
+_ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 
 
 # ------------------------------------------------------------------
@@ -209,21 +209,21 @@ class TiktokAds(il.Source):
         )
         return _with_date(rows, context.partition_date)
 
-    # --- Entity (metadata) assets (_METADATA_NORMALIZER) ---
+    # --- Entity assets (_ENTITY_NORMALIZER) ---
 
-    @il.asset(schema=Ads, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    @il.asset(schema=Ads, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     def ads(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
-        """Metadata for all ads in the advertiser account."""
+        """All ads in the advertiser account with their attributes."""
         return _paginate(connection, "/ad/get/", {"advertiser_id": self.advertiser_id})
 
-    @il.asset(schema=Campaigns, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    @il.asset(schema=Campaigns, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     def campaigns(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
-        """Metadata for all campaigns in the advertiser account."""
+        """All campaigns in the advertiser account with their attributes."""
         return _paginate(connection, "/campaign/get/", {"advertiser_id": self.advertiser_id})
 
-    @il.asset(schema=Advertisers, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    @il.asset(schema=Advertisers, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     def advertisers(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
-        """Metadata for the advertiser account."""
+        """The advertiser account with its attributes."""
         response = connection.client.get(
             "/advertiser/info/",
             params={

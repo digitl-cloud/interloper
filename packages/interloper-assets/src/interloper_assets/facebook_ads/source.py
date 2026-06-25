@@ -420,7 +420,7 @@ class FacebookAds(il.Source):
         tags=["Entity"],
     )
     def ads(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
-        """Ad metadata including creative, status, and configuration."""
+        """Ad entities including creative, status, and configuration."""
         return _get_ads(connection, self.account_id)
 
     @il.asset(
@@ -428,5 +428,5 @@ class FacebookAds(il.Source):
         tags=["Entity"],
     )
     def campaigns(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
-        """Campaign metadata including objective, budget, and status configuration."""
+        """Campaign entities including objective, budget, and status configuration."""
         return _get_campaigns(connection, self.account_id)

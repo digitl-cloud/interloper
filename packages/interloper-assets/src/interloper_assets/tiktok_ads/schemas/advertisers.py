@@ -3,7 +3,7 @@ from pydantic import Field
 
 
 class Advertisers(Schema):
-    """Tiktok Metadata for advertisers"""
+    """Tiktok advertiser entities"""
 
     address: str | None = Field(default=None, description="Physical address of the advertiser")
     advertiser_id: str | None = Field(default=None, description="Unique identifier for the advertiser")

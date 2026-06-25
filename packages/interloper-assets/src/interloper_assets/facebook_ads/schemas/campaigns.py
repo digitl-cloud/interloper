@@ -3,7 +3,7 @@ from pydantic import Field
 
 
 class Campaigns(Schema):
-    """Facebook Ads campaign metadata snapshot. One row per campaign (not time-series). Captures campaign-level configuration, objective, budget, and status. boosted_object_id is the join key to facebook_insights.posts for Boost Post campaigns."""
+    """Facebook Ads campaign entity snapshot. One row per campaign (not time-series). Captures campaign-level configuration, objective, budget, and status. boosted_object_id is the join key to facebook_insights.posts for Boost Post campaigns."""
 
     id: str | None = Field(default=None, description="Unique campaign identifier. Join key to campaign insights table (campaign_id).")
     account_id: str | None = Field(default=None, description="Ad account ID this campaign belongs to.")

@@ -3,7 +3,7 @@ from pydantic import Field
 
 
 class AdSquads(Schema):
-    """The Ad Squads Metadata report provides insights into the metadata of ads squads in a campaign. It includes key metrics such as ad squad ID, status, placement, bid strategy, budget, targeting details (demographics, interests, geos), scheduling configurations, and delivery constraints."""
+    """The Ad Squads entity provides insights into the attributes of ads squads in a campaign. It includes key metrics such as ad squad ID, status, placement, bid strategy, budget, targeting details (demographics, interests, geos), scheduling configurations, and delivery constraints."""
 
     id: str | None = Field(default=None, description="The ID of the ad squad")
     updated_at: str | None = Field(default=None, description="The last updated timestamp of the ad squad")

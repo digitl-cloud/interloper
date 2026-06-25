@@ -2,11 +2,11 @@
 
 TikTok integrated reports return each row as ``{"dimensions": {...},
 "metrics": {...}}``; the source's ``TiktokStatsNormalizer`` merges both into a
-flat record (de-prefixed) before column normalization. Entity (metadata)
-records carry list/dict fields (``ad_texts``, ``image_ids``, …) that the flat
-schemas type as strings; the conformer JSON-encodes those nested values when
-casting to the declared ``str`` type, so the metadata assets need no bespoke
-normalizer. These tests pin both reshapes, that every asset gets the right
+flat record (de-prefixed) before column normalization. Entity records carry
+list/dict fields (``ad_texts``, ``image_ids``, …) that the flat schemas type as
+strings; the conformer JSON-encodes those nested values when casting to the
+declared ``str`` type, so the entity assets need no bespoke normalizer. These
+tests pin both reshapes, that every asset gets the right
 normalizer, and that the normalizer survives the host→child spec round-trip and
 reconciles against the ported schemas.
 """
@@ -53,7 +53,7 @@ class TestSourceNormalizer:
             asset = next(a for a in _source().assets if type(a).key == key)
             assert isinstance(asset.normalizer, TiktokStatsNormalizer), key
 
-    def test_metadata_assets_use_the_base_normalizer(self):
+    def test_entity_assets_use_the_base_normalizer(self):
         # Entity assets use a plain DataFrameNormalizer (not the stats reshape);
         # nested str-field encoding is handled downstream by the conformer.
         for key in ("ads", "campaigns", "advertisers"):
@@ -107,7 +107,7 @@ class TestSpecRoundtripAndReconcile:
         assert float(reconciled.loc[0, "spend"]) == 12.5
         assert int(reconciled.loc[0, "clicks"]) == 3
 
-    def test_metadata_row_reconciles_against_ads_metadata_schema(self):
+    def test_entity_row_reconciles_against_ads_schema(self):
         child = self._child("ads")
         assert isinstance(child.normalizer, DataFrameNormalizer)
         rows = [{"ad_id": "456", "ad_name": "My Ad", "ad_texts": ["hello"], "image_ids": ["img1"]}]

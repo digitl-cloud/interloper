@@ -24,4 +24,4 @@ class PinterestAds(il.Source):
         description="Pinterest Ads account",
     )
 
-    # --- Entity assets (metadata) ---
+    # --- Entity assets ---

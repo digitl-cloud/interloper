@@ -107,7 +107,7 @@ class TestSpecRoundtripAndReconcile:
         df = pd.DataFrame([{"date_start": "2026-06-10", "account_id": "123", "actions_link_click": 7}])
         representation_for(df).conformer.validate(df, schemas.AdsStats)  # must not raise
 
-    def test_metadata_row_flattens_creative_and_reconciles(self):
+    def test_entity_row_flattens_creative_and_reconciles(self):
         child = self._child("ads")
         rows = [{"id": "456", "name": "My Ad", "creative": {"id": "789", "name": "Creative A"}}]
         normalized = child.normalizer.normalize(rows)

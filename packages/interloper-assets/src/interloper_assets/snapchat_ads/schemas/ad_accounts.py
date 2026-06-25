@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class AdAccounts(Schema):
-    """The Ad Accounts Metadata report provides detailed information about each advertising account, including identifiers, timestamps, names, types, statuses, and various financial and organizational details."""
+    """The Ad Accounts entity provides detailed information about each advertising account, including identifiers, timestamps, names, types, statuses, and various financial and organizational details."""
 
     id: str | None = Field(default=None, description="Unique identifier for the ad account.")
     updated_at: dt.datetime | None = Field(default=None, description="Timestamp of when the ad account was last updated.")
