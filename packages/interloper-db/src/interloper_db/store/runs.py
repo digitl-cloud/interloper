@@ -101,10 +101,11 @@ class RunMixin:
         run_id: UUID | None = None,
         org_id: UUID | None = None,
         asset_ids: Sequence[UUID] | None = None,
+        event_types: Sequence[str] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Event]:
-        """List events, optionally filtered by run and/or asset(s).
+        """List events, optionally filtered by run, asset(s) and/or type(s).
 
         Ordering is ``timestamp ASC, id ASC`` — stable and deterministic so
         ``offset``/``limit`` paging never skips or repeats a row when several
@@ -114,6 +115,7 @@ class RunMixin:
             run_id: Optional run filter.
             org_id: Optional org filter.
             asset_ids: Optional filter to events of any of these assets.
+            event_types: Optional filter to events of any of these types.
             limit: Max results (default 100).
             offset: Pagination offset.
 
@@ -128,6 +130,8 @@ class RunMixin:
                 statement = statement.where(Event.org_id == org_id)
             if asset_ids:
                 statement = statement.where(col(Event.asset_id).in_(asset_ids))
+            if event_types:
+                statement = statement.where(col(Event.event_type).in_(event_types))
             statement = (
                 statement.order_by(col(Event.timestamp).asc(), col(Event.id).asc()).offset(offset).limit(limit)
             )
@@ -139,6 +143,7 @@ class RunMixin:
         run_id: UUID | None = None,
         org_id: UUID | None = None,
         asset_ids: Sequence[UUID] | None = None,
+        event_types: Sequence[str] | None = None,
     ) -> int:
         """Count events matching the same filters as :meth:`list_events`.
 
@@ -146,6 +151,7 @@ class RunMixin:
             run_id: Optional run filter.
             org_id: Optional org filter.
             asset_ids: Optional filter to events of any of these assets.
+            event_types: Optional filter to events of any of these types.
 
         Returns:
             Total number of matching events (ignoring limit/offset).
@@ -158,6 +164,8 @@ class RunMixin:
                 statement = statement.where(Event.org_id == org_id)
             if asset_ids:
                 statement = statement.where(col(Event.asset_id).in_(asset_ids))
+            if event_types:
+                statement = statement.where(col(Event.event_type).in_(event_types))
             return session.exec(statement).one()
 
     def list_asset_executions(self, run_id: UUID) -> list[dict]:

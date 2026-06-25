@@ -2,6 +2,7 @@
 import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
 import type { ExecutionStatus } from '~/types/asset_execution'
+import type { EventCategory } from '~/utils/events'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
 // orgSwitchTarget: this page is bespoke to one org's run — switching org from
@@ -53,6 +54,16 @@ watch(eventAssetIds, ids => eventsStore.filterByAssets(ids))
 
 // Switching the status pill clears any single-asset drill-down.
 watch(statusFilter, () => { selectedAsset.value = null })
+
+// Event category tab (All / Lifecycle / Errors / Logs), filtered server-side.
+const eventCategory = ref<EventCategory>('all')
+const eventTabs: { key: EventCategory; label: string; icon: string }[] = [
+    { key: 'all', label: 'All', icon: 'i-lucide-list' },
+    { key: 'lifecycle', label: 'Lifecycle', icon: 'i-lucide-activity' },
+    { key: 'errors', label: 'Errors', icon: 'i-lucide-circle-alert' },
+    { key: 'logs', label: 'Logs', icon: 'i-lucide-scroll-text' },
+]
+watch(eventCategory, cat => eventsStore.filterByEventTypes(eventTypesForCategory(cat)))
 
 const markerTime = computed(() => eventInFocus.value?.timestamp ? new Date(eventInFocus.value.timestamp) : null)
 const highlightedAsset = computed(() => eventInFocus.value?.asset_id ?? null)
@@ -174,7 +185,21 @@ onUnmounted(() => {
                            :min-size="20"
                            class="flex flex-col min-h-0">
                 <div class="flex items-center gap-2 px-4 py-2 shrink-0">
-                    <span class="text-xs font-medium uppercase tracking-wide text-muted">Events</span>
+                    <div class="flex items-center gap-0.5 rounded-md bg-elevated p-0.5">
+                        <button v-for="tab in eventTabs"
+                                :key="tab.key"
+                                type="button"
+                                class="flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors cursor-pointer"
+                                :class="eventCategory === tab.key
+                                    ? 'bg-default text-default shadow-sm'
+                                    : 'text-muted hover:text-default'"
+                                @click="eventCategory = tab.key">
+                            <UIcon :name="tab.icon"
+                                   class="size-3.5" />
+                            {{ tab.label }}
+                        </button>
+                    </div>
+                    <span class="ml-auto text-xs font-medium uppercase tracking-wide text-muted">Events</span>
                     <UBadge v-if="!eventsStore.loading"
                             color="neutral"
                             variant="subtle"

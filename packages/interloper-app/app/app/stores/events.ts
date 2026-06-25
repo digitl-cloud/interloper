@@ -31,6 +31,9 @@ export const useEventsStore = defineStore('events', () => {
     // too — filtering only the loaded pages client-side would hide every
     // matching event that hasn't been scrolled into view yet.
     const assetIds = ref<string[] | null>(null)
+    // Server-side event-type filter — the category tab (Lifecycle / Errors /
+    // Logs). Composes with the asset filter; same server-paging rationale.
+    const eventTypes = ref<string[] | null>(null)
     const events = ref<RunEvent[]>([])
     const total = ref(0)
     const loading = ref(false) // initial page load
@@ -63,8 +66,8 @@ export const useEventsStore = defineStore('events', () => {
         events.value.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id))
     }
 
-    /** Order-insensitive equality of two asset-id filters. */
-    function _sameAssetFilter(a: string[] | null, b: string[] | null): boolean {
+    /** Order-insensitive equality of two filter lists. */
+    function _sameFilter(a: string[] | null, b: string[] | null): boolean {
         if (a === b) return true
         if (!a || !b || a.length !== b.length) return false
         const sa = [...a].sort()
@@ -103,6 +106,7 @@ export const useEventsStore = defineStore('events', () => {
             offset: String(nextOffset.value),
         })
         for (const aid of assetIds.value ?? []) params.append('asset_id', aid)
+        for (const et of eventTypes.value ?? []) params.append('event_type', et)
         const res = await apiFetchRaw<RunEvent[]>(`/runs/${id}/events?${params}`)
         if (epoch !== fetchEpoch) return // state was reset while in flight
         const page = res._data ?? []
@@ -120,24 +124,17 @@ export const useEventsStore = defineStore('events', () => {
         table: 'events',
         scope: () => runId.value ? orgStore.organisation?.id : null,
         shouldHandle: (record: Record<string, any>) =>
-            record.run_id === runId.value && (!assetIds.value || assetIds.value.includes(record.asset_id)),
+            record.run_id === runId.value
+            && (!assetIds.value || assetIds.value.includes(record.asset_id))
+            && (!eventTypes.value || eventTypes.value.includes(record.event_type)),
         onInsert: (record: Record<string, any>) => _upsert(record as RunEvent),
     })
 
     /**********************
      * Actions
      **********************/
-    /**
-     * Load the first page of events for a run, optionally filtered to one asset.
-     *
-     * Events are ordered oldest-first, so the terminal/outcome events
-     * (`asset_completed`, `asset_failed`, `run_failed`, …) live at the end.
-     * The table reaches them by infinite-scrolling — see `loadMore` — rather
-     * than loading the whole history up front.
-     */
-    async function fetchForRun(id: string, assets: string[] | null = null) {
-        runId.value = id
-        assetIds.value = assets
+    /** Reset paging and load the first page with the current filters. */
+    async function _reload() {
         fetchEpoch++
         events.value = []
         total.value = 0
@@ -155,10 +152,33 @@ export const useEventsStore = defineStore('events', () => {
         }
     }
 
+    /**
+     * Load the first page of events for a run (clearing any active filters).
+     *
+     * Events are ordered oldest-first, so the terminal/outcome events
+     * (`asset_completed`, `asset_failed`, `run_failed`, …) live at the end.
+     * The table reaches them by infinite-scrolling — see `loadMore` — rather
+     * than loading the whole history up front.
+     */
+    async function fetchForRun(id: string) {
+        runId.value = id
+        assetIds.value = null
+        eventTypes.value = null
+        await _reload()
+    }
+
     /** Re-page from the start filtered to a set of assets (`null` clears it). */
     async function filterByAssets(assets: string[] | null) {
-        if (!runId.value || _sameAssetFilter(assets, assetIds.value)) return
-        await fetchForRun(runId.value, assets)
+        if (!runId.value || _sameFilter(assets, assetIds.value)) return
+        assetIds.value = assets
+        await _reload()
+    }
+
+    /** Re-page from the start filtered to a set of event types (`null` clears it). */
+    async function filterByEventTypes(types: string[] | null) {
+        if (!runId.value || _sameFilter(types, eventTypes.value)) return
+        eventTypes.value = types
+        await _reload()
     }
 
     /** Load the next page of events. Safe to call repeatedly (infinite scroll). */
@@ -190,6 +210,7 @@ export const useEventsStore = defineStore('events', () => {
     function $reset() {
         runId.value = null
         assetIds.value = null
+        eventTypes.value = null
         fetchEpoch++
         events.value = []
         total.value = 0
@@ -202,6 +223,7 @@ export const useEventsStore = defineStore('events', () => {
     return {
         runId,
         assetIds,
+        eventTypes,
         events,
         total,
         loading,
@@ -210,6 +232,7 @@ export const useEventsStore = defineStore('events', () => {
         error,
         fetchForRun,
         filterByAssets,
+        filterByEventTypes,
         loadMore,
         findById,
         byAssetKey,
