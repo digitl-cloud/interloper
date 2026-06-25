@@ -123,9 +123,11 @@ onUnmounted(() => {
         <SplitterGroup direction="vertical"
                        auto-save-id="run-panels"
                        class="flex-1 min-h-0 rounded-lg">
+            <!-- pr-0 so the timeline's scrollbar sits flush at the panel edge,
+                 aligned with the events table's scrollbar below. -->
             <SplitterPanel :default-size="40"
                            :min-size="15"
-                           class="overflow-hidden p-4">
+                           class="overflow-hidden py-4 pl-4">
                 <ChartExecutionTimeline v-if="run?.status !== 'queued'"
                                         v-model:selected-asset="selectedAsset"
                                         :asset-executions="assetExecutions"
