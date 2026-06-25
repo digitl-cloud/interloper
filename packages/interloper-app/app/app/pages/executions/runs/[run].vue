@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { DropdownMenuItem } from '@nuxt/ui'
 import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
 import type { ExecutionStatus } from '~/types/asset_execution'
@@ -51,19 +50,6 @@ async function onRetry(scope: 'all' | 'failed') {
     }
 }
 
-const retryItems = computed<DropdownMenuItem[]>(() => [
-    {
-        label: 'Retry failed assets only',
-        icon: 'i-lucide-list-restart',
-        onSelect: () => onRetry('failed'),
-    },
-    {
-        label: 'Retry all assets',
-        icon: 'i-lucide-rotate-ccw',
-        onSelect: () => onRetry('all'),
-    },
-])
-
 const fetchError = ref<unknown>(null)
 
 onMounted(async () => {
@@ -95,30 +81,41 @@ onUnmounted(() => {
              :error="fetchError"
              back-to="/executions?tab=runs"
              resource-label="run">
-        <div>
-            <div class="flex items-center gap-3 mb-4 shrink-0 px-4 pt-4">
-            <NuxtLink to="/executions?tab=runs"
-                      class="text-sm text-muted hover:text-default">
-                Runs
-            </NuxtLink>
-            <span class="text-sm text-muted">/</span>
-            <span class="text-sm font-medium font-mono">{{ runId }}</span>
-            <UBadge v-if="run"
-                    :color="statusColor(run.status)">
-                {{ statusLabel(run.status) }}
-            </UBadge>
-            <UDropdownMenu v-if="run?.status === 'failed'"
-                           :items="retryItems"
-                           class="ml-auto">
-                <UButton icon="i-lucide-rotate-ccw"
-                         label="Retry"
-                         color="neutral"
-                         variant="outline"
-                         size="sm"
-                         trailing-icon="i-lucide-chevron-down"
-                         :loading="retrying" />
-            </UDropdownMenu>
-        </div>
+        <div class="flex flex-col h-full min-h-0">
+            <div class="flex flex-col gap-4 mb-4 shrink-0 px-4 pt-4">
+                <div class="flex items-center gap-3">
+                    <NuxtLink to="/executions?tab=runs"
+                              class="text-sm text-muted hover:text-default">
+                        Runs
+                    </NuxtLink>
+                    <span class="text-sm text-muted">/</span>
+                    <span class="text-sm font-medium font-mono">{{ runId }}</span>
+                    <UBadge v-if="run"
+                            :color="statusColor(run.status)">
+                        {{ statusLabel(run.status) }}
+                    </UBadge>
+                    <div v-if="run?.status === 'failed'"
+                         class="ml-auto flex items-center gap-2">
+                        <UButton label="Retry failed"
+                                 icon="i-lucide-list-restart"
+                                 color="neutral"
+                                 variant="outline"
+                                 size="sm"
+                                 :loading="retrying"
+                                 @click="onRetry('failed')" />
+                        <UButton label="Retry all"
+                                 icon="i-lucide-rotate-ccw"
+                                 color="neutral"
+                                 variant="outline"
+                                 size="sm"
+                                 :loading="retrying"
+                                 @click="onRetry('all')" />
+                    </div>
+                </div>
+                <ExecutionsRunSummary v-if="run"
+                                      :run="run"
+                                      :asset-executions="assetExecutions" />
+            </div>
 
         <SplitterGroup direction="vertical"
                        auto-save-id="run-panels"
