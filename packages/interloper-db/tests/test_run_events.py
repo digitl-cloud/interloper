@@ -153,6 +153,34 @@ def test_asset_filter_lists_and_counts_only_that_asset(store: RunMixin) -> None:
     assert all(e.asset_id == asset_b for e in page_b)
 
 
+def test_event_type_filter_lists_and_counts_only_those_types(store: RunMixin) -> None:
+    # _make_events emits n-1 "asset_materializing" then one "asset_completed".
+    _seed(_make_events(5))
+
+    assert store.count_events(run_id=_RUN_ID, event_types=["asset_completed"]) == 1
+    assert store.count_events(run_id=_RUN_ID, event_types=["asset_materializing"]) == 4
+    # A set of types is the union of each.
+    assert store.count_events(run_id=_RUN_ID, event_types=["asset_completed", "asset_materializing"]) == 5
+
+    completed = store.list_events(run_id=_RUN_ID, event_types=["asset_completed"])
+    assert len(completed) == 1
+    assert all(e.event_type == "asset_completed" for e in completed)
+
+
+def test_asset_and_event_type_filters_compose(store: RunMixin) -> None:
+    asset_a, asset_b = uuid4(), uuid4()
+    _seed(_make_events(5, asset_id=asset_a))
+    _seed(_make_events(5, start=5, asset_id=asset_b))
+
+    # Each asset has exactly one "asset_completed"; narrowing to asset_a's set
+    # of one type yields just that asset's completion.
+    assert store.count_events(run_id=_RUN_ID, asset_ids=[asset_a], event_types=["asset_completed"]) == 1
+    page = store.list_events(run_id=_RUN_ID, asset_ids=[asset_a], event_types=["asset_completed"])
+    assert len(page) == 1
+    assert page[0].asset_id == asset_a
+    assert page[0].event_type == "asset_completed"
+
+
 def test_asset_filter_accepts_multiple_assets(store: RunMixin) -> None:
     asset_a, asset_b, asset_c = uuid4(), uuid4(), uuid4()
     _seed(_make_events(10, asset_id=asset_a))

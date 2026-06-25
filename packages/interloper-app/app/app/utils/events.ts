@@ -54,6 +54,44 @@ const labelMap: Record<EventType, string> = {
     log: 'Log',
 }
 
+export type EventCategory = 'all' | 'lifecycle' | 'errors' | 'logs'
+
+/** All known event types, derived from the icon map so this can't drift. */
+const ALL_EVENT_TYPES = Object.keys(iconMap) as EventType[]
+
+/**
+ * High-level orchestration milestones (run/asset/backfill state machine).
+ * Excludes the granular `*_exec_*` / `dest_*` IO events and `log`.
+ */
+const LIFECYCLE_TYPES: EventType[] = [
+    'run_dispatched',
+    'run_started',
+    'run_completed',
+    'run_failed',
+    'asset_queued',
+    'asset_skipped',
+    'asset_started',
+    'asset_completed',
+    'asset_failed',
+    'asset_canceled',
+    'backfill_started',
+    'backfill_completed',
+    'backfill_failed',
+]
+
+/** Every failure event, derived so new `*_failed` types are picked up automatically. */
+const ERROR_TYPES: EventType[] = ALL_EVENT_TYPES.filter(t => t.endsWith('_failed'))
+
+/** Event types backing a category tab; `all` returns null (no filter). */
+export function eventTypesForCategory(category: EventCategory): EventType[] | null {
+    switch (category) {
+        case 'lifecycle': return LIFECYCLE_TYPES
+        case 'errors': return ERROR_TYPES
+        case 'logs': return ['log']
+        default: return null
+    }
+}
+
 export function eventTypeIcon(eventType: EventType): string {
     return iconMap[eventType] ?? 'i-lucide-align-left'
 }
