@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import type { Run } from '~/types/run'
 import type { AssetExecution } from '~/types/asset_execution'
+import type { RunStatusBucket } from '~/composables/runStats'
 
 const props = defineProps<{
     run: Run
     assetExecutions: AssetExecution[]
 }>()
 
+/** Active status bucket key (e.g. "failed"); filters the assets + events. */
+const statusFilter = defineModel<string | null>('statusFilter', { default: null })
+
 const stats = useRunStats(toRef(props, 'run'), toRef(props, 'assetExecutions'))
+
+/** Toggle a status filter; empty buckets aren't selectable (nothing to show). */
+function toggleStatus(bucket: RunStatusBucket) {
+    if (bucket.count === 0) return
+    statusFilter.value = statusFilter.value === bucket.key ? null : bucket.key
+}
 
 /** One-line breakdown, omitting empty buckets (e.g. "11 succeeded · 1 failed · 3 not run"). */
 const summaryLine = computed(() => {
@@ -56,14 +66,25 @@ const metaItems = computed(() => [
             </div>
 
             <div class="flex flex-wrap gap-1.5">
-                <div v-for="b in legendBuckets"
-                     :key="b.key"
-                     class="flex items-center gap-1.5 rounded-md bg-accented px-2 py-1 text-xs">
+                <button v-for="b in legendBuckets"
+                        :key="b.key"
+                        type="button"
+                        :disabled="b.count === 0"
+                        :aria-pressed="statusFilter === b.key"
+                        class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
+                        :class="[
+                            b.count === 0 ? 'cursor-default opacity-50' : 'cursor-pointer hover:bg-elevated',
+                            statusFilter === b.key
+                                ? 'bg-elevated ring-1 ring-inset ring-primary'
+                                : 'bg-accented',
+                            statusFilter && statusFilter !== b.key ? 'opacity-60' : '',
+                        ]"
+                        @click="toggleStatus(b)">
                     <span class="size-2 rounded-full"
                           :class="b.colorClass" />
                     <span class="text-muted">{{ b.label }}</span>
                     <span class="font-medium tabular-nums">{{ b.count }}</span>
-                </div>
+                </button>
             </div>
         </div>
 

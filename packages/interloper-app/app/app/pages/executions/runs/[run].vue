@@ -25,11 +25,35 @@ const assetExecutions = computed(() => assetExecutionsStore.assetExecutions)
 const run = computed(() => runsStore.findById(runId) ?? initialRun.value)
 
 const selectedAsset = ref<string | null>(null)
+const statusFilter = ref<string | null>(null)
 const eventInFocus = ref<RunEvent | null>(null)
 
-// The events table is paged from the server, so the asset filter is applied
-// there (re-paged from offset 0) rather than over the loaded pages only.
-watch(selectedAsset, asset => eventsStore.filterByAsset(asset))
+/** Execution statuses behind the active status pill (e.g. pending → pending+queued). */
+const filterStatuses = computed(() => statusFilter.value ? statusesForKey(statusFilter.value) : null)
+
+/** Timeline rows, narrowed to the active status pill. */
+const filteredAssetExecutions = computed(() => {
+    const statuses = filterStatuses.value
+    if (!statuses) return assetExecutions.value
+    return assetExecutions.value.filter(e => statuses.includes(e.status))
+})
+
+// Selecting a single asset narrows to it; otherwise the active status pill's
+// asset set drives the filter. Events are paged from the server, so the filter
+// is applied there (re-paged from offset 0) rather than over the loaded pages.
+const eventAssetIds = computed<string[] | null>(() => {
+    if (selectedAsset.value) return [selectedAsset.value]
+    const statuses = filterStatuses.value
+    if (!statuses) return null
+    return assetExecutions.value
+        .filter(e => statuses.includes(e.status) && e.asset_id)
+        .map(e => e.asset_id!)
+})
+watch(eventAssetIds, ids => eventsStore.filterByAssets(ids))
+
+// Switching the status pill clears any single-asset drill-down.
+watch(statusFilter, () => { selectedAsset.value = null })
+
 const markerTime = computed(() => eventInFocus.value?.timestamp ? new Date(eventInFocus.value.timestamp) : null)
 const highlightedAsset = computed(() => eventInFocus.value?.asset_id ?? null)
 
@@ -113,6 +137,7 @@ onUnmounted(() => {
                     </div>
                 </div>
                 <ExecutionsRunSummary v-if="run"
+                                      v-model:status-filter="statusFilter"
                                       :run="run"
                                       :asset-executions="assetExecutions" />
             </div>
@@ -127,7 +152,7 @@ onUnmounted(() => {
                            class="overflow-hidden py-4 pl-4">
                 <ChartExecutionTimeline v-if="run?.status !== 'queued'"
                                         v-model:selected-asset="selectedAsset"
-                                        :asset-executions="assetExecutions"
+                                        :asset-executions="filteredAssetExecutions"
                                         :status="(run?.status as ExecutionStatus)"
                                         :marker-time="markerTime"
                                         :highlighted-asset="highlightedAsset" />

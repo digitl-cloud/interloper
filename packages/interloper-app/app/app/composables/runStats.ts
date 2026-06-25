@@ -23,6 +23,11 @@ const STATUS_META: StatusMeta[] = [
 /** Always shown in the legend, even at zero. Pending only appears when present. */
 const CORE_KEYS = new Set(['success', 'running', 'failed', 'canceled', 'skipped'])
 
+/** Execution statuses grouped under a bucket key (e.g. pending → pending+queued). */
+export function statusesForKey(key: string): ExecutionStatus[] {
+    return STATUS_META.find(m => m.key === key)?.statuses ?? []
+}
+
 export interface RunStatusBucket {
     key: string
     label: string

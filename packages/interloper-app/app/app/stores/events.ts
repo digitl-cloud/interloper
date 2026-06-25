@@ -26,10 +26,11 @@ export const useEventsStore = defineStore('events', () => {
      * State
      **********************/
     const runId = ref<string | null>(null)
-    // Server-side asset filter. Events are paged from the server, so filtering
-    // must happen there too — filtering only the loaded pages client-side would
-    // hide every matching event that hasn't been scrolled into view yet.
-    const assetId = ref<string | null>(null)
+    // Server-side asset filter — one or more assets (e.g. every asset sharing a
+    // status). Events are paged from the server, so filtering must happen there
+    // too — filtering only the loaded pages client-side would hide every
+    // matching event that hasn't been scrolled into view yet.
+    const assetIds = ref<string[] | null>(null)
     const events = ref<RunEvent[]>([])
     const total = ref(0)
     const loading = ref(false) // initial page load
@@ -62,6 +63,15 @@ export const useEventsStore = defineStore('events', () => {
         events.value.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id))
     }
 
+    /** Order-insensitive equality of two asset-id filters. */
+    function _sameAssetFilter(a: string[] | null, b: string[] | null): boolean {
+        if (a === b) return true
+        if (!a || !b || a.length !== b.length) return false
+        const sa = [...a].sort()
+        const sb = [...b].sort()
+        return sa.every((v, i) => v === sb[i])
+    }
+
     function _upsert(event: RunEvent) {
         const idx = events.value.findIndex(e => e.id === event.id)
         if (idx >= 0) {
@@ -92,7 +102,7 @@ export const useEventsStore = defineStore('events', () => {
             limit: String(EVENTS_PAGE_SIZE),
             offset: String(nextOffset.value),
         })
-        if (assetId.value) params.set('asset_id', assetId.value)
+        for (const aid of assetIds.value ?? []) params.append('asset_id', aid)
         const res = await apiFetchRaw<RunEvent[]>(`/runs/${id}/events?${params}`)
         if (epoch !== fetchEpoch) return // state was reset while in flight
         const page = res._data ?? []
@@ -110,7 +120,7 @@ export const useEventsStore = defineStore('events', () => {
         table: 'events',
         scope: () => runId.value ? orgStore.organisation?.id : null,
         shouldHandle: (record: Record<string, any>) =>
-            record.run_id === runId.value && (!assetId.value || record.asset_id === assetId.value),
+            record.run_id === runId.value && (!assetIds.value || assetIds.value.includes(record.asset_id)),
         onInsert: (record: Record<string, any>) => _upsert(record as RunEvent),
     })
 
@@ -125,9 +135,9 @@ export const useEventsStore = defineStore('events', () => {
      * The table reaches them by infinite-scrolling — see `loadMore` — rather
      * than loading the whole history up front.
      */
-    async function fetchForRun(id: string, asset: string | null = null) {
+    async function fetchForRun(id: string, assets: string[] | null = null) {
         runId.value = id
-        assetId.value = asset
+        assetIds.value = assets
         fetchEpoch++
         events.value = []
         total.value = 0
@@ -145,10 +155,10 @@ export const useEventsStore = defineStore('events', () => {
         }
     }
 
-    /** Re-page from the start with an asset filter (`null` clears it). */
-    async function filterByAsset(asset: string | null) {
-        if (!runId.value || asset === assetId.value) return
-        await fetchForRun(runId.value, asset)
+    /** Re-page from the start filtered to a set of assets (`null` clears it). */
+    async function filterByAssets(assets: string[] | null) {
+        if (!runId.value || _sameAssetFilter(assets, assetIds.value)) return
+        await fetchForRun(runId.value, assets)
     }
 
     /** Load the next page of events. Safe to call repeatedly (infinite scroll). */
@@ -179,7 +189,7 @@ export const useEventsStore = defineStore('events', () => {
 
     function $reset() {
         runId.value = null
-        assetId.value = null
+        assetIds.value = null
         fetchEpoch++
         events.value = []
         total.value = 0
@@ -191,7 +201,7 @@ export const useEventsStore = defineStore('events', () => {
 
     return {
         runId,
-        assetId,
+        assetIds,
         events,
         total,
         loading,
@@ -199,7 +209,7 @@ export const useEventsStore = defineStore('events', () => {
         hasMore,
         error,
         fetchForRun,
-        filterByAsset,
+        filterByAssets,
         loadMore,
         findById,
         byAssetKey,

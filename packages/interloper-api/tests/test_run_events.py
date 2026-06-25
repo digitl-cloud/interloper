@@ -33,7 +33,7 @@ class FakeStore:
     def __init__(self, total: int = 777) -> None:
         self.total = total
         self.list_calls: list[tuple] = []
-        self.count_calls: list[UUID | None] = []
+        self.count_calls: list[list[UUID] | None] = []
 
     def get_run(self, run_id: UUID):
         return SimpleNamespace(id=run_id, org_id=_ORG_ID)
@@ -46,9 +46,9 @@ class FakeStore:
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
-        asset_id: UUID | None = None,
+        asset_ids: list[UUID] | None = None,
     ) -> int:
-        self.count_calls.append(asset_id)
+        self.count_calls.append(asset_ids)
         return self.total
 
     def list_events(
@@ -56,11 +56,11 @@ class FakeStore:
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
-        asset_id: UUID | None = None,
+        asset_ids: list[UUID] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list:
-        self.list_calls.append((run_id, limit, offset, asset_id))
+        self.list_calls.append((run_id, limit, offset, asset_ids))
         # Return as many fake events as the page would hold, capped at the total.
         n = max(0, min(limit, self.total - offset))
         return [
@@ -109,9 +109,19 @@ def test_forwards_asset_filter_to_list_and_count(store: FakeStore) -> None:
     asset_id = uuid4()
     resp = _client(store).get(f"/{_RUN_ID}/events?asset_id={asset_id}")
     assert resp.status_code == 200
-    assert store.list_calls[-1] == (_RUN_ID, 100, 0, asset_id)
+    # A single asset_id arrives as a one-element list.
+    assert store.list_calls[-1] == (_RUN_ID, 100, 0, [asset_id])
     # X-Total-Count must reflect the same filter the listing used.
-    assert store.count_calls[-1] == asset_id
+    assert store.count_calls[-1] == [asset_id]
+
+
+def test_forwards_multiple_asset_filters(store: FakeStore) -> None:
+    a, b = uuid4(), uuid4()
+    resp = _client(store).get(f"/{_RUN_ID}/events?asset_id={a}&asset_id={b}")
+    assert resp.status_code == 200
+    # Repeated asset_id params filter the listing to the whole set (e.g. one status).
+    assert store.list_calls[-1] == (_RUN_ID, 100, 0, [a, b])
+    assert store.count_calls[-1] == [a, b]
 
 
 def test_invalid_asset_filter_is_rejected(store: FakeStore) -> None:
