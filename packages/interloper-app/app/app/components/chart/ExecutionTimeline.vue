@@ -39,7 +39,7 @@ const isDark = computed(() => colorMode.value === 'dark')
 
 function getStatusColor(status: string) {
     switch (status) {
-        case 'success': return isDark.value ? '#4ade80' : '#16a34a'
+        case 'success': return isDark.value ? '#22c55e' : '#16a34a'
         case 'failed': return isDark.value ? '#f87171' : '#dc2626'
         case 'running': return isDark.value ? '#60a5fa' : '#2563eb'
         case 'canceled': return isDark.value ? '#fbbf24' : '#d97706'
@@ -443,7 +443,7 @@ watch(axisMax, () => {
                  class="absolute top-0 flex h-full items-center whitespace-nowrap text-[10px] text-muted"
                  :style="{
                      left: `min(${t.percent}%, calc(100% - 1px))`,
-                     transform: t.percent >= 99 ? 'translateX(-100%)' : 'translateX(-50%)',
+                     transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 99 ? 'translateX(-100%)' : 'translateX(-50%)',
                  }">
                 {{ t.label }}
             </div>
