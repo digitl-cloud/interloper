@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class Campaigns(Schema):
-    """Tiktok Metadata for campaigns"""
+    """Tiktok campaign entities"""
 
     modify_time: dt.datetime | None = Field(default=None, description="Last modification timestamp of the campaign")
     special_industries: str | None = Field(default=None, description="Indicates if the campaign belongs to special industries")

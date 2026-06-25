@@ -3,7 +3,7 @@ from pydantic import Field
 
 
 class Ads(Schema):
-    """The Ads Metadata report provides insights into the metadata of indivudal ads in a campaign. It includes key metrics such as ad ID, timestamps for creation and last update, ad name, ad squad ID, creative ID, third-party paid impression tracking URLs, third-party on swipe tracking URLs, ad status, ad type, render type, review status, delivery status, reasons for the review status, and container chain IDs."""
+    """The Ads entity provides insights into the attributes of indivudal ads in a campaign. It includes key metrics such as ad ID, timestamps for creation and last update, ad name, ad squad ID, creative ID, third-party paid impression tracking URLs, third-party on swipe tracking URLs, ad status, ad type, render type, review status, delivery status, reasons for the review status, and container chain IDs."""
 
     id: str | None = Field(default=None, description="The ID of the ad")
     updated_at: str | None = Field(default=None, description="The timestamp when the ad was last updated")

@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class Ads(Schema):
-    """Tiktok Metadata for ads"""
+    """Tiktok ad entities"""
 
     ad_format: str | None = Field(default=None, description="Format of the ad")
     ad_id: str | None = Field(default=None, description="Unique identifier for the ad")

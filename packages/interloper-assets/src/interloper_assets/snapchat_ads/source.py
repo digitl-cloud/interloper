@@ -57,8 +57,8 @@ class SnapchatStatsNormalizer(DataFrameNormalizer):
         return super().normalize(df)
 
 
-# Metadata records are nested entity dicts; flatten and drop all-null columns.
-_METADATA_NORMALIZER = DataFrameNormalizer(flatten_max_level=3, drop_na_columns=True)
+# Entity records are nested dicts; flatten and drop all-null columns.
+_ENTITY_NORMALIZER = DataFrameNormalizer(flatten_max_level=3, drop_na_columns=True)
 
 
 # ------------------------------------------------------------------
@@ -105,8 +105,8 @@ def _request_report(
     return rows
 
 
-def _metadata_records(connection: SnapchatAdsConnection, path: str, list_key: str, item_key: str) -> list[_RECORD]:
-    """Page a metadata endpoint and unwrap ``page[list_key][i][item_key]`` records."""
+def _entity_records(connection: SnapchatAdsConnection, path: str, list_key: str, item_key: str) -> list[_RECORD]:
+    """Page an entity endpoint and unwrap ``page[list_key][i][item_key]`` records."""
     records: list[_RECORD] = []
     for page in _get_pages(connection, path):
         records.extend(item[item_key] for item in page.get(list_key, []))
@@ -178,39 +178,39 @@ class SnapchatAds(il.Source):
         )
         return _with_date(rows, context.partition_date)
 
-    # --- Entity (metadata) assets (flattening normalizer) ---
+    # --- Entity assets (flattening normalizer) ---
 
-    @il.asset(schema=AdAccount, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    @il.asset(schema=AdAccount, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     def ad_account(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
-        """Metadata for a single ad account."""
+        """A single ad account with its attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
-        return _metadata_records(connection, path, "adaccounts", "adaccount")
+        return _entity_records(connection, path, "adaccounts", "adaccount")
 
-    @il.asset(schema=AdAccounts, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    @il.asset(schema=AdAccounts, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     def ad_accounts(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
-        """Metadata for all ad accounts in the organization owning this account."""
+        """All ad accounts in the organization owning this account."""
         account_path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
-        accounts = _metadata_records(connection, account_path, "adaccounts", "adaccount")
+        accounts = _entity_records(connection, account_path, "adaccounts", "adaccount")
         organization_id = accounts[0]["organization_id"] if accounts else None
         if organization_id is None:
             return []
         path = f"/{constants.API_VERSION}/organizations/{organization_id}/adaccounts"
-        return _metadata_records(connection, path, "adaccounts", "adaccount")
+        return _entity_records(connection, path, "adaccounts", "adaccount")
 
-    @il.asset(schema=Ads, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    @il.asset(schema=Ads, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     def ads(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
-        """Metadata for all ads in the ad account."""
+        """All ads in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/ads"
-        return _metadata_records(connection, path, "ads", "ad")
+        return _entity_records(connection, path, "ads", "ad")
 
-    @il.asset(schema=AdSquads, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    @il.asset(schema=AdSquads, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     def ad_squads(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
-        """Metadata for all ad squads in the ad account."""
+        """All ad squads in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/adsquads"
-        return _metadata_records(connection, path, "adsquads", "adsquad")
+        return _entity_records(connection, path, "adsquads", "adsquad")
 
-    @il.asset(schema=Campaigns, tags=["Entity"], normalizer=_METADATA_NORMALIZER)
+    @il.asset(schema=Campaigns, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     def campaigns(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
-        """Metadata for all campaigns in the ad account."""
+        """All campaigns in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/campaigns"
-        return _metadata_records(connection, path, "campaigns", "campaign")
+        return _entity_records(connection, path, "campaigns", "campaign")

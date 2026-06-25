@@ -3,7 +3,7 @@ from pydantic import Field
 
 
 class Campaigns(Schema):
-    """The Campaigns Metadata report provides insights into the metadata of campaigns. It includes key dimensions such as campaign ID, name, objective, status, start and end times, lifetime spend cap, buy model, delivery status, and creation state."""
+    """The Campaigns entity provides insights into the attributes of campaigns. It includes key dimensions such as campaign ID, name, objective, status, start and end times, lifetime spend cap, buy model, delivery status, and creation state."""
 
     id: str | None = Field(default=None, description="The ID of the campaign")
     updated_at: str | None = Field(default=None, description="The last updated timestamp of the campaign")

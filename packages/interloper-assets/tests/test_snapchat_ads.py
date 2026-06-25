@@ -2,7 +2,7 @@
 
 Stats rows nest metrics under a ``stats`` dict (flattened and de-prefixed) or,
 for dimensioned reports, a ``dimension_stats`` list (exploded into one row per
-dimension) — reshaped by ``SnapchatStatsNormalizer``. Metadata records are
+dimension) — reshaped by ``SnapchatStatsNormalizer``. Entity records are
 flattened by a configured ``DataFrameNormalizer``. These tests pin the
 normalizers, that they survive the host→child spec round-trip (the AmazonAds
 failure mode), and that results reconcile against the ported schemas.
@@ -46,7 +46,7 @@ class TestSource:
         for key in ("ads_stats", "campaigns_stats", "ads_stats_by_country", "videos_stats_by_os"):
             assert isinstance(by_key[key].normalizer, SnapchatStatsNormalizer), key
 
-    def test_metadata_assets_use_flattening_normalizer(self):
+    def test_entity_assets_use_flattening_normalizer(self):
         by_key = {type(a).key: a for a in _source().assets}
         for key in ("ads", "ad_squads", "campaigns", "ad_account"):
             norm = by_key[key].normalizer
@@ -90,7 +90,7 @@ class TestSpecRoundtripAndReconcile:
         # The custom subclass must reconstruct in the child (not degrade to the base).
         assert isinstance(self._child("ads_stats").normalizer, SnapchatStatsNormalizer)
 
-    def test_metadata_normalizer_survives_roundtrip(self):
+    def test_entity_normalizer_survives_roundtrip(self):
         norm = self._child("ads").normalizer
         assert isinstance(norm, DataFrameNormalizer) and not isinstance(norm, SnapchatStatsNormalizer)
         assert norm.flatten_max_level == 3 and norm.drop_na_columns is True
@@ -102,7 +102,7 @@ class TestSpecRoundtripAndReconcile:
         out = representation_for(normalized).conformer.reconcile(normalized, schemas.AdsStats)
         assert int(out.loc[0, "impressions"]) == 100
 
-    def test_ads_metadata_conforms_after_roundtrip(self):
+    def test_ads_entity_conforms_after_roundtrip(self):
         child = self._child("ads")
         normalized = child.normalizer.normalize([{"id": "ad1", "name": "My Ad"}])
         representation_for(normalized).conformer.reconcile(normalized, schemas.Ads)  # must not raise

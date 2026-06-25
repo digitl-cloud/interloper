@@ -3,7 +3,7 @@ from pydantic import Field
 
 
 class Ads(Schema):
-    """Facebook Ads metadata snapshot. One row per ad (not time-series). Captures ad configuration, status, and creative details. Join to the ads insights table on id=ad_id. Join to facebook_insights.posts on creative_effective_object_story_id=post_id to resolve paid vs organic split."""
+    """Facebook Ads entity snapshot. One row per ad (not time-series). Captures ad configuration, status, and creative details. Join to the ads insights table on id=ad_id. Join to facebook_insights.posts on creative_effective_object_story_id=post_id to resolve paid vs organic split."""
 
     id: str | None = Field(default=None, description="Unique ad identifier. Join key to ads insights table (ad_id).")
     account_id: str | None = Field(default=None, description="Ad account ID.")
