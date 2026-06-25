@@ -2,6 +2,76 @@
 
 <!-- version list -->
 
+## v0.21.0 (2026-06-25)
+
+### Bug Fixes
+
+- JSON-encode nested values for str-typed schema fields in conformer
+  ([`c548f10`](https://github.com/digitl-cloud/interloper/commit/c548f1028fb53fd19d443be42fe7a9920938ea3f))
+
+- **app**: Focus graph only on the open-panel asset, not source expansion
+  ([`7ae324b`](https://github.com/digitl-cloud/interloper/commit/7ae324b4bb33c5d6be8403145a1fff9b74f9e453))
+
+- **app**: Tune timeline success color, unclip 0 tick, align scrollbar
+  ([`9d046c6`](https://github.com/digitl-cloud/interloper/commit/9d046c66e8e816cd40192a4efcee29233e2f770f))
+
+### Code Style
+
+- **app**: Collapsible Materialization section with status + history
+  ([`08b75b7`](https://github.com/digitl-cloud/interloper/commit/08b75b755b6226fd5349a6f66456e59fb6956069))
+
+- **app**: Focus-on-select graph edges, blue selection, drop status dot
+  ([`d69a78b`](https://github.com/digitl-cloud/interloper/commit/d69a78be93b7c2ff96372846e4e9387569cae2bc))
+
+- **app**: Match graph node design — elevation, icon tiles, contrast
+  ([`138c29b`](https://github.com/digitl-cloud/interloper/commit/138c29bb8ac7c0c7d4f3c4378e0c6ac50ddf765f))
+
+- **app**: Match Latest materialization card to panel widgets
+  ([`768f482`](https://github.com/digitl-cloud/interloper/commit/768f482ea64e167feb744c5f133c2ca67e9db9c3))
+
+- **app**: Reorder asset-panel sections by relevance
+  ([`b5bd458`](https://github.com/digitl-cloud/interloper/commit/b5bd4588af40b2d2594476a0b455134084a77146))
+
+- **app**: Replace asset-panel metrics with a Latest materialization card
+  ([`7413356`](https://github.com/digitl-cloud/interloper/commit/7413356dc1a46a64773ca32a215bf41cb18d0dc5))
+
+- **app**: Show job name in Latest materialization meta
+  ([`6f4dc5c`](https://github.com/digitl-cloud/interloper/commit/6f4dc5ced4c142e34a98b6943731057126b377a9))
+
+- **app**: Unify graph toolbar controls, left-aligned
+  ([`344642d`](https://github.com/digitl-cloud/interloper/commit/344642df9fc1a0a8589cb066640eb608676d78eb))
+
+### Documentation
+
+- Agents run the dev app on a non-3000 port
+  ([`e2bfd3f`](https://github.com/digitl-cloud/interloper/commit/e2bfd3f8943c5a2eab18b95968bbf5878e743d5e))
+
+### Features
+
+- Detect and surface catalog-key drift for sources and assets
+  ([`0b68718`](https://github.com/digitl-cloud/interloper/commit/0b6871873d2ed78ab74eac875e932a0f7e774d80))
+
+- **app**: Add graph toolbar filters and Topology/Status view modes
+  ([`a88f9c6`](https://github.com/digitl-cloud/interloper/commit/a88f9c604bc28625d65d87777c3ca7153294cc9b))
+
+- **app**: Add List/Graph/Nodes expand modes, redesign source cards
+  ([`85a6132`](https://github.com/digitl-cloud/interloper/commit/85a61323e38b018351e4c094a44943c18618d807))
+
+- **app**: Enrich asset detail panel with status, metrics, runs
+  ([`178ff64`](https://github.com/digitl-cloud/interloper/commit/178ff648c23fc36a628798ea77b4563ca4f89400))
+
+- **app**: Rewrite ExecutionTimeline as a native Gantt chart
+  ([`6c47f24`](https://github.com/digitl-cloud/interloper/commit/6c47f242d7d7204c55ff4240a8e68e93caf54dca))
+
+### Refactoring
+
+- Drop "metadata" asset terminology in favor of "entity"
+  ([`5c85624`](https://github.com/digitl-cloud/interloper/commit/5c85624929ce79e5b02a62a45d00fe122c57fa4d))
+
+- **app**: Extract reusable GraphCanvas from AssetGraph
+  ([`b08b76e`](https://github.com/digitl-cloud/interloper/commit/b08b76e1169967c66a3bea72f7418f9987ae1a80))
+
+
 ## v0.20.0 (2026-06-23)
 
 ### Chores
