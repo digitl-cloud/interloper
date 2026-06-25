@@ -136,6 +136,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                                  :view-mode="viewMode"
                                  :status-filter="statusFilter"
                                  :show-new-source-button="false"
+                                 :selected-id="panelOpen ? selectedAsset?.id : null"
                                  @add-source="onCreateSource"
                                  @edit-source="onEditSource"
                                  @asset-click="onAssetClick"
