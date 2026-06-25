@@ -137,17 +137,30 @@ def test_asset_filter_lists_and_counts_only_that_asset(store: RunMixin) -> None:
     _seed(_make_events(150, asset_id=asset_a))
     _seed(_make_events(30, start=150, asset_id=asset_b))
 
-    assert store.count_events(run_id=_RUN_ID, asset_id=asset_a) == 150
-    assert store.count_events(run_id=_RUN_ID, asset_id=asset_b) == 30
+    assert store.count_events(run_id=_RUN_ID, asset_ids=[asset_a]) == 150
+    assert store.count_events(run_id=_RUN_ID, asset_ids=[asset_b]) == 30
 
     # Paging honours the filter: asset_a events past the first unfiltered
     # page are reachable through the filtered offsets.
-    page2 = store.list_events(run_id=_RUN_ID, asset_id=asset_a, limit=100, offset=100)
+    page2 = store.list_events(run_id=_RUN_ID, asset_ids=[asset_a], limit=100, offset=100)
     assert len(page2) == 50
     assert all(e.asset_id == asset_a for e in page2)
 
     # asset_b's events all live beyond the first 150 rows of the run, yet its
     # filtered first page surfaces them.
-    page_b = store.list_events(run_id=_RUN_ID, asset_id=asset_b, limit=100, offset=0)
+    page_b = store.list_events(run_id=_RUN_ID, asset_ids=[asset_b], limit=100, offset=0)
     assert len(page_b) == 30
     assert all(e.asset_id == asset_b for e in page_b)
+
+
+def test_asset_filter_accepts_multiple_assets(store: RunMixin) -> None:
+    asset_a, asset_b, asset_c = uuid4(), uuid4(), uuid4()
+    _seed(_make_events(10, asset_id=asset_a))
+    _seed(_make_events(5, start=10, asset_id=asset_b))
+    _seed(_make_events(7, start=15, asset_id=asset_c))
+
+    # A set of asset ids (e.g. every asset of one status) is the union of each.
+    assert store.count_events(run_id=_RUN_ID, asset_ids=[asset_a, asset_b]) == 15
+    page = store.list_events(run_id=_RUN_ID, asset_ids=[asset_a, asset_b], limit=100, offset=0)
+    assert len(page) == 15
+    assert all(e.asset_id in {asset_a, asset_b} for e in page)
