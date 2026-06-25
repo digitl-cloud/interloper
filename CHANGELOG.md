@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v0.22.0 (2026-06-25)
+
+### Features
+
+- Add All / Lifecycle / Errors / Logs tabs to run events
+  ([`6e8349a`](https://github.com/digitl-cloud/interloper/commit/6e8349a4ef1d2b8df73f081dc79bd40540c882f2))
+
+- Filter run assets and events by status
+  ([`3b42874`](https://github.com/digitl-cloud/interloper/commit/3b42874bfbdf83e8e822dc27b8454e30f827cbbb))
+
+- **app**: Add run summary header card
+  ([`b769104`](https://github.com/digitl-cloud/interloper/commit/b769104de1cde1eaaa2b45a6ecf58f7d84966984))
+
+
 ## v0.21.0 (2026-06-25)
 
 ### Bug Fixes
