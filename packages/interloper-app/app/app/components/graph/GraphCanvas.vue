@@ -25,6 +25,12 @@ const props = withDefaults(defineProps<{
     showNewSourceButton?: boolean
     /** Asset id whose detail panel is open — the only node that gets the selection highlight. */
     selectedId?: string | null
+    /** Top-level layout flow: 'TB' (catalog default) or 'LR' (run pipeline). */
+    direction?: 'TB' | 'LR'
+    /** Zoom out to fit the whole graph instead of snapping to 100% after layout. */
+    fitToContent?: boolean
+    /** Render assets as small status nodes (run graph) instead of catalog cards. */
+    compact?: boolean
 }>(), {
     editable: false,
     expandMode: 'nodes',
@@ -34,6 +40,9 @@ const props = withDefaults(defineProps<{
     materializingAssetIds: undefined,
     showNewSourceButton: true,
     selectedId: null,
+    direction: 'TB',
+    fitToContent: false,
+    compact: false,
 })
 
 const emit = defineEmits<{
@@ -64,9 +73,9 @@ function toggleSource(sourceId: string) {
     expandedSources.value = next
 }
 
-// Layout constants
-const ASSET_W = 220
-const ASSET_H = 160
+// Layout constants (assets render smaller in compact / run mode)
+const ASSET_W = props.compact ? 200 : 220
+const ASSET_H = props.compact ? 44 : 160
 const SRC_PADDING = 26
 const SRC_HEADER_H = 50
 const COLLAPSED_W = 244
@@ -223,7 +232,13 @@ const sourceLayout = computed(() => {
         })),
     ]
 
-    return layoutDag(layoutNodes, topLevelEdges.value, { gapX: 60, gapY: 60 })
+    return layoutDag(layoutNodes, topLevelEdges.value, {
+        // gapX = within-layer, gapY = between-layer. For the LR run graph that
+        // means a tight vertical stack within a rank, wider spacing between ranks.
+        gapX: props.compact ? 22 : 60,
+        gapY: props.compact ? 80 : 60,
+        direction: props.direction,
+    })
 })
 
 /** Structural edges (id/source/target/handles); styling + focus applied in `edges`. */
@@ -426,7 +441,7 @@ vueFlow.onNodesInitialized(() => {
     }
 
     vueFlow.fitView({ padding: 0.25 })
-    vueFlow.zoomTo(1)
+    if (!props.fitToContent) vueFlow.zoomTo(1)
 })
 
 // ── Connection plumbing provided to child node components ──
@@ -570,7 +585,15 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                                  @asset-click="(a, d, s) => emit('asset-click', a, d, s)" />
             </template>
             <template #node-asset="{ data }">
-                <GraphAssetNode :asset="data.asset"
+                <GraphRunNode v-if="compact"
+                              :asset="data.asset"
+                              :asset-defn="data.assetDefn"
+                              :status="data.status"
+                              :view-mode="viewMode"
+                              :selected="data.asset.id === selectedId"
+                              @view="emit('asset-click', data.asset, data.assetDefn, data.source)" />
+                <GraphAssetNode v-else
+                                :asset="data.asset"
                                 :asset-defn="data.assetDefn"
                                 :status="data.status"
                                 :view-mode="viewMode"
