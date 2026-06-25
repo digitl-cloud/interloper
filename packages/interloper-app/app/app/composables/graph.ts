@@ -123,58 +123,50 @@ export function useGraphLayout() {
 
         const sortedRanks = [...layers.keys()].sort((a, b) => a - b)
 
-        // Compute max layer width for centering
-        const layerWidths = sortedRanks.map((r) => {
+        const isVertical = direction === 'TB'
+        // Extent along the within-layer axis (X for TB, Y for LR) and the
+        // layer-advance axis (Y for TB, X for LR). Swapping these by direction
+        // is what makes 'LR' actually flow left-to-right.
+        const crossExtent = (n: LayoutNode) => (isVertical ? n.width : n.height)
+        const mainExtent = (n: LayoutNode) => (isVertical ? n.height : n.width)
+
+        // Cross-axis span of each layer, for centering.
+        const layerSpans = sortedRanks.map((r) => {
             const ids = layers.get(r)!
-            return ids.reduce((sum, id) => sum + nodeMap.get(id)!.width, 0)
+            return ids.reduce((sum, id) => sum + crossExtent(nodeMap.get(id)!), 0)
                 + (ids.length - 1) * gapX
         })
-        const maxLayerWidth = Math.max(...layerWidths)
+        const maxLayerSpan = Math.max(...layerSpans)
 
         // Position nodes
-        let totalHeight = 0
-        const isVertical = direction === 'TB'
+        let mainCursor = 0
 
         for (let i = 0; i < sortedRanks.length; i++) {
             const r = sortedRanks[i]!
             const ids = layers.get(r)!
-            const layerWidth = layerWidths[i]!
+            const layerSpan = layerSpans[i]!
 
-            // Center this layer within the max width
-            const offsetX = (maxLayerWidth - layerWidth) / 2
-
-            let cursor = offsetX
-            const maxNodeHeight = Math.max(...ids.map(id => nodeMap.get(id)!.height))
+            // Center this layer within the widest layer.
+            let cross = (maxLayerSpan - layerSpan) / 2
+            const maxMain = Math.max(...ids.map(id => mainExtent(nodeMap.get(id)!)))
 
             for (const id of ids) {
                 const node = nodeMap.get(id)!
-                if (isVertical) {
-                    positions.set(id, {
-                        x: cursor,
-                        y: totalHeight,
-                    })
-                }
-                else {
-                    positions.set(id, {
-                        x: totalHeight,
-                        y: cursor,
-                    })
-                }
-                cursor += node.width + gapX
+                if (isVertical) positions.set(id, { x: cross, y: mainCursor })
+                else positions.set(id, { x: mainCursor, y: cross })
+                cross += crossExtent(node) + gapX
             }
 
-            totalHeight += maxNodeHeight + gapY
+            mainCursor += maxMain + gapY
         }
 
         // Remove trailing gap
-        totalHeight -= gapY
-
-        const totalWidth = maxLayerWidth
+        mainCursor -= gapY
 
         return {
             positions,
-            width: isVertical ? totalWidth : totalHeight,
-            height: isVertical ? totalHeight : totalWidth,
+            width: isVertical ? maxLayerSpan : mainCursor,
+            height: isVertical ? mainCursor : maxLayerSpan,
         }
     }
 

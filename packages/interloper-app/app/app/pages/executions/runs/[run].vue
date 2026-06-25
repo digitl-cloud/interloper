@@ -16,6 +16,7 @@ const runsStore = useRunsStore()
 const eventsStore = useEventsStore()
 const assetExecutionsStore = useAssetExecutionsStore()
 const sourcesStore = useSourcesStore()
+const assetsStore = useAssetsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
@@ -65,6 +66,13 @@ const eventTabs: { key: EventCategory; label: string; icon: string }[] = [
 ]
 watch(eventCategory, cat => eventsStore.filterByEventTypes(eventTypesForCategory(cat)))
 
+// Top-panel view: the Gantt timeline or the run dependency graph.
+const view = ref<'timeline' | 'graph'>('timeline')
+const viewTabs: { key: 'timeline' | 'graph'; label: string; icon: string }[] = [
+    { key: 'timeline', label: 'Timeline', icon: 'i-lucide-gantt-chart' },
+    { key: 'graph', label: 'Graph', icon: 'i-lucide-workflow' },
+]
+
 const markerTime = computed(() => eventInFocus.value?.timestamp ? new Date(eventInFocus.value.timestamp) : null)
 const highlightedAsset = computed(() => eventInFocus.value?.asset_id ?? null)
 
@@ -94,6 +102,8 @@ onMounted(async () => {
             eventsStore.fetchForRun(runId),
             assetExecutionsStore.fetchForRun(runId),
             sourcesStore.sources.length === 0 ? sourcesStore.fetch() : Promise.resolve(),
+            // Asset dependencies back the Graph view's edges.
+            assetsStore.dependencies.length === 0 ? assetsStore.fetch() : Promise.resolve(),
             catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
         ])
         initialRun.value = fetchedRun
@@ -160,16 +170,36 @@ onUnmounted(() => {
                  aligned with the events table's scrollbar below. -->
             <SplitterPanel :default-size="40"
                            :min-size="15"
-                           class="overflow-hidden py-4 pl-4">
-                <ChartExecutionTimeline v-if="run?.status !== 'queued'"
+                           class="flex flex-col overflow-hidden pt-4 pl-4">
+                <div class="mb-2 mr-4 flex items-center gap-0.5 self-start rounded-md bg-elevated p-0.5">
+                    <button v-for="tab in viewTabs"
+                            :key="tab.key"
+                            type="button"
+                            class="flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors cursor-pointer"
+                            :class="view === tab.key
+                                ? 'bg-default text-default shadow-sm'
+                                : 'text-muted hover:text-default'"
+                            @click="view = tab.key">
+                        <UIcon :name="tab.icon"
+                               class="size-3.5" />
+                        {{ tab.label }}
+                    </button>
+                </div>
+
+                <div class="flex min-h-0 flex-1 flex-col">
+                    <div v-if="run?.status === 'queued'"
+                         class="flex h-full items-center justify-center text-muted">
+                        <span class="text-sm">Run is currently queued...</span>
+                    </div>
+                    <ChartExecutionTimeline v-else-if="view === 'timeline'"
+                                            v-model:selected-asset="selectedAsset"
+                                            :asset-executions="filteredAssetExecutions"
+                                            :status="(run?.status as ExecutionStatus)"
+                                            :marker-time="markerTime"
+                                            :highlighted-asset="highlightedAsset" />
+                    <ExecutionsRunGraph v-else
                                         v-model:selected-asset="selectedAsset"
-                                        :asset-executions="filteredAssetExecutions"
-                                        :status="(run?.status as ExecutionStatus)"
-                                        :marker-time="markerTime"
-                                        :highlighted-asset="highlightedAsset" />
-                <div v-else
-                     class="flex h-full items-center justify-center text-muted">
-                    <span class="text-sm">Run is currently queued...</span>
+                                        :run-id="runId" />
                 </div>
             </SplitterPanel>
 
