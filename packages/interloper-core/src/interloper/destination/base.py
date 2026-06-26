@@ -63,10 +63,11 @@ class Destination(Component):
         from interloper.utils.imports import get_object_path
 
         raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
-        res_types: dict[str, type[Resource]] = cls.__dict__.get("resource_types", {})
-        # Validate against the resolved resource map (annotation-declared slots
-        # are not in ``__dict__``); matches how the resolver finds the connection.
-        validate_fetch_field_providers(cls, cls.resource_types)
+        # Resolved resource map (includes annotation-declared slots, not just
+        # ``__dict__``) so the DestinationDefinition's ``resources`` and its
+        # FetchField pickers work for both declaration styles.
+        res_types: dict[str, type[Resource]] = cls.resource_types
+        validate_fetch_field_providers(cls, res_types)
         return DestinationDefinition(
             kind=cls.kind,
             key=cls.key,

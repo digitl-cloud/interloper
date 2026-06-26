@@ -433,12 +433,14 @@ class Source(Component):
         """
         from interloper.resource.fields import strip_internal_fields
 
-        res_types: dict[str, type[Resource]] = cls.__dict__.get("resource_types", {})
-        # Validate against the *resolved* resource map (``cls.resource_types``),
-        # which includes slots declared via typed annotations (``connection:
-        # XConnection``) — not just those in ``__dict__`` — matching how the
-        # resolver looks up the connection class at runtime.
-        validate_fetch_field_providers(cls, cls.resource_types)
+        # Use the *resolved* resource map: it includes slots declared via typed
+        # annotations (``connection: XConnection``), not just those set in
+        # ``__dict__`` by the ``@source(resources=...)`` decorator. This is what
+        # ``Catalog.from_paths`` and the FetchField resolver read, so the
+        # SourceDefinition's ``resources`` (and the connection step / fetch
+        # fields the frontend builds from it) stay consistent for both styles.
+        res_types: dict[str, type[Resource]] = cls.resource_types
+        validate_fetch_field_providers(cls, res_types)
 
         # Build config schema from Source's own fields, excluding framework
         # internals (resources, assets, etc.) and base Source fields.
