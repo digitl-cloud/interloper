@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from abc import abstractmethod
 from collections.abc import Callable
 from functools import cache
 from importlib.metadata import entry_points
@@ -11,10 +13,10 @@ from pydantic import Field, PrivateAttr
 
 from interloper.component import Component
 from interloper.errors import ConfigError, PartitionError, RunnerError
+from interloper.events import EventBus
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
-    from interloper.runner.sync_runner import SyncRunner
 from interloper.events.event import Event
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.results import ExecutionStatus, RunResult
@@ -24,7 +26,7 @@ _ENTRY_POINT_GROUP = "interloper.runners"
 
 
 @cache
-def runners() -> dict[str, type[SyncRunner]]:
+def runners() -> dict[str, type[Runner]]:
     """Load the runner registry from installed entry points.
 
     Every runner — including the built-ins — registers through the
@@ -39,9 +41,9 @@ def runners() -> dict[str, type[SyncRunner]]:
 
 
 def build_runner(
-    runner_type: str = "multi_thread",
+    runner_type: str = "async",
     runner_config: dict[str, Any] | None = None,
-) -> tuple[type[SyncRunner], dict[str, Any]]:
+) -> tuple[type[Runner], dict[str, Any]]:
     """Resolve a runner type key to a concrete class and forward its kwargs.
 
     Args:
@@ -66,9 +68,13 @@ def build_runner(
 class Runner(Component):
     """Abstract base class for all runners.
 
-    Provides shared config, state management, lifecycle hooks, and
-    preflight validation.  Subclasses implement their own ``run()``
-    method (sync or async) and the scheduling primitives.
+    Async-native: :meth:`run` is a coroutine. It owns the ``on_event``
+    subscription lifecycle and delegates the actual DAG walk to the
+    subclass :meth:`_run`. ``await`` it from async code, or drive it from a
+    sync entrypoint with ``asyncio.run``::
+
+        result = await runner.run(dag)        # async
+        result = asyncio.run(runner.run(dag))  # sync edge
     """
 
     fail_fast: bool = False
@@ -91,6 +97,48 @@ class Runner(Component):
         if self._state is None:
             raise RunnerError("State not initialized")
         return self._state
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    async def run(
+        self,
+        dag: DAG,
+        partition_or_window: Partition | PartitionWindow | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> RunResult:
+        """Materialize the DAG and return the result.
+
+        Subscribes the ``on_event`` handler (if any) for the duration of the
+        run, delegates to :meth:`_run`, then flushes pending events and
+        unsubscribes — so every emitted event is delivered before returning.
+
+        Args:
+            dag: The DAG to execute.
+            partition_or_window: Partition or window to scope the run.
+            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
+
+        Returns:
+            A RunResult summarizing the execution outcome.
+        """
+        if self.on_event is not None:
+            EventBus.subscribe(self.on_event)
+        try:
+            return await self._run(dag, partition_or_window, metadata)
+        finally:
+            if self.on_event is not None:
+                await asyncio.to_thread(EventBus.flush, 5.0)
+                EventBus.unsubscribe(self.on_event)
+
+    @abstractmethod
+    async def _run(
+        self,
+        dag: DAG,
+        partition_or_window: Partition | PartitionWindow | None,
+        metadata: dict[str, Any] | None,
+    ) -> RunResult:
+        """Walk the DAG and return the result (implemented by subclasses)."""
 
     # ------------------------------------------------------------------
     # Hooks

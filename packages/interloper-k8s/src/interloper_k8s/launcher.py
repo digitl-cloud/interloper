@@ -79,7 +79,7 @@ class KubernetesLauncher(Launcher):
         postgres_database: str,
         image: str,
         namespace: str = "default",
-        runner_type: str = "multi_thread",
+        runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
         service_account_name: str | None = None,
         image_pull_policy: str | None = None,

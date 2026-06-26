@@ -1,5 +1,6 @@
 """Example script demonstrating serial backfiller."""
 
+import asyncio
 import datetime as dt
 
 import dotenv
@@ -14,6 +15,5 @@ source = DemoSource(destination=destination)
 dag = il.DAG(source)
 partition = il.TimePartition(value=dt.date(2025, 1, 1))
 
-with il.SerialRunner(on_event=print) as runner:
-    result = runner.run(dag, partition)
+result = asyncio.run(il.SerialRunner(on_event=print).run(dag, partition))
 print(result)

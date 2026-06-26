@@ -30,7 +30,7 @@ launcher:
   #   image_pull_policy: Never
 
 runner:
-  type: multi_thread
+  type: async
 
   # type: docker
   # config:

@@ -51,11 +51,17 @@ def asset(
 ) -> type[Asset] | Callable[..., type[Asset]]:
     """Create an Asset subclass from a decorated function.
 
-    Can be used bare or with arguments::
+    The decorated function may be sync or ``async``. Sync functions are
+    offloaded to a worker thread at materialization time; ``async`` functions
+    are awaited natively on the event loop::
 
         @asset
         def users(**kwargs):
             return fetch_users()
+
+        @asset
+        async def events(**kwargs):
+            return await fetch_events()
 
         @asset(resources={"config": MyConfig, "connection": MyConn})
         def other(config: MyConfig, connection: MyConn) -> Any:
@@ -124,26 +130,39 @@ def _build_asset_class(
     fn_params = list(fn_sig.parameters.keys())
     is_method = len(fn_params) > 0 and fn_params[0] == "self"
 
+    is_async = inspect.iscoroutinefunction(fn)
+
     if is_method:
         # Method asset: signature already has `self`, keep as-is for
         # resource inference. The `data()` wrapper passes the source
         # instance as the first positional arg.
         data_sig = fn_sig
 
-        def data(self: Asset, **kwargs: Any) -> Any:
-            source = self._source
-            return fn(source, **kwargs)
+        if is_async:
 
-        data.__signature__ = data_sig  # ty: ignore[unresolved-attribute]
+            async def data(self: Asset, **kwargs: Any) -> Any:
+                return await fn(self._source, **kwargs)
+        else:
+
+            def data(self: Asset, **kwargs: Any) -> Any:
+                return fn(self._source, **kwargs)
+
+        data.__signature__ = data_sig  # ty: ignore[invalid-assignment]
     else:
         # Standalone function asset: prepend `self` for bound method compat.
         self_param = inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)
         data_sig = fn_sig.replace(parameters=[self_param, *fn_sig.parameters.values()])
 
-        def data(self: Asset, **kwargs: Any) -> Any:
-            return fn(**kwargs)
+        if is_async:
 
-        data.__signature__ = data_sig  # ty: ignore[unresolved-attribute]
+            async def data(self: Asset, **kwargs: Any) -> Any:
+                return await fn(**kwargs)
+        else:
+
+            def data(self: Asset, **kwargs: Any) -> Any:
+                return fn(**kwargs)
+
+        data.__signature__ = data_sig  # ty: ignore[invalid-assignment]
 
     namespace: dict[str, Any] = {"data": data, **classvars, **fields}
     namespace["__module__"] = fn.__module__

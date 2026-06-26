@@ -3,7 +3,6 @@
 from interloper.runner.async_runner import AsyncRunner
 from interloper.runner.base import Runner, build_runner
 from interloper.runner.multi_process import MultiProcessRunner
-from interloper.runner.multi_thread import MultiThreadRunner
 from interloper.runner.results import AssetExecutionInfo, ExecutionStatus, RunResult
 from interloper.runner.serial import SerialRunner
 from interloper.runner.state import RunState
@@ -14,7 +13,6 @@ __all__ = [
     "AsyncRunner",
     "ExecutionStatus",
     "MultiProcessRunner",
-    "MultiThreadRunner",
     "RunResult",
     "RunState",
     "Runner",

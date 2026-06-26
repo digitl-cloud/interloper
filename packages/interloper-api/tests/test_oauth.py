@@ -9,7 +9,6 @@ environment variables (``<PROVIDER>_CLIENT_ID`` / ``_CLIENT_SECRET`` /
 
 from __future__ import annotations
 
-import asyncio
 import json
 from types import SimpleNamespace
 from uuid import uuid4
@@ -129,15 +128,12 @@ def _cfg(monkeypatch: pytest.MonkeyPatch, provider: str) -> oauth_module._Provid
     return oauth_module._ProviderConfig(provider)
 
 
-def test_exchange_post_json(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_exchange_post_json(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
     spec = provider("amazon")
 
-    async def run() -> dict:
-        async with _capture_client(captured) as client:
-            return await oauth_module._exchange(client, spec, _cfg(monkeypatch, "amazon"), "the-code")
-
-    result = asyncio.run(run())
+    async with _capture_client(captured) as client:
+        result = await oauth_module._exchange(client, spec, _cfg(monkeypatch, "amazon"), "the-code")
 
     req = captured[0]
     assert req.method == "POST"
@@ -153,15 +149,12 @@ def test_exchange_post_json(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result == {"refresh_token": "rt"}
 
 
-def test_exchange_post_form(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_exchange_post_form(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
     spec = provider("linkedin")
 
-    async def run() -> None:
-        async with _capture_client(captured) as client:
-            await oauth_module._exchange(client, spec, _cfg(monkeypatch, "linkedin"), "the-code")
-
-    asyncio.run(run())
+    async with _capture_client(captured) as client:
+        await oauth_module._exchange(client, spec, _cfg(monkeypatch, "linkedin"), "the-code")
 
     req = captured[0]
     assert req.method == "POST"
@@ -170,15 +163,12 @@ def test_exchange_post_form(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "code=the-code" in req.content.decode()
 
 
-def test_exchange_get_omits_grant_type(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_exchange_get_omits_grant_type(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
     spec = provider("facebook")
 
-    async def run() -> None:
-        async with _capture_client(captured) as client:
-            await oauth_module._exchange(client, spec, _cfg(monkeypatch, "facebook"), "the-code")
-
-    asyncio.run(run())
+    async with _capture_client(captured) as client:
+        await oauth_module._exchange(client, spec, _cfg(monkeypatch, "facebook"), "the-code")
 
     req = captured[0]
     assert req.method == "GET"
@@ -186,28 +176,22 @@ def test_exchange_get_omits_grant_type(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "grant_type" not in req.url.params
 
 
-def test_exchange_basic_auth_header(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_exchange_basic_auth_header(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
     spec = provider("pinterest")
 
-    async def run() -> None:
-        async with _capture_client(captured) as client:
-            await oauth_module._exchange(client, spec, _cfg(monkeypatch, "pinterest"), "the-code")
-
-    asyncio.run(run())
+    async with _capture_client(captured) as client:
+        await oauth_module._exchange(client, spec, _cfg(monkeypatch, "pinterest"), "the-code")
 
     assert captured[0].headers["Authorization"].startswith("Basic ")
 
 
-def test_exchange_renamed_params(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_exchange_renamed_params(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
     spec = provider("tiktok")
 
-    async def run() -> None:
-        async with _capture_client(captured) as client:
-            await oauth_module._exchange(client, spec, _cfg(monkeypatch, "tiktok"), "the-code")
-
-    asyncio.run(run())
+    async with _capture_client(captured) as client:
+        await oauth_module._exchange(client, spec, _cfg(monkeypatch, "tiktok"), "the-code")
 
     body = json.loads(captured[0].content)
     assert body == {"auth_code": "the-code", "app_id": "cid", "secret": "cs"}

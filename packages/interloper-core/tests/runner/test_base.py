@@ -6,6 +6,7 @@ import pytest
 
 from interloper.errors import ConfigError
 from interloper.runner import build_runner
+from interloper.runner.async_runner import AsyncRunner
 from interloper.runner.base import runners
 from interloper.runner.serial import SerialRunner
 
@@ -16,10 +17,11 @@ class TestRegistry:
     def test_all_workspace_runners_are_discovered(self):
         # Built-ins register through core's own pyproject; docker/k8s through
         # theirs — asserting the discovery end to end.
-        assert {"serial", "multi_thread", "multi_process", "docker", "kubernetes"} <= set(runners())
+        assert {"async", "serial", "multi_process", "docker", "kubernetes"} <= set(runners())
 
     def test_registry_maps_keys_to_classes(self):
         registry = runners()
+        assert registry["async"] is AsyncRunner
         assert registry["serial"] is SerialRunner
         assert registry["docker"].__name__ == "DockerRunner"
         assert registry["kubernetes"].__name__ == "KubernetesRunner"
@@ -30,15 +32,25 @@ class TestRegistry:
         registry = runners()
         assert registry["k8s"] is registry["kubernetes"]
 
+    def test_serial_is_the_async_engine_with_one_slot(self):
+        # In-process execution is the single async-native engine; ``serial``
+        # is simply that engine bounded to one concurrency slot.
+        assert issubclass(SerialRunner, AsyncRunner)
+        assert SerialRunner().max_workers == 1
+
 
 class TestBuildRunner:
     """Key resolution and kwargs forwarding."""
 
     def test_resolves_class_and_forwards_kwargs(self):
-        cls, kwargs = build_runner("serial", {"fail_fast": True})
-        assert cls is SerialRunner
-        assert kwargs == {"fail_fast": True}
+        cls, kwargs = build_runner("async", {"max_workers": 2})
+        assert cls is AsyncRunner
+        assert kwargs == {"max_workers": 2}
+
+    def test_default_type_is_async(self):
+        cls, _ = build_runner()
+        assert cls is AsyncRunner
 
     def test_unknown_type_raises_actionable_error(self):
-        with pytest.raises(ConfigError, match=r"Unknown runner: 'ray'.*available.*docker.*serial"):
+        with pytest.raises(ConfigError, match=r"Unknown runner: 'ray'.*available.*async.*serial"):
             build_runner("ray")

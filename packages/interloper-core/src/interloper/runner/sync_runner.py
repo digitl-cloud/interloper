@@ -8,11 +8,8 @@ from abc import abstractmethod
 from concurrent.futures import FIRST_COMPLETED, Future, wait
 from typing import TYPE_CHECKING, Any
 
-from typing_extensions import Self
-
 from interloper.asset.base import Asset
 from interloper.errors import RunnerError
-from interloper.events import EventBus
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
@@ -22,43 +19,35 @@ if TYPE_CHECKING:
 
 
 class SyncRunner(Runner):
-    """Base class for synchronous runners backed by ``concurrent.futures``.
+    """Base class for ``concurrent.futures``-backed, out-of-process runners.
 
-    Subclasses implement ``_submit_asset`` to submit work to their executor
-    and ``_handle_future_result`` to interpret what the future returned.
-    The DAG walk loop, context manager, and error handling are shared.
+    Backs the runners whose unit of execution is a separate process or
+    container — :class:`MultiProcessRunner`, ``DockerRunner``,
+    ``KubernetesRunner`` — where the event loop lives at the process/pod
+    boundary, not in this scheduler. In-process DAG walking is handled by
+    the async-native :class:`~interloper.runner.async_runner.AsyncRunner`.
 
-    Usage::
-
-        with MyRunner(on_event=log_event) as runner:
-            result = runner.run(dag)
+    These runners are inherently blocking (they poll futures / Jobs), so the
+    async-native :meth:`~interloper.runner.base.Runner.run` contract is
+    satisfied by offloading the blocking DAG walk to a worker thread. Subclasses
+    implement ``_submit_asset`` to submit work to their executor and
+    ``_handle_completed`` to interpret what the future returned.
     """
 
-    # ------------------------------------------------------------------
-    # Sync context manager
-    # ------------------------------------------------------------------
-
-    def __enter__(self) -> Self:
-        """Subscribe the ``on_event`` handler if provided.
+    async def _run(
+        self,
+        dag: DAG,
+        partition_or_window: Partition | PartitionWindow | None,
+        metadata: dict[str, Any] | None,
+    ) -> RunResult:
+        """Offload the blocking DAG walk to a worker thread.
 
         Returns:
-            The runner instance.
+            A RunResult summarizing the execution outcome.
         """
-        if self.on_event is not None:
-            EventBus.subscribe(self.on_event)
-        return self
+        return await asyncio.to_thread(self._run_blocking, dag, partition_or_window, metadata)
 
-    def __exit__(self, *_: object) -> None:
-        """Unsubscribe the handler and flush pending events."""
-        if self.on_event is not None:
-            EventBus.flush(timeout=5.0)
-            EventBus.unsubscribe(self.on_event)
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
-    def run(
+    def _run_blocking(
         self,
         dag: DAG,
         partition_or_window: Partition | PartitionWindow | None = None,
@@ -140,25 +129,6 @@ class SyncRunner(Runner):
     # ------------------------------------------------------------------
     # Shared execution helpers
     # ------------------------------------------------------------------
-
-    def _execute_asset(
-        self,
-        asset: Asset,
-        partition_or_window: Partition | PartitionWindow | None = None,
-    ) -> Any:
-        """Execute a single asset synchronously via ``asyncio.run``.
-
-        Returns:
-            The materialization result.
-        """
-        effective_partition = asset.effective_partition(partition_or_window)
-        return asyncio.run(
-            asset.materialize(
-                partition_or_window=effective_partition,
-                dag=self.state.dag,
-                metadata=self.state.metadata,
-            )
-        )
 
     def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
         """Process a completed future and update state."""

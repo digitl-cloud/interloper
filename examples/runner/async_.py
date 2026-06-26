@@ -17,8 +17,7 @@ partition = il.TimePartition(value=dt.date(2025, 1, 1))
 
 
 async def run() -> None:
-    async with il.AsyncRunner(max_workers=2, on_event=print) as runner:
-        result = await runner.run(dag, partition)
+    result = await il.AsyncRunner(max_workers=2, on_event=print).run(dag, partition)
     print(result)
 
 

@@ -7,11 +7,9 @@ import traceback
 from typing import TYPE_CHECKING, Any
 
 from pydantic import PrivateAttr
-from typing_extensions import Self
 
 from interloper.asset.base import Asset
 from interloper.errors import RunnerError
-from interloper.events import EventBus
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
@@ -21,22 +19,24 @@ if TYPE_CHECKING:
 
 
 class AsyncRunner(Runner):
-    """Async-native runner using ``asyncio.Semaphore`` for bounded concurrency.
+    """Async-native, in-process runner — the single DAG-walking engine.
 
-    Replaces both ``SerialRunner`` and ``MultiThreadRunner`` with a single
-    implementation:
+    Schedules ready assets as ``asyncio`` tasks bounded by an
+    ``asyncio.Semaphore``. It subsumes both serial and thread-pool execution:
 
     - ``AsyncRunner(max_workers=1)`` — serial execution (deterministic ordering).
     - ``AsyncRunner(max_workers=4)`` — concurrent execution (default).
 
     Sync ``data()`` functions are automatically offloaded to threads via
     ``asyncio.to_thread``, while async ``data()`` functions run natively
-    on the event loop.
+    on the event loop. Either way, exactly one event loop is created per
+    run (not per asset)::
 
-    Usage::
+        # async
+        result = await AsyncRunner(max_workers=2, on_event=log_event).run(dag)
 
-        async with AsyncRunner(max_workers=2, on_event=log_event) as runner:
-            result = await runner.run(dag)
+        # sync edge (scripts, CLI, scheduler worker)
+        result = asyncio.run(AsyncRunner(on_event=log_event).run(dag))
     """
 
     max_workers: int = 4
@@ -45,31 +45,7 @@ class AsyncRunner(Runner):
 
     _semaphore: asyncio.Semaphore | None = PrivateAttr(default=None)
 
-    # ------------------------------------------------------------------
-    # Async context manager
-    # ------------------------------------------------------------------
-
-    async def __aenter__(self) -> Self:
-        """Subscribe the ``on_event`` handler if provided.
-
-        Returns:
-            The runner instance.
-        """
-        if self.on_event is not None:
-            EventBus.subscribe(self.on_event)
-        return self
-
-    async def __aexit__(self, *_: object) -> None:
-        """Unsubscribe the handler and flush pending events."""
-        if self.on_event is not None:
-            await EventBus.aflush(timeout=5.0)
-            EventBus.unsubscribe(self.on_event)
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
-    async def run(
+    async def _run(
         self,
         dag: DAG,
         partition_or_window: Partition | PartitionWindow | None = None,
