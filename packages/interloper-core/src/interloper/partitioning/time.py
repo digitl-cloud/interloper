@@ -9,6 +9,39 @@ from dataclasses import dataclass
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 
 
+def coerce_to_date(value: object) -> dt.date:
+    """Coerce a partition value to a ``datetime.date``.
+
+    Accepts a ``date``, a ``datetime`` (its date part is used), or an ISO-8601
+    date string. Anything else raises ``TypeError``.
+
+    Args:
+        value: The partition value to coerce.
+
+    Returns:
+        The value as a ``datetime.date``.
+
+    Raises:
+        TypeError: If the value cannot be interpreted as a date.
+    """
+    # `datetime` is a subclass of `date`, so check it first.
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    if isinstance(value, str):
+        try:
+            return dt.date.fromisoformat(value)
+        except ValueError as e:
+            raise TypeError(
+                f"Could not parse partition value {value!r} as a date: expected an ISO-8601 date string (YYYY-MM-DD)."
+            ) from e
+    raise TypeError(
+        f"Time partition value must be a `datetime.date` or an ISO-8601 date string, got {type(value).__name__}: "
+        f"{value!r}."
+    )
+
+
 def date_range(start_date: dt.date, end_date: dt.date, reversed: bool = False) -> Generator[dt.date, None, None]:
     """Yield each date from *start_date* to *end_date* inclusive.
 
@@ -39,6 +72,12 @@ class TimePartition(Partition):
     """A single date-based partition."""
 
     value: dt.date
+
+    def __post_init__(self) -> None:
+        """Normalize the value to a ``datetime.date``, coercing strings/datetimes."""
+        coerced = coerce_to_date(self.value)
+        if coerced is not self.value:
+            object.__setattr__(self, "value", coerced)
 
     def __repr__(self) -> str:
         """Return ISO-formatted date string."""
