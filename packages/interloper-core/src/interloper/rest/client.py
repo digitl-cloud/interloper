@@ -64,3 +64,45 @@ class RESTClient(httpx.Client):
             raise ConfigError("RESTClient has no paginator configured")
 
         yield from self._paginator.paginate(self, path)
+
+
+class AsyncRESTClient(httpx.AsyncClient):
+    """Async counterpart to :class:`RESTClient` for IO-bound extraction.
+
+    Same construction surface as :class:`RESTClient` so a connection can expose
+    a sync ``client`` and an async ``aclient`` interchangeably. Use it from an
+    ``async def data()`` to overlap independent requests (paginated pages,
+    per-entity calls) with ``asyncio.gather`` / :func:`interloper.utils.bounded_gather`.
+
+    Connector-specific pagination (cursor following, ``total_page`` discovery)
+    lives in the connector; this client is just an authenticated ``httpx``
+    session with the framework's construction conventions.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        auth: httpx.Auth | None = None,
+        timeout: float | None = None,
+        headers: dict[str, str] | None = None,
+        params: dict[str, str] | None = None,
+        **kwargs: Any,
+    ):
+        """Initialize the async REST client.
+
+        Args:
+            base_url: The base URL of the API.
+            auth: The authentication method (httpx.Auth instance).
+            timeout: The timeout for requests.
+            headers: The headers to include in requests.
+            params: The parameters to include in requests.
+            **kwargs: Additional keyword arguments to pass to httpx.AsyncClient.
+        """
+        super().__init__(
+            base_url=base_url,
+            auth=auth,
+            timeout=timeout,
+            headers=headers,
+            params=params,
+            **kwargs,
+        )

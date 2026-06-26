@@ -37,15 +37,24 @@ from interloper.resource.fields import (
     fetch_field_provider,
     is_fetch_field_provider,
 )
-from interloper.rest import HTTPBearerAuth, OAuth2Auth, OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth, RESTClient
+from interloper.rest import (
+    AsyncRESTClient,
+    HTTPBearerAuth,
+    OAuth2Auth,
+    OAuth2ClientCredentialsAuth,
+    OAuth2RefreshTokenAuth,
+    RESTClient,
+)
 from interloper.runner import AsyncRunner, MultiProcessRunner, Runner, RunResult, SerialRunner
 from interloper.schema import Schema, schema
 from interloper.source import Source, SourceDefinition, source
+from interloper.utils import bounded_gather
 
 __all__ = [
     "DAG",
     "Asset",
     "AssetDefinition",
+    "AsyncRESTClient",
     "AsyncRunner",
     "CSVDestination",
     "Catalog",
@@ -99,6 +108,7 @@ __all__ = [
     "TimePartitionConfig",
     "TimePartitionWindow",
     "asset",
+    "bounded_gather",
     "config",
     "connection",
     "destination",

@@ -27,9 +27,10 @@ class TiktokAdsConnection(il.Connection):
     access_token: str = il.SecretField(description="TikTok Ads API access token")
 
     @cached_property
-    def client(self) -> il.RESTClient:
+    def aclient(self) -> il.AsyncRESTClient:
         # The TikTok Business API authenticates via the "Access-Token" header, not Bearer.
-        return il.RESTClient(BASE_URL, headers={"Access-Token": self.access_token})
+        # Static-header auth drops straight into the async client.
+        return il.AsyncRESTClient(BASE_URL, headers={"Access-Token": self.access_token})
 
     @il.fetch_field_provider
     async def advertisers(self) -> list[dict[str, str]]:
