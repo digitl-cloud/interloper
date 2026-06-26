@@ -683,8 +683,7 @@ class TestDefinition:
 
         assert properties["project"]["x-widget"] == "fetch"
         assert properties["project"]["x-fetch"] == {
-            "endpoint": "google-cloud/projects",
-            "depends_on": ["connection"],
+            "provider": "connection.projects",
             "label_key": "name",
             "value_key": "project_id",
         }

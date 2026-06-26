@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from interloper.catalog.base import Catalog
 from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
 from interloper_db.models import Resource
@@ -84,7 +85,7 @@ def _load_authorized_resource(resource_id: UUID, user: Profile, store: Store, *,
 
 @router.get("/kinds")
 def list_resource_kinds(
-    catalog: dict[str, Any] = Depends(get_catalog),
+    catalog: Catalog = Depends(get_catalog),
 ) -> list[str]:
     """Return distinct resource kinds from the catalog.
 
@@ -92,7 +93,7 @@ def list_resource_kinds(
     (source, asset, destination). Currently this yields kinds like
     ``connection`` and ``config``.
     """
-    kinds = {defn["kind"] for defn in catalog.values() if defn.get("kind") and defn["kind"] not in _NON_RESOURCE_KINDS}
+    kinds = {defn.kind for defn in catalog.components.values() if defn.kind and defn.kind not in _NON_RESOURCE_KINDS}
     return sorted(kinds)
 
 

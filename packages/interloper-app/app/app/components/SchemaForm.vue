@@ -20,8 +20,8 @@
 import type { TabsItem } from '@nuxt/ui'
 
 interface FetchMeta {
-    endpoint: string
-    depends_on: string[]
+    /** `<slot>.<method>` resolved via `/external/resolve`. */
+    provider: string
     label_key: string
     value_key: string
 }
@@ -50,11 +50,18 @@ interface JsonSchema {
 
 const props = defineProps<{
     schema: JsonSchema
+    /**
+     * Catalog key of the component this schema belongs to (e.g. the source key).
+     * Required for provider-backed `x-fetch` fields, which resolve via
+     * `/external/resolve` using this key.
+     */
+    componentKey?: string
     /** Fields to exclude from the form (e.g. 'id'). */
     exclude?: string[]
     /**
      * Resource data from sibling steps, keyed by slot name.
-     * Used by `x-fetch` fields whose `depends_on` references a resource slot.
+     * Used by `x-fetch` fields, which resolve options from the resource in
+     * their provider's slot.
      * Each value is the resource's stored `data` object (credentials, config, etc.).
      * Takes precedence over `resourceIds` for the same slot.
      */
@@ -198,27 +205,28 @@ function updateFetchState(fieldKey: string, patch: Partial<{ options: { label: s
     }
 }
 
+/** The resource slot a fetch field depends on — the provider's `<slot>`. */
+function fetchSlot(meta: FetchMeta): string {
+    return meta.provider.split('.')[0] ?? ''
+}
+
 /** Fetch options for a single x-fetch field. */
 async function fetchOptions(fieldKey: string, meta: FetchMeta) {
     ensureFetchState(fieldKey)
 
-    // Build request body from depends_on resource data + already-filled form fields
-    const body: Record<string, unknown> = {}
-    for (const dep of meta.depends_on) {
-        const resourceData = mergedResourceContext.value[dep]
-        if (resourceData) {
-            Object.assign(body, resourceData)
-        }
-        else if (data.value[dep] !== undefined && data.value[dep] !== '') {
-            body[dep] = data.value[dep]
-        }
-    }
+    // Backend instantiates the resource in the provider's slot and calls the
+    // provider method. Credentials are sent keyed by slot.
+    const slot = fetchSlot(meta)
+    const deps: Record<string, unknown> = {}
+    const resourceData = mergedResourceContext.value[slot]
+    if (resourceData) deps[slot] = resourceData
+    else if (data.value[slot] !== undefined && data.value[slot] !== '') deps[slot] = data.value[slot]
 
     updateFetchState(fieldKey, { loading: true, error: null })
     try {
-        const result = await apiFetch<Record<string, unknown>[]>(`/external/${meta.endpoint}`, {
+        const result = await apiFetch<Record<string, unknown>[]>('/external/resolve', {
             method: 'POST',
-            body,
+            body: { component_key: props.componentKey, field: fieldKey, deps },
         })
         const items = Array.isArray(result) ? result : []
         updateFetchState(fieldKey, {
@@ -239,29 +247,25 @@ async function fetchOptions(fieldKey: string, meta: FetchMeta) {
 }
 
 /**
- * Check if all dependencies for a fetch field are satisfied.
+ * Check if the dependency (the provider's slot) for a fetch field is satisfied.
  */
 function fetchDepsReady(meta: FetchMeta): boolean {
-    for (const dep of meta.depends_on) {
-        if (mergedResourceContext.value[dep]) continue
-        if (data.value[dep] !== undefined && data.value[dep] !== '') continue
-        return false
-    }
-    return true
+    const slot = fetchSlot(meta)
+    if (mergedResourceContext.value[slot]) return true
+    if (data.value[slot] !== undefined && data.value[slot] !== '') return true
+    return false
 }
 
 /**
- * Build a fingerprint for a fetch field's dependencies.
- * Used to detect when deps actually change and a re-fetch is needed.
+ * Build a fingerprint for a fetch field's dependency.
+ * Used to detect when the slot's value actually changes and a re-fetch is needed.
  */
 function depsFingerprint(meta: FetchMeta): string {
-    const parts: string[] = []
-    for (const dep of meta.depends_on) {
-        const resourceData = mergedResourceContext.value[dep]
-        if (resourceData) parts.push(`${dep}:resource`)
-        else if (data.value[dep] !== undefined) parts.push(`${dep}:${data.value[dep]}`)
-    }
-    return parts.join('|')
+    const slot = fetchSlot(meta)
+    const resourceData = mergedResourceContext.value[slot]
+    if (resourceData) return `${slot}:resource`
+    if (data.value[slot] !== undefined) return `${slot}:${data.value[slot]}`
+    return ''
 }
 
 /** Track the last fingerprint per field to avoid redundant fetches. */

@@ -1,8 +1,8 @@
-"""External provider API routes for FetchField resolution.
+"""External provider API routes.
 
-Each submodule contains routes for a specific external provider.
-The combined ``router`` is re-exported here so ``app.py`` can
-import it unchanged.
+FetchField options are resolved by a single generic endpoint (``resolve``);
+there are no per-provider routes. Each connector exposes its lookups as
+``@fetch_field_provider`` methods on its connection class, which the resolver calls.
 """
 
 from __future__ import annotations
@@ -34,23 +34,7 @@ def handle_error(error: Exception, context: str) -> None:
     raise HTTPException(status_code=500, detail=f"Failed {context}.")
 
 
-# Import and register sub-routers after helpers are defined.
-from interloper_api.routes.external.amazon_ads import sub_router as amazon_ads_router  # noqa: E402
-from interloper_api.routes.external.criteo import sub_router as criteo_router  # noqa: E402
-from interloper_api.routes.external.facebook_ads import sub_router as facebook_ads_router  # noqa: E402
-from interloper_api.routes.external.google_ads import sub_router as google_ads_router  # noqa: E402
-from interloper_api.routes.external.google_cloud import sub_router as google_cloud_router  # noqa: E402
-from interloper_api.routes.external.impact import sub_router as impact_router  # noqa: E402
-from interloper_api.routes.external.pinterest_ads import sub_router as pinterest_ads_router  # noqa: E402
-from interloper_api.routes.external.snapchat_ads import sub_router as snapchat_ads_router  # noqa: E402
-from interloper_api.routes.external.tiktok_ads import sub_router as tiktok_ads_router  # noqa: E402
+# Import and register the resolver after helpers are defined.
+from interloper_api.routes.external.resolve import sub_router as resolve_router  # noqa: E402
 
-router.include_router(amazon_ads_router)
-router.include_router(criteo_router)
-router.include_router(facebook_ads_router)
-router.include_router(google_ads_router)
-router.include_router(google_cloud_router)
-router.include_router(impact_router)
-router.include_router(pinterest_ads_router)
-router.include_router(snapchat_ads_router)
-router.include_router(tiktok_ads_router)
+router.include_router(resolve_router)

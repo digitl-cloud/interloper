@@ -1,5 +1,6 @@
 from functools import cached_property
 
+import httpx
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -29,3 +30,52 @@ class PinterestAdsConnection(il.OAuthConnection):
                 refresh_token=self.refresh_token,
             ),
         )
+
+    async def _get_access_token(self) -> str:
+        """Exchange the refresh token for an access token using HTTP Basic auth."""
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{constants.BASE_URL}/oauth/token",
+                auth=(self.client_id, self.client_secret),
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": self.refresh_token,
+                },
+            )
+            response.raise_for_status()
+            return response.json()["access_token"]
+
+    @il.fetch_field_provider
+    async def accounts(self) -> list[dict[str, str]]:
+        """List the ad accounts reachable by this connection.
+
+        Backs the source's ``account_id`` ``FetchField``. Talks to the v5 API
+        over httpx (not the SDK) so it runs in the API process.
+        """
+        token = await self._get_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        accounts: list[dict[str, str]] = []
+        bookmark: str | None = None
+
+        async with httpx.AsyncClient(timeout=30, headers=headers) as client:
+            while True:
+                params: dict[str, str] = {"page_size": "100"}
+                if bookmark:
+                    params["bookmark"] = bookmark
+
+                response = await client.get(f"{constants.BASE_URL}/ad_accounts", params=params)
+                response.raise_for_status()
+                data = response.json()
+
+                for account in data.get("items", []):
+                    accounts.append({
+                        "id": account["id"],
+                        "name": account.get("name", account["id"]),
+                    })
+
+                bookmark = data.get("bookmark")
+                if not bookmark:
+                    break
+
+        return accounts

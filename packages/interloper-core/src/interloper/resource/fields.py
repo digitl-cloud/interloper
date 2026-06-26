@@ -8,9 +8,92 @@ are forwarded transparently.
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
-from pydantic import Field
+from pydantic import BaseModel, Field
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+#: Attribute stamped on a method by :func:`fetch_field_provider`.
+FETCH_FIELD_PROVIDER_ATTR = "__is_fetch_field_provider__"
+
+
+def fetch_field_provider(fn: F) -> F:
+    """Mark a resource method as a :func:`FetchField` data source.
+
+    A ``FetchField(provider="<slot>.<method>")`` resolves its options by
+    instantiating the resource in slot ``<slot>`` (from the credentials the
+    form already holds) and calling the method named ``<method>``. Only
+    methods marked with this decorator may be invoked that way — it is the
+    allowlist that stops the browser from calling arbitrary attributes.
+
+    The method runs inside the API process, which installs the connection
+    *classes* but not their heavy provider SDK extras, so a provider must
+    use lightweight HTTP (``httpx``), never ``self.api`` (the SDK client).
+
+    It returns a ``list[dict]``; the ``FetchField`` picks ``label_key`` /
+    ``value_key`` out of each item::
+
+        class FacebookAdsConnection(il.Connection):
+            @il.fetch_field_provider
+            async def accounts(self) -> list[dict]:
+                ...
+
+    Returns:
+        The same callable, stamped as a fetch provider.
+    """
+    setattr(fn, FETCH_FIELD_PROVIDER_ATTR, True)
+    return fn
+
+
+def is_fetch_field_provider(obj: Any) -> bool:
+    """Return whether *obj* (a function or bound method) is a fetch provider."""
+    return bool(getattr(obj, FETCH_FIELD_PROVIDER_ATTR, False))
+
+
+def validate_fetch_field_providers(cls: type[BaseModel], res_types: dict[str, Any]) -> None:
+    """Check every ``FetchField(provider=...)`` on *cls* resolves to a provider.
+
+    For each field carrying an ``x-fetch``, the provider ``"<slot>.<method>"``
+    must name a declared resource slot whose resource class exposes
+    ``<method>`` marked with :func:`fetch_field_provider`. Fails loudly at
+    catalog-build time rather than letting the form silently fail at runtime.
+
+    Args:
+        cls: The component class being defined (source or destination).
+        res_types: The component's ``resource_types`` (slot → resource class).
+
+    Raises:
+        TypeError: If a provider reference is malformed, names an unknown
+            slot, or targets a method that is not a ``@fetch_field_provider``.
+    """
+    for field_name, field in cls.model_fields.items():
+        extra = field.json_schema_extra
+        if not isinstance(extra, dict):
+            continue
+        fetch = extra.get("x-fetch")
+        if not isinstance(fetch, dict):
+            continue
+        provider = fetch.get("provider")
+        slot, _, method = str(provider).partition(".")
+        if not slot or not method:
+            raise TypeError(
+                f"{cls.__name__}.{field_name}: FetchField provider '{provider}' must be of the form '<slot>.<method>'"
+            )
+        res_cls = res_types.get(slot)
+        if res_cls is None:
+            raise TypeError(
+                f"{cls.__name__}.{field_name}: FetchField provider '{provider}' "
+                f"references resource slot '{slot}', which is not declared in resources={{}}"
+            )
+        target = getattr(res_cls, method, None)
+        if not is_fetch_field_provider(target):
+            raise TypeError(
+                f"{cls.__name__}.{field_name}: FetchField provider '{provider}' targets "
+                f"'{res_cls.__name__}.{method}', which is not a @fetch_field_provider method"
+            )
+
 
 # Internal fields that should be stripped from config schemas exposed
 # to the UI.  These are framework plumbing, not user-configurable.
@@ -174,25 +257,27 @@ def SelectField(
 def FetchField(
     default: Any = ...,
     *,
-    endpoint: str,
-    depends_on: str | list[str] = "connection",
+    provider: str,
     label_key: str = "name",
     value_key: str = "id",
     **kwargs: Any,
 ) -> Any:
-    """Field whose options are fetched from an external API at runtime.
+    """Field whose options are fetched from a resource's provider method.
 
-    The frontend reads ``x-fetch`` from the JSON Schema and renders a
-    select/autocomplete that calls the daemon's ``/external/{endpoint}``
-    route, passing credentials from the resource referenced by
-    ``depends_on``.
+    The backend instantiates the resource in slot ``<slot>`` (from the
+    credentials the form already holds) and calls the :func:`fetch_field_provider`
+    method ``<method>`` on it. The lookup logic lives next to the credentials
+    it uses — there is no per-provider API route to hand-write.
+
+    The dependency is the provider's own slot (the ``<slot>`` part): the
+    frontend waits for that resource to be selected, then resolves via
+    ``/external/resolve``. It is implicit in ``provider``, so there is no
+    separate ``depends_on``.
 
     Args:
         default: Default value (``...`` means required).
-        endpoint: Path under ``/external/`` (e.g. ``"amazon-ads/profiles"``).
-        depends_on: Resource slot name(s) whose data is sent as the
-            request body.  A string for a single dependency or a list
-            for multiple.
+        provider: ``"<slot>.<method>"`` reference to a ``@fetch_field_provider``
+            method on the resource in slot ``<slot>``.
         label_key: Key in each response item used as the display label.
         value_key: Key in each response item used as the stored value.
         **kwargs: Forwarded to ``pydantic.Field``.
@@ -200,19 +285,23 @@ def FetchField(
     Returns:
         A Pydantic Field descriptor.
 
+    Raises:
+        ValueError: If ``provider`` is not of the form ``"<slot>.<method>"``.
+
     Example::
 
-        profile_id: str = FetchField(
-            endpoint="amazon-ads/profiles",
-            depends_on="connection",
+        account_id: str = FetchField(
+            provider="connection.accounts",
             label_key="name",
-            value_key="profile_id",
+            value_key="account_id",
         )
     """
+    slot, _, method = provider.partition(".")
+    if not slot or not method:
+        raise ValueError(f"FetchField provider '{provider}' must be of the form '<slot>.<method>'")
     extra = _extra(kwargs, "fetch")
     extra["x-fetch"] = {
-        "endpoint": endpoint,
-        "depends_on": [depends_on] if isinstance(depends_on, str) else depends_on,
+        "provider": provider,
         "label_key": label_key,
         "value_key": value_key,
     }

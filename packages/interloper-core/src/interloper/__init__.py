@@ -34,6 +34,8 @@ from interloper.resource.fields import (
     SecretField,
     SelectField,
     TextField,
+    fetch_field_provider,
+    is_fetch_field_provider,
 )
 from interloper.rest import HTTPBearerAuth, OAuth2Auth, OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth, RESTClient
 from interloper.runner import AsyncRunner, MultiProcessRunner, MultiThreadRunner, Runner, RunResult, SerialRunner
@@ -101,6 +103,8 @@ __all__ = [
     "config",
     "connection",
     "destination",
+    "fetch_field_provider",
+    "is_fetch_field_provider",
     "schema",
     "source",
 ]

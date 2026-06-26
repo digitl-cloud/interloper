@@ -17,8 +17,7 @@ class GoogleAds(il.Source):
     """Google Ads advertising platform integration."""
 
     customer_id: str = il.FetchField(
-        endpoint="google-ads/customers",
-        depends_on="connection",
+        provider="connection.customers",
         label_key="name",
         value_key="customer_id",
         description="Google Ads customer ID (without hyphens)",

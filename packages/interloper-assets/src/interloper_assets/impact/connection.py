@@ -28,3 +28,27 @@ class ImpactConnection(il.Connection):
             auth,
             headers={"Accept": "application/json"},
         )
+
+    @il.fetch_field_provider
+    async def programs(self) -> list[dict[str, str]]:
+        """Fetch Impact programs (campaigns) accessible by the connection."""
+        programs: list[dict[str, str]] = []
+        async with httpx.AsyncClient(
+            timeout=30,
+            auth=httpx.BasicAuth(self.account_sid, self.auth_token),
+            headers={"Accept": "application/json"},
+        ) as client:
+            page, num_pages = 1, 1
+            while page <= num_pages:
+                resp = await client.get(
+                    f"{BASE_URL}/Advertisers/{self.account_sid}/Campaigns",
+                    params={"Page": page},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                num_pages = int(data["@numpages"])
+                for campaign in data.get("Campaigns", []):
+                    programs.append({"Id": campaign["Id"], "Name": campaign.get("Name", campaign["Id"])})
+                page += 1
+
+        return programs

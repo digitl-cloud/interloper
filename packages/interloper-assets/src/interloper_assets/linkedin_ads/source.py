@@ -19,8 +19,7 @@ class LinkedinAds(il.Source):
     """LinkedIn Ads advertising platform integration."""
 
     account_id: str = il.FetchField(
-        endpoint="linkedin-ads/accounts",
-        depends_on="connection",
+        provider="connection.accounts",
         label_key="name",
         value_key="id",
         description="LinkedIn Ads account",

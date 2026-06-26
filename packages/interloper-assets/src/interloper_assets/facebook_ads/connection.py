@@ -1,10 +1,13 @@
 from functools import cached_property
 from typing import Any
 
+import httpx
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.facebook_ads import constants
+
+_GRAPH_URL = f"https://graph.facebook.com/v{constants.API_VERSION}"
 
 
 @il.connection(
@@ -41,3 +44,32 @@ class FacebookAdsConnection(il.Connection):
             access_token=self.access_token,
             api_version=f"v{constants.API_VERSION}",
         )
+
+    @il.fetch_field_provider
+    async def accounts(self) -> list[dict[str, str]]:
+        """List the active ad accounts reachable by this connection.
+
+        Backs the source's ``account_id`` ``FetchField``. Uses the Graph API
+        over httpx (not the SDK) so it runs in the API process, which omits
+        the heavy SDK extras.
+        """
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{_GRAPH_URL}/me/adaccounts",
+                params={
+                    "access_token": self.access_token,
+                    "fields": "account_id,name,account_status",
+                    "limit": "500",
+                },
+            )
+            response.raise_for_status()
+            data = response.json().get("data", [])
+
+        return [
+            {
+                "account_id": account["account_id"],
+                "name": account.get("name", account["account_id"]),
+            }
+            for account in data
+            if account.get("account_status") == 1  # ACTIVE only
+        ]

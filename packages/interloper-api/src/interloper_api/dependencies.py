@@ -63,18 +63,20 @@ def get_store() -> Store:
     return _store
 
 
-def get_catalog() -> dict[str, Any]:
-    """Return the global catalog as a serialized dict.
+def get_catalog() -> Catalog:
+    """Return the global ``Catalog`` instance.
+
+    Routes that need the serialized form call ``.dump()`` themselves.
 
     Returns:
-        Mapping from component key to serialized definition.
+        The Catalog instance.
 
     Raises:
         RuntimeError: If the catalog has not been set.
     """
     if _catalog is None:
         raise RuntimeError("Catalog not initialized. Call set_catalog() first.")
-    return _catalog.dump()
+    return _catalog
 
 
 def get_auth_config() -> Any:

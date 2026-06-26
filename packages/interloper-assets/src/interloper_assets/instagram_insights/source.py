@@ -12,8 +12,7 @@ class InstagramInsights(il.Source):
     """Instagram Business and Creator account insights integration."""
 
     account_id: str = il.FetchField(
-        endpoint="instagram-insights/accounts",
-        depends_on="connection",
+        provider="connection.accounts",
         label_key="name",
         value_key="id",
         description="Instagram Business or Creator account ID",

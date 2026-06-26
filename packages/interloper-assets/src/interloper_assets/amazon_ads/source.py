@@ -162,12 +162,9 @@ def request_and_download_report(
 # SOURCE
 # ------------------------------------------------------------------
 @il.source(
-    resources={"connection": AmazonAdsConnection},
     tags=["Advertising"],
     icon="icon:amazon",
     normalizer=DataFrameNormalizer(
-        # Amazon reports name metrics camelCase with digit groups as words
-        # (acosClicks14d -> acos_clicks_14d); profiles nest accountInfo one level.
         snake_case_digits=True,
         flatten_max_level=1,
         column_overrides={
@@ -179,11 +176,12 @@ def request_and_download_report(
 class AmazonAds(il.Source):
     """Amazon Ads advertising platform integration."""
 
+    connection: AmazonAdsConnection
+
     profile_id: str = il.FetchField(
         title="Profile ID",
         description="Amazon Ads profile",
-        endpoint="amazon-ads/profiles",
-        depends_on="connection",
+        provider="connection.profiles",
         label_key="name",
         value_key="profile_id",
     )
