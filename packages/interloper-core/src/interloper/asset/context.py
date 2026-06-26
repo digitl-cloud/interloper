@@ -7,7 +7,7 @@ from typing import Any
 
 from interloper.events import EventLogger
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-from interloper.partitioning.time import TimePartitionConfig
+from interloper.partitioning.time import TimePartitionConfig, coerce_to_date
 
 
 class ExecutionContext:
@@ -93,7 +93,7 @@ class ExecutionContext:
                 "Context currently holds a partition window, not a partition."
             )
 
-        return self._partition_or_window.value
+        return coerce_to_date(self._partition_or_window.value)
 
     @property
     def partition_date_window(self) -> tuple[dt.date, dt.date]:
@@ -123,7 +123,8 @@ class ExecutionContext:
             )
 
         if isinstance(self._partition_or_window, Partition):
-            return (self._partition_or_window.value, self._partition_or_window.value)
+            date = coerce_to_date(self._partition_or_window.value)
+            return (date, date)
 
         assert isinstance(self._partition_or_window, PartitionWindow)
-        return (self._partition_or_window.start, self._partition_or_window.end)
+        return (coerce_to_date(self._partition_or_window.start), coerce_to_date(self._partition_or_window.end))
