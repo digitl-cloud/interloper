@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from interloper.asset.base import Asset
@@ -256,33 +255,24 @@ class DAG:
     # Materialization
     # ------------------------------------------------------------------
 
-    def materialize(
-        self,
-        partition_or_window: Partition | PartitionWindow | None = None,
-    ) -> RunResult:
-        """Synchronous convenience wrapper around :meth:`materialize`.
-
-        Creates a new event loop and runs the async ``materialize()`` to
-        completion.  Useful for scripts, notebooks, and CLI entry points.
-
-        Returns:
-            The result of the DAG execution.
-        """
-        return asyncio.run(self.materialize_async(partition_or_window=partition_or_window))
-
-    async def materialize_async(
+    async def materialize(
         self,
         partition_or_window: Partition | PartitionWindow | None = None,
     ) -> RunResult:
         """Execute all assets in dependency order using a default ``AsyncRunner``.
+
+        Async-native; ``await`` it from async code, or drive it from a sync
+        entrypoint with ``asyncio.run``::
+
+            result = await dag.materialize(partition)        # async
+            result = asyncio.run(dag.materialize(partition))  # sync edge
 
         Returns:
             The result of the DAG execution.
         """
         from interloper.runner.async_runner import AsyncRunner
 
-        runner = AsyncRunner()
-        return await runner.run(dag=self, partition_or_window=partition_or_window)
+        return await AsyncRunner().run(dag=self, partition_or_window=partition_or_window)
 
     # ------------------------------------------------------------------
     # Serialization

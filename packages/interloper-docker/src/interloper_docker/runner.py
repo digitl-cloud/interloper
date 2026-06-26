@@ -60,10 +60,11 @@ class DockerRunner(SyncRunner):
     by the scheduler) and updates internal state silently (``emit=False``)
     to avoid duplicate events.
 
-    Fully synchronous::
+    The blocking container-polling walk is offloaded to a thread, so the
+    runner satisfies the async-native ``run()`` contract::
 
-        with DockerRunner(image="my-image", on_event=log_event) as runner:
-            result = runner.run(dag)
+        result = await DockerRunner(image="my-image", on_event=log_event).run(dag)
+        # or, from a sync edge: asyncio.run(DockerRunner(image=...).run(dag))
     """
 
     image: str = "interloper:latest-worker"

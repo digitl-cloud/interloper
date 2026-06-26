@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import atexit
 import queue
 import threading
@@ -140,18 +139,6 @@ class EventBus:
         done = threading.Event()
         inst._queue.put(_Sentinel(done=done))
         return done.wait(timeout)
-
-    @staticmethod
-    async def aflush(timeout: float | None = None) -> bool:
-        """Async-friendly flush: wraps :meth:`flush` in ``asyncio.to_thread``.
-
-        Args:
-            timeout: Maximum seconds to wait.  ``None`` waits indefinitely.
-
-        Returns:
-            ``True`` if the flush completed, ``False`` on timeout.
-        """
-        return await asyncio.to_thread(EventBus.flush, timeout)
 
     @staticmethod
     def shutdown() -> None:

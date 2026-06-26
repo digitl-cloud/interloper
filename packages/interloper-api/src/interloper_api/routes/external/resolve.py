@@ -16,16 +16,15 @@ way may be invoked, so the browser cannot call arbitrary attributes.
 
 from __future__ import annotations
 
-import inspect
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.catalog.base import Catalog
 from interloper.resource.fields import is_fetch_field_provider
+from interloper.utils.concurrency import invoke
 from interloper.utils.imports import import_from_path
 from interloper_db import Profile
 from pydantic import BaseModel
-from starlette.concurrency import run_in_threadpool
 
 from interloper_api.dependencies import get_catalog, require_viewer
 from interloper_api.routes.external import handle_error
@@ -82,7 +81,7 @@ async def resolve_fetch_field(
     assert fn is not None  # narrowed by the is_fetch_field_provider guard above
 
     try:
-        result = await fn() if inspect.iscoroutinefunction(fn) else await run_in_threadpool(fn)
+        result = await invoke(fn)
     except Exception as exc:
         handle_error(exc, f"resolving {body.component_key}.{body.field}")
         return []

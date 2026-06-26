@@ -25,6 +25,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pre-commit>=4.2.0",
+    "pytest-asyncio>=1.4.0",
     "pytest-cov>=6.0.0",
     "pytest>=8.3.5",
     "python-dotenv>=1.1.1",
@@ -112,6 +113,7 @@ extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 markers = ["integration", "functional"]
 addopts = ["--import-mode=importlib", "-m not functional"]
 filterwarnings = ["ignore::FutureWarning:google.api_core"]
+asyncio_mode = "auto"
 
 # ###############
 # COVERAGE

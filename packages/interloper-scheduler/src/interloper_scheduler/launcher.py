@@ -127,13 +127,13 @@ class Launcher(ABC):
 
     def __init__(
         self,
-        runner_type: str = "multi_thread",
+        runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the launcher.
 
         Args:
-            runner_type: Runner type name (``serial``, ``multi_thread``, ``multi_process``).
+            runner_type: Runner type name (``async``, ``serial``, ``multi_process``).
             runner_config: Runner-specific kwargs forwarded to the runner constructor.
         """
         self._runner_type = runner_type
@@ -169,14 +169,14 @@ class InProcessLauncher(Launcher):
 
     def __init__(
         self,
-        runner_type: str = "multi_thread",
+        runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
         store: Store | None = None,
     ) -> None:
         """Initialize the launcher.
 
         Args:
-            runner_type: Runner type name (``serial``, ``multi_thread``, ``multi_process``).
+            runner_type: Runner type name (``async``, ``serial``, ``multi_process``).
             runner_config: Runner-specific kwargs forwarded to the runner constructor.
             store: Optional Store instance to share with executors.
         """

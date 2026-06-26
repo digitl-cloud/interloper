@@ -41,6 +41,7 @@ are emitted instead.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import datetime as dt
 import logging
 from typing import TYPE_CHECKING
@@ -233,8 +234,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
             runner_cls.__name__,
         )
 
-        with runner_cls(**runner_kwargs, on_event=on_event) as runner:
-            result = runner.run(dag, partition, metadata=metadata or None)
+        runner = runner_cls(**runner_kwargs, on_event=on_event)
+        # The CLI process is the sync edge: drive the async run to completion here.
+        result = asyncio.run(runner.run(dag, partition, metadata=metadata or None))
 
         logger.info("Run completed: %s", result.status.name)
 

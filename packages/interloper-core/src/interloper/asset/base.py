@@ -22,6 +22,7 @@ from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
 from interloper.representation import representation_for
 from interloper.resource import Resource
 from interloper.schema import Schema
+from interloper.utils.concurrency import invoke
 from interloper.utils.data import is_empty
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label
@@ -286,7 +287,7 @@ class Asset(Component):
             overrides["deps"] = deps
         return self.model_copy(update=overrides)
 
-    async def run_async(
+    async def run(
         self,
         partition_or_window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
@@ -326,7 +327,7 @@ class Asset(Component):
             metadata={**exec_meta, "message": f"Executing '{type(self).key}'"},
         )
         try:
-            result = await self._invoke_data(**kwargs)
+            result = await invoke(self.data, **kwargs)
             EventBus.emit(
                 EventType.ASSET_EXEC_COMPLETED,
                 metadata={**exec_meta, "message": f"Executed '{type(self).key}'"},
@@ -343,24 +344,11 @@ class Asset(Component):
             )
             raise
 
-        result = self._normalize_and_conform(result)
+        # Normalization + conform is CPU-bound (pandas/pyarrow); offload it so
+        # it never blocks the event loop while other assets run concurrently.
+        result = await asyncio.to_thread(self._normalize_and_conform, result)
 
         return result
-
-    def run(
-        self,
-        partition_or_window: Partition | PartitionWindow | None = None,
-        dag: DAG | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> Any:
-        """Synchronous convenience wrapper around :meth:`run`.
-
-        Creates a new event loop and runs the async ``run()`` to completion.
-
-        Returns:
-            The result of the asset execution.
-        """
-        return asyncio.run(self.run_async(partition_or_window, dag, metadata))
 
     async def materialize(
         self,
@@ -382,7 +370,7 @@ class Asset(Component):
             return None
 
         metadata = metadata or {}
-        result = await self.run_async(partition_or_window, dag, metadata)
+        result = await self.run(partition_or_window, dag, metadata)
         await self._destination_write(partition_or_window, metadata, result)
         return result
 
@@ -425,20 +413,6 @@ class Asset(Component):
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
-    async def _invoke_data(self, **kwargs: Any) -> Any:
-        """Call the user's ``data()`` method, handling both sync and async.
-
-        Sync functions are offloaded to a thread via ``asyncio.to_thread``
-        so they never block the event loop.  Async functions are awaited
-        natively.
-
-        Returns:
-            The result of the data function.
-        """
-        if asyncio.iscoroutinefunction(self.data):
-            return await self.data(**kwargs)
-        return await asyncio.to_thread(self.data, **kwargs)
-
     async def _build_kwargs(
         self,
         context: ExecutionContext,
@@ -515,8 +489,7 @@ class Asset(Component):
                     **self._event_metadata(metadata, partition_or_window),
                     "level": "WARNING",
                     "message": (
-                        f"Asset '{type(self).key}' produced no data; "
-                        f"skipping write to {len(dests)} destination(s)"
+                        f"Asset '{type(self).key}' produced no data; skipping write to {len(dests)} destination(s)"
                     ),
                 },
             )
@@ -538,7 +511,7 @@ class Asset(Component):
                 metadata={**dest_meta, "message": f"Writing '{type(self).key}'"},
             )
             try:
-                await dest.awrite(dest_context, result)
+                await invoke(dest.write, dest_context, result)
                 EventBus.emit(
                     EventType.DEST_WRITE_COMPLETED,
                     metadata={**dest_meta, "message": f"Wrote '{type(self).key}'"},
@@ -588,7 +561,7 @@ class Asset(Component):
             metadata={**dest_meta, "message": f"Reading '{type(upstream_asset).key}'"},
         )
         try:
-            result = await dest.aread(dest_context)
+            result = await invoke(dest.read, dest_context)
             EventBus.emit(
                 EventType.DEST_READ_COMPLETED,
                 metadata={**dest_meta, "message": f"Read '{type(upstream_asset).key}'"},
@@ -660,8 +633,7 @@ class Asset(Component):
                 self._effective_schema = None
                 return result
             raise AssetError(
-                f"Asset '{type(self).key}' declares a schema but returned data that cannot "
-                f"be checked against it: {e}"
+                f"Asset '{type(self).key}' declares a schema but returned data that cannot be checked against it: {e}"
             ) from e
 
         if schema is None:

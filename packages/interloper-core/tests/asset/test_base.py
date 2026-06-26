@@ -491,7 +491,7 @@ class TestSerialization:
 # ---------------------------------------------------------------------------
 
 
-def _capture_log_events(run: Any) -> list[Event]:
+async def _capture_log_events(coro: Any) -> list[Event]:
     captured: list[Event] = []
 
     def handler(event: Event) -> None:
@@ -499,7 +499,7 @@ def _capture_log_events(run: Any) -> list[Event]:
 
     EventBus.subscribe(handler)
     try:
-        run()
+        await coro
         EventBus.flush(timeout=5.0)
     finally:
         EventBus.unsubscribe(handler)
@@ -507,7 +507,7 @@ def _capture_log_events(run: Any) -> list[Event]:
 
 
 class TestDestinationWrite:
-    def test_empty_result_skips_write_and_warns(self):
+    async def test_empty_result_skips_write_and_warns(self):
         il.MemoryDestination.clear()
         mem = il.MemoryDestination()
 
@@ -516,7 +516,7 @@ class TestDestinationWrite:
             return []
 
         asset = empty(id="empty", destination=mem)
-        logs = _capture_log_events(lambda: asyncio.run(asset.materialize()))
+        logs = await _capture_log_events(asset.materialize())
 
         # Nothing was written.
         assert mem._storage == {}
@@ -530,7 +530,7 @@ class TestDestinationWrite:
         # The warning is attributed to the asset so it filters/labels in the UI.
         assert warnings[0].metadata.get("asset_id") == asset.id
 
-    def test_non_empty_result_is_written(self):
+    async def test_non_empty_result_is_written(self):
         il.MemoryDestination.clear()
         mem = il.MemoryDestination()
 
@@ -539,7 +539,7 @@ class TestDestinationWrite:
             return [{"a": 1}]
 
         asset = full(id="full", destination=mem)
-        logs = _capture_log_events(lambda: asyncio.run(asset.materialize()))
+        logs = await _capture_log_events(asset.materialize())
 
         # Data was written and no "no data" warning was emitted.
         assert mem._storage
@@ -561,17 +561,60 @@ class StrictConformSchema(il.Schema):
     name: str | None
 
 
+class TestAsyncAndSyncData:
+    """``@asset`` accepts both sync and ``async`` data functions."""
+
+    async def test_sync_data_function(self):
+        @il.asset
+        def users() -> list[dict[str, Any]]:
+            return [{"id": 1}]
+
+        assert not asyncio.iscoroutinefunction(users().data)
+        assert await users().run() == [{"id": 1}]
+
+    async def test_async_data_function_is_awaited_natively(self):
+        @il.asset
+        async def users() -> list[dict[str, Any]]:
+            return [{"id": 1}]
+
+        # The decorator must preserve coroutine-ness, otherwise the engine
+        # would offload a sync wrapper to a thread and return an un-awaited
+        # coroutine instead of the data.
+        assert asyncio.iscoroutinefunction(users().data)
+        assert await users().run() == [{"id": 1}]
+
+    async def test_async_destination_write_is_awaited(self):
+        # A destination may implement ``write`` as ``async def``; materialize
+        # must await it natively rather than hand it a coroutine to a thread.
+        captured: dict[str, Any] = {}
+
+        class AsyncDestination(il.Destination):
+            def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
+                return None
+
+            async def write(self, context: Any, data: Any) -> None:
+                captured["data"] = data
+
+        @il.asset
+        def users() -> list[dict[str, Any]]:
+            return [{"id": 1}]
+
+        asset = users(destination=AsyncDestination(id="async-dest"))
+        await asset.materialize()
+        assert captured["data"] == [{"id": 1}]
+
+
 class TestConform:
     """Schema enforcement runs whether or not a normalizer is configured."""
 
-    def test_schema_validates_without_normalizer(self):
+    async def test_schema_validates_without_normalizer(self):
         @il.asset(schema=ConformSchema)
         def users() -> list[dict[str, Any]]:
             return [{"user_id": 1, "name": "a"}]
 
-        assert users().run() == [{"user_id": 1, "name": "a"}]
+        assert await users().run() == [{"user_id": 1, "name": "a"}]
 
-    def test_mismatched_data_fails_fast(self):
+    async def test_mismatched_data_fails_fast(self):
         from interloper.errors import SchemaError
 
         @il.asset(schema=ConformSchema)
@@ -579,9 +622,9 @@ class TestConform:
             return [{"user_id": "not-an-int", "name": "a"}]
 
         with pytest.raises(SchemaError):
-            users().run()
+            await users().run()
 
-    def test_dataframe_validated_without_normalizer(self):
+    async def test_dataframe_validated_without_normalizer(self):
         pd = pytest.importorskip("pandas")
         from interloper.errors import SchemaError
 
@@ -590,9 +633,9 @@ class TestConform:
             return pd.DataFrame([{"userId": 1, "Name": "a"}])  # wrong casing -> required fields missing
 
         with pytest.raises(SchemaError):
-            users().run()
+            await users().run()
 
-    def test_dataframe_with_nan_validates_against_nullable_fields(self):
+    async def test_dataframe_with_nan_validates_against_nullable_fields(self):
         pd = pytest.importorskip("pandas")
         import numpy as np
 
@@ -600,10 +643,10 @@ class TestConform:
         def users() -> Any:
             return pd.DataFrame([{"user_id": np.nan, "name": "a"}])
 
-        result = users().run()
+        result = await users().run()
         assert isinstance(result, pd.DataFrame)
 
-    def test_strategy_requires_schema(self):
+    async def test_strategy_requires_schema(self):
         from interloper.normalizer import MaterializationStrategy
 
         @il.asset(materialization_strategy=MaterializationStrategy.RECONCILE)
@@ -611,44 +654,44 @@ class TestConform:
             return [{"a": 1}]
 
         with pytest.raises(AssetError, match="requires a schema"):
-            users().run()
+            await users().run()
 
-    def test_reconcile_without_normalizer(self):
+    async def test_reconcile_without_normalizer(self):
         from interloper.normalizer import MaterializationStrategy
 
         @il.asset(schema=ConformSchema, materialization_strategy=MaterializationStrategy.RECONCILE)
         def users() -> list[dict[str, Any]]:
             return [{"user_id": "1", "name": "a", "extra": True}]
 
-        assert users().run() == [{"user_id": 1, "name": "a"}]
+        assert await users().run() == [{"user_id": 1, "name": "a"}]
 
-    def test_generator_with_schema_is_coerced(self):
+    async def test_generator_with_schema_is_coerced(self):
         @il.asset(schema=ConformSchema)
         def users() -> Any:
             yield {"user_id": 1, "name": "a"}
 
-        assert users().run() == [{"user_id": 1, "name": "a"}]
+        assert await users().run() == [{"user_id": 1, "name": "a"}]
 
-    def test_non_tabular_data_with_schema_fails(self):
+    async def test_non_tabular_data_with_schema_fails(self):
         @il.asset(schema=ConformSchema)
         def users() -> Any:
             return "not tabular"
 
         with pytest.raises(AssetError, match="cannot[\\s\\S]*be checked"):
-            users().run()
+            await users().run()
 
-    def test_auto_without_schema_infers_effective_schema(self):
+    async def test_auto_without_schema_infers_effective_schema(self):
         @il.asset
         def users() -> list[dict[str, Any]]:
             return [{"user_id": 1, "name": "a"}]
 
         asset = users()
-        asset.run()
+        await asset.run()
         assert asset._effective_schema is not None
         names = [s.name for s in asset._effective_schema.field_specs()]
         assert names == ["user_id", "name"]
 
-    def test_iocontext_carries_schema_to_destination(self):
+    async def test_iocontext_carries_schema_to_destination(self):
         captured: dict[str, Any] = {}
 
         class CapturingDestination(il.Destination):
@@ -663,10 +706,10 @@ class TestConform:
             return [{"user_id": 1, "name": "a"}]
 
         asset = users(destination=CapturingDestination(id="cap"))
-        asyncio.run(asset.materialize())
+        await asset.materialize()
         assert captured["schema"] is ConformSchema
 
-    def test_iocontext_carries_inferred_schema_when_undeclared(self):
+    async def test_iocontext_carries_inferred_schema_when_undeclared(self):
         captured: dict[str, Any] = {}
 
         class CapturingDestination(il.Destination):
@@ -681,6 +724,6 @@ class TestConform:
             return [{"user_id": 1}]
 
         asset = users(destination=CapturingDestination(id="cap"))
-        asyncio.run(asset.materialize())
+        await asset.materialize()
         assert captured["schema"] is not None
         assert [s.name for s in captured["schema"].field_specs()] == ["user_id"]

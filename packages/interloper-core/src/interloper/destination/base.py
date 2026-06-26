@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from abc import abstractmethod
 from typing import Any, ClassVar
 
@@ -32,9 +31,12 @@ class DestinationDefinition(ComponentDefinition):
 class Destination(Component):
     """A component that reads and writes asset data.
 
-    Subclass and implement ``read()`` and ``write()`` to define a destination.
-    For native async support, override ``aread()`` and ``awrite()`` instead —
-    the defaults wrap the sync versions in ``asyncio.to_thread()``::
+    Subclass and implement ``read()`` and ``write()``. They may be written
+    as plain sync methods (the common case — most warehouse/file clients are
+    sync) or as ``async def`` for native async I/O (e.g. asyncpg, aiofiles).
+    The engine is async-native: it awaits async implementations directly and
+    offloads sync ones to a worker thread, so a destination never blocks the
+    event loop either way::
 
         class PostgresDestination(Destination):
             resource_types = {"connection": PostgresConnection}
@@ -99,30 +101,6 @@ class Destination(Component):
             context: Destination context with asset, partition, and metadata.
             data: The data to write.
         """
-
-    async def aread(self, context: IOContext) -> Any:
-        """Async read. Defaults to wrapping :meth:`read` in ``asyncio.to_thread``.
-
-        Override this method for native async I/O (e.g. asyncpg, aiofiles).
-
-        Args:
-            context: Destination context with asset, partition, and metadata.
-
-        Returns:
-            The data read from the destination.
-        """
-        return await asyncio.to_thread(self.read, context)
-
-    async def awrite(self, context: IOContext, data: Any) -> None:
-        """Async write. Defaults to wrapping :meth:`write` in ``asyncio.to_thread``.
-
-        Override this method for native async I/O (e.g. asyncpg, aiofiles).
-
-        Args:
-            context: Destination context with asset, partition, and metadata.
-            data: The data to write.
-        """
-        await asyncio.to_thread(self.write, context, data)
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
         """Return row counts grouped by the asset's partition column.

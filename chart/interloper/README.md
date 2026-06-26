@@ -92,7 +92,7 @@ config:
     type: kubernetes
     # image + namespace + service_account_name are auto-filled from the release
   runner:
-    type: multi_thread
+    type: async
   catalog:
     - interloper_assets.demo.source.DemoSource
     - interloper_google_cloud.BigQueryDestination

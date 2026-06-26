@@ -26,8 +26,8 @@ dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0"]
 interloper-google-cloud = { workspace = true }
 
 [project.entry-points."interloper.runners"]
+async = "interloper.runner.async_runner:AsyncRunner"
 serial = "interloper.runner.serial:SerialRunner"
-multi_thread = "interloper.runner.multi_thread:MultiThreadRunner"
 multi_process = "interloper.runner.multi_process:MultiProcessRunner"
 
 [project.entry-points."interloper.oauth_providers"]

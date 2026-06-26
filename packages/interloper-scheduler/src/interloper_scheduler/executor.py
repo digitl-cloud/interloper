@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import logging
 from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.runner import ExecutionStatus
-from interloper.runner.sync_runner import SyncRunner
+from interloper.runner import ExecutionStatus, Runner
 from interloper_db import Store, get_engine
 from interloper_db.models import AssetDependency, Job, Run, Source
 from sqlalchemy.orm import selectinload
@@ -31,7 +31,7 @@ class RunExecutor:
     def __init__(
         self,
         store: Store | None = None,
-        runner_type: type[SyncRunner] = il.MultiThreadRunner,
+        runner_type: type[Runner] = il.AsyncRunner,
         runner_kwargs: dict[str, Any] | None = None,
     ) -> None:
         if store is None:
@@ -44,6 +44,9 @@ class RunExecutor:
 
     def execute(self, run_id: UUID) -> bool:
         """Execute a run with full lifecycle tracking.
+
+        Synchronous DB orchestration around the async DAG run; the async
+        boundary lives in :meth:`_run_dag` where the engine is actually driven.
 
         Returns:
             ``True`` if the run completed successfully, ``False`` otherwise.
@@ -209,11 +212,9 @@ class RunExecutor:
         def handle_event(event: il.Event) -> None:
             self._store.save_event(event, org_id=org_id, run_id=run_id)
 
-        with self._runner_type(
-            **self._runner_kwargs,
-            on_event=handle_event,
-        ) as runner:
-            return runner.run(
+        runner = self._runner_type(**self._runner_kwargs, on_event=handle_event)
+        return asyncio.run(
+            runner.run(
                 dag,
                 partition,
                 metadata={
@@ -221,3 +222,4 @@ class RunExecutor:
                     "backfill_id": backfill_id,
                 },
             )
+        )

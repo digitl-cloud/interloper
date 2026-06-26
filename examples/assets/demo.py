@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 
 import interloper as il
@@ -23,8 +24,8 @@ demo.b.deps["x"] = x.id
 
 dag = il.DAG(demo, x)
 partition = il.TimePartition(dt.date(2024, 1, 1))
-result = dag.materialize(partition_or_window=partition)
+result = asyncio.run(dag.materialize(partition_or_window=partition))
 # print(result)
 
-# result = demo.b.run(partition_or_window=partition, dag=dag)
+# result = asyncio.run(demo.b.run(partition_or_window=partition, dag=dag))
 # print(result)

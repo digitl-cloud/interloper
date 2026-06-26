@@ -82,7 +82,7 @@ class DockerLauncher(Launcher):
         postgres_password: str,
         postgres_database: str,
         image: str = "interloper:latest-scheduler",
-        runner_type: str = "multi_thread",
+        runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
         volumes: dict[str, dict[str, str]] | None = None,
     ) -> None:

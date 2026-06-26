@@ -38,7 +38,7 @@ from interloper.resource.fields import (
     is_fetch_field_provider,
 )
 from interloper.rest import HTTPBearerAuth, OAuth2Auth, OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth, RESTClient
-from interloper.runner import AsyncRunner, MultiProcessRunner, MultiThreadRunner, Runner, RunResult, SerialRunner
+from interloper.runner import AsyncRunner, MultiProcessRunner, Runner, RunResult, SerialRunner
 from interloper.schema import Schema, schema
 from interloper.source import Source, SourceDefinition, source
 
@@ -69,7 +69,6 @@ __all__ = [
     "MaterializationStrategy",
     "MemoryDestination",
     "MultiProcessRunner",
-    "MultiThreadRunner",
     "Normalizer",
     "OAuth2Auth",
     "OAuth2ClientCredentialsAuth",

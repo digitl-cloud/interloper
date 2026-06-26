@@ -153,7 +153,7 @@ config:
 
   # How the DAG runs inside each launched container.
   runner:
-    type: multi_thread
+    type: async
     config: {}
 
   # Catalog: list of dotted import paths for sources, assets, destinations.

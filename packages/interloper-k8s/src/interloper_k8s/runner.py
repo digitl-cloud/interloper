@@ -45,10 +45,11 @@ class KubernetesRunner(SyncRunner):
     ``materializable=False`` to avoid recomputation while still enabling
     IO-based dependency resolution.
 
-    Fully synchronous::
+    The blocking Job-polling walk is offloaded to a thread, so the runner
+    satisfies the async-native ``run()`` contract::
 
-        with KubernetesRunner(image="my-image", on_event=log_event) as runner:
-            result = runner.run(dag)
+        result = await KubernetesRunner(image="my-image", on_event=log_event).run(dag)
+        # or, from a sync edge: asyncio.run(KubernetesRunner(image=...).run(dag))
     """
 
     image: str

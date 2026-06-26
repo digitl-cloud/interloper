@@ -61,8 +61,8 @@ class MultiProcessRunner(SyncRunner):
     Use this runner when assets perform CPU-bound work or when
     you need true parallelism (bypassing the GIL)::
 
-        with MultiProcessRunner(max_workers=2, on_event=log_event) as runner:
-            result = runner.run(dag)
+        result = await MultiProcessRunner(max_workers=2, on_event=log_event).run(dag)
+        # or, from a sync edge: asyncio.run(MultiProcessRunner().run(dag))
     """
 
     max_workers: int = 4

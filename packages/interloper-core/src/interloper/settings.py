@@ -114,12 +114,14 @@ class LauncherSettings(BaseSettings):
 class RunnerSettings(BaseSettings):
     """Runner settings (type + runner-specific config).
 
-    Supported types: ``serial``, ``multi_thread``, ``multi_process``, ``async``.
+    Built-in types: ``async`` (default, in-process concurrency via ``max_workers``),
+    ``serial`` (``async`` with a single slot), ``multi_process``. The ``docker``
+    and ``kubernetes`` runners register through their own packages.
     """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RUNNER_")
 
-    type: str = "multi_thread"
+    type: str = "async"
     config: dict[str, Any] = Field(default_factory=dict)
 
 

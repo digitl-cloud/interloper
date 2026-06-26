@@ -1,5 +1,6 @@
 """Example script demonstrating multi-process backfiller."""
 
+import asyncio
 import datetime as dt
 
 import dotenv
@@ -15,6 +16,5 @@ if __name__ == "__main__":
     dag = il.DAG(source)
     partition = il.TimePartition(value=dt.date(2025, 1, 1))
 
-    with il.MultiProcessRunner(on_event=print) as runner:
-        result = runner.run(dag, partition)
+    result = asyncio.run(il.MultiProcessRunner(on_event=print).run(dag, partition))
     print(result)

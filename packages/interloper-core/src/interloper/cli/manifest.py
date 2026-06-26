@@ -16,7 +16,7 @@ Example::
     name: facebook-backfill
 
     runner:                       # optional, overrides AppSettings.runner
-      type: multi_thread
+      type: async
       config:
         max_concurrency: 4
 
