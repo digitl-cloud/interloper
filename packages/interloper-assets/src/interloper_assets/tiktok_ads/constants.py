@@ -2,6 +2,10 @@ BASE_URL = "https://business-api.tiktok.com/open_api/v1.3"
 
 PAGE_SIZE = 200
 
+# Max paginated requests in flight at once per asset. Bounds fan-out so a
+# many-page report can't stampede TikTok into rate limits.
+PAGE_CONCURRENCY = 8
+
 ATTRIBUTE_METRICS = [
     "campaign_name",
     "campaign_id",
