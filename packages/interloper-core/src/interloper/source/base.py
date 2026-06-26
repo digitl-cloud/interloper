@@ -15,7 +15,7 @@ from interloper.component.base import ComponentDescriptor, ComponentSpec, dump_s
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.resource import Resource
-from interloper.resource.fields import InputField, SelectField
+from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label
 
@@ -434,6 +434,11 @@ class Source(Component):
         from interloper.resource.fields import strip_internal_fields
 
         res_types: dict[str, type[Resource]] = cls.__dict__.get("resource_types", {})
+        # Validate against the *resolved* resource map (``cls.resource_types``),
+        # which includes slots declared via typed annotations (``connection:
+        # XConnection``) — not just those in ``__dict__`` — matching how the
+        # resolver looks up the connection class at runtime.
+        validate_fetch_field_providers(cls, cls.resource_types)
 
         # Build config schema from Source's own fields, excluding framework
         # internals (resources, assets, etc.) and base Source fields.

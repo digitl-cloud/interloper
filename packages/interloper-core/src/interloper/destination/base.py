@@ -59,11 +59,14 @@ class Destination(Component):
         Returns:
             A DestinationDefinition with metadata and JSON Schema.
         """
-        from interloper.resource.fields import strip_internal_fields
+        from interloper.resource.fields import strip_internal_fields, validate_fetch_field_providers
         from interloper.utils.imports import get_object_path
 
         raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
         res_types: dict[str, type[Resource]] = cls.__dict__.get("resource_types", {})
+        # Validate against the resolved resource map (annotation-declared slots
+        # are not in ``__dict__``); matches how the resolver finds the connection.
+        validate_fetch_field_providers(cls, cls.resource_types)
         return DestinationDefinition(
             kind=cls.kind,
             key=cls.key,

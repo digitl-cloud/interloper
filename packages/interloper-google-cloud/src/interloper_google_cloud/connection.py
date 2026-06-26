@@ -3,11 +3,90 @@
 from __future__ import annotations
 
 import json
+import time
+from typing import Any
 
+import httpx
+from google.auth import crypt, jwt
 from interloper.connection import Connection, connection
-from interloper.resource.fields import JsonField
+from interloper.resource.fields import JsonField, fetch_field_provider
 from pydantic import field_validator
 from pydantic_settings import SettingsConfigDict
+
+_TOKEN_URL = "https://oauth2.googleapis.com/token"
+# BigQuery's own projects.list: returns the projects the credential holds a
+# BigQuery role on -- exactly the candidates for a BigQuery destination --
+# and only requires the BigQuery API, which is necessarily enabled wherever
+# the destination can work (unlike the Cloud Resource Manager API, which is
+# frequently disabled).
+_PROJECTS_URL = "https://bigquery.googleapis.com/bigquery/v2/projects"
+_SCOPE = "https://www.googleapis.com/auth/bigquery.readonly"
+
+
+def _make_assertion(key_info: dict[str, Any]) -> str:
+    """Build a signed JWT-bearer assertion for the service account.
+
+    Only the signing comes from google-auth; the token exchange itself goes
+    through httpx like every other external fetch.
+
+    Args:
+        key_info: The parsed service account key.
+
+    Returns:
+        The signed JWT assertion.
+    """
+    signer = crypt.RSASigner.from_service_account_info(key_info)
+    now = int(time.time())
+    payload = {
+        "iss": key_info["client_email"],
+        "scope": _SCOPE,
+        "aud": _TOKEN_URL,
+        "iat": now,
+        "exp": now + 600,
+    }
+    return jwt.encode(signer, payload).decode()
+
+
+async def _get_access_token(client: httpx.AsyncClient, key_info: dict[str, Any]) -> str:
+    """Exchange a service account JWT assertion for an access token."""
+    resp = await client.post(
+        _TOKEN_URL,
+        data={
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": _make_assertion(key_info),
+        },
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
+async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[dict[str, str]]:
+    """List the projects the credential has BigQuery access to, following pagination.
+
+    Returns:
+        Project options with ``project_id`` and a display ``name``.
+    """
+    results: list[dict[str, str]] = []
+    page_token: str | None = None
+    while True:
+        params: dict[str, str] = {"maxResults": "500"}
+        if page_token:
+            params["pageToken"] = page_token
+        resp = await client.get(
+            _PROJECTS_URL,
+            params=params,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        for project in data.get("projects", []):
+            project_id = project["id"]
+            name = project.get("friendlyName") or project_id
+            results.append({"project_id": project_id, "name": f"{name} ({project_id})"})
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+    return sorted(results, key=lambda p: p["name"].lower())
 
 
 @connection(
@@ -29,3 +108,17 @@ class GoogleCloudConnection(Connection):
         if isinstance(v, dict):
             return json.dumps(v)
         return v
+
+    @fetch_field_provider
+    async def projects(self) -> list[dict[str, str]]:
+        """List the Google Cloud projects this connection has BigQuery access to.
+
+        Backs the BigQuery destination's ``project`` ``FetchField``. Signs a
+        JWT-bearer assertion from the service account key and exchanges it for
+        an access token over httpx (only the signing uses google-auth), then
+        pages through BigQuery's ``projects.list``.
+        """
+        key_info: dict[str, Any] = json.loads(self.service_account_key)
+        async with httpx.AsyncClient(timeout=30) as client:
+            access_token = await _get_access_token(client, key_info)
+            return await _list_projects(client, access_token)

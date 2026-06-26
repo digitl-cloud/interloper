@@ -41,8 +41,7 @@ class BigQueryDestination(DatabaseDestination):
     connection: GoogleCloudConnection
 
     project: str = FetchField(
-        endpoint="google-cloud/projects",
-        depends_on="connection",
+        provider="connection.projects",
         label_key="name",
         value_key="project_id",
         description="Google Cloud project ID",

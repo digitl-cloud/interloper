@@ -158,8 +158,7 @@ class Impact(il.Source):
     """Impact.com affiliate and partnership platform integration."""
 
     program_id: str = il.FetchField(
-        endpoint="impact/programs",
-        depends_on="connection",
+        provider="connection.programs",
         label_key="Name",
         value_key="Id",
         description="Impact program (campaign) ID",

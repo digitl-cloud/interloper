@@ -6,6 +6,8 @@ from interloper.resource.fields import (
     SecretField,
     SelectField,
     TextField,
+    fetch_field_provider,
+    is_fetch_field_provider,
 )
 from interloper.resource.ref import ResourceRef
 
@@ -19,4 +21,6 @@ __all__ = [
     "SecretField",
     "SelectField",
     "TextField",
+    "fetch_field_provider",
+    "is_fetch_field_provider",
 ]

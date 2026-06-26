@@ -288,6 +288,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                             v-model:data="configData"
                             v-model:is-valid="configValid"
                             :schema="destDefn.config_schema"
+                            :component-key="destDefn.key"
                             :resource-context="resourceContext" />
             </div>
         </template>

@@ -131,8 +131,7 @@ class SnapchatAds(il.Source):
     """Snapchat Ads advertising platform integration."""
 
     account_id: str = il.FetchField(
-        endpoint="snapchat-ads/ad-accounts",
-        depends_on="connection",
+        provider="connection.ad_accounts",
         label_key="name",
         value_key="id",
         description="Snapchat Ads ad account",

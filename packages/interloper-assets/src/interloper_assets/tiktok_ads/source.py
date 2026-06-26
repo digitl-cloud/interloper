@@ -127,8 +127,7 @@ class TiktokAds(il.Source):
     """TikTok Ads advertising platform integration."""
 
     advertiser_id: str = il.FetchField(
-        endpoint="tiktok-ads/advertisers",
-        depends_on="connection",
+        provider="connection.advertisers",
         label_key="name",
         value_key="advertiser_id",
         description="TikTok Ads advertiser account",

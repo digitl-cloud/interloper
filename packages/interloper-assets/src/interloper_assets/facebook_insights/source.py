@@ -17,8 +17,7 @@ class FacebookInsights(il.Source):
     """Facebook Page and Post Insights integration."""
 
     page_id: str = il.FetchField(
-        endpoint="facebook-insights/pages",
-        depends_on="connection",
+        provider="connection.pages",
         label_key="name",
         value_key="id",
         description="Facebook Page to retrieve insights for",

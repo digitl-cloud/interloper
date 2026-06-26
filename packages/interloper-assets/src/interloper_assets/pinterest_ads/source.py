@@ -17,8 +17,7 @@ class PinterestAds(il.Source):
     """Pinterest Ads advertising platform integration."""
 
     account_id: str = il.FetchField(
-        endpoint="pinterest-ads/accounts",
-        depends_on="connection",
+        provider="connection.accounts",
         label_key="name",
         value_key="id",
         description="Pinterest Ads account",

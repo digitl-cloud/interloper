@@ -129,7 +129,6 @@ def _is_rate_limit_error(exc: BaseException) -> bool:
     return isinstance(exc, FacebookRequestError) and exc.api_error_code() in _RATE_LIMIT_CODES
 
 
-# Retry wrapper for paginated entity calls that can hit Facebook rate limits.
 _rate_limit_retry = tc.retry(
     retry=tc.retry_if_exception(_is_rate_limit_error),
     wait=tc.wait_random_exponential(multiplier=2, min=5, max=300),
@@ -282,16 +281,13 @@ def _time_range(date: dt.date) -> dict[str, str]:
     resources={"connection": FacebookAdsConnection},
     tags=["Advertising"],
     icon="logos:facebook",
-    # Pivots action-lists, flattens nested entity dicts (e.g. ``creative``),
-    # and snake-cases the columns.
     normalizer=FacebookActionsNormalizer(flatten_max_level=1),
 )
 class FacebookAds(il.Source):
     """Facebook Ads (Meta Marketing) advertising platform integration."""
 
     account_id: str = il.FetchField(
-        endpoint="facebook-ads/accounts",
-        depends_on="connection",
+        provider="connection.accounts",
         label_key="name",
         value_key="account_id",
         description="Facebook Ads account ID",

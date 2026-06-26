@@ -19,8 +19,7 @@ class LinkedinOrganic(il.Source):
     """LinkedIn Organization page organic analytics integration."""
 
     organization_id: str = il.FetchField(
-        endpoint="linkedin-organic/organizations",
-        depends_on="connection",
+        provider="connection.organizations",
         label_key="name",
         value_key="id",
         description="LinkedIn Organization page ID",

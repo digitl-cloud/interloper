@@ -62,8 +62,7 @@ class Criteo(il.Source):
     """Criteo advertising platform integration."""
 
     advertiser_id: str = il.FetchField(
-        endpoint="criteo/advertisers",
-        depends_on="connection",
+        provider="connection.advertisers",
         label_key="name",
         value_key="id",
         description="Criteo advertiser account",
