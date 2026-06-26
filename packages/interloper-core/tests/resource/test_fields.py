@@ -41,11 +41,13 @@ class TestFetchField:
         with pytest.raises(ValueError, match="<slot>.<method>"):
             il.FetchField(provider="things")
 
-    def test_validates_annotation_declared_slot(self):
-        """A slot declared via a typed annotation (not ``resources=``) validates.
+    def test_annotation_declared_slot_validates_and_is_exposed(self):
+        """A slot declared via a typed annotation (not ``resources=``) works.
 
         Such slots live on the resolved ``resource_types`` but not in the
-        class ``__dict__``; validation must resolve against the former.
+        class ``__dict__``. Both validation and the definition's ``resources``
+        map must resolve against the former — otherwise the frontend gets an
+        empty ``resources`` and the FetchField degrades to a plain input.
         """
 
         @il.source()
@@ -53,11 +55,10 @@ class TestFetchField:
             connection: Conn
             thing_id: str = il.FetchField(provider="connection.things", value_key="id")
 
-        # Should not raise — the 'connection' slot comes from the annotation,
-        # resolved via Src.resource_types even though it's absent from __dict__.
         defn = Src.definition()
         assert defn.config_schema["properties"]["thing_id"]["x-fetch"]["provider"] == "connection.things"
-        assert "connection" in Src.resource_types
+        # The annotation-declared slot must be exposed in the catalog resources.
+        assert defn.resources == {"connection": Conn.key}
 
 
 class TestValidation:
