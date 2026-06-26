@@ -11,21 +11,24 @@ in prod for AmazonAds; see ``test_amazon_ads.py``).
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
+import pytest
 from interloper.dag.base import DAG
 from interloper.dag.spec import DAGSpec
 from interloper.representation import representation_for
 from interloper_pandas import DataFrameNormalizer
+from suds import WebFault
 
 from interloper_assets.bing_ads import constants
 from interloper_assets.bing_ads.schemas import AdsStats
-from interloper_assets.bing_ads.source import BingAds
+from interloper_assets.bing_ads.source import BingAds, _translate_soap_fault
 
 
 def _source() -> Any:
-    return BingAds(id="src-1")
+    return BingAds(id="src-1", account_id="123")  # ty: ignore[unknown-argument]
 
 
 class TestSourceNormalizer:
@@ -73,3 +76,50 @@ class TestSpecRoundtrip:
         assert normalizer is not None
         normalized = normalizer.normalize(df)
         representation_for(normalized).conformer.validate(normalized, AdsStats)  # must not raise
+
+
+def _web_fault(detail: SimpleNamespace) -> WebFault:
+    return WebFault(SimpleNamespace(faultstring="Invalid client data.", detail=detail), document=None)
+
+
+class TestTranslateSoapFault:
+    """The generic 'Invalid client data' fault must be unpacked into its real cause."""
+
+    def test_operation_error_is_surfaced(self):
+        fault = _web_fault(
+            SimpleNamespace(
+                ApiFaultDetail=SimpleNamespace(
+                    BatchErrors="",
+                    OperationErrors=SimpleNamespace(
+                        OperationError=SimpleNamespace(
+                            Code="2003",
+                            ErrorCode="AccountNotAuthorized",
+                            Message="insufficient privileges",
+                        )
+                    ),
+                )
+            )
+        )
+        with pytest.raises(RuntimeError, match="AccountNotAuthorized: insufficient privileges"):
+            _translate_soap_fault(fault)
+
+    def test_multiple_batch_errors_are_joined(self):
+        fault = _web_fault(
+            SimpleNamespace(
+                ApiFaultDetail=SimpleNamespace(
+                    OperationErrors="",
+                    BatchErrors=SimpleNamespace(
+                        BatchError=[
+                            SimpleNamespace(Code="1", ErrorCode="A", Message="first"),
+                            SimpleNamespace(Code="2", ErrorCode="B", Message="second"),
+                        ]
+                    ),
+                )
+            )
+        )
+        with pytest.raises(RuntimeError, match="A: first; B: second"):
+            _translate_soap_fault(fault)
+
+    def test_non_webfault_is_left_untouched(self):
+        # Returns None (does not raise) so the caller re-raises the original.
+        assert _translate_soap_fault(ValueError("boom")) is None
