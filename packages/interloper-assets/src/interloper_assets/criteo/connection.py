@@ -1,6 +1,5 @@
 from functools import cached_property
 
-import httpx
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -19,43 +18,27 @@ class CriteoConnection(il.OAuthConnection):
     model_config = SettingsConfigDict(env_prefix="criteo_")
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        return il.RESTClient(
+    def client(self) -> il.AsyncRESTClient:
+        """Async REST client with OAuth2 refresh-token auth.
+
+        The token exchange is async-native (yielded into this client's flow), so
+        no blocking refresh runs on the event loop — no up-front token fetch needed.
+        """
+        return il.AsyncRESTClient(
             constants.BASE_URL,
             auth=il.OAuth2RefreshTokenAuth(
-                base_url=constants.BASE_URL,
-                client_id=self.client_id,
-                client_secret=self.client_secret,
-                refresh_token=self.refresh_token,
-                token_endpoint="/oauth2/token",
+                constants.BASE_URL, self.client_id, self.client_secret, refresh_token=self.refresh_token
             ),
         )
 
     @il.fetch_field_provider
     async def advertisers(self) -> list[dict[str, str]]:
         """Fetch the Criteo advertisers accessible by this connection, sorted by name."""
-        async with httpx.AsyncClient(timeout=30) as client:
-            token_resp = await client.post(
-                f"{constants.BASE_URL}/oauth2/token",
-                data={
-                    "grant_type": "refresh_token",
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                    "refresh_token": self.refresh_token,
-                },
-            )
-            token_resp.raise_for_status()
-            access_token = token_resp.json()["access_token"]
-
-            advertisers_resp = await client.get(
-                f"{constants.BASE_URL}/{constants.API_VERSION}/advertisers/me",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            advertisers_resp.raise_for_status()
-            advertisers = advertisers_resp.json().get("data", [])
+        response = await self.client.get(f"/{constants.API_VERSION}/advertisers/me")
+        response.raise_for_status()
+        advertisers = response.json().get("data", [])
 
         results = [
-            {"id": a["id"], "name": a.get("attributes", {}).get("advertiserName") or a["id"]}
-            for a in advertisers
+            {"id": a["id"], "name": a.get("attributes", {}).get("advertiserName") or a["id"]} for a in advertisers
         ]
         return sorted(results, key=lambda a: a["name"].lower())

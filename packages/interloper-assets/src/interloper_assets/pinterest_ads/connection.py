@@ -19,8 +19,17 @@ class PinterestAdsConnection(il.OAuthConnection):
     model_config = SettingsConfigDict(env_prefix="pinterest_ads_")
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        return il.RESTClient(
+    def client(self) -> il.AsyncRESTClient:
+        """Async REST client for the Pinterest v5 API.
+
+        Note: this client's ``OAuth2RefreshTokenAuth`` sends the client
+        credentials in the request body, whereas Pinterest's token endpoint
+        actually requires HTTP **Basic** auth (see ``_get_access_token``, which
+        the ``accounts`` provider relies on). Reconcile this Basic-vs-body
+        discrepancy when the source's assets are implemented and start using
+        this client.
+        """
+        return il.AsyncRESTClient(
             constants.BASE_URL,
             auth=il.OAuth2RefreshTokenAuth(
                 base_url=constants.BASE_URL,

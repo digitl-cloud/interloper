@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 # HELPERS
 # ------------------------------------------------------------------
-def _statistics_report(
+async def _statistics_report(
     connection: CriteoConnection,
     advertiser_id: str,
     start_date: dt.date,
@@ -25,7 +25,7 @@ def _statistics_report(
     currency: str = "EUR",
 ) -> list[dict]:
     """POST a Criteo statistics report and return its rows."""
-    response = connection.client.post(
+    response = await connection.client.post(
         f"/{constants.API_VERSION}/statistics/report",
         json={
             "advertiserIds": advertiser_id,
@@ -73,29 +73,27 @@ class Criteo(il.Source):
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    def ads_stats(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
+    async def ads_stats(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
         """Ad-level performance statistics with daily breakdowns."""
-        rows = _statistics_report(
+        return await _statistics_report(
             connection,
             advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,
             dimensions=["Day", "AdId", "AdsetId", "CampaignId"],
         )
-        return rows
 
     @il.asset(
         schema=CampaignsStats,
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    def campaigns_stats(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
+    async def campaigns_stats(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
         """Campaign-level performance statistics with daily breakdowns."""
-        rows = _statistics_report(
+        return await _statistics_report(
             connection,
             advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,
             dimensions=["Day", "CampaignId"],
         )
-        return rows

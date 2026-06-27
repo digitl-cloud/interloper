@@ -21,34 +21,16 @@ class ImpactConnection(il.Connection):
     auth_token: str = il.SecretField(description="Impact auth token")
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        auth = httpx.BasicAuth(username=self.account_sid, password=self.auth_token)
-        return il.RESTClient(
+    def client(self) -> il.AsyncRESTClient:
+        return il.AsyncRESTClient(
             f"{BASE_URL}/Advertisers/{self.account_sid}",
-            auth,
+            auth=httpx.BasicAuth(username=self.account_sid, password=self.auth_token),
             headers={"Accept": "application/json"},
         )
 
     @il.fetch_field_provider
     async def programs(self) -> list[dict[str, str]]:
         """Fetch Impact programs (campaigns) accessible by the connection."""
-        programs: list[dict[str, str]] = []
-        async with httpx.AsyncClient(
-            timeout=30,
-            auth=httpx.BasicAuth(self.account_sid, self.auth_token),
-            headers={"Accept": "application/json"},
-        ) as client:
-            page, num_pages = 1, 1
-            while page <= num_pages:
-                resp = await client.get(
-                    f"{BASE_URL}/Advertisers/{self.account_sid}/Campaigns",
-                    params={"Page": page},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                num_pages = int(data["@numpages"])
-                for campaign in data.get("Campaigns", []):
-                    programs.append({"Id": campaign["Id"], "Name": campaign.get("Name", campaign["Id"])})
-                page += 1
-
-        return programs
+        paginator = il.PageNumberPaginator(page_param="Page", total_path="@numpages")
+        pages = self.client.paginate("/Campaigns", paginator, data_selector=lambda r: r.json().get("Campaigns") or [])
+        return [{"Id": c["Id"], "Name": c.get("Name", c["Id"])} async for page in pages for c in page]
