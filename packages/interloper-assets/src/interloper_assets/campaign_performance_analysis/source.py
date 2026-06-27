@@ -5,4 +5,4 @@ import interloper as il
     tags=["Analytics"],
 )
 class CampaignPerformanceAnalysis(il.Source):
-    """Campaign performance analysis source."""
+    """Campaign performance analysis source (placeholder, not yet implemented)."""

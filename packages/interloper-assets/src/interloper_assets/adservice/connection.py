@@ -18,7 +18,7 @@ class AdserviceConnection(il.Connection):
     api_key: str = il.SecretField(description="Adservice API key")
 
     @cached_property
-    def client(self) -> il.RESTClient:
+    def client(self) -> il.AsyncRESTClient:
         base_url = "https://api.adservice.com/v2/client"
         auth = httpx.BasicAuth(username="api", password=self.api_key)
-        return il.RESTClient(base_url, auth)
+        return il.AsyncRESTClient(base_url, auth)

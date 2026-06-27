@@ -20,7 +20,6 @@ class UsercentricsConnection(il.Connection):
     analytics_id: str = il.InputField(description="Usercentrics analytics ID")
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        client = il.RESTClient(constants.BASE_URL)
-        client.headers.update({"X-API-Key": self.api_key})
-        return client
+    def client(self) -> il.AsyncRESTClient:
+        # Static API-key header (no token refresh) drops straight into the async client.
+        return il.AsyncRESTClient(constants.BASE_URL, headers={"X-API-Key": self.api_key})

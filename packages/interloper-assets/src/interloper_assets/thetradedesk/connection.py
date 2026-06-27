@@ -20,8 +20,9 @@ class TheTradeDeskConnection(il.Connection):
     partner_id: str = il.InputField(description="The Trade Desk partner ID")
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        return il.RESTClient(
+    def client(self) -> il.AsyncRESTClient:
+        """Async REST client for the The Trade Desk API."""
+        return il.AsyncRESTClient(
             BASE_URL,
             headers={"TTD-Auth": self.api_key},
         )

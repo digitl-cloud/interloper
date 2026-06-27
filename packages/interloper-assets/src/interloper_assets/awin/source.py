@@ -59,14 +59,14 @@ class AwinTransactionsNormalizer(DataFrameNormalizer):
 # ------------------------------------------------------------------
 
 
-def get_advertiser_transactions(
-    client: il.RESTClient,
+async def get_advertiser_transactions(
+    client: il.AsyncRESTClient,
     advertiser_id: str,
     start_date: dt.date,
     end_date: dt.date,
 ) -> list[dict]:
     """Fetch advertiser transactions from the Awin API."""
-    response = client.get(
+    response = await client.get(
         f"/advertisers/{advertiser_id}/transactions/",
         params={
             "startDate": start_date.isoformat() + "T00:00:00",
@@ -79,14 +79,14 @@ def get_advertiser_transactions(
     return response.json()
 
 
-def get_advertiser_reports_by_publisher(
-    client: il.RESTClient,
+async def get_advertiser_reports_by_publisher(
+    client: il.AsyncRESTClient,
     advertiser_id: str,
     start_date: dt.date,
     end_date: dt.date,
 ) -> list[dict]:
     """Fetch advertiser reports aggregated by publisher from the Awin API."""
-    response = client.get(
+    response = await client.get(
         f"/advertisers/{advertiser_id}/reports/publisher",
         params={
             "startDate": start_date.isoformat(),
@@ -119,9 +119,9 @@ class Awin(il.Source):
         tags=["Report"],
         normalizer=AwinTransactionsNormalizer(),
     )
-    def transactions(self, context: il.ExecutionContext, connection: AwinConnection) -> list[dict[str, Any]]:
+    async def transactions(self, context: il.ExecutionContext, connection: AwinConnection) -> list[dict[str, Any]]:
         """Advertiser transactions including commissions, sales amounts, and click attribution."""
-        data = get_advertiser_transactions(
+        data = await get_advertiser_transactions(
             client=connection.client,
             advertiser_id=connection.publisher_id,
             start_date=context.partition_date,
@@ -134,9 +134,9 @@ class Awin(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def publishers_stats(self, context: il.ExecutionContext, connection: AwinConnection) -> list[dict[str, Any]]:
+    async def publishers_stats(self, context: il.ExecutionContext, connection: AwinConnection) -> list[dict[str, Any]]:
         """Advertiser performance reports aggregated by publisher."""
-        data = get_advertiser_reports_by_publisher(
+        data = await get_advertiser_reports_by_publisher(
             client=connection.client,
             advertiser_id=connection.publisher_id,
             start_date=context.partition_date,

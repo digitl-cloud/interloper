@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 
 
-def get_report(
-    client: il.RESTClient,
+async def get_report(
+    client: il.AsyncRESTClient,
     start_date: dt.date,
     end_date: dt.date,
     report_type: str,
@@ -33,7 +33,7 @@ def get_report(
     sales_amount: int | None = None,
 ) -> dict:
     """Fetch a report from the Adservice API."""
-    response = client.get(
+    response = await client.get(
         url=f"/{report_type}",
         params={
             "from_date": start_date.isoformat(),
@@ -67,9 +67,11 @@ class Adservice(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def campaigns_stats(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
+    async def campaigns_stats(
+        self, context: il.ExecutionContext, connection: AdserviceConnection
+    ) -> list[dict[str, Any]]:
         """Campaign performance statistics with metrics like impressions, clicks, and conversions."""
-        response = get_report(
+        response = await get_report(
             client=connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
@@ -78,96 +80,90 @@ class Adservice(il.Source):
             end_group="stamp",
             sales_amount=1,
         )
-        data = response["data"]["rows"]
-        return data
+        return response["data"]["rows"]
 
     @il.asset(
         schema=Conversions,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def conversions(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
+    async def conversions(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
         """Conversion events and attribution data."""
-        response = get_report(
+        response = await get_report(
             client=connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="conversions",
         )
-        data = response["data"]
-        return data
+        return response["data"]
 
     @il.asset(
         schema=ConversionsStatsByTimeOfDay,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def conversions_stats_by_time_of_day(
+    async def conversions_stats_by_time_of_day(
         self, context: il.ExecutionContext, connection: AdserviceConnection
     ) -> list[dict[str, Any]]:
         """Conversion events broken down by time of day."""
-        response = get_report(
+        response = await get_report(
             client=connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics/conversions/timeofday",
         )
-        data = response["data"]
-        return data
+        return response["data"]
 
     @il.asset(
         schema=CampaignsStatsByCity,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def campaigns_stats_by_city(
+    async def campaigns_stats_by_city(
         self, context: il.ExecutionContext, connection: AdserviceConnection
     ) -> list[dict[str, Any]]:
         """Campaign performance segmented by city."""
-        response = get_report(
+        response = await get_report(
             client=connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics/devicedetails",
             group_by="city",
         )
-        data = response["data"]
-        return data
+        return response["data"]
 
     @il.asset(
         schema=CampaignsStatsByBrowser,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def campaigns_stats_by_browser(
+    async def campaigns_stats_by_browser(
         self, context: il.ExecutionContext, connection: AdserviceConnection
     ) -> list[dict[str, Any]]:
         """Campaign performance segmented by browser."""
-        response = get_report(
+        response = await get_report(
             client=connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics/devicedetails",
             group_by="browser",
         )
-        data = response["data"]
-        return data
+        return response["data"]
 
     @il.asset(
         schema=CampaignsStatsByDeviceType,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def campaigns_stats_by_device_type(
+    async def campaigns_stats_by_device_type(
         self, context: il.ExecutionContext, connection: AdserviceConnection
     ) -> list[dict[str, Any]]:
         """Campaign performance segmented by device type."""
-        response = get_report(
+        response = await get_report(
             client=connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics/devicedetails",
             group_by="device_type",
         )
-        data = response["data"]
-        return data
+        return response["data"]

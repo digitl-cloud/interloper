@@ -1,6 +1,5 @@
 from functools import cached_property
 
-import httpx
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -26,17 +25,13 @@ class InstagramInsightsConnection(il.Connection):
     refresh_token: str = il.SecretField(description="OAuth2 long-lived access token")
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        return il.RESTClient(
-            constants.BASE_URL,
-            auth=il.OAuth2RefreshTokenAuth(
-                base_url=constants.BASE_URL,
-                token_endpoint="/v21.0/oauth/access_token",
-                client_id=self.client_id,
-                client_secret=self.client_secret,
-                refresh_token=self.refresh_token,
-            ),
-        )
+    def client(self) -> il.AsyncRESTClient:
+        """Async REST client for the Facebook Graph API.
+
+        The ``refresh_token`` field holds a long-lived access token, used
+        directly as the bearer.
+        """
+        return il.AsyncRESTClient(constants.BASE_URL, auth=il.HTTPBearerAuth(self.refresh_token))
 
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:
@@ -45,7 +40,8 @@ class InstagramInsightsConnection(il.Connection):
         Backs the source's ``account_id`` ``FetchField``. Walks the Facebook Pages
         the token administers and flattens each Page's connected
         ``instagram_business_account`` (Pages without one are skipped). Talks to the
-        Graph API over httpx (not the SDK) so it runs in the API process.
+        Graph API over the lightweight ``AsyncRESTClient`` (not the SDK) so it runs
+        in the API process.
         """
         params = {
             "fields": "instagram_business_account{id,username,name},name",
@@ -54,26 +50,25 @@ class InstagramInsightsConnection(il.Connection):
         }
 
         accounts: list[dict[str, str]] = []
-        url: str | None = f"{constants.BASE_URL}/v21.0/me/accounts"
+        path: str | None = "/v21.0/me/accounts"
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            while url:
-                response = await client.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
+        while path:
+            response = await self.client.get(path, params=params)
+            response.raise_for_status()
+            data = response.json()
 
-                for page in data.get("data", []):
-                    ig_account = page.get("instagram_business_account")
-                    if not ig_account:
-                        continue
-                    name = ig_account.get("username") or ig_account.get("name") or page.get("name", ig_account["id"])
-                    accounts.append({
-                        "id": str(ig_account["id"]),
-                        "name": name,
-                    })
+            for page in data.get("data", []):
+                ig_account = page.get("instagram_business_account")
+                if not ig_account:
+                    continue
+                name = ig_account.get("username") or ig_account.get("name") or page.get("name", ig_account["id"])
+                accounts.append({
+                    "id": str(ig_account["id"]),
+                    "name": name,
+                })
 
-                # Cursor pagination: follow the absolute `next` URL (already carries params).
-                url = data.get("paging", {}).get("next")
-                params = {}
+            # Cursor pagination: follow the absolute `next` URL (already carries params).
+            path = data.get("paging", {}).get("next")
+            params = {}
 
         return accounts

@@ -54,9 +54,10 @@ class AmazonSellingPartnerConnection(il.Connection):
         return AmazonSellingPartnerLocation(self.location)
 
     @cached_property
-    def client(self) -> il.RESTClient:
+    def client(self) -> il.AsyncRESTClient:
+        """Async REST client for the Amazon Selling Partner API."""
         location = self.api_location
-        client = il.RESTClient(
+        client = il.AsyncRESTClient(
             location.api_url,
             auth=il.OAuth2RefreshTokenAuth(
                 base_url=location.auth_url,

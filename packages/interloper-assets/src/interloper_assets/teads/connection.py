@@ -19,8 +19,9 @@ class TeadsConnection(il.Connection):
     api_key: str = il.SecretField(description="Teads API key")
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        client = il.RESTClient(constants.BASE_URL)
+    def client(self) -> il.AsyncRESTClient:
+        """Async REST client for the Teads API."""
+        client = il.AsyncRESTClient(constants.BASE_URL)
         client.headers.update(
             {
                 "Authorization": self.api_key,

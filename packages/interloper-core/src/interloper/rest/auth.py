@@ -37,7 +37,14 @@ class HTTPBearerAuth(httpx.Auth):
 
 
 class OAuth2Auth(httpx.Auth):
-    """OAuth2 authentication with automatic token refresh."""
+    """OAuth2 authentication with automatic token acquisition and 401 refresh.
+
+    Async-native: the token request is *yielded into the active client's flow*
+    rather than performed inline, so a single :meth:`auth_flow` drives both
+    :class:`~interloper.rest.client.RESTClient` and
+    :class:`~interloper.rest.client.AsyncRESTClient` — the token exchange runs
+    sync on one and async on the other, with no blocking I/O on the event loop.
+    """
 
     requires_response_body = True
 
@@ -54,7 +61,7 @@ class OAuth2Auth(httpx.Auth):
         """Initialize the OAuth2 authentication.
 
         Args:
-            base_url: The base URL of the API.
+            base_url: The base URL of the API (token endpoint is resolved against it).
             client_id: The client ID.
             client_secret: The client secret.
             refresh_token: The refresh token (optional).
@@ -69,7 +76,6 @@ class OAuth2Auth(httpx.Auth):
         self._scope = scope
         self._token_endpoint = token_endpoint if token_endpoint.startswith("/") else f"/{token_endpoint}"
         self._access_token = access_token
-        self._token_client: httpx.Client | None = None
 
     @property
     def grant_type(self) -> str:
@@ -91,6 +97,11 @@ class OAuth2Auth(httpx.Auth):
         return data
 
     @property
+    def auth_headers(self) -> dict[str, str] | None:
+        """The authentication headers for token requests."""
+        return None
+
+    @property
     def access_token(self) -> str:
         """The access token.
 
@@ -106,105 +117,47 @@ class OAuth2Auth(httpx.Auth):
         """The refresh token."""
         return self._refresh_token
 
-    def _get_token_client(self) -> httpx.Client:
-        """Get or create a client for token requests.
-
-        Returns:
-            An httpx client for making token requests.
-        """
-        if self._token_client is None:
-            self._token_client = httpx.Client(base_url=self._base_url, timeout=None)
-        return self._token_client
-
-    def _acquire_token(self) -> None:
-        """Acquire a new access token."""
-        logger.info("Acquiring OAuth2 access token...")
-
-        token_client = self._get_token_client()
-        response = token_client.post(
-            self._token_endpoint,
-            data=self.auth_data,
-            headers=self.auth_headers,
-        )
-        response.raise_for_status()
-
-        token_data = response.json()
-        self._access_token = token_data["access_token"]
-        self._refresh_token = token_data.get("refresh_token", self._refresh_token)
-
-        logger.info("OAuth2 access token acquired")
-
-    def _refresh_access_token(self) -> None:
-        """Refresh the access token using the refresh token.
-
-        Raises:
-            AuthenticationError: If no refresh token is available.
-        """
-        if self._refresh_token is None:
-            raise AuthenticationError("Cannot refresh token: no refresh token available")
-
-        logger.info("Refreshing OAuth2 access token...")
-
-        token_client = self._get_token_client()
-        refresh_data = {
-            "client_id": self._client_id,
-            "client_secret": self._client_secret,
-            "grant_type": "refresh_token",
-            "refresh_token": self._refresh_token,
-        }
-
-        response = token_client.post(
-            self._token_endpoint,
-            data=refresh_data,
-            headers=self.auth_headers,
-        )
-        response.raise_for_status()
-
-        token_data = response.json()
-        self._access_token = token_data["access_token"]
-        self._refresh_token = token_data.get("refresh_token", self._refresh_token)
-
-        logger.info("OAuth2 access token refreshed")
-
-    @property
-    def auth_headers(self) -> dict[str, str] | None:
-        """The authentication headers for token requests."""
-        return None
-
     def clear_token(self) -> None:
-        """Clear the cached access token."""
+        """Clear the cached access token (forces re-acquisition on the next request)."""
         self._access_token = None
 
-    def sync_auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
-        """Authenticate the request with OAuth2, handling token acquisition and refresh.
+    def _token_request(self) -> httpx.Request:
+        """Build the token-exchange request to be executed by the active client.
 
-        Args:
-            request: The request to authenticate.
+        Returns:
+            A POST to the token endpoint carrying the grant's ``auth_data``.
+        """
+        url = self._base_url.rstrip("/") + self._token_endpoint
+        return httpx.Request("POST", url, data=self.auth_data, headers=self.auth_headers or {})
+
+    def _store_token(self, response: httpx.Response) -> None:
+        """Persist the access/refresh tokens from a token-endpoint response."""
+        response.raise_for_status()
+        token_data = response.json()
+        self._access_token = token_data["access_token"]
+        self._refresh_token = token_data.get("refresh_token", self._refresh_token)
+        logger.info("OAuth2 access token acquired")
+
+    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+        """Attach a Bearer token, acquiring/refreshing it via yielded requests.
+
+        Defining ``auth_flow`` (rather than ``sync_auth_flow``) lets httpx drive
+        the same generator for sync and async clients: the yielded token request
+        is executed by whichever client is active.
 
         Yields:
-            The authenticated request(s).
+            The token request (when needed) and the authenticated request.
         """
-        # Acquire token if we don't have one
         if self._access_token is None:
-            self._acquire_token()
+            self._store_token((yield self._token_request()))
 
-        # Add the access token to the request
         request.headers["Authorization"] = f"Bearer {self._access_token}"
-
-        # Send the request
         response = yield request
 
-        # If we get a 401, try to refresh the token and retry
         if response.status_code == 401:
-            try:
-                self._refresh_access_token()
-                request.headers["Authorization"] = f"Bearer {self._access_token}"
-                yield request
-            except AuthenticationError:
-                # No refresh token available, try to acquire a new token
-                self._acquire_token()
-                request.headers["Authorization"] = f"Bearer {self._access_token}"
-                yield request
+            self._store_token((yield self._token_request()))
+            request.headers["Authorization"] = f"Bearer {self._access_token}"
+            yield request
 
 
 class OAuth2ClientCredentialsAuth(OAuth2Auth):
@@ -251,10 +204,6 @@ class OAuth2RefreshTokenAuth(OAuth2Auth):
     def grant_type(self) -> str:
         """The grant type."""
         return "refresh_token"
-
-    def refresh(self) -> None:
-        """Refresh the access token using the refresh token."""
-        self._refresh_access_token()
 
     @property
     def auth_data(self) -> dict[str, str]:

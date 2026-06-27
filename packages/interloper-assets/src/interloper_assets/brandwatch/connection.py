@@ -30,7 +30,5 @@ class BrandwatchConnection(il.Connection):
     )
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        client = il.RESTClient(constants.BASE_URL)
-        client.params = client.params.set("param_key", self.api_key)
-        return client
+    def client(self) -> il.AsyncRESTClient:
+        return il.AsyncRESTClient(constants.BASE_URL, params={"param_key": self.api_key})

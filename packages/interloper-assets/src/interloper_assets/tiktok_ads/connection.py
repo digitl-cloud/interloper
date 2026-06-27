@@ -1,7 +1,6 @@
 import os
 from functools import cached_property
 
-import httpx
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -27,7 +26,7 @@ class TiktokAdsConnection(il.Connection):
     access_token: str = il.SecretField(description="TikTok Ads API access token")
 
     @cached_property
-    def aclient(self) -> il.AsyncRESTClient:
+    def client(self) -> il.AsyncRESTClient:
         # The TikTok Business API authenticates via the "Access-Token" header, not Bearer.
         # Static-header auth drops straight into the async client.
         return il.AsyncRESTClient(BASE_URL, headers={"Access-Token": self.access_token})
@@ -39,22 +38,17 @@ class TiktokAdsConnection(il.Connection):
         Backs the source's ``advertiser_id`` ``FetchField``. Listing advertisers needs
         the connector app's ``app_id`` / ``secret`` — read from the provider-scoped
         environment (``TIKTOK_CLIENT_ID`` / ``TIKTOK_CLIENT_SECRET``) — alongside the
-        connection's access token. Talks to the v1.3 API over httpx (not the SDK) so it
-        runs in the API process.
+        connection's access token. Talks to the v1.3 API over the lightweight
+        ``AsyncRESTClient`` (not the SDK) so it runs in the API process.
         """
         app_id = os.environ.get("TIKTOK_CLIENT_ID", "")
         secret = os.environ.get("TIKTOK_CLIENT_SECRET", "")
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                f"{BASE_URL}/oauth2/advertiser/get/",
-                params={"app_id": app_id, "secret": secret},
-                headers={"Access-Token": self.access_token},
-            )
-            response.raise_for_status()
-            body = response.json()
-            if body.get("code") != 0:
-                raise RuntimeError(f"TikTok API error: {body.get('message')}")
+        response = await self.client.get("/oauth2/advertiser/get/", params={"app_id": app_id, "secret": secret})
+        response.raise_for_status()
+        body = response.json()
+        if body.get("code") != 0:
+            raise RuntimeError(f"TikTok API error: {body.get('message')}")
 
         advertisers = body.get("data", {}).get("list", [])
         results = [

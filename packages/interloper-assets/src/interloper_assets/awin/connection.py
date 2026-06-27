@@ -20,8 +20,5 @@ class AwinConnection(il.Connection):
     publisher_id: str = il.InputField(description="Awin publisher or advertiser ID")
 
     @cached_property
-    def client(self) -> il.RESTClient:
-        return il.RESTClient(
-            BASE_URL,
-            headers={"Authorization": f"Bearer {self.access_token}"},
-        )
+    def client(self) -> il.AsyncRESTClient:
+        return il.AsyncRESTClient(BASE_URL, auth=il.HTTPBearerAuth(self.access_token))

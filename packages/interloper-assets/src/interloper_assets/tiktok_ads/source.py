@@ -63,39 +63,29 @@ _ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 # ------------------------------------------------------------------
 # HELPERS — HTTP / pagination
 # ------------------------------------------------------------------
-async def _get_page(
-    connection: TiktokAdsConnection, path: str, params: dict[str, Any], page: int
-) -> dict[str, Any]:
-    """GET one page and return its ``data`` envelope (``list`` + ``page_info``)."""
-    response = await connection.aclient.get(
-        path,
-        params={**params, "page": page, "page_size": constants.PAGE_SIZE},
-    )
-    response.raise_for_status()
+def _select_list(response: Any) -> list[dict[str, Any]]:
+    """Pull ``data.list`` out of a TikTok response, raising on a non-zero API code."""
     body = response.json()
     if body.get("code") != 0:
         raise RuntimeError(f"TikTok API error {body.get('code')}: {body.get('message')}")
-    return body["data"]
+    return body["data"]["list"]
 
 
 async def _paginate(connection: TiktokAdsConnection, path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
     """GET a paginated TikTok endpoint, following ``data.page_info.total_page``.
 
     The first page reports ``total_page``, so the remaining pages are fetched
-    concurrently (bounded by ``PAGE_CONCURRENCY``) rather than one at a time.
+    concurrently (bounded by ``PAGE_CONCURRENCY``) by the paginating client.
     """
-    first = await _get_page(connection, path, params, 1)
-    items: list[dict[str, Any]] = list(first["list"])
-
-    total_page = first["page_info"]["total_page"]
-    if total_page > 1:
-        rest = await il.bounded_gather(
-            (_get_page(connection, path, params, page) for page in range(2, total_page + 1)),
-            limit=constants.PAGE_CONCURRENCY,
-        )
-        for data in rest:
-            items.extend(data["list"])
-    return items
+    paginator = il.PageNumberPaginator(total_path="data.page_info.total_page")
+    pages = connection.client.paginate(
+        path,
+        paginator,
+        params={**params, "page_size": constants.PAGE_SIZE},
+        data_selector=_select_list,
+        concurrency=constants.PAGE_CONCURRENCY,
+    )
+    return [row async for page in pages for row in page]
 
 
 async def _request_report(
@@ -238,7 +228,7 @@ class TiktokAds(il.Source):
     @il.asset(schema=Advertisers, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
     async def advertisers(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
         """The advertiser account with its attributes."""
-        response = await connection.aclient.get(
+        response = await connection.client.get(
             "/advertiser/info/",
             params={
                 "advertiser_ids": json.dumps([self.advertiser_id]),
