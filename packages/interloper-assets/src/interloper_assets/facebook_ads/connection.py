@@ -24,8 +24,14 @@ _GRAPH_URL = f"https://graph.facebook.com/v{constants.API_VERSION}"
         },
     ),
 )
-class FacebookAdsConnection(il.Connection):
-    """Facebook Ads (Meta Marketing) API connection."""
+class FacebookAdsConnection(il.OAuthConnection):
+    """Facebook Ads (Meta Marketing) API connection.
+
+    Facebook names its app credentials ``app_id`` / ``app_secret`` and uses a
+    long-lived ``access_token``, so it declares those fields and maps them via
+    ``OAuthConfig.fields``, leaving ``OAuthConnection``'s optional credential
+    trio unused.
+    """
 
     model_config = SettingsConfigDict(env_prefix="facebook_ads_")
 

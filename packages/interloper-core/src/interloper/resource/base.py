@@ -49,25 +49,14 @@ class Resource(Component):
         """Produce a structured definition of this resource class.
 
         The config schema is inlined as it belongs to the resource itself.
-        If the class declares an ``oauth`` ClassVar, its metadata is
-        injected as an ``x-oauth`` extension at the schema root.
 
         Returns:
             A ResourceDefinition with metadata and JSON Schema.
         """
-        from interloper.oauth import OAuthConfig
         from interloper.resource.fields import strip_internal_fields
         from interloper.utils.imports import get_object_path
 
         raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
-        schema = strip_internal_fields(raw)
-
-        # Inject x-oauth from ClassVar if present.
-        oauth_cfg: OAuthConfig | None = getattr(cls, "oauth", None)
-        provider: str | None = None
-        if isinstance(oauth_cfg, OAuthConfig):
-            schema["x-oauth"] = oauth_cfg.to_schema_ext()
-            provider = oauth_cfg.provider
 
         return ResourceDefinition(
             kind=cls.kind,
@@ -77,6 +66,5 @@ class Resource(Component):
             icon=cls.icon,
             description=cls.__doc__ or "",
             tags=list(getattr(cls, 'tags', [])),
-            config_schema=schema,
-            provider=provider,
+            config_schema=strip_internal_fields(raw),
         )

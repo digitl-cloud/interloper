@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
 from interloper.component.build import build_component_class
-from interloper.connection.base import Connection, validate_oauth_fields
+from interloper.connection.base import Connection, OAuthConnection, validate_oauth_fields
 from interloper.oauth import OAuthConfig
 
 # Bounded TypeVar so that classes already extending Connection preserve their
@@ -86,6 +86,12 @@ def connection(
 
     def build(cls: type) -> type[Connection]:
         result = build_component_class(cls, base=Connection, classvars=classvars)
+        # OAuth lives on OAuthConnection only — reject it on a plain Connection,
+        # which carries neither the credential trio nor the schema injection.
+        if oauth is not None and not issubclass(result, OAuthConnection):
+            raise TypeError(
+                f"{result.__name__}: oauth=... requires subclassing OAuthConnection, not Connection."
+            )
         # Classes already extending Connection get classvars stamped after
         # model build, so the __pydantic_init_subclass__ hook ran without
         # the decorator's oauth — validate the final class explicitly.

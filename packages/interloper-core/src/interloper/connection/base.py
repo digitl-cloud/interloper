@@ -9,7 +9,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 from interloper.oauth import OAuthConfig
-from interloper.resource import InputField, Resource, SecretField
+from interloper.resource import InputField, Resource, ResourceDefinition, SecretField
 
 
 def validate_oauth_fields(cls: type[Connection]) -> None:
@@ -52,18 +52,50 @@ class Connection(BaseSettings, Resource):
         # Loads USERNAME, PASSWORD from environment if not passed explicitly
         conn = MyConnection()
 
-    Connections that support OAuth declare it via the decorator::
-
-        @connection(oauth=OAuthConfig("amazon", scope="..."))
-        class AmazonAdsConnection(OAuthConnection):
-            ...
-
-    (An ``oauth: ClassVar[OAuthConfig]`` in the class body is equivalent.)
+    Connections that support OAuth subclass ``OAuthConnection`` rather than
+    ``Connection``; the ``oauth`` config lives there, not on this base.
     """
 
     kind: ClassVar[str] = "connection"
     tags: ClassVar[list[str]] = []
+
+
+class OAuthConnection(Connection):
+    """A connection authenticated via OAuth — the home for all OAuth support.
+
+    Declares the standard credential trio (``client_id`` / ``client_secret`` /
+    ``refresh_token``) that ``OAuthConfig``'s default ``fields`` mapping
+    targets, so OAuth-enabled connections only add their own fields::
+
+        @connection(oauth=OAuthConfig("linkedin", scope="r_ads"))
+        class LinkedinAdsConnection(OAuthConnection):
+            account_id: str
+
+    The ``oauth`` config (provider, scope, token→field mapping) is declared
+    via the ``@connection(oauth=...)`` decorator kwarg or an equivalent
+    ``oauth: ClassVar[OAuthConfig]`` in the class body. Only ``OAuthConnection``
+    subclasses carry it — ``definition()`` injects the ``x-oauth`` schema
+    extension and tags the resolved credential fields so the form can render a
+    "Sign in with X" button.
+
+    The whole trio is optional (defaults to ``""``) so connections with a
+    non-standard token shape — a single long-lived ``access_token`` and no
+    refresh token, or differently named app credentials — can still subclass
+    this base and add their own fields.
+
+    ``client_id`` / ``client_secret`` are the *app* credentials. Left blank,
+    they default to the in-house per-provider credentials resolved from the
+    ``<PROVIDER>_CLIENT_ID`` / ``<PROVIDER>_CLIENT_SECRET`` environment (the
+    same vars the API's token-exchange endpoint reads), so the in-house secret
+    is never sent to the browser or stored per connection. Setting them
+    explicitly overrides the in-house app — e.g. to use your own OAuth client.
+    """
+
     oauth: ClassVar[OAuthConfig | None] = None
+
+    client_id: str = InputField("")
+    client_secret: str = SecretField("")
+    refresh_token: str = SecretField("")
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -71,34 +103,44 @@ class Connection(BaseSettings, Resource):
         super().__pydantic_init_subclass__(**kwargs)
         validate_oauth_fields(cls)
 
+    @classmethod
+    def definition(cls) -> ResourceDefinition:
+        """Augment the resource definition with the OAuth schema metadata.
 
-class OAuthConnection(Connection):
-    """A connection authenticated via the standard OAuth2 refresh-token flow.
+        Injects the ``x-oauth`` extension from the ``oauth`` config and tags
+        the fields the sign-in flow resolves with ``x-oauth-managed`` so the
+        form hides them in sign-in mode, surfacing them only for manual entry.
 
-    Declares the credential trio that ``OAuthConfig``'s default ``fields``
-    mapping targets, so OAuth-enabled connections only add their own
-    fields::
+        Returns:
+            The resource definition, enriched when ``oauth`` is configured.
+        """
+        definition = super().definition()
+        if isinstance(cls.oauth, OAuthConfig):
+            schema = definition.config_schema
+            schema["x-oauth"] = cls.oauth.to_schema_ext()
+            properties = schema.get("properties", {})
+            for name in cls.oauth_managed_fields():
+                if name in properties:
+                    properties[name] = {**properties[name], "x-oauth-managed": True}
+            definition.provider = cls.oauth.provider
+        return definition
 
-        @connection(oauth=OAuthConfig("linkedin", scope="r_ads"))
-        class LinkedinAdsConnection(OAuthConnection):
-            account_id: str
+    @classmethod
+    def oauth_managed_fields(cls) -> list[str]:
+        """Credential fields the OAuth flow resolves — hidden in sign-in mode.
 
-    Connections with a non-standard token response shape (e.g. Facebook's
-    app_id/app_secret/access_token) declare their own fields on a plain
-    ``Connection`` and pass a custom ``fields=`` mapping to ``OAuthConfig``.
+        The standard trio ``OAuthConnection`` adds over a plain ``Connection``
+        (``client_id`` / ``client_secret`` from env, ``refresh_token`` from
+        sign-in), unioned with the token-mapped fields a custom-shaped
+        connection declares (e.g. a long-lived ``access_token``). Derived from
+        the model, so the names live only at their declaration above.
 
-    ``client_id`` / ``client_secret`` are the *app* credentials. They are
-    optional and default to the in-house per-provider credentials resolved
-    from the ``<PROVIDER>_CLIENT_ID`` / ``<PROVIDER>_CLIENT_SECRET``
-    environment (the same vars the API's token-exchange endpoint reads), so
-    the in-house secret is never sent to the browser or stored per
-    connection. Setting them explicitly overrides the in-house app — e.g. to
-    use your own OAuth client.
-    """
-
-    client_id: str = InputField("")
-    client_secret: str = SecretField("")
-    refresh_token: str = SecretField()
+        Returns:
+            The credential field names, deduplicated in declaration order.
+        """
+        credentials = [f for f in OAuthConnection.model_fields if f not in Connection.model_fields]
+        token_fields = cls.oauth.fields.values() if isinstance(cls.oauth, OAuthConfig) else ()
+        return list(dict.fromkeys([*credentials, *token_fields]))
 
     @model_validator(mode="after")
     def _resolve_app_credentials(self) -> OAuthConnection:
