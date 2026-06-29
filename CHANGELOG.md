@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v0.23.0 (2026-06-29)
+
+### Bug Fixes
+
+- Coerce partition values to dates for time-partitioned assets
+  ([`ac07f4a`](https://github.com/digitl-cloud/interloper/commit/ac07f4ace15bad4affefe1ac7f9653e88921c5e1))
+
+- Expose annotation-declared resource slots in component definitions
+  ([`6200779`](https://github.com/digitl-cloud/interloper/commit/6200779a5a51e7dea39be1d5fd955fe7f1b70710))
+
+### Features
+
+- Async pagination for the TikTok Ads connector
+  ([`5919776`](https://github.com/digitl-cloud/interloper/commit/59197764dc1b67bb9d5f6d924c5bf576a53cb1e3))
+
+- Async-native connectors and a REST pagination architecture
+  ([`d979369`](https://github.com/digitl-cloud/interloper/commit/d9793690425821c5004d728fee959448aba25254))
+
+- Make the execution engine async-native and unify runners
+  ([`bcf03f2`](https://github.com/digitl-cloud/interloper/commit/bcf03f243ff77e24f9d4cdb35c0c277c715a21c6))
+
+- **app**: Add a run dependency graph view
+  ([`3855631`](https://github.com/digitl-cloud/interloper/commit/3855631bd7fbd7da6ba663e13d1ef04e70e3b545))
+
+### Refactoring
+
+- Resolve FetchField options via connection provider methods
+  ([`9893fa1`](https://github.com/digitl-cloud/interloper/commit/9893fa1c4886a4470af2e17c8ddfe66f983ae06f))
+
+- **assets**: Move bing-ads account to the source and surface API errors
+  ([`5cd8893`](https://github.com/digitl-cloud/interloper/commit/5cd88931675723a5b86c27e885d043ee5d4ab09d))
+
+
 ## v0.22.0 (2026-06-25)
 
 ### Features
