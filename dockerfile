@@ -10,6 +10,8 @@
 #   api        core + db + api (assets installed; SDK extras skipped)
 #   frontend   pre-built Nuxt SPA served by nginx
 #
+# The static documentation site has its own standalone build: docs.dockerfile.
+#
 # Tagging convention: one image per role, flavors ride the tag.
 #   docker build --target scheduler -t interloper-scheduler:0.2.0 .        # base
 #   docker build --target scheduler --build-arg SCHEDULER_EXTRAS=k8s \
