@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.23.1 (2026-06-29)
+
+### Bug Fixes
+
+- Hide OAuth app credentials in sign-in mode
+  ([`7fa55ba`](https://github.com/digitl-cloud/interloper/commit/7fa55ba0442ab0d70ecf5df12d8edcda158343e9))
+
+
 ## v0.23.0 (2026-06-29)
 
 ### Bug Fixes
