@@ -1,0 +1,81 @@
+# ============================================================================
+# Zensical configuration for the Interloper documentation site.
+# Build with `uv run zensical build` (or serve with `uv run zensical serve`)
+# from the repository root.
+# ============================================================================
+
+[project]
+
+site_name = "Interloper"
+site_description = "The ultra-portable data asset framework"
+site_author = "Digitl Cloud"
+
+#site_url = "https://www.example.com/"
+
+repo_url = "https://github.com/digitl-cloud/interloper"
+
+copyright = """
+Copyright &copy; 2026 Digitl Cloud
+"""
+
+nav = [
+    { "Home" = "index.md" },
+    { "Getting started" = "getting-started.md" },
+    { "Tutorial" = "tutorial.md" },
+    { "Features" = [
+        { "Assets & Sources" = "features/assets-sources.md" },
+        { "Destinations" = "features/destinations.md" },
+        { "Schema & Normalizer" = "features/schema.md" },
+        { "Upstream Assets" = "features/upstream-assets.md" },
+        { "Data Validation" = "features/data-validation.md" },
+        { "Partitioning" = "features/partitioning.md" },
+        { "Backfilling" = "features/backfilling.md" },
+        { "Connections" = "features/connections.md" },
+        { "Resources" = "features/resources.md" },
+        { "OAuth" = "features/oauth.md" },
+        { "REST & Pagination" = "features/rest.md" },
+        { "Configuration" = "features/config.md" },
+        { "Runners" = "features/runners.md" },
+        { "Events" = "features/events.md" },
+        { "Catalog" = "features/catalog.md" },
+        { "CLI & Manifests" = "features/cli.md" },
+    ] },
+    { "FAQ" = "faq.md" },
+]
+
+extra_css = ["stylesheets/extra.css"]
+
+# ----------------------------------------------------------------------------
+# Theme
+# ----------------------------------------------------------------------------
+[project.theme]
+
+language = "en"
+
+features = [
+    "announce.dismiss",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.code.select",
+    "content.footnote.tooltips",
+    "content.tabs.link",
+    "content.tooltips",
+    "navigation.footer",
+    "navigation.indexes",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.path",
+    "navigation.sections",
+    "navigation.tabs",
+    "navigation.tabs.sticky",
+    "navigation.top",
+    "navigation.tracking",
+    "search.highlight",
+    "toc.follow",
+    "toc.integrate",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "custom"
+accent = "custom"

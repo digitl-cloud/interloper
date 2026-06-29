@@ -21,6 +21,8 @@ examples/                    runnable usage examples
 chart/                       Helm chart
 docker/                      uv-sync.sh helper and nginx template
 dockerfile                   multi-target build (core / scheduler / worker / api / frontend)
+docs.dockerfile              standalone build for the static documentation site (zensical)
+docs/                        documentation site (zensical) served at docs.interloper.dev
 ```
 
 The frontend lives at `packages/interloper-app/app/` and has its own toolchain (pnpm + Nuxt) and its own [AGENTS.md](packages/interloper-app/app/AGENTS.md). `make build-app` builds the SPA and copies it into `packages/interloper-app/src/interloper_app/static/`.

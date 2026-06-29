@@ -1,0 +1,134 @@
+/* ==========================================================================
+   Interloper brand palette
+   Mirrors the console: light chrome, emerald-green brand accent, blue links,
+   dark-navy code surfaces.
+   ========================================================================== */
+
+:root {
+    --il-emerald: #10b981;
+    --il-emerald-dark: #059669;
+    --il-emerald-light: #34d399;
+    --il-blue: #2563eb;
+    --il-blue-dark: #1d4ed8;
+    --il-navy: #0d1526;
+    --il-slate-900: #0f172a;
+    --il-slate-600: #475569;
+    --il-gray-100: #f1f5f9;
+    --il-gray-50: #f7f8f9;
+}
+
+/* Custom primary (emerald) — drives active states, the tab indicator, etc. */
+[data-md-color-primary=custom] {
+    --md-primary-fg-color: var(--il-emerald);
+    --md-primary-fg-color--light: var(--il-emerald-light);
+    --md-primary-fg-color--dark: var(--il-emerald-dark);
+    --md-primary-bg-color: #ffffff;
+    --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+}
+
+/* Custom accent (blue) — link hover and interactive accents. */
+[data-md-color-accent=custom] {
+    --md-accent-fg-color: var(--il-blue);
+    --md-accent-fg-color--transparent: rgba(37, 99, 235, 0.1);
+    --md-accent-bg-color: #ffffff;
+}
+
+/* Blue links, like the console. */
+:root {
+    --md-typeset-a-color: var(--il-blue);
+}
+
+/* --------------------------------------------------------------------------
+   White header + tabs bar with dark text (console top bar), decoupled from
+   the emerald primary so the green still drives the active tab underline.
+   -------------------------------------------------------------------------- */
+.md-header {
+    background-color: #ffffff;
+    color: var(--il-slate-900);
+    box-shadow: 0 0 0.2rem rgba(0, 0, 0, 0.05), 0 0.2rem 0.4rem rgba(0, 0, 0, 0.05);
+}
+
+.md-tabs {
+    background-color: #ffffff;
+    color: var(--il-slate-900);
+    border-bottom: 0.05rem solid rgba(0, 0, 0, 0.07);
+}
+
+/* Active / hovered tab uses the emerald accent. */
+.md-tabs__link--active,
+.md-tabs__link:hover {
+    color: var(--il-emerald-dark);
+    opacity: 1;
+}
+
+/* Gray search field, like the console's "Search… ⌘K". */
+.md-search__form {
+    background-color: var(--il-gray-100);
+    color: var(--il-slate-900);
+    border-radius: 0.4rem;
+}
+
+.md-search__form:hover {
+    background-color: #e7ebf0;
+}
+
+.md-search__input::placeholder,
+.md-search__icon {
+    color: var(--il-slate-600);
+}
+
+/* --------------------------------------------------------------------------
+   Dark-navy code surfaces, echoing the console terminal and cards.
+   Syntax tokens are tuned for the dark background (these vars are only ever
+   consumed inside code blocks, so overriding them globally is safe).
+   -------------------------------------------------------------------------- */
+[data-md-color-scheme=default] {
+    --md-code-bg-color: var(--il-navy);
+    --md-code-fg-color: #cdd6e4;
+    --md-code-hl-color: #2977ff;
+    --md-code-hl-color--light: #2977ff1a;
+    --md-code-hl-comment-color: #8a94a7;
+    --md-code-hl-operator-color: #8a94a7;
+    --md-code-hl-punctuation-color: #8a94a7;
+    --md-code-hl-generic-color: #8a94a7;
+    --md-code-hl-variable-color: #8a94a7;
+    --md-code-hl-constant-color: #9383e2;
+    --md-code-hl-function-color: #c973d9;
+    --md-code-hl-keyword-color: #6791e0;
+    --md-code-hl-number-color: #e6695b;
+    --md-code-hl-special-color: #f06090;
+    --md-code-hl-string-color: #2fb170;
+    --md-code-hl-name-color: var(--md-code-fg-color);
+}
+
+.md-typeset pre > code,
+.md-typeset .highlight {
+    border-radius: 0.4rem;
+}
+
+/* Keep inline code light so it stays legible inside body text. */
+.md-typeset code:not(pre code) {
+    background-color: var(--il-gray-100);
+    color: var(--il-slate-900);
+}
+
+/* ==========================================================================
+   Landing page helpers
+   ========================================================================== */
+.center {
+    text-align: center;
+}
+
+.title {
+
+    h1 {
+        font-size: 3em;
+        margin-bottom: 0.5em;
+    }
+
+    h2 {
+        font-size: 3em;
+        font-weight: bold;
+        margin: 0 0 1.5em;
+    }
+}

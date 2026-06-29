@@ -79,10 +79,13 @@ jobs:
       matrix:
         # role  → dockerfile target + image name (interloper-<role>)
         # flavor → tag suffix; api_extras/scheduler_extras feed the build args
+        # file   → dockerfile to build (defaults to the multi-target dockerfile;
+        #          docs has its own standalone docs.dockerfile)
         include:
           - { role: api,       flavor: "",       api_extras: "",      scheduler_extras: "" }
           - { role: api,       flavor: agent,    api_extras: "agent", scheduler_extras: "" }
           - { role: frontend,  flavor: "",       api_extras: "",      scheduler_extras: "" }
+          - { role: docs,      flavor: "",       api_extras: "",      scheduler_extras: "", file: docs.dockerfile }
           - { role: worker,    flavor: "",       api_extras: "",      scheduler_extras: "" }
           - { role: scheduler, flavor: "",       api_extras: "",      scheduler_extras: "" }
           - { role: scheduler, flavor: k8s,      api_extras: "",      scheduler_extras: "k8s" }
@@ -126,7 +129,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfile
+          file: ${{ matrix.file || 'dockerfile' }}
           target: ${{ matrix.role }}
           platforms: linux/amd64,linux/arm64
           push: true
