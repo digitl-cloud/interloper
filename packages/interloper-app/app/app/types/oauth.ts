@@ -24,5 +24,6 @@ export interface OAuthFieldMeta {
     scope: string
     label: string
     icon: string
+    /** Token-response-key → model-field-name mapping, filled on sign-in. */
     fields: Record<string, string>
 }

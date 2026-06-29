@@ -36,6 +36,8 @@ interface JsonSchemaProperty {
     'x-options'?: { label: string, value: string }[]
     'x-options-from'?: string
     'x-fetch'?: FetchMeta
+    /** Field resolved by the OAuth flow — hidden in sign-in mode. */
+    'x-oauth-managed'?: boolean
     minimum?: number
     maximum?: number
     minLength?: number
@@ -113,16 +115,30 @@ const oauthTabs = computed<TabsItem[]>(() => [
     { label: 'Manual', value: 'manual', icon: 'i-lucide-keyboard' },
 ])
 
-/** The set of field keys that are auto-filled by OAuth. */
-const oauthFieldKeys = computed<Set<string>>(() => {
+/** Field keys auto-filled by the OAuth token exchange (used for the fill check). */
+const oauthTokenFieldKeys = computed<Set<string>>(() => {
     if (!oauthMeta.value) return new Set()
     return new Set(Object.values(oauthMeta.value.fields))
+})
+
+/**
+ * Field keys hidden in sign-in mode: everything the OAuth flow resolves for
+ * the user — token-filled fields plus app credentials from env (e.g. client_id
+ * / client_secret). The backend tags these with `x-oauth-managed`; falls back
+ * to the token fields if none are tagged.
+ */
+const oauthFieldKeys = computed<Set<string>>(() => {
+    if (!oauthMeta.value) return new Set()
+    const tagged = Object.entries(props.schema?.properties ?? {})
+        .filter(([, prop]) => prop['x-oauth-managed'])
+        .map(([key]) => key)
+    return new Set(tagged.length ? tagged : [...oauthTokenFieldKeys.value])
 })
 
 /** Whether OAuth fields have been filled (sign-in completed). */
 const oauthFilled = computed(() => {
     if (!oauthMeta.value) return false
-    return [...oauthFieldKeys.value].every(
+    return [...oauthTokenFieldKeys.value].every(
         key => data.value[key] !== undefined && data.value[key] !== '',
     )
 })

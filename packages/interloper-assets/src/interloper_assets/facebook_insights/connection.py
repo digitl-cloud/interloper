@@ -15,14 +15,15 @@ from interloper_assets.facebook_insights import constants
         scope="pages_show_list,pages_read_engagement,pages_read_user_content,read_insights",
     ),
 )
-class FacebookInsightsConnection(il.Connection):
-    """Facebook Insights API connection with OAuth2 refresh token auth."""
+class FacebookInsightsConnection(il.OAuthConnection):
+    """Facebook Insights API connection with OAuth2 refresh token auth.
+
+    Uses the standard ``client_id`` / ``client_secret`` / ``refresh_token``
+    trio from ``OAuthConnection``; ``refresh_token`` holds a long-lived access
+    token used directly as the bearer.
+    """
 
     model_config = SettingsConfigDict(env_prefix="facebook_insights_")
-
-    client_id: str = il.InputField(description="Facebook App ID")
-    client_secret: str = il.SecretField(description="Facebook App Secret")
-    refresh_token: str = il.SecretField(description="OAuth2 long-lived access token")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:

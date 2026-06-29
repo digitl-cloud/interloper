@@ -15,14 +15,15 @@ from interloper_assets.instagram_insights import constants
         scope="instagram_basic,instagram_manage_insights,pages_show_list,pages_read_engagement",
     ),
 )
-class InstagramInsightsConnection(il.Connection):
-    """Instagram Insights API connection with OAuth2 refresh token auth via Facebook Graph API."""
+class InstagramInsightsConnection(il.OAuthConnection):
+    """Instagram Insights API connection with OAuth2 refresh token auth via Facebook Graph API.
+
+    Uses the standard ``client_id`` / ``client_secret`` / ``refresh_token``
+    trio from ``OAuthConnection``; ``refresh_token`` holds a long-lived access
+    token.
+    """
 
     model_config = SettingsConfigDict(env_prefix="instagram_insights_")
-
-    client_id: str = il.InputField(description="Facebook App ID")
-    client_secret: str = il.SecretField(description="Facebook App Secret")
-    refresh_token: str = il.SecretField(description="OAuth2 long-lived access token")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:

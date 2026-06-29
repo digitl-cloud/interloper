@@ -36,17 +36,14 @@ class TestConnectionDecorator:
         assert definition.provider == "linkedin"
         assert definition.config_schema["x-oauth"]["auth_url"] == "https://www.linkedin.com/oauth/v2/authorization"
 
-    def test_oauth_kwarg_on_plain_class(self):
-        # The with-kwargs overload is typed for Connection subclasses;
-        # plain classes are still supported at runtime.
-        @connection(oauth=OAuthConfig("amazon"))  # ty: ignore[invalid-argument-type]
-        class MyConn:
-            client_id: str = "i"
-            client_secret: str = "s"
-            refresh_token: str = "r"
+    def test_oauth_kwarg_rejected_on_plain_connection(self):
+        # OAuth lives on OAuthConnection; a class that resolves to a plain
+        # Connection (here a bare class) is rejected.
+        with pytest.raises(TypeError, match=r"requires subclassing OAuthConnection"):
 
-        assert issubclass(MyConn, Connection)
-        assert MyConn.definition().provider == "amazon"
+            @connection(oauth=OAuthConfig("amazon"))  # ty: ignore[invalid-argument-type]
+            class MyConn:
+                host: str = "h"
 
     def test_oauth_kwarg_does_not_become_model_field(self):
         @connection(oauth=OAuthConfig("amazon"))
@@ -57,10 +54,10 @@ class TestConnectionDecorator:
         assert "oauth" not in MyConn.definition().config_schema.get("properties", {})
 
     def test_oauth_fields_mapping_validated_on_subclass_path(self):
-        # ClassVars are stamped on already-built Connection subclasses after
-        # the pydantic hooks ran -- the decorator must still validate.
+        # ClassVars are stamped on already-built OAuthConnection subclasses
+        # after the pydantic hooks ran -- the decorator must still validate.
         with pytest.raises(TypeError, match=r"Broken: OAuthConfig.fields .* \['nope'\]"):
 
             @connection(oauth=OAuthConfig("amazon", fields={"refresh_token": "nope"}))
-            class Broken(Connection):
-                client_id: str = "x"
+            class Broken(OAuthConnection):
+                pass
