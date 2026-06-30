@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.24.1 (2026-06-30)
+
+### Refactoring
+
+- Prefix connector OAuth provider env vars with INTERLOPER_
+  ([`c537d35`](https://github.com/digitl-cloud/interloper/commit/c537d352102089eb7a95e1240aa219c5293ce781))
+
+- Split OAuth connection bases and drive the form from a fields mapping
+  ([`3b37f2d`](https://github.com/digitl-cloud/interloper/commit/3b37f2d0c866c0ea3be5eff4fcc87c70e8a2ea7b))
+
+
 ## v0.24.0 (2026-06-30)
 
 ### Features
