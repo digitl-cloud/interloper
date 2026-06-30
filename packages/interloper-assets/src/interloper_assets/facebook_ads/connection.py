@@ -3,6 +3,7 @@ from typing import Any
 
 import httpx
 import interloper as il
+from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.facebook_ads import constants
@@ -35,6 +36,13 @@ class FacebookAdsConnection(il.OAuthConnection):
     access_token: str = il.SecretField(description="Facebook access token")
     app_id: str = il.InputField("", description="Facebook App ID")
     app_secret: str = il.SecretField("", description="Facebook App secret")
+
+    @model_validator(mode="after")
+    def _resolve_app_credentials(self) -> "FacebookAdsConnection":
+        """Fill blank ``app_id`` / ``app_secret`` from the in-house env creds."""
+        self.app_id = self.app_id or self.env_credential("CLIENT_ID")
+        self.app_secret = self.app_secret or self.env_credential("CLIENT_SECRET")
+        return self
 
     @cached_property
     def api(self) -> Any:
