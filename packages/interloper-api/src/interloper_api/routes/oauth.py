@@ -6,10 +6,11 @@ encoding, parameter names), so the exchange is performed generically —
 adding a provider is an ``interloper.oauth_providers`` entry point, not a
 new route.
 
-The connector *app* credentials (``client_id`` / ``client_secret`` /
+The in-house *OAuth* credentials (``client_id`` / ``client_secret`` /
 ``redirect_uri``) are read from provider-scoped environment variables
-(``<PROVIDER>_CLIENT_ID``, …) and injected into the token response so they
-can be stored alongside the tokens.
+(``<PROVIDER>_CLIENT_ID``, …) and used to perform the exchange. They are
+never returned to the browser; connections resolve them from the same env
+at runtime (see ``OAuthCredentialField``).
 
 The ``GET /providers`` endpoint returns metadata for all providers that
 have credentials configured, so the frontend knows which "Sign in with X"
@@ -42,7 +43,7 @@ router = APIRouter(prefix="/oauth", tags=["oauth"])
 
 
 class _ProviderConfig:
-    """Connector app credentials resolved from environment variables."""
+    """In-house OAuth credentials resolved from environment variables."""
 
     def __init__(self, key: str, *, env_prefix: str | None = None) -> None:
         prefix = (env_prefix or key).upper()
@@ -76,11 +77,11 @@ async def _exchange(
     Args:
         client: The HTTP client to use.
         spec: The provider's token-exchange spec.
-        cfg: The connector app credentials.
+        cfg: The in-house OAuth credentials.
         code: The authorization code.
 
     Returns:
-        The provider's raw token response (e.g. ``refresh_token``). The app
+        The provider's raw token response (e.g. ``refresh_token``). The OAuth
         credentials are *not* injected: they are the in-house per-provider
         values resolved from env at runtime, so the secret never leaves the
         server.
@@ -165,7 +166,7 @@ async def exchange_token(
     """Exchange an authorization code for tokens. Requires authentication.
 
     Returns only the provider's token response (e.g. ``refresh_token``); the
-    in-house app credentials are never included — connections resolve them
+    in-house OAuth credentials are never included — connections resolve them
     from env at runtime.
     """
     spec = providers().get(provider)

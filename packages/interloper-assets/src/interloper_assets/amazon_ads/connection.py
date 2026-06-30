@@ -34,7 +34,7 @@ class AmazonAdsAPILocation(Enum):
     tags=["Advertising"],
     oauth=il.OAuthConfig("amazon", scope="advertising::campaign_management"),
 )
-class AmazonAdsConnection(il.OAuthConnection):
+class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
     """Amazon Ads API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="amazon_ads_")

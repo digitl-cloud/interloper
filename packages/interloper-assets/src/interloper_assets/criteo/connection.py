@@ -12,7 +12,7 @@ from interloper_assets.criteo import constants
     tags=["Advertising"],
     oauth=il.OAuthConfig("criteo"),
 )
-class CriteoConnection(il.OAuthConnection):
+class CriteoConnection(il.RefreshTokenOAuthConnection):
     """Criteo API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="criteo_")

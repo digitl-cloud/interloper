@@ -15,7 +15,7 @@ from interloper_assets.linkedin_organic import constants
         scope="r_organization_social,rw_organization_admin,r_organization_social_feed",
     ),
 )
-class LinkedinOrganicConnection(il.OAuthConnection):
+class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
     """LinkedIn Organic API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="linkedin_organic_")

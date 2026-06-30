@@ -24,6 +24,10 @@ export interface OAuthFieldMeta {
     scope: string
     label: string
     icon: string
-    /** Token-response-key → model-field-name mapping, filled on sign-in. */
+    /**
+     * OAuth role → model-field-name mapping (roles: client_id / client_secret /
+     * refresh_token). The mapped fields are hidden in sign-in mode; the
+     * refresh_token field receives the token returned by the flow.
+     */
     fields: Record<string, string>
 }
