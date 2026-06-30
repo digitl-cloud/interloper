@@ -11,9 +11,6 @@ from pydantic_settings import BaseSettings
 from interloper.oauth import OAuthConfig
 from interloper.resource import InputField, Resource, ResourceDefinition, SecretField
 
-#: OAuth roles whose fields are the in-house credentials resolved from env.
-_ENV_CREDENTIAL_ROLES = ("client_id", "client_secret")
-
 
 class Connection(BaseSettings, Resource):
     """A resource for database/service connection credentials.
@@ -81,28 +78,19 @@ class OAuthConnection(Connection):
             definition.provider = cls.oauth.provider
         return definition
 
-    @model_validator(mode="after")
-    def _resolve_credentials(self) -> OAuthConnection:
-        """Fill blank ``client_id`` / ``client_secret`` fields from env.
+    def env_credential(self, suffix: str) -> str:
+        """The in-house OAuth credential for ``suffix`` (e.g. ``"CLIENT_ID"``).
 
-        The fields named by the ``client_id`` / ``client_secret`` roles read
-        ``<PROVIDER>_CLIENT_ID`` / ``<PROVIDER>_CLIENT_SECRET`` (the same vars
-        the token-exchange endpoint uses) when left blank. An explicitly set
-        value (a per-connection override) always wins.
+        Read from ``INTERLOPER_<PROVIDER>_<SUFFIX>`` — the same vars the
+        token-exchange endpoint uses. A subclass resolves its own declared
+        credential fields with this; returns ``""`` when unset.
 
         Returns:
-            The connection instance (self), with credentials filled in.
+            The env credential value, or ``""``.
         """
         if not isinstance(self.oauth, OAuthConfig):
-            return self
-        prefix = self.oauth.provider.upper()
-        for role in _ENV_CREDENTIAL_ROLES:
-            field = self.oauth.fields.get(role)
-            if field and field in type(self).model_fields and not getattr(self, field, ""):
-                value = os.environ.get(f"{prefix}_{role.upper()}", "")
-                if value:
-                    setattr(self, field, value)
-        return self
+            return ""
+        return os.environ.get(f"INTERLOPER_{self.oauth.provider.upper()}_{suffix}", "")
 
 
 class RefreshTokenOAuthConnection(OAuthConnection):
@@ -118,10 +106,11 @@ class RefreshTokenOAuthConnection(OAuthConnection):
             account_id: str
 
     Connections whose credential fields are named differently subclass
-    ``OAuthConnection`` directly and pass their own ``fields`` mapping.
+    ``OAuthConnection`` directly, declare their own fields, and resolve them
+    via :meth:`OAuthConnection.env_credential`.
 
     ``client_id`` / ``client_secret`` default to the in-house per-provider
-    credentials from ``<PROVIDER>_CLIENT_ID`` / ``<PROVIDER>_CLIENT_SECRET``
+    credentials from ``INTERLOPER_<PROVIDER>_CLIENT_ID`` / ``INTERLOPER_<PROVIDER>_CLIENT_SECRET``
     (the same vars the token-exchange endpoint reads), so the in-house secret
     is never sent to the browser or stored per connection. Setting them
     explicitly overrides the in-house app — e.g. to use your own OAuth client.
@@ -130,3 +119,14 @@ class RefreshTokenOAuthConnection(OAuthConnection):
     client_id: str = InputField("")
     client_secret: str = SecretField("")
     refresh_token: str = SecretField()
+
+    @model_validator(mode="after")
+    def _resolve_credentials(self) -> RefreshTokenOAuthConnection:
+        """Fill blank ``client_id`` / ``client_secret`` from the in-house env creds.
+
+        Returns:
+            The connection instance (self), with credentials filled in.
+        """
+        self.client_id = self.client_id or self.env_credential("CLIENT_ID")
+        self.client_secret = self.client_secret or self.env_credential("CLIENT_SECRET")
+        return self

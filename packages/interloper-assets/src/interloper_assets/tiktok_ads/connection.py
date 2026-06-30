@@ -38,12 +38,12 @@ class TiktokAdsConnection(il.OAuthConnection):
 
         Backs the source's ``advertiser_id`` ``FetchField``. Listing advertisers needs
         the connector app's ``app_id`` / ``secret`` — read from the provider-scoped
-        environment (``TIKTOK_CLIENT_ID`` / ``TIKTOK_CLIENT_SECRET``) — alongside the
-        connection's access token. Talks to the v1.3 API over the lightweight
-        ``AsyncRESTClient`` (not the SDK) so it runs in the API process.
+        environment (``INTERLOPER_TIKTOK_CLIENT_ID`` / ``INTERLOPER_TIKTOK_CLIENT_SECRET``)
+        — alongside the connection's access token. Talks to the v1.3 API over the
+        lightweight ``AsyncRESTClient`` (not the SDK) so it runs in the API process.
         """
-        app_id = os.environ.get("TIKTOK_CLIENT_ID", "")
-        secret = os.environ.get("TIKTOK_CLIENT_SECRET", "")
+        app_id = os.environ.get("INTERLOPER_TIKTOK_CLIENT_ID", "")
+        secret = os.environ.get("INTERLOPER_TIKTOK_CLIENT_SECRET", "")
 
         response = await self.client.get("/oauth2/advertiser/get/", params={"app_id": app_id, "secret": secret})
         response.raise_for_status()

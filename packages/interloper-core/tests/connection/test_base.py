@@ -72,26 +72,21 @@ class TestOAuthConnection:
 
         assert TkConn.definition().config_schema["x-oauth"]["fields"] == {"refresh_token": "access_token"}
 
-    def test_credentials_resolved_into_mapped_fields(self, monkeypatch: pytest.MonkeyPatch):
-        # The client_id / client_secret roles fill their mapped fields (here
-        # app_id / app_secret) from <PROVIDER>_CLIENT_ID / _CLIENT_SECRET.
-        monkeypatch.setenv("FACEBOOK_CLIENT_ID", "fb-id")
-        monkeypatch.setenv("FACEBOOK_CLIENT_SECRET", "fb-secret")
+    def test_env_credential_reads_prefixed_env(self, monkeypatch: pytest.MonkeyPatch):
+        # A custom-shape connection resolves its own credential fields by suffix
+        # from INTERLOPER_<PROVIDER>_<SUFFIX> via this helper (see facebook_ads).
+        monkeypatch.setenv("INTERLOPER_FACEBOOK_CLIENT_ID", "fb-id")
 
         class FbConn(OAuthConnection):
-            oauth: ClassVar[OAuthConfig] = OAuthConfig(
-                "facebook",
-                fields={"client_id": "app_id", "client_secret": "app_secret", "refresh_token": "access_token"},
-            )
-            model_config = SettingsConfigDict(env_prefix="fb_conn_test_")
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("facebook", fields={"client_id": "app_id"})
+            model_config = SettingsConfigDict(env_prefix="fb_helper_test_")
 
-            access_token: str = SecretField()
             app_id: str = InputField("")
-            app_secret: str = SecretField("")
 
-        conn = FbConn(access_token="t")
+        conn = FbConn()
 
-        assert (conn.app_id, conn.app_secret) == ("fb-id", "fb-secret")
+        assert conn.env_credential("CLIENT_ID") == "fb-id"
+        assert conn.env_credential("CLIENT_SECRET") == ""
 
 
 class TestRefreshTokenOAuthConnection:
@@ -118,8 +113,8 @@ class TestRefreshTokenOAuthConnection:
         assert properties["client_secret"]["x-widget"] == "password"
 
     def test_oauth_credentials_resolved_from_provider_env(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("AMAZON_CLIENT_ID", "in-house-id")
-        monkeypatch.setenv("AMAZON_CLIENT_SECRET", "in-house-secret")
+        monkeypatch.setenv("INTERLOPER_AMAZON_CLIENT_ID", "in-house-id")
+        monkeypatch.setenv("INTERLOPER_AMAZON_CLIENT_SECRET", "in-house-secret")
 
         class AmazonConn(RefreshTokenOAuthConnection):
             oauth: ClassVar[OAuthConfig] = OAuthConfig("amazon")
@@ -131,8 +126,8 @@ class TestRefreshTokenOAuthConnection:
         assert conn.refresh_token == "rt"
 
     def test_explicit_oauth_credentials_override_env(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("AMAZON_CLIENT_ID", "in-house-id")
-        monkeypatch.setenv("AMAZON_CLIENT_SECRET", "in-house-secret")
+        monkeypatch.setenv("INTERLOPER_AMAZON_CLIENT_ID", "in-house-id")
+        monkeypatch.setenv("INTERLOPER_AMAZON_CLIENT_SECRET", "in-house-secret")
 
         class AmazonConn(RefreshTokenOAuthConnection):
             oauth: ClassVar[OAuthConfig] = OAuthConfig("amazon")

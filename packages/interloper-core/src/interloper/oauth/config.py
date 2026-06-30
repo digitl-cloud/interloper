@@ -31,8 +31,8 @@ class OAuthConfig:
     ``fields`` maps the canonical OAuth roles — ``client_id`` / ``client_secret``
     / ``refresh_token`` — to the connection's actual field names. It drives the
     whole form: the mapped fields are hidden in sign-in mode, the ``client_id``
-    / ``client_secret`` fields are resolved from ``<PROVIDER>_CLIENT_ID`` /
-    ``<PROVIDER>_CLIENT_SECRET`` env, and the ``refresh_token`` field receives
+    / ``client_secret`` fields are resolved from ``INTERLOPER_<PROVIDER>_CLIENT_ID`` /
+    ``INTERLOPER_<PROVIDER>_CLIENT_SECRET`` env, and the ``refresh_token`` field receives
     the token from the sign-in response. It defaults to the identity trio, so a
     standard connection declares nothing; a connection with differently named
     fields (or only some roles) passes its own mapping.

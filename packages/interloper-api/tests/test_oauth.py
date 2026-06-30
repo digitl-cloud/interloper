@@ -2,7 +2,7 @@
 
 Providers come from the core registry (``interloper.oauth``); connector
 OAuth *app* credentials are read at the route level from provider-scoped
-environment variables (``<PROVIDER>_CLIENT_ID`` / ``_CLIENT_SECRET`` /
+environment variables (``INTERLOPER_<PROVIDER>_CLIENT_ID`` / ``_CLIENT_SECRET`` /
 ``_REDIRECT_URI``).  These tests cover that resolution, the public
 ``/providers`` endpoint, and the spec-driven generic token exchange.
 """
@@ -30,12 +30,12 @@ def _clean_oauth_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate tests from ambient / .env connector OAuth variables."""
     for key in providers():
         for suffix in _SUFFIXES:
-            monkeypatch.delenv(f"{key.upper()}_{suffix}", raising=False)
+            monkeypatch.delenv(f"INTERLOPER_{key.upper()}_{suffix}", raising=False)
 
 
 def _configure(monkeypatch: pytest.MonkeyPatch, provider: str, **vals: str) -> None:
     for suffix, val in vals.items():
-        monkeypatch.setenv(f"{provider.upper()}_{suffix.upper()}", val)
+        monkeypatch.setenv(f"INTERLOPER_{provider.upper()}_{suffix.upper()}", val)
 
 
 def _client() -> TestClient:

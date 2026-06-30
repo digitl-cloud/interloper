@@ -8,7 +8,7 @@ new route.
 
 The in-house *OAuth* credentials (``client_id`` / ``client_secret`` /
 ``redirect_uri``) are read from provider-scoped environment variables
-(``<PROVIDER>_CLIENT_ID``, …) and used to perform the exchange. They are
+(``INTERLOPER_<PROVIDER>_CLIENT_ID``, …) and used to perform the exchange. They are
 never returned to the browser; connections resolve them from the same env
 at runtime (see ``OAuthCredentialField``).
 
@@ -48,9 +48,9 @@ class _ProviderConfig:
     def __init__(self, key: str, *, env_prefix: str | None = None) -> None:
         prefix = (env_prefix or key).upper()
         self.key = key
-        self.client_id = os.environ.get(f"{prefix}_CLIENT_ID", "")
-        self.client_secret = os.environ.get(f"{prefix}_CLIENT_SECRET", "")
-        self.redirect_uri = os.environ.get(f"{prefix}_REDIRECT_URI", "")
+        self.client_id = os.environ.get(f"INTERLOPER_{prefix}_CLIENT_ID", "")
+        self.client_secret = os.environ.get(f"INTERLOPER_{prefix}_CLIENT_SECRET", "")
+        self.redirect_uri = os.environ.get(f"INTERLOPER_{prefix}_REDIRECT_URI", "")
 
     @property
     def configured(self) -> bool:
