@@ -36,8 +36,6 @@ interface JsonSchemaProperty {
     'x-options'?: { label: string, value: string }[]
     'x-options-from'?: string
     'x-fetch'?: FetchMeta
-    /** Field resolved by the OAuth flow — hidden in sign-in mode. */
-    'x-oauth-managed'?: boolean
     minimum?: number
     maximum?: number
     minLength?: number
@@ -115,32 +113,23 @@ const oauthTabs = computed<TabsItem[]>(() => [
     { label: 'Manual', value: 'manual', icon: 'i-lucide-keyboard' },
 ])
 
-/** Field keys auto-filled by the OAuth token exchange (used for the fill check). */
-const oauthTokenFieldKeys = computed<Set<string>>(() => {
+/** The model field that receives the token from the sign-in flow. */
+const oauthTokenField = computed<string | undefined>(() => oauthMeta.value?.fields.refresh_token)
+
+/**
+ * Field keys hidden in sign-in mode — the connection's credential fields, i.e.
+ * every value of the `fields` role→field mapping (client_id / client_secret
+ * from env, the token from the flow). Non-credential config fields stay visible.
+ */
+const oauthFieldKeys = computed<Set<string>>(() => {
     if (!oauthMeta.value) return new Set()
     return new Set(Object.values(oauthMeta.value.fields))
 })
 
-/**
- * Field keys hidden in sign-in mode: everything the OAuth flow resolves for
- * the user — token-filled fields plus app credentials from env (e.g. client_id
- * / client_secret). The backend tags these with `x-oauth-managed`; falls back
- * to the token fields if none are tagged.
- */
-const oauthFieldKeys = computed<Set<string>>(() => {
-    if (!oauthMeta.value) return new Set()
-    const tagged = Object.entries(props.schema?.properties ?? {})
-        .filter(([, prop]) => prop['x-oauth-managed'])
-        .map(([key]) => key)
-    return new Set(tagged.length ? tagged : [...oauthTokenFieldKeys.value])
-})
-
-/** Whether OAuth fields have been filled (sign-in completed). */
+/** Whether sign-in has completed — the token field is filled. */
 const oauthFilled = computed(() => {
-    if (!oauthMeta.value) return false
-    return [...oauthTokenFieldKeys.value].every(
-        key => data.value[key] !== undefined && data.value[key] !== '',
-    )
+    const field = oauthTokenField.value
+    return !!field && data.value[field] !== undefined && data.value[field] !== ''
 })
 
 // ── Resource resolution ──────────────────────────────────────────
@@ -369,14 +358,16 @@ const visibleFields = computed(() => {
     return fields.value
 })
 
-/** Handle OAuth sign-in success — map tokens to form fields. */
+/**
+ * Handle OAuth sign-in success — place the returned token into the connection's
+ * token field. The app credentials (client_id / client_secret) are resolved
+ * server-side from env, so they're never part of the response.
+ */
 function handleOAuthSuccess(tokens: Record<string, unknown>) {
-    if (!oauthMeta.value) return
-    for (const [tokenKey, fieldKey] of Object.entries(oauthMeta.value.fields)) {
-        if (tokens[tokenKey] !== undefined) {
-            data.value[fieldKey] = tokens[tokenKey]
-        }
-    }
+    const field = oauthTokenField.value
+    if (!field) return
+    const token = tokens.refresh_token ?? tokens.access_token
+    if (token !== undefined) data.value[field] = token
 }
 
 /** Initialise default values for fields that have them. */

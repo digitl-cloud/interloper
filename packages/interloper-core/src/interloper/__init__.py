@@ -3,7 +3,7 @@ from interloper.catalog import Catalog
 from interloper.cli.manifest import RunManifest, RunPlan
 from interloper.component import Component, ComponentDefinition, ComponentSpec
 from interloper.config import Config, config
-from interloper.connection import Connection, OAuthConnection, connection
+from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuthConnection, connection
 from interloper.dag import DAG
 from interloper.destination import (
     CSVDestination,
@@ -105,6 +105,7 @@ __all__ = [
     "PartitionedDestination",
     "RESTClient",
     "RangePaginator",
+    "RefreshTokenOAuthConnection",
     "Resource",
     "ResourceDefinition",
     "ResourceRef",

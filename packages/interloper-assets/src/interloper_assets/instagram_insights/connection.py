@@ -15,7 +15,7 @@ from interloper_assets.instagram_insights import constants
         scope="instagram_basic,instagram_manage_insights,pages_show_list,pages_read_engagement",
     ),
 )
-class InstagramInsightsConnection(il.OAuthConnection):
+class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
     """Instagram Insights API connection with OAuth2 refresh token auth via Facebook Graph API.
 
     Uses the standard ``client_id`` / ``client_secret`` / ``refresh_token``

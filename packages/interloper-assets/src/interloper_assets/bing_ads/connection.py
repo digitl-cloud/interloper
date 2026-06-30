@@ -43,7 +43,7 @@ def _first_descendant(root: ET.Element, name: str) -> ET.Element | None:
     icon="icon:bing",
     tags=["Advertising"],
 )
-class BingAdsConnection(il.OAuthConnection):
+class BingAdsConnection(il.RefreshTokenOAuthConnection):
     """Bing Ads API connection with OAuth2 refresh token auth.
 
     Holds only credentials. The account a report targets lives on the

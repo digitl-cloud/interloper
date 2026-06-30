@@ -101,7 +101,7 @@ def test_exchange_unconfigured_provider_is_rejected() -> None:
 
 def test_exchange_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> None:
     # Fully configured provider, but no session: the token exchange must not
-    # be reachable anonymously (it spends the in-house app credentials).
+    # be reachable anonymously (it spends the in-house OAuth credentials).
     _configure(monkeypatch, "amazon", client_id="id", client_secret="secret", redirect_uri="uri")
     app = FastAPI()
     app.include_router(oauth_module.router)

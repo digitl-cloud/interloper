@@ -13,7 +13,7 @@ from interloper_assets.pinterest_ads import constants
     tags=["Advertising"],
     oauth=il.OAuthConfig("pinterest", scope="ads:read"),
 )
-class PinterestAdsConnection(il.OAuthConnection):
+class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
     """Pinterest Ads API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="pinterest_ads_")

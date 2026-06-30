@@ -17,27 +17,24 @@ _GRAPH_URL = f"https://graph.facebook.com/v{constants.API_VERSION}"
     oauth=il.OAuthConfig(
         "facebook",
         scope="ads_read,ads_management",
-        fields={
-            "access_token": "access_token",
-            "client_id": "app_id",
-            "client_secret": "app_secret",
-        },
+        fields={"client_id": "app_id", "client_secret": "app_secret", "refresh_token": "access_token"},
     ),
 )
 class FacebookAdsConnection(il.OAuthConnection):
     """Facebook Ads (Meta Marketing) API connection.
 
-    Facebook names its app credentials ``app_id`` / ``app_secret`` and uses a
-    long-lived ``access_token``, so it declares those fields and maps them via
-    ``OAuthConfig.fields``, leaving ``OAuthConnection``'s optional credential
-    trio unused.
+    Facebook names its OAuth credentials ``app_id`` / ``app_secret`` and uses a
+    long-lived ``access_token``, so it subclasses ``OAuthConnection`` and maps
+    those field names via ``OAuthConfig.fields``. ``app_id`` / ``app_secret``
+    resolve from ``FACEBOOK_CLIENT_ID`` / ``FACEBOOK_CLIENT_SECRET``;
+    ``access_token`` is filled on sign-in.
     """
 
     model_config = SettingsConfigDict(env_prefix="facebook_ads_")
 
     access_token: str = il.SecretField(description="Facebook access token")
-    app_id: str = il.InputField(description="Facebook App ID")
-    app_secret: str = il.SecretField(description="Facebook App secret")
+    app_id: str = il.InputField("", description="Facebook App ID")
+    app_secret: str = il.SecretField("", description="Facebook App secret")
 
     @cached_property
     def api(self) -> Any:

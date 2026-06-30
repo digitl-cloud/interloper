@@ -19,7 +19,7 @@ _BASE_URL = "https://googleads.googleapis.com/v20"
     icon="logos:google-ads",
     tags=["Advertising"],
 )
-class GoogleAdsConnection(il.OAuthConnection):
+class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
     """Google Ads API connection using the Google Ads Python client library."""
 
     model_config = SettingsConfigDict(env_prefix="google_ads_")

@@ -12,7 +12,7 @@ from interloper_assets.linkedin_ads import constants
     tags=["Advertising"],
     oauth=il.OAuthConfig("linkedin", scope="r_ads,r_ads_reporting"),
 )
-class LinkedinAdsConnection(il.OAuthConnection):
+class LinkedinAdsConnection(il.RefreshTokenOAuthConnection):
     """LinkedIn Ads API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="linkedin_ads_")

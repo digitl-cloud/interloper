@@ -11,15 +11,15 @@ from interloper_assets.tiktok_ads.constants import BASE_URL
     name="TikTok Ads",
     icon="logos:tiktok-icon",
     tags=["Advertising"],
-    oauth=il.OAuthConfig("tiktok", fields={"access_token": "access_token"}),
+    oauth=il.OAuthConfig("tiktok", fields={"refresh_token": "access_token"}),
 )
 class TiktokAdsConnection(il.OAuthConnection):
     """TikTok Ads (Business API) connection authenticated with a long-lived access token.
 
     TikTok's token exchange returns a single long-lived ``access_token`` (no
-    refresh token), so it declares its own ``access_token`` field with a custom
-    ``OAuthConfig.fields`` mapping and leaves ``OAuthConnection``'s optional
-    credential trio unused.
+    refresh token, no stored app credentials), so it subclasses
+    ``OAuthConnection`` and maps just the ``refresh_token`` role to its
+    ``access_token`` field.
     """
 
     model_config = SettingsConfigDict(env_prefix="tiktok_ads_")

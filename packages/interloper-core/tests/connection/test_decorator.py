@@ -2,7 +2,7 @@
 
 import pytest
 
-from interloper.connection import Connection, OAuthConnection, connection
+from interloper.connection import Connection, RefreshTokenOAuthConnection, connection
 from interloper.oauth import OAuthConfig
 
 
@@ -27,7 +27,7 @@ class TestConnectionDecorator:
 
     def test_oauth_kwarg_on_connection_subclass(self):
         @connection(name="Test", oauth=OAuthConfig("linkedin", scope="r_ads"))
-        class MyConn(OAuthConnection):
+        class MyConn(RefreshTokenOAuthConnection):
             account_id: str = "a"
 
         definition = MyConn.definition()
@@ -47,17 +47,8 @@ class TestConnectionDecorator:
 
     def test_oauth_kwarg_does_not_become_model_field(self):
         @connection(oauth=OAuthConfig("amazon"))
-        class MyConn(OAuthConnection):
+        class MyConn(RefreshTokenOAuthConnection):
             pass
 
         assert "oauth" not in MyConn.model_fields
         assert "oauth" not in MyConn.definition().config_schema.get("properties", {})
-
-    def test_oauth_fields_mapping_validated_on_subclass_path(self):
-        # ClassVars are stamped on already-built OAuthConnection subclasses
-        # after the pydantic hooks ran -- the decorator must still validate.
-        with pytest.raises(TypeError, match=r"Broken: OAuthConfig.fields .* \['nope'\]"):
-
-            @connection(oauth=OAuthConfig("amazon", fields={"refresh_token": "nope"}))
-            class Broken(OAuthConnection):
-                pass

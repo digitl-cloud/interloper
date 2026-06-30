@@ -7,14 +7,20 @@ from typing import Any
 from interloper.errors import ConfigError
 from interloper.oauth.base import providers
 
+#: Default ``fields`` mapping — the standard credential trio, named identically.
+_DEFAULT_FIELDS = {
+    "client_id": "client_id",
+    "client_secret": "client_secret",
+    "refresh_token": "refresh_token",
+}
+
 
 class OAuthConfig:
     """Class-level OAuth configuration for connection resources.
 
     Declares that a connection supports OAuth sign-in: which provider to
-    use, what scope to request, and how to map the token response back to
-    model field names.  Provider identity (auth_url, label, icon) is
-    resolved from the provider registry; pass them explicitly only to
+    use and what scope to request. Provider identity (auth_url, label, icon)
+    is resolved from the provider registry; pass them explicitly only to
     override the registry or to use an unregistered provider.
 
     When present on a connection class (via the ``@connection(oauth=...)``
@@ -22,13 +28,21 @@ class OAuthConfig:
     ``x-oauth`` extension into the root of the generated JSON Schema so the
     frontend can render a "Sign in with X" button.
 
+    ``fields`` maps the canonical OAuth roles — ``client_id`` / ``client_secret``
+    / ``refresh_token`` — to the connection's actual field names. It drives the
+    whole form: the mapped fields are hidden in sign-in mode, the ``client_id``
+    / ``client_secret`` fields are resolved from ``<PROVIDER>_CLIENT_ID`` /
+    ``<PROVIDER>_CLIENT_SECRET`` env, and the ``refresh_token`` field receives
+    the token from the sign-in response. It defaults to the identity trio, so a
+    standard connection declares nothing; a connection with differently named
+    fields (or only some roles) passes its own mapping.
+
     Args:
         provider: OAuth provider key (e.g. ``"amazon"``, ``"facebook"``).
         scope: OAuth scope string to request.
-        fields: Mapping of ``{token_response_key: model_field_name}``.
-            Defaults to ``{"refresh_token": "refresh_token"}`` — only the
-            per-user refresh token is filled from the exchange; the app
-            credentials come from env at runtime.
+        fields: ``{role: model_field_name}`` mapping (roles: ``client_id`` /
+            ``client_secret`` / ``refresh_token``). Defaults to the identity
+            trio.
         auth_url: Authorization endpoint override.  Required when the
             provider is not in the registry.
         label: Display label override.
@@ -41,10 +55,14 @@ class OAuthConfig:
     Example::
 
         @connection(
-            name="Amazon Ads",
-            oauth=OAuthConfig("amazon", scope="advertising::campaign_management"),
+            name="Facebook Ads",
+            oauth=OAuthConfig(
+                "facebook",
+                scope="ads_read",
+                fields={"client_id": "app_id", "client_secret": "app_secret", "refresh_token": "access_token"},
+            ),
         )
-        class AmazonAdsConnection(OAuthConnection):
+        class FacebookAdsConnection(OAuthConnection):
             ...
     """
 
@@ -63,7 +81,8 @@ class OAuthConfig:
         Args:
             provider: OAuth provider key (e.g. ``"amazon"``).
             scope: OAuth scope string.
-            fields: Token response key → model field name mapping.
+            fields: Role → field-name mapping (see class docstring); defaults
+                to the identity trio.
             auth_url: Authorization endpoint override (required for
                 unregistered providers).
             label: Display label override.
@@ -85,11 +104,7 @@ class OAuthConfig:
         self.scope = scope
         self.label = label or (spec.label if spec else "") or provider.title()
         self.icon = icon or (spec.icon if spec else "")
-        # Only the per-user refresh token is auto-filled from the token
-        # exchange. The app credentials (client_id/client_secret) are the
-        # in-house per-provider values resolved from env at runtime, so they
-        # are never returned to the browser or stored per connection.
-        self.fields = fields or {"refresh_token": "refresh_token"}
+        self.fields = fields if fields is not None else dict(_DEFAULT_FIELDS)
 
     def to_schema_ext(self) -> dict[str, Any]:
         """Serialize to a JSON Schema ``x-oauth`` extension dict.

@@ -14,7 +14,7 @@ _TOKEN_ENDPOINT = "/login/oauth2/access_token"
     tags=["Advertising"],
     oauth=il.OAuthConfig("snapchat", scope="snapchat-marketing-api"),
 )
-class SnapchatAdsConnection(il.OAuthConnection):
+class SnapchatAdsConnection(il.RefreshTokenOAuthConnection):
     """Snapchat Ads API connection with OAuth2 refresh token auth."""
 
     model_config = SettingsConfigDict(env_prefix="snapchat_ads_")
