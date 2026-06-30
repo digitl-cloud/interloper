@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.24.0 (2026-06-30)
+
+### Features
+
+- Documentation site at docs.interloper.dev
+  ([`ad2d0d1`](https://github.com/digitl-cloud/interloper/commit/ad2d0d1f08c8441726133faa9afa949a71431a6a))
+
+
 ## v0.23.1 (2026-06-29)
 
 ### Bug Fixes
