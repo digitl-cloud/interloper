@@ -174,6 +174,7 @@ Contains Postgres connection info + the encryption key secret.
     secretKeyRef:
       name: {{ include "interloper.secretName" . }}
       key: INTERLOPER_POSTGRES_PASSWORD
+      optional: true
 - name: INTERLOPER_ENCRYPTION_KEY
   valueFrom:
     secretKeyRef:
