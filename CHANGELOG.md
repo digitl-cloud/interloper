@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.25.1 (2026-07-01)
+
+### Bug Fixes
+
+- **chart**: Make INTERLOPER_POSTGRES_PASSWORD secret ref optional
+  ([`4940685`](https://github.com/digitl-cloud/interloper/commit/494068569cf580cb25b5db7778b31363200784e4))
+
+
 ## v0.25.0 (2026-07-01)
 
 ### Chores
