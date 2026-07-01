@@ -26,23 +26,30 @@ class FacebookAdsConnection(il.OAuthConnection):
 
     Facebook names its OAuth credentials ``app_id`` / ``app_secret`` and uses a
     long-lived ``access_token``, so it subclasses ``OAuthConnection`` and maps
-    those field names via ``OAuthConfig.fields``. ``app_id`` / ``app_secret``
-    resolve from ``FACEBOOK_CLIENT_ID`` / ``FACEBOOK_CLIENT_SECRET``;
-    ``access_token`` is filled on sign-in.
+    those field names via ``OAuthConfig.fields``. All three are required;
+    ``app_id`` / ``app_secret`` may be supplied by the in-house
+    ``INTERLOPER_FACEBOOK_CLIENT_ID`` / ``INTERLOPER_FACEBOOK_CLIENT_SECRET`` (injected
+    before validation), and ``access_token`` is filled on sign-in.
     """
 
     model_config = SettingsConfigDict(env_prefix="facebook_ads_")
 
     access_token: str = il.SecretField(description="Facebook access token")
-    app_id: str = il.InputField("", description="Facebook App ID")
-    app_secret: str = il.SecretField("", description="Facebook App secret")
+    app_id: str = il.InputField(description="Facebook App ID")
+    app_secret: str = il.SecretField(description="Facebook App secret")
 
-    @model_validator(mode="after")
-    def _resolve_app_credentials(self) -> "FacebookAdsConnection":
-        """Fill blank ``app_id`` / ``app_secret`` from the in-house env creds."""
-        self.app_id = self.app_id or self.env_credential("CLIENT_ID")
-        self.app_secret = self.app_secret or self.env_credential("CLIENT_SECRET")
-        return self
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_credentials(cls, data: Any) -> Any:
+        """Inject blank ``app_id`` / ``app_secret`` from the in-house env creds."""
+        if isinstance(data, dict):
+            app_id = cls.env_credential("CLIENT_ID")
+            if app_id and not data.get("app_id"):
+                data["app_id"] = app_id
+            app_secret = cls.env_credential("CLIENT_SECRET")
+            if app_secret and not data.get("app_secret"):
+                data["app_secret"] = app_secret
+        return data
 
     @cached_property
     def api(self) -> Any:

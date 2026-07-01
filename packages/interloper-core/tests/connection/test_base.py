@@ -86,7 +86,7 @@ class TestOAuthConnection:
         conn = FbConn()
 
         assert conn.env_credential("CLIENT_ID") == "fb-id"
-        assert conn.env_credential("CLIENT_SECRET") == ""
+        assert conn.env_credential("CLIENT_SECRET") is None
 
 
 class TestRefreshTokenOAuthConnection:
