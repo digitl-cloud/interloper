@@ -20,6 +20,7 @@ const code = route.query.code as string | undefined
 const status = ref<OAuthPopupStatus>(
     code ? OAuthPopupStatus.Loading : OAuthPopupStatus.MissingCode,
 )
+const errorDetail = ref('')
 
 onMounted(async () => {
     if (code) {
@@ -27,7 +28,8 @@ onMounted(async () => {
             await exchangeCode(provider, code)
             status.value = OAuthPopupStatus.Success
         }
-        catch {
+        catch (error) {
+            errorDetail.value = oauthErrorDetail(error)
             status.value = OAuthPopupStatus.Failure
         }
     }
@@ -59,6 +61,21 @@ onMounted(async () => {
                 variant="subtle"
                 icon="i-lucide-circle-x"
                 title="Authentication Failed"
-                description="Something went wrong during authentication. You can close this window." />
+                class="max-w-md">
+            <template #description>
+                <p>Something went wrong during authentication. You can close this window.</p>
+                <UCollapsible v-if="errorDetail"
+                              class="mt-2">
+                    <button class="flex items-center gap-1 group cursor-pointer text-xs font-medium">
+                        <UIcon name="i-lucide-chevron-right"
+                               class="size-3.5 shrink-0 group-data-[state=open]:rotate-90 transition-transform duration-200" />
+                        Details
+                    </button>
+                    <template #content>
+                        <pre class="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-error/10 p-2 text-xs">{{ errorDetail }}</pre>
+                    </template>
+                </UCollapsible>
+            </template>
+        </UAlert>
     </div>
 </template>
