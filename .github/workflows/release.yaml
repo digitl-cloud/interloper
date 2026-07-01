@@ -16,6 +16,18 @@ on:
           - stable
           - release-candidate
         default: stable
+      force:
+        description: >-
+          Force a bump when the commits alone don't warrant one (e.g. only
+          chore/refactor since the last release). "auto" = normal
+          commit-driven behaviour.
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+        default: auto
 
 jobs:
   release:
@@ -72,6 +84,10 @@ jobs:
         with:
           prerelease: ${{ inputs.release_type == 'release-candidate' }}
           prerelease_token: rc
+          # Force a bump level when the commit history alone wouldn't trigger a
+          # release (only chore/refactor since the last tag). Empty = let PSR
+          # decide from the Conventional Commits, the normal path.
+          force: ${{ inputs.force != 'auto' && inputs.force || '' }}
           # Runs the configured build_command (`uv lock`) so the release
           # commit carries a lock file consistent with the stamped versions.
           # The actual package build happens in the publish step below.
