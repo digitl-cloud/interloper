@@ -1,3 +1,4 @@
+import os
 from functools import cached_property
 from typing import Any
 from xml.etree import ElementTree as ET
@@ -48,7 +49,7 @@ def _first_descendant(root: ET.Element, name: str) -> ET.Element | None:
         scope="offline_access https://ads.microsoft.com/msads.manage",
         # ``developer_token`` rides the same in-house path as the credential
         # trio: listing it here hides it in sign-in mode (the form hides every
-        # mapped field), and ``_resolve_developer_token`` fills it from env.
+        # mapped field), and ``resolve_credentials`` fills it from env.
         fields={
             "client_id": "client_id",
             "client_secret": "client_secret",
@@ -71,22 +72,22 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
 
     @model_validator(mode="before")
     @classmethod
-    def resolve_developer_token(cls, data: Any) -> Any:
-        """Inject a blank ``developer_token`` from the in-house env credential.
+    def resolve_credentials(cls, data: Any) -> Any:
+        """Inject blank credentials from the in-house env before validation.
 
-        Mirrors how ``client_id`` / ``client_secret`` resolve on
-        :class:`RefreshTokenOAuthConnection`: read
-        ``INTERLOPER_MICROSOFT_DEVELOPER_TOKEN`` before validation when the field
-        is absent, so the required token is satisfied by the in-house app and
-        never stored per connection. An explicit value overrides it.
+        Overrides the base to also resolve ``developer_token``, which — unlike
+        the provider-scoped OAuth trio (``INTERLOPER_MICROSOFT_*``) — is a
+        Bing-specific token read from ``INTERLOPER_BING_ADS_DEVELOPER_TOKEN``.
+        An explicit value overrides the in-house one; when neither the caller
+        nor env supplies one, the required check fails.
 
         Returns:
             The (possibly augmented) input data.
         """
         if isinstance(data, dict):
-            developer_token = cls.env_credential("DEVELOPER_TOKEN")
-            if developer_token and not data.get("developer_token"):
-                data["developer_token"] = developer_token
+            cls.resolve_field(data, "client_id", cls.env_credential("CLIENT_ID"))
+            cls.resolve_field(data, "client_secret", cls.env_credential("CLIENT_SECRET"))
+            cls.resolve_field(data, "developer_token", os.environ.get("INTERLOPER_BING_ADS_DEVELOPER_TOKEN"))
         return data
 
     @cached_property

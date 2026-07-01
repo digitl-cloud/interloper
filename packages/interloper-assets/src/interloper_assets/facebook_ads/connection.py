@@ -43,12 +43,8 @@ class FacebookAdsConnection(il.OAuthConnection):
     def resolve_credentials(cls, data: Any) -> Any:
         """Inject blank ``app_id`` / ``app_secret`` from the in-house env creds."""
         if isinstance(data, dict):
-            app_id = cls.env_credential("CLIENT_ID")
-            if app_id and not data.get("app_id"):
-                data["app_id"] = app_id
-            app_secret = cls.env_credential("CLIENT_SECRET")
-            if app_secret and not data.get("app_secret"):
-                data["app_secret"] = app_secret
+            cls.resolve_field(data, "app_id", cls.env_credential("CLIENT_ID"))
+            cls.resolve_field(data, "app_secret", cls.env_credential("CLIENT_SECRET"))
         return data
 
     @cached_property

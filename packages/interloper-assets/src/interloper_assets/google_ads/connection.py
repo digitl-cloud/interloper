@@ -1,8 +1,10 @@
+import os
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 import httpx
 import interloper as il
+from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.google_ads.constants import API_VERSION
@@ -18,6 +20,19 @@ _BASE_URL = "https://googleads.googleapis.com/v20"
     name="Google Ads",
     icon="logos:google-ads",
     tags=["Advertising"],
+    oauth=il.OAuthConfig(
+        "google",
+        scope="https://www.googleapis.com/auth/adwords",
+        # ``developer_token`` rides the same in-house path as the credential
+        # trio: listing it here hides it in sign-in mode, and
+        # ``resolve_credentials`` fills it from env.
+        fields={
+            "client_id": "client_id",
+            "client_secret": "client_secret",
+            "refresh_token": "refresh_token",
+            "developer_token": "developer_token",
+        },
+    ),
 )
 class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
     """Google Ads API connection using the Google Ads Python client library."""
@@ -25,6 +40,26 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
     model_config = SettingsConfigDict(env_prefix="google_ads_")
 
     developer_token: str = il.SecretField(description="Google Ads API developer token")
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_credentials(cls, data: Any) -> Any:
+        """Inject blank credentials from the in-house env before validation.
+
+        Overrides the base to also resolve ``developer_token``, a Google-Ads-
+        specific token read from ``INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN`` (the
+        OAuth trio comes from the provider-scoped ``INTERLOPER_GOOGLE_*``). An
+        explicit value overrides the in-house one; when neither the caller nor
+        env supplies one, the required check fails.
+
+        Returns:
+            The (possibly augmented) input data.
+        """
+        if isinstance(data, dict):
+            cls.resolve_field(data, "client_id", cls.env_credential("CLIENT_ID"))
+            cls.resolve_field(data, "client_secret", cls.env_credential("CLIENT_SECRET"))
+            cls.resolve_field(data, "developer_token", os.environ.get("INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN"))
+        return data
 
     @cached_property
     def client(self) -> "GoogleAdsClient":
