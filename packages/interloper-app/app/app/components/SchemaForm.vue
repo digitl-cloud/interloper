@@ -126,6 +126,22 @@ const oauthFieldKeys = computed<Set<string>>(() => {
     return new Set(Object.values(oauthMeta.value.fields))
 })
 
+/**
+ * OAuth credential fields resolved server-side from the in-house env during
+ * sign-in — every mapped field except the token, which the flow fills. These
+ * are required (per the schema) but skipped in sign-in validation, since the
+ * browser never sends them; in manual mode they're shown and enforced normally.
+ */
+const envResolvedFieldKeys = computed<Set<string>>(() => {
+    const map = oauthMeta.value?.fields
+    if (!map) return new Set()
+    return new Set(
+        Object.entries(map)
+            .filter(([role]) => role !== 'refresh_token')
+            .map(([, field]) => field),
+    )
+})
+
 /** Whether sign-in has completed — the token field is filled. */
 const oauthFilled = computed(() => {
     const field = oauthTokenField.value
@@ -409,13 +425,16 @@ watch(
     { immediate: true, deep: true },
 )
 
-/** Validate: all required fields must have a non-empty value. */
+/** Validate: all required fields must have a non-empty value. In sign-in mode
+ * the env-resolved credential fields are skipped (the server fills them); the
+ * token stays required so sign-in must complete. Re-runs on tab switch. */
 watch(
-    data,
-    (val) => {
+    [data, activeTab],
+    () => {
+        const signIn = oauthAvailable.value && activeTab.value === 'oauth'
         isValid.value = fields.value
-            .filter(f => f.required)
-            .every(f => val[f.key] !== undefined && val[f.key] !== '')
+            .filter(f => f.required && !(signIn && envResolvedFieldKeys.value.has(f.key)))
+            .every(f => data.value[f.key] !== undefined && data.value[f.key] !== '')
     },
     { deep: true, immediate: true },
 )

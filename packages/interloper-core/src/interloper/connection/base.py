@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
@@ -78,19 +78,23 @@ class OAuthConnection(Connection):
             definition.provider = cls.oauth.provider
         return definition
 
-    def env_credential(self, suffix: str) -> str:
+    @classmethod
+    def env_credential(cls, suffix: str) -> str | None:
         """The in-house OAuth credential for ``suffix`` (e.g. ``"CLIENT_ID"``).
 
         Read from ``INTERLOPER_<PROVIDER>_<SUFFIX>`` — the same vars the
-        token-exchange endpoint uses. A subclass resolves its own declared
-        credential fields with this; returns ``""`` when unset.
+        token-exchange endpoint uses. A ``mode="before"`` validator falls back to
+        this for its declared credential fields, so a required field can be
+        satisfied by the in-house app. Returns ``None`` when unset, so a field
+        left unfilled stays ``None`` and fails the required check rather than
+        passing as an empty string.
 
         Returns:
-            The env credential value, or ``""``.
+            The env credential value, or ``None``.
         """
-        if not isinstance(self.oauth, OAuthConfig):
-            return ""
-        return os.environ.get(f"INTERLOPER_{self.oauth.provider.upper()}_{suffix}", "")
+        if not isinstance(cls.oauth, OAuthConfig):
+            return None
+        return os.environ.get(f"INTERLOPER_{cls.oauth.provider.upper()}_{suffix}")
 
 
 class RefreshTokenOAuthConnection(OAuthConnection):
@@ -106,27 +110,38 @@ class RefreshTokenOAuthConnection(OAuthConnection):
             account_id: str
 
     Connections whose credential fields are named differently subclass
-    ``OAuthConnection`` directly, declare their own fields, and resolve them
-    via :meth:`OAuthConnection.env_credential`.
+    ``OAuthConnection`` directly, declare their own fields, and inject them from
+    env with a ``mode="before"`` validator calling :meth:`env_credential`.
 
-    ``client_id`` / ``client_secret`` default to the in-house per-provider
-    credentials from ``INTERLOPER_<PROVIDER>_CLIENT_ID`` / ``INTERLOPER_<PROVIDER>_CLIENT_SECRET``
-    (the same vars the token-exchange endpoint reads), so the in-house secret
-    is never sent to the browser or stored per connection. Setting them
-    explicitly overrides the in-house app — e.g. to use your own OAuth client.
+    All three fields are **required**. ``client_id`` / ``client_secret`` may be
+    supplied by the in-house per-provider credentials
+    (``INTERLOPER_<PROVIDER>_CLIENT_ID`` / ``INTERLOPER_<PROVIDER>_CLIENT_SECRET`` — the
+    same vars the token-exchange endpoint reads), injected before validation so
+    the sign-in flow can omit them and the in-house secret is never sent to the
+    browser or stored per connection. An explicit value overrides the in-house
+    app; when neither the caller nor env supplies one, the required check fails.
     """
 
-    client_id: str = InputField("")
-    client_secret: str = SecretField("")
+    client_id: str = InputField()
+    client_secret: str = SecretField()
     refresh_token: str = SecretField()
 
-    @model_validator(mode="after")
-    def _resolve_credentials(self) -> RefreshTokenOAuthConnection:
-        """Fill blank ``client_id`` / ``client_secret`` from the in-house env creds.
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_credentials(cls, data: Any) -> Any:
+        """Inject blank ``client_id`` / ``client_secret`` from the in-house env creds.
+
+        Runs before validation so the in-house app can satisfy these required
+        fields when the caller omits them; an explicit value is left untouched.
 
         Returns:
-            The connection instance (self), with credentials filled in.
+            The (possibly augmented) input data.
         """
-        self.client_id = self.client_id or self.env_credential("CLIENT_ID")
-        self.client_secret = self.client_secret or self.env_credential("CLIENT_SECRET")
-        return self
+        if isinstance(data, dict):
+            client_id = cls.env_credential("CLIENT_ID")
+            if client_id and not data.get("client_id"):
+                data["client_id"] = client_id
+            client_secret = cls.env_credential("CLIENT_SECRET")
+            if client_secret and not data.get("client_secret"):
+                data["client_secret"] = client_secret
+        return data

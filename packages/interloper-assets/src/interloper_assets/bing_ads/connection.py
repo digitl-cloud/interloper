@@ -67,23 +67,27 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
 
     model_config = SettingsConfigDict(env_prefix="bing_ads_")
 
-    developer_token: str = il.SecretField("", description="Bing Ads developer token")
+    developer_token: str = il.SecretField(description="Bing Ads developer token")
 
-    @model_validator(mode="after")
-    def _resolve_developer_token(self) -> "BingAdsConnection":
-        """Fill a blank ``developer_token`` from the in-house env credential.
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_developer_token(cls, data: Any) -> Any:
+        """Inject a blank ``developer_token`` from the in-house env credential.
 
         Mirrors how ``client_id`` / ``client_secret`` resolve on
         :class:`RefreshTokenOAuthConnection`: read
-        ``INTERLOPER_MICROSOFT_DEVELOPER_TOKEN`` when the field is left blank, so
-        the in-house token is used automatically and never stored per
-        connection. Setting it explicitly overrides the in-house token.
+        ``INTERLOPER_MICROSOFT_DEVELOPER_TOKEN`` before validation when the field
+        is absent, so the required token is satisfied by the in-house app and
+        never stored per connection. An explicit value overrides it.
 
         Returns:
-            The connection instance (self), with the developer token filled in.
+            The (possibly augmented) input data.
         """
-        self.developer_token = self.developer_token or self.env_credential("DEVELOPER_TOKEN")
-        return self
+        if isinstance(data, dict):
+            developer_token = cls.env_credential("DEVELOPER_TOKEN")
+            if developer_token and not data.get("developer_token"):
+                data["developer_token"] = developer_token
+        return data
 
     @cached_property
     def _authentication(self) -> Any:
