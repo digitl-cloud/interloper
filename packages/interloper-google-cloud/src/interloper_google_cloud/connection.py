@@ -14,11 +14,6 @@ from pydantic import field_validator
 from pydantic_settings import SettingsConfigDict
 
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
-# BigQuery's own projects.list: returns the projects the credential holds a
-# BigQuery role on -- exactly the candidates for a BigQuery destination --
-# and only requires the BigQuery API, which is necessarily enabled wherever
-# the destination can work (unlike the Cloud Resource Manager API, which is
-# frequently disabled).
 _PROJECTS_URL = "https://bigquery.googleapis.com/bigquery/v2/projects"
 _SCOPE = "https://www.googleapis.com/auth/bigquery.readonly"
 

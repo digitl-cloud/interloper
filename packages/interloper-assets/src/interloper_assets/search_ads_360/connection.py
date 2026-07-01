@@ -17,4 +17,4 @@ class SearchAds360Connection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="search_ads_360_")
 
-    service_account_key: str = il.SecretField(description="Google service account key JSON")
+    service_account_key: str = il.JsonField(description="Google service account key JSON")

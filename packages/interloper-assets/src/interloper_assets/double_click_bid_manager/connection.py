@@ -18,7 +18,7 @@ class DoubleClickBidManagerConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="double_click_bid_manager_")
 
-    service_account_key: str = il.SecretField(description="Google service account key JSON")
+    service_account_key: str = il.JsonField(description="Google service account key JSON")
 
     @cached_property
     def client(self) -> Any:
