@@ -186,6 +186,24 @@ async def test_exchange_basic_auth_header(monkeypatch: pytest.MonkeyPatch) -> No
     assert captured[0].headers["Authorization"].startswith("Basic ")
 
 
+async def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Providers such as TikTok 3xx-redirect to the trailing-slash URL; httpx
+    # must follow it rather than surfacing the redirect page as an error.
+    spec = provider("amazon")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not request.url.path.endswith("/token/"):
+            return httpx.Response(307, headers={"Location": f"{request.url}/"})
+        return httpx.Response(200, json={"refresh_token": "rt"})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), follow_redirects=True
+    ) as client:
+        result = await oauth_module._exchange(client, spec, _cfg(monkeypatch, "amazon"), "the-code")
+
+    assert result == {"refresh_token": "rt"}
+
+
 async def test_exchange_renamed_params(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
     spec = provider("tiktok")

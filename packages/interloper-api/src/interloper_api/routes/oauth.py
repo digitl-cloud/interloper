@@ -179,7 +179,7 @@ async def exchange_token(
 
     try:
         logger.info("Exchanging auth code for provider %s", provider)
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             result = await _exchange(client, spec, cfg, body.code)
         logger.info("Successfully exchanged auth code for provider %s", provider)
         return result

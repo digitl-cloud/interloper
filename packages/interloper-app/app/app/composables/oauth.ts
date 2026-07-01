@@ -9,6 +9,20 @@
  */
 
 
+/**
+ * Extract a human-readable detail from a failed token-exchange request.
+ *
+ * The backend returns `{ detail: "..." }` on error (surfaced by ofetch as
+ * `error.data`); fall back to the raw message when the shape is unexpected.
+ */
+export function oauthErrorDetail(error: unknown): string {
+    const e = error as { data?: { detail?: unknown }, message?: string }
+    const detail = e?.data?.detail
+    if (typeof detail === 'string' && detail) return detail
+    if (detail != null) return JSON.stringify(detail, null, 2)
+    return e?.message || 'Unknown error'
+}
+
 /** Wait for a single DOM event, returned as a promise. */
 function promiseFromEvent<T extends Event>(target: EventTarget, event: string): Promise<T> {
     return new Promise((resolve) => {
@@ -53,7 +67,7 @@ export function useOAuthPopup() {
         )
 
         if (event.data.type !== OAuthPopupStatus.Success) {
-            throw new Error('OAuth sign-in failed')
+            throw new Error(event.data.error || 'OAuth sign-in failed')
         }
 
         popup.close()
@@ -65,19 +79,32 @@ export function useOAuthPopup() {
      * Posts the result back to the opener window.
      */
     async function exchangeCode(provider: string, code: string) {
-        const tokens = await apiFetch<Record<string, unknown>>(`/oauth/${provider}`, {
-            method: 'POST',
-            body: { code },
-        })
+        try {
+            const tokens = await apiFetch<Record<string, unknown>>(`/oauth/${provider}`, {
+                method: 'POST',
+                body: { code },
+            })
 
-        if (window.opener) {
-            window.opener.postMessage({
-                type: OAuthPopupStatus.Success,
-                tokens,
-            }, '*')
+            if (window.opener) {
+                window.opener.postMessage({
+                    type: OAuthPopupStatus.Success,
+                    tokens,
+                }, '*')
+            }
+
+            return tokens
         }
-
-        return tokens
+        catch (error) {
+            // Notify the opener of the failure so its `signIn` promise rejects
+            // instead of hanging, forwarding the detail for display.
+            if (window.opener) {
+                window.opener.postMessage({
+                    type: OAuthPopupStatus.Failure,
+                    error: oauthErrorDetail(error),
+                }, '*')
+            }
+            throw error
+        }
     }
 
     return { signIn, exchangeCode }
