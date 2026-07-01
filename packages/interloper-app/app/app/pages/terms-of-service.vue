@@ -6,7 +6,7 @@ definePageMeta({
 </script>
 
 <template>
-    <div class="min-h-svh w-full py-12 px-6 md:px-10">
+    <div class="h-svh w-full overflow-y-auto py-12 px-6 md:px-10">
         <article class="mx-auto w-full max-w-3xl flex flex-col gap-6">
             <h1 class="text-3xl font-semibold">
                 Terms of Service
