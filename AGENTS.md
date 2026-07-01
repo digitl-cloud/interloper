@@ -88,6 +88,7 @@ Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS` (flavor extras co
 - Test files mirror the package layout one-to-one: a test for `src/interloper/<pkg>/<module>.py` lives in `tests/<pkg>/test_<module>.py`. Don't add standalone `test_<feature>.py` files — fold tests for an existing module into that module's test file (e.g. tests for `asset/base.py` go in `tests/asset/test_base.py`, not a new `test_<feature>.py`).
 - Pre-commit runs ruff + ty + pytest on every commit ([.pre-commit-config.yaml](.pre-commit-config.yaml)).
 - All workspace packages share `version = "0.2.0"`, bumped by `python-semantic-release` from commit history.
+- Comment sparingly. A comment earns its place only when it's genuinely useful and targeted: explain a non-obvious *why* for the exact code it sits on. Don't restate what the code already says, and keep comments **scoped** — don't explain other parts of the architecture that this code doesn't own (e.g. don't describe the cloud-sql-proxy / Cloud SQL IAM setup in a chart env helper). That context belongs where that component lives, and drifts stale here.
 
 ### Asset naming
 
