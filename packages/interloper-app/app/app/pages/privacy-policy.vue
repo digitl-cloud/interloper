@@ -70,7 +70,7 @@ definePageMeta({
                 </h2>
                 <p>
                     Our Platform allows users to connect their TikTok accounts through official TikTok API
-                    Services. By using the TikTok connector within the DigitlCloud Connectors hub, you agree
+                    Services. By using the TikTok connector within Interloper, you agree
                     to be bound by the TikTok Terms of Service (accessible at
                     <ULink href="https://www.tiktok.com/legal/terms-of-service"
                            target="_blank"
@@ -82,7 +82,7 @@ definePageMeta({
                 <p>
                     We only access, ingest, and process TikTok data that you explicitly authorize during the
                     OAuth consent flow. You may revoke this access at any time through your TikTok account
-                    security settings or by disconnecting your account within the DigitlCloud dashboard. We
+                    security settings or by disconnecting your account within Interloper. We
                     do not use your TikTok data for any purpose other than providing the requested analytics
                     and reporting services to you.
                 </p>

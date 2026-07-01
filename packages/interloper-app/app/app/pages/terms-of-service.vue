@@ -13,9 +13,9 @@ definePageMeta({
             </h1>
 
             <p>
-                These Terms of Service govern your access to and use of the DigitlCloud Connectors portal and
-                related connector authorization flows provided by DiGiTL Cloud GmbH. By using this portal,
-                connecting a third-party platform, or requesting access tokens through the portal, you agree
+                These Terms of Service govern your access to and use of Interloper and
+                related connector authorization flows provided by DiGiTL Cloud GmbH. By using Interloper,
+                connecting a third-party platform, or requesting access tokens through Interloper, you agree
                 to these Terms.
             </p>
 
@@ -24,9 +24,9 @@ definePageMeta({
                     Scope of the service
                 </h2>
                 <p>
-                    The portal is provided to help customers authorize supported marketing, analytics,
+                    Interloper is provided to help customers authorize supported marketing, analytics,
                     commerce, and social media connectors and to support downstream reporting, data
-                    synchronization, and operational workflows requested by the customer. The portal itself
+                    synchronization, and operational workflows requested by the customer. Interloper itself
                     is a facilitation layer for connector access and does not transfer ownership of any
                     third-party account, content, or platform data.
                 </p>
@@ -37,7 +37,7 @@ definePageMeta({
                     Eligibility and authority
                 </h2>
                 <p>
-                    You may only use the portal if you are legally permitted to do so and if you are
+                    You may only use Interloper if you are legally permitted to do so and if you are
                     authorized to act on behalf of the business, brand, or account owner whose connector
                     access you submit. You are responsible for ensuring that any consent you grant through an
                     OAuth flow is accurate, current, and authorized.
@@ -75,7 +75,7 @@ definePageMeta({
                     TikTok connector terms
                 </h2>
                 <p>
-                    When you connect a TikTok Ads account or TikTok Organic account through this portal, you
+                    When you connect a TikTok Ads account or TikTok Organic account through Interloper, you
                     acknowledge and agree that your use of those connectors remains subject to the applicable
                     TikTok Terms of Service (<ULink href="https://www.tiktok.com/legal/terms-of-service"
                                                     target="_blank"
@@ -85,21 +85,21 @@ definePageMeta({
                 </p>
                 <p>
                     You may only connect TikTok accounts for which you have full permission to grant the
-                    requested access scopes. You authorize DigitlCloud to request, receive, process, and
+                    requested access scopes. You authorize Interloper to request, receive, process, and
                     store the TikTok access credentials and TikTok account data that are necessary to provide
                     the analytics, reporting, integration, and support services you requested.
                 </p>
                 <p>
                     That authorization is limited to the scopes approved during the OAuth flow and to the
                     services associated with your customer relationship with DiGiTL Cloud GmbH. You must not
-                    use the TikTok connectors through this portal in a way that violates TikTok rules,
+                    use the TikTok connectors through Interloper in a way that violates TikTok rules,
                     infringes third-party rights, misrepresents account ownership, bypasses access controls,
                     or enables unlawful targeting, scraping, resale, or misuse of TikTok data.
                 </p>
                 <p>
                     If TikTok requires user disclosures, additional consent, or revocation mechanisms, you
                     remain responsible for satisfying those obligations in your own business operations. If
-                    you revoke DigitlCloud access from within TikTok, remove app permissions, or your TikTok
+                    you revoke Interloper access from within TikTok, remove app permissions, or your TikTok
                     authorization expires, the related connector services may stop working until a new
                     authorization is completed.
                 </p>
@@ -122,10 +122,10 @@ definePageMeta({
                     Acceptable use
                 </h2>
                 <p>
-                    You may not use the portal to gain unauthorized access, interfere with service
+                    You may not use Interloper to gain unauthorized access, interfere with service
                     availability, circumvent platform restrictions, upload malicious content, violate
                     applicable law, or process data you do not have the right to access. You may not attempt
-                    to reverse engineer, disrupt, or misuse the portal, any connector flow, or any associated
+                    to reverse engineer, disrupt, or misuse Interloper, any connector flow, or any associated
                     infrastructure.
                 </p>
             </section>
@@ -135,7 +135,7 @@ definePageMeta({
                     Availability and changes
                 </h2>
                 <p>
-                    We may update, improve, restrict, or discontinue parts of the portal at any time,
+                    We may update, improve, restrict, or discontinue parts of Interloper at any time,
                     including supported connectors, supported scopes, interface behavior, or security
                     controls. We do not guarantee uninterrupted availability or continued support for any
                     specific third-party integration.
@@ -147,10 +147,10 @@ definePageMeta({
                     Intellectual property
                 </h2>
                 <p>
-                    The portal, its design, and its underlying software remain the property of DiGiTL Cloud
+                    Interloper, its design, and its underlying software remain the property of DiGiTL Cloud
                     GmbH or its licensors, except for third-party marks, content, and materials that remain
                     the property of their respective owners. These Terms do not transfer any intellectual
-                    property rights to you other than the limited right to use the portal for its intended
+                    property rights to you other than the limited right to use Interloper for its intended
                     business purpose.
                 </p>
             </section>
@@ -160,7 +160,7 @@ definePageMeta({
                     Disclaimer and limitation of liability
                 </h2>
                 <p>
-                    The portal is provided on an as-available basis. To the maximum extent permitted by law,
+                    Interloper is provided on an as-available basis. To the maximum extent permitted by law,
                     DiGiTL Cloud GmbH disclaims warranties not expressly stated, including implied warranties
                     of availability, fitness for a particular purpose, and non-infringement. We are not liable
                     for losses caused by third-party platform downtime, revoked permissions, policy changes,
@@ -174,10 +174,10 @@ definePageMeta({
                     Termination
                 </h2>
                 <p>
-                    We may restrict or terminate access to the portal if necessary to comply with law,
+                    We may restrict or terminate access to Interloper if necessary to comply with law,
                     enforce these Terms, respond to a third-party platform requirement, address security
-                    concerns, or prevent abuse. You may stop using the portal at any time and may revoke
-                    connector authorizations through the relevant third-party platform or your DigitlCloud
+                    concerns, or prevent abuse. You may stop using Interloper at any time and may revoke
+                    connector authorizations through the relevant third-party platform or your Interloper
                     service contacts where applicable.
                 </p>
             </section>
