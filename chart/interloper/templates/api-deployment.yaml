@@ -45,6 +45,10 @@ spec:
             - name: http
               containerPort: {{ .Values.config.server.port | default 3000 }}
               protocol: TCP
+          {{- with .Values.api.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
             {{- with .Values.api.forwardedAllowIps }}
