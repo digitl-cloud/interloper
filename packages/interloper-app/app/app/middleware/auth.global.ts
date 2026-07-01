@@ -3,7 +3,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
         return
 
     // Publicly accessible pages that don't require authentication
-    if (to.path === '/privacy-policy')
+    if (to.path === '/privacy-policy' || to.path === '/terms-of-service')
         return
 
     const userStore = useUserStore()
