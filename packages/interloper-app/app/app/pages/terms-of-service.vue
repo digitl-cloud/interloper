@@ -107,6 +107,83 @@ definePageMeta({
 
             <section class="flex flex-col gap-2">
                 <h2 class="text-xl font-semibold">
+                    Other platform connector terms
+                </h2>
+                <p>
+                    The connector terms above apply, with equal force, to every other platform you connect
+                    through Interloper. You may only connect an account for which you are authorized to grant
+                    the requested scopes, you authorize Interloper to request, receive, process, and store the
+                    credentials and data necessary to provide the services you requested, and that
+                    authorization is limited to the approved scopes and to your customer relationship with
+                    DiGiTL Cloud GmbH. In particular:
+                </p>
+                <ul class="list-disc pl-6 flex flex-col gap-2">
+                    <li>
+                        <strong>Google connectors</strong> (Google Ads, Campaign Manager 360, Display &amp;
+                        Video 360, and related services) are subject to the
+                        <ULink href="https://developers.google.com/terms"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Google APIs Terms of Service</ULink>.
+                        Interloper's use and transfer of information received from Google APIs to any other
+                        app adheres to the
+                        <ULink href="https://developers.google.com/terms/api-services-user-data-policy"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Google API Services User Data Policy</ULink>,
+                        including the Limited Use requirements.
+                    </li>
+                    <li>
+                        <strong>Meta connectors</strong> (Facebook and Instagram) are subject to the
+                        <ULink href="https://developers.facebook.com/terms/"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Meta Platform Terms</ULink>
+                        and Meta's developer policies.
+                    </li>
+                    <li>
+                        <strong>LinkedIn connectors</strong> (LinkedIn Ads and LinkedIn Organic) are subject
+                        to the
+                        <ULink href="https://legal.linkedin.com/api-terms-of-use"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">LinkedIn API Terms of Use</ULink>.
+                    </li>
+                    <li>
+                        <strong>Amazon connectors</strong> (Amazon Ads and Amazon Selling Partner) are subject
+                        to Amazon's API license agreement, Acceptable Use Policy, and Data Protection Policy.
+                    </li>
+                    <li>
+                        <strong>Microsoft Advertising</strong> (Bing Ads) is subject to the Microsoft
+                        Advertising Agreement and Microsoft's developer policies.
+                    </li>
+                    <li>
+                        <strong>Pinterest</strong> (Pinterest Ads) is subject to the
+                        <ULink href="https://business.pinterest.com/business-terms-of-service/"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Pinterest Business Terms of Service</ULink>
+                        and developer guidelines.
+                    </li>
+                    <li>
+                        <strong>Snapchat</strong> (Snapchat Ads) is subject to the Snap Business and developer
+                        terms.
+                    </li>
+                    <li>
+                        <strong>Criteo</strong> is subject to Criteo's applicable API and platform terms.
+                    </li>
+                </ul>
+                <p>
+                    You must not use any connector in a way that violates the relevant platform's rules,
+                    infringes third-party rights, misrepresents account ownership, bypasses access controls,
+                    or enables unlawful targeting, scraping, resale, or misuse of platform data. Additional
+                    connectors may be supported from time to time and are governed by these same terms and by
+                    the applicable platform's terms.
+                </p>
+            </section>
+
+            <section class="flex flex-col gap-2">
+                <h2 class="text-xl font-semibold">
                     Data use and instructions
                 </h2>
                 <p>
