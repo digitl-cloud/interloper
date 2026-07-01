@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.25.0 (2026-07-01)
+
+### Chores
+
+- **ci**: Add optional force bump input to release workflow
+  ([`2396336`](https://github.com/digitl-cloud/interloper/commit/23963362471a759b3a2f69006a2f317f427acde7))
+
+### Features
+
+- In-house developer_token fallback for Bing Ads sign-in
+  ([`9837379`](https://github.com/digitl-cloud/interloper/commit/98373792420047701ad0cef1bbaf8dceab87a46e))
+
+- **chart**: Add extraEnvFrom hook for api and scheduler
+  ([`8cb0ac9`](https://github.com/digitl-cloud/interloper/commit/8cb0ac9f21c2ae86d9099c3f308bef73da81f388))
+
+
 ## v0.24.1 (2026-06-30)
 
 ### Refactoring
