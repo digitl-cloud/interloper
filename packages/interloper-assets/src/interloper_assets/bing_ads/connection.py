@@ -4,6 +4,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 import interloper as il
+from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 # Microsoft Advertising OAuth + Customer Management SOAP endpoints. These are
@@ -42,6 +43,19 @@ def _first_descendant(root: ET.Element, name: str) -> ET.Element | None:
     name="Bing Ads",
     icon="icon:bing",
     tags=["Advertising"],
+    oauth=il.OAuthConfig(
+        "microsoft",
+        scope="offline_access https://ads.microsoft.com/msads.manage",
+        # ``developer_token`` rides the same in-house path as the credential
+        # trio: listing it here hides it in sign-in mode (the form hides every
+        # mapped field), and ``_resolve_developer_token`` fills it from env.
+        fields={
+            "client_id": "client_id",
+            "client_secret": "client_secret",
+            "refresh_token": "refresh_token",
+            "developer_token": "developer_token",
+        },
+    ),
 )
 class BingAdsConnection(il.RefreshTokenOAuthConnection):
     """Bing Ads API connection with OAuth2 refresh token auth.
@@ -53,7 +67,23 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
 
     model_config = SettingsConfigDict(env_prefix="bing_ads_")
 
-    developer_token: str = il.SecretField(description="Bing Ads developer token")
+    developer_token: str = il.SecretField("", description="Bing Ads developer token")
+
+    @model_validator(mode="after")
+    def _resolve_developer_token(self) -> "BingAdsConnection":
+        """Fill a blank ``developer_token`` from the in-house env credential.
+
+        Mirrors how ``client_id`` / ``client_secret`` resolve on
+        :class:`RefreshTokenOAuthConnection`: read
+        ``INTERLOPER_MICROSOFT_DEVELOPER_TOKEN`` when the field is left blank, so
+        the in-house token is used automatically and never stored per
+        connection. Setting it explicitly overrides the in-house token.
+
+        Returns:
+            The connection instance (self), with the developer token filled in.
+        """
+        self.developer_token = self.developer_token or self.env_credential("DEVELOPER_TOKEN")
+        return self
 
     @cached_property
     def _authentication(self) -> Any:
