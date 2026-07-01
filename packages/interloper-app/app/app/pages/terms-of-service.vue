@@ -56,7 +56,7 @@ definePageMeta({
                 </p>
             </section>
 
-            <section class="flex flex-col gap-2">
+            <section class="flex flex-col gap-4">
                 <h2 class="text-xl font-semibold">
                     Third-party platforms and connector terms
                 </h2>
@@ -68,59 +68,59 @@ definePageMeta({
                     disables access, we may need to modify, suspend, or remove the relevant connector
                     functionality.
                 </p>
-            </section>
+                <p>
+                    For every platform you connect through Interloper you may only connect an account for
+                    which you are authorized to grant the requested scopes; you authorize Interloper to
+                    request, receive, process, and store the credentials and data necessary to provide the
+                    services you requested; and that authorization is limited to the approved scopes and to
+                    your customer relationship with DiGiTL Cloud GmbH. You must not use any connector in a way
+                    that violates the relevant platform's rules, infringes third-party rights, misrepresents
+                    account ownership, bypasses access controls, or enables unlawful targeting, scraping,
+                    resale, or misuse of platform data. The following platform-specific terms apply.
+                </p>
 
-            <section class="flex flex-col gap-2">
-                <h2 class="text-xl font-semibold">
-                    TikTok connector terms
-                </h2>
-                <p>
-                    When you connect a TikTok Ads account or TikTok Organic account through Interloper, you
-                    acknowledge and agree that your use of those connectors remains subject to the applicable
-                    TikTok Terms of Service (<ULink href="https://www.tiktok.com/legal/terms-of-service"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="text-primary">https://www.tiktok.com/legal/terms-of-service</ULink>),
-                    developer documentation, API policies, and privacy notices.
-                </p>
-                <p>
-                    You may only connect TikTok accounts for which you have full permission to grant the
-                    requested access scopes. You authorize Interloper to request, receive, process, and
-                    store the TikTok access credentials and TikTok account data that are necessary to provide
-                    the analytics, reporting, integration, and support services you requested.
-                </p>
-                <p>
-                    That authorization is limited to the scopes approved during the OAuth flow and to the
-                    services associated with your customer relationship with DiGiTL Cloud GmbH. You must not
-                    use the TikTok connectors through Interloper in a way that violates TikTok rules,
-                    infringes third-party rights, misrepresents account ownership, bypasses access controls,
-                    or enables unlawful targeting, scraping, resale, or misuse of TikTok data.
-                </p>
-                <p>
-                    If TikTok requires user disclosures, additional consent, or revocation mechanisms, you
-                    remain responsible for satisfying those obligations in your own business operations. If
-                    you revoke Interloper access from within TikTok, remove app permissions, or your TikTok
-                    authorization expires, the related connector services may stop working until a new
-                    authorization is completed.
-                </p>
-            </section>
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        TikTok
+                    </h3>
+                    <p>
+                        When you connect a TikTok Ads account or TikTok Organic account through Interloper,
+                        you acknowledge and agree that your use of those connectors remains subject to the
+                        applicable TikTok Terms of Service (<ULink href="https://www.tiktok.com/legal/terms-of-service"
+                                                                   target="_blank"
+                                                                   rel="noopener noreferrer"
+                                                                   class="text-primary">https://www.tiktok.com/legal/terms-of-service</ULink>),
+                        developer documentation, API policies, and privacy notices.
+                    </p>
+                    <p>
+                        You may only connect TikTok accounts for which you have full permission to grant the
+                        requested access scopes. You authorize Interloper to request, receive, process, and
+                        store the TikTok access credentials and TikTok account data that are necessary to
+                        provide the analytics, reporting, integration, and support services you requested.
+                    </p>
+                    <p>
+                        That authorization is limited to the scopes approved during the OAuth flow and to the
+                        services associated with your customer relationship with DiGiTL Cloud GmbH. You must
+                        not use the TikTok connectors through Interloper in a way that violates TikTok rules,
+                        infringes third-party rights, misrepresents account ownership, bypasses access
+                        controls, or enables unlawful targeting, scraping, resale, or misuse of TikTok data.
+                    </p>
+                    <p>
+                        If TikTok requires user disclosures, additional consent, or revocation mechanisms, you
+                        remain responsible for satisfying those obligations in your own business operations.
+                        If you revoke Interloper access from within TikTok, remove app permissions, or your
+                        TikTok authorization expires, the related connector services may stop working until a
+                        new authorization is completed.
+                    </p>
+                </section>
 
-            <section class="flex flex-col gap-2">
-                <h2 class="text-xl font-semibold">
-                    Other platform connector terms
-                </h2>
-                <p>
-                    The connector terms above apply, with equal force, to every other platform you connect
-                    through Interloper. You may only connect an account for which you are authorized to grant
-                    the requested scopes, you authorize Interloper to request, receive, process, and store the
-                    credentials and data necessary to provide the services you requested, and that
-                    authorization is limited to the approved scopes and to your customer relationship with
-                    DiGiTL Cloud GmbH. In particular:
-                </p>
-                <ul class="list-disc pl-6 flex flex-col gap-2">
-                    <li>
-                        <strong>Google connectors</strong> (Google Ads, Campaign Manager 360, Display &amp;
-                        Video 360, and related services) are subject to the
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Google
+                    </h3>
+                    <p>
+                        Google connectors (Google Ads, Campaign Manager 360, Display &amp; Video 360, and
+                        related services) are subject to the
                         <ULink href="https://developers.google.com/terms"
                                target="_blank"
                                rel="noopener noreferrer"
@@ -132,53 +132,91 @@ definePageMeta({
                                rel="noopener noreferrer"
                                class="text-primary">Google API Services User Data Policy</ULink>,
                         including the Limited Use requirements.
-                    </li>
-                    <li>
-                        <strong>Meta connectors</strong> (Facebook and Instagram) are subject to the
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Meta (Facebook and Instagram)
+                    </h3>
+                    <p>
+                        Meta connectors are subject to the
                         <ULink href="https://developers.facebook.com/terms/"
                                target="_blank"
                                rel="noopener noreferrer"
                                class="text-primary">Meta Platform Terms</ULink>
                         and Meta's developer policies.
-                    </li>
-                    <li>
-                        <strong>LinkedIn connectors</strong> (LinkedIn Ads and LinkedIn Organic) are subject
-                        to the
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        LinkedIn
+                    </h3>
+                    <p>
+                        LinkedIn connectors (LinkedIn Ads and LinkedIn Organic) are subject to the
                         <ULink href="https://legal.linkedin.com/api-terms-of-use"
                                target="_blank"
                                rel="noopener noreferrer"
                                class="text-primary">LinkedIn API Terms of Use</ULink>.
-                    </li>
-                    <li>
-                        <strong>Amazon connectors</strong> (Amazon Ads and Amazon Selling Partner) are subject
-                        to Amazon's API license agreement, Acceptable Use Policy, and Data Protection Policy.
-                    </li>
-                    <li>
-                        <strong>Microsoft Advertising</strong> (Bing Ads) is subject to the Microsoft
-                        Advertising Agreement and Microsoft's developer policies.
-                    </li>
-                    <li>
-                        <strong>Pinterest</strong> (Pinterest Ads) is subject to the
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Amazon
+                    </h3>
+                    <p>
+                        Amazon connectors (Amazon Ads and Amazon Selling Partner) are subject to Amazon's API
+                        license agreement, Acceptable Use Policy, and Data Protection Policy.
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Microsoft Advertising (Bing Ads)
+                    </h3>
+                    <p>
+                        The Bing Ads connector is subject to the Microsoft Advertising Agreement and
+                        Microsoft's developer policies.
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Pinterest
+                    </h3>
+                    <p>
+                        The Pinterest Ads connector is subject to the
                         <ULink href="https://business.pinterest.com/business-terms-of-service/"
                                target="_blank"
                                rel="noopener noreferrer"
                                class="text-primary">Pinterest Business Terms of Service</ULink>
                         and developer guidelines.
-                    </li>
-                    <li>
-                        <strong>Snapchat</strong> (Snapchat Ads) is subject to the Snap Business and developer
-                        terms.
-                    </li>
-                    <li>
-                        <strong>Criteo</strong> is subject to Criteo's applicable API and platform terms.
-                    </li>
-                </ul>
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Snapchat
+                    </h3>
+                    <p>
+                        The Snapchat Ads connector is subject to the Snap Business and developer terms.
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Criteo
+                    </h3>
+                    <p>
+                        The Criteo connector is subject to Criteo's applicable API and platform terms.
+                    </p>
+                </section>
+
                 <p>
-                    You must not use any connector in a way that violates the relevant platform's rules,
-                    infringes third-party rights, misrepresents account ownership, bypasses access controls,
-                    or enables unlawful targeting, scraping, resale, or misuse of platform data. Additional
-                    connectors may be supported from time to time and are governed by these same terms and by
-                    the applicable platform's terms.
+                    Additional connectors may be supported from time to time and are governed by these same
+                    terms and by the applicable platform's terms.
                 </p>
             </section>
 

@@ -66,7 +66,7 @@ definePageMeta({
                 </p>
             </section>
 
-            <section class="flex flex-col gap-2">
+            <section class="flex flex-col gap-4">
                 <h2 class="text-xl font-semibold">
                     Connector integrations and third-party platform data
                 </h2>
@@ -87,95 +87,88 @@ definePageMeta({
                     Your use of each connector is also subject to the terms, developer policies, API rules,
                     and privacy documentation of the applicable platform, summarized below.
                 </p>
-            </section>
 
-            <section class="flex flex-col gap-2">
-                <h2 class="text-xl font-semibold">
-                    Google API Services
-                </h2>
-                <p>
-                    Connectors for Google Ads, Campaign Manager 360, Display &amp; Video 360, and related
-                    Google services access data through Google APIs, subject to the
-                    <ULink href="https://developers.google.com/terms"
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           class="text-primary">Google APIs Terms of Service</ULink>
-                    and the
-                    <ULink href="https://policies.google.com/privacy"
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           class="text-primary">Google Privacy Policy</ULink>.
-                </p>
-                <p>
-                    Interloper's use and transfer of information received from Google APIs to any other app
-                    will adhere to the
-                    <ULink href="https://developers.google.com/terms/api-services-user-data-policy"
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           class="text-primary">Google API Services User Data Policy</ULink>,
-                    including the Limited Use requirements.
-                </p>
-            </section>
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Google API Services
+                    </h3>
+                    <p>
+                        Connectors for Google Ads, Campaign Manager 360, Display &amp; Video 360, and related
+                        Google services access data through Google APIs, subject to the
+                        <ULink href="https://developers.google.com/terms"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Google APIs Terms of Service</ULink>
+                        and the
+                        <ULink href="https://policies.google.com/privacy"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Google Privacy Policy</ULink>.
+                    </p>
+                    <p>
+                        Interloper's use and transfer of information received from Google APIs to any other
+                        app will adhere to the
+                        <ULink href="https://developers.google.com/terms/api-services-user-data-policy"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Google API Services User Data Policy</ULink>,
+                        including the Limited Use requirements.
+                    </p>
+                </section>
 
-            <section class="flex flex-col gap-2">
-                <h2 class="text-xl font-semibold">
-                    Meta Platform (Facebook and Instagram)
-                </h2>
-                <p>
-                    Connectors for Facebook Ads, Facebook Insights, and Instagram Insights access data
-                    through the Meta APIs, subject to the
-                    <ULink href="https://developers.facebook.com/terms/"
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           class="text-primary">Meta Platform Terms</ULink>
-                    and the
-                    <ULink href="https://www.facebook.com/privacy/policy/"
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           class="text-primary">Meta Privacy Policy</ULink>.
-                    You may disconnect at any time within Interloper or by removing Interloper from the
-                    Business Integrations settings of your Meta account. To request deletion of Meta data we
-                    hold on your behalf, see "Data retention and deletion" below.
-                </p>
-            </section>
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Meta Platform (Facebook and Instagram)
+                    </h3>
+                    <p>
+                        Connectors for Facebook Ads, Facebook Insights, and Instagram Insights access data
+                        through the Meta APIs, subject to the
+                        <ULink href="https://developers.facebook.com/terms/"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Meta Platform Terms</ULink>
+                        and the
+                        <ULink href="https://www.facebook.com/privacy/policy/"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">Meta Privacy Policy</ULink>.
+                        You may disconnect at any time within Interloper or by removing Interloper from the
+                        Business Integrations settings of your Meta account. To request deletion of Meta data
+                        we hold on your behalf, see "Data retention and deletion" below.
+                    </p>
+                </section>
 
-            <section class="flex flex-col gap-2">
-                <h2 class="text-xl font-semibold">
-                    TikTok Integration and API Services
-                </h2>
-                <p>
-                    Our Platform allows users to connect their TikTok accounts through official TikTok API
-                    Services. By using the TikTok connector within Interloper, you agree
-                    to be bound by the TikTok Terms of Service (accessible at
-                    <ULink href="https://www.tiktok.com/legal/terms-of-service"
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           class="text-primary">
-                        https://www.tiktok.com/legal/terms-of-service
-                    </ULink>) and the TikTok Privacy Policy.
-                </p>
-                <p>
-                    We only access, ingest, and process TikTok data that you explicitly authorize during the
-                    OAuth consent flow. You may revoke this access at any time through your TikTok account
-                    security settings or by disconnecting your account within Interloper. We
-                    do not use your TikTok data for any purpose other than providing the requested analytics
-                    and reporting services to you.
-                </p>
-            </section>
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        TikTok Integration and API Services
+                    </h3>
+                    <p>
+                        Our Platform allows users to connect their TikTok accounts through official TikTok API
+                        Services. By using the TikTok connector within Interloper, you agree to be bound by
+                        the TikTok Terms of Service (accessible at
+                        <ULink href="https://www.tiktok.com/legal/terms-of-service"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-primary">
+                            https://www.tiktok.com/legal/terms-of-service
+                        </ULink>) and the TikTok Privacy Policy.
+                    </p>
+                    <p>
+                        We only access, ingest, and process TikTok data that you explicitly authorize during
+                        the OAuth consent flow. You may revoke this access at any time through your TikTok
+                        account security settings or by disconnecting your account within Interloper. We do
+                        not use your TikTok data for any purpose other than providing the requested analytics
+                        and reporting services to you.
+                    </p>
+                </section>
 
-            <section class="flex flex-col gap-2">
-                <h2 class="text-xl font-semibold">
-                    Other platform connectors
-                </h2>
-                <p>
-                    The following connectors access data through each platform's official API and are subject
-                    to that platform's terms and privacy documentation. In each case we access only the
-                    scopes you approve, and you may disconnect at any time within Interloper or by revoking
-                    access in the platform's own settings.
-                </p>
-                <ul class="list-disc pl-6 flex flex-col gap-2">
-                    <li>
-                        <strong>LinkedIn</strong> (LinkedIn Ads and LinkedIn Organic) — subject to the
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        LinkedIn
+                    </h3>
+                    <p>
+                        Connectors for LinkedIn Ads and LinkedIn Organic access data through the LinkedIn
+                        APIs, subject to the
                         <ULink href="https://legal.linkedin.com/api-terms-of-use"
                                target="_blank"
                                rel="noopener noreferrer"
@@ -185,22 +178,40 @@ definePageMeta({
                                target="_blank"
                                rel="noopener noreferrer"
                                class="text-primary">LinkedIn Privacy Policy</ULink>.
-                    </li>
-                    <li>
-                        <strong>Amazon</strong> (Amazon Ads and Amazon Selling Partner) — subject to Amazon's
-                        API license agreement, Acceptable Use Policy, and Data Protection Policy, and the
-                        applicable Amazon privacy notices.
-                    </li>
-                    <li>
-                        <strong>Microsoft Advertising</strong> (Bing Ads) — subject to the Microsoft
-                        Advertising Agreement and the
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Amazon
+                    </h3>
+                    <p>
+                        Connectors for Amazon Ads and Amazon Selling Partner access data through Amazon's
+                        APIs, subject to Amazon's API license agreement, Acceptable Use Policy, and Data
+                        Protection Policy, and the applicable Amazon privacy notices.
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Microsoft Advertising (Bing Ads)
+                    </h3>
+                    <p>
+                        The Bing Ads connector accesses data through the Microsoft Advertising API, subject to
+                        the Microsoft Advertising Agreement and the
                         <ULink href="https://privacy.microsoft.com/privacystatement"
                                target="_blank"
                                rel="noopener noreferrer"
                                class="text-primary">Microsoft Privacy Statement</ULink>.
-                    </li>
-                    <li>
-                        <strong>Pinterest</strong> (Pinterest Ads) — subject to the
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Pinterest
+                    </h3>
+                    <p>
+                        The Pinterest Ads connector accesses data through the Pinterest API, subject to the
                         <ULink href="https://business.pinterest.com/business-terms-of-service/"
                                target="_blank"
                                rel="noopener noreferrer"
@@ -210,24 +221,37 @@ definePageMeta({
                                target="_blank"
                                rel="noopener noreferrer"
                                class="text-primary">Pinterest Privacy Policy</ULink>.
-                    </li>
-                    <li>
-                        <strong>Snapchat</strong> (Snapchat Ads) — subject to the Snap Business and developer
-                        terms and the
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Snapchat
+                    </h3>
+                    <p>
+                        The Snapchat Ads connector accesses data through the Snap Marketing API, subject to
+                        the Snap Business and developer terms and the
                         <ULink href="https://snap.com/privacy/privacy-policy"
                                target="_blank"
                                rel="noopener noreferrer"
                                class="text-primary">Snap Privacy Policy</ULink>.
-                    </li>
-                    <li>
-                        <strong>Criteo</strong> — subject to Criteo's applicable API and platform terms and
-                        the
+                    </p>
+                </section>
+
+                <section class="flex flex-col gap-2">
+                    <h3 class="text-lg font-semibold">
+                        Criteo
+                    </h3>
+                    <p>
+                        The Criteo connector accesses data through the Criteo API, subject to Criteo's
+                        applicable API and platform terms and the
                         <ULink href="https://www.criteo.com/privacy/"
                                target="_blank"
                                rel="noopener noreferrer"
                                class="text-primary">Criteo Privacy Policy</ULink>.
-                    </li>
-                </ul>
+                    </p>
+                </section>
+
                 <p>
                     Additional connectors may be supported from time to time; each is used only within the
                     scopes you approve and subject to the applicable platform's terms.
