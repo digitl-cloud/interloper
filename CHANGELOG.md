@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.26.0 (2026-07-01)
+
+### Documentation
+
+- Add a comment-sparingly convention to AGENTS.md
+  ([`0313bba`](https://github.com/digitl-cloud/interloper/commit/0313bbac51c0330f6d99f906bb6ad64e7cb9687d))
+
+### Features
+
+- **assets**: Make service_account_key a JsonField instead of a SecretField
+  ([`d5a74d0`](https://github.com/digitl-cloud/interloper/commit/d5a74d089c40a7e92a1eaf2026caa4ea9f90859c))
+
+### Refactoring
+
+- Make OAuth credential fields required, env-injected before validation
+  ([`31bdb94`](https://github.com/digitl-cloud/interloper/commit/31bdb9427ec06d75014f3eeb09da79b462927936))
+
+
 ## v0.25.1 (2026-07-01)
 
 ### Bug Fixes
