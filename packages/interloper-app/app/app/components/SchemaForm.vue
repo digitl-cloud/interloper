@@ -126,6 +126,21 @@ const oauthFieldKeys = computed<Set<string>>(() => {
     return new Set(Object.values(oauthMeta.value.fields))
 })
 
+/** Manual-entry mode: no OAuth for this schema, or the Manual tab is active. */
+const manualMode = computed(() => !oauthAvailable.value || activeTab.value === 'manual')
+
+/**
+ * Field keys required in the current mode. Always the schema's `required`; in
+ * manual mode also the OAuth credential fields, which are schema-optional only
+ * so sign-in can resolve them from env / the flow. Entering credentials by hand
+ * means providing all of them (client_id / client_secret / token).
+ */
+const requiredKeys = computed<Set<string>>(() => {
+    const req = new Set(props.schema?.required ?? [])
+    if (manualMode.value) for (const key of oauthFieldKeys.value) req.add(key)
+    return req
+})
+
 /** Whether sign-in has completed — the token field is filled. */
 const oauthFilled = computed(() => {
     const field = oauthTokenField.value
@@ -321,7 +336,7 @@ function resolveOptions(prop: JsonSchemaProperty): unknown[] | undefined {
 /** Compute field descriptors from the schema. */
 const fields = computed(() => {
     const properties = props.schema?.properties ?? {}
-    const required = new Set(props.schema?.required ?? [])
+    const required = requiredKeys.value
     const excluded = new Set(props.exclude ?? ['id'])
 
     return Object.entries(properties)
@@ -409,13 +424,14 @@ watch(
     { immediate: true, deep: true },
 )
 
-/** Validate: all required fields must have a non-empty value. */
+/** Validate: all required fields must have a non-empty value. Re-runs on tab
+ * switch too, since manual mode requires the OAuth credential fields. */
 watch(
-    data,
-    (val) => {
+    [data, requiredKeys],
+    () => {
         isValid.value = fields.value
             .filter(f => f.required)
-            .every(f => val[f.key] !== undefined && val[f.key] !== '')
+            .every(f => data.value[f.key] !== undefined && data.value[f.key] !== '')
     },
     { deep: true, immediate: true },
 )
