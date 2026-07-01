@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.27.0 (2026-07-01)
+
+### Bug Fixes
+
+- Follow redirects in OAuth token exchange
+  ([`385bb7c`](https://github.com/digitl-cloud/interloper/commit/385bb7cbfd8323d3f742e77316ed3a7301883356))
+
+### Features
+
+- **assets**: Add Google Ads OAuth sign-in; scope developer tokens per connection
+  ([`304db0d`](https://github.com/digitl-cloud/interloper/commit/304db0d1abba98622db6c5a6864540054a9ecccb))
+
+
 ## v0.26.0 (2026-07-01)
 
 ### Documentation
