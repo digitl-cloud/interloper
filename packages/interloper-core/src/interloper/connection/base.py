@@ -96,6 +96,17 @@ class OAuthConnection(Connection):
             return None
         return os.environ.get(f"INTERLOPER_{cls.oauth.provider.upper()}_{suffix}")
 
+    @staticmethod
+    def resolve_field(data: dict[str, Any], field: str, value: str | None) -> None:
+        """Fill ``data[field]`` from ``value`` when the field is blank and value is set.
+
+        A ``mode="before"`` ``resolve_credentials`` validator uses this per field.
+        Leaves the field absent when there is no value, so a required field fails
+        with "Field required" rather than being satisfied by an empty value.
+        """
+        if value and not data.get(field):
+            data[field] = value
+
 
 class RefreshTokenOAuthConnection(OAuthConnection):
     """A connection using the standard OAuth2 refresh-token flow.
@@ -138,10 +149,6 @@ class RefreshTokenOAuthConnection(OAuthConnection):
             The (possibly augmented) input data.
         """
         if isinstance(data, dict):
-            client_id = cls.env_credential("CLIENT_ID")
-            if client_id and not data.get("client_id"):
-                data["client_id"] = client_id
-            client_secret = cls.env_credential("CLIENT_SECRET")
-            if client_secret and not data.get("client_secret"):
-                data["client_secret"] = client_secret
+            cls.resolve_field(data, "client_id", cls.env_credential("CLIENT_ID"))
+            cls.resolve_field(data, "client_secret", cls.env_credential("CLIENT_SECRET"))
         return data
