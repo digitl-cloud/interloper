@@ -40,6 +40,10 @@ scheduler:
   affinity: {}
   podAnnotations: {}
   extraEnv: []
+  # Extra `envFrom` sources (secretRef / configMapRef) injected verbatim. Use
+  # this to bulk-map a Secret whose keys already match the desired env var
+  # names (e.g. connector OAuth provider creds) instead of one entry per key.
+  extraEnvFrom: []
 
 # ── Worker (per-asset Job target; only consumed when config.runner.type=kubernetes (or legacy alias k8s)) ─
 # Not deployed as a workload — this image is referenced by the Kubernetes
@@ -83,6 +87,10 @@ api:
   affinity: {}
   podAnnotations: {}
   extraEnv: []
+  # Extra `envFrom` sources (secretRef / configMapRef) injected verbatim. Use
+  # this to bulk-map a Secret whose keys already match the desired env var
+  # names (e.g. connector OAuth provider creds) instead of one entry per key.
+  extraEnvFrom: []
 
 # ── Frontend (nginx serving the pre-built Nuxt SPA) ────────────────────────
 frontend:
