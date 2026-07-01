@@ -30,11 +30,9 @@ def coerce_to_records(data: Any) -> list[dict[str, Any]]:
     if isinstance(data, (Generator, Iterator, types.GeneratorType)):
         return coerce_to_records(list(data))
 
-    # Single Pydantic model
     if isinstance(data, BaseModel):
         return [data.model_dump()]
 
-    # list
     if isinstance(data, list):
         if not data:
             return []
@@ -47,7 +45,6 @@ def coerce_to_records(data: Any) -> list[dict[str, Any]]:
             f"Normalizer received list[{type(first).__name__}], expected list[dict] or list[BaseModel]."
         )
 
-    # Single dict
     if isinstance(data, dict):
         return [data]
 

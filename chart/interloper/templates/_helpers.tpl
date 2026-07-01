@@ -158,7 +158,6 @@ Postgres host: either the bundled subchart service or external config.
 
 {{/*
 Environment variables shared by all interloper pods (scheduler, api, frontend).
-Contains Postgres connection info + the encryption key secret.
 */}}
 {{- define "interloper.commonEnv" -}}
 - name: INTERLOPER_POSTGRES_HOST

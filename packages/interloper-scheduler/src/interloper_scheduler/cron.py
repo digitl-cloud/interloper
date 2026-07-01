@@ -131,12 +131,10 @@ class CronController:
                     session.flush()
                     continue
 
-                # Update next_run_at
                 job.next_run_at = next_run_at
                 session.add(job)
                 session.flush()
 
-                # Create runs
                 if job.partitioned and job.backfill_days:
                     end_date = now.date() - dt.timedelta(days=1)
                     start_date = end_date - dt.timedelta(days=job.backfill_days - 1)

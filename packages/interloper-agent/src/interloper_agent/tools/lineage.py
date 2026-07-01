@@ -144,7 +144,6 @@ def impact_analysis(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
                 if neighbor not in visited:
                     queue.append((neighbor, depth + 1))
 
-        # Group by source
         by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for item in affected:
             by_source[item.get("source_key", "unknown")].append(item)
@@ -228,7 +227,6 @@ def _build_adjacency(
         if a.source and a.source_id:
             source_keys[a.source_id] = a.source.key
 
-    # Add source_key to asset_info
     for uid, info in asset_info.items():
         sid_str = info["source_id"]
         if sid_str:

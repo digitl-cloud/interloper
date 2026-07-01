@@ -46,14 +46,12 @@ export function useAgentChat(sessionId: Ref<string>) {
 
         error.value = null
 
-        // Add user message
         messages.value.push({
             id: crypto.randomUUID(),
             role: 'user',
             text,
         })
 
-        // Add placeholder for assistant response
         const assistantId = crypto.randomUUID()
         messages.value.push({
             id: assistantId,
@@ -123,7 +121,6 @@ export function useAgentChat(sessionId: Ref<string>) {
             }
         }
         finally {
-            // Ensure loading state is cleared
             const msg = messages.value.find(m => m.id === assistantId)
             if (msg) msg.loading = false
             streaming.value = false

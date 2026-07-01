@@ -42,8 +42,8 @@ spec:
           {{- with .Values.securityContext }}
           securityContext: {{- toYaml . | nindent 12 }}
           {{- end }}
-          # No config mount: pre-install hooks run before the ConfigMap is
-          # created. Postgres connection comes from env vars (commonEnv).
+          # No config mount: db init only needs the Postgres connection, which
+          # comes from env vars (commonEnv).
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
           resources: {{- toYaml .Values.dbInit.resources | nindent 12 }}

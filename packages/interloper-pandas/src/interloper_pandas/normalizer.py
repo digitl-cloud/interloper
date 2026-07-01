@@ -45,7 +45,6 @@ class DataFrameNormalizer(Normalizer):
         if isinstance(data, pd.DataFrame):
             df = data
         else:
-            # Coerce to list[dict] using base class, then convert to DataFrame
             rows = self._coerce(data)
             df = pd.DataFrame(rows)
 

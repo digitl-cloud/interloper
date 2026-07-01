@@ -38,7 +38,6 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
     mock_client.project = project
     mock_client.location = "EU"
 
-    # Build mock connection resource
     conn = MagicMock(spec=GoogleCloudConnection)
     conn.service_account_key = _SA_KEY
 

@@ -470,7 +470,6 @@ class AuthMixin:
                 session.commit()
                 return None
 
-            # Check if already a member
             existing_membership = session.exec(
                 select(UserOrganisation).where(
                     UserOrganisation.user_id == user_id,

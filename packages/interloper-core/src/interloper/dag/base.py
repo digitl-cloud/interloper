@@ -56,10 +56,8 @@ class DAG:
             else:
                 raise DAGError(f"Expected Asset or Source, got {type(item)}")
 
-        # Build asset map keyed by instance id
         self.asset_map = {asset.id: asset for asset in self.assets}
 
-        # Check for duplicate ids
         if len(self.asset_map) != len(self.assets):
             seen: set[str] = set()
             duplicates: list[str] = []
@@ -69,11 +67,9 @@ class DAG:
                 seen.add(asset.id)
             raise DAGError(f"Duplicate asset id found: {duplicates}")
 
-        # Initialize successors with empty lists
         for asset in self.assets:
             self.successors[asset.id] = []
 
-        # Build dependency graph from resolved deps
         for asset in self.assets:
             if not asset.materializable:
                 continue
@@ -306,7 +302,6 @@ class DAG:
                 continue
             source_assets.setdefault(source.id, []).append(asset)
 
-        # For each source, build a spec using the DAG's asset states
         for assets in source_assets.values():
             source = assets[0]._source
             assert source is not None

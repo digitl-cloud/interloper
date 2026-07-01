@@ -168,16 +168,13 @@ class DockerLauncher(Launcher):
         state = container.attrs.get("State", {}) if container.attrs else {}
         docker_status = (state.get("Status") or container.status or "").lower()
 
-        # "running", "created", "restarting", "paused" — still alive
         if docker_status in ("running", "created", "restarting", "paused"):
             return RunState(status=RunStatus.RUNNING)
 
-        # Terminal states: "exited", "dead", "removing"
         exit_code = state.get("ExitCode")
         if exit_code == 0:
             return RunState(status=RunStatus.SUCCEEDED)
 
-        # Anything else is a failure
         parts = [f"Container {container.short_id} status={docker_status}"]
         if exit_code is not None:
             parts.append(f"exit_code={exit_code}")
