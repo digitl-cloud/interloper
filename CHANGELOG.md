@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v0.28.0 (2026-07-02)
+
+### Bug Fixes
+
+- **app**: Oauth popup flow reports cancel and failure to the opener
+  ([`c8030bf`](https://github.com/digitl-cloud/interloper/commit/c8030bf065819957c779b762fceccb261f5352ac))
+
+- **assets**: Google-ads connection resolves its own app creds env vars
+  ([`d7a1da4`](https://github.com/digitl-cloud/interloper/commit/d7a1da444b491e63adf84ff2ec82b8b0cdcf0f95))
+
+### Chores
+
+- **assets**: Improve connections fields labels
+  ([`6d71956`](https://github.com/digitl-cloud/interloper/commit/6d71956633a0540865a83e1654b7686c03b3cd32))
+
+### Features
+
+- Sync-callable run/materialize entrypoints backed by an il.run bridge
+  ([`982df84`](https://github.com/digitl-cloud/interloper/commit/982df845af6e141a1fe1f9214371a9e07aee5a5b))
+
+### Refactoring
+
+- **assets**: Move awin advertiser id to a source FetchField
+  ([`2f9adba`](https://github.com/digitl-cloud/interloper/commit/2f9adba7d93338a7b52a33e709da319790c71698))
+
+
 ## v0.27.0 (2026-07-01)
 
 ### Bug Fixes
