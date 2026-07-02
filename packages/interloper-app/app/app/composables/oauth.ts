@@ -5,9 +5,21 @@
  * - Building provider-specific authorization URLs
  * - Opening a popup window for the OAuth consent screen
  * - Exchanging the authorization code for tokens via the backend
- * - Communicating tokens back from the popup to the opener
+ * - Communicating the outcome back from the popup to the opener
+ *
+ * Opener and popup talk over a BroadcastChannel (same-origin by construction)
+ * rather than `window.opener.postMessage`: providers that respond with
+ * `Cross-Origin-Opener-Policy: same-origin` sever the opener link, which would
+ * silently drop the result and leave the opener waiting forever.
  */
 
+/** Rejection raised when the popup is closed before the flow completes. */
+export class OAuthCancelledError extends Error {}
+
+const OAUTH_CHANNEL = 'interloper-oauth'
+const POPUP_POLL_INTERVAL_MS = 500
+/** Delay between the popup closing and rejecting, so an in-flight result message wins the race. */
+const POPUP_CLOSE_GRACE_MS = 1_000
 
 /**
  * Extract a human-readable detail from a failed token-exchange request.
@@ -23,17 +35,6 @@ export function oauthErrorDetail(error: unknown): string {
     return e?.message || 'Unknown error'
 }
 
-/** Wait for a single DOM event, returned as a promise. */
-function promiseFromEvent<T extends Event>(target: EventTarget, event: string): Promise<T> {
-    return new Promise((resolve) => {
-        const handler = (e: Event) => {
-            target.removeEventListener(event, handler)
-            resolve(e as T)
-        }
-        target.addEventListener(event, handler)
-    })
-}
-
 /**
  * Composable for the OAuth2 popup sign-in flow.
  */
@@ -41,8 +42,11 @@ export function useOAuthPopup() {
     const { apiFetch } = useApi()
 
     /**
-     * Open a popup to the given authorization URL and wait for
-     * the callback page to post tokens back via `postMessage`.
+     * Open a popup to the given authorization URL and wait for the callback
+     * page to report the outcome over the OAuth channel.
+     *
+     * Rejects with `OAuthCancelledError` when the popup is closed before the
+     * flow completes, and with a regular `Error` when the flow itself fails.
      */
     async function signIn(url: string): Promise<Record<string, unknown>> {
         const width = 500
@@ -50,64 +54,80 @@ export function useOAuthPopup() {
         const left = window.screen.width / 2 - width / 2
         const top = window.screen.height / 2 - height / 2
 
+        // Correlates this flow instance with its popup: providers echo `state`
+        // back to the callback page, which includes it in the result message.
+        const state = crypto.randomUUID()
+        const popupUrl = new URL(url)
+        popupUrl.searchParams.set('state', state)
+
         const popup = window.open(
-            url,
+            popupUrl.toString(),
             'oauth2popup',
             `width=${width},height=${height},left=${left},top=${top}`,
         )
         if (!popup) throw new Error('Failed to open popup window')
 
-        // Wait for the popup to post a message with our status type
-        let event: MessageEvent
-        do {
-            event = await promiseFromEvent<MessageEvent>(window, 'message')
-        } while (
-            !event.data?.type
-            || !Object.values(OAuthPopupStatus).includes(event.data.type)
-        )
+        return new Promise((resolve, reject) => {
+            const channel = new BroadcastChannel(OAUTH_CHANNEL)
+            let settled = false
 
-        if (event.data.type !== OAuthPopupStatus.Success) {
-            throw new Error(event.data.error || 'OAuth sign-in failed')
-        }
+            function settle(complete: () => void) {
+                if (settled) return
+                settled = true
+                clearInterval(poll)
+                channel.close()
+                complete()
+            }
 
-        popup.close()
-        return event.data.tokens as Record<string, unknown>
+            // There is no close event for a (cross-origin) popup, so poll.
+            const poll = setInterval(() => {
+                if (!popup.closed) return
+                clearInterval(poll)
+                setTimeout(
+                    () => settle(() => reject(new OAuthCancelledError('Sign-in window was closed'))),
+                    POPUP_CLOSE_GRACE_MS,
+                )
+            }, POPUP_POLL_INTERVAL_MS)
+
+            channel.onmessage = (event: MessageEvent<OAuthPopupMessage>) => {
+                const message = event.data
+                if (message?.type !== OAuthPopupStatus.Success && message?.type !== OAuthPopupStatus.Failure) return
+                // A mismatched state belongs to another flow instance. A missing
+                // one means the provider dropped the param — accept rather than hang.
+                if (message.state && message.state !== state) return
+
+                if (message.type === OAuthPopupStatus.Success) {
+                    popup.close()
+                    settle(() => resolve(message.tokens))
+                }
+                else {
+                    // Leave the popup open — it displays the failure details.
+                    settle(() => reject(new Error(message.error || 'OAuth sign-in failed')))
+                }
+            }
+        })
     }
 
     /**
      * Exchange an authorization code for tokens (called from the callback page).
-     * Posts the result back to the opener window.
      */
-    async function exchangeCode(provider: string, code: string) {
-        try {
-            const tokens = await apiFetch<Record<string, unknown>>(`/oauth/${provider}`, {
-                method: 'POST',
-                body: { code },
-            })
-
-            if (window.opener) {
-                window.opener.postMessage({
-                    type: OAuthPopupStatus.Success,
-                    tokens,
-                }, '*')
-            }
-
-            return tokens
-        }
-        catch (error) {
-            // Notify the opener of the failure so its `signIn` promise rejects
-            // instead of hanging, forwarding the detail for display.
-            if (window.opener) {
-                window.opener.postMessage({
-                    type: OAuthPopupStatus.Failure,
-                    error: oauthErrorDetail(error),
-                }, '*')
-            }
-            throw error
-        }
+    async function exchangeCode(provider: string, code: string): Promise<Record<string, unknown>> {
+        return await apiFetch<Record<string, unknown>>(`/oauth/${provider}`, {
+            method: 'POST',
+            body: { code },
+        })
     }
 
-    return { signIn, exchangeCode }
+    /**
+     * Report the flow outcome to the opener (called from the callback page).
+     */
+    function reportResult(message: OAuthPopupMessage) {
+        const channel = new BroadcastChannel(OAUTH_CHANNEL)
+        channel.postMessage(message)
+        channel.close()
+    }
+
+    return { signIn, exchangeCode, reportResult }
 }
 
 /**

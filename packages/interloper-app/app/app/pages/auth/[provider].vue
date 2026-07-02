@@ -6,7 +6,7 @@ definePageMeta({
 })
 
 const route = useRoute()
-const { exchangeCode } = useOAuthPopup()
+const { exchangeCode, reportResult } = useOAuthPopup()
 
 const provider = route.params.provider?.toString()
 if (!provider) {
@@ -17,20 +17,37 @@ if (!provider) {
 }
 
 const code = route.query.code as string | undefined
-const status = ref<OAuthPopupStatus>(
-    code ? OAuthPopupStatus.Loading : OAuthPopupStatus.MissingCode,
-)
+const providerError = route.query.error as string | undefined
+const state = route.query.state as string | undefined
+
+const status = ref<OAuthPopupStatus>(OAuthPopupStatus.Loading)
 const errorDetail = ref('')
 
+function fail(error: string, failureStatus = OAuthPopupStatus.Failure) {
+    errorDetail.value = error
+    status.value = failureStatus
+    reportResult({ type: OAuthPopupStatus.Failure, state, error })
+}
+
+// Every terminal state reports back to the opener, so its pending sign-in
+// settles instead of spinning forever.
 onMounted(async () => {
-    if (code) {
+    if (providerError) {
+        // Provider redirected back with an error (e.g. the user denied consent).
+        const description = route.query.error_description as string | undefined
+        fail(description ? `${providerError}: ${description}` : providerError)
+    }
+    else if (!code) {
+        fail('Authorization code is missing', OAuthPopupStatus.MissingCode)
+    }
+    else {
         try {
-            await exchangeCode(provider, code)
+            const tokens = await exchangeCode(provider, code)
             status.value = OAuthPopupStatus.Success
+            reportResult({ type: OAuthPopupStatus.Success, state, tokens })
         }
         catch (error) {
-            errorDetail.value = oauthErrorDetail(error)
-            status.value = OAuthPopupStatus.Failure
+            fail(oauthErrorDetail(error))
         }
     }
 })

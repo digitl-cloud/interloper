@@ -7,6 +7,21 @@ export enum OAuthPopupStatus {
     MissingCode = 'OAUTH_POPUP_MISSING_CODE',
 }
 
+/**
+ * Flow outcome sent by the popup callback page to the opener over the OAuth
+ * BroadcastChannel. `state` echoes the OAuth `state` nonce so the opener can
+ * ignore results from another flow instance (e.g. a popup opened by another tab).
+ */
+export type OAuthPopupMessage = {
+    type: OAuthPopupStatus.Success
+    state?: string
+    tokens: Record<string, unknown>
+} | {
+    type: OAuthPopupStatus.Failure
+    state?: string
+    error: string
+}
+
 /** Public provider info returned by the API (no secrets). */
 export interface OAuthProviderInfo {
     key: string
