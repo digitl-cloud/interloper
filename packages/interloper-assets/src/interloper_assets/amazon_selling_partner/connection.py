@@ -45,9 +45,9 @@ class AmazonSellingPartnerConnection(il.Connection):
         ],
         description="API region",
     )
-    client_id: str = il.InputField(description="LWA client ID")
-    client_secret: str = il.SecretField(description="LWA client secret")
-    refresh_token: str = il.SecretField(description="LWA refresh token")
+    client_id: str = il.InputField(title="Client ID", description="LWA client ID")
+    client_secret: str = il.SecretField(title="Client Secret", description="LWA client secret")
+    refresh_token: str = il.SecretField(title="Refresh Token", description="LWA refresh token")
 
     @cached_property
     def api_location(self) -> AmazonSellingPartnerLocation:

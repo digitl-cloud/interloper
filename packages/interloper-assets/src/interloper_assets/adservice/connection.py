@@ -15,7 +15,7 @@ class AdserviceConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="adservice_")
 
-    api_key: str = il.SecretField(description="Adservice API key")
+    api_key: str = il.SecretField(title="API Key", description="Adservice API key")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:

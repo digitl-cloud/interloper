@@ -16,7 +16,7 @@ class AdupConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="adup_")
 
-    client_id: str = il.InputField(description="OAuth2 client ID")
+    client_id: str = il.InputField(title="Client ID", description="OAuth2 client ID")
     client_secret: str = il.SecretField(description="OAuth2 client secret")
 
     @cached_property

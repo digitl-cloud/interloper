@@ -16,7 +16,7 @@ class TeadsConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="teads_")
 
-    api_key: str = il.SecretField(description="Teads API key")
+    api_key: str = il.SecretField(title="API Key", description="Teads API key")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:

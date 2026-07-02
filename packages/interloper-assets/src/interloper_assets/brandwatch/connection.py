@@ -16,8 +16,8 @@ class BrandwatchConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="brandwatch_")
 
-    api_key: str = il.SecretField(description="Brandwatch API key")
-    channel_id: str = il.InputField(description="Channel ID to fetch insights for")
+    api_key: str = il.SecretField(title="API Key", description="Brandwatch API key")
+    channel_id: str = il.InputField(title="Channel ID", description="Channel ID to fetch insights for")
     network: str = il.SelectField(
         options=[
             {"label": "Facebook", "value": "facebook"},

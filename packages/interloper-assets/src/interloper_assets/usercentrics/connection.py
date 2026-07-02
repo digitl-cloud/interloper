@@ -16,8 +16,8 @@ class UsercentricsConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="usercentrics_")
 
-    api_key: str = il.SecretField(description="Usercentrics API key")
-    analytics_id: str = il.InputField(description="Usercentrics analytics ID")
+    api_key: str = il.SecretField(title="API Key", description="Usercentrics API key")
+    analytics_id: str = il.InputField(title="Analytics ID", description="Usercentrics analytics ID")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
