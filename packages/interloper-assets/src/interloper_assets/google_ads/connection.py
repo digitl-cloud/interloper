@@ -23,9 +23,6 @@ _BASE_URL = "https://googleads.googleapis.com/v20"
     oauth=il.OAuthConfig(
         "google",
         scope="https://www.googleapis.com/auth/adwords",
-        # ``developer_token`` rides the same in-house path as the credential
-        # trio: listing it here hides it in sign-in mode, and
-        # ``resolve_credentials`` fills it from env.
         fields={
             "client_id": "client_id",
             "client_secret": "client_secret",
@@ -56,8 +53,8 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
             The (possibly augmented) input data.
         """
         if isinstance(data, dict):
-            cls.resolve_field(data, "client_id", cls.env_credential("CLIENT_ID"))
-            cls.resolve_field(data, "client_secret", cls.env_credential("CLIENT_SECRET"))
+            cls.resolve_field(data, "client_id", os.environ.get("INTERLOPER_GOOGLE_ADS_CLIENT_ID"))
+            cls.resolve_field(data, "client_secret", os.environ.get("INTERLOPER_GOOGLE_ADS_CLIENT_SECRET"))
             cls.resolve_field(data, "developer_token", os.environ.get("INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN"))
         return data
 
@@ -74,15 +71,6 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
             "api_version": API_VERSION,
         }
         return GoogleAdsClient.load_from_dict(config)
-
-    def to_dict(self, message: Any) -> dict:
-        """Convert a GoogleAdsRow (proto-plus) into a flat dictionary."""
-        return type(message).to_dict(
-            message,
-            preserving_proto_field_name=True,
-            use_integers_for_enums=False,
-            including_default_value_fields=False,
-        )
 
     @il.fetch_field_provider
     async def customers(self) -> list[dict[str, str]]:
@@ -132,15 +120,19 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
                         for row in batch.get("results", []):
                             customer = row.get("customer", {})
                             name = customer.get("descriptiveName", customer_id)
-                            results.append({
-                                "customer_id": customer_id,
-                                "name": f"{name} ({customer_id})",
-                            })
+                            results.append(
+                                {
+                                    "customer_id": customer_id,
+                                    "name": f"{name} ({customer_id})",
+                                }
+                            )
                 except httpx.HTTPStatusError:
                     # Some customers may not be queryable (suspended, etc.)
-                    results.append({
-                        "customer_id": customer_id,
-                        "name": customer_id,
-                    })
+                    results.append(
+                        {
+                            "customer_id": customer_id,
+                            "name": customer_id,
+                        }
+                    )
 
         return results
