@@ -113,6 +113,13 @@ async def get_advertiser_reports_by_publisher(
 class Awin(il.Source):
     """Awin affiliate network integration for transaction and publisher reporting."""
 
+    advertiser_id: str = il.FetchField(
+        provider="connection.advertisers",
+        label_key="name",
+        value_key="advertiser_id",
+        description="Awin advertiser account",
+    )
+
     @il.asset(
         schema=Transactions,
         partitioning=il.TimePartitionConfig(column="date"),
@@ -123,7 +130,7 @@ class Awin(il.Source):
         """Advertiser transactions including commissions, sales amounts, and click attribution."""
         data = await get_advertiser_transactions(
             client=connection.client,
-            advertiser_id=connection.publisher_id,
+            advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
@@ -138,7 +145,7 @@ class Awin(il.Source):
         """Advertiser performance reports aggregated by publisher."""
         data = await get_advertiser_reports_by_publisher(
             client=connection.client,
-            advertiser_id=connection.publisher_id,
+            advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,
         )
