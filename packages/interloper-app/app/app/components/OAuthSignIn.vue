@@ -41,8 +41,11 @@ async function handleSignIn() {
         emit('success', tokens)
         toast.add({ title: `Connected to ${providerInfo.value?.label ?? props.provider}`, color: 'success' })
     }
-    catch {
-        toast.add({ title: 'Sign-in failed', color: 'error' })
+    catch (error) {
+        // Closing the popup is a deliberate cancel, not a failure.
+        if (!(error instanceof OAuthCancelledError)) {
+            toast.add({ title: 'Sign-in failed', color: 'error' })
+        }
     }
     finally {
         loading.value = false
