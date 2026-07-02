@@ -41,13 +41,12 @@ def greetings():
 
 ### Run it
 
-`run()` executes the asset function and returns the result. The execution engine is
-**async-native**, so `run()` is a coroutine — `await` it, or drive it with `asyncio.run()`:
+`run()` executes the asset function and returns the result — a plain synchronous call that
+works in scripts, the REPL, and notebooks (the engine is async-native under the hood; async
+code awaits `run_async()` instead):
 
 ```py
-import asyncio
-
-result = asyncio.run(greetings().run())
+result = greetings().run()
 print(result)
 # [{'name': 'Alice', 'message': 'Hello'}, {'name': 'Bob', 'message': 'Hi'}]
 ```
@@ -58,7 +57,7 @@ Add a destination and materialize -- this runs the asset **and** writes the resu
 
 ```py
 greetings_asset = greetings(destination=il.FileDestination("./data"))
-asyncio.run(greetings_asset.materialize())
+greetings_asset.materialize()
 # Data is written to ./data/greetings/data.pkl
 ```
 
@@ -86,7 +85,7 @@ def my_source():
 ```py
 source = my_source(destination=il.FileDestination("./data"))
 dag = il.DAG(source)
-asyncio.run(dag.materialize())
+dag.materialize()
 ```
 
 ## Next steps

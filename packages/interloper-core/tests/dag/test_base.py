@@ -21,6 +21,7 @@ from interloper.errors import (
     DependencyNotFoundError,
 )
 from interloper.partitioning.base import PartitionConfig
+from interloper.runner.results import ExecutionStatus
 
 # ---------------------------------------------------------------------------
 # Minimal asset/source fixtures used by small-topology tests
@@ -717,3 +718,25 @@ class TestSerialization:
                 f"materializable assets after round-trip, expected 1"
             )
             assert type(materializable[0]).key == type(asset).key
+
+
+class TestMaterialize:
+    """DAG materialization through the default engine."""
+
+    def test_materialize_is_callable_directly_from_sync_code(self):
+        # The manual script/REPL/notebook path: materialize() drives the
+        # async engine on the bridge loop, no asyncio.run required.
+        @il.asset
+        def users() -> list[dict[str, Any]]:
+            return [{"id": 1}]
+
+        result = DAG(users()).materialize()
+        assert result.status is ExecutionStatus.COMPLETED
+
+    async def test_materialize_async_is_awaitable(self):
+        @il.asset
+        def users() -> list[dict[str, Any]]:
+            return [{"id": 1}]
+
+        result = await DAG(users()).materialize_async()
+        assert result.status is ExecutionStatus.COMPLETED

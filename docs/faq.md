@@ -34,12 +34,14 @@ instance = my_asset()  # this is an Asset instance
 ```
 
 
-### Why are `run()` and `materialize()` coroutines?
+### Do I need `asyncio` to run assets?
 
-The execution engine is async-native. Both `run()` and `materialize()` return coroutines — call
-them with `await` inside an event loop, or `asyncio.run(...)` at the top level. Synchronous asset
-functions are offloaded to threads automatically, so you never have to make your asset `async`
-just to satisfy the engine.
+No. `run()`, `materialize()`, and `dag.materialize()` are plain synchronous calls — they work
+as-is in scripts, the REPL, and notebook cells. Under the hood the execution engine is
+async-native: the sync entrypoints drive it on a persistent background event loop (see
+`il.run`). Async code uses the `*_async` counterparts (`run_async()`, `materialize_async()`)
+and `await`s them. Synchronous asset functions are offloaded to threads automatically, so you
+never have to make your asset `async` just to satisfy the engine.
 
 
 ### What is the difference between `run()` and `materialize()`?
@@ -61,8 +63,8 @@ resolved automatically. For cross-source dependencies or name mismatches, use `r
 Yes. You can run or materialize individual assets directly:
 
 ```py
-result = await my_asset().run()
-await my_asset(destination=il.FileDestination("./data")).materialize()
+result = my_asset().run()
+my_asset(destination=il.FileDestination("./data")).materialize()
 ```
 
 A DAG is only needed when you have multiple assets with dependencies.

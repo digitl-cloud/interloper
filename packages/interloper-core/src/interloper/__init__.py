@@ -56,7 +56,7 @@ from interloper.rest import (
 from interloper.runner import AsyncRunner, MultiProcessRunner, Runner, RunResult, SerialRunner
 from interloper.schema import Schema, schema
 from interloper.source import Source, SourceDefinition, source
-from interloper.utils import bounded_gather
+from interloper.utils import bounded_gather, run
 
 __all__ = [
     "DAG",
@@ -131,6 +131,7 @@ __all__ = [
     "destination",
     "fetch_field_provider",
     "is_fetch_field_provider",
+    "run",
     "schema",
     "source",
 ]

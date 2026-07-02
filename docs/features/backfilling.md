@@ -10,7 +10,6 @@ Pass a window to any runner's `run()` (or to `dag.materialize()`). The runner wa
 **from most recent to oldest**, running the DAG once per partition:
 
 ```py
-import asyncio
 import datetime as dt
 import interloper as il
 
@@ -31,7 +30,7 @@ window = il.TimePartitionWindow(
     end=dt.date(2025, 1, 7),
 )
 
-result = asyncio.run(il.AsyncRunner(max_workers=4).run(dag, window))
+result = il.run(il.AsyncRunner(max_workers=4).run(dag, window))
 print(result.status)
 ```
 
@@ -56,7 +55,7 @@ By default the in-process runners stop the current run on the first asset failur
 
 ```py
 runner = il.AsyncRunner(fail_fast=False)
-result = asyncio.run(runner.run(dag, window))
+result = il.run(runner.run(dag, window))
 ```
 
 ## Progress monitoring
@@ -69,7 +68,7 @@ def on_event(event: il.Event):
     if event.type is il.EventType.RUN_COMPLETED:
         print(f"Completed: {event.metadata.get('partition_or_window')}")
 
-result = asyncio.run(il.AsyncRunner(on_event=on_event).run(dag, window))
+result = il.run(il.AsyncRunner(on_event=on_event).run(dag, window))
 ```
 
 See [Events](events.md) for the full event model.
@@ -83,14 +82,14 @@ each asset (with its ancestors) runs in an isolated container or Job:
 from interloper_docker.runner import DockerRunner
 
 runner = DockerRunner(image="interloper:latest-worker", max_containers=4)
-asyncio.run(runner.run(dag, window))
+il.run(runner.run(dag, window))
 ```
 
 ```py
 from interloper_k8s.runner import KubernetesRunner
 
 runner = KubernetesRunner(image="my-repo/interloper:latest", namespace="data", max_jobs=4)
-asyncio.run(runner.run(dag, window))
+il.run(runner.run(dag, window))
 ```
 
 See [Runners](runners.md) for all execution strategies and their options.

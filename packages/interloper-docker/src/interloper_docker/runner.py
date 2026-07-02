@@ -64,7 +64,7 @@ class DockerRunner(SyncRunner):
     runner satisfies the async-native ``run()`` contract::
 
         result = await DockerRunner(image="my-image", on_event=log_event).run(dag)
-        # or, from a sync edge: asyncio.run(DockerRunner(image=...).run(dag))
+        # or, from a sync edge: il.run(DockerRunner(image=...).run(dag))
     """
 
     image: str = "interloper:latest-worker"

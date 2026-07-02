@@ -255,17 +255,32 @@ class DAG:
     # Materialization
     # ------------------------------------------------------------------
 
-    async def materialize(
+    def materialize(
         self,
         partition_or_window: Partition | PartitionWindow | None = None,
     ) -> RunResult:
         """Execute all assets in dependency order using a default ``AsyncRunner``.
 
-        Async-native; ``await`` it from async code, or drive it from a sync
-        entrypoint with ``asyncio.run``::
+        Sync entrypoint for scripts, REPLs, and notebooks — drives
+        :meth:`materialize_async` to completion on the bridge loop
+        (see :func:`interloper.run`)::
 
-            result = await dag.materialize(partition)        # async
-            result = asyncio.run(dag.materialize(partition))  # sync edge
+            result = dag.materialize(partition)
+
+        Async code awaits :meth:`materialize_async` instead.
+
+        Returns:
+            The result of the DAG execution.
+        """
+        from interloper.utils import concurrency
+
+        return concurrency.run(self.materialize_async(partition_or_window))
+
+    async def materialize_async(
+        self,
+        partition_or_window: Partition | PartitionWindow | None = None,
+    ) -> RunResult:
+        """Execute all assets in dependency order using a default ``AsyncRunner``.
 
         Returns:
             The result of the DAG execution.

@@ -49,7 +49,7 @@ class KubernetesRunner(SyncRunner):
     satisfies the async-native ``run()`` contract::
 
         result = await KubernetesRunner(image="my-image", on_event=log_event).run(dag)
-        # or, from a sync edge: asyncio.run(KubernetesRunner(image=...).run(dag))
+        # or, from a sync edge: il.run(KubernetesRunner(image=...).run(dag))
     """
 
     image: str

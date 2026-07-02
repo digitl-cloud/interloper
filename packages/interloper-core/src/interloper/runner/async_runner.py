@@ -35,8 +35,8 @@ class AsyncRunner(Runner):
         # async
         result = await AsyncRunner(max_workers=2, on_event=log_event).run(dag)
 
-        # sync edge (scripts, CLI, scheduler worker)
-        result = asyncio.run(AsyncRunner(on_event=log_event).run(dag))
+        # sync edge (scripts, REPL, notebooks)
+        result = il.run(AsyncRunner(on_event=log_event).run(dag))
     """
 
     max_workers: int = 4
@@ -152,7 +152,7 @@ class AsyncRunner(Runner):
 
         try:
             effective_partition = asset.effective_partition(partition_or_window)
-            result = await asset.materialize(
+            result = await asset.materialize_async(
                 partition_or_window=effective_partition,
                 dag=self.state.dag,
                 metadata=self.state.metadata,

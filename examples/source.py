@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import interloper as il
@@ -60,7 +59,7 @@ if __name__ == "__main__":
 
     print("\n=== Run ===")
     for a in s.assets:
-        print(f"{a.key}: {asyncio.run(a.run())}")
+        print(f"{a.key}: {a.run()}")
 
     print("\n=== Reconfigure ===")
     disabled = s(materializable=False)

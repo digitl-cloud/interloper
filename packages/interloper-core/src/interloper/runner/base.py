@@ -71,10 +71,10 @@ class Runner(Component):
     Async-native: :meth:`run` is a coroutine. It owns the ``on_event``
     subscription lifecycle and delegates the actual DAG walk to the
     subclass :meth:`_run`. ``await`` it from async code, or drive it from a
-    sync entrypoint with ``asyncio.run``::
+    sync entrypoint with :func:`interloper.run`::
 
-        result = await runner.run(dag)        # async
-        result = asyncio.run(runner.run(dag))  # sync edge
+        result = await runner.run(dag)     # async
+        result = il.run(runner.run(dag))   # sync edge
     """
 
     fail_fast: bool = False

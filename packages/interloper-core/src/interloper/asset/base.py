@@ -22,6 +22,7 @@ from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
 from interloper.representation import representation_for
 from interloper.resource import Resource
 from interloper.schema import Schema
+from interloper.utils import concurrency
 from interloper.utils.concurrency import invoke
 from interloper.utils.data import is_empty
 from interloper.utils.imports import get_object_path
@@ -287,7 +288,33 @@ class Asset(Component):
             overrides["deps"] = deps
         return self.model_copy(update=overrides)
 
-    async def run(
+    def run(
+        self,
+        partition_or_window: Partition | PartitionWindow | None = None,
+        dag: DAG | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> Any:
+        """Execute the asset and return the result without writing to destination.
+
+        Sync entrypoint for scripts, REPLs, and notebooks — drives
+        :meth:`run_async` to completion on the bridge loop
+        (see :func:`interloper.run`)::
+
+            data = asset.run()
+
+        Async code awaits :meth:`run_async` instead.
+
+        Args:
+            partition_or_window: Partition or PartitionWindow for this run.
+            dag: DAG for dependency resolution (required if asset has deps).
+            metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
+
+        Returns:
+            The raw execution result.
+        """
+        return concurrency.run(self.run_async(partition_or_window, dag, metadata))
+
+    async def run_async(
         self,
         partition_or_window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
@@ -350,7 +377,33 @@ class Asset(Component):
 
         return result
 
-    async def materialize(
+    def materialize(
+        self,
+        partition_or_window: Partition | PartitionWindow | None = None,
+        dag: DAG | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> Any:
+        """Execute the asset and write the result to all configured destinations.
+
+        Sync entrypoint for scripts, REPLs, and notebooks — drives
+        :meth:`materialize_async` to completion on the bridge loop
+        (see :func:`interloper.run`)::
+
+            asset.materialize()
+
+        Async code awaits :meth:`materialize_async` instead.
+
+        Args:
+            partition_or_window: Partition or PartitionWindow for this run.
+            dag: DAG for dependency resolution (required if asset has deps).
+            metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
+
+        Returns:
+            The execution result, or ``None`` if the asset is not materializable.
+        """
+        return concurrency.run(self.materialize_async(partition_or_window, dag, metadata))
+
+    async def materialize_async(
         self,
         partition_or_window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
@@ -370,7 +423,7 @@ class Asset(Component):
             return None
 
         metadata = metadata or {}
-        result = await self.run(partition_or_window, dag, metadata)
+        result = await self.run_async(partition_or_window, dag, metadata)
         await self._destination_write(partition_or_window, metadata, result)
         return result
 

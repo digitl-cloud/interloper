@@ -29,7 +29,7 @@ back and passed as the `users` argument to `user_count`.
 ```py
 source = my_source(destination=il.FileDestination("./data"))
 dag = il.DAG(source)
-await dag.materialize()
+dag.materialize()
 ```
 
 ## Explicit dependency mapping
@@ -75,7 +75,7 @@ def source_b():
     return [report]
 
 dag = il.DAG(source_a(...), source_b(...))
-await dag.materialize()
+dag.materialize()
 ```
 
 ## Runtime dependency overrides
