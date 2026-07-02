@@ -26,7 +26,7 @@ Run for a specific date:
 ```py
 source = my_source(destination=il.FileDestination("./data"))
 dag = il.DAG(source)
-await dag.materialize(partition_or_window=il.TimePartition(dt.date(2025, 1, 15)))
+dag.materialize(partition_or_window=il.TimePartition(dt.date(2025, 1, 15)))
 ```
 
 Data is stored in partition-aware paths:
@@ -50,7 +50,7 @@ def weekly_summary(context: il.ExecutionContext):
 Run with a window:
 
 ```py
-await dag.materialize(
+dag.materialize(
     partition_or_window=il.TimePartitionWindow(
         start=dt.date(2025, 1, 1),
         end=dt.date(2025, 1, 7),

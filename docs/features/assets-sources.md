@@ -16,7 +16,7 @@ The decorator returns an asset **definition** (a class) -- an immutable blueprin
 
 ```py
 asset_instance = my_asset()
-result = await asset_instance.run()
+result = asset_instance.run()
 ```
 
 Asset functions can be synchronous or asynchronous. Synchronous functions are offloaded to a
@@ -51,7 +51,7 @@ def my_asset():
 schema if configured) **without** writing to any destination:
 
 ```py
-result = await my_asset().run()
+result = my_asset().run()
 ```
 
 ### Materializing an asset
@@ -60,11 +60,12 @@ result = await my_asset().run()
 
 ```py
 asset_instance = my_asset(destination=il.FileDestination("./data"))
-await asset_instance.materialize()
+asset_instance.materialize()
 ```
 
-Both `run()` and `materialize()` are coroutines. Outside an event loop, drive them with
-`asyncio.run(...)`.
+Both `run()` and `materialize()` are plain synchronous calls — they work in scripts, the
+REPL, and notebooks. Async code awaits their coroutine counterparts, `run_async()` and
+`materialize_async()`.
 
 ## Sources
 
@@ -133,8 +134,8 @@ my_source.asset_a
 
 # On the instance (returns the runtime Asset)
 source = my_source(destination=il.FileDestination("./data"))
-await source.asset_a.run()
-await source.asset_b.materialize()
+source.asset_a.run()
+source.asset_b.materialize()
 ```
 
 ### Reconfiguring a source
@@ -156,7 +157,7 @@ A `DAG` (Directed Acyclic Graph) orchestrates the execution of multiple assets, 
 ```py
 source = my_source(destination=il.FileDestination("./data"))
 dag = il.DAG(source)
-await dag.materialize()
+dag.materialize()
 ```
 
 A DAG can be built from any combination of assets and sources (instances or definitions):

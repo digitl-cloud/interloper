@@ -39,7 +39,7 @@ def _worker(
             partition_or_window = None
 
         asyncio.run(
-            asset.materialize(
+            asset.materialize_async(
                 partition_or_window=partition_or_window,
                 dag=dag,
                 metadata=metadata,
@@ -62,7 +62,7 @@ class MultiProcessRunner(SyncRunner):
     you need true parallelism (bypassing the GIL)::
 
         result = await MultiProcessRunner(max_workers=2, on_event=log_event).run(dag)
-        # or, from a sync edge: asyncio.run(MultiProcessRunner().run(dag))
+        # or, from a sync edge: il.run(MultiProcessRunner().run(dag))
     """
 
     max_workers: int = 4

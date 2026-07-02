@@ -99,7 +99,7 @@ In Python:
 import interloper as il
 
 plan = il.RunManifest.from_yaml_file("manifest.yaml").compile()
-await plan.dag.materialize(partition_or_window=plan.partition)
+plan.dag.materialize(partition_or_window=plan.partition)
 ```
 
 ## interloper.yaml

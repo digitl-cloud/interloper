@@ -13,7 +13,7 @@ class SerialRunner(AsyncRunner):
     asset in flight::
 
         result = await SerialRunner(on_event=log_event).run(dag)
-        # or, from a sync edge: asyncio.run(SerialRunner().run(dag))
+        # or, from a sync edge: il.run(SerialRunner().run(dag))
     """
 
     max_workers: int = 1

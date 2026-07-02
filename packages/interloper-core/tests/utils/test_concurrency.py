@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from interloper.utils.concurrency import bounded_gather, invoke
+from interloper.utils.concurrency import bounded_gather, invoke, run
 
 
 class TestBoundedGather:
@@ -81,3 +81,52 @@ class TestInvoke:
             return (a, b, c)
 
         assert await invoke(fn, 1, 2, c=3) == (1, 2, 3)
+
+
+class TestRun:
+    """Sync bridge to the async engine (``il.run``)."""
+
+    def test_returns_result_from_sync_context(self):
+        async def add(a: int, b: int) -> int:
+            return a + b
+
+        assert run(add(1, 2)) == 3
+
+    def test_propagates_exceptions(self):
+        async def boom() -> None:
+            raise ValueError("nope")
+
+        with pytest.raises(ValueError, match="nope"):
+            run(boom())
+
+    def test_reuses_one_persistent_loop_across_calls(self):
+        # Loop-bound state (e.g. an AsyncRESTClient's pool) created by one
+        # call must remain valid for the next — the loop is process-lived.
+        async def current_loop() -> asyncio.AbstractEventLoop:
+            return asyncio.get_running_loop()
+
+        assert run(current_loop()) is run(current_loop())
+
+    def test_runs_off_the_calling_thread(self):
+        async def loop_thread() -> int:
+            return threading.get_ident()
+
+        assert run(loop_thread()) != threading.get_ident()
+
+    async def test_works_while_a_loop_is_running_in_the_calling_thread(self):
+        # The Jupyter scenario: the caller's thread already runs a loop
+        # (here: pytest-asyncio's), where asyncio.run would raise.
+        async def add(a: int, b: int) -> int:
+            return a + b
+
+        assert run(add(1, 2)) == 3
+
+    def test_calling_run_on_its_own_loop_raises(self):
+        async def nested() -> None:
+            async def noop() -> None:
+                pass
+
+            run(noop())  # sync call from the bridge's own loop thread
+
+        with pytest.raises(RuntimeError, match="use 'await'"):
+            run(nested())

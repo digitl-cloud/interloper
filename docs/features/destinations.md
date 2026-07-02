@@ -62,7 +62,7 @@ In-memory storage backed by a class-level dict. Useful for tests and quick exper
 
 ```py
 asset_instance = my_asset(destination=il.MemoryDestination())
-await asset_instance.materialize()
+asset_instance.materialize()
 ```
 
 All instances share the same storage. Clear it between tests:
@@ -77,7 +77,7 @@ Pickle-based storage on the local filesystem.
 
 ```py
 asset_instance = my_asset(destination=il.FileDestination(base_path="./data"))
-await asset_instance.materialize()
+asset_instance.materialize()
 # Writes to ./data/{dataset}/{asset_key}/data.pkl
 ```
 

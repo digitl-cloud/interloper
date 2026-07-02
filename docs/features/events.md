@@ -15,7 +15,7 @@ def on_event(event: il.Event):
 
 il.EventBus.subscribe(on_event)
 
-await dag.materialize()
+dag.materialize()
 
 il.EventBus.unsubscribe(on_event)
 ```

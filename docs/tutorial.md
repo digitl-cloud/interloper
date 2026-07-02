@@ -27,14 +27,12 @@ def forecast():
     return data
 ```
 
-We can execute our asset by instantiating it and calling `run()`. The execution engine is
-**async-native**, so `run()` is a coroutine — `await` it inside an event loop, or drive it
-with `asyncio.run()`:
+We can execute our asset by instantiating it and calling `run()` — a plain synchronous call
+that works in scripts, the REPL, and notebooks alike (the async-native engine runs on a
+background event loop; async code awaits `run_async()` instead):
 
 ```py
-import asyncio
-
-result = asyncio.run(forecast().run())
+result = forecast().run()
 ```
 
 !!! note
@@ -87,7 +85,7 @@ Let's materialize our asset using `FileDestination`, which pickles the data on t
 
 ```py
 forecast_asset = forecast(destination=il.FileDestination("./data"))
-asyncio.run(forecast_asset.materialize())
+forecast_asset.materialize()
 ```
 
 The materialization handles the execution of the asset and saves the data as a pickle file under `./data/forecast/data.pkl`.
@@ -135,8 +133,8 @@ Instantiate the source and access individual assets by name:
 
 ```py
 source = open_meteo(destination=il.FileDestination("./data"))
-asyncio.run(source.forecast.run())
-asyncio.run(source.air_quality.materialize())
+source.forecast.run()
+source.air_quality.materialize()
 ```
 
 ## DAG
@@ -146,13 +144,14 @@ When you want to materialize multiple assets together, respecting their dependen
 ```py
 source = open_meteo(destination=il.FileDestination("./data"))
 dag = il.DAG(source)
-asyncio.run(dag.materialize())
+dag.materialize()
 ```
 
-`dag.materialize()` runs the DAG with the default `AsyncRunner`. For more control, use a runner directly:
+`dag.materialize()` runs the DAG with the default `AsyncRunner`. For more control, use a runner
+directly — runners are async-native, so drive them with `il.run` from sync code:
 
 ```py
-result = asyncio.run(il.SerialRunner().run(dag))
+result = il.run(il.SerialRunner().run(dag))
 
 print(result.status)           # ExecutionStatus.COMPLETED
 print(result.execution_time)   # Total time in seconds
@@ -229,7 +228,7 @@ Materialize for a specific date:
 ```py
 source = open_meteo(destination=il.FileDestination("./data"))
 dag = il.DAG(source)
-asyncio.run(dag.materialize(partition_or_window=il.TimePartition(dt.date.today())))
+dag.materialize(partition_or_window=il.TimePartition(dt.date.today()))
 ```
 
 ## Backfilling
@@ -244,7 +243,7 @@ window = il.TimePartitionWindow(
     start=dt.date(2025, 1, 1),
     end=dt.date(2025, 1, 7),
 )
-asyncio.run(il.AsyncRunner().run(dag, window))
+il.run(il.AsyncRunner().run(dag, window))
 ```
 
 There is no separate "backfiller" object — backfilling is just running a DAG over a window,
