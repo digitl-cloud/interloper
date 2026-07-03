@@ -59,12 +59,21 @@ api:
   enabled: true
   replicaCount: 1
   # Agent (ADK chat) support. When true, the chart deploys the
-  # `interloper-api:<tag>-agent` image, which bundles interloper-agent so the
-  # /agent routes mount (the base image omits them → those routes 404). The
-  # agent also needs Google/Gemini credentials at runtime — supply them via
-  # api.extraEnv (e.g. GOOGLE_API_KEY / GEMINI_API_KEY).
+  # `interloper-api:<tag>-agent` image, which bundles interloper-agent, and
+  # enables the /agent routes via the generated interloper.yaml (the API
+  # reports availability to the app, which shows/hides the Agent UI).
+  #
+  # `model` takes a bare name for native Gemini models (default
+  # "gemini-2.5-flash") or a LiteLLM `provider/model` reference such as
+  # "anthropic/claude-sonnet-4-5" or "openai/gpt-5". Credentials come from the
+  # provider's standard env vars supplied via api.extraEnv / api.extraEnvFrom
+  # (e.g. GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY). For Gemini on
+  # GKE, Vertex AI needs no key at all: set GOOGLE_GENAI_USE_VERTEXAI=TRUE,
+  # GOOGLE_CLOUD_PROJECT, and GOOGLE_CLOUD_LOCATION and grant the pod's
+  # service account Vertex access via workload identity.
   agent:
     enabled: false
+    model: ""  # defaults to gemini-2.5-flash
   image:
     repository: ""  # defaults to {image.registry}/interloper-api
     tag: ""

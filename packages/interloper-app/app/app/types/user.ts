@@ -9,4 +9,5 @@ export interface User {
     is_super_admin: boolean
     organisation: Organisation | null
     last_organisation_id: string | null
+    features: Record<string, boolean>
 }

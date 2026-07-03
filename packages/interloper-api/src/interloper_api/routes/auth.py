@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse
 from interloper_db import Organisation, Profile, Store
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_auth_config, get_current_user, get_store
+from interloper_api.dependencies import get_auth_config, get_current_user, get_features, get_store
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -41,6 +41,7 @@ class AuthUserResponse(BaseModel):
     is_super_admin: bool = False
     organisation: OrganisationResponse | None = None
     last_organisation_id: UUID | None = None
+    features: dict[str, bool] = {}
 
 
 @router.get("/google")
@@ -193,6 +194,7 @@ def get_me(
         is_super_admin=profile.is_super_admin,
         organisation=OrganisationResponse.model_validate(org, from_attributes=True) if org else None,
         last_organisation_id=profile.last_organisation_id,
+        features=get_features(),
     )
 
 

@@ -14,6 +14,7 @@ _store: Store | None = None
 _catalog: Catalog | None = None
 _auth_config: Any | None = None
 _smtp_config: Any | None = None
+_features: dict[str, bool] = {}
 
 # Role hierarchy: admin > editor > viewer
 _ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
@@ -110,6 +111,25 @@ def get_smtp_config() -> Any:
         The SmtpConfig instance, or None if not configured.
     """
     return _smtp_config
+
+
+def set_features(features: dict[str, bool]) -> None:
+    """Set the optional-feature availability flags (resolved at app creation).
+
+    Args:
+        features: Feature name → availability.
+    """
+    global _features  # noqa: PLW0603
+    _features = features
+
+
+def get_features() -> dict[str, bool]:
+    """Return the optional-feature availability flags.
+
+    Returns:
+        Feature name → availability; empty if never set.
+    """
+    return _features
 
 
 # -- Auth dependencies -------------------------------------------------------

@@ -1,10 +1,15 @@
 {{/*
 Generated interloper.yaml mounted into every pod at /etc/interloper/interloper.yaml.
-The launcher and runner sections get auto-filled with cluster-aware defaults
-(scheduler image, release namespace, service account) when the user hasn't
-set them explicitly.
+The launcher, runner, and agent sections get auto-filled from chart values
+(cluster-aware defaults, api.agent) when the user hasn't set them explicitly.
 */}}
 {{- $cfg := deepCopy .Values.config -}}
+{{- if not (hasKey $cfg "agent") -}}
+  {{- $_ := set $cfg "agent" (dict "enabled" .Values.api.agent.enabled) -}}
+  {{- with .Values.api.agent.model -}}
+    {{- $_ := set $cfg.agent "model" . -}}
+  {{- end -}}
+{{- end -}}
 {{- if eq (default "" (dig "launcher" "type" "" $cfg)) "kubernetes" -}}
   {{- if not (hasKey $cfg "launcher") -}}{{- $_ := set $cfg "launcher" dict -}}{{- end -}}
   {{- if not (hasKey $cfg.launcher "config") -}}{{- $_ := set $cfg.launcher "config" dict -}}{{- end -}}

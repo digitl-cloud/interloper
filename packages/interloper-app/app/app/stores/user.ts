@@ -11,6 +11,7 @@ export const useUserStore = defineStore('user', () => {
     const error = ref<Error | null>(null)
     const authenticated = computed(() => !!user.value)
     const isSuperAdmin = computed(() => !!user.value?.is_super_admin)
+    const agentAvailable = computed(() => !!user.value?.features?.agent)
 
     /**********************
      * Actions
@@ -56,6 +57,7 @@ export const useUserStore = defineStore('user', () => {
         error,
         authenticated,
         isSuperAdmin,
+        agentAvailable,
         findProfile,
         requireProfile,
         fetchMe,

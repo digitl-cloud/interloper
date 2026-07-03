@@ -4,6 +4,7 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 const route = useRoute()
 
 const catalogStore = useCatalogStore()
+const userStore = useUserStore()
 const { open: commandPaletteOpen, groups: commandPaletteGroups } = useCommandPalette()
 const { open: agentOpen, width: agentWidth, dragging: agentDragging } = useAgentPanel()
 
@@ -103,7 +104,7 @@ const items = computed<NavigationMenuItem[]>(() => {
 <template>
     <div>
         <UDashboardGroup storage-key="dashboard-data"
-                         :style="{ right: agentOpen ? `${agentWidth}px` : '0px' }"
+                         :style="{ right: agentOpen && userStore.agentAvailable ? `${agentWidth}px` : '0px' }"
                          :ui="{ base: `fixed top-0 bottom-0 left-0 flex flex-col overflow-hidden ${agentDragging ? '' : 'transition-[right] duration-300'}` }">
             <UDashboardNavbar>
                 <template #leading>
@@ -123,7 +124,8 @@ const items = computed<NavigationMenuItem[]>(() => {
                 </template>
 
                 <template #right>
-                    <UButton icon="i-lucide-sparkles"
+                    <UButton v-if="userStore.agentAvailable"
+                             icon="i-lucide-sparkles"
                              label="Agent"
                              size="md"
                              @click="agentOpen = !agentOpen" />
@@ -205,6 +207,6 @@ const items = computed<NavigationMenuItem[]>(() => {
             </div>
         </UDashboardGroup>
 
-        <AgentPanel />
+        <AgentPanel v-if="userStore.agentAvailable" />
     </div>
 </template>
