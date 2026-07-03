@@ -3,12 +3,6 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
 
-const modeItems = computed<NavigationMenuItem[]>(() => [
-    { label: 'Data', icon: 'i-lucide-database', to: '/', active: true },
-    { label: 'Analytics', icon: 'i-lucide-chart-column', to: '/analytics' },
-    { label: 'Agent', icon: 'i-lucide-sparkles', to: '/agent' },
-])
-
 const catalogStore = useCatalogStore()
 const { open: commandPaletteOpen, groups: commandPaletteGroups } = useCommandPalette()
 
@@ -126,7 +120,6 @@ const items = computed<NavigationMenuItem[]>(() => {
                     </NuxtLink>
                 </template>
 
-                <UNavigationMenu :items="modeItems" />
             </UDashboardNavbar>
 
             <div class="flex flex-1 min-h-0 overflow-hidden">
