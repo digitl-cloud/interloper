@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.29.0 (2026-07-03)
+
+### Bug Fixes
+
+- **app**: Catalog asset panel spans the full content height
+  ([`4c1bed3`](https://github.com/digitl-cloud/interloper/commit/4c1bed3a0453c1a3fafb4c7a77e65838e403dec5))
+
+### Features
+
+- **app**: Docked agent chat panel that pushes the layout
+  ([`cf81f8a`](https://github.com/digitl-cloud/interloper/commit/cf81f8a12b6934d50b65dc38573a45ade8a577f4))
+
+- **app**: Redesign the UI to match the Claude Design system
+  ([`99a4237`](https://github.com/digitl-cloud/interloper/commit/99a4237ae3ae64358af7200d8e0a1060c51c90b1))
+
+- **app**: Remove the top mode switcher and the analytics pages
+  ([`13065b4`](https://github.com/digitl-cloud/interloper/commit/13065b483365c72e495a33e0e6187f2422e41efa))
+
+
 ## v0.28.0 (2026-07-02)
 
 ### Bug Fixes
