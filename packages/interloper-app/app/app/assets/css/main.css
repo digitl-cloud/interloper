@@ -1,61 +1,122 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* Custom Colors */
+/* Custom Colors — palette from the Claude Design project ("Current" variant) */
 :root {
-    --color-blue-50: #f0f7ff;
-    --color-blue-100: #e0efff;
-    --color-blue-200: #b8d9ff;
-    --color-blue-300: #7ab9ff;
-    --color-blue-400: #3393ff;
-    --color-blue-500: #4CA0FF;
-    --color-blue-600: #006ce6;
-    --color-blue-700: #004da3;
-    --color-blue-800: #003775;
-    --color-blue-900: #00244d;
-    --color-blue-950: #001833;
-    --color-gray-50: #f5f5f6;
-    --color-gray-100: #eaeaec;
-    --color-gray-200: #d5d5d9;
-    --color-gray-300: #b0b0b8;
-    --color-gray-400: #85858f;
-    --color-gray-500: #6b6b75;
-    --color-gray-600: #565660;
-    --color-gray-700: #43434c;
-    --color-gray-800: #313139;
-    --color-gray-900: #232329;
-    --color-gray-950: #18181c;
+    /* accent #2D7DF6 */
+    --color-blue-50: #f0f6fe;
+    --color-blue-100: #e1edfe;
+    --color-blue-200: #c3dbfc;
+    --color-blue-300: #94bffa;
+    --color-blue-400: #5c9ef8;
+    --color-blue-500: #2d7df6;
+    --color-blue-600: #1e63d9;
+    --color-blue-700: #1a4fae;
+    --color-blue-800: #184189;
+    --color-blue-900: #173867;
+    --color-blue-950: #102344;
+    /* neutrals: 50 app bg · 100 sidebar · 200 controls/hover · 300 lines · 950 ink */
+    --color-gray-50: #fbfbfc;
+    --color-gray-100: #f7f7f8;
+    --color-gray-200: #f0f0f3;
+    --color-gray-300: #e8e8ec;
+    --color-gray-400: #d4d4d9;
+    --color-gray-500: #b0b0b6;
+    --color-gray-600: #9a9aa0;
+    --color-gray-700: #86868b;
+    --color-gray-800: #6b6b70;
+    --color-gray-900: #3f3f44;
+    --color-gray-950: #1d1d1f;
+    /* status: success #1FA463 · error #E5484D · warning #E69E2E (50 = design tints) */
+    --color-green-50: #edf9f2;
+    --color-green-100: #d8f2e4;
+    --color-green-200: #b2e5cb;
+    --color-green-300: #7ed3aa;
+    --color-green-400: #45bc84;
+    --color-green-500: #1fa463;
+    --color-green-600: #17854f;
+    --color-green-700: #146a41;
+    --color-green-800: #125435;
+    --color-green-900: #10452d;
+    --color-green-950: #08271a;
+    --color-red-50: #fceded;
+    --color-red-100: #fadbdc;
+    --color-red-200: #f5b8ba;
+    --color-red-300: #ef8d90;
+    --color-red-400: #ea686c;
+    --color-red-500: #e5484d;
+    --color-red-600: #c93338;
+    --color-red-700: #a6282d;
+    --color-red-800: #852125;
+    --color-red-900: #6b1d20;
+    --color-red-950: #3b0d0f;
+    --color-amber-50: #fbf1e1;
+    --color-amber-100: #f8e6c8;
+    --color-amber-200: #f2d096;
+    --color-amber-300: #edbb66;
+    --color-amber-400: #e9ac46;
+    --color-amber-500: #e69e2e;
+    --color-amber-600: #c98219;
+    --color-amber-700: #a66714;
+    --color-amber-800: #855112;
+    --color-amber-900: #6b4110;
+    --color-amber-950: #3d2407;
 }
 
 
 :root {
     --ui-font-sans: "Inter", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
     --ui-header-height: 4rem;
 }
 
 :root {
-    --ui-text-dimmed: var(--color-gray-500);
-    --ui-text-muted: var(--color-gray-600);
-    --ui-text-toned: var(--color-gray-700);
-    --ui-text: var(--color-gray-800);
+    /* text: ink #1d1d1f · ink2 #6b6b70 · ink3 #9a9aa0 */
+    --ui-text-dimmed: var(--color-gray-600);
+    --ui-text-muted: var(--color-gray-800);
+    --ui-text-toned: var(--color-gray-900);
+    --ui-text: var(--color-gray-950);
     --ui-text-highlighted: var(--color-gray-950);
     --ui-text-inverted: #ffffff;
-    --ui-bg: var(--color-gray-50);
+    /* surfaces: white content/cards/header · sidebar (muted) #F7F7F8 */
+    --ui-bg: #ffffff;
+    /* contrasted band: table headers, info strips, chart rulers */
+    --ui-bg-band: #fafafb;
     --ui-bg-muted: var(--color-gray-100);
     --ui-bg-elevated: var(--color-gray-200);
     --ui-bg-accented: var(--color-gray-300);
-    --ui-bg-inverted: var(--color-gray-900);
-    --ui-border: var(--color-gray-200);
-    --ui-border-muted: var(--color-gray-300);
-    --ui-border-accented: var(--color-gray-400);
-    --ui-border-inverted: var(--color-gray-900);
+    --ui-bg-inverted: var(--color-gray-950);
+    /* borders: #E8E8EC lines/input rings · #F2F3F5 row dividers */
+    --ui-border: var(--color-gray-300);
+    --ui-border-muted: #f2f3f5;
+    --ui-border-accented: var(--color-gray-300);
+    --ui-border-inverted: var(--color-gray-950);
     --ui-radius: 0.4rem;
 }
 
+/* Design mono section label ("eyebrow"): pair with a text color utility. */
+.eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+}
+
 /* Scrollbar */
+:root {
+    --scrollbar-thumb: var(--color-gray-400);
+    --scrollbar-thumb-hover: var(--color-gray-500);
+}
+
+.dark {
+    --scrollbar-thumb: var(--color-gray-900);
+    --scrollbar-thumb-hover: #4a4a50;
+}
+
 * {
     scrollbar-width: thin;
-    scrollbar-color: var(--ui-border-muted) transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -68,12 +129,12 @@
 }
 
 *::-webkit-scrollbar-thumb {
-    background-color: var(--ui-border-muted);
+    background-color: var(--scrollbar-thumb);
     border-radius: 3px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-    background-color: var(--ui-border-accented);
+    background-color: var(--scrollbar-thumb-hover);
 }
 
 @keyframes pulse-grow {
@@ -86,27 +147,30 @@
 }
 
 .dark {
-    --ui-text-dimmed: var(--color-gray-500);
-    --ui-text-muted: var(--color-gray-400);
-    --ui-text-toned: var(--color-gray-300);
-    --ui-text: var(--color-gray-200);
+    /* dark surfaces stay bespoke: the design's gray scale is light-oriented,
+       so these are ink-family (#1d1d1f) tones rather than scale slots */
+    --ui-text-dimmed: var(--color-gray-800);
+    --ui-text-muted: var(--color-gray-700);
+    --ui-text-toned: var(--color-gray-500);
+    --ui-text: var(--color-gray-400);
     --ui-text-highlighted: #ffffff;
-    --ui-text-inverted: var(--color-gray-900);
-    --ui-bg: var(--color-gray-950);
-    --ui-bg-muted: var(--color-gray-900);
-    --ui-bg-elevated: var(--color-gray-800);
-    --ui-bg-accented: var(--color-gray-700);
+    --ui-text-inverted: var(--color-gray-950);
+    --ui-bg: #18181b;
+    --ui-bg-band: #232326;
+    --ui-bg-muted: #232326;
+    --ui-bg-elevated: #2e2e32;
+    --ui-bg-accented: var(--color-gray-900);
     --ui-bg-inverted: #ffffff;
-    --ui-border: var(--color-gray-800);
-    --ui-border-muted: var(--color-gray-700);
-    --ui-border-accented: var(--color-gray-700);
+    --ui-border: #2e2e32;
+    --ui-border-muted: #29292c;
+    --ui-border-accented: var(--color-gray-900);
     --ui-border-inverted: #ffffff;
     --ui-radius: 0.4rem;
 
-    --vf-node-bg: var(--color-gray-800);
-    --vf-node-text: var(--color-gray-200);
-    --vf-connection-path: var(--color-gray-500);
-    --vf-handle: var(--color-gray-400);
+    --vf-node-bg: var(--ui-bg-elevated);
+    --vf-node-text: var(--color-gray-400);
+    --vf-connection-path: var(--color-gray-800);
+    --vf-handle: var(--color-gray-700);
 }
 
 /* Vue Flow dark mode overrides */
@@ -115,26 +179,26 @@
 }
 
 .dark .vue-flow__controls-button {
-    background: var(--color-gray-800);
-    border-bottom-color: var(--color-gray-700);
+    background: var(--ui-bg-elevated);
+    border-bottom-color: var(--color-gray-900);
 }
 
 .dark .vue-flow__controls-button svg {
-    fill: var(--color-gray-300);
+    fill: var(--color-gray-500);
 }
 
 .dark .vue-flow__controls-button:hover {
-    background: var(--color-gray-700);
+    background: var(--color-gray-900);
 }
 
 .dark .vue-flow__minimap {
-    background-color: var(--color-gray-900);
+    background-color: var(--ui-bg-muted);
 }
 
 .dark .vue-flow__edge-textbg {
-    fill: var(--color-gray-900);
+    fill: var(--ui-bg-muted);
 }
 
 .dark .vue-flow__handle {
-    border-color: var(--color-gray-800);
+    border-color: var(--ui-bg-elevated);
 }

@@ -22,11 +22,11 @@ onMounted(() => {
 </script>
 
 <template>
+    <div class="flex flex-col flex-1 min-h-0">
         <UTabs :items="items"
                variant="link"
                :model-value="activeTab"
-               class="overflow-auto"
-               :ui="{ list: 'px-4 pt-4' }"
+               :ui="{ list: 'mb-4' }"
                @update:model-value="activeTab = $event as string">
             <template #runs>
                 <ExecutionsRunsTable />
@@ -35,4 +35,5 @@ onMounted(() => {
                 <ExecutionsBackfillsTable />
             </template>
         </UTabs>
+    </div>
 </template>

@@ -117,12 +117,17 @@ function onRowContextMenu(e: Event, row: { original: TData }) {
     ctxMenuOpen.value = true
 }
 
-const totalPages = computed(() => Math.ceil(totalCount.value / PAGE_SIZE))
+
+// ── Empty state ──
+const slots = useSlots()
+/** With no data at all (not just filtered out), render the #empty slot instead of the table. */
+const showEmpty = computed(() => !props.loading && props.data.length === 0 && !!slots.empty)
 </script>
 
 <template>
     <div class="w-full flex flex-col gap-4">
-        <div class="flex items-center gap-2 px-4 pt-4">
+        <div v-if="!showEmpty"
+             class="flex items-center gap-3">
             <UInput v-model="globalFilter"
                     :placeholder="searchPlaceholder ?? 'Search...'"
                     icon="i-lucide-search"
@@ -158,7 +163,13 @@ const totalPages = computed(() => Math.ceil(totalCount.value / PAGE_SIZE))
             </div>
         </div>
 
-        <UTable ref="table"
+        <div v-if="showEmpty"
+             class="w-full max-w-[1040px] mx-auto">
+            <slot name="empty" />
+        </div>
+
+        <UTable v-if="!showEmpty"
+                ref="table"
                 v-model:pagination="pagination"
                 :data="data"
                 :columns="columnsWithActions"
@@ -209,20 +220,17 @@ const totalPages = computed(() => Math.ceil(totalCount.value / PAGE_SIZE))
             </template>
         </UModal>
 
-        <div class="flex items-center justify-between text-sm text-muted px-4 pb-4">
-            <span v-if="selectedCount > 0">
+        <TableFooter v-if="!showEmpty"
+                     :page="pagination.pageIndex + 1"
+                     :total="totalCount"
+                     :page-size="PAGE_SIZE"
+                     @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
+            <template v-if="selectedCount > 0">
                 {{ selectedCount }} of {{ totalCount }} row(s) selected.
-            </span>
-            <span v-else>
+            </template>
+            <template v-else>
                 {{ totalCount }} row(s) total.
-            </span>
-            <UPagination v-if="totalPages > 1"
-                         :page="pagination.pageIndex + 1"
-                         :total="totalCount"
-                         :items-per-page="PAGE_SIZE"
-                         :sibling-count="1"
-                         show-edges
-                         @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }" />
-        </div>
+            </template>
+        </TableFooter>
     </div>
 </template>

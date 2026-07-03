@@ -51,8 +51,8 @@ onMounted(async () => {
                     </template>
 
                     <UChatMessage v-for="message in messages"
-                                  :key="message.id"
                                   :id="message.id"
+                                  :key="message.id"
                                   :role="message.role === 'user' ? 'user' : 'assistant'"
                                   :parts="[{ type: 'text', text: message.text }]"
                                   :variant="message.role === 'user' ? 'soft' : 'naked'"

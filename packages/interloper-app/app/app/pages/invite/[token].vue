@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ title: 'Accept Invitation' })
+definePageMeta({ title: 'Accept Invitation', fullBleed: true })
 
 const route = useRoute()
 const { apiFetch } = useApi()

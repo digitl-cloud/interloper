@@ -2,11 +2,16 @@
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { Source } from '~/types/source'
 
-definePageMeta({ title: 'Graph' })
+definePageMeta({ title: 'Graph', fullBleed: true })
 
-const sourceDrawerOpen = ref(false)
-const editingSource = ref<Source | null>(null)
 const sourceStepperRef = ref<any>(null)
+
+const {
+    open: sourceDrawerOpen,
+    editing: editingSource,
+    openCreate: onCreateSource,
+    openEdit: openEditSource,
+} = useWizardDrawer<Source>()
 const sourcesStore = useSourcesStore()
 const assetsStore = useAssetsStore()
 const jobsStore = useJobsStore()
@@ -38,13 +43,8 @@ onMounted(() => {
 })
 
 function onEditSource(sourceId: string) {
-    editingSource.value = sourcesStore.findById(sourceId) ?? null
-    if (editingSource.value) sourceDrawerOpen.value = true
-}
-
-function onCreateSource() {
-    editingSource.value = null
-    sourceDrawerOpen.value = true
+    const source = sourcesStore.findById(sourceId)
+    if (source) openEditSource(source)
 }
 
 function handleSaved() {
@@ -164,31 +164,17 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
             </template>
         </SplitterGroup>
 
-        <UDrawer v-model:open="sourceDrawerOpen"
-                 direction="right"
-                 :handle="false"
-                 :handle-only="true"
-                 :title="sourceStepperRef?.title ?? 'New Source'"
-                 :ui="{ content: 'w-[40rem]', description: 'sr-only' }">
-            <template #description>Configure source</template>
-            <template #body>
-                <SourcesStepper v-if="sourceDrawerOpen"
-                                :key="editingSource?.id ?? 'new'"
-                                ref="sourceStepperRef"
-                                :source="editingSource"
-                                @created="handleSaved"
-                                @updated="handleSaved" />
-            </template>
-            <template #footer>
-                <StepperNav v-if="sourceStepperRef"
-                            :can-proceed="sourceStepperRef.canProceed"
-                            :has-prev="sourceStepperRef.hasPrev"
-                            :submitting="sourceStepperRef.submitting"
-                            :submit-label="sourceStepperRef.submitLabel"
-                            @next="sourceStepperRef.next()"
-                            @prev="sourceStepperRef.prev()" />
-            </template>
-        </UDrawer>
+        <WizardDrawer v-model:open="sourceDrawerOpen"
+                      default-title="New Source"
+                      description="Configure source"
+                      :stepper="sourceStepperRef">
+            <SourcesStepper v-if="sourceDrawerOpen"
+                            :key="editingSource?.id ?? 'new'"
+                            ref="sourceStepperRef"
+                            :source="editingSource"
+                            @created="handleSaved"
+                            @updated="handleSaved" />
+        </WizardDrawer>
     </div>
 </template>
 

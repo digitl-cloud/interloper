@@ -11,12 +11,15 @@ withDefaults(defineProps<{
     submitting?: boolean
     submitLabel?: string
     backLabel?: string
+    /** On the last step the primary button drops its forward arrow. */
+    lastStep?: boolean
 }>(), {
     canProceed: false,
     hasPrev: false,
     submitting: false,
     submitLabel: 'Next',
     backLabel: 'Back',
+    lastStep: false,
 })
 
 const emit = defineEmits<{
@@ -35,6 +38,7 @@ const emit = defineEmits<{
         <UButton :disabled="!canProceed || submitting"
                  :loading="submitting"
                  :label="submitLabel"
+                 :trailing-icon="lastStep ? undefined : 'i-lucide-arrow-right'"
                  @click="emit('next')" />
     </div>
 </template>

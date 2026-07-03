@@ -189,7 +189,6 @@ const uniqueSourceIds = computed(() => {
     return ids
 })
 
-const totalSourcePages = computed(() => Math.ceil(uniqueSourceIds.value.length / SOURCE_PAGE_SIZE))
 
 const paginatedData = computed(() => {
     const start = sourcePageIndex.value * SOURCE_PAGE_SIZE
@@ -225,7 +224,7 @@ function onRowClick(row: any) {
 
 <template>
     <div class="w-full flex flex-col gap-4">
-        <div class="flex items-center gap-2 px-4 pt-4">
+        <div class="flex items-center gap-3">
             <UInput v-model="globalFilter"
                     placeholder="Search catalog..."
                     icon="i-lucide-search"
@@ -560,17 +559,12 @@ function onRowClick(row: any) {
             <div class="hidden" />
         </UDropdownMenu>
 
-        <div class="flex items-center justify-between text-sm text-muted px-4 pb-4">
-            <span>{{ sources.length }} {{ sources.length === 1 ? 'source' : 'sources' }}, {{ assetCount }} {{
-                assetCount === 1
-                    ? 'asset' : 'assets' }}</span>
-            <UPagination v-if="totalSourcePages > 1"
-                         :page="sourcePageIndex + 1"
-                         :total="uniqueSourceIds.length"
-                         :items-per-page="SOURCE_PAGE_SIZE"
-                         :sibling-count="1"
-                         show-edges
-                         @update:page="(p: number) => sourcePageIndex = p - 1" />
-        </div>
+        <TableFooter :page="sourcePageIndex + 1"
+                     :total="uniqueSourceIds.length"
+                     :page-size="SOURCE_PAGE_SIZE"
+                     @update:page="(p: number) => sourcePageIndex = p - 1">
+            {{ sources.length }} {{ sources.length === 1 ? 'source' : 'sources' }},
+            {{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}
+        </TableFooter>
     </div>
 </template>

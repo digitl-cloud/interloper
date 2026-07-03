@@ -21,10 +21,13 @@ const props = withDefaults(defineProps<{
     compatibleKeys?: string[]
     /** When set, stepper opens in edit mode with values pre-filled. */
     destination?: Destination | null
+    /** Preselect this type and open directly on the next step (create mode). */
+    initialTypeKey?: string
 }>(), {
     mode: 'standalone',
     compatibleKeys: () => [],
     destination: null,
+    initialTypeKey: undefined,
 })
 
 const emit = defineEmits<{
@@ -105,7 +108,7 @@ const steps = computed<StepperItem[]>(() => {
         const kind = rs.slotName.charAt(0).toUpperCase() + rs.slotName.slice(1)
         items.push({
             title: kind,
-            icon: rs.slotName === 'connection' ? 'i-lucide-key-round' : 'i-lucide-settings',
+            icon: resourceSlotIcon(rs.slotName),
             slot: `resource-${rs.slotName}` as any,
         })
     }
@@ -121,6 +124,26 @@ const steps = computed<StepperItem[]>(() => {
 const totalSteps = computed(() => steps.value.length)
 const { activeStep, hasPrev, isLastStep, next: nextStep, prev: prevStep } = useStepperFlow(totalSteps)
 
+const displaySteps = useCheckedSteps(steps, activeStep)
+
+/** Selected-type summary card shown on every post-type step. */
+const summaryCard = computed(() => destDefn.value && {
+    icon: componentIcon(destDefn.value.key),
+    title: destDefn.value.name,
+    caption: destDefn.value.tags?.[0] ?? 'Destination',
+    changeable: !isEditMode.value,
+})
+
+/** Recap rows for the final step — the resources chosen along the way. */
+const recapRows = computed(() => resourceSlots.value.map((rs) => {
+    const id = resourceSelections.value[rs.slotName]
+    return {
+        icon: resourceSlotIcon(rs.slotName),
+        label: rs.slotName.charAt(0).toUpperCase() + rs.slotName.slice(1),
+        value: id ? (resourcesStore.findById(id)?.name ?? '—') : 'None',
+    }
+}))
+
 // ── Auto-advance on type selection ──────────────────────────────
 
 watch(selectedDestKey, (key) => {
@@ -129,6 +152,13 @@ watch(selectedDestKey, (key) => {
         resourceSelections.value = {}
         configData.value = {}
         nextStep()
+    }
+})
+
+onMounted(() => {
+    if (!isEditMode.value && props.initialTypeKey) {
+        // Triggers the selection watcher above, which advances past the type step.
+        selectedDestKey.value = props.initialTypeKey
     }
 })
 
@@ -248,7 +278,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 
 <template>
     <UStepper v-model="activeStep"
-              :items="steps"
+              :items="displaySteps"
               linear
               disabled
               class="w-full">
@@ -263,27 +293,40 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <template v-for="rs in resourceSlots"
                   :key="rs.slotName"
                   #[`resource-${rs.slotName}`]>
-            <SourcesResourceStep v-if="rs.definition"
-                                 :ref="(el: any) => { if (el) resourceStepRefs[rs.slotName] = el }"
-                                 v-model="resourceSelections[rs.slotName]"
-                                 :slot-name="rs.slotName"
-                                 :definition="rs.definition"
-                                 :resource-context="resourceContext"
-                                 :silent="props.mode === 'collect'" />
+            <div class="flex flex-col gap-6">
+                <TypeSummaryCard v-if="summaryCard"
+                                 v-bind="summaryCard"
+                                 @change="activeStep = 0" />
+
+                <SourcesResourceStep v-if="rs.definition"
+                                     :ref="(el: any) => { if (el) resourceStepRefs[rs.slotName] = el }"
+                                     v-model="resourceSelections[rs.slotName]"
+                                     :slot-name="rs.slotName"
+                                     :definition="rs.definition"
+                                     :resource-context="resourceContext"
+                                     :silent="props.mode === 'collect'" />
+            </div>
         </template>
 
         <!-- Config step -->
         <template v-if="hasConfig"
                   #config>
-            <div class="flex flex-col gap-4">
-                <p class="text-sm text-muted">
-                    Configure <strong>{{ destDefn?.name }}</strong> settings.
-                </p>
-                <UFormField label="Name">
+            <div class="flex flex-col gap-6">
+                <TypeSummaryCard v-if="summaryCard"
+                                 v-bind="summaryCard"
+                                 @change="activeStep = 0" />
+
+                <UFormField label="Destination name">
                     <UInput v-model="destName"
                             placeholder="Destination name"
                             class="w-full" />
                 </UFormField>
+
+                <WizardRecap v-if="recapRows.length"
+                             :rows="recapRows" />
+
+                <USeparator label="Configuration" />
+
                 <SchemaForm v-if="destDefn?.config_schema"
                             v-model:data="configData"
                             v-model:is-valid="configValid"

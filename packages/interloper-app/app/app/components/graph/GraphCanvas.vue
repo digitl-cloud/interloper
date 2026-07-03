@@ -610,11 +610,27 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
             <Panel v-if="editable && sourceEntries.length === 0"
                    position="top-left"
                    class="!inset-0 !m-0 flex items-center justify-center pointer-events-none">
-                <UButton icon="i-lucide-plus"
-                         label="Add your first source"
-                         size="lg"
-                         class="pointer-events-auto"
-                         @click="emit('add-source')" />
+                <div class="pointer-events-auto w-[430px] max-w-[92%] bg-default border border-default rounded-[20px] shadow-2xl px-8 py-9 text-center">
+                    <div class="size-14 mx-auto rounded-[16px] bg-primary/10 text-primary flex items-center justify-center">
+                        <UIcon name="i-lucide-workflow"
+                               class="size-7" />
+                    </div>
+                    <div class="eyebrow text-primary mt-4">
+                        Asset graph
+                    </div>
+                    <h2 class="text-[22px] font-bold tracking-[-0.02em] text-highlighted mt-2">
+                        Your data, wired together
+                    </h2>
+                    <p class="text-[15px] text-muted leading-relaxed mt-2.5">
+                        The graph is a live map of every source, the assets they produce and
+                        the dependencies between them — Interloper wires it automatically as
+                        you build. Add your first source to watch it take shape.
+                    </p>
+                    <UButton icon="i-lucide-plus"
+                             label="Add your first source"
+                             class="mt-6"
+                             @click="emit('add-source')" />
+                </div>
             </Panel>
             <Panel v-else-if="editable && showNewSourceButton"
                    position="top-center"

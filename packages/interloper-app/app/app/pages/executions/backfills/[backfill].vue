@@ -93,7 +93,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
              back-to="/executions?tab=backfills"
              resource-label="backfill">
         <div>
-            <div class="flex items-center gap-3 mb-4 shrink-0 px-4 pt-4">
+            <div class="flex items-center gap-3 mb-4 shrink-0">
             <NuxtLink to="/executions?tab=backfills"
                       class="text-sm text-muted hover:text-default">
                 Backfills
@@ -108,7 +108,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
         </div>
 
         <div v-if="backfill"
-             class="flex items-center gap-4 px-4 mb-4 text-sm text-muted">
+             class="flex items-center gap-4 mb-4 text-sm text-muted">
             <div class="flex items-center gap-1.5">
                 <UIcon name="i-lucide-briefcase"
                        class="size-4" />

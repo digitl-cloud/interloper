@@ -47,25 +47,29 @@ function deselectAll() {
             </div>
         </div>
 
-        <div v-if="sources.length === 0"
-             class="flex flex-col items-center justify-center rounded-md p-6 gap-2">
-            <span class="text-sm text-muted">No sources configured yet.</span>
-        </div>
+        <InlineEmptyState v-if="sources.length === 0"
+                          icon="i-lucide-plug"
+                          message="No sources configured yet."
+                          action-label="Go to Sources"
+                          @action="navigateTo('/sources')" />
 
         <div v-else
-             class="flex flex-col gap-1">
-            <div v-for="source in sources"
-                 :key="source.id"
-                 class="flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer bg-elevated/50 hover:bg-elevated transition-colors"
-                 @click="toggle(source.id)">
+             class="flex flex-col gap-2.5">
+            <SelectionCard v-for="source in sources"
+                           :key="source.id"
+                           :selected="selectedIds.includes(source.id)"
+                           class="flex items-center gap-3 px-4 py-3"
+                           @select="toggle(source.id)">
                 <UCheckbox :model-value="selectedIds.includes(source.id)"
                            @click.stop
                            @update:model-value="toggle(source.id)" />
-                <UIcon :name="sourceIcon(source)"
-                       class="size-5 shrink-0" />
+                <div class="size-10 shrink-0 rounded-[11px] border border-default bg-default flex items-center justify-center">
+                    <UIcon :name="sourceIcon(source)"
+                           class="size-6" />
+                </div>
                 <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-medium">{{ source.name }}</span>
-                    <span class="text-xs text-muted truncate">{{ source.key }}</span>
+                    <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ source.name }}</span>
+                    <span class="text-xs text-dimmed truncate">{{ source.key }}</span>
                 </div>
                 <UBadge color="neutral"
                         variant="subtle"
@@ -73,7 +77,7 @@ function deselectAll() {
                         class="ml-auto">
                     {{ source.assets.length }} asset{{ source.assets.length !== 1 ? 's' : '' }}
                 </UBadge>
-            </div>
+            </SelectionCard>
         </div>
     </div>
 </template>

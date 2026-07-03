@@ -12,6 +12,14 @@ const modeItems = computed<NavigationMenuItem[]>(() => [
 const catalogStore = useCatalogStore()
 const { open: commandPaletteOpen, groups: commandPaletteGroups } = useCommandPalette()
 
+/** Design page header rendered by the layout, declared via definePageMeta({ pageHeader }). */
+interface PageHeaderMeta {
+    eyebrow?: string
+    title: string
+    description?: string
+}
+const pageHeader = computed(() => route.meta.pageHeader as PageHeaderMeta | undefined)
+
 /** Icons for resource kinds — fallback to generic box. */
 const RESOURCE_KIND_ICONS: Record<string, string> = {
     connection: 'i-lucide-key-round',
@@ -128,9 +136,10 @@ const items = computed<NavigationMenuItem[]>(() => {
                     <template #default="{ collapsed }">
                         <UButton :label="collapsed ? undefined : 'Search...'"
                                  icon="i-lucide-search"
-                                 color="secondary"
+                                 color="neutral"
+                                 variant="outline"
                                  block
-                                 class="mt-2"
+                                 class="mt-2 bg-default text-dimmed"
                                  :square="collapsed"
                                  @click="commandPaletteOpen = true">
                             <template v-if="!collapsed"
@@ -158,7 +167,30 @@ const items = computed<NavigationMenuItem[]>(() => {
                 <UDashboardPanel
                                  :ui="{ root: 'relative flex flex-col min-w-0 min-h-full lg:not-last:border-e lg:not-last:border-default shrink-0 flex-1', body: '!p-0 !gap-0 overflow-hidden [&>*]:flex-1 [&>*]:flex [&>*]:flex-col [&>*]:min-h-0' }">
                     <template #body>
-                        <slot />
+                        <!-- Full-bleed pages (canvas/split views) manage their own frame. -->
+                        <slot v-if="route.meta.fullBleed" />
+                        <div v-else
+                             class="flex-1 min-h-0 w-full overflow-y-auto">
+                            <div class="p-4 w-full"
+                                 :class="pageHeader && 'max-w-[1040px] mx-auto'">
+                                <div v-if="pageHeader"
+                                     class="mb-6">
+                                    <div v-if="pageHeader.eyebrow"
+                                         class="eyebrow text-primary">
+                                        {{ pageHeader.eyebrow }}
+                                    </div>
+                                    <h1 class="text-[28px] font-bold tracking-[-0.022em] leading-tight text-highlighted"
+                                        :class="pageHeader.eyebrow ? 'mt-2.5' : ''">
+                                        {{ pageHeader.title }}
+                                    </h1>
+                                    <p v-if="pageHeader.description"
+                                       class="text-[15px] text-muted leading-relaxed max-w-[660px] mt-2.5">
+                                        {{ pageHeader.description }}
+                                    </p>
+                                </div>
+                                <slot />
+                            </div>
+                        </div>
                     </template>
                 </UDashboardPanel>
                 <UModal v-model:open="commandPaletteOpen">

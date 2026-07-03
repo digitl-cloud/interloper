@@ -110,11 +110,26 @@ const steps = computed<StepperItem[]>(() => {
     if (props.mode !== 'collect') {
         items.push({ title: 'Sources', icon: 'i-lucide-plug', slot: 'sources' as const })
     }
-    items.push({ title: 'Details', icon: 'i-lucide-file-text', slot: 'details' as const })
+    items.push({ title: 'Details', icon: 'i-lucide-settings-2', slot: 'details' as const })
     return items
 })
 
 const { activeStep, hasPrev, hasNext, isLastStep, reset: resetStepper, next: nextStep, prev: prevStep } = useStepperFlow(computed(() => steps.value.length))
+
+const displaySteps = useCheckedSteps(steps, activeStep)
+
+/** Recap of the sources chosen on step 1 (standalone mode only). */
+const recapRows = computed(() => {
+    if (props.mode === 'collect') return []
+    const names = selectedSourceIds.value
+        .map(id => sourcesStore.findById(id)?.name)
+        .filter(Boolean)
+    return [{
+        icon: 'i-lucide-plug',
+        label: 'Sources',
+        value: names.length ? names.join(', ') : 'None',
+    }]
+})
 
 // ── Validation ──────────────────────────────────────────────────
 const detailsValid = computed(() =>
@@ -192,7 +207,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 
 <template>
     <UStepper v-model="activeStep"
-              :items="steps"
+              :items="displaySteps"
               :linear="steps.length > 1"
               :disabled="steps.length > 1"
               class="w-full">
@@ -204,8 +219,8 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 
         <!-- Details -->
         <template #details>
-            <div class="flex flex-col gap-4">
-                <UFormField label="Name"
+            <div class="flex flex-col gap-6">
+                <UFormField label="Job name"
                             required>
                     <UInput v-model="name"
                             placeholder="My job"
@@ -214,13 +229,16 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 
                 <UFormField label="Tags">
                     <UInputTags v-model="tags"
-                    placeholder="Add a tag..."
-                    class="w-full" />
+                                placeholder="Add a tag..."
+                                class="w-full" />
                 </UFormField>
 
-                <USeparator />
+                <WizardRecap v-if="recapRows.length"
+                             :rows="recapRows" />
 
-                <UFormField label="Schedule"
+                <USeparator label="Schedule" />
+
+                <UFormField label="Cron expression"
                             required
                             :description="cronDescription">
                     <UInput v-model="cron"
@@ -239,8 +257,6 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                 </div>
 
                 <template v-if="partitioned">
-                    <USeparator />
-
                     <div class="flex items-center gap-2 text-sm text-muted">
                         <UIcon name="i-lucide-calendar-days"
                                class="size-4 shrink-0" />
@@ -257,7 +273,8 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                 class="w-full" />
                     </UFormField>
                 </template>
-                <USeparator />
+
+                <USeparator label="Options" />
 
                 <div class="flex items-center justify-between">
                     <div>

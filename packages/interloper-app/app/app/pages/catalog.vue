@@ -3,15 +3,24 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { Source, SourceAsset } from '~/types/source'
 import type { AssetDefinition } from '~/types/catalog'
 
+definePageMeta({ title: 'Catalog' })
+
 const sourcesStore = useSourcesStore()
 const assetsStore = useAssetsStore()
 const catalogStore = useCatalogStore()
 const jobsStore = useJobsStore()
 const runsStore = useRunsStore()
 
-const drawerOpen = ref(false)
-const editingSource = ref<Source | null>(null)
 const sourceStepperRef = ref<any>(null)
+
+const {
+    open: drawerOpen,
+    editing: editingSource,
+    presetTypeKey,
+    openCreate: onCreateSource,
+    openCreateWithType: onCreateSourceFromCatalog,
+    openEdit: openEditSource,
+} = useWizardDrawer<Source>()
 
 // ── Asset panel ────────────────────────────────────────────────
 const panelOpen = ref(false)
@@ -53,15 +62,13 @@ function onCloseAnimationEnd() {
 
 // ── Data fetching ──────────────────────────────────────────────
 
-onMounted(async () => {
-    await Promise.all([
-        sourcesStore.fetch(),
-        assetsStore.fetch(),
-        jobsStore.fetch(),
-        runsStore.fetch(),
-        catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
-    ])
-})
+// Fired in setup so `loading` flags are set before the first render
+// (gates the empty placeholder without a flash).
+sourcesStore.fetch()
+assetsStore.fetch()
+jobsStore.fetch()
+runsStore.fetch()
+if (!catalogStore.loaded) catalogStore.fetchCatalog()
 
 function handleSaved() {
     sourcesStore.fetch()
@@ -71,20 +78,25 @@ function handleSaved() {
 }
 
 function onEditSource(sourceId: string) {
-    editingSource.value = sourcesStore.findById(sourceId) ?? null
-    if (editingSource.value) drawerOpen.value = true
+    const source = sourcesStore.findById(sourceId)
+    if (source) openEditSource(source)
 }
 
-function onCreateSource() {
-    editingSource.value = null
-    drawerOpen.value = true
-}
+const showEmpty = computed(() => !sourcesStore.loading && sourcesStore.sources.length === 0)
 </script>
 
 <template>
     <div class="flex flex-col min-h-0 flex-1">
         <DriftBanner />
-        <SplitterGroup direction="horizontal"
+
+        <div v-if="showEmpty"
+             class="w-full max-w-[1040px] mx-auto">
+            <SourcesEmptyState @create="onCreateSource"
+                               @create-type="onCreateSourceFromCatalog" />
+        </div>
+
+        <SplitterGroup v-else
+                       direction="horizontal"
                        auto-save-id="catalog-panels"
                        class="flex-1 min-h-0">
             <SplitterPanel :default-size="panelVisible ? 70 : 100"
@@ -113,31 +125,18 @@ function onCreateSource() {
             </template>
         </SplitterGroup>
 
-        <UDrawer v-model:open="drawerOpen"
-                 direction="right"
-                 :handle="false"
-                 :handle-only="true"
-                 :title="sourceStepperRef?.title ?? 'New Source'"
-                 :ui="{ content: 'w-[40rem]', description: 'sr-only' }">
-            <template #description>Configure source</template>
-            <template #body>
-                <SourcesStepper v-if="drawerOpen"
-                                :key="editingSource?.id ?? 'new'"
-                                ref="sourceStepperRef"
-                                :source="editingSource"
-                                @created="handleSaved"
-                                @updated="handleSaved" />
-            </template>
-            <template #footer>
-                <StepperNav v-if="sourceStepperRef"
-                            :can-proceed="sourceStepperRef.canProceed"
-                            :has-prev="sourceStepperRef.hasPrev"
-                            :submitting="sourceStepperRef.submitting"
-                            :submit-label="sourceStepperRef.submitLabel"
-                            @next="sourceStepperRef.next()"
-                            @prev="sourceStepperRef.prev()" />
-            </template>
-        </UDrawer>
+        <WizardDrawer v-model:open="drawerOpen"
+                      default-title="New Source"
+                      description="Configure source"
+                      :stepper="sourceStepperRef">
+            <SourcesStepper v-if="drawerOpen"
+                            :key="editingSource?.id ?? 'new'"
+                            ref="sourceStepperRef"
+                            :source="editingSource"
+                            :initial-type-key="presetTypeKey"
+                            @created="handleSaved"
+                            @updated="handleSaved" />
+        </WizardDrawer>
     </div>
 </template>
 

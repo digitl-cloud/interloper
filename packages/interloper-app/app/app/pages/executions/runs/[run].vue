@@ -7,7 +7,7 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
 // orgSwitchTarget: this page is bespoke to one org's run — switching org from
 // the nav lands on the runs list instead.
-definePageMeta({ title: 'Run', orgSwitchTarget: '/executions?tab=runs' })
+definePageMeta({ title: 'Run', orgSwitchTarget: '/executions?tab=runs', fullBleed: true })
 
 const route = useRoute()
 const runId = route.params.run!.toString()
@@ -58,19 +58,19 @@ watch(statusFilter, () => { selectedAsset.value = null })
 
 // Event category tab (All / Lifecycle / Errors / Logs), filtered server-side.
 const eventCategory = ref<EventCategory>('all')
-const eventTabs: { key: EventCategory; label: string; icon: string }[] = [
-    { key: 'all', label: 'All', icon: 'i-lucide-list' },
-    { key: 'lifecycle', label: 'Lifecycle', icon: 'i-lucide-activity' },
-    { key: 'errors', label: 'Errors', icon: 'i-lucide-circle-alert' },
-    { key: 'logs', label: 'Logs', icon: 'i-lucide-scroll-text' },
+const eventTabs = [
+    { value: 'all', label: 'All', icon: 'i-lucide-list' },
+    { value: 'lifecycle', label: 'Lifecycle', icon: 'i-lucide-activity' },
+    { value: 'errors', label: 'Errors', icon: 'i-lucide-circle-alert' },
+    { value: 'logs', label: 'Logs', icon: 'i-lucide-scroll-text' },
 ]
 watch(eventCategory, cat => eventsStore.filterByEventTypes(eventTypesForCategory(cat)))
 
 // Top-panel view: the Gantt timeline or the run dependency graph.
 const view = ref<'timeline' | 'graph'>('timeline')
-const viewTabs: { key: 'timeline' | 'graph'; label: string; icon: string }[] = [
-    { key: 'timeline', label: 'Timeline', icon: 'i-lucide-gantt-chart' },
-    { key: 'graph', label: 'Graph', icon: 'i-lucide-workflow' },
+const viewTabs = [
+    { value: 'timeline', label: 'Timeline', icon: 'i-lucide-gantt-chart' },
+    { value: 'graph', label: 'Graph', icon: 'i-lucide-workflow' },
 ]
 
 const markerTime = computed(() => eventInFocus.value?.timestamp ? new Date(eventInFocus.value.timestamp) : null)
@@ -165,28 +165,20 @@ onUnmounted(() => {
 
         <SplitterGroup direction="vertical"
                        auto-save-id="run-panels"
-                       class="flex-1 min-h-0 rounded-lg">
-            <!-- pr-0 so the timeline's scrollbar sits flush at the panel edge,
-                 aligned with the events table's scrollbar below. -->
+                       class="flex-1 min-h-0 rounded-lg px-4 pb-4">
             <SplitterPanel :default-size="40"
                            :min-size="15"
-                           class="flex flex-col overflow-hidden pt-4 pl-4">
-                <div class="mb-2 mr-4 flex items-center gap-0.5 self-start rounded-md bg-elevated p-0.5">
-                    <button v-for="tab in viewTabs"
-                            :key="tab.key"
-                            type="button"
-                            class="flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors cursor-pointer"
-                            :class="view === tab.key
-                                ? 'bg-default text-default shadow-sm'
-                                : 'text-muted hover:text-default'"
-                            @click="view = tab.key">
-                        <UIcon :name="tab.icon"
-                               class="size-3.5" />
-                        {{ tab.label }}
-                    </button>
-                </div>
+                           class="flex flex-col overflow-hidden">
+                <div class="flex flex-col flex-1 min-h-0 border border-default rounded-xl bg-default overflow-hidden">
+                    <div class="flex items-center px-3.5 py-2 shrink-0 border-b border-default">
+                        <UTabs v-model="view"
+                               :items="viewTabs"
+                               variant="pill"
+                               size="xs"
+                               :content="false" />
+                    </div>
 
-                <div class="flex min-h-0 flex-1 flex-col">
+                    <div class="flex min-h-0 flex-1 flex-col">
                     <div v-if="run?.status === 'queued'"
                          class="flex h-full items-center justify-center text-muted">
                         <span class="text-sm">Run is currently queued...</span>
@@ -200,6 +192,7 @@ onUnmounted(() => {
                     <ExecutionsRunGraph v-else
                                         v-model:selected-asset="selectedAsset"
                                         :run-id="runId" />
+                    </div>
                 </div>
             </SplitterPanel>
 
@@ -214,36 +207,29 @@ onUnmounted(() => {
             <SplitterPanel :default-size="60"
                            :min-size="20"
                            class="flex flex-col min-h-0">
-                <div class="flex items-center gap-2 px-4 py-2 shrink-0">
-                    <div class="flex items-center gap-0.5 rounded-md bg-elevated p-0.5">
-                        <button v-for="tab in eventTabs"
-                                :key="tab.key"
-                                type="button"
-                                class="flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors cursor-pointer"
-                                :class="eventCategory === tab.key
-                                    ? 'bg-default text-default shadow-sm'
-                                    : 'text-muted hover:text-default'"
-                                @click="eventCategory = tab.key">
-                            <UIcon :name="tab.icon"
-                                   class="size-3.5" />
-                            {{ tab.label }}
-                        </button>
+                <div class="flex flex-col flex-1 min-h-0 border border-default rounded-xl bg-default overflow-hidden">
+                    <div class="flex items-center gap-2 px-3.5 py-2 shrink-0 border-b border-default">
+                        <UTabs v-model="eventCategory"
+                               :items="eventTabs"
+                               variant="pill"
+                               size="xs"
+                               :content="false" />
+                        <span class="ml-auto text-xs font-medium uppercase tracking-wide text-muted">Events</span>
+                        <UBadge v-if="!eventsStore.loading"
+                                color="neutral"
+                                variant="subtle"
+                                size="sm">
+                            {{ eventsStore.hasMore ? `${eventsStore.events.length} / ${eventsStore.total}` : eventsStore.events.length }}
+                        </UBadge>
                     </div>
-                    <span class="ml-auto text-xs font-medium uppercase tracking-wide text-muted">Events</span>
-                    <UBadge v-if="!eventsStore.loading"
-                            color="neutral"
-                            variant="subtle"
-                            size="sm">
-                        {{ eventsStore.hasMore ? `${eventsStore.events.length} / ${eventsStore.total}` : eventsStore.events.length }}
-                    </UBadge>
-                </div>
-                <div class="flex-1 min-h-0">
-                    <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
-                                           :events="eventsStore.events"
-                                           :loading="eventsStore.loading"
-                                           :loading-more="eventsStore.loadingMore"
-                                           :has-more="eventsStore.hasMore"
-                                           :load-more="eventsStore.loadMore" />
+                    <div class="flex-1 min-h-0">
+                        <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
+                                               :events="eventsStore.events"
+                                               :loading="eventsStore.loading"
+                                               :loading-more="eventsStore.loadingMore"
+                                               :has-more="eventsStore.hasMore"
+                                               :load-more="eventsStore.loadMore" />
+                    </div>
                 </div>
             </SplitterPanel>
         </SplitterGroup>

@@ -111,37 +111,29 @@ function destLabel(key: string) {
         <template v-else>
             <!-- Existing destinations -->
             <div v-if="availableDestinations.length > 0"
-                 class="flex flex-col gap-1">
-                <div v-for="dest in availableDestinations"
-                     :key="dest.id"
-                     class="flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer bg-elevated/50 hover:bg-elevated transition-colors"
-                     :class="isSelected(dest.id) ? 'ring-primary ring-2' : ''"
-                     @click="toggle(dest.id)">
+                 class="flex flex-col gap-2.5">
+                <SelectionCard v-for="dest in availableDestinations"
+                               :key="dest.id"
+                               :selected="isSelected(dest.id)"
+                               class="flex items-center gap-3 px-4 py-3"
+                               @select="toggle(dest.id)">
                     <UCheckbox :model-value="isSelected(dest.id)"
                                @click.stop
                                @update:model-value="toggle(dest.id)" />
-                    <UIcon :name="destIcon(dest.key)"
-                           class="size-5 shrink-0" />
-                    <div class="flex flex-col min-w-0">
-                        <span class="text-sm font-medium">{{ dest.name || destLabel(dest.key) }}</span>
+                    <div class="size-10 shrink-0 rounded-[11px] border border-default bg-default flex items-center justify-center">
+                        <UIcon :name="destIcon(dest.key)"
+                               class="size-6" />
                     </div>
-                    <UIcon v-if="isSelected(dest.id)"
-                           name="i-lucide-check"
-                           class="size-4 ml-auto text-primary shrink-0" />
-                </div>
+                    <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ dest.name || destLabel(dest.key) }}</span>
+                </SelectionCard>
             </div>
 
             <!-- Empty state -->
-            <div v-if="availableDestinations.length === 0"
-                 class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-default py-6">
-                <UIcon name="i-lucide-hard-drive"
-                       class="size-8 text-muted" />
-                <p class="text-sm text-muted">No destinations available.</p>
-                <UButton icon="i-lucide-plus"
-                         label="Create Destination"
-                         variant="soft"
-                         @click="drawerOpen = true" />
-            </div>
+            <InlineEmptyState v-if="availableDestinations.length === 0"
+                              icon="i-lucide-hard-drive"
+                              message="No destinations yet."
+                              action-label="Create destination"
+                              @action="drawerOpen = true" />
         </template>
 
         <!-- Nested drawer for destination creation -->

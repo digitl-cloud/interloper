@@ -226,8 +226,7 @@ const kpis = [
 
             <!-- KPI row -->
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div
-                    v-for="kpi in kpis"
+                <div v-for="kpi in kpis"
                     :key="kpi.label"
                     class="rounded-xl border border-default bg-default/50 backdrop-blur px-4 py-3 space-y-1"
                 >

@@ -38,13 +38,8 @@ const colorMode = useColorMode()
 const isDark = computed(() => colorMode.value === 'dark')
 
 function getStatusColor(status: string) {
-    switch (status) {
-        case 'success': return isDark.value ? '#22c55e' : '#16a34a'
-        case 'failed': return isDark.value ? '#f87171' : '#dc2626'
-        case 'running': return isDark.value ? '#60a5fa' : '#2563eb'
-        case 'canceled': return isDark.value ? '#fbbf24' : '#d97706'
-        default: return isDark.value ? '#6b7280' : '#d1d5db'
-    }
+    const entry = CHART_STATUS_COLORS[status] ?? CHART_STATUS_COLORS.default!
+    return isDark.value ? entry.dark : entry.light
 }
 
 /**********************
@@ -431,7 +426,7 @@ watch(axisMax, () => {
          @click="onBlankClick"
          @dblclick="resetZoom">
         <!-- Time axis / ruler: sticky, and the drag-to-pan surface when zoomed. -->
-        <div class="sticky top-0 z-20 flex select-none border-b border-default bg-default"
+        <div class="sticky top-0 z-20 flex select-none border-b border-default bg-(--ui-bg-band)"
              :class="fitted ? '' : 'cursor-ew-resize'"
              :style="{ height: AXIS_HEIGHT + 'px' }"
              @pointerdown="onRulerPointerDown"

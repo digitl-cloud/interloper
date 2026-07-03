@@ -164,12 +164,14 @@ function depSelectionKey(assetKey: string, paramName: string): string {
             </div>
         </div>
 
-        <div class="flex flex-col gap-1">
-            <div v-for="asset in sourceDefn.assets"
-                 :key="asset.key"
-                 class="flex flex-col rounded-md bg-elevated/50 hover:bg-elevated transition-colors">
+        <div class="flex flex-col gap-2.5">
+            <SelectionCard v-for="asset in sourceDefn.assets"
+                           :key="asset.key"
+                           as="div"
+                           :selected="selectedKeys.includes(asset.key)"
+                           class="flex flex-col">
                 <!-- Asset row -->
-                <div class="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
+                <div class="flex items-center gap-3 px-4 py-3 cursor-pointer"
                      @click="toggle(asset.key)">
                     <UCheckbox :model-value="selectedKeys.includes(asset.key)"
                                @click.stop
@@ -236,7 +238,7 @@ function depSelectionKey(assetKey: string, paramName: string): string {
                         </UBadge>
                     </div>
                 </div>
-            </div>
+            </SelectionCard>
         </div>
     </div>
 </template>

@@ -4,9 +4,9 @@ import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { OrgMember } from '~/types/organisation'
 
 const UAvatar = resolveComponent('UAvatar')
-const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
+const StatusPill = resolveComponent('StatusPill')
 
 const props = defineProps<{
     members: OrgMember[]
@@ -20,6 +20,8 @@ const emit = defineEmits<{
     'resend-invite': [member: OrgMember]
 }>()
 
+const userStore = useUserStore()
+
 function getInitials(member: OrgMember): string {
     const name = member.name?.trim()
     if (name && name.length > 0) {
@@ -31,10 +33,14 @@ function getInitials(member: OrgMember): string {
     return member.email?.charAt(0).toUpperCase() ?? '?'
 }
 
-const roleColor: Record<string, 'primary' | 'success' | 'neutral'> = {
-    admin: 'primary',
-    editor: 'success',
-    viewer: 'neutral',
+/** Design avatar palette — deterministic per member so colors are stable. */
+const AVATAR_PALETTE = ['#10B6CB', '#6C5CE7', '#1FA463', '#E69E2E', '#2D7DF6', '#E5484D', '#C8511B']
+
+function avatarColor(member: OrgMember): string {
+    const key = member.email || member.id
+    let hash = 0
+    for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0
+    return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length]!
 }
 
 function getRowMenuItems(member: OrgMember): DropdownMenuItem[][] {
@@ -72,22 +78,24 @@ function getRowMenuItems(member: OrgMember): DropdownMenuItem[][] {
 const columns = computed<TableColumn<OrgMember>[]>(() => {
     const base: TableColumn<OrgMember>[] = [
         {
-            id: 'avatar',
-            header: '',
-            cell: ({ row }) => h(UAvatar, {
-                src: row.original.avatar_url ?? undefined,
-                text: getInitials(row.original),
-                alt: row.original.name ?? row.original.email,
-                size: 'sm',
-            }),
-            size: 50,
-            enableSorting: false,
-            enableGlobalFilter: false,
-        },
-        {
             accessorKey: 'name',
             header: 'Name',
-            cell: ({ row }) => row.original.name ?? '—',
+            cell: ({ row }) => {
+                const member = row.original
+                const avatar = member.avatar_url
+                    ? h(UAvatar, { src: member.avatar_url, alt: member.name ?? member.email, size: 'sm' })
+                    : h('div', {
+                        class: 'size-8 shrink-0 rounded-full flex items-center justify-center text-white text-xs font-semibold',
+                        style: { background: avatarColor(member) },
+                    }, getInitials(member))
+                const name = member.name
+                    ? h('span', { class: 'font-semibold text-highlighted' }, member.name)
+                    : h('span', { class: 'text-dimmed' }, '—')
+                const you = member.id === userStore.user?.id
+                    ? h('span', { class: 'px-1.5 py-px rounded-[5px] bg-elevated text-[11px] font-semibold text-dimmed' }, 'You')
+                    : null
+                return h('div', { class: 'flex items-center gap-3' }, [avatar, name, you])
+            },
         },
         {
             accessorKey: 'email',
@@ -98,21 +106,20 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
             header: 'Role',
             cell: ({ row }) => {
                 const role = row.getValue<string>('role')
-                return h(UBadge, {
-                    color: roleColor[role] ?? 'neutral',
-                    variant: 'subtle',
-                }, () => role.charAt(0).toUpperCase() + role.slice(1))
+                return h('span', {
+                    class: `inline-block px-2.5 py-1 rounded-[7px] text-xs font-semibold ${ROLE_TINTS[role] ?? ROLE_TINTS.viewer}`,
+                }, role.charAt(0).toUpperCase() + role.slice(1))
             },
         },
         {
             accessorKey: 'status',
             header: 'Status',
             cell: ({ row }) => {
-                const status = row.getValue<string>('status')
-                return h(UBadge, {
-                    color: status === 'active' ? 'success' : 'warning',
-                    variant: 'subtle',
-                }, () => status === 'active' ? 'Active' : 'Invited')
+                const active = row.getValue<string>('status') === 'active'
+                return h(StatusPill, {
+                    color: active ? 'success' : 'warning',
+                    label: active ? 'Active' : 'Pending',
+                })
             },
         },
     ]
