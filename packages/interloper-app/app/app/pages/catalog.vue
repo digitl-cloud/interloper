@@ -3,7 +3,7 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { Source, SourceAsset } from '~/types/source'
 import type { AssetDefinition } from '~/types/catalog'
 
-definePageMeta({ title: 'Catalog' })
+definePageMeta({ title: 'Catalog', fullBleed: true })
 
 const sourcesStore = useSourcesStore()
 const assetsStore = useAssetsStore()
@@ -87,12 +87,12 @@ const showEmpty = computed(() => !sourcesStore.loading && sourcesStore.sources.l
 
 <template>
     <div class="flex flex-col min-h-0 flex-1">
-        <DriftBanner />
-
         <div v-if="showEmpty"
-             class="w-full max-w-[1040px] mx-auto">
-            <SourcesEmptyState @create="onCreateSource"
-                               @create-type="onCreateSourceFromCatalog" />
+             class="flex-1 min-h-0 overflow-y-auto">
+            <div class="p-4 w-full max-w-[1040px] mx-auto">
+                <SourcesEmptyState @create="onCreateSource"
+                                   @create-type="onCreateSourceFromCatalog" />
+            </div>
         </div>
 
         <SplitterGroup v-else
@@ -101,10 +101,13 @@ const showEmpty = computed(() => !sourcesStore.loading && sourcesStore.sources.l
                        class="flex-1 min-h-0">
             <SplitterPanel :default-size="panelVisible ? 70 : 100"
                            :min-size="30"
-                           class="flex flex-col min-h-0">
-                <CatalogTable @create="onCreateSource"
-                              @edit-source="onEditSource"
-                              @view-asset="onViewAsset" />
+                           class="flex flex-col min-h-0 overflow-y-auto">
+                <div class="p-4 flex flex-col min-h-0 flex-1">
+                    <DriftBanner />
+                    <CatalogTable @create="onCreateSource"
+                                  @edit-source="onEditSource"
+                                  @view-asset="onViewAsset" />
+                </div>
             </SplitterPanel>
 
             <template v-if="panelVisible">
