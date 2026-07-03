@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.30.0 (2026-07-03)
+
+### Features
+
+- Gate the agent behind settings with a configurable model
+  ([`5c38108`](https://github.com/digitl-cloud/interloper/commit/5c381087ea8307171cee092fa7d4a7971c39133d))
+
+
 ## v0.29.0 (2026-07-03)
 
 ### Bug Fixes
