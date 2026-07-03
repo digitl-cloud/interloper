@@ -5,6 +5,7 @@ const route = useRoute()
 
 const catalogStore = useCatalogStore()
 const { open: commandPaletteOpen, groups: commandPaletteGroups } = useCommandPalette()
+const { open: agentOpen, width: agentWidth, dragging: agentDragging } = useAgentPanel()
 
 /** Design page header rendered by the layout, declared via definePageMeta({ pageHeader }). */
 interface PageHeaderMeta {
@@ -102,7 +103,8 @@ const items = computed<NavigationMenuItem[]>(() => {
 <template>
     <div>
         <UDashboardGroup storage-key="dashboard-data"
-                         :ui="{ base: 'fixed inset-0 flex flex-col overflow-hidden' }">
+                         :style="{ right: agentOpen ? `${agentWidth}px` : '0px' }"
+                         :ui="{ base: `fixed top-0 bottom-0 left-0 flex flex-col overflow-hidden ${agentDragging ? '' : 'transition-[right] duration-300'}` }">
             <UDashboardNavbar>
                 <template #leading>
                     <UDashboardSidebarCollapse />
@@ -120,6 +122,12 @@ const items = computed<NavigationMenuItem[]>(() => {
                     </NuxtLink>
                 </template>
 
+                <template #right>
+                    <UButton icon="i-lucide-sparkles"
+                             label="Agent"
+                             size="md"
+                             @click="agentOpen = !agentOpen" />
+                </template>
             </UDashboardNavbar>
 
             <div class="flex flex-1 min-h-0 overflow-hidden">
@@ -196,5 +204,7 @@ const items = computed<NavigationMenuItem[]>(() => {
                 </UModal>
             </div>
         </UDashboardGroup>
+
+        <AgentPanel />
     </div>
 </template>
