@@ -16,7 +16,7 @@ class AwinConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="awin_")
 
-    access_token: str = il.SecretField(description="Awin API access token")
+    access_token: str = il.SecretField(title="Access Token", description="Awin API access token")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-navigateTo('/sources', { replace: true })
+navigateTo('/graph', { replace: true })
 </script>
 
 <template>
