@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.30.1 (2026-07-03)
+
+### Bug Fixes
+
+- **chart**: Move agent values from api.agent to the root
+  ([`a5297ba`](https://github.com/digitl-cloud/interloper/commit/a5297ba9b73a64283ed6555ddb0607f86d72e092))
+
+
 ## v0.30.0 (2026-07-03)
 
 ### Features
