@@ -1,12 +1,13 @@
 {{/*
 Generated interloper.yaml mounted into every pod at /etc/interloper/interloper.yaml.
 The launcher, runner, and agent sections get auto-filled from chart values
-(cluster-aware defaults, api.agent) when the user hasn't set them explicitly.
+(cluster-aware defaults, the root agent block) when the user hasn't set
+them explicitly.
 */}}
 {{- $cfg := deepCopy .Values.config -}}
 {{- if not (hasKey $cfg "agent") -}}
-  {{- $_ := set $cfg "agent" (dict "enabled" .Values.api.agent.enabled) -}}
-  {{- with .Values.api.agent.model -}}
+  {{- $_ := set $cfg "agent" (dict "enabled" .Values.agent.enabled) -}}
+  {{- with .Values.agent.model -}}
     {{- $_ := set $cfg.agent "model" . -}}
   {{- end -}}
 {{- end -}}

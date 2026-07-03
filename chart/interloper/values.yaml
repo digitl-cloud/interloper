@@ -8,7 +8,7 @@
 # convention "<registry>/interloper-<component>:<tag>" — e.g.
 # ghcr.io/digitl-cloud/interloper-api:0.3.1. Flavored variants ride the TAG as
 # a "-<flavor>" suffix on the same image: the scheduler gets "-k8s"/"-docker"
-# from config.launcher.type, and the api gets "-agent" when api.agent.enabled.
+# from config.launcher.type, and the api gets "-agent" when agent.enabled.
 image:
   registry: ghcr.io/digitl-cloud
   tag: ""  # defaults to Chart.appVersion
@@ -58,22 +58,6 @@ worker:
 api:
   enabled: true
   replicaCount: 1
-  # Agent (ADK chat) support. When true, the chart deploys the
-  # `interloper-api:<tag>-agent` image, which bundles interloper-agent, and
-  # enables the /agent routes via the generated interloper.yaml (the API
-  # reports availability to the app, which shows/hides the Agent UI).
-  #
-  # `model` takes a bare name for native Gemini models (default
-  # "gemini-2.5-flash") or a LiteLLM `provider/model` reference such as
-  # "anthropic/claude-sonnet-4-5" or "openai/gpt-5". Credentials come from the
-  # provider's standard env vars supplied via api.extraEnv / api.extraEnvFrom
-  # (e.g. GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY). For Gemini on
-  # GKE, Vertex AI needs no key at all: set GOOGLE_GENAI_USE_VERTEXAI=TRUE,
-  # GOOGLE_CLOUD_PROJECT, and GOOGLE_CLOUD_LOCATION and grant the pod's
-  # service account Vertex access via workload identity.
-  agent:
-    enabled: false
-    model: ""  # defaults to gemini-2.5-flash
   image:
     repository: ""  # defaults to {image.registry}/interloper-api
     tag: ""
@@ -137,6 +121,23 @@ dbInit:
 # =============================================================================
 # Configuration
 # =============================================================================
+
+# Agent (ADK chat) support. When enabled, the chart deploys the
+# `interloper-api:<tag>-agent` image, which bundles interloper-agent, and
+# enables the /agent routes via the generated interloper.yaml (the API
+# reports availability to the app, which shows/hides the Agent UI).
+#
+# `model` takes a bare name for native Gemini models (default
+# "gemini-2.5-flash") or a LiteLLM `provider/model` reference such as
+# "anthropic/claude-sonnet-4-5" or "openai/gpt-5". Credentials come from the
+# provider's standard env vars supplied via api.extraEnv / api.extraEnvFrom
+# (e.g. GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY). For Gemini on
+# GKE, Vertex AI needs no key at all: set GOOGLE_GENAI_USE_VERTEXAI=TRUE,
+# GOOGLE_CLOUD_PROJECT, and GOOGLE_CLOUD_LOCATION and grant the pod's
+# service account Vertex access via workload identity.
+agent:
+  enabled: false
+  model: ""  # defaults to gemini-2.5-flash
 
 # The chart generates an interloper.yaml ConfigMap from this block.
 # Any value set here becomes part of the config file mounted into the pods.
