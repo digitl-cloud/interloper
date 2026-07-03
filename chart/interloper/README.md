@@ -31,7 +31,7 @@ ghcr.io/digitl-cloud/interloper-worker:<version>             # kubernetes runner
 ```
 
 The chart picks the scheduler tag suffix from `config.launcher.type`
-automatically, and the api `-agent` tag when `api.agent.enabled=true` — no
+automatically, and the api `-agent` tag when `agent.enabled=true` — no
 manual mapping. Override `image.registry` (and `image.pullSecrets` for a
 private registry) to pull from elsewhere.
 

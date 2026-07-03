@@ -80,7 +80,7 @@ Flavor token for the api image. The "agent" flavor
 mount; the base image omits it (those routes 404).
 */}}
 {{- define "interloper.apiFlavor" -}}
-{{- if .Values.api.agent.enabled -}}agent{{- end -}}
+{{- if .Values.agent.enabled -}}agent{{- end -}}
 {{- end -}}
 
 {{/*
