@@ -52,6 +52,8 @@ const groups = computed(() => {
         <UInput v-model="search"
                 placeholder="Search..."
                 icon="i-lucide-search"
+                variant="subtle"
+                :ui="{ base: 'bg-muted' }"
                 class="w-full" />
 
         <div v-if="filtered.length === 0"
@@ -62,22 +64,21 @@ const groups = computed(() => {
         <template v-else>
             <div v-for="[tag, items] in groups"
                  :key="tag"
-                 class="flex flex-col gap-2">
+                 class="flex flex-col gap-3">
                 <span v-if="tag"
-                      class="text-sm font-medium text-muted capitalize tracking-wide">{{ tag }}</span>
-                <div class="grid grid-cols-3 auto-rows-[7rem] gap-2">
-                    <UCard v-for="defn in items"
-                           :key="defn.key"
-                           class="cursor-pointer text-center h-full"
-                           :class="[
-                               selectedKey === defn.key ? 'ring-primary ring-2' : '',
-                           ]"
-                           :ui="{ root: 'transition-colors hover:bg-elevated', body: 'flex flex-col items-center justify-center gap-4 p-3 sm:p-3 h-full' }"
-                           @click="selectedKey = defn.key">
-                        <UIcon :name="componentIcon(defn.key)"
-                               class="size-8 shrink-0" />
-                        <span class="text-sm font-medium leading-tight line-clamp-2">{{ defn.name }}</span>
-                    </UCard>
+                      class="eyebrow text-dimmed">{{ tag }}</span>
+                <div class="grid grid-cols-2 gap-3">
+                    <SelectionCard v-for="defn in items"
+                                   :key="defn.key"
+                                   :selected="selectedKey === defn.key"
+                                   class="flex flex-col items-center gap-2.5 px-3.5 py-[18px]"
+                                   @select="selectedKey = defn.key">
+                        <div class="size-11 shrink-0 rounded-xl border border-default bg-default flex items-center justify-center">
+                            <UIcon :name="componentIcon(defn.key)"
+                                   class="size-[26px]" />
+                        </div>
+                        <span class="text-[13.5px] font-semibold text-highlighted text-center leading-tight line-clamp-2">{{ defn.name }}</span>
+                    </SelectionCard>
                 </div>
             </div>
         </template>

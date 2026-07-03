@@ -132,7 +132,7 @@ const columns: TableColumn<RunEvent>[] = [
             :columns="columns"
             :loading="loading"
             sticky
-            :ui="{ tr: 'h-10' }"
+            :ui="{ tr: 'h-10', root: 'border-0 rounded-none' }"
             class="h-full"
             :on-hover="onRowHover">
         <template #body-bottom>

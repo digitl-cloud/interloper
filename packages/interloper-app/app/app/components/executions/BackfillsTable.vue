@@ -34,7 +34,6 @@ function jobName(backfill: Backfill): string {
 
 const pagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
 const sorting = ref([{ id: 'started_at', desc: true }])
-const totalPages = computed(() => Math.ceil(backfills.value.length / PAGE_SIZE))
 
 const columns: TableColumn<Backfill>[] = withSortableHeaders([
     {
@@ -89,24 +88,35 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <UTable v-model:pagination="pagination"
-                v-model:sorting="sorting"
-                :data="backfills"
-                :columns="columns"
-                :loading="loading"
-                :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
-                sticky
-                @select="(_e: Event, row: any) => navigateTo(`/executions/backfills/${row.original.id}`)" />
+        <div v-if="!loading && backfills.length === 0"
+             class="w-full max-w-[1040px] mx-auto">
+            <EmptyState icon="i-lucide-history"
+                        title="No backfills yet"
+                        description="Backfills re-run historical partitions to fill gaps or reprocess past data. Trigger one from a job and every partition it replays shows up here.">
+                <UButton icon="i-lucide-calendar-plus"
+                         label="Go to Jobs"
+                         class="mt-5"
+                         to="/jobs" />
+            </EmptyState>
+        </div>
 
-        <div class="flex items-center justify-between text-sm text-muted px-4 py-3">
-            <span>{{ backfills.length }} backfill(s) total.</span>
-            <UPagination v-if="totalPages > 1"
+        <template v-else>
+            <UTable v-model:pagination="pagination"
+                    v-model:sorting="sorting"
+                    :data="backfills"
+                    :columns="columns"
+                    :loading="loading"
+                    :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+                    sticky
+                    @select="(_e: Event, row: any) => navigateTo(`/executions/backfills/${row.original.id}`)" />
+
+            <TableFooter class="py-3"
                          :page="pagination.pageIndex + 1"
                          :total="backfills.length"
-                         :items-per-page="PAGE_SIZE"
-                         :sibling-count="1"
-                         show-edges
-                         @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }" />
-        </div>
+                         :page-size="PAGE_SIZE"
+                         @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
+                {{ backfills.length }} backfill(s) total.
+            </TableFooter>
+        </template>
     </div>
 </template>

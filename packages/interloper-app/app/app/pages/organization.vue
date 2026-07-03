@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import type { OrgMember } from '~/types/organisation'
 
-definePageMeta({ title: 'Organization' })
+definePageMeta({
+    title: 'Organization',
+    pageHeader: {
+        eyebrow: 'Workspace',
+        title: 'Members',
+        description: 'Invite your team to your workspace and give everyone the right level of access. '
+            + 'Roles control who can build pipelines, who can only read data, and who can manage the workspace.',
+    },
+})
 
 interface Invitation {
     id: string
@@ -101,6 +109,28 @@ const organisationStore = useOrganisationStore()
 
 onMounted(loadData)
 watch(() => organisationStore.organisation, loadData)
+
+/** Access-level explainer cards — matches the app's real role vocabulary. */
+const ROLE_CARDS = [
+    {
+        name: 'Admin',
+        icon: 'i-lucide-shield-check',
+        tile: ROLE_TINTS.admin!,
+        desc: 'Full control — manage members, invitations, connections and every pipeline.',
+    },
+    {
+        name: 'Editor',
+        icon: 'i-lucide-wrench',
+        tile: ROLE_TINTS.editor!,
+        desc: 'Build and run the data layer: create sources, destinations, connections and jobs, and trigger runs.',
+    },
+    {
+        name: 'Viewer',
+        icon: 'i-lucide-eye',
+        tile: ROLE_TINTS.viewer!,
+        desc: 'Read-only access to the catalog, graph and run history. Cannot change anything.',
+    },
+]
 </script>
 
 <template>
@@ -117,6 +147,30 @@ watch(() => organisationStore.organisation, loadData)
                          @click="inviteOpen = true" />
             </template>
         </OrganizationMembersTable>
+
+        <div class="mt-11 mb-3.5">
+            <div class="eyebrow text-primary">
+                Access levels
+            </div>
+            <h2 class="text-[19px] font-bold tracking-[-0.015em] text-highlighted mt-2">
+                What each role can do
+            </h2>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div v-for="role in ROLE_CARDS"
+                 :key="role.name"
+                 class="border border-default rounded-xl p-[18px] bg-default">
+                <div class="flex items-center gap-2.5">
+                    <div class="size-[34px] rounded-lg flex items-center justify-center"
+                         :class="role.tile">
+                        <UIcon :name="role.icon"
+                               class="size-[18px]" />
+                    </div>
+                    <div class="text-[15px] font-bold text-highlighted">{{ role.name }}</div>
+                </div>
+                <p class="text-[13px] text-muted leading-normal mt-2.5">{{ role.desc }}</p>
+            </div>
+        </div>
 
         <OrganizationInviteModal v-model:open="inviteOpen"
                                  @invited="loadData" />

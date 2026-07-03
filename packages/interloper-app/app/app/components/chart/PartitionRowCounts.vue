@@ -30,8 +30,8 @@ const chartHeight = computed(() =>
 
 const option = computed(() => {
     const isDark = colorMode.value === 'dark'
-    const axisColor = isDark ? '#9ca3af' : '#6b7280'
-    const barColor = isDark ? '#60a5fa' : '#2563eb'
+    const axisColor = isDark ? CHART_AXIS_COLORS.axis.dark : CHART_AXIS_COLORS.axis.light
+    const barColor = isDark ? CHART_AXIS_COLORS.bar.dark : CHART_AXIS_COLORS.bar.light
 
     return {
         grid: {
@@ -70,7 +70,7 @@ const option = computed(() => {
                 formatter: formatNumber,
             },
             splitLine: {
-                lineStyle: { color: isDark ? '#374151' : '#e5e7eb' },
+                lineStyle: { color: isDark ? CHART_AXIS_COLORS.grid.dark : CHART_AXIS_COLORS.grid.light },
             },
         },
         series: [

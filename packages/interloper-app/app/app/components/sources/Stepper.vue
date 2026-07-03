@@ -21,9 +21,12 @@ const props = withDefaults(defineProps<{
     mode?: 'standalone' | 'collect'
     /** When set, stepper opens in edit mode with values pre-filled. */
     source?: Source | null
+    /** Preselect this type and open directly on the next step (create mode). */
+    initialTypeKey?: string
 }>(), {
     mode: 'standalone',
     source: null,
+    initialTypeKey: undefined,
 })
 
 const emit = defineEmits<{
@@ -121,7 +124,7 @@ const steps = computed<StepperItem[]>(() => {
         const kind = rs.slotName.charAt(0).toUpperCase() + rs.slotName.slice(1)
         items.push({
             title: kind,
-            icon: rs.slotName === 'connection' ? 'i-lucide-key-round' : 'i-lucide-settings',
+            icon: resourceSlotIcon(rs.slotName),
             slot: `resource-${rs.slotName}` as any,
         })
     }
@@ -137,6 +140,42 @@ const steps = computed<StepperItem[]>(() => {
 
 const totalSteps = computed(() => steps.value.length)
 const { activeStep, hasPrev, isLastStep, reset: resetStepper, next: nextStep, prev: prevStep } = useStepperFlow(totalSteps)
+
+const displaySteps = useCheckedSteps(steps, activeStep)
+
+/** Selected-type summary card shown on every post-type step. */
+const summaryCard = computed(() => sourceDefn.value && {
+    icon: componentIcon(sourceDefn.value.key),
+    title: sourceDefn.value.name,
+    caption: sourceDefn.value.tags?.[0] ?? 'Source',
+    changeable: !isEditMode.value,
+})
+
+/** Recap rows for the final step — what was chosen along the way. */
+const recapRows = computed(() => {
+    const rows = [{
+        icon: 'i-lucide-layers',
+        label: 'Assets',
+        value: `${selectedAssetKeys.value.length} selected`,
+    }]
+    for (const rs of resourceSlots.value) {
+        const id = resourceSelections.value[rs.slotName]
+        rows.push({
+            icon: resourceSlotIcon(rs.slotName),
+            label: rs.slotName.charAt(0).toUpperCase() + rs.slotName.slice(1),
+            value: id ? (resourcesStore.findById(id)?.name ?? '—') : 'None',
+        })
+    }
+    const destNames = selectedDestinationIds.value
+        .map(id => destinationsStore.findById(id)?.name)
+        .filter(Boolean)
+    rows.push({
+        icon: 'i-lucide-hard-drive',
+        label: 'Destinations',
+        value: destNames.length ? destNames.join(', ') : 'None',
+    })
+    return rows
+})
 
 // ── Resource data caching (for x-fetch fields) ──────────────────
 
@@ -177,6 +216,13 @@ watch(selectedSourceKey, (key) => {
         resourceSelections.value = {}
         configData.value = {}
         nextStep()
+    }
+})
+
+onMounted(() => {
+    if (!isEditMode.value && props.initialTypeKey) {
+        // Triggers the selection watcher above, which advances past the type step.
+        selectedSourceKey.value = props.initialTypeKey
     }
 })
 
@@ -282,7 +328,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 
 <template>
     <UStepper v-model="activeStep"
-              :items="steps"
+              :items="displaySteps"
               linear
               disabled
               class="w-full">
@@ -295,34 +341,53 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 
         <!-- Step: Assets -->
         <template #assets>
-            <SourcesAssetSelect v-if="sourceDefn"
-                                v-model:selected-keys="selectedAssetKeys"
-                                v-model:resolved-deps="resolvedCrossDeps"
-                                :source-defn="sourceDefn"
-                                :all-sources="sourcesStore.sources" />
+            <div class="flex flex-col gap-6">
+                <TypeSummaryCard v-if="summaryCard"
+                                 v-bind="summaryCard"
+                                 @change="activeStep = 0" />
+                <SourcesAssetSelect v-if="sourceDefn"
+                                    v-model:selected-keys="selectedAssetKeys"
+                                    v-model:resolved-deps="resolvedCrossDeps"
+                                    :source-defn="sourceDefn"
+                                    :all-sources="sourcesStore.sources" />
+            </div>
         </template>
 
         <!-- Dynamic resource steps -->
         <template v-for="rs in resourceSlots"
                   :key="rs.slotName"
                   #[`resource-${rs.slotName}`]>
-            <SourcesResourceStep v-if="rs.definition"
-                                 :ref="(el: any) => { if (el) resourceStepRefs[rs.slotName] = el }"
-                                 v-model="resourceSelections[rs.slotName]"
-                                 :slot-name="rs.slotName"
-                                 :definition="rs.definition"
-                                 :resource-context="resourceContext"
-                                 :silent="props.mode === 'collect'" />
+            <div class="flex flex-col gap-6">
+                <TypeSummaryCard v-if="summaryCard"
+                                 v-bind="summaryCard"
+                                 @change="activeStep = 0" />
+                <SourcesResourceStep v-if="rs.definition"
+                                     :ref="(el: any) => { if (el) resourceStepRefs[rs.slotName] = el }"
+                                     v-model="resourceSelections[rs.slotName]"
+                                     :slot-name="rs.slotName"
+                                     :definition="rs.definition"
+                                     :resource-context="resourceContext"
+                                     :silent="props.mode === 'collect'" />
+            </div>
         </template>
 
         <!-- Step: Config -->
         <template #config>
-            <div class="flex flex-col gap-4">
-                <UFormField label="Name">
+            <div class="flex flex-col gap-6">
+                <TypeSummaryCard v-if="summaryCard"
+                                 v-bind="summaryCard"
+                                 @change="activeStep = 0" />
+
+                <UFormField label="Source name">
                     <UInput v-model="sourceName"
                             placeholder="Source name"
                             class="w-full" />
                 </UFormField>
+
+                <WizardRecap :rows="recapRows" />
+
+                <USeparator label="Configuration" />
+
                 <SchemaForm v-if="sourceDefn?.config_schema"
                             v-model:data="configData"
                             v-model:is-valid="configValid"
@@ -335,8 +400,13 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 
         <!-- Step: Destination -->
         <template #destination>
-            <SourcesDestinationStep v-model:selected-ids="selectedDestinationIds"
-                                    :compatible-keys="sourceDefn?.destinations ?? []" />
+            <div class="flex flex-col gap-6">
+                <TypeSummaryCard v-if="summaryCard"
+                                 v-bind="summaryCard"
+                                 @change="activeStep = 0" />
+                <SourcesDestinationStep v-model:selected-ids="selectedDestinationIds"
+                                        :compatible-keys="sourceDefn?.destinations ?? []" />
+            </div>
         </template>
     </UStepper>
 </template>

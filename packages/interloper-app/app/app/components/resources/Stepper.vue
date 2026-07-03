@@ -19,6 +19,8 @@ const props = defineProps<{
     definitions: ComponentDefinition[]
     /** When set, opens in edit mode for this resource. */
     resource?: Resource | null
+    /** Preselect this type and open directly on the details step (create mode). */
+    initialTypeKey?: string
 }>()
 
 const emit = defineEmits<{
@@ -42,10 +44,14 @@ const loadingEdit = ref(false)
 /** Whether we're in edit mode. */
 const isEditing = computed(() => !!props.resource)
 
-const steps = computed<StepperItem[]>(() => [
+const steps: StepperItem[] = [
     { slot: 'type' as const, title: 'Type', icon: 'i-lucide-plug' },
-    { slot: 'details' as const, title: 'Details', icon: 'i-lucide-file-text' },
-])
+    { slot: 'details' as const, title: 'Details', icon: 'i-lucide-settings-2' },
+]
+const displaySteps = useCheckedSteps(steps, activeStep)
+
+/** Label for the schema section separator. */
+const schemaSectionLabel = computed(() => props.kind === 'connection' ? 'Credentials' : 'Configuration')
 
 /** The config_schema for the currently selected type. */
 const selectedSchema = computed(() => {
@@ -81,6 +87,10 @@ onMounted(() => {
     if (props.resource) {
         loadResourceData(props.resource)
     }
+    else if (props.initialTypeKey) {
+        // Triggers the selection watcher below, which advances to details.
+        selectedType.value = props.initialTypeKey
+    }
 })
 
 // When a type is selected (create mode only), reset form and advance
@@ -98,6 +108,12 @@ watch(selectedType, (newKey, oldKey) => {
 const selectedTypeName = computed(() => {
     if (!selectedType.value) return ''
     return props.definitions.find(d => d.key === selectedType.value)?.name ?? selectedType.value
+})
+
+/** First catalog tag of the selected type (summary-card caption). */
+const selectedTypeTag = computed(() => {
+    const defn = props.definitions.find(d => d.key === selectedType.value) as (ComponentDefinition & { tags?: string[] }) | undefined
+    return defn?.tags?.[0] ?? kindLabel.value
 })
 
 /** Can proceed to next step? */
@@ -171,7 +187,7 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
     <!-- Create mode: stepper -->
     <UStepper v-else-if="!isEditing"
               v-model="activeStep"
-              :items="steps"
+              :items="displaySteps"
               linear
               disabled
               class="w-full">
@@ -181,15 +197,21 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
         </template>
 
         <template #details>
-            <div class="flex flex-col gap-4">
-                <UFormField label="Name"
+            <div class="flex flex-col gap-6">
+                <TypeSummaryCard :icon="componentIcon(selectedType)"
+                                 :title="selectedTypeName"
+                                 :caption="selectedTypeTag"
+                                 changeable
+                                 @change="prevStep" />
+
+                <UFormField :label="`${kindLabel} name`"
                             required>
                     <UInput v-model="resourceName"
                             placeholder="Enter a name for this resource"
                             class="w-full" />
                 </UFormField>
 
-                <USeparator />
+                <USeparator :label="schemaSectionLabel" />
 
                 <div v-if="selectedSchema"
                      class="space-y-1">
@@ -207,21 +229,19 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
 
     <!-- Edit mode: details form only -->
     <div v-else
-         class="flex flex-col gap-4">
-        <div class="flex items-center gap-2 text-sm text-muted">
-            <UIcon :name="componentIcon(selectedType)"
-                   class="size-4" />
-            <span>{{ selectedTypeName }}</span>
-        </div>
+         class="flex flex-col gap-6">
+        <TypeSummaryCard :icon="componentIcon(selectedType)"
+                         :title="selectedTypeName"
+                         :caption="selectedTypeTag" />
 
-        <UFormField label="Name"
+        <UFormField :label="`${kindLabel} name`"
                     required>
             <UInput v-model="resourceName"
                     placeholder="Enter a name for this resource"
                     class="w-full" />
         </UFormField>
 
-        <USeparator />
+        <USeparator :label="schemaSectionLabel" />
 
         <div v-if="selectedSchema"
              class="space-y-1">

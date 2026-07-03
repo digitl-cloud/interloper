@@ -76,7 +76,6 @@ const columns: TableColumn<Run>[] = [
     },
 ]
 
-const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
 
 function onPageChange(page: number) {
     runsStore.goToPage(page - 1)
@@ -85,22 +84,33 @@ function onPageChange(page: number) {
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <UTable :data="runs"
-                :columns="columns"
-                :loading="loading"
-                :sorting="[{ id: 'created_at', desc: true }]"
-                sticky
-                @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
+        <div v-if="!loading && runs.length === 0"
+             class="w-full max-w-[1040px] mx-auto">
+            <EmptyState icon="i-lucide-activity"
+                        title="No executions yet"
+                        description="Executions are the run history of your pipelines. Every time a job runs — on schedule or triggered manually — each materialized partition appears here with its status and timing.">
+                <UButton icon="i-lucide-calendar-plus"
+                         label="Create a job"
+                         class="mt-5"
+                         to="/jobs" />
+            </EmptyState>
+        </div>
 
-        <div class="flex items-center justify-between text-sm text-muted px-4 py-3">
-            <span>{{ total }} run(s) total.</span>
-            <UPagination v-if="totalPages > 1"
+        <template v-else>
+            <UTable :data="runs"
+                    :columns="columns"
+                    :loading="loading"
+                    :sorting="[{ id: 'created_at', desc: true }]"
+                    sticky
+                    @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
+
+            <TableFooter class="py-3"
                          :page="pageIndex + 1"
                          :total="total"
-                         :items-per-page="pageSize"
-                         :sibling-count="1"
-                         show-edges
-                         @update:page="onPageChange" />
-        </div>
+                         :page-size="pageSize"
+                         @update:page="onPageChange">
+                {{ total }} run(s) total.
+            </TableFooter>
+        </template>
     </div>
 </template>

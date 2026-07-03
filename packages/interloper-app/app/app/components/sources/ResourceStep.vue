@@ -144,33 +144,29 @@ defineExpose({ formData })
         </div>
 
         <!-- Empty state -->
-        <div v-if="instances.length === 0"
-             class="flex flex-col items-center justify-center rounded-md p-6 gap-2">
-            <span class="text-sm text-muted">No {{ definition.name }} {{ definition.kind.toLowerCase() }} found.</span>
-            <UButton icon="i-lucide-plus"
-                     label="Create one"
-                     @click="openCreateDrawer" />
-        </div>
+        <InlineEmptyState v-if="instances.length === 0"
+                          :icon="componentIcon(definition.key)"
+                          :message="`No ${definition.name} ${definition.kind.toLowerCase()} yet.`"
+                          :action-label="`Create ${definition.kind.toLowerCase()}`"
+                          @action="openCreateDrawer" />
 
         <!-- Instance list -->
         <div v-else
-             class="flex flex-col gap-1">
-            <div v-for="inst in instances"
-                 :key="inst.id"
-                 class="flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer bg-elevated/50 hover:bg-elevated transition-colors"
-                 :class="[
-                     selectedId === inst.id ? 'ring-primary ring-2' : '',
-                 ]"
-                 @click="selectedId = inst.id">
-                <UIcon :name="componentIcon(definition.key)"
-                       class="size-5 shrink-0" />
-                <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-medium">{{ inst.name }}</span>
+             class="flex flex-col gap-2.5">
+            <SelectionCard v-for="inst in instances"
+                           :key="inst.id"
+                           :selected="selectedId === inst.id"
+                           class="flex items-center gap-3 px-4 py-3"
+                           @select="selectedId = inst.id">
+                <div class="size-10 shrink-0 rounded-[11px] border border-default bg-default flex items-center justify-center">
+                    <UIcon :name="componentIcon(definition.key)"
+                           class="size-6" />
                 </div>
+                <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ inst.name }}</span>
                 <UIcon v-if="selectedId === inst.id"
                        name="i-lucide-check"
                        class="size-4 ml-auto text-primary shrink-0" />
-            </div>
+            </SelectionCard>
         </div>
 
         <!-- Create drawer (nested) -->
@@ -196,7 +192,7 @@ defineExpose({ formData })
                     <UFormField label="Name"
                                 required>
                         <UInput v-model="newName"
-                                :placeholder=definition.name
+                                :placeholder="definition.name"
                                 class="w-full" />
                     </UFormField>
 

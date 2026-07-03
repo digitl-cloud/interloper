@@ -15,7 +15,10 @@ export default defineNuxtConfig({
             Inter: {
                 wght: [100, 200, 300, 400, 500, 600, 700, 800, 900],
                 ital: [100, 200, 300, 400, 500, 600, 700, 800, 900],
-            }
+            },
+            'JetBrains Mono': {
+                wght: [400, 500, 600],
+            },
         },
         display: 'swap',
         prefetch: true,

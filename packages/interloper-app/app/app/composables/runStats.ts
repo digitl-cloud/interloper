@@ -16,8 +16,8 @@ const STATUS_META: StatusMeta[] = [
     { key: 'running', label: 'Running', statuses: ['running'], colorClass: 'bg-blue-500' },
     { key: 'failed', label: 'Failed', statuses: ['failed'], colorClass: 'bg-red-500' },
     { key: 'canceled', label: 'Canceled', statuses: ['canceled'], colorClass: 'bg-amber-500' },
-    { key: 'skipped', label: 'Skipped', statuses: ['skipped'], colorClass: 'bg-gray-400' },
-    { key: 'pending', label: 'Pending', statuses: ['pending', 'queued'], colorClass: 'bg-gray-600' },
+    { key: 'skipped', label: 'Skipped', statuses: ['skipped'], colorClass: 'bg-gray-500' },
+    { key: 'pending', label: 'Pending', statuses: ['pending', 'queued'], colorClass: 'bg-gray-800' },
 ]
 
 /** Always shown in the legend, even at zero. Pending only appears when present. */

@@ -61,8 +61,7 @@ const inactiveDashboards = [
         <div class="max-w-[1200px] mx-auto px-4 py-8 space-y-8">
             <!-- Dashboard cards -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <NuxtLink
-                    v-for="db in dashboards"
+                <NuxtLink v-for="db in dashboards"
                     :key="db.title"
                     :to="db.to"
                     class="group rounded-xl border border-default bg-elevated/40 backdrop-blur p-6 space-y-4 transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/5"
@@ -83,8 +82,7 @@ const inactiveDashboards = [
 
                     <!-- Stats -->
                     <div class="grid grid-cols-3 gap-3">
-                        <div
-                            v-for="stat in db.stats"
+                        <div v-for="stat in db.stats"
                             :key="stat.label"
                             class="rounded-lg bg-elevated/50 px-3 py-2"
                         >
@@ -100,8 +98,7 @@ const inactiveDashboards = [
                 </NuxtLink>
 
                 <!-- Inactive cards -->
-                <div
-                    v-for="db in inactiveDashboards"
+                <div v-for="db in inactiveDashboards"
                     :key="db.title"
                     class="relative rounded-xl border border-dashed border-default bg-elevated/20 p-6 space-y-4 opacity-60"
                 >

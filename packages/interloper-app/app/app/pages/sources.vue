@@ -13,28 +13,21 @@ const sourcesStore = useSourcesStore()
 const destinationsStore = useDestinationsStore()
 const { statusBadge, sourceDrift } = useDrift()
 
-function typeIcon(key: string): string {
-    return componentIcon(key)
-}
-
 function typeName(key: string): string {
     return catalogStore.catalog[key]?.name ?? key
 }
 
-const drawerOpen = ref(false)
-const editingSource = ref<Source | null>(null)
 const stepperRef = ref<any>(null)
 const toast = useToast()
 
-function handleEdit(source: Source) {
-    editingSource.value = source
-    drawerOpen.value = true
-}
-
-function handleCreate() {
-    editingSource.value = null
-    drawerOpen.value = true
-}
+const {
+    open: drawerOpen,
+    editing: editingSource,
+    presetTypeKey,
+    openCreate: handleCreate,
+    openCreateWithType: handleCreateFromCatalog,
+    openEdit: handleEdit,
+} = useWizardDrawer<Source>()
 
 sourcesStore.fetch()
 
@@ -45,7 +38,7 @@ const columns: TableColumn<Source>[] = [
         header: 'Source',
         cell: ({ row }) => {
             const children: any[] = [
-                h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
+                h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
                 row.original.name,
             ]
             const badge = statusBadge(sourceDrift(row.original))
@@ -70,7 +63,7 @@ const columns: TableColumn<Source>[] = [
             color: 'neutral',
             variant: 'subtle',
         }, () => h('span', { class: 'flex items-center gap-1.5' }, [
-            h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
+            h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
             typeName(row.original.key),
         ])),
     },
@@ -129,7 +122,7 @@ async function handleDelete(ids: string[]) {
     <div>
         <DriftBanner />
 
-        <div class="flex flex-col h-full">
+        <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="sourcesStore.sources"
                        :loading="sourcesStore.loading"
@@ -141,35 +134,25 @@ async function handleDelete(ids: string[]) {
                              label="New source"
                              @click="handleCreate" />
                 </template>
+
+                <template #empty>
+                    <SourcesEmptyState @create="handleCreate"
+                                       @create-type="handleCreateFromCatalog" />
+                </template>
             </DataTable>
         </div>
 
-        <UDrawer v-model:open="drawerOpen"
-                 direction="right"
-                 :handle="false"
-                 :handle-only="true"
-                 :title="stepperRef?.title ?? 'New Source'"
-                 :ui="{ content: 'w-[40rem]', description: 'sr-only' }">
-            <template #description>
-                Configure a new source
-            </template>
-            <template #body>
-                <SourcesStepper v-if="drawerOpen"
-                                :key="editingSource?.id ?? 'new'"
-                                ref="stepperRef"
-                                :source="editingSource"
-                                @created="handleSaved"
-                                @updated="handleSaved" />
-            </template>
-            <template #footer>
-                <StepperNav v-if="stepperRef"
-                            :can-proceed="stepperRef.canProceed"
-                            :has-prev="stepperRef.hasPrev"
-                            :submitting="stepperRef.submitting"
-                            :submit-label="stepperRef.submitLabel"
-                            @next="stepperRef.next()"
-                            @prev="stepperRef.prev()" />
-            </template>
-        </UDrawer>
+        <WizardDrawer v-model:open="drawerOpen"
+                      default-title="New Source"
+                      description="Configure a new source"
+                      :stepper="stepperRef">
+            <SourcesStepper v-if="drawerOpen"
+                            :key="editingSource?.id ?? 'new'"
+                            ref="stepperRef"
+                            :source="editingSource"
+                            :initial-type-key="presetTypeKey"
+                            @created="handleSaved"
+                            @updated="handleSaved" />
+        </WizardDrawer>
     </div>
 </template>
