@@ -1,6 +1,11 @@
 """Interloper Agent — multi-agent system for asset discovery, lineage, and operations."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from google.adk.agents import Agent
+from interloper.settings import AppSettings
 
 from interloper_agent.prompts import (
     ACTION_INSTRUCTION,
@@ -12,9 +17,30 @@ from interloper_agent.prompts import (
 )
 from interloper_agent.tools import actions, analytics, catalog, lineage, operations
 
+if TYPE_CHECKING:
+    from google.adk.models import BaseLlm
+
+
+def resolve_model(name: str | None = None) -> str | BaseLlm:
+    """Resolve a model name into an ADK model reference.
+
+    Bare names (``gemini-2.5-flash``) are native Gemini models; names with a
+    provider prefix (``anthropic/claude-sonnet-4-5``) are routed through
+    LiteLLM, which reads the provider's standard credential env vars.
+    """
+    name = name or AppSettings.get().agent.model
+    if "/" in name:
+        from google.adk.models.lite_llm import LiteLlm
+
+        return LiteLlm(model=name)
+    return name
+
+
+_model = resolve_model()
+
 catalog_agent = Agent(
     name="CatalogAgent",
-    model="gemini-2.5-flash",
+    model=_model,
     description="Discovers sources, inspects asset schemas, searches fields across the catalog, and compares schemas.",
     instruction=CATALOG_INSTRUCTION,
     tools=[
@@ -29,7 +55,7 @@ catalog_agent = Agent(
 
 lineage_agent = Agent(
     name="LineageAgent",
-    model="gemini-2.5-flash",
+    model=_model,
     description="Analyzes asset dependencies — upstream/downstream traversal, impact analysis, and cross-source edges.",
     instruction=LINEAGE_INSTRUCTION,
     tools=[
@@ -43,7 +69,7 @@ lineage_agent = Agent(
 
 operations_agent = Agent(
     name="OperationsAgent",
-    model="gemini-2.5-flash",
+    model=_model,
     description="Monitors run health, recent failures, job schedules, and backfill progress.",
     instruction=OPERATIONS_INSTRUCTION,
     tools=[
@@ -58,7 +84,7 @@ operations_agent = Agent(
 
 analytics_agent = Agent(
     name="AnalyticsAgent",
-    model="gemini-2.5-flash",
+    model=_model,
     description="Provides run statistics, partition coverage analysis, and data freshness checks.",
     instruction=ANALYTICS_INSTRUCTION,
     tools=[
@@ -70,7 +96,7 @@ analytics_agent = Agent(
 
 action_agent = Agent(
     name="ActionAgent",
-    model="gemini-2.5-flash",
+    model=_model,
     description="Triggers runs, starts backfills, and toggles jobs or assets on/off.",
     instruction=ACTION_INSTRUCTION,
     tools=[
@@ -83,7 +109,7 @@ action_agent = Agent(
 
 root_agent = Agent(
     name="InterloperAgent",
-    model="gemini-2.5-flash",
+    model=_model,
     instruction=ROOT_INSTRUCTION,
     description="Main Interloper assistant that routes queries to specialized sub-agents.",
     sub_agents=[catalog_agent, lineage_agent, operations_agent, analytics_agent, action_agent],

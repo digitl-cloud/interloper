@@ -12,7 +12,7 @@ from interloper.catalog.base import Catalog
 from interloper.errors import ComponentDriftError
 from interloper_db import Store
 
-from interloper_api.dependencies import set_auth_config, set_catalog, set_smtp_config, set_store
+from interloper_api.dependencies import set_auth_config, set_catalog, set_features, set_smtp_config, set_store
 from interloper_api.routes import (
     admin,
     assets,
@@ -38,6 +38,7 @@ def create_app(
     catalog: Catalog | None = None,
     auth_config: Any | None = None,
     smtp_config: Any | None = None,
+    agent_config: Any | None = None,
     cors_origins: list[str] | None = None,
     **kwargs: Any,
 ) -> FastAPI:
@@ -48,6 +49,8 @@ def create_app(
         catalog: Catalog instance.
         auth_config: ``AuthConfig`` instance for authentication settings.
         smtp_config: ``SmtpConfig`` instance for sending invitation emails.
+        agent_config: ``AgentSettings`` instance; the agent routes mount only
+            when it's enabled (or None) and the ``agent`` extra is installed.
         cors_origins: Allowed CORS origins. Only needed in dev mode for direct
             WebSocket connections that bypass the Vite proxy.
         **kwargs: Additional kwargs forwarded to ``FastAPI()``.
@@ -100,15 +103,21 @@ def create_app(
     api.include_router(external.router, prefix="/external", tags=["external"])
     api.include_router(ws.router, tags=["ws"])
 
-    try:
-        from interloper_api.routes import agent as agent_routes
+    agent_available = False
+    if agent_config is None or agent_config.enabled:
+        try:
+            from interloper_api.routes import agent as agent_routes
 
-        api.include_router(agent_routes.router, prefix="/agent", tags=["agent"])
-    except ImportError:
-        logger.warning(
-            "Agent routes not mounted: the 'agent' extra is not installed "
-            "(install interloper-api[agent]); /agent endpoints will return 404."
-        )
+            api.include_router(agent_routes.router, prefix="/agent", tags=["agent"])
+            agent_available = True
+        except ImportError:
+            logger.warning(
+                "Agent routes not mounted: the 'agent' extra is not installed "
+                "(install interloper-api[agent]); /agent endpoints will return 404."
+            )
+    else:
+        logger.info("Agent routes not mounted: disabled via settings.")
+    set_features({"agent": agent_available})
 
     @api.get("/health")
     def health() -> dict[str, str]:

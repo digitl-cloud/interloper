@@ -102,6 +102,23 @@ class SmtpSettings(BaseSettings):
         return bool(self.host and self.user and self.password)
 
 
+class AgentSettings(BaseSettings):
+    """AI agent settings (chat assistant served by the API).
+
+    The agent is only available when the ``agent`` extra is installed
+    (interloper-api[agent]); ``enabled`` switches it off without changing
+    the installation. ``model`` takes a bare name for native Gemini models
+    (``gemini-2.5-flash``) or a LiteLLM ``provider/model`` reference
+    (``anthropic/claude-sonnet-4-5``) — provider credentials are read from
+    the provider's standard environment variables.
+    """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}AGENT_")
+
+    enabled: bool = True
+    model: str = "gemini-2.5-flash"
+
+
 class LauncherSettings(BaseSettings):
     """Launcher settings (type + launcher-specific config)."""
 
@@ -159,6 +176,7 @@ class AppSettings(BaseSettings):
     server: ServerSettings = Field(default_factory=ServerSettings)
     cron: CronSettings = Field(default_factory=CronSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
+    agent: AgentSettings = Field(default_factory=AgentSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     reaper: ReaperSettings = Field(default_factory=ReaperSettings)
     launcher: LauncherSettings = Field(default_factory=LauncherSettings)

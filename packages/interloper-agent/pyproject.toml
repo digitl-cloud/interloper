@@ -12,7 +12,7 @@ dependencies = [
     "interloper-core",
     "interloper-db",
     "interloper-assets",
-    "google-adk>=1.0.0",
+    "google-adk[extensions]>=1.0.0",
 ]
 
 [build-system]

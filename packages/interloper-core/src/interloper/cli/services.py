@@ -65,6 +65,7 @@ def run_services(
             catalog=catalog,
             auth_config=settings.auth,
             smtp_config=settings.smtp,
+            agent_config=settings.agent,
             cors_origins=cors_origins,
         )
 
