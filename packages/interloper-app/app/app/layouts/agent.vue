@@ -1,14 +1,7 @@
 <script setup lang="ts">
-import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
 const agentStore = useAgentStore()
-
-const modeItems: NavigationMenuItem[] = [
-    { label: 'Data', icon: 'i-lucide-database', to: '/' },
-    { label: 'Analytics', icon: 'i-lucide-chart-column', to: '/analytics' },
-    { label: 'Agent', icon: 'i-lucide-sparkles', to: '/agent', active: true },
-]
 
 const sidebarItems = computed(() => {
     if (!agentStore.sessions.length) return []
@@ -57,7 +50,6 @@ onMounted(() => {
                     </NuxtLink>
                 </template>
 
-                <UNavigationMenu :items="modeItems" />
             </UDashboardNavbar>
 
             <div class="flex flex-1 min-h-0 overflow-hidden">
