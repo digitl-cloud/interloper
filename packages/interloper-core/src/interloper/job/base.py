@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import Field
 
 from interloper.asset.base import Asset
-from interloper.component.base import Component
+from interloper.component.base import Component, RelationDefinition
 from interloper.source.base import Source
 
 if TYPE_CHECKING:
@@ -25,6 +25,10 @@ class Job(Component):
     """
 
     icon: ClassVar[str] = "carbon:event-schedule"
+    relation_types: ClassVar[dict[str, RelationDefinition]] = {
+        "target": RelationDefinition(kinds=["source", "asset"]),
+    }
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"targets"})
 
     targets: list[Source | Asset] = Field(default_factory=list)
     cron: str | None = Field(default=None, description="Cron trigger; interpreted by the scheduler")

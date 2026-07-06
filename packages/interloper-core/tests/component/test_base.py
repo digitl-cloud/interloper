@@ -124,6 +124,34 @@ class TestDefinition:
 
         assert FakeDocumentedComponent.definition().description == "A documented component."
 
+    def test_definition_config_schema_strips_internal_fields(self):
+        class FakeConfigured(Component):
+            """Component with one user field and one class-declared internal field."""
+
+            internal_fields = frozenset({"plumbing"})
+
+            value: str = ""
+            plumbing: str = ""
+
+        schema = FakeConfigured.definition().config_schema
+        assert set(schema["properties"]) == {"value"}
+
+    def test_definition_relations_from_class_vocabulary(self):
+        from typing import ClassVar
+
+        from interloper.component.base import RelationDefinition
+
+        class FakeRelated(Component):
+            """Component declaring a relation vocabulary."""
+
+            relation_types: ClassVar[dict[str, RelationDefinition]] = {
+                "wires": RelationDefinition(kinds=["fake_component"], slotted=True)
+            }
+
+        relations = FakeRelated.definition().relations
+        assert relations["wires"].kinds == ["fake_component"]
+        assert relations["wires"].slotted is True
+
 
 # ---------------------------------------------------------------------------
 # Resource slot inference and trickle-down

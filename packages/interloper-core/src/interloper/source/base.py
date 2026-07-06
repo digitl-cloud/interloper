@@ -10,7 +10,7 @@ from typing_extensions import Self
 
 from interloper.asset import Asset
 from interloper.asset.base import AssetDefinition
-from interloper.component import Component, ComponentDefinition
+from interloper.component import Component, ComponentDefinition, RelationDefinition
 from interloper.component.base import ComponentDescriptor, ComponentSpec, dump_spec_value
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
@@ -72,9 +72,7 @@ class SourceDefinition(ComponentDefinition):
     - ``assets`` are owned by this source, so their definitions are nested
     """
 
-    tags: list[str] = Field(default_factory=list)
     resources: dict[str, str] = Field(default_factory=dict)
-    config_schema: dict[str, Any] = Field(default_factory=dict)
     destinations: list[str] = Field(default_factory=list)
     assets: list[AssetDefinition] = Field(default_factory=list)
 
@@ -99,6 +97,13 @@ class Source(Component):
     destination_types: ClassVar[list[type[Destination]]] = []
     asset_types: ClassVar[list[type[Asset]]] = []
     tags: ClassVar[list[str]] = []
+    relation_types: ClassVar[dict[str, RelationDefinition]] = {
+        "resource": RelationDefinition(kinds=["connection", "config", "resource"], slotted=True),
+        "destination": RelationDefinition(kinds=["destination"]),
+    }
+    internal_fields: ClassVar[frozenset[str]] = frozenset(
+        {"assets", "destination", "normalizer", "materialization_strategy"}
+    )
 
     # State
     destination: Destination | list[Destination] | None = Field(default=None)
@@ -431,8 +436,6 @@ class Source(Component):
         Returns:
             A SourceDefinition with metadata and nested asset definitions.
         """
-        from interloper.resource.fields import strip_internal_fields
-
         # Use the *resolved* resource map: it includes slots declared via typed
         # annotations (``connection: XConnection``), not just those set in
         # ``__dict__`` by the ``@source(resources=...)`` decorator. This is what
@@ -442,44 +445,6 @@ class Source(Component):
         res_types: dict[str, type[Resource]] = cls.resource_types
         validate_fetch_field_providers(cls, res_types)
 
-        # Build config schema from Source's own fields, excluding framework
-        # internals (resources, assets, etc.) and base Source fields.
-        _SOURCE_INTERNAL = frozenset(
-            {
-                "id",
-                "resources",
-                "assets",
-                "destination",
-                "normalizer",
-                "materialization_strategy",
-            }
-        )
-
-        raw_schema = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
-        schema = strip_internal_fields(raw_schema)
-
-        # Further strip Source-level framework fields
-        if schema.get("properties"):
-            schema = {
-                **schema,
-                "properties": {k: v for k, v in schema["properties"].items() if k not in _SOURCE_INTERNAL},
-            }
-            if "required" in schema:
-                schema["required"] = [r for r in schema["required"] if r not in _SOURCE_INTERNAL]
-                if not schema["required"]:
-                    del schema["required"]
-            # Remove $defs that are only referenced by stripped internal fields
-            if "$defs" in schema and not schema.get("properties"):
-                del schema["$defs"]
-            elif "$defs" in schema:
-                # Only keep $defs that are actually referenced in remaining properties
-                import json
-
-                props_str = json.dumps(schema["properties"])
-                schema["$defs"] = {k: v for k, v in schema["$defs"].items() if f'"#/$defs/{k}"' in props_str}
-                if not schema["$defs"]:
-                    del schema["$defs"]
-
         return SourceDefinition(
             kind=cls.kind,
             key=cls.key,
@@ -488,7 +453,8 @@ class Source(Component):
             icon=cls.icon,
             description=cls.__doc__ or "",
             tags=list(cls.tags),
-            config_schema=schema if schema.get("properties") else {},
+            config_schema=cls.config_schema(),
+            relations=dict(cls.relation_types),
             destinations=[dest_cls.key for dest_cls in cls.destination_types],
             resources={name: res_cls.key for name, res_cls in res_types.items()},
             assets=[asset_cls.definition().model_copy(update={"source_key": cls.key}) for asset_cls in cls.asset_types],

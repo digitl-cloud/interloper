@@ -29,6 +29,12 @@ class TestDefinition:
         assert il.Job.kind == "job"
         assert il.Job.key == "job"
 
+    def test_definition_self_describes(self):
+        defn = il.Job.definition()
+        assert set(defn.config_schema["properties"]) == {"cron", "enabled", "tags", "partitioned", "backfill_days"}
+        assert defn.relations["target"].kinds == ["source", "asset"]
+        assert defn.relations["target"].slotted is False
+
     def test_defaults(self):
         job = il.Job()
         assert job.targets == []
