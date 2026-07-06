@@ -12,7 +12,7 @@ from pydantic import Field, PrivateAttr
 from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
-from interloper.component import Component, ComponentDefinition
+from interloper.component import Component, ComponentDefinition, RelationDefinition
 from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
 from interloper.errors import AssetError, NormalizerError, PartitionError
@@ -61,7 +61,6 @@ class AssetDefinition(ComponentDefinition):
     """
 
     source_key: str = Field(default="")
-    tags: list[str] = Field(default_factory=list)
     resources: dict[str, str] = Field(default_factory=dict)
     destinations: list[str] = Field(default_factory=list)
     asset_schema: dict[str, Any] | None = Field(default=None)
@@ -103,6 +102,11 @@ class Asset(Component):
     destination_types: ClassVar[list[type[Destination]]] = []
     schema: ClassVar[type[Schema] | None] = None
     partitioning: ClassVar[PartitionConfig | None] = None
+    relation_types: ClassVar[dict[str, RelationDefinition]] = {
+        "resource": RelationDefinition(kinds=["connection", "config", "resource"], slotted=True),
+        "destination": RelationDefinition(kinds=["destination"]),
+        "dependency": RelationDefinition(kinds=["asset"], slotted=True),
+    }
     requires: ClassVar[dict[str, str]] = {}
     optional_requires: ClassVar[dict[str, str]] = {}
     tags: ClassVar[list[str]] = []
@@ -245,6 +249,7 @@ class Asset(Component):
             icon=cls.icon,
             description=cls.__doc__ or "",
             tags=list(cls.tags),
+            relations=dict(cls.relation_types),
             resources={name: res_cls.key for name, res_cls in res_types.items()},
             destinations=[d.key for d in cls.destination_types],
             asset_schema=schema_dict,

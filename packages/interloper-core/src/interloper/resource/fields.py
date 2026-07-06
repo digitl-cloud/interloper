@@ -8,7 +8,7 @@ are forwarded transparently.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, Field
@@ -97,31 +97,40 @@ def validate_fetch_field_providers(cls: type[BaseModel], res_types: dict[str, An
 
 # Internal fields that should be stripped from config schemas exposed
 # to the UI.  These are framework plumbing, not user-configurable.
-_INTERNAL_FIELDS = frozenset({"resources"})
+_INTERNAL_FIELDS = frozenset({"id", "resources"})
 
 
-def strip_internal_fields(schema: dict[str, Any]) -> dict[str, Any]:
+def strip_internal_fields(schema: dict[str, Any], extra: Iterable[str] = ()) -> dict[str, Any]:
     """Remove internal framework fields from a JSON Schema.
 
-    Strips properties listed in ``_INTERNAL_FIELDS`` and adjusts the
-    ``required`` list accordingly.  Returns a shallow copy; the original
-    schema is not mutated.
+    Strips properties listed in ``_INTERNAL_FIELDS`` (plus *extra*), adjusts
+    the ``required`` list, and drops ``$defs`` entries no remaining property
+    references.  Returns a shallow copy; the original schema is not mutated.
 
     Args:
         schema: A JSON Schema dict (from ``model_json_schema()``).
+        extra: Additional class-declared internal field names to strip.
 
     Returns:
         A copy of the schema without internal fields.
     """
+    internal = _INTERNAL_FIELDS | frozenset(extra)
     properties = schema.get("properties", {})
-    if not _INTERNAL_FIELDS & properties.keys():
+    if not internal & properties.keys():
         return schema
-    kept = {name: prop for name, prop in properties.items() if name not in _INTERNAL_FIELDS}
+    kept = {name: prop for name, prop in properties.items() if name not in internal}
     filtered = {**schema, "properties": kept}
     if "required" in filtered:
-        filtered["required"] = [r for r in filtered["required"] if r not in _INTERNAL_FIELDS]
+        filtered["required"] = [r for r in filtered["required"] if r not in internal]
         if not filtered["required"]:
             del filtered["required"]
+    if "$defs" in filtered:
+        import json
+
+        props_str = json.dumps(kept)
+        filtered["$defs"] = {k: v for k, v in filtered["$defs"].items() if f'"#/$defs/{k}"' in props_str}
+        if not filtered["$defs"]:
+            del filtered["$defs"]
     return filtered
 
 

@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from interloper.component import Component, ComponentDefinition
+from interloper.component import Component, ComponentDefinition, RelationDefinition
 from interloper.destination.context import IOContext
 from interloper.resource import Resource
 from interloper.utils.text import to_label
@@ -23,8 +23,6 @@ class DestinationDefinition(ComponentDefinition):
     - ``config_schema`` is the destination's own JSON Schema
     """
 
-    tags: list[str] = Field(default_factory=list)
-    config_schema: dict[str, Any] = Field(default_factory=dict)
     resources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -51,6 +49,9 @@ class Destination(Component):
     """
 
     tags: ClassVar[list[str]] = []
+    relation_types: ClassVar[dict[str, RelationDefinition]] = {
+        "resource": RelationDefinition(kinds=["connection", "config", "resource"], slotted=True),
+    }
 
     @classmethod
     def definition(cls) -> DestinationDefinition:
@@ -61,10 +62,9 @@ class Destination(Component):
         Returns:
             A DestinationDefinition with metadata and JSON Schema.
         """
-        from interloper.resource.fields import strip_internal_fields, validate_fetch_field_providers
+        from interloper.resource.fields import validate_fetch_field_providers
         from interloper.utils.imports import get_object_path
 
-        raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
         # Resolved resource map (includes annotation-declared slots, not just
         # ``__dict__``) so the DestinationDefinition's ``resources`` and its
         # FetchField pickers work for both declaration styles.
@@ -78,7 +78,8 @@ class Destination(Component):
             icon=cls.icon,
             description=cls.__doc__ or "",
             tags=list(cls.tags),
-            config_schema=strip_internal_fields(raw),
+            config_schema=cls.config_schema(),
+            relations=dict(cls.relation_types),
             resources={name: res_cls.key for name, res_cls in res_types.items()},
         )
 

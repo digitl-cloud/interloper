@@ -44,11 +44,26 @@ def dump_spec_value(value: Any) -> Any:
     return to_jsonable_python(value)
 
 
+class RelationDefinition(BaseModel):
+    """One relation type a component kind may declare toward other components.
+
+    ``kinds`` lists the component kinds a relation of this type may point at;
+    ``slotted`` marks relations that carry a slot (a resource slot name, a
+    dependency parameter name).
+    """
+
+    kinds: list[str]
+    slotted: bool = False
+
+
 class ComponentDefinition(BaseModel):
     """Read-only view of a Component class's metadata.
 
     Returned by ``Component.definition()``. Not a separate architectural
     entity — just a structured projection of the class for API consumers.
+    Every kind is self-describing: ``config_schema`` is the JSON Schema of
+    its user-configurable fields, ``relations`` the vocabulary of relation
+    types it may declare toward other components.
     """
 
     kind: str
@@ -57,6 +72,9 @@ class ComponentDefinition(BaseModel):
     name: str
     icon: str = ""
     description: str = ""
+    tags: list[str] = Field(default_factory=list)
+    config_schema: dict[str, Any] = Field(default_factory=dict)
+    relations: dict[str, RelationDefinition] = Field(default_factory=dict)
 
 
 class ComponentSpec(BaseModel):
@@ -108,6 +126,10 @@ class Component(BaseModel):
     name: ClassVar[str] = ""
     icon: ClassVar[str] = ""
     resource_types: ClassVar[dict[str, type[Resource]]] = {}
+    relation_types: ClassVar[dict[str, RelationDefinition]] = {}
+    # Class-declared config fields that are framework plumbing, stripped from
+    # the definition's config_schema on top of the always-internal set.
+    internal_fields: ClassVar[frozenset[str]] = frozenset()
 
     id: str = Field(default="")
     resources: dict[str, Any] = Field(default_factory=dict)
@@ -305,6 +327,19 @@ class Component(BaseModel):
         return cast(Self, spec.reconstruct())
 
     @classmethod
+    def config_schema(cls) -> dict[str, Any]:
+        """JSON Schema of the class's user-configurable fields.
+
+        Returns:
+            The stripped schema, or ``{}`` when no configurable field remains.
+        """
+        from interloper.resource.fields import strip_internal_fields
+
+        raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
+        schema = strip_internal_fields(raw, extra=cls.internal_fields)
+        return schema if schema.get("properties") else {}
+
+    @classmethod
     def definition(cls) -> ComponentDefinition:
         """Produce a structured definition of this component class.
 
@@ -318,4 +353,7 @@ class Component(BaseModel):
             name=cls.name or to_label(cls.__name__),
             icon=cls.icon,
             description=cls.__doc__ or "",
+            tags=list(getattr(cls, "tags", [])),
+            config_schema=cls.config_schema(),
+            relations=dict(cls.relation_types),
         )

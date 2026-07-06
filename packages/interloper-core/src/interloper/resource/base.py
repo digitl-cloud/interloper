@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
-
-from pydantic import Field
+from typing import ClassVar
 
 from interloper.component import Component, ComponentDefinition
 from interloper.utils.text import to_label
@@ -17,8 +15,6 @@ class ResourceDefinition(ComponentDefinition):
     this is same-entity data so it's always inlined, never a key reference.
     """
 
-    tags: list[str] = Field(default_factory=list)
-    config_schema: dict[str, Any] = Field(default_factory=dict)
     provider: str | None = None
 
 
@@ -53,10 +49,7 @@ class Resource(Component):
         Returns:
             A ResourceDefinition with metadata and JSON Schema.
         """
-        from interloper.resource.fields import strip_internal_fields
         from interloper.utils.imports import get_object_path
-
-        raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
 
         return ResourceDefinition(
             kind=cls.kind,
@@ -65,6 +58,6 @@ class Resource(Component):
             name=cls.name or to_label(cls.__name__),
             icon=cls.icon,
             description=cls.__doc__ or "",
-            tags=list(getattr(cls, 'tags', [])),
-            config_schema=strip_internal_fields(raw),
+            tags=list(getattr(cls, "tags", [])),
+            config_schema=cls.config_schema(),
         )
