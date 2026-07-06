@@ -113,8 +113,8 @@ class TestDefinition:
         assert defn.path.endswith(".FakeSource")
         assert defn.name
         assert defn.assets == []
-        assert defn.resources == {}
-        assert defn.destinations == []
+        assert defn.relations["resource"].slots == {}
+        assert defn.relations["destination"].keys == []
 
     def test_definition_includes_nested_assets(self):
         defn = FakeSourceWithAssets.definition()

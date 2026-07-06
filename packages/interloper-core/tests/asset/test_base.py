@@ -160,10 +160,9 @@ class TestDefinition:
         assert defn.key == "fake_asset"
         assert defn.path == FakeAsset.classpath()
         assert defn.name
-        assert defn.resources == {}
-        assert defn.destinations == []
-        assert defn.requires == {}
-        assert defn.optional_requires == {}
+        assert defn.relations["resource"].slots == {}
+        assert defn.relations["destination"].keys == []
+        assert defn.relations["dependency"].slots == {}
         assert defn.asset_schema is None
         assert defn.partitioning is None
 
@@ -182,7 +181,19 @@ class TestDefinition:
 
     def test_definition_includes_inferred_resources(self):
         defn = FakeAssetWithResource.definition()
-        assert defn.resources == {"config": FakeResource.key}
+        assert defn.relations["resource"].slots["config"].key == FakeResource.key
+
+    def test_definition_dependency_slots_from_requires(self):
+        from typing import ClassVar
+
+        class FakeDependentAsset(il.Asset):
+            requires: ClassVar[dict[str, str]] = {"upstream": "other_source.things"}
+            optional_requires: ClassVar[dict[str, str]] = {"extra": "other_source.extras"}
+
+        slots = FakeDependentAsset.definition().relations["dependency"].slots
+        assert slots["upstream"].key == "other_source.things"
+        assert slots["upstream"].required is True
+        assert slots["extra"].required is False
 
     def test_definition_includes_asset_schema_when_set(self):
         from typing import ClassVar

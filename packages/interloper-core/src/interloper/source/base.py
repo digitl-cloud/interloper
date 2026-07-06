@@ -72,8 +72,6 @@ class SourceDefinition(ComponentDefinition):
     - ``assets`` are owned by this source, so their definitions are nested
     """
 
-    resources: dict[str, str] = Field(default_factory=dict)
-    destinations: list[str] = Field(default_factory=list)
     assets: list[AssetDefinition] = Field(default_factory=list)
 
 
@@ -166,6 +164,20 @@ class Source(Component):
                 instances.append(asset_cls(**assets[asset_cls.key]))
         data["assets"] = instances
         return data
+
+    @classmethod
+    def relation_definitions(cls) -> dict[str, RelationDefinition]:
+        """Enrich the vocabulary with the source's allowed destination keys.
+
+        Returns:
+            Relation type → enriched definition.
+        """
+        relations = super().relation_definitions()
+        if "destination" in relations:
+            relations["destination"] = relations["destination"].model_copy(
+                update={"keys": [dest_cls.key for dest_cls in cls.destination_types]}
+            )
+        return relations
 
     def model_post_init(self, context: Any) -> None:
         """Instantiate default asset types (if none were supplied) and resolve trickle-down fields."""
@@ -454,9 +466,7 @@ class Source(Component):
             description=cls.__doc__ or "",
             tags=list(cls.tags),
             config_schema=cls.config_schema(),
-            relations=dict(cls.relation_types),
-            destinations=[dest_cls.key for dest_cls in cls.destination_types],
-            resources={name: res_cls.key for name, res_cls in res_types.items()},
+            relations=cls.relation_definitions(),
             assets=[asset_cls.definition().model_copy(update={"source_key": cls.key}) for asset_cls in cls.asset_types],
         )
 

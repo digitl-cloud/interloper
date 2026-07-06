@@ -44,16 +44,32 @@ def dump_spec_value(value: Any) -> Any:
     return to_jsonable_python(value)
 
 
+class RelationSlot(BaseModel):
+    """A declared slot on a slotted relation type.
+
+    ``key`` names the expected component key for the slot (``""`` accepts any
+    component of the relation's kinds); ``required`` distinguishes mandatory
+    slots from optional ones.
+    """
+
+    key: str = ""
+    required: bool = True
+
+
 class RelationDefinition(BaseModel):
     """One relation type a component kind may declare toward other components.
 
     ``kinds`` lists the component kinds a relation of this type may point at;
-    ``slotted`` marks relations that carry a slot (a resource slot name, a
-    dependency parameter name).
+    ``keys`` optionally narrows the allowed destination keys; ``slotted``
+    marks relations that carry a slot, and ``slots`` enumerates the slots a
+    concrete class declares — together they fully describe the pickers a UI
+    renders for the relation.
     """
 
     kinds: list[str]
     slotted: bool = False
+    keys: list[str] = Field(default_factory=list)
+    slots: dict[str, RelationSlot] = Field(default_factory=dict)
 
 
 class ComponentDefinition(BaseModel):
@@ -358,5 +374,24 @@ class Component(BaseModel):
             description=cls.__doc__ or "",
             tags=list(getattr(cls, "tags", [])),
             config_schema=cls.config_schema(),
-            relations=dict(cls.relation_types),
+            relations=cls.relation_definitions(),
         )
+
+    @classmethod
+    def relation_definitions(cls) -> dict[str, RelationDefinition]:
+        """The class's relation vocabulary, enriched with its declared slots.
+
+        The anchor's ``relation_types`` gives the vocabulary; the concrete
+        class contributes the slots — resource slots come from
+        ``resource_types`` here, subclasses layer in what they declare
+        (dependency parameters, allowed destination keys).
+
+        Returns:
+            Relation type → enriched definition.
+        """
+        relations = dict(cls.relation_types)
+        if "resource" in relations:
+            relations["resource"] = relations["resource"].model_copy(
+                update={"slots": {name: RelationSlot(key=res.key) for name, res in cls.resource_types.items()}}
+            )
+        return relations

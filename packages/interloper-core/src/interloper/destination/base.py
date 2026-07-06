@@ -5,8 +5,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, ClassVar
 
-from pydantic import Field
-
 from interloper.component import Component, ComponentDefinition, RelationDefinition
 from interloper.destination.context import IOContext
 from interloper.resource import Resource
@@ -22,8 +20,6 @@ class DestinationDefinition(ComponentDefinition):
     Same-entity data is inlined:
     - ``config_schema`` is the destination's own JSON Schema
     """
-
-    resources: dict[str, str] = Field(default_factory=dict)
 
 
 class Destination(Component):
@@ -79,8 +75,7 @@ class Destination(Component):
             description=cls.__doc__ or "",
             tags=list(cls.tags),
             config_schema=cls.config_schema(),
-            relations=dict(cls.relation_types),
-            resources={name: res_cls.key for name, res_cls in res_types.items()},
+            relations=cls.relation_definitions(),
         )
 
     @abstractmethod
