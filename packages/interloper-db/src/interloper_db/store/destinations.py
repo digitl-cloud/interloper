@@ -5,62 +5,26 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from interloper.errors import NotFoundError
+from sqlmodel import Session
 
 from interloper_db.engine import get_engine
-from interloper_db.models import Destination, DestinationResource
-
-
-def _load_destination(session: Session, destination_id: UUID) -> Destination:
-    """Load a destination with resources eager-loaded."""
-    statement = (
-        select(Destination)
-        .where(Destination.id == destination_id)
-        .options(selectinload(Destination.resources))  # ty: ignore[invalid-argument-type]
-    )
-    db_destination = session.exec(statement).first()
-    if not db_destination:
-        from interloper.errors import NotFoundError
-
-        raise NotFoundError(f"Destination {destination_id} not found")
-    return db_destination
-
-
-def _sync_resource_bindings(
-    session: Session,
-    db_destination: Destination,
-    resources: dict[str, str] | None,
-) -> None:
-    """Replace all resource bindings for a destination."""
-    existing_bindings = session.exec(
-        select(DestinationResource).where(DestinationResource.destination_id == db_destination.id)
-    ).all()
-    for binding in existing_bindings:
-        session.delete(binding)
-    for key, resource_id in (resources or {}).items():
-        session.add(
-            DestinationResource(destination_id=db_destination.id, resource_id=UUID(resource_id), key=key)
-        )
+from interloper_db.models import Component
+from interloper_db.store.components import list_components, load_component, sync_relations
 
 
 class DestinationMixin:
     """Store methods for destination CRUD."""
 
-    def list_destinations(self, org_id: UUID) -> list[Destination]:
+    def list_destinations(self, org_id: UUID) -> list[Component]:
         """List all destinations for an organisation."""
         with Session(get_engine()) as session:
-            statement = (
-                select(Destination)
-                .where(Destination.org_id == org_id)
-                .options(selectinload(Destination.resources))  # ty: ignore[invalid-argument-type]
-            )
-            return list(session.exec(statement).all())
+            return list_components(session, org_id, kind="destination")
 
-    def get_destination(self, destination_id: UUID) -> Destination:
+    def get_destination(self, destination_id: UUID) -> Component:
         """Get a single destination by ID."""
         with Session(get_engine()) as session:
-            return _load_destination(session, destination_id)
+            return load_component(session, destination_id, kind="destination")
 
     def create_destination(
         self,
@@ -70,22 +34,16 @@ class DestinationMixin:
         name: str | None = None,
         config: dict[str, Any] | None = None,
         resources: dict[str, str] | None = None,
-    ) -> Destination:
+    ) -> Component:
         """Create a standalone destination."""
         with Session(get_engine()) as session:
-            db_destination = Destination(
-                org_id=org_id,
-                key=key,
-                name=name,
-                config=config,
-            )
+            db_destination = Component(org_id=org_id, kind="destination", key=key, name=name, config=config)
             session.add(db_destination)
             session.flush()
-            created_id = db_destination.id
-            _sync_resource_bindings(session, db_destination, resources)
+            bindings = {slot: UUID(rid) for slot, rid in (resources or {}).items()}
+            sync_relations(session, db_destination, "resource", bindings)
             session.commit()
-        with Session(get_engine()) as session:
-            return _load_destination(session, created_id)
+            return load_component(session, db_destination.id, kind="destination")
 
     def update_destination(
         self,
@@ -94,29 +52,26 @@ class DestinationMixin:
         name: str | None = None,
         config: dict[str, Any] | None = None,
         resources: dict[str, str] | None = None,
-    ) -> Destination:
+    ) -> Component:
         """Update a destination's config/resources."""
         with Session(get_engine()) as session:
-            db_destination = session.get(Destination, destination_id)
-            if not db_destination:
-                from interloper.errors import NotFoundError
-
+            db_destination = session.get(Component, destination_id)
+            if not db_destination or db_destination.kind != "destination":
                 raise NotFoundError(f"Destination {destination_id} not found")
             if name is not None:
                 db_destination.name = name
             if config is not None:
                 db_destination.config = config
             if resources is not None:
-                _sync_resource_bindings(session, db_destination, resources)
+                bindings = {slot: UUID(rid) for slot, rid in resources.items()}
+                sync_relations(session, db_destination, "resource", bindings)
             session.commit()
-        with Session(get_engine()) as session:
-            return _load_destination(session, destination_id)
+            return load_component(session, destination_id, kind="destination")
 
     def delete_destination(self, destination_id: UUID) -> None:
-        """Delete a destination. Source and resource bindings cascade via FK."""
+        """Delete a destination. Bindings cascade via the relation FKs."""
         with Session(get_engine()) as session:
-            db_destination = session.get(Destination, destination_id)
-            if not db_destination:
-                return
-            session.delete(db_destination)
-            session.commit()
+            db_destination = session.get(Component, destination_id)
+            if db_destination and db_destination.kind == "destination":
+                session.delete(db_destination)
+                session.commit()

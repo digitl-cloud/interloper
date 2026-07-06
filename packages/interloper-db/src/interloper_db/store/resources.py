@@ -1,4 +1,9 @@
-"""Resource persistence: CRUD, hydration, and encryption."""
+"""Resource persistence: CRUD, hydration, and encryption.
+
+Resources are components whose payload lives in the encrypted ``data``
+column rather than ``config`` — user credentials never touch a plaintext
+column unless explicitly opted out.
+"""
 
 from __future__ import annotations
 
@@ -8,11 +13,11 @@ from uuid import UUID
 
 import interloper as il
 from interloper.errors import ConfigError, HydrationError, ResourceNotFoundError
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from interloper_db.engine import get_engine
-from interloper_db.hydration import Hydrator
-from interloper_db.models import Resource
+from interloper_db.hydration import SECRET_KINDS, Hydrator
+from interloper_db.models import Component
 
 
 class ResourceMixin:
@@ -60,7 +65,7 @@ class ResourceMixin:
         name: str,
         data: dict[str, Any],
         encrypted: bool | None = None,
-    ) -> Resource:
+    ) -> Component:
         """Create a new resource.
 
         Args:
@@ -73,12 +78,12 @@ class ResourceMixin:
                 configured key); ``False`` to opt out and store plaintext.
 
         Returns:
-            The saved Resource row.
+            The saved component row.
         """
         raw, encrypted = self._encode_data(data, encrypted)
 
         with Session(get_engine()) as session:
-            db_resource = Resource(
+            db_resource = Component(
                 org_id=org_id,
                 kind=kind,
                 key=key,
@@ -100,7 +105,7 @@ class ResourceMixin:
         name: str,
         data: dict[str, Any],
         encrypted: bool | None = None,
-    ) -> Resource:
+    ) -> Component:
         """Update an existing resource.
 
         Args:
@@ -113,7 +118,7 @@ class ResourceMixin:
                 configured key); ``False`` to opt out and store plaintext.
 
         Returns:
-            The updated Resource row.
+            The updated component row.
 
         Raises:
             ResourceNotFoundError: If the resource is not found.
@@ -121,8 +126,8 @@ class ResourceMixin:
         raw, encrypted = self._encode_data(data, encrypted)
 
         with Session(get_engine()) as session:
-            db_resource = session.get(Resource, resource_id)
-            if not db_resource:
+            db_resource = session.get(Component, resource_id)
+            if not db_resource or db_resource.kind not in SECRET_KINDS:
                 raise ResourceNotFoundError(f"Resource {resource_id} not found")
             db_resource.kind = kind
             db_resource.key = key
@@ -133,25 +138,25 @@ class ResourceMixin:
             session.refresh(db_resource)
             return db_resource
 
-    def load_resource(self, resource_id: UUID) -> Resource:
+    def load_resource(self, resource_id: UUID) -> Component:
         """Load a resource row by ID.
 
         Args:
             resource_id: The resource UUID.
 
         Returns:
-            The Resource row.
+            The component row.
 
         Raises:
             ResourceNotFoundError: If the resource is not found.
         """
         with Session(get_engine()) as session:
-            db_resource = session.get(Resource, resource_id)
-            if not db_resource:
+            db_resource = session.get(Component, resource_id)
+            if not db_resource or db_resource.kind not in SECRET_KINDS:
                 raise ResourceNotFoundError(f"Resource {resource_id} not found")
             return db_resource
 
-    def list_resources(self, org_id: UUID, kind: str | None = None) -> list[Resource]:
+    def list_resources(self, org_id: UUID, kind: str | None = None) -> list[Component]:
         """List resources, optionally filtered by kind.
 
         Args:
@@ -159,27 +164,28 @@ class ResourceMixin:
             kind: Optional resource kind filter.
 
         Returns:
-            List of matching Resource rows.
+            List of matching component rows.
         """
         with Session(get_engine()) as session:
-            statement = select(Resource).where(Resource.org_id == org_id)
-            if kind:
-                statement = statement.where(Resource.kind == kind)
+            statement = select(Component).where(
+                Component.org_id == org_id,
+                col(Component.kind).in_([kind] if kind else list(SECRET_KINDS)),
+            )
             return list(session.exec(statement).all())
 
     def delete_resource(self, resource_id: UUID) -> None:
-        """Delete a resource by ID. Source and destination bindings cascade via FK.
+        """Delete a resource by ID. Bindings cascade via the relation FKs.
 
         Args:
             resource_id: The resource UUID.
         """
         with Session(get_engine()) as session:
-            db_resource = session.get(Resource, resource_id)
+            db_resource = session.get(Component, resource_id)
             if db_resource:
                 session.delete(db_resource)
                 session.commit()
 
-    def hydrate_resource(self, db_resource: Resource) -> il.Resource:
+    def hydrate_resource(self, db_resource: Component) -> il.Resource:
         """Hydrate a framework Resource from a DB row.
 
         Delegates to :class:`~interloper_db.hydration.Hydrator` to build a
@@ -187,12 +193,13 @@ class ResourceMixin:
         ``spec.reconstruct()``.
 
         Args:
-            db_resource: The DB Resource row.
+            db_resource: The DB component row.
 
         Returns:
             The hydrated framework Resource instance.
         """
-        spec = self._hydrator.build_resource_spec(db_resource)
+        with Session(get_engine()) as session:
+            spec = self._hydrator.build_component_spec(session, db_resource)
         try:
             return cast(il.Resource, spec.reconstruct())
         except Exception as e:
@@ -200,17 +207,17 @@ class ResourceMixin:
                 f"Failed to hydrate resource '{db_resource.key}' ({db_resource.id}): {e}"
             ) from e
 
-    def decode_resource_data(self, db_resource: Resource) -> dict[str, Any]:
-        """Return the decoded ``data`` blob of a Resource row.
+    def decode_resource_data(self, db_resource: Component) -> dict[str, Any]:
+        """Return the decoded ``data`` blob of a resource row.
 
-        Thin wrapper around :meth:`Hydrator.decode_resource_data` for
-        API consumers that want the raw config dict (e.g. for display
-        in an admin UI) without reconstructing the Resource.
+        Thin wrapper around :meth:`Hydrator.decode_data` for API consumers
+        that want the raw config dict (e.g. for display in an admin UI)
+        without reconstructing the Resource.
 
         Args:
-            db_resource: The DB Resource row.
+            db_resource: The DB component row.
 
         Returns:
             The decoded (and decrypted, when applicable) config dict.
         """
-        return self._hydrator.decode_resource_data(db_resource)
+        return self._hydrator.decode_data(db_resource)

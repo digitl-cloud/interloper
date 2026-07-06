@@ -7,8 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.errors import NotFoundError
-from interloper_db import Profile, Store
-from interloper_db.models import Job
+from interloper_db import JobRecord, Profile, Store
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (
@@ -69,7 +68,7 @@ class BackfillRequest(BaseModel):
     fail_fast: bool = False
 
 
-def _load_authorized_job(job_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Job:
+def _load_authorized_job(job_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> JobRecord:
     """Load a job and authorize the user by membership in its org.
 
     Args:
@@ -79,7 +78,7 @@ def _load_authorized_job(job_id: UUID, user: Profile, store: Store, *, minimum: 
         minimum: Minimum role required in the job's organisation.
 
     Returns:
-        The Job row.
+        The job record.
 
     Raises:
         HTTPException: 404 if missing or the user is not a member of the
@@ -93,15 +92,8 @@ def _load_authorized_job(job_id: UUID, user: Profile, store: Store, *, minimum: 
     return job
 
 
-def _job_to_response(job: Job) -> JobResponse:
-    """Convert a DB Job to a JobResponse.
-
-    Args:
-        job: The DB Job row with sources loaded.
-
-    Returns:
-        The response model.
-    """
+def _job_to_response(job: JobRecord) -> JobResponse:
+    """Convert a JobRecord to a JobResponse."""
     return JobResponse(
         id=job.id,
         org_id=job.org_id,
@@ -111,8 +103,8 @@ def _job_to_response(job: Job) -> JobResponse:
         enabled=job.enabled,
         partitioned=job.partitioned,
         backfill_days=job.backfill_days,
-        source_ids=[s.id for s in job.sources],
-        asset_ids=[a.id for a in job.assets if a.id],
+        source_ids=job.source_ids,
+        asset_ids=job.asset_ids,
         last_run_at=str(job.last_run_at) if job.last_run_at else None,
         next_run_at=str(job.next_run_at) if job.next_run_at else None,
         created_at=str(job.created_at) if job.created_at else None,
@@ -160,7 +152,7 @@ def create_job(
         partitioned=body.partitioned,
         backfill_days=body.backfill_days,
     )
-    return _job_to_response(store.get_job(job.id))
+    return _job_to_response(job)
 
 
 @router.put("/{job_id}")
@@ -186,7 +178,7 @@ def update_job(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    return _job_to_response(store.get_job(job.id))
+    return _job_to_response(job)
 
 
 @router.delete("/{job_id}")

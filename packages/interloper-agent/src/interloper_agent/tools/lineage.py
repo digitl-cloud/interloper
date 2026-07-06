@@ -28,13 +28,13 @@ def get_upstream(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
 
         upstream = []
         for dep in deps:
-            if dep.asset_id == target:
-                asset = store.get_asset(dep.upstream_asset_id)
+            if dep.src_id == target:
+                asset = store.get_asset(dep.dst_id)
                 upstream.append({
-                    "upstream_asset_id": str(dep.upstream_asset_id),
-                    "param_name": dep.param_name,
+                    "upstream_asset_id": str(dep.dst_id),
+                    "param_name": dep.slot,
                     "asset_key": asset.key,
-                    "source_id": str(asset.source_id),
+                    "source_id": str(asset.parent_id),
                 })
 
         return {"status": "success", "asset_id": asset_id, "upstream": upstream}
@@ -58,13 +58,13 @@ def get_downstream(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
 
         downstream = []
         for dep in deps:
-            if dep.upstream_asset_id == target:
-                asset = store.get_asset(dep.asset_id)
+            if dep.dst_id == target:
+                asset = store.get_asset(dep.src_id)
                 downstream.append({
-                    "asset_id": str(dep.asset_id),
-                    "param_name": dep.param_name,
+                    "asset_id": str(dep.src_id),
+                    "param_name": dep.slot,
                     "asset_key": asset.key,
-                    "source_id": str(asset.source_id),
+                    "source_id": str(asset.parent_id),
                 })
 
         return {"status": "success", "asset_id": asset_id, "downstream": downstream}
@@ -176,20 +176,20 @@ def cross_source_dependencies(tool_context: ToolContext) -> dict[str, Any]:
         for a in assets:
             if not a.id:
                 continue
-            asset_source[a.id] = a.source_id
-            asset_info[a.id] = {"asset_key": a.key, "source_id": str(a.source_id) if a.source_id else ""}
+            asset_source[a.id] = a.parent_id
+            asset_info[a.id] = {"asset_key": a.key, "source_id": str(a.parent_id) if a.parent_id else ""}
 
         cross_deps = []
         for dep in deps:
-            src_down = asset_source.get(dep.asset_id)
-            src_up = asset_source.get(dep.upstream_asset_id)
+            src_down = asset_source.get(dep.src_id)
+            src_up = asset_source.get(dep.dst_id)
             if src_down and src_up and src_down != src_up:
                 cross_deps.append({
-                    "downstream_asset_id": str(dep.asset_id),
-                    "downstream": asset_info.get(dep.asset_id, {}),
-                    "upstream_asset_id": str(dep.upstream_asset_id),
-                    "upstream": asset_info.get(dep.upstream_asset_id, {}),
-                    "param_name": dep.param_name,
+                    "downstream_asset_id": str(dep.src_id),
+                    "downstream": asset_info.get(dep.src_id, {}),
+                    "upstream_asset_id": str(dep.dst_id),
+                    "upstream": asset_info.get(dep.dst_id, {}),
+                    "param_name": dep.slot,
                 })
 
         return {"status": "success", "cross_source_count": len(cross_deps), "dependencies": cross_deps}
@@ -224,9 +224,9 @@ def _build_adjacency(
     for a in assets:
         if not a.id:
             continue
-        asset_info[a.id] = {"asset_key": a.key, "source_id": str(a.source_id) if a.source_id else ""}
-        if a.source and a.source_id:
-            source_keys[a.source_id] = a.source.key
+        asset_info[a.id] = {"asset_key": a.key, "source_id": str(a.parent_id) if a.parent_id else ""}
+        if a.parent and a.parent_id:
+            source_keys[a.parent_id] = a.parent.key
 
     # Add source_key to asset_info
     for uid, info in asset_info.items():
@@ -239,8 +239,8 @@ def _build_adjacency(
     adj: dict[UUID, list[UUID]] = defaultdict(list)
     for dep in deps:
         if direction == "upstream":
-            adj[dep.asset_id].append(dep.upstream_asset_id)
+            adj[dep.src_id].append(dep.dst_id)
         else:
-            adj[dep.upstream_asset_id].append(dep.asset_id)
+            adj[dep.dst_id].append(dep.src_id)
 
     return adj, asset_info

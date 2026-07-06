@@ -1,33 +1,48 @@
 """SQLModel database models for interloper persistence.
 
-The schema is designed around the principle that the framework's catalog
-(Python class definitions) provides the schema, and the database stores
-user-provided instance data.
+The schema mirrors the framework's own model: everything is a Component,
+persisted in a single ``components`` table, with typed relations in a single
+``component_relations`` table. The catalog (Python class definitions) provides
+the schema; the database stores instance data.
 
 Key design decisions:
-- Resources are first-class: typed, named, optionally encrypted.
-- Sources and destinations reference resources via junction tables.
-- Assets are thin rows — metadata comes from the catalog.
+- One row per component instance; ``kind`` discriminates. New kinds need no
+  schema changes.
+- Three payload columns with distinct contracts: ``config`` (the spec — user
+  intent, the ComponentSpec init payload), ``state`` (machine-owned runtime
+  state, written only by operators via targeted updates, always safe to
+  discard), and ``data`` (Fernet-encrypted secrets).
+- Relations carry ``org_id``/``src_kind``/``dst_kind`` denormalized but drift-proof:
+  composite foreign keys onto ``UNIQUE (id, org_id, kind)`` force them to match
+  the referenced rows, giving DB-level kind- and tenant-safety.
 - Auth tables (profiles, organisations, sessions) live alongside data
   models so that ``create_all()`` provisions everything in one shot.
 """
 
 import datetime as dt
 from datetime import datetime
-from typing import Any, ClassVar
-from uuid import UUID
+from typing import Any, ClassVar, Optional
+from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index
-from sqlmodel import ARRAY, JSON, Column, LargeBinary, Relationship, SQLModel, String, text
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import Column, LargeBinary, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
 # All datetime columns use TIMESTAMPTZ so SQLAlchemy returns timezone-aware values.
 TZDateTime = DateTime(timezone=True)
 
+# JSONB on Postgres; plain JSON elsewhere (in-memory SQLite test databases).
+PortableJSON = JSON().with_variant(JSONB(), "postgresql")
+
 
 def _ts(**kwargs: Any) -> Any:
-    """Shorthand for a nullable TIMESTAMPTZ column with server_default=now()."""
-    return SQLField(default=None, sa_column=Column(TZDateTime, server_default=text("now()"), **kwargs))
+    """Shorthand for a nullable TIMESTAMPTZ column defaulting to the insert time.
+
+    ``CURRENT_TIMESTAMP`` rather than ``now()`` so the tables also work on the
+    in-memory SQLite databases the tests use (identical semantics on Postgres).
+    """
+    return SQLField(default=None, sa_column=Column(TZDateTime, server_default=text("CURRENT_TIMESTAMP"), **kwargs))
 
 
 # -- Auth & Organisation -----------------------------------------------------
@@ -113,293 +128,144 @@ class Session(SQLModel, table=True):
     created_at: datetime | None = _ts()
 
 
-# -- Junction tables (defined first to avoid forward references) ---------------
+# -- Components ----------------------------------------------------------------
 
 
-class SourceResource(SQLModel, table=True):
-    """Junction: binds a named resource slot on a source to a resource instance."""
+class Component(SQLModel, table=True):
+    """A persisted component instance of any kind.
 
-    __tablename__: ClassVar[str] = "source_resources"
-
-    source_id: UUID = SQLField(sa_column=Column(ForeignKey("sources.id", ondelete="CASCADE"), primary_key=True))
-    resource_id: UUID = SQLField(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True))
-    key: str = SQLField(primary_key=True)
-
-
-class SourceDestination(SQLModel, table=True):
-    """Junction: binds a source to a destination."""
-
-    __tablename__: ClassVar[str] = "source_destinations"
-
-    source_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("sources.id", ondelete="CASCADE"), primary_key=True),
-    )
-    destination_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("destinations.id", ondelete="CASCADE"), primary_key=True),
-    )
-
-
-class AssetResource(SQLModel, table=True):
-    """Junction: binds a named resource slot on an asset to a resource instance."""
-
-    __tablename__: ClassVar[str] = "asset_resources"
-
-    asset_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True),
-    )
-    resource_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True),
-    )
-    key: str = SQLField(primary_key=True)
-
-
-class AssetDestination(SQLModel, table=True):
-    """Junction: binds an asset to a destination."""
-
-    __tablename__: ClassVar[str] = "asset_destinations"
-
-    asset_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True),
-    )
-    destination_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("destinations.id", ondelete="CASCADE"), primary_key=True),
-    )
-
-
-class AssetDependency(SQLModel, table=True):
-    """Dependency edge between assets (intra or cross-source).
-
-    ``param_name`` is the function parameter on the downstream asset
-    that receives the upstream asset's data at materialization time.
+    ``kind``/``key`` mirror the framework class identity; ``parent_id`` models
+    ownership (asset → source, cascading on delete). ``config`` holds the
+    spec, ``state`` holds operator-written runtime state, ``data`` holds the
+    encrypted payload of secret-bearing kinds.
     """
 
-    __tablename__: ClassVar[str] = "asset_dependencies"
-
-    asset_id: UUID = SQLField(
-        sa_column=Column(None, ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True),
-    )
-    upstream_asset_id: UUID = SQLField(
-        sa_column=Column(None, ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True),
-    )
-    param_name: str = SQLField(primary_key=True)  # TODO: rename to `slot`
-
-
-class DestinationResource(SQLModel, table=True):
-    """Junction: binds a named resource slot on a destination to a resource instance."""
-
-    __tablename__: ClassVar[str] = "destination_resources"
-
-    destination_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("destinations.id", ondelete="CASCADE"), primary_key=True),
-    )
-    resource_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True),
-    )
-    key: str = SQLField(primary_key=True)
-
-
-class JobSource(SQLModel, table=True):
-    """Junction: binds a job to a source."""
-
-    __tablename__: ClassVar[str] = "job_sources"
-
-    job_id: UUID = SQLField(sa_column=Column(ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True))
-    source_id: UUID = SQLField(sa_column=Column(ForeignKey("sources.id", ondelete="CASCADE"), primary_key=True))
-
-
-class JobAsset(SQLModel, table=True):
-    """Junction: binds a job to a standalone asset."""
-
-    __tablename__: ClassVar[str] = "job_assets"
-
-    job_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True),
-    )
-    asset_id: UUID = SQLField(
-        sa_column=Column(ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True),
+    __tablename__: ClassVar[str] = "components"
+    __table_args__: ClassVar[tuple[Any, ...]] = (
+        UniqueConstraint("id", "org_id", "kind", name="uq_components_id_org_kind"),
+        Index("ix_components_org_id_kind", "org_id", "kind"),
+        CheckConstraint("parent_id IS NULL OR kind = 'asset'", name="ck_components_parent_kind"),
+        CheckConstraint(
+            "data IS NULL OR kind IN ('connection', 'config', 'resource')",
+            name="ck_components_data_kind",
+        ),
     )
 
-
-# -- Resources ----------------------------------------------------------------
-
-
-class Resource(SQLModel, table=True):
-    """A typed, named resource instance (config, connection, credentials).
-
-    The ``kind`` field is the functional category (e.g. ``"connection"``,
-    ``"config"``). The ``key`` field is the catalog key that identifies
-    the resource class. When ``encrypted`` is True, the ``data`` column
-    contains the encrypted blob of the entire JSON config.
-    """
-
-    __tablename__: ClassVar[str] = "resources"
-
+    # Python-side default (not just gen_random_uuid()) so the store can wire
+    # relations to a component before flush, and inserts work on SQLite tests.
     id: UUID = SQLField(
-        default=None,
+        default_factory=uuid4,
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
     )
-    org_id: UUID = SQLField(index=True)
+    org_id: UUID
     kind: str
     key: str = SQLField(index=True)
-    name: str
+    name: str | None = None
+    parent_id: UUID | None = SQLField(
+        default=None,
+        sa_column=Column(ForeignKey("components.id", ondelete="CASCADE"), index=True, nullable=True),
+    )
+    config: dict[str, Any] | None = SQLField(default=None, sa_column=Column(PortableJSON))
+    state: dict[str, Any] | None = SQLField(default=None, sa_column=Column(PortableJSON))
     data: bytes | None = SQLField(default=None, sa_column=Column(LargeBinary))
     encrypted: bool = False
     created_at: datetime | None = _ts()
     updated_at: datetime | None = _ts()
 
-
-# -- Sources ------------------------------------------------------------------
-
-
-class Source(SQLModel, table=True):
-    """A registered source instance.
-
-    User decisions are stored directly on the row:
-    - ``config`` — source config field values (account_id, etc.)
-
-    Resource and destination bindings are stored via junction tables
-    (``source_resources`` and ``source_destinations``).
-    Asset enablement is controlled per-asset via ``Asset.materializable``.
-    """
-
-    __tablename__: ClassVar[str] = "sources"
-
-    id: UUID = SQLField(
-        default=None,
-        primary_key=True,
-        sa_column_kwargs={"server_default": text("gen_random_uuid()")},
+    parent: Optional["Component"] = Relationship(  # noqa: UP045 — SQLModel can't resolve the union string form
+        back_populates="children",
+        sa_relationship_kwargs={"remote_side": "Component.id"},
     )
-    org_id: UUID = SQLField(index=True)
-    key: str = SQLField(index=True)
-    name: str
-    config: dict[str, Any] | None = SQLField(default=None, sa_column=Column(JSON))
-    created_at: datetime | None = _ts()
-    updated_at: datetime | None = _ts()
-
-    assets: list["Asset"] = Relationship(
-        back_populates="source",
+    children: list["Component"] = Relationship(
+        back_populates="parent",
         sa_relationship_kwargs={"passive_deletes": True},
     )
-    jobs: list["Job"] = Relationship(
-        back_populates="sources",
-        link_model=JobSource,
-        sa_relationship_kwargs={"passive_deletes": True},
+    out_relations: list["ComponentRelation"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "Component.id == foreign(ComponentRelation.src_id)",
+            "viewonly": True,
+        },
     )
-    resources: list["Resource"] = Relationship(
-        link_model=SourceResource,
-        sa_relationship_kwargs={"viewonly": True},
-    )
-    destinations: list["Destination"] = Relationship(
-        link_model=SourceDestination,
-        sa_relationship_kwargs={"viewonly": True},
+    in_relations: list["ComponentRelation"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "Component.id == foreign(ComponentRelation.dst_id)",
+            "viewonly": True,
+        },
     )
 
 
-# -- Assets -------------------------------------------------------------------
+class ComponentRelation(SQLModel, table=True):
+    """A typed, directed relation between two components.
 
+    ``type`` names the relation; ``slot`` disambiguates multiple relations of
+    the same type on one source component (a resource slot name, a dependency
+    parameter name — empty when the relation has no slot semantics).
 
-class Asset(SQLModel, table=True):
-    """The primary data entity — represents a single materializable dataset.
-
-    Assets may belong to a source (grouped, with inherited config/resources)
-    or be standalone (source_id is None, with their own bindings).
-    Per-asset config overrides are stored in ``config`` and take precedence
-    over source-level config during hydration.
+    Checks constrain the types the schema knows and permit any type they
+    don't, so new relation types need no schema change.
     """
 
-    __tablename__: ClassVar[str] = "assets"
-
-    id: UUID = SQLField(
-        default=None,
-        primary_key=True,
-        sa_column_kwargs={"server_default": text("gen_random_uuid()")},
-    )
-    source_id: UUID | None = SQLField(
-        default=None,
-        sa_column=Column(None, ForeignKey("sources.id", ondelete="CASCADE"), index=True, nullable=True),
-    )
-    org_id: UUID = SQLField(index=True)
-    key: str
-    materializable: bool = True
-    config: dict[str, Any] | None = SQLField(default=None, sa_column=Column(JSON))
-    created_at: datetime | None = _ts()
-
-    source: Source | None = Relationship(back_populates="assets")
-    resources: list["Resource"] = Relationship(
-        link_model=AssetResource,
-        sa_relationship_kwargs={"viewonly": True},
-    )
-    destinations: list["Destination"] = Relationship(
-        link_model=AssetDestination,
-        sa_relationship_kwargs={"viewonly": True},
-    )
-
-
-# -- Destinations -------------------------------------------------------------
-
-
-class Destination(SQLModel, table=True):
-    """A standalone destination instance — global, not owned by any source.
-
-    Like connections, destinations are independent entities that sources
-    reference by ID.  A single destination can be used by multiple sources.
-    Resource bindings are stored via the ``destination_resources`` junction table.
-    """
-
-    __tablename__: ClassVar[str] = "destinations"
-
-    id: UUID = SQLField(
-        default=None,
-        primary_key=True,
-        sa_column_kwargs={"server_default": text("gen_random_uuid()")},
-    )
-    org_id: UUID = SQLField(index=True)
-    key: str = SQLField(index=True)
-    name: str | None = None
-    config: dict[str, Any] | None = SQLField(default=None, sa_column=Column(JSON))
-    created_at: datetime | None = _ts()
-
-    resources: list["Resource"] = Relationship(
-        link_model=DestinationResource,
-        sa_relationship_kwargs={"viewonly": True},
+    __tablename__: ClassVar[str] = "component_relations"
+    __table_args__: ClassVar[tuple[Any, ...]] = (
+        ForeignKeyConstraint(
+            ["src_id", "org_id", "src_kind"],
+            ["components.id", "components.org_id", "components.kind"],
+            ondelete="CASCADE",
+            name="fk_component_relations_src",
+        ),
+        ForeignKeyConstraint(
+            ["dst_id", "org_id", "dst_kind"],
+            ["components.id", "components.org_id", "components.kind"],
+            ondelete="CASCADE",
+            name="fk_component_relations_dst",
+        ),
+        CheckConstraint(
+            "type <> 'dependency' OR (src_kind = 'asset' AND dst_kind = 'asset')",
+            name="ck_component_relations_dependency",
+        ),
+        CheckConstraint(
+            "type <> 'resource' OR dst_kind IN ('connection', 'config', 'resource')",
+            name="ck_component_relations_resource",
+        ),
+        CheckConstraint(
+            "type <> 'destination' OR (dst_kind = 'destination' AND slot = '')",
+            name="ck_component_relations_destination",
+        ),
+        CheckConstraint(
+            "type <> 'target' OR (src_kind = 'job' AND dst_kind IN ('source', 'asset') AND slot = '')",
+            name="ck_component_relations_target",
+        ),
+        Index(
+            "uq_component_relations_slot",
+            "src_id",
+            "type",
+            "slot",
+            unique=True,
+            postgresql_where=text("type IN ('resource', 'dependency')"),
+            sqlite_where=text("type IN ('resource', 'dependency')"),
+        ),
+        Index("ix_component_relations_org_id_type", "org_id", "type"),
+        Index("ix_component_relations_dst_id_type", "dst_id", "type"),
     )
 
+    src_id: UUID = SQLField(primary_key=True)
+    type: str = SQLField(primary_key=True)
+    slot: str = SQLField(default="", primary_key=True)
+    dst_id: UUID = SQLField(primary_key=True)
+    org_id: UUID
+    src_kind: str
+    dst_kind: str
 
-# -- Jobs & Scheduling --------------------------------------------------------
-
-
-class Job(SQLModel, table=True):
-    """A cron-scheduled materialization job."""
-
-    __tablename__: ClassVar[str] = "jobs"
-
-    id: UUID = SQLField(
-        default=None,
-        primary_key=True,
-        sa_column_kwargs={"server_default": text("gen_random_uuid()")},
+    dst: Component = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "foreign(ComponentRelation.dst_id) == Component.id",
+            "viewonly": True,
+        },
     )
-    org_id: UUID = SQLField(index=True)
-    name: str
-    cron: str
-    tags: list[str] = SQLField(default_factory=list, sa_column=Column(ARRAY(String)))
-    enabled: bool = True
-    partitioned: bool = False
-    backfill_days: int | None = None
-    created_at: datetime | None = _ts()
-    last_run_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
-    next_run_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
 
-    runs: list["Run"] = Relationship(back_populates="job")
-    sources: list[Source] = Relationship(
-        back_populates="jobs",
-        link_model=JobSource,
-        sa_relationship_kwargs={"passive_deletes": True},
-    )
-    assets: list[Asset] = Relationship(
-        link_model=JobAsset,
-        sa_relationship_kwargs={"viewonly": True},
-    )
+
+# -- Scheduling ----------------------------------------------------------------
 
 
 class Backfill(SQLModel, table=True):
@@ -414,7 +280,7 @@ class Backfill(SQLModel, table=True):
     )
     job_id: UUID | None = SQLField(
         default=None,
-        sa_column=Column(ForeignKey("jobs.id", ondelete="SET NULL"), index=True),
+        sa_column=Column(ForeignKey("components.id", ondelete="SET NULL"), index=True),
     )
     org_id: UUID = SQLField(index=True)
     status: str = "queued"
@@ -427,7 +293,6 @@ class Backfill(SQLModel, table=True):
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = _ts()
 
-    job: Job | None = Relationship()
     runs: list["Run"] = Relationship(back_populates="backfill")
 
 
@@ -450,7 +315,7 @@ class Run(SQLModel, table=True):
     )
     job_id: UUID | None = SQLField(
         default=None,
-        sa_column=Column(ForeignKey("jobs.id", ondelete="SET NULL"), index=True),
+        sa_column=Column(ForeignKey("components.id", ondelete="SET NULL"), index=True),
     )
     org_id: UUID
     backfill_id: UUID | None = SQLField(default=None, foreign_key="backfills.id")
@@ -466,7 +331,6 @@ class Run(SQLModel, table=True):
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = _ts()
 
-    job: Job | None = Relationship(back_populates="runs")
     backfill: Backfill | None = Relationship(back_populates="runs")
 
 

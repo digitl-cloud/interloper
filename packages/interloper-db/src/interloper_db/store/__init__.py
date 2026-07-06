@@ -17,13 +17,18 @@ Usage::
     # Save a new resource
     store.create_resource(org_id, kind="demo_config", name="My Config", ...)
 
-Implementation is split across domain-specific mixins:
+All component kinds persist to the same two tables (``components`` +
+``component_relations``); the shared machinery lives in
+``interloper_db.store.components``. The kind-specific mixins are thin
+facades over it that own the semantics generic code can't: encryption
+(resources), catalog-driven child sync and drift (sources/assets), and
+the flat :class:`~interloper_db.store.jobs.JobRecord` read model (jobs).
 
 - ``AuthMixin`` — profiles, sessions, organisations, memberships
 - ``ResourceMixin`` — resource CRUD, hydration, encryption
-- ``SourceMixin`` — source CRUD, hydration, graph management
+- ``SourceMixin`` — source CRUD, hydration, child-asset sync
 - ``AssetMixin`` — asset get/list/update, dependencies
-- ``JobMixin`` — job CRUD
+- ``JobMixin`` — job CRUD and hydration
 - ``RunMixin`` — runs, events, backfills
 """
 

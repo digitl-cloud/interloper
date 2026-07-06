@@ -1,4 +1,9 @@
-"""Asset persistence: CRUD, hydration, and dependencies."""
+"""Asset persistence: CRUD, hydration, and dependencies.
+
+Assets are component rows — source-owned when ``parent_id`` is set,
+standalone otherwise. ``materializable`` is an init override like any
+other and lives inside ``config``; it defaults to true when absent.
+"""
 
 from __future__ import annotations
 
@@ -7,58 +12,13 @@ from uuid import UUID
 
 import interloper as il
 from interloper.errors import ComponentDriftError, HydrationError, NotFoundError
-from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from interloper_db.drift import ComponentStatus, asset_status
 from interloper_db.engine import get_engine
 from interloper_db.hydration import Hydrator
-from interloper_db.models import (
-    Asset,
-    AssetDependency,
-    AssetDestination,
-    AssetResource,
-    Destination,
-)
-
-
-def _load_asset_with_relations(session: Session, asset_id: UUID) -> Asset:
-    """Load an asset with all relationships eager-loaded."""
-    statement = (
-        select(Asset)
-        .where(Asset.id == asset_id)
-        .options(
-            selectinload(Asset.source),  # ty: ignore[invalid-argument-type]
-            selectinload(Asset.resources),  # ty: ignore[invalid-argument-type]
-            selectinload(Asset.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
-        )
-    )
-    db_asset = session.exec(statement).first()
-    if not db_asset:
-        raise NotFoundError(f"Asset {asset_id} not found")
-    return db_asset
-
-
-def _sync_resource_bindings(session: Session, db_asset: Asset, resources: dict[str, str] | None) -> None:
-    """Replace all resource bindings for an asset."""
-    existing_bindings = session.exec(select(AssetResource).where(AssetResource.asset_id == db_asset.id)).all()
-    for binding in existing_bindings:
-        session.delete(binding)
-    for key, resource_id in (resources or {}).items():
-        session.add(
-            AssetResource(asset_id=db_asset.id, resource_id=UUID(resource_id), key=key)
-        )
-
-
-def _sync_destination_bindings(session: Session, db_asset: Asset, destination_ids: list[str] | None) -> None:
-    """Replace all destination bindings for an asset."""
-    existing_bindings = session.exec(select(AssetDestination).where(AssetDestination.asset_id == db_asset.id)).all()
-    for binding in existing_bindings:
-        session.delete(binding)
-    for destination_id in destination_ids or []:
-        session.add(
-            AssetDestination(asset_id=db_asset.id, destination_id=UUID(destination_id))
-        )
+from interloper_db.models import Component, ComponentRelation
+from interloper_db.store.components import add_relation, list_components, load_component, sync_relations
 
 
 class AssetMixin:
@@ -70,7 +30,6 @@ class AssetMixin:
     if TYPE_CHECKING:
         # Provided by SourceMixin on the composed Store.
         def load_source(self, source_id: UUID) -> il.Source: ...
-
 
     # ------------------------------------------------------------------
     # CRUD
@@ -84,8 +43,8 @@ class AssetMixin:
         config: dict[str, Any] | None = None,
         resources: dict[str, str] | None = None,
         destination_ids: list[str] | None = None,
-    ) -> Asset:
-        """Create a standalone asset (source_id=None).
+    ) -> Component:
+        """Create a standalone asset (no parent source).
 
         Args:
             org_id: Organisation UUID.
@@ -95,38 +54,31 @@ class AssetMixin:
             destination_ids: Optional destination UUIDs.
 
         Returns:
-            The created Asset row with relationships loaded.
+            The created component row with relations loaded.
         """
         with Session(get_engine()) as session:
-            db_asset = Asset(
-                org_id=org_id,
-                key=key,
-                config=config,
-                materializable=True,
-            )
+            db_asset = Component(org_id=org_id, kind="asset", key=key, config=config)
             session.add(db_asset)
             session.flush()
-            created_id = db_asset.id
-            _sync_resource_bindings(session, db_asset, resources)
-            _sync_destination_bindings(session, db_asset, destination_ids)
+            sync_relations(session, db_asset, "resource", {slot: UUID(rid) for slot, rid in (resources or {}).items()})
+            sync_relations(session, db_asset, "destination", [UUID(did) for did in destination_ids or []])
             session.commit()
-        with Session(get_engine()) as session:
-            return _load_asset_with_relations(session, created_id)
+            return load_component(session, db_asset.id, kind="asset")
 
-    def get_asset(self, asset_id: UUID) -> Asset:
-        """Load an asset by ID with relationships.
+    def get_asset(self, asset_id: UUID) -> Component:
+        """Load an asset by ID with relations.
 
         Args:
             asset_id: The asset UUID.
 
         Returns:
-            The Asset row with resources and destinations loaded.
+            The component row with parent, relations, and their destinations loaded.
 
         Raises:
             NotFoundError: If the asset is not found.
         """
         with Session(get_engine()) as session:
-            return _load_asset_with_relations(session, asset_id)
+            return load_component(session, asset_id, kind="asset")
 
     def update_asset(
         self,
@@ -136,7 +88,7 @@ class AssetMixin:
         config: dict[str, Any] | None = None,
         resources: dict[str, str] | None = None,
         destination_ids: list[str] | None = None,
-    ) -> Asset:
+    ) -> Component:
         """Update an asset's configuration, resources, or destinations.
 
         Supports per-asset overrides for both standalone and source-owned assets.
@@ -149,26 +101,29 @@ class AssetMixin:
             destination_ids: Per-asset destination bindings (replaces existing).
 
         Returns:
-            The updated Asset row.
+            The updated component row.
 
         Raises:
             NotFoundError: If the asset is not found.
         """
         with Session(get_engine()) as session:
-            db_asset = session.get(Asset, asset_id)
-            if not db_asset:
+            db_asset = session.get(Component, asset_id)
+            if not db_asset or db_asset.kind != "asset":
                 raise NotFoundError(f"Asset {asset_id} not found")
-            if materializable is not None:
-                db_asset.materializable = materializable
+            merged = dict(db_asset.config or {})
             if config is not None:
-                db_asset.config = config
+                # Replace the user config but keep the materializable toggle
+                # unless this call also sets it.
+                merged = {k: v for k, v in merged.items() if k == "materializable"} | dict(config)
+            if materializable is not None:
+                merged["materializable"] = materializable
+            db_asset.config = merged or None
             if resources is not None:
-                _sync_resource_bindings(session, db_asset, resources)
+                sync_relations(session, db_asset, "resource", {slot: UUID(rid) for slot, rid in resources.items()})
             if destination_ids is not None:
-                _sync_destination_bindings(session, db_asset, destination_ids)
+                sync_relations(session, db_asset, "destination", [UUID(did) for did in destination_ids])
             session.commit()
-        with Session(get_engine()) as session:
-            return _load_asset_with_relations(session, asset_id)
+            return load_component(session, asset_id, kind="asset")
 
     def delete_asset(self, asset_id: UUID) -> None:
         """Delete a standalone asset. Refuses to delete source-owned assets.
@@ -181,34 +136,25 @@ class AssetMixin:
             ValueError: If the asset belongs to a source (use source deletion instead).
         """
         with Session(get_engine()) as session:
-            db_asset = session.get(Asset, asset_id)
-            if not db_asset:
+            db_asset = session.get(Component, asset_id)
+            if not db_asset or db_asset.kind != "asset":
                 raise NotFoundError(f"Asset {asset_id} not found")
-            if db_asset.source_id is not None:
+            if db_asset.parent_id is not None:
                 raise ValueError("Cannot delete a source-owned asset directly. Delete or update the source instead.")
             session.delete(db_asset)
             session.commit()
 
-    def list_assets(self, org_id: UUID) -> list[Asset]:
-        """List all assets for an organisation with relationships loaded.
+    def list_assets(self, org_id: UUID) -> list[Component]:
+        """List all assets for an organisation with relations loaded.
 
         Args:
             org_id: Organisation UUID.
 
         Returns:
-            List of Asset rows.
+            List of component rows.
         """
         with Session(get_engine()) as session:
-            statement = (
-                select(Asset)
-                .where(Asset.org_id == org_id)
-                .options(
-                    selectinload(Asset.source),  # ty: ignore[invalid-argument-type]
-                    selectinload(Asset.resources),  # ty: ignore[invalid-argument-type]
-                    selectinload(Asset.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
-                )
-            )
-            return list(session.exec(statement).all())
+            return list_components(session, org_id, kind="asset")
 
     # ------------------------------------------------------------------
     # Hydration
@@ -232,14 +178,16 @@ class AssetMixin:
             HydrationError: If hydration fails.
         """
         with Session(get_engine()) as session:
-            db_asset = _load_asset_with_relations(session, asset_id)
+            db_asset = session.get(Component, asset_id)
+            if not db_asset or db_asset.kind != "asset":
+                raise NotFoundError(f"Asset {asset_id} not found")
 
-            if db_asset.source_id is not None:
+            if db_asset.parent_id is not None:
                 # Source-owned: hydrate via parent source and extract. A drifted
                 # parent raises ComponentDriftError from load_source; if the
                 # parent is live but no longer declares this key, the asset key
                 # itself has drifted out of the source.
-                source = self.load_source(db_asset.source_id)
+                source = self.load_source(db_asset.parent_id)
                 for asset in source.assets:
                     if type(asset).key == db_asset.key:
                         return asset
@@ -255,7 +203,7 @@ class AssetMixin:
                     f"Asset '{db_asset.key}' ({db_asset.id}) cannot be hydrated: "
                     f"its catalog key is {status.value}."
                 )
-            spec = self._hydrator.build_asset_spec(session, db_asset)
+            spec = self._hydrator.build_component_spec(session, db_asset)
 
         try:
             return cast(il.Asset, spec.reconstruct())
@@ -268,7 +216,7 @@ class AssetMixin:
     # Dependencies
     # ------------------------------------------------------------------
 
-    def add_dependency(self, asset_id: UUID, upstream_asset_id: UUID, param_name: str) -> AssetDependency:
+    def add_dependency(self, asset_id: UUID, upstream_asset_id: UUID, param_name: str) -> ComponentRelation:
         """Add an asset dependency.
 
         Args:
@@ -277,21 +225,22 @@ class AssetMixin:
             param_name: The downstream function parameter this dep wires to.
 
         Returns:
-            The created AssetDependency row.
+            The created dependency relation.
 
         Raises:
             NotFoundError: If either asset does not exist.
         """
         with Session(get_engine()) as session:
-            if not session.get(Asset, asset_id):
+            db_asset = session.get(Component, asset_id)
+            if not db_asset or db_asset.kind != "asset":
                 raise NotFoundError(f"Asset {asset_id} not found")
-            if not session.get(Asset, upstream_asset_id):
+            upstream = session.get(Component, upstream_asset_id)
+            if not upstream or upstream.kind != "asset":
                 raise NotFoundError(f"Upstream asset {upstream_asset_id} not found")
-            dependency = AssetDependency(asset_id=asset_id, upstream_asset_id=upstream_asset_id, param_name=param_name)
-            session.add(dependency)
+            relation = add_relation(session, db_asset, upstream, "dependency", param_name)
             session.commit()
-            session.refresh(dependency)
-            return dependency
+            session.refresh(relation)
+            return relation
 
     def remove_dependency(self, asset_id: UUID, upstream_asset_id: UUID) -> None:
         """Remove an asset dependency.
@@ -301,28 +250,28 @@ class AssetMixin:
             upstream_asset_id: Upstream asset UUID.
         """
         with Session(get_engine()) as session:
-            statement = select(AssetDependency).where(
-                AssetDependency.asset_id == asset_id,
-                AssetDependency.upstream_asset_id == upstream_asset_id,
+            statement = select(ComponentRelation).where(
+                ComponentRelation.src_id == asset_id,
+                ComponentRelation.type == "dependency",
+                ComponentRelation.dst_id == upstream_asset_id,
             )
-            dependency = session.exec(statement).first()
-            if dependency:
-                session.delete(dependency)
-                session.commit()
+            for relation in session.exec(statement).all():
+                session.delete(relation)
+            session.commit()
 
-    def list_dependencies(self, org_id: UUID) -> list[AssetDependency]:
-        """List all asset dependencies for an organisation.
+    def list_dependencies(self, org_id: UUID) -> list[ComponentRelation]:
+        """List all asset dependency relations for an organisation.
 
         Args:
             org_id: Organisation UUID.
 
         Returns:
-            List of AssetDependency rows.
+            List of dependency relations (``src_id`` is the downstream asset,
+            ``dst_id`` the upstream, ``slot`` the parameter name).
         """
         with Session(get_engine()) as session:
-            statement = (
-                select(AssetDependency)
-                .join(Asset, AssetDependency.asset_id == Asset.id)  # ty: ignore[invalid-argument-type]
-                .where(Asset.org_id == org_id)
+            statement = select(ComponentRelation).where(
+                ComponentRelation.org_id == org_id,
+                ComponentRelation.type == "dependency",
             )
             return list(session.exec(statement).all())

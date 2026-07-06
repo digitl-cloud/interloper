@@ -7,10 +7,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.errors import NotFoundError
-from interloper_db import Profile, Store
-from interloper_db.models import Destination, DestinationResource
+from interloper_db import Component, Profile, Store
 from pydantic import BaseModel
 
+from interloper_api.components import resource_map
 from interloper_api.dependencies import (
     authorize_org_member,
     get_current_user,
@@ -43,24 +43,13 @@ class DestinationResponse(BaseModel):
     created_at: str | None = None
 
 
-def _resource_map(dest: Destination) -> dict[str, str]:
-    """Build {slot_key: resource_id} from junction rows."""
-    from interloper_db.engine import get_engine
-    from sqlmodel import Session as _S
-    from sqlmodel import select as _sel
-
-    with _S(get_engine()) as s:
-        rows = s.exec(_sel(DestinationResource).where(DestinationResource.destination_id == dest.id)).all()
-    return {r.key: str(r.resource_id) for r in rows}
-
-
-def _to_response(dest: Destination) -> DestinationResponse:
+def _to_response(dest: Component) -> DestinationResponse:
     return DestinationResponse(
         id=dest.id,
         key=dest.key,
         name=dest.name,
         config=dest.config,
-        resources=_resource_map(dest),
+        resources=resource_map(dest),
         created_at=str(dest.created_at) if dest.created_at else None,
     )
 

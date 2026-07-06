@@ -11,8 +11,7 @@ from uuid import UUID
 import interloper as il
 from interloper.runner import ExecutionStatus, Runner
 from interloper_db import Store, get_engine
-from interloper_db.models import AssetDependency, Job, Run, Source
-from sqlalchemy.orm import selectinload
+from interloper_db.models import ComponentRelation, Run
 from sqlmodel import Session, col, select
 
 logger = logging.getLogger(__name__)
@@ -58,36 +57,40 @@ class RunExecutor:
             logger.info("Starting run %s", run_id)
 
             with Session(get_engine()) as session:
-                db_run = self._load_run(session, run_id)
-                if not db_run or not db_run.job:
+                db_run = session.get(Run, run_id)
+                if not db_run or not db_run.job_id:
                     logger.info("Run %s not found, skipping", run_id)
                     return False
 
+                job_id = db_run.job_id
                 org_id = db_run.org_id
                 backfill_id = str(db_run.backfill_id) if db_run.backfill_id else None
+                partition_date = db_run.partition_date
+                retry_of = db_run.retry_of if db_run.retry_scope == "failed" else None
 
                 self._mark_running(session, db_run)
 
-                assets = self._hydrate_job_assets(db_run.job)
-                if not assets:
-                    logger.info("No sources or assets for run %s, marking success", run_id)
-                    self._store.complete_run(run_id, success=True)
-                    return True
+            job = self._store.load_job(job_id)
+            assets = _job_assets(job)
+            if not assets:
+                logger.info("No sources or assets for run %s, marking success", run_id)
+                self._store.complete_run(run_id, success=True)
+                return True
 
-                self._resolve_upstream_deps(db_run.job, assets)
+            self._resolve_upstream_deps(assets)
 
-                if db_run.retry_scope == "failed" and db_run.retry_of:
-                    self._skip_succeeded_assets(db_run, assets)
+            if retry_of:
+                self._skip_succeeded_assets(retry_of, assets)
 
-                dag = il.DAG(*assets)
-                partition = il.TimePartition(db_run.partition_date) if db_run.partition_date else None
+            dag = il.DAG(*assets)
+            partition = il.TimePartition(partition_date) if partition_date else None
 
-                result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, backfill_id=backfill_id)
+            result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, backfill_id=backfill_id)
 
-                success = result.status == ExecutionStatus.COMPLETED
-                logger.info("Run %s completed: %s", run_id, result.status.name)
-                self._store.complete_run(run_id, success=success)
-                return success
+            success = result.status == ExecutionStatus.COMPLETED
+            logger.info("Run %s completed: %s", run_id, result.status.name)
+            self._store.complete_run(run_id, success=success)
+            return success
 
         except Exception as e:
             logger.exception("Run %s failed: %s", run_id, e)
@@ -110,44 +113,13 @@ class RunExecutor:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _load_run(session: Session, run_id: UUID) -> Run | None:
-        return session.get(
-            Run,
-            run_id,
-            options=[
-                selectinload(Run.job).selectinload(Job.sources).selectinload(Source.assets),  # ty: ignore[invalid-argument-type]
-                selectinload(Run.job).selectinload(Job.assets),  # ty: ignore[invalid-argument-type]
-            ],
-        )
-
-    @staticmethod
     def _mark_running(session: Session, db_run: Run) -> None:
         db_run.status = "running"
         db_run.started_at = dt.datetime.now(dt.timezone.utc)
         session.add(db_run)
         session.commit()
 
-    def _hydrate_job_assets(self, db_job: Job) -> list[il.Asset]:
-        """Hydrate job sources/assets and return only DB-registered assets."""
-        assets: list[il.Asset] = []
-
-        # Source-owned: hydrate the full source, then cherry-pick registered assets.
-        for db_source in db_job.sources:
-            assert db_source.id is not None
-            source = self._store.load_source(db_source.id)
-            registered_keys = {db_asset.key for db_asset in db_source.assets}
-            for asset in source.assets:
-                if type(asset).key in registered_keys:
-                    assets.append(asset)
-
-        # Standalone assets
-        for db_asset in db_job.assets:
-            assert db_asset.id is not None
-            assets.append(self._store.load_asset(db_asset.id))
-
-        return assets
-
-    def _skip_succeeded_assets(self, db_run: Run, assets: list[il.Asset]) -> None:
+    def _skip_succeeded_assets(self, retry_of: UUID, assets: list[il.Asset]) -> None:
         """Mark assets that already succeeded in the retry lineage as non-materializable.
 
         For a ``"failed"``-scope retry, assets that completed successfully in an
@@ -158,7 +130,7 @@ class RunExecutor:
         events) still carry their earlier success forward.
         """
         statuses: dict[str, str] = {}
-        parent_id: UUID | None = db_run.retry_of
+        parent_id: UUID | None = retry_of
         with Session(get_engine()) as session:
             while parent_id:
                 for row in self._store.list_asset_executions(parent_id):
@@ -172,30 +144,28 @@ class RunExecutor:
             if type(asset).key in success_keys:
                 asset.materializable = False
 
-    def _resolve_upstream_deps(self, db_job: Job, assets: list[il.Asset]) -> None:
-        """Add transitive upstream deps to *assets* as non-materializable."""
-        db_asset_ids: set[UUID] = set()
-        for db_source in db_job.sources:
-            for db_asset in db_source.assets:
-                assert db_asset.id is not None
-                db_asset_ids.add(db_asset.id)
-        for db_asset in db_job.assets:
-            assert db_asset.id is not None
-            db_asset_ids.add(db_asset.id)
+    def _resolve_upstream_deps(self, assets: list[il.Asset]) -> None:
+        """Add transitive upstream deps to *assets* as non-materializable.
 
-        frontier = list(db_asset_ids)
-        visited = set(db_asset_ids)
+        Hydrated assets carry their row id, so the dependency relations are
+        walked directly from the ids already in hand.
+        """
+        visited = {UUID(asset.id) for asset in assets}
+        frontier = list(visited)
         with Session(get_engine()) as session:
             while frontier:
-                dependency_rows = session.exec(
-                    select(AssetDependency).where(col(AssetDependency.asset_id).in_(frontier))
+                dependencies = session.exec(
+                    select(ComponentRelation).where(
+                        col(ComponentRelation.src_id).in_(frontier),
+                        ComponentRelation.type == "dependency",
+                    )
                 ).all()
                 next_frontier: list[UUID] = []
-                for dependency in dependency_rows:
-                    if dependency.upstream_asset_id not in visited:
-                        visited.add(dependency.upstream_asset_id)
-                        next_frontier.append(dependency.upstream_asset_id)
-                        upstream_asset = self._store.load_asset(dependency.upstream_asset_id)
+                for relation in dependencies:
+                    if relation.dst_id not in visited:
+                        visited.add(relation.dst_id)
+                        next_frontier.append(relation.dst_id)
+                        upstream_asset = self._store.load_asset(relation.dst_id)
                         upstream_asset.materializable = False
                         assets.append(upstream_asset)
                 frontier = next_frontier
@@ -223,3 +193,14 @@ class RunExecutor:
                 },
             )
         )
+
+
+def _job_assets(job: il.Job) -> list[il.Asset]:
+    """Flatten a hydrated job's targets into the asset list to materialize."""
+    assets: list[il.Asset] = []
+    for target in job.targets:
+        if isinstance(target, il.Source):
+            assets.extend(target.assets)
+        else:
+            assets.append(target)
+    return assets
