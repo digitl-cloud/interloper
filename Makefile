@@ -184,7 +184,7 @@ DEV_ENV := INTERLOPER_POSTGRES_HOST=localhost \
            INTERLOPER_POSTGRES_PASSWORD=postgres \
            INTERLOPER_POSTGRES_DATABASE=interloper \
            INTERLOPER_LAUNCHER_TYPE=in_process \
-           INTERLOPER_RUNNER_TYPE=multi_thread \
+           INTERLOPER_RUNNER_TYPE=async \
            INTERLOPER_ENCRYPTION_KEY=dev-encryption-key-not-for-production \
            INTERLOPER_DEV_USER_EMAIL=$(INTERLOPER_DEV_USER_EMAIL) \
            INTERLOPER_DEV_USER_GOOGLE_ID=$(INTERLOPER_DEV_USER_GOOGLE_ID) \

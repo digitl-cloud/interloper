@@ -8,6 +8,7 @@
 # is the active ./interloper.yaml instead of the repo-root (k8s) one.
 
 catalog:
+  - interloper.destination.csv.CSVDestination
   - interloper_assets.adservice.source.Adservice
   - interloper_assets.adup.source.Adup
   - interloper_assets.amazon_ads.source.AmazonAds
