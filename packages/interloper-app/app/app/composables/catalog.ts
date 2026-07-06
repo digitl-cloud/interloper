@@ -2,6 +2,7 @@ import type { ComponentRecord, ComponentStatus, Relation } from '~/types/compone
 import { jobTargetIds, relationIds } from '~/types/component'
 import type { Run } from '~/types/run'
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
+import { resourceSlots } from '~/types/catalog'
 import type { AssetWarning } from '~/composables/warnings'
 import type { SourceDriftStatus } from '~/composables/drift'
 
@@ -131,9 +132,9 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
         const map = new Map<string, { name: string; icon: string }>()
         for (const source of options.sources.value) {
             const sourceDefn = catalogStore.getSourceDefinition(source.key)
-            if (!sourceDefn?.resources) continue
+            if (!sourceDefn) continue
             // Find the connection resource slot in the source definition
-            for (const [_slotName, resourceKey] of Object.entries(sourceDefn.resources)) {
+            for (const [_slotName, resourceKey] of Object.entries(resourceSlots(sourceDefn))) {
                 if (resourceKey.endsWith('_connection') || resourceKey === 'connection') {
                     map.set(source.id, {
                         name: catalogStore.catalog[resourceKey]?.name ?? resourceKey,

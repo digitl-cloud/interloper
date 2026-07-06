@@ -14,6 +14,7 @@ import type { StepperItem } from '@nuxt/ui'
 import type { ComponentRecord, ComponentInput } from '~/types/component'
 import { resourceMap } from '~/types/component'
 import type { DestinationDefinition } from '~/types/catalog'
+import { resourceSlots as definitionResourceSlots } from '~/types/catalog'
 
 const props = withDefaults(defineProps<{
     /** 'standalone' saves to API, 'collect' emits config without saving. */
@@ -77,10 +78,10 @@ const destDefn = computed<DestinationDefinition | undefined>(() =>
     selectedDestKey.value ? catalogStore.getDestinationDefinition(selectedDestKey.value) : undefined,
 )
 
-/** Resource slots: entries from the destination's `resources` dict. */
+/** Resource slots: entries from the destination's `resource` relation slots. */
 const resourceSlots = computed(() => {
-    if (!destDefn.value?.resources) return []
-    return Object.entries(destDefn.value.resources).map(([slotName, resourceKey]) => ({
+    if (!destDefn.value) return []
+    return Object.entries(definitionResourceSlots(destDefn.value)).map(([slotName, resourceKey]) => ({
         slotName,
         resourceKey,
         definition: catalogStore.catalog[resourceKey],

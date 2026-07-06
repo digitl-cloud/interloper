@@ -3,6 +3,7 @@ import type { ContextMenuItem } from '@nuxt/ui'
 import { Handle, Position, useVueFlow, useNodeConnections, useNodeId } from '@vue-flow/core'
 import type { Connection } from '@vue-flow/core'
 import type { ComponentRecord } from '~/types/component'
+import { requiredDependencies } from '~/types/catalog'
 
 const props = defineProps<{
     asset: ComponentRecord
@@ -83,15 +84,13 @@ const isCompatible = computed(() => isValidTarget.value || isValidSource.value)
 const shouldFade = computed(() => isDragging.value && !isDragSource.value && !isCompatible.value)
 
 // Check if this asset has all required upstream dependencies
-const hasRequires = computed(() => {
-    if (!props.assetDefn?.requires) return false
-    return Object.keys(props.assetDefn.requires).length > 0
-})
+const requiredDepCount = computed(() =>
+    props.assetDefn ? Object.keys(requiredDependencies(props.assetDefn)).length : 0,
+)
 const isRunnable = computed(() => {
-    if (!hasRequires.value) return true
-    const requiredCount = Object.keys(props.assetDefn?.requires ?? {}).length
+    if (requiredDepCount.value === 0) return true
     const upstreams = componentsStore.dependencies.filter(d => d.src_id === props.asset.id)
-    return upstreams.length >= requiredCount
+    return upstreams.length >= requiredDepCount.value
 })
 
 const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value || isValidTarget.value)
