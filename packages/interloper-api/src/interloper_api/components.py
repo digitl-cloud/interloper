@@ -7,9 +7,40 @@ the database again.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from interloper_db import Component
+from pydantic import BaseModel
+
+
+class DestinationResponse(BaseModel):
+    """Response body for a destination, standalone or nested."""
+
+    id: UUID
+    key: str
+    name: str | None = None
+    config: dict[str, Any] | None = None
+    resources: dict[str, str] = {}
+    created_at: str | None = None
+
+
+def destination_response(dest: Component) -> DestinationResponse:
+    """Convert a destination component row to its response model."""
+    return DestinationResponse(
+        id=dest.id,
+        key=dest.key,
+        name=dest.name,
+        config=dest.config,
+        resources=resource_map(dest),
+        created_at=timestamp(dest.created_at),
+    )
+
+
+def timestamp(value: datetime | None) -> str | None:
+    """Render an optional timestamp the way every response does."""
+    return str(value) if value else None
 
 
 def resource_map(component: Component) -> dict[str, str]:

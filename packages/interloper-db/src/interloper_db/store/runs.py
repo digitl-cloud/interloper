@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import interloper as il
-from interloper.errors import NotFoundError, RunNotFoundError
+from interloper.errors import NotFoundError
 from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
@@ -231,7 +231,7 @@ class RunMixin:
         with Session(get_engine()) as session:
             db_run = session.get(Run, run_id)
             if not db_run:
-                raise RunNotFoundError(f"Run {run_id} not found")
+                raise NotFoundError(f"Run {run_id} not found")
             return db_run
 
     def list_runs(
@@ -313,7 +313,7 @@ class RunMixin:
         with Session(get_engine()) as session:
             db_run = session.get(Run, run_id)
             if not db_run:
-                raise RunNotFoundError(f"Run {run_id} not found")
+                raise NotFoundError(f"Run {run_id} not found")
 
             db_run.status = "success" if success else "failed"
             db_run.completed_at = datetime.now(timezone.utc)
@@ -342,7 +342,7 @@ class RunMixin:
             The newly created, queued Run row.
 
         Raises:
-            RunNotFoundError: If the run is not found.
+            NotFoundError: If the run is not found.
             ValueError: If the run is not in a failed state or ``scope`` is invalid.
         """
         if scope not in ("all", "failed"):
@@ -351,7 +351,7 @@ class RunMixin:
         with Session(get_engine()) as session:
             src = session.get(Run, run_id)
             if not src:
-                raise RunNotFoundError(f"Run {run_id} not found")
+                raise NotFoundError(f"Run {run_id} not found")
             if src.status != "failed":
                 raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
 

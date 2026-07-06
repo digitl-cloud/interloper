@@ -10,12 +10,19 @@ from interloper.errors import NotFoundError
 from interloper_db import Component, ComponentStatus, Profile, Store
 from pydantic import BaseModel
 
-from interloper_api.components import destination_rows, materializable, resource_map
+from interloper_api.components import (
+    DestinationResponse,
+    destination_response,
+    destination_rows,
+    materializable,
+    resource_map,
+    timestamp,
+)
 from interloper_api.dependencies import (
-    authorize_org_member,
     get_current_user,
     get_org_id,
     get_store,
+    load_authorized,
     require_editor,
     require_viewer,
 )
@@ -42,17 +49,6 @@ class AssetResponse(BaseModel):
     key: str
     materializable: bool
     status: ComponentStatus
-
-
-class DestinationResponse(BaseModel):
-    """Nested destination in source response."""
-
-    id: UUID
-    key: str
-    name: str | None = None
-    config: dict[str, Any] | None = None
-    resources: dict[str, str] = {}
-    created_at: str | None = None
 
 
 class SourceResponse(BaseModel):
@@ -85,17 +81,7 @@ def _build_source_response(source: Component, store: Store) -> SourceResponse:
         config=source.config,
         status=store.source_status(source.key),
         resources=resource_map(source),
-        destinations=[
-            DestinationResponse(
-                id=destination.id,
-                key=destination.key,
-                name=destination.name,
-                config=destination.config,
-                resources=resource_map(destination),
-                created_at=str(destination.created_at) if destination.created_at else None,
-            )
-            for destination in destination_rows(source)
-        ],
+        destinations=[destination_response(destination) for destination in destination_rows(source)],
         assets=[
             AssetResponse(
                 id=child.id,
@@ -105,7 +91,7 @@ def _build_source_response(source: Component, store: Store) -> SourceResponse:
             )
             for child in source.children
         ],
-        created_at=str(source.created_at) if source.created_at else None,
+        created_at=timestamp(source.created_at),
     )
 
 
@@ -140,20 +126,6 @@ def create_source(
     return _build_source_response(source, store)
 
 
-def _authorize_source(source_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> None:
-    """Authorize the user by membership in the source's org.
-
-    Raises:
-        HTTPException: 404 if missing or the user is not a member of the
-            owning org, 403 if the role is insufficient.
-    """
-    try:
-        source = store.get_source(source_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
-    authorize_org_member(user, source.org_id, store, minimum=minimum, detail=f"Source {source_id} not found")
-
-
 @router.put("/{source_id}")
 def update_source(
     source_id: UUID,
@@ -162,7 +134,7 @@ def update_source(
     store: Store = Depends(get_store),
 ) -> SourceResponse:
     """Update a source."""
-    _authorize_source(source_id, user, store, minimum="editor")
+    load_authorized(store.get_source, source_id, user, store, label="Source", minimum="editor")
     try:
         source = store.update_source(
             source_id,
@@ -185,6 +157,6 @@ def delete_source(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete a source. Assets cascade via FK."""
-    _authorize_source(source_id, user, store, minimum="editor")
+    load_authorized(store.get_source, source_id, user, store, label="Source", minimum="editor")
     store.delete_source(source_id)
     return {"status": "deleted"}

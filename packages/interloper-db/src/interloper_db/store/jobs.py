@@ -18,7 +18,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import ComponentDriftError, HydrationError, JobNotFoundError
+from interloper.errors import ComponentDriftError, HydrationError, NotFoundError
 from sqlmodel import Session, select
 
 from interloper_db.drift import ComponentStatus, asset_status, source_status
@@ -161,12 +161,12 @@ class JobMixin:
             The updated job record.
 
         Raises:
-            JobNotFoundError: If the job is not found.
+            NotFoundError: If the job is not found.
         """
         with Session(get_engine()) as session:
             db_job = session.get(Component, job_id)
             if not db_job or db_job.kind != "job":
-                raise JobNotFoundError(f"Job {job_id} not found")
+                raise NotFoundError(f"Job {job_id} not found")
             db_job.name = name
             db_job.config = _job_config(cron, tags, enabled, partitioned, backfill_days)
             sync_relations(session, db_job, "target", [*(source_ids or []), *(asset_ids or [])])
@@ -183,12 +183,12 @@ class JobMixin:
             The job record.
 
         Raises:
-            JobNotFoundError: If the job is not found.
+            NotFoundError: If the job is not found.
         """
         with Session(get_engine()) as session:
             db_job = session.get(Component, job_id)
             if not db_job or db_job.kind != "job":
-                raise JobNotFoundError(f"Job {job_id} not found")
+                raise NotFoundError(f"Job {job_id} not found")
             return _job_record(db_job, _target_relations(session, db_job.id))
 
     def list_jobs(self, org_id: UUID) -> list[JobRecord]:
@@ -234,14 +234,14 @@ class JobMixin:
             The hydrated framework Job, targets included.
 
         Raises:
-            JobNotFoundError: If the job is not found.
+            NotFoundError: If the job is not found.
             ComponentDriftError: If any target's catalog key does not resolve.
             HydrationError: If reconstruction fails.
         """
         with Session(get_engine()) as session:
             db_job = session.get(Component, job_id)
             if not db_job or db_job.kind != "job":
-                raise JobNotFoundError(f"Job {job_id} not found")
+                raise NotFoundError(f"Job {job_id} not found")
 
             for rel in _target_relations(session, db_job.id):
                 target = session.get(Component, rel.dst_id)

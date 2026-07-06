@@ -11,7 +11,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import CatalogKeyError, ComponentDriftError, HydrationError, NotFoundError, SourceNotFoundError
+from interloper.errors import CatalogKeyError, ComponentDriftError, HydrationError, NotFoundError
 from sqlmodel import Session, select
 
 from interloper_db.drift import ComponentStatus, resolve_source_cls, source_status
@@ -75,7 +75,7 @@ class SourceMixin:
         with Session(get_engine()) as session:
             db_source = session.get(Component, source_id)
             if not db_source or db_source.kind != "source":
-                raise SourceNotFoundError(f"Source {source_id} not found")
+                raise NotFoundError(f"Source {source_id} not found")
             if name is not None:
                 db_source.name = name
             if config is not None:
@@ -100,13 +100,10 @@ class SourceMixin:
             The component row.
 
         Raises:
-            SourceNotFoundError: If the source is not found.
+            NotFoundError: If the source is not found.
         """
         with Session(get_engine()) as session:
-            try:
-                return load_component(session, source_id, kind="source")
-            except NotFoundError:
-                raise SourceNotFoundError(f"Source {source_id} not found") from None
+            return load_component(session, source_id, kind="source")
 
     def list_sources(self, org_id: UUID) -> list[Component]:
         """List all sources with children and relations loaded."""
@@ -118,9 +115,9 @@ class SourceMixin:
         with Session(get_engine()) as session:
             db_asset = session.get(Component, asset_id)
             if not db_asset or db_asset.kind != "asset":
-                raise SourceNotFoundError(f"Asset {asset_id} not found")
+                raise NotFoundError(f"Asset {asset_id} not found")
             if not db_asset.parent_id:
-                raise SourceNotFoundError(f"Asset {asset_id} is standalone (no source)")
+                raise NotFoundError(f"Asset {asset_id} is standalone (no source)")
             return self.load_source(db_asset.parent_id)
 
     def delete_source(self, source_id: UUID) -> None:
@@ -277,7 +274,7 @@ class SourceMixin:
         with Session(get_engine()) as session:
             db_source = session.get(Component, source_id)
             if not db_source or db_source.kind != "source":
-                raise SourceNotFoundError(f"Source {source_id} not found")
+                raise NotFoundError(f"Source {source_id} not found")
 
             status = source_status(self._catalog, db_source.key)
             if status is not ComponentStatus.OK:
