@@ -2,13 +2,13 @@
 /**
  * Checkbox multi-select for choosing which assets to enable on a source.
  *
- * For assets with cross-source dependencies (qualified keys in `requires`
- * or `optional_requires`), shows a dropdown to select the upstream asset
- * instance. Auto-resolves when only one candidate exists; prioritises
- * assets within the same source.
+ * For assets with cross-source dependencies (qualified keys in the
+ * definition's `dependency` relation slots), shows a dropdown to select the
+ * upstream asset instance. Auto-resolves when only one candidate exists;
+ * prioritises assets within the same source.
  */
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
-import { parseQualifiedKey } from '~/types/catalog'
+import { dependencySlots, parseQualifiedKey } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 
 const selectedKeys = defineModel<string[]>('selectedKeys', { default: () => [] })
@@ -52,12 +52,9 @@ interface AssetDep {
 /** Compute dependency info for a given asset definition. */
 function getAssetDeps(assetDefn: AssetDefinition): AssetDep[] {
     const deps: AssetDep[] = []
-    const allReqs: Array<[string, string, boolean]> = [
-        ...Object.entries(assetDefn.requires ?? {}).map(([p, k]) => [p, k, false] as [string, string, boolean]),
-        ...Object.entries(assetDefn.optional_requires ?? {}).map(([p, k]) => [p, k, true] as [string, string, boolean]),
-    ]
-
-    for (const [paramName, qk, isOptional] of allReqs) {
+    for (const [paramName, slot] of Object.entries(dependencySlots(assetDefn))) {
+        const qk = slot.key
+        const isOptional = !slot.required
         const { sourceKey, assetKey } = parseQualifiedKey(qk)
         const isCrossSource = !!sourceKey && sourceKey !== props.sourceDefn.key
 

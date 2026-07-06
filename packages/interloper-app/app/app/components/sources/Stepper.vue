@@ -16,6 +16,7 @@ import type { StepperItem } from '@nuxt/ui'
 import type { ComponentRecord, ComponentInput } from '~/types/component'
 import { relationIds, resourceMap } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
+import { allowedDestinationKeys, resourceSlots as definitionResourceSlots } from '~/types/catalog'
 
 const props = withDefaults(defineProps<{
     /** 'standalone' saves to API, 'collect' emits config without saving. */
@@ -94,7 +95,7 @@ const sourceDefn = computed<SourceDefinition | undefined>(() =>
 /** Resource slots (connections only — configs are now source fields). */
 const resourceSlots = computed(() => {
     if (!sourceDefn.value) return []
-    return Object.entries(sourceDefn.value.resources).map(([slotName, resourceKey]) => ({
+    return Object.entries(definitionResourceSlots(sourceDefn.value)).map(([slotName, resourceKey]) => ({
         slotName,
         resourceKey,
         definition: catalogStore.catalog[resourceKey],
@@ -414,7 +415,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
                 <SourcesDestinationStep v-model:selected-ids="selectedDestinationIds"
-                                        :compatible-keys="sourceDefn?.destinations ?? []" />
+                                        :compatible-keys="sourceDefn ? allowedDestinationKeys(sourceDefn) : []" />
             </div>
         </template>
     </UStepper>

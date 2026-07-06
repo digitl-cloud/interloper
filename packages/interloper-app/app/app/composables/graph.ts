@@ -1,5 +1,5 @@
 import type { Connection } from '@vue-flow/core'
-import { qualifiedKey } from '~/types/catalog'
+import { dependencySlots, qualifiedKey } from '~/types/catalog'
 import type { ComponentRecord, Relation } from '~/types/component'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -225,11 +225,11 @@ export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions)
         for (const downstream of downstreamAssets) {
             const spec = options.getAssetDefinition(downstream.qk)
             if (!spec) continue
-            const allReqs = { ...spec.requires, ...spec.optional_requires }
+            const allReqs = dependencySlots(spec)
             for (const upstream of upstreamAssets) {
                 if (upstream.id === downstream.id) continue
                 // Find the param name that this upstream satisfies
-                const paramName = Object.entries(allReqs).find(([, reqQk]) => reqQk === upstream.qk)?.[0]
+                const paramName = Object.entries(allReqs).find(([, slot]) => slot.key === upstream.qk)?.[0]
                 if (!paramName) continue
                 if (depExists(downstream.id, upstream.id)) continue
                 pairs.push({ upstreamAssetId: upstream.id, downstreamAssetId: downstream.id, paramName })

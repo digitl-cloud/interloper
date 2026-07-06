@@ -1,7 +1,7 @@
 import type { ComponentRecord } from '~/types/component'
 import { jobTargetIds, relationRefs } from '~/types/component'
 import type { AssetDefinition } from '~/types/catalog'
-import { parseQualifiedKey, qualifiedKey } from '~/types/catalog'
+import { parseQualifiedKey, qualifiedKey, requiredDependencies } from '~/types/catalog'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -100,9 +100,9 @@ export function useAssetWarnings() {
         const defn = getAssetDefinition(qk)
 
         // --- Dependency warnings ---
-        if (defn?.requires) {
+        if (defn) {
             const recorded = upstreamsByAssetId.value.get(assetId) ?? new Set()
-            for (const [_param, depQk] of Object.entries(defn.requires)) {
+            for (const [_param, depQk] of Object.entries(requiredDependencies(defn))) {
                 const upstreamId = assetIdByQualifiedKey.value.get(depQk)
                 if (!upstreamId || !recorded.has(upstreamId)) {
                     const depDefn = getAssetDefinition(depQk)
