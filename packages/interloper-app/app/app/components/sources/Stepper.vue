@@ -13,14 +13,15 @@
  * Navigation state is exposed via defineExpose.
  */
 import type { StepperItem } from '@nuxt/ui'
-import type { Source } from '~/types/source'
+import type { ComponentRecord, ComponentInput } from '~/types/component'
+import { relationIds, resourceMap } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
 
 const props = withDefaults(defineProps<{
     /** 'standalone' saves to API, 'collect' emits config without saving. */
     mode?: 'standalone' | 'collect'
     /** When set, stepper opens in edit mode with values pre-filled. */
-    source?: Source | null
+    source?: ComponentRecord | null
     /** Preselect this type and open directly on the next step (create mode). */
     initialTypeKey?: string
 }>(), {
@@ -45,10 +46,10 @@ const emit = defineEmits<{
 const isEditMode = computed(() => !!props.source)
 
 const catalogStore = useCatalogStore()
-const sourcesStore = useSourcesStore()
-const resourcesStore = useResourcesStore()
-const destinationsStore = useDestinationsStore()
+const componentsStore = useComponentsStore()
 const toast = useToast()
+
+const sources = computed(() => componentsStore.byKind('source'))
 
 // ── State ────────────────────────────────────────────────────────
 const selectedSourceKey = ref('')
@@ -64,7 +65,7 @@ const submitting = ref(false)
 /** Dynamic options context for SchemaForm's x-options-from fields. */
 const optionsContext = computed(() => ({
     destinations: selectedDestinationIds.value.map((id) => {
-        const dest = destinationsStore.findById(id)
+        const dest = componentsStore.byId(id)
         const defn = dest ? catalogStore.catalog[dest.key] : undefined
         return { label: dest?.name ?? defn?.name ?? id, value: dest?.key ?? id }
     }),
@@ -77,11 +78,11 @@ const resourceStepRefs = ref<Record<string, any>>({})
 
 if (props.source) {
     selectedSourceKey.value = props.source.key
-    sourceName.value = props.source.name
-    selectedAssetKeys.value = props.source.assets.map(a => a.key)
+    sourceName.value = props.source.name ?? ''
+    selectedAssetKeys.value = props.source.children.map(a => a.key)
     configData.value = { ...(props.source.config || {}) }
-    resourceSelections.value = { ...props.source.resources }
-    selectedDestinationIds.value = props.source.destinations.map(d => d.id)
+    resourceSelections.value = resourceMap(props.source)
+    selectedDestinationIds.value = relationIds(props.source, 'destination')
 }
 
 // ── Derived ──────────────────────────────────────────────────────
@@ -163,11 +164,11 @@ const recapRows = computed(() => {
         rows.push({
             icon: resourceSlotIcon(rs.slotName),
             label: rs.slotName.charAt(0).toUpperCase() + rs.slotName.slice(1),
-            value: id ? (resourcesStore.findById(id)?.name ?? '—') : 'None',
+            value: id ? (componentsStore.byId(id)?.name ?? '—') : 'None',
         })
     }
     const destNames = selectedDestinationIds.value
-        .map(id => destinationsStore.findById(id)?.name)
+        .map(id => componentsStore.byId(id)?.name)
         .filter(Boolean)
     rows.push({
         icon: 'i-lucide-hard-drive',
@@ -191,8 +192,8 @@ watch(resourceSelections, async (selections) => {
         }
         if (resourceDataCache.value[slotName]?._id === resourceId) continue
         try {
-            const detail = await resourcesStore.fetchOne(resourceId)
-            resourceDataCache.value[slotName] = { ...detail.data, _id: resourceId }
+            const detail = await componentsStore.fetchOne(resourceId)
+            resourceDataCache.value[slotName] = { ...detail.config, _id: resourceId }
         }
         catch { /* don't block */ }
     }
@@ -269,34 +270,42 @@ async function submit() {
 
     submitting.value = true
     try {
-        // Convert resolvedCrossDeps from "assetKey→paramName" → upstreamId
-        // to API format: { asset_key: { param_name: upstream_asset_id } }
-        const crossDeps: Record<string, Record<string, string>> = {}
-        for (const [key, upstreamId] of Object.entries(resolvedCrossDeps.value)) {
-            const [assetKey, paramName] = key.split('→')
-            if (assetKey && paramName && upstreamId) {
-                if (!crossDeps[assetKey]) crossDeps[assetKey] = {}
-                crossDeps[assetKey][paramName] = upstreamId
-            }
-        }
-
-        const input = {
-            key: sourceDefn.value.key,
+        const input: ComponentInput = {
             name: sourceName.value || sourceDefn.value.name,
             config: Object.keys(configData.value).length > 0 ? configData.value : undefined,
-            resources: Object.keys(resources).length > 0 ? resources : undefined,
-            asset_keys: selectedAssetKeys.value,
-            destination_ids: selectedDestinationIds.value.length > 0 ? selectedDestinationIds.value : undefined,
-            cross_deps: Object.keys(crossDeps).length > 0 ? crossDeps : undefined,
+            children: selectedAssetKeys.value,
+            relations: {
+                resource: Object.entries(resources).map(([slot, dstId]) => ({ dst_id: dstId, slot })),
+                destination: selectedDestinationIds.value.map(id => ({ dst_id: id })),
+            },
         }
 
+        let saved: ComponentRecord
         if (isEditMode.value && props.source) {
-            await sourcesStore.update(props.source.id, input)
+            saved = await componentsStore.update(props.source.id, input)
+        }
+        else {
+            saved = await componentsStore.create({ ...input, kind: 'source', key: sourceDefn.value.key })
+        }
+
+        // Cross-source deps are wired per child asset via the relations
+        // endpoint, using the child ids from the save response.
+        const childIdByKey = new Map(saved.children.map(a => [a.key, a.id]))
+        await Promise.all(
+            Object.entries(resolvedCrossDeps.value).map(async ([key, upstreamId]) => {
+                const [assetKey, paramName] = key.split('→')
+                const childId = assetKey ? childIdByKey.get(assetKey) : undefined
+                if (!childId || !paramName || !upstreamId) return
+                // Tolerate re-submits of an already-wired dependency on edit.
+                await componentsStore.addRelation(childId, { type: 'dependency', dst_id: upstreamId, slot: paramName }).catch(() => {})
+            }),
+        )
+
+        if (isEditMode.value) {
             toast.add({ title: `${sourceName.value} updated`, color: 'success' })
             emit('updated')
         }
         else {
-            await sourcesStore.create(input)
             toast.add({ title: `${sourceName.value} created`, color: 'success' })
             emit('created')
         }
@@ -349,7 +358,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                     v-model:selected-keys="selectedAssetKeys"
                                     v-model:resolved-deps="resolvedCrossDeps"
                                     :source-defn="sourceDefn"
-                                    :all-sources="sourcesStore.sources" />
+                                    :all-sources="sources" />
             </div>
         </template>
 

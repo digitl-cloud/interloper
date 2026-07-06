@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Handle, Position, useNodeConnections } from '@vue-flow/core'
+import type { ComponentRecord } from '~/types/component'
 
 /**
  * Compact run-graph node: status dot + type icon + name + duration, sized for
@@ -7,7 +8,7 @@ import { Handle, Position, useNodeConnections } from '@vue-flow/core'
  * AssetNode is large and uses Top/Bottom handles, made for the TB catalog).
  */
 const props = defineProps<{
-    asset: SourceAsset
+    asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
     status?: NodeStatus
     viewMode?: ViewMode

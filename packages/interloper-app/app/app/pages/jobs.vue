@@ -2,15 +2,17 @@
 import { h, resolveComponent } from 'vue'
 import cronstrue from 'cronstrue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
-import type { Job } from '~/types/job'
+import type { ComponentRecord } from '~/types/component'
+import { jobCron, jobEnabled, jobLastRunAt, jobTargetIds } from '~/types/component'
 
 definePageMeta({ title: 'Jobs' })
 
 const UBadge = resolveComponent('UBadge')
 
-const jobsStore = useJobsStore()
-const sourcesStore = useSourcesStore()
+const componentsStore = useComponentsStore()
 const toast = useToast()
+
+const jobs = computed(() => componentsStore.byKind('job'))
 
 const stepperRef = ref<any>(null)
 
@@ -19,12 +21,11 @@ const {
     editing: editingJob,
     openCreate: handleCreate,
     openEdit: handleEdit,
-} = useWizardDrawer<Job>()
+} = useWizardDrawer<ComponentRecord>()
 const runModalOpen = ref(false)
-const runModalJob = ref<Job | null>(null)
+const runModalJob = ref<ComponentRecord | null>(null)
 
-jobsStore.fetch()
-sourcesStore.fetch()
+componentsStore.fetchAll(['job', 'source'])
 
 function cronLabel(cron: string): string {
     try {
@@ -35,7 +36,7 @@ function cronLabel(cron: string): string {
     }
 }
 
-function openRun(job: Job) {
+function openRun(job: ComponentRecord) {
     runModalJob.value = job
     runModalOpen.value = true
 }
@@ -46,50 +47,53 @@ const SETUP_STEPS = [
     { to: '/destinations', icon: 'i-lucide-database', title: 'Step 2 · Add a destination', sub: 'Choose where assets are materialized', link: 'Go to Destinations' },
 ]
 
-const columns: TableColumn<Job>[] = [
+const columns: TableColumn<ComponentRecord>[] = [
     { accessorKey: 'select' as any, header: '' },
     {
         accessorKey: 'name',
         header: 'Name',
-        cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name),
+        cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name ?? ''),
     },
     {
         accessorKey: 'cron',
         header: 'Schedule',
         cell: ({ row }) => h('span', {
             class: 'text-muted',
-            title: row.original.cron,
-        }, cronLabel(row.original.cron)),
+            title: jobCron(row.original),
+        }, cronLabel(jobCron(row.original))),
     },
     {
         accessorKey: 'source_ids',
         header: 'Sources',
-        cell: ({ row }) => h(UBadge, {
-            color: 'neutral',
-            variant: 'subtle',
-        }, () => `${row.original.source_ids.length} source${row.original.source_ids.length !== 1 ? 's' : ''}`),
+        cell: ({ row }) => {
+            const count = jobTargetIds(row.original, 'source').length
+            return h(UBadge, {
+                color: 'neutral',
+                variant: 'subtle',
+            }, () => `${count} source${count !== 1 ? 's' : ''}`)
+        },
     },
     {
         accessorKey: 'enabled',
         header: 'Status',
         cell: ({ row }) => h(UBadge, {
-            color: row.original.enabled ? 'success' : 'neutral',
+            color: jobEnabled(row.original) ? 'success' : 'neutral',
             variant: 'subtle',
-        }, () => row.original.enabled ? 'Enabled' : 'Disabled'),
+        }, () => jobEnabled(row.original) ? 'Enabled' : 'Disabled'),
     },
     {
         accessorKey: 'last_run_at',
         header: 'Last run',
-        accessorFn: (row: Job) => row.last_run_at ? formatDate(row.last_run_at) : '—',
+        accessorFn: (row: ComponentRecord) => jobLastRunAt(row) ? formatDate(jobLastRunAt(row)!) : '—',
     },
     {
         accessorKey: 'created_at',
         header: 'Created',
-        accessorFn: (row: Job) => row.created_at ? formatDate(row.created_at) : '—',
+        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '—',
     },
 ]
 
-function rowActions(job: Job): DropdownMenuItem[][] {
+function rowActions(job: ComponentRecord): DropdownMenuItem[][] {
     return [[
         {
             label: 'Run',
@@ -100,13 +104,13 @@ function rowActions(job: Job): DropdownMenuItem[][] {
 }
 
 function handleSaved() {
-    jobsStore.fetch()
+    componentsStore.fetchAll(['job'])
     drawerOpen.value = false
 }
 
 async function handleDelete(ids: string[]) {
     try {
-        await jobsStore.remove(ids)
+        await componentsStore.remove(ids)
         toast.add({ title: `${ids.length} job${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch {
@@ -119,8 +123,8 @@ async function handleDelete(ids: string[]) {
     <div>
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
-                       :data="jobsStore.jobs"
-                       :loading="jobsStore.loading"
+                       :data="jobs"
+                       :loading="componentsStore.loading"
                        :row-actions="rowActions"
                        search-placeholder="Search jobs..."
                        @delete="handleDelete"

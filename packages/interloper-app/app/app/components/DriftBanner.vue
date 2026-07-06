@@ -5,7 +5,7 @@
  * catalog) and offers a one-click, confirmed cleanup. Self-contained: it reads
  * state via useDrift and performs the cleanup itself.
  */
-const sourcesStore = useSourcesStore()
+const componentsStore = useComponentsStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 const { hasDrift, missingSources, partialSources, missingAssetCount } = useDrift()
@@ -36,14 +36,14 @@ async function handleCleanup() {
     try {
         // Prune drifted assets from still-valid sources, keeping the live ones.
         for (const source of partialSources.value) {
-            const keep = source.assets.filter(a => a.status !== 'missing').map(a => a.key)
-            await sourcesStore.update(source.id, { key: source.key, name: source.name, asset_keys: keep })
+            const keep = source.children.filter(a => a.status !== 'missing').map(a => a.key)
+            await componentsStore.update(source.id, { children: keep })
         }
         // Delete sources whose own key is gone from the catalog (assets cascade).
         const missingIds = missingSources.value.map(s => s.id)
-        if (missingIds.length) await sourcesStore.remove(missingIds)
+        if (missingIds.length) await componentsStore.remove(missingIds)
 
-        await sourcesStore.fetch()
+        await componentsStore.fetchAll(['source'])
         toast.add({ title: 'Catalog drift cleaned up', color: 'success' })
     }
     catch {

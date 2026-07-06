@@ -1,5 +1,5 @@
-import type { Source } from '~/types/source'
-import type { Destination } from '~/types/destination'
+import type { ComponentRecord } from '~/types/component'
+import { relationIds } from '~/types/component'
 
 export interface DestinationBadge {
     icon: string
@@ -9,10 +9,10 @@ export interface DestinationBadge {
 }
 
 export function useDestinationBadge() {
-    const sourcesStore = useSourcesStore()
+    const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
 
-    function getBadgeForDestinations(destinations: Destination[]): DestinationBadge | null {
+    function getBadgeForDestinations(destinations: ComponentRecord[]): DestinationBadge | null {
         if (destinations.length === 0) return null
 
         if (destinations.length > 1) {
@@ -35,12 +35,15 @@ export function useDestinationBadge() {
         }
     }
 
-    function getBadgeForSource(source: Source): DestinationBadge | null {
-        return getBadgeForDestinations(source.destinations)
+    function getBadgeForSource(source: ComponentRecord): DestinationBadge | null {
+        const destinations = relationIds(source, 'destination')
+            .map(id => componentsStore.byId(id))
+            .filter((d): d is ComponentRecord => !!d)
+        return getBadgeForDestinations(destinations)
     }
 
     function getBadgeForAssetId(assetId: string): DestinationBadge | null {
-        const source = sourcesStore.sources.find(s => s.assets.some(a => a.id === assetId))
+        const source = componentsStore.byKind('source').find(s => s.children.some(a => a.id === assetId))
         if (!source) return null
         return getBadgeForSource(source)
     }

@@ -1,9 +1,7 @@
-import type { Source } from '~/types/source'
-import type { Asset, AssetDependency } from '~/types/asset'
-import type { Job } from '~/types/job'
+import type { ComponentRecord, ComponentStatus, Relation } from '~/types/component'
+import { jobTargetIds, relationIds } from '~/types/component'
 import type { Run } from '~/types/run'
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
-import type { ComponentStatus } from '~/types/component'
 import type { AssetWarning } from '~/composables/warnings'
 import type { SourceDriftStatus } from '~/composables/drift'
 
@@ -35,11 +33,10 @@ export interface CatalogRow {
 // ─── Catalog Rows ────────────────────────────────────────────────────
 
 interface UseCatalogRowsOptions {
-    sources: Ref<Source[]>
-    assets: Ref<Asset[]>
-    dependencies: Ref<AssetDependency[]>
-    destinations: Ref<Array<{ id: string; key: string; name: string | null }>>
-    jobs: Ref<Job[]>
+    sources: Ref<ComponentRecord[]>
+    dependencies: Ref<Relation[]>
+    destinations: Ref<ComponentRecord[]>
+    jobs: Ref<ComponentRecord[]>
     runs: Ref<Run[]>
     getWarnings: (assetId: string, assetKey: string) => AssetWarning[]
 }
@@ -47,13 +44,6 @@ interface UseCatalogRowsOptions {
 export function useCatalogRows(options: UseCatalogRowsOptions) {
     const catalogStore = useCatalogStore()
     const { sourceDrift } = useDrift()
-
-    /** Asset id → Asset record (for created_at etc.) */
-    const assetById = computed(() => {
-        const map = new Map<string, Asset>()
-        for (const a of options.assets.value) map.set(a.id, a)
-        return map
-    })
 
     /** Look up an asset definition by qualified key ("source_key.asset_key"). */
     function getAssetDefinition(qk: string): AssetDefinition | undefined {
@@ -75,16 +65,16 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
         // Build asset id → qualified key map from all sources
         const qkById = new Map<string, string>()
         for (const source of options.sources.value) {
-            for (const asset of source.assets) {
+            for (const asset of source.children) {
                 qkById.set(asset.id, `${source.key}.${asset.key}`)
             }
         }
 
         const map = new Map<string, Array<{ name: string; icon: string }>>()
         for (const dep of options.dependencies.value) {
-            if (!map.has(dep.asset_id)) map.set(dep.asset_id, [])
-            const upstreamQk = qkById.get(dep.upstream_asset_id)
-            let name = upstreamQk ?? dep.upstream_asset_id
+            if (!map.has(dep.src_id)) map.set(dep.src_id, [])
+            const upstreamQk = qkById.get(dep.dst_id)
+            let name = upstreamQk ?? dep.dst_id
             let icon = 'i-lucide-box'
             if (upstreamQk) {
                 const defn = getAssetDefinition(upstreamQk)
@@ -93,16 +83,16 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
                     icon = componentIcon(defn.key)
                 }
             }
-            map.get(dep.asset_id)!.push({ name, icon })
+            map.get(dep.src_id)!.push({ name, icon })
         }
         return map
     })
 
     /** Jobs that reference each source. */
     const jobsBySourceId = computed(() => {
-        const map = new Map<string, Job[]>()
+        const map = new Map<string, ComponentRecord[]>()
         for (const job of options.jobs.value) {
-            for (const sourceId of job.source_ids) {
+            for (const sourceId of jobTargetIds(job, 'source')) {
                 if (!map.has(sourceId)) map.set(sourceId, [])
                 map.get(sourceId)!.push(job)
             }
@@ -159,21 +149,20 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
     const data = computed<CatalogRow[]>(() => {
         const rows: CatalogRow[] = []
         for (const source of options.sources.value) {
-            const sourceDefn: SourceDefinition | undefined = catalogStore.getSourceDefinition(source.key)
-
-            const destInfos = source.destinations.map((dest) => {
-                const defn = catalogStore.catalog[dest.key]
+            const destInfos = relationIds(source, 'destination').map((destId) => {
+                const dest = options.destinations.value.find(d => d.id === destId)
+                const defn = dest ? catalogStore.catalog[dest.key] : undefined
                 return {
-                    name: dest.name ?? defn?.name ?? dest.key,
-                    icon: componentIcon(dest.key, 'i-lucide-hard-drive'),
+                    name: dest?.name ?? defn?.name ?? dest?.key ?? destId,
+                    icon: componentIcon(dest?.key ?? '', 'i-lucide-hard-drive'),
                 }
             })
 
-            const sourceJobs = (jobsBySourceId.value.get(source.id) ?? []).map(j => ({ name: j.name }))
+            const sourceJobs = (jobsBySourceId.value.get(source.id) ?? []).map(j => ({ name: j.name ?? j.key }))
             const lastRun = getLastRunForSource(source.id)
             const conn = connectionBySourceId.value.get(source.id)
 
-            for (const asset of source.assets) {
+            for (const asset of source.children) {
                 const assetDefn = getAssetDefinition(`${source.key}.${asset.key}`)
 
                 const baseRow = {
@@ -192,7 +181,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
                     connectionName: conn?.name ?? null,
                     connectionIcon: conn?.icon ?? null,
                     destinations: destInfos,
-                    createdAt: assetById.value.get(asset.id)?.created_at ?? null,
+                    createdAt: asset.created_at,
                 }
 
                 if (destInfos.length > 0) {
@@ -219,7 +208,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
             }
 
             // Source with no assets: placeholder row
-            if (source.assets.length === 0) {
+            if (source.children.length === 0) {
                 rows.push({
                     id: source.id,
                     sourceId: source.id,
@@ -256,10 +245,10 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
             drift: SourceDriftStatus
         }>()
         for (const source of options.sources.value) {
-            const sourceDefn = catalogStore.getSourceDefinition(source.key)
+            const sourceDefn: SourceDefinition | undefined = catalogStore.getSourceDefinition(source.key)
 
             // Aggregate & deduplicate warnings across all assets in the source
-            const all = source.assets.flatMap(a => options.getWarnings(a.id, a.key))
+            const all = source.children.flatMap(a => options.getWarnings(a.id, a.key))
             const seen = new Set<string>()
             const warnings = all.filter((w) => {
                 if (seen.has(w.message)) return false
@@ -270,7 +259,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
             map.set(source.id, {
                 name: sourceDefn?.name ?? source.name ?? source.key,
                 icon: componentIcon(source.key, 'i-lucide-database'),
-                assetCount: source.assets.length,
+                assetCount: source.children.length,
                 warnings,
                 drift: sourceDrift(source),
             })
@@ -279,7 +268,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
     })
 
     const assetCount = computed(() =>
-        options.sources.value.reduce((sum, s) => sum + s.assets.length, 0),
+        options.sources.value.reduce((sum, s) => sum + s.children.length, 0),
     )
 
     return { data, sourceInfoById, assetCount }

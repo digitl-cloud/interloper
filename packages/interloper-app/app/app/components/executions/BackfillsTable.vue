@@ -9,14 +9,14 @@ const PAGE_SIZE = 20
 const UBadge = resolveComponent('UBadge')
 
 const backfillsStore = useBackfillsStore()
-const jobsStore = useJobsStore()
+const componentsStore = useComponentsStore()
 const { backfills, loading } = storeToRefs(backfillsStore)
 
 /** Reactive map so cell render functions pick up changes. */
 const jobNameMap = computed(() => {
     const map = new Map<string, string>()
-    for (const job of jobsStore.jobs) {
-        map.set(job.id, job.name)
+    for (const job of componentsStore.byKind('job')) {
+        map.set(job.id, job.name ?? job.key)
     }
     return map
 })
@@ -24,7 +24,7 @@ const jobNameMap = computed(() => {
 onMounted(async () => {
     await Promise.all([
         !loading.value ? backfillsStore.fetch() : Promise.resolve(),
-        jobsStore.fetch(),
+        componentsStore.fetchAll(['job']),
     ])
 })
 

@@ -10,7 +10,7 @@
  */
 import type { StepperItem } from '@nuxt/ui'
 import type { ComponentDefinition } from '~/types/catalog'
-import type { Resource } from '~/types/resource'
+import type { ComponentRecord } from '~/types/component'
 
 const props = defineProps<{
     /** The resource kind (e.g. "connection", "config"). */
@@ -18,7 +18,7 @@ const props = defineProps<{
     /** Available type definitions for this kind. */
     definitions: ComponentDefinition[]
     /** When set, opens in edit mode for this resource. */
-    resource?: Resource | null
+    resource?: ComponentRecord | null
     /** Preselect this type and open directly on the details step (create mode). */
     initialTypeKey?: string
 }>()
@@ -29,7 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const catalogStore = useCatalogStore()
-const resourcesStore = useResourcesStore()
+const componentsStore = useComponentsStore()
 const toast = useToast()
 
 const { activeStep, hasPrev, hasNext, reset: resetStepper, next: nextStep, prev: prevStep } = useStepperFlow(2)
@@ -66,14 +66,14 @@ const kindLabel = computed(() => {
     return k.charAt(0).toUpperCase() + k.slice(1)
 })
 
-/** Load the full resource data for editing. */
-async function loadResourceData(resource: Resource) {
+/** Load the full resource data for editing (decoded config comes from the detail fetch). */
+async function loadResourceData(resource: ComponentRecord) {
     loadingEdit.value = true
     try {
-        const detail = await resourcesStore.fetchOne(resource.id)
+        const detail = await componentsStore.fetchOne(resource.id)
         selectedType.value = resource.key
-        resourceName.value = resource.name
-        formData.value = detail.data ?? {}
+        resourceName.value = resource.name ?? ''
+        formData.value = detail.config ?? {}
         activeStep.value = 1
     }
     finally {
@@ -135,20 +135,21 @@ const canProceed = computed(() => {
 async function submit() {
     submitting.value = true
     try {
-        const body = {
-            kind: props.kind,
-            key: selectedType.value,
-            name: resourceName.value.trim(),
-            data: formData.value,
-        }
-
         if (isEditing.value && props.resource) {
-            await resourcesStore.update(props.resource.id, body)
+            await componentsStore.update(props.resource.id, {
+                name: resourceName.value.trim(),
+                config: formData.value,
+            })
             toast.add({ title: `${kindLabel.value} "${resourceName.value}" updated`, color: 'success' })
             emit('updated')
         }
         else {
-            await resourcesStore.create(body)
+            await componentsStore.create({
+                kind: props.kind,
+                key: selectedType.value,
+                name: resourceName.value.trim(),
+                config: formData.value,
+            })
             toast.add({ title: `${kindLabel.value} "${resourceName.value}" created`, color: 'success' })
             emit('created')
         }

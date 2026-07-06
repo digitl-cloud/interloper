@@ -2,9 +2,10 @@
 import type { ContextMenuItem } from '@nuxt/ui'
 import { Handle, Position, useVueFlow, useNodeConnections, useNodeId } from '@vue-flow/core'
 import type { Connection } from '@vue-flow/core'
+import type { ComponentRecord } from '~/types/component'
 
 const props = defineProps<{
-    asset: SourceAsset
+    asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
     /** Derived node status (used by the Status view mode). */
     status?: NodeStatus
@@ -17,7 +18,7 @@ const emit = defineEmits<{
     view: []
 }>()
 
-const assetsStore = useAssetsStore()
+const componentsStore = useComponentsStore()
 const { getWarnings } = useAssetWarnings()
 const { getBadgeForAssetId } = useDestinationBadge()
 const { statusBadge } = useDrift()
@@ -89,7 +90,7 @@ const hasRequires = computed(() => {
 const isRunnable = computed(() => {
     if (!hasRequires.value) return true
     const requiredCount = Object.keys(props.assetDefn?.requires ?? {}).length
-    const upstreams = assetsStore.upstreamOf(props.asset.id)
+    const upstreams = componentsStore.dependencies.filter(d => d.src_id === props.asset.id)
     return upstreams.length >= requiredCount
 })
 
@@ -125,8 +126,8 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                         description: `This will remove all upstream dependencies from "${label.value}".`,
                     })
                     if (confirmed) {
-                        const deps = assetsStore.dependencies.filter(d => d.asset_id === props.asset.id)
-                        await Promise.all(deps.map(d => assetsStore.removeDependency(d.asset_id, d.upstream_asset_id)))
+                        const deps = componentsStore.dependencies.filter(d => d.src_id === props.asset.id)
+                        await Promise.all(deps.map(d => componentsStore.removeRelation(d.src_id, 'dependency', d.dst_id)))
                     }
                 },
             },

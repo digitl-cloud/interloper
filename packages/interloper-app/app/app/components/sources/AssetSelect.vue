@@ -9,6 +9,7 @@
  */
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
 import { parseQualifiedKey } from '~/types/catalog'
+import type { ComponentRecord } from '~/types/component'
 
 const selectedKeys = defineModel<string[]>('selectedKeys', { default: () => [] })
 
@@ -22,7 +23,7 @@ const props = defineProps<{
     /** The source definition whose assets to display. */
     sourceDefn: SourceDefinition
     /** All existing sources in the system (for candidate discovery). */
-    allSources: Array<{ id: string; key: string; name: string; assets: Array<{ id: string; key: string }> }>
+    allSources: ComponentRecord[]
 }>()
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -71,12 +72,12 @@ function getAssetDeps(assetDefn: AssetDefinition): AssetDep[] {
         const candidates: DepCandidate[] = []
         for (const source of props.allSources) {
             if (source.key !== sourceKey) continue
-            const asset = source.assets.find(a => a.key === assetKey)
+            const asset = source.children.find(a => a.key === assetKey)
             if (!asset) continue
             candidates.push({
                 assetId: asset.id,
                 sourceId: source.id,
-                sourceName: source.name,
+                sourceName: source.name ?? source.key,
                 assetName: label,
                 sameSource: false, // cross-source by definition
             })

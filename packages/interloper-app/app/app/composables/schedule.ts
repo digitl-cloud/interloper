@@ -1,6 +1,6 @@
 import cronstrue from 'cronstrue'
-import type { Source } from '~/types/source'
-import type { Job } from '~/types/job'
+import type { ComponentRecord } from '~/types/component'
+import { jobCron, jobEnabled, jobNextRunAt, jobTargetIds } from '~/types/component'
 
 /** Human-readable cron, e.g. "Daily at 06:00". Falls back to the raw expression. */
 export function cronLabel(cron: string): string {
@@ -61,25 +61,25 @@ export interface SourceSchedule {
  * summarise the job(s) that reference a given source.
  */
 export function useSchedule() {
-    const jobsStore = useJobsStore()
+    const componentsStore = useComponentsStore()
 
-    function jobsForSource(source: Source): Job[] {
-        return jobsStore.jobs.filter(j => j.source_ids.includes(source.id))
+    function jobsForSource(source: ComponentRecord): ComponentRecord[] {
+        return componentsStore.byKind('job').filter(j => jobTargetIds(j, 'source').includes(source.id))
     }
 
     /** Schedule summary for a source, or null when no job references it. */
-    function getSourceSchedule(source: Source): SourceSchedule | null {
+    function getSourceSchedule(source: ComponentRecord): SourceSchedule | null {
         const jobs = jobsForSource(source)
         if (jobs.length === 0) return null
 
-        const paused = jobs.every(j => !j.enabled)
+        const paused = jobs.every(j => !jobEnabled(j))
         const nextRunAt = jobs
-            .map(j => j.next_run_at)
+            .map(j => jobNextRunAt(j))
             .filter((d): d is string => !!d)
             .sort()[0] ?? null
 
         if (jobs.length === 1) {
-            return { label: scheduleSummary(jobs[0]!.cron), paused, jobCount: 1, nextRunAt }
+            return { label: scheduleSummary(jobCron(jobs[0]!)), paused, jobCount: 1, nextRunAt }
         }
         return { label: 'Multiple schedules', paused, jobCount: jobs.length, nextRunAt }
     }

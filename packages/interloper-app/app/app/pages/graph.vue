@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
-import type { Source } from '~/types/source'
+import type { ComponentRecord } from '~/types/component'
 
 definePageMeta({ title: 'Graph', fullBleed: true })
 
@@ -11,10 +11,8 @@ const {
     editing: editingSource,
     openCreate: onCreateSource,
     openEdit: openEditSource,
-} = useWizardDrawer<Source>()
-const sourcesStore = useSourcesStore()
-const assetsStore = useAssetsStore()
-const jobsStore = useJobsStore()
+} = useWizardDrawer<ComponentRecord>()
+const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
@@ -26,7 +24,7 @@ const statusFilter = ref<StatusFilter>('all')
 const { sourceStatus } = useNodeStatus()
 const statusCounts = computed<Record<StatusFilter, number>>(() => {
     const c: Record<StatusFilter, number> = { all: 0, healthy: 0, attention: 0, paused: 0 }
-    for (const s of sourcesStore.sources) {
+    for (const s of componentsStore.byKind('source')) {
         c.all++
         const state = sourceStatus(s).state
         if (state === 'paused') c.paused++
@@ -37,33 +35,34 @@ const statusCounts = computed<Record<StatusFilter, number>>(() => {
 })
 
 onMounted(() => {
-    if (!sourcesStore.loading) sourcesStore.fetch()
-    if (!assetsStore.loading) assetsStore.fetch()
-    if (!jobsStore.loading) jobsStore.fetch()
+    if (!componentsStore.loading) {
+        componentsStore.fetchAll()
+        componentsStore.fetchRelations('dependency')
+    }
 })
 
 function onEditSource(sourceId: string) {
-    const source = sourcesStore.findById(sourceId)
+    const source = componentsStore.byId(sourceId)
     if (source) openEditSource(source)
 }
 
 function handleSaved() {
-    sourcesStore.fetch()
-    assetsStore.fetch()
+    componentsStore.fetchAll()
+    componentsStore.fetchRelations('dependency')
     sourceDrawerOpen.value = false
 }
 
 const panelOpen = ref(false)
 const closing = ref(false)
 const panelVisible = computed(() => panelOpen.value || closing.value)
-const selectedAsset = ref<SourceAsset | undefined>()
+const selectedAsset = ref<ComponentRecord | undefined>()
 const selectedAssetDefn = ref<AssetDefinition | undefined>()
-const selectedSource = ref<Source | undefined>()
+const selectedSource = ref<ComponentRecord | undefined>()
 
-function onAssetClick(asset: SourceAsset | Asset, assetDefn: AssetDefinition | undefined, source: Source | null) {
+function onAssetClick(asset: ComponentRecord, assetDefn: AssetDefinition | undefined, source: ComponentRecord | null) {
     // Panel is only shown for source-owned assets; standalone assets have no source.
     if (!source) return
-    selectedAsset.value = asset as SourceAsset
+    selectedAsset.value = asset
     selectedAssetDefn.value = assetDefn
     selectedSource.value = source
     panelOpen.value = true
@@ -80,9 +79,9 @@ function onCloseAnimationEnd() {
 }
 
 async function onDeleteSource(sourceId: string) {
-    const source = sourcesStore.findById(sourceId)
+    const source = componentsStore.byId(sourceId)
     try {
-        await sourcesStore.remove(sourceId)
+        await componentsStore.remove(sourceId)
         toast.add({ title: `Source "${source?.name ?? 'Source'}" deleted`, color: 'success' })
     }
     catch {
@@ -94,7 +93,7 @@ async function onCreateDependencies(pairs: Array<{ upstreamAssetId: string; down
     try {
         await Promise.all(
             pairs.map(({ downstreamAssetId, upstreamAssetId, paramName }) =>
-                assetsStore.addDependency(downstreamAssetId, upstreamAssetId, paramName),
+                componentsStore.addRelation(downstreamAssetId, { type: 'dependency', dst_id: upstreamAssetId, slot: paramName }),
             ),
         )
     }
@@ -105,7 +104,7 @@ async function onCreateDependencies(pairs: Array<{ upstreamAssetId: string; down
 
 async function onDeleteDependency(payload: { upstreamAssetId: string; downstreamAssetId: string }) {
     try {
-        await assetsStore.removeDependency(payload.downstreamAssetId, payload.upstreamAssetId)
+        await componentsStore.removeRelation(payload.downstreamAssetId, 'dependency', payload.upstreamAssetId)
     }
     catch {
         toast.add({ title: 'Failed to delete dependency', color: 'error' })

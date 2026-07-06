@@ -2,15 +2,15 @@
 /**
  * Checkbox multi-select for choosing which sources to include in a job.
  */
-import type { Source } from '~/types/source'
+import type { ComponentRecord } from '~/types/component'
 
 const selectedIds = defineModel<string[]>({ default: () => [] })
 
 defineProps<{
-    sources: Source[]
+    sources: ComponentRecord[]
 }>()
 
-function sourceIcon(source: Source): string {
+function sourceIcon(source: ComponentRecord): string {
     return componentIcon(source.key)
 }
 
@@ -20,7 +20,7 @@ function toggle(id: string) {
     else selectedIds.value.push(id)
 }
 
-function selectAll(sources: Source[]) {
+function selectAll(sources: ComponentRecord[]) {
     selectedIds.value = sources.map(s => s.id)
 }
 
@@ -75,7 +75,7 @@ function deselectAll() {
                         variant="subtle"
                         size="xs"
                         class="ml-auto">
-                    {{ source.assets.length }} asset{{ source.assets.length !== 1 ? 's' : '' }}
+                    {{ source.children.length }} asset{{ source.children.length !== 1 ? 's' : '' }}
                 </UBadge>
             </SelectionCard>
         </div>

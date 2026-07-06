@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { Resource } from '~/types/resource'
+import type { ComponentRecord } from '~/types/component'
 
 definePageMeta({ title: 'Resources' })
 
@@ -10,7 +10,7 @@ const UBadge = resolveComponent('UBadge')
 
 const route = useRoute()
 const catalogStore = useCatalogStore()
-const resourcesStore = useResourcesStore()
+const componentsStore = useComponentsStore()
 
 const kind = computed(() => route.params.kind as string)
 const pageTitle = computed(() => {
@@ -22,7 +22,7 @@ const pageTitle = computed(() => {
 const definitions = computed(() => catalogStore.definitionsForKind(kind.value))
 
 /** Resources filtered by current kind. */
-const resources = computed(() => resourcesStore.byKind(kind.value))
+const resources = computed(() => componentsStore.byKind(kind.value))
 
 function typeName(key: string): string {
     return catalogStore.catalog[key]?.name ?? key
@@ -37,12 +37,12 @@ const {
     openCreate: handleCreate,
     openCreateWithType: handleCreateFromCatalog,
     openEdit: handleEdit,
-} = useWizardDrawer<Resource>()
+} = useWizardDrawer<ComponentRecord>()
 
 // Re-fetch when kind changes
-watch(kind, () => resourcesStore.fetch(kind.value), { immediate: true })
+watch(kind, () => componentsStore.fetchAll([kind.value]), { immediate: true })
 
-const columns: TableColumn<Resource>[] = [
+const columns: TableColumn<ComponentRecord>[] = [
     { accessorKey: 'select' as any, header: '' },
     { accessorKey: 'name', header: 'Name' },
     {
@@ -60,7 +60,7 @@ const columns: TableColumn<Resource>[] = [
     {
         accessorKey: 'created_at',
         header: 'Created',
-        accessorFn: (row: Resource) => row.created_at ? formatDate(row.created_at) : '-',
+        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '-',
     },
 ]
 
@@ -68,7 +68,7 @@ const toast = useToast()
 
 async function handleDelete(ids: string[]) {
     try {
-        await resourcesStore.remove(ids)
+        await componentsStore.remove(ids)
         toast.add({ title: `${ids.length} resource(s) deleted`, color: 'success' })
     }
     catch {
@@ -77,7 +77,7 @@ async function handleDelete(ids: string[]) {
 }
 
 function handleSaved() {
-    resourcesStore.fetch(kind.value)
+    componentsStore.fetchAll([kind.value])
     drawerOpen.value = false
 }
 
@@ -110,7 +110,7 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="resources"
-                       :loading="resourcesStore.loading"
+                       :loading="componentsStore.loading"
                        :search-placeholder="`Search ${pageTitle.toLowerCase()}...`"
                        @delete="handleDelete"
                        @edit="handleEdit">

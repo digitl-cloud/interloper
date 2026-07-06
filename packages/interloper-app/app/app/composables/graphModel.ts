@@ -2,7 +2,8 @@ import type { MaybeRefOrGetter } from 'vue'
 import { qualifiedKey } from '~/types/catalog'
 import { stateFromExecution, toGraphDependency } from '~/types/graph'
 import type { GraphModel, GraphSourceEntry, GraphAssetEntry, NodeStatus } from '~/types/graph'
-import type { AssetDependency } from '~/types/asset'
+import type { ComponentRecord, Relation } from '~/types/component'
+import { jobTargetIds } from '~/types/component'
 
 /**
  * Graph model builders — one per surface. Each returns the same normalised
@@ -17,13 +18,18 @@ import type { AssetDependency } from '~/types/asset'
 function assemble(
     sources: GraphSourceEntry[],
     assets: GraphAssetEntry[],
-    deps: AssetDependency[],
+    deps: Relation[],
 ): GraphModel {
     const present = new Set(assets.map(e => e.asset.id))
     const dependencies = deps
-        .filter(d => present.has(d.asset_id) && present.has(d.upstream_asset_id))
+        .filter(d => present.has(d.src_id) && present.has(d.dst_id))
         .map(toGraphDependency)
     return { sources, assets, dependencies }
+}
+
+/** Standalone assets: persisted assets without an owning source. */
+function standaloneAssets(componentsStore: ReturnType<typeof useComponentsStore>): ComponentRecord[] {
+    return componentsStore.byKind('asset').filter(a => a.parent_id === null)
 }
 
 interface CatalogGraphOptions {
@@ -33,16 +39,15 @@ interface CatalogGraphOptions {
 
 /** Catalog-wide graph: every source, its assets, standalone assets, all deps. */
 export function useCatalogGraph(options: CatalogGraphOptions = {}) {
-    const sourcesStore = useSourcesStore()
-    const assetsStore = useAssetsStore()
+    const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
     const { assetStatus, sourceStatus } = useNodeStatus()
 
     const sources = computed(() => {
         const ids = toValue(options.sourceIds)
-        if (!ids) return sourcesStore.sources
+        if (!ids) return componentsStore.byKind('source')
         const set = new Set(ids)
-        return sourcesStore.sources.filter(s => set.has(s.id))
+        return componentsStore.byKind('source').filter(s => set.has(s.id))
     })
 
     const model = computed<GraphModel>(() => {
@@ -54,7 +59,7 @@ export function useCatalogGraph(options: CatalogGraphOptions = {}) {
 
         const assetEntries: GraphAssetEntry[] = []
         for (const source of sources.value) {
-            for (const asset of source.assets) {
+            for (const asset of source.children) {
                 assetEntries.push({
                     asset,
                     assetDefn: catalogStore.getAssetDefinition(qualifiedKey(source.key, asset.key)),
@@ -63,7 +68,7 @@ export function useCatalogGraph(options: CatalogGraphOptions = {}) {
                 })
             }
         }
-        for (const asset of assetsStore.standalone) {
+        for (const asset of standaloneAssets(componentsStore)) {
             assetEntries.push({
                 asset,
                 assetDefn: catalogStore.getAssetDefinition(asset.key),
@@ -72,7 +77,7 @@ export function useCatalogGraph(options: CatalogGraphOptions = {}) {
             })
         }
 
-        return assemble(sourceEntries, assetEntries, assetsStore.dependencies)
+        return assemble(sourceEntries, assetEntries, componentsStore.dependencies)
     })
 
     return { model }
@@ -80,19 +85,17 @@ export function useCatalogGraph(options: CatalogGraphOptions = {}) {
 
 /** A single job's subgraph: the sources/assets the job materialises. (Seam — page not yet wired.) */
 export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
-    const jobsStore = useJobsStore()
-    const sourcesStore = useSourcesStore()
-    const assetsStore = useAssetsStore()
+    const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
     const { assetStatus, sourceStatus } = useNodeStatus()
 
     const model = computed<GraphModel>(() => {
-        const job = jobsStore.jobs.find(j => j.id === toValue(jobId))
+        const job = componentsStore.byId(toValue(jobId))
         if (!job) return { sources: [], assets: [], dependencies: [] }
 
-        const sourceIds = new Set(job.source_ids)
-        const assetIds = new Set(job.asset_ids)
-        const sources = sourcesStore.sources.filter(s => sourceIds.has(s.id))
+        const sourceIds = new Set(jobTargetIds(job, 'source'))
+        const assetIds = new Set(jobTargetIds(job, 'asset'))
+        const sources = componentsStore.byKind('source').filter(s => sourceIds.has(s.id))
 
         const sourceEntries: GraphSourceEntry[] = sources.map(source => ({
             source,
@@ -102,7 +105,7 @@ export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
 
         const assetEntries: GraphAssetEntry[] = []
         for (const source of sources) {
-            for (const asset of source.assets) {
+            for (const asset of source.children) {
                 if (!assetIds.has(asset.id)) continue
                 assetEntries.push({
                     asset,
@@ -112,7 +115,7 @@ export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
                 })
             }
         }
-        for (const asset of assetsStore.standalone) {
+        for (const asset of standaloneAssets(componentsStore)) {
             if (!assetIds.has(asset.id)) continue
             assetEntries.push({
                 asset,
@@ -122,7 +125,7 @@ export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
             })
         }
 
-        return assemble(sourceEntries, assetEntries, assetsStore.dependencies)
+        return assemble(sourceEntries, assetEntries, componentsStore.dependencies)
     })
 
     return { model }
@@ -135,8 +138,7 @@ export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
  */
 export function useRunGraph(runId: MaybeRefOrGetter<string>) {
     const assetExecutionsStore = useAssetExecutionsStore()
-    const sourcesStore = useSourcesStore()
-    const assetsStore = useAssetsStore()
+    const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
 
     const statusByAssetId = computed(() => {
@@ -152,7 +154,7 @@ export function useRunGraph(runId: MaybeRefOrGetter<string>) {
         // tracks the store contents reactively.
         void toValue(runId)
         const present = statusByAssetId.value
-        const sources = sourcesStore.sources.filter(s => s.assets.some(a => present.has(a.id)))
+        const sources = componentsStore.byKind('source').filter(s => s.children.some(a => present.has(a.id)))
 
         const sourceEntries: GraphSourceEntry[] = sources.map(source => ({
             source,
@@ -162,7 +164,7 @@ export function useRunGraph(runId: MaybeRefOrGetter<string>) {
 
         const assetEntries: GraphAssetEntry[] = []
         for (const source of sources) {
-            for (const asset of source.assets) {
+            for (const asset of source.children) {
                 if (!present.has(asset.id)) continue
                 assetEntries.push({
                     asset,
@@ -172,7 +174,7 @@ export function useRunGraph(runId: MaybeRefOrGetter<string>) {
                 })
             }
         }
-        for (const asset of assetsStore.standalone) {
+        for (const asset of standaloneAssets(componentsStore)) {
             if (!present.has(asset.id)) continue
             assetEntries.push({
                 asset,
@@ -182,7 +184,7 @@ export function useRunGraph(runId: MaybeRefOrGetter<string>) {
             })
         }
 
-        return assemble(sourceEntries, assetEntries, assetsStore.dependencies)
+        return assemble(sourceEntries, assetEntries, componentsStore.dependencies)
     })
 
     return { model }

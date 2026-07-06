@@ -1,4 +1,5 @@
-import type { Source } from '~/types/source'
+import type { ComponentRecord } from '~/types/component'
+import { jobTargetIds, relationRefs } from '~/types/component'
 import type { AssetDefinition } from '~/types/catalog'
 import { parseQualifiedKey, qualifiedKey } from '~/types/catalog'
 
@@ -20,17 +21,17 @@ export interface AssetWarning {
  *   - job         — the asset's source is not associated with any job
  */
 export function useAssetWarnings() {
-    const sourcesStore = useSourcesStore()
-    const assetsStore = useAssetsStore()
+    const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
-    const jobsStore = useJobsStore()
+
+    const sources = computed(() => componentsStore.byKind('source'))
 
     /** Recorded upstream asset IDs per asset. */
     const upstreamsByAssetId = computed(() => {
         const map = new Map<string, Set<string>>()
-        for (const dep of assetsStore.dependencies) {
-            if (!map.has(dep.asset_id)) map.set(dep.asset_id, new Set())
-            map.get(dep.asset_id)!.add(dep.upstream_asset_id)
+        for (const dep of componentsStore.dependencies) {
+            if (!map.has(dep.src_id)) map.set(dep.src_id, new Set())
+            map.get(dep.src_id)!.add(dep.dst_id)
         }
         return map
     })
@@ -41,8 +42,8 @@ export function useAssetWarnings() {
      */
     const assetIdByQualifiedKey = computed(() => {
         const map = new Map<string, string>()
-        for (const source of sourcesStore.sources) {
-            for (const asset of source.assets) {
+        for (const source of sources.value) {
+            for (const asset of source.children) {
                 map.set(qualifiedKey(source.key, asset.key), asset.id)
             }
         }
@@ -51,9 +52,9 @@ export function useAssetWarnings() {
 
     /** asset id → source (for checking destinations at the source level). */
     const sourceByAssetId = computed(() => {
-        const map = new Map<string, Source>()
-        for (const source of sourcesStore.sources) {
-            for (const asset of source.assets) {
+        const map = new Map<string, ComponentRecord>()
+        for (const source of sources.value) {
+            for (const asset of source.children) {
                 map.set(asset.id, source)
             }
         }
@@ -63,8 +64,8 @@ export function useAssetWarnings() {
     /** source id → set of job ids that reference it. */
     const jobsBySourceId = computed(() => {
         const map = new Map<string, string[]>()
-        for (const job of jobsStore.jobs) {
-            for (const sourceId of job.source_ids) {
+        for (const job of componentsStore.byKind('job')) {
+            for (const sourceId of jobTargetIds(job, 'source')) {
                 if (!map.has(sourceId)) map.set(sourceId, [])
                 map.get(sourceId)!.push(job.id)
             }
@@ -112,7 +113,7 @@ export function useAssetWarnings() {
         }
 
         // --- Destination warnings ---
-        if (source && source.destinations.length === 0) {
+        if (source && relationRefs(source, 'destination').length === 0) {
             warnings.push({ category: 'destination', message: 'No destination configured' })
         }
 
@@ -127,8 +128,8 @@ export function useAssetWarnings() {
     /**
      * Check whether any asset in a source has warnings.
      */
-    function sourceHasWarnings(source: Source): boolean {
-        return source.assets.some(a => getWarnings(a.id, a.key).length > 0)
+    function sourceHasWarnings(source: ComponentRecord): boolean {
+        return source.children.some(a => getWarnings(a.id, a.key).length > 0)
     }
 
     /**

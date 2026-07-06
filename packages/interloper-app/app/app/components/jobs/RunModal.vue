@@ -7,15 +7,17 @@
  */
 import { today, getLocalTimeZone } from '@internationalized/date'
 import type { DateRange } from 'reka-ui'
-import type { Job } from '~/types/job'
+import type { ComponentRecord } from '~/types/component'
+import { jobPartitioned } from '~/types/component'
 
 const open = defineModel<boolean>('open', { default: false })
 
 const props = defineProps<{
-    job: Job
+    job: ComponentRecord
 }>()
 
-const jobsStore = useJobsStore()
+const runsStore = useRunsStore()
+const backfillsStore = useBackfillsStore()
 const toast = useToast()
 
 const submitting = ref(false)
@@ -110,18 +112,18 @@ async function onSubmit() {
     submitting.value = true
     try {
         if (isRange.value) {
-            const backfillId = await jobsStore.queueBackfill(
-                props.job.id,
-                startISO.value,
-                endISO.value,
-                { failFast: failFast.value },
-            )
+            const backfillId = await backfillsStore.createBackfill({
+                jobId: props.job.id,
+                startDate: startISO.value,
+                endDate: endISO.value,
+                failFast: failFast.value,
+            })
             toast.add({ title: `Backfill queued (${backfillId.slice(0, 8)})`, color: 'success' })
         }
         else {
-            const runId = await jobsStore.queueRun(
+            const runId = await runsStore.createRun(
                 props.job.id,
-                props.job.partitioned ? startISO.value : undefined,
+                jobPartitioned(props.job) ? startISO.value : undefined,
             )
             toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
         }

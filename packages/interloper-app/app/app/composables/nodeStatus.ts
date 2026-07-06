@@ -1,4 +1,4 @@
-import type { Source } from '~/types/source'
+import type { ComponentRecord } from '~/types/component'
 import type { NodeStatus, GraphNodeState } from '~/types/graph'
 
 /** Tailwind class for a status indicator dot, keyed by node state. */
@@ -56,10 +56,10 @@ export function useNodeStatus() {
             : { state: 'idle' }
     }
 
-    function sourceStatus(source: Source): NodeStatus {
+    function sourceStatus(source: ComponentRecord): NodeStatus {
         const schedule = getSourceSchedule(source)
         if (schedule?.paused) return { state: 'paused' }
-        const hasWarning = source.assets.some(a => getWarnings(a.id, a.key).length > 0)
+        const hasWarning = source.children.some(a => getWarnings(a.id, a.key).length > 0)
         return hasWarning ? { state: 'attention' } : { state: 'idle' }
     }
 

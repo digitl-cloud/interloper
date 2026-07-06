@@ -1,5 +1,6 @@
 import type { Connection } from '@vue-flow/core'
 import { qualifiedKey } from '~/types/catalog'
+import type { ComponentRecord, Relation } from '~/types/component'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -33,8 +34,9 @@ export interface DependencyPair {
 }
 
 interface UseGraphConnectionRulesOptions {
-    sources: Ref<Source[]>
-    assetDependencies: Ref<AssetDependency[]>
+    sources: Ref<ComponentRecord[]>
+    /** Persisted `dependency` relations (src = downstream asset, dst = upstream). */
+    assetDependencies: Ref<Relation[]>
     assetToSource: Ref<Map<string, string | null>>
     /** asset id → qualified key ("source_key.asset_key") */
     qualifiedKeyById: Ref<Map<string, string>>
@@ -179,7 +181,7 @@ export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions)
     /** Check if a dependency already exists. */
     function depExists(downstreamId: string, upstreamId: string): boolean {
         return options.assetDependencies.value.some(
-            d => d.asset_id === downstreamId && d.upstream_asset_id === upstreamId,
+            d => d.src_id === downstreamId && d.dst_id === upstreamId,
         )
     }
 
@@ -197,7 +199,7 @@ export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions)
         else {
             const source = options.sources.value.find(s => s.id === srcNode)
             if (source) {
-                for (const a of source.assets) {
+                for (const a of source.children) {
                     upstreamAssets.push({ id: a.id, qk: qualifiedKey(source.key, a.key) })
                 }
             }
@@ -212,7 +214,7 @@ export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions)
         else {
             const source = options.sources.value.find(s => s.id === tgtNode)
             if (source) {
-                for (const a of source.assets) {
+                for (const a of source.children) {
                     downstreamAssets.push({ id: a.id, qk: qualifiedKey(source.key, a.key) })
                 }
             }

@@ -149,7 +149,7 @@ const oauthFilled = computed(() => {
 })
 
 // ── Resource resolution ──────────────────────────────────────────
-const resourcesStore = useResourcesStore()
+const componentsStore = useComponentsStore()
 
 /** Internally-fetched resource data from `resourceIds` prop. */
 const resolvedResources = ref<Record<string, Record<string, unknown>>>({})
@@ -166,10 +166,10 @@ watch(
             // Skip if already resolved for this ID
             if ((resolvedResources.value[slotName] as any)?._id === resourceId) continue
             try {
-                const detail = await resourcesStore.fetchOne(resourceId)
+                const detail = await componentsStore.fetchOne(resourceId)
                 resolvedResources.value = {
                     ...resolvedResources.value,
-                    [slotName]: { ...detail.data, _id: resourceId },
+                    [slotName]: { ...detail.config, _id: resourceId },
                 }
             }
             catch {

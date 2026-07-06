@@ -4,23 +4,19 @@ import { getGroupedRowModel } from '@tanstack/vue-table'
 import type { GroupingOptions } from '@tanstack/vue-table'
 import type { CatalogRow } from '~/composables/catalog'
 
-const sourcesStore = useSourcesStore()
-const assetsStore = useAssetsStore()
-const destinationsStore = useDestinationsStore()
-const jobsStore = useJobsStore()
+const componentsStore = useComponentsStore()
 const runsStore = useRunsStore()
 const toast = useToast()
 const { confirm } = useConfirm()
-const { sources, loading } = storeToRefs(sourcesStore)
-const { assets, dependencies } = storeToRefs(assetsStore)
-const { destinations } = storeToRefs(destinationsStore)
-const { jobs } = storeToRefs(jobsStore)
+const { loading, dependencies } = storeToRefs(componentsStore)
+const sources = computed(() => componentsStore.byKind('source'))
+const destinations = computed(() => componentsStore.byKind('destination'))
+const jobs = computed(() => componentsStore.byKind('job'))
 const { runs } = storeToRefs(runsStore)
 const { getWarnings, filterByCategory } = useAssetWarnings()
 const { statusBadge } = useDrift()
 const { data, sourceInfoById, assetCount } = useCatalogRows({
     sources,
-    assets,
     dependencies,
     destinations,
     jobs,
@@ -87,7 +83,7 @@ async function deleteSource(sourceId: string) {
     })
     if (!confirmed) return
     try {
-        await sourcesStore.remove(sourceId)
+        await componentsStore.remove(sourceId)
         toast.add({ title: `Source "${info?.name ?? 'Source'}" deleted`, color: 'success' })
     }
     catch {
