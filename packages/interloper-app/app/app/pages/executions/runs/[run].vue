@@ -100,7 +100,10 @@ onMounted(async () => {
             runsStore.fetchOne(runId),
             eventsStore.fetchForRun(runId),
             assetExecutionsStore.fetchForRun(runId),
-            componentsStore.byKind('source').length === 0 ? componentsStore.fetchAll(['source', 'asset']) : Promise.resolve(),
+            // Sources/assets back the Graph view; jobs resolve the run's target in the summary.
+            componentsStore.byKind('source').length === 0 || componentsStore.byKind('job').length === 0
+                ? componentsStore.fetchAll(['source', 'asset', 'job'])
+                : Promise.resolve(),
             // Asset dependency relations back the Graph view's edges.
             componentsStore.dependencies.length === 0 ? componentsStore.fetchRelations('dependency') : Promise.resolve(),
             catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),

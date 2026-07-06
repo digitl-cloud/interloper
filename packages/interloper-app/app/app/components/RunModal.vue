@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * Modal for triggering a job run or backfill.
+ * Modal for triggering a run of a runnable component (job, source, or asset).
  *
- * Same date → single run, date range → backfill.
+ * Jobs: same date → single run, date range → backfill.
+ * Sources/assets: single partition date → run (backfills are job-only).
  * Mirrors the MaterializeModal layout from the old app.
  */
 import { today, getLocalTimeZone } from '@internationalized/date'
@@ -13,12 +14,17 @@ import { jobPartitioned } from '~/types/component'
 const open = defineModel<boolean>('open', { default: false })
 
 const props = defineProps<{
-    job: ComponentRecord
+    target: ComponentRecord
+    /** Whether the target takes a partition date. Defaults to the job's config for jobs. */
+    partitioned?: boolean
 }>()
 
 const runsStore = useRunsStore()
 const backfillsStore = useBackfillsStore()
 const toast = useToast()
+
+const isJob = computed(() => props.target.kind === 'job')
+const partitioned = computed(() => props.partitioned ?? (isJob.value && jobPartitioned(props.target)))
 
 const submitting = ref(false)
 const failFast = ref(false)
@@ -26,6 +32,12 @@ const failFast = ref(false)
 const now = today(getLocalTimeZone())
 
 const dateRange = shallowRef<DateRange>({ start: now, end: now })
+
+/** Single-date proxy for non-job targets (no backfills, so no range picking). */
+const singleDate = computed({
+    get: () => dateRange.value.start,
+    set: (d) => { dateRange.value = { start: d, end: d } },
+})
 
 const startISO = computed(() => dateRange.value.start?.toString())
 const endISO = computed(() => dateRange.value.end?.toString())
@@ -90,6 +102,16 @@ const presets: Preset[] = [
     },
 ]
 
+/** Non-job targets can't backfill — hide multi-day presets. */
+const visiblePresets = computed(() =>
+    isJob.value
+        ? presets
+        : presets.filter((p) => {
+            const r = p.range()
+            return r.start?.toString() === r.end?.toString()
+        }),
+)
+
 const activePreset = computed(() =>
     presets.find((p) => {
         const r = p.range()
@@ -113,7 +135,7 @@ async function onSubmit() {
     try {
         if (isRange.value) {
             const backfillId = await backfillsStore.createBackfill({
-                jobId: props.job.id,
+                componentId: props.target.id,
                 startDate: startISO.value,
                 endDate: endISO.value,
                 failFast: failFast.value,
@@ -122,8 +144,8 @@ async function onSubmit() {
         }
         else {
             const runId = await runsStore.createRun(
-                props.job.id,
-                jobPartitioned(props.job) ? startISO.value : undefined,
+                props.target.id,
+                partitioned.value ? startISO.value : undefined,
             )
             toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
         }
@@ -146,7 +168,7 @@ async function onSubmit() {
             <UBadge color="neutral"
                     variant="subtle"
                     class="ml-1.5">
-                {{ props.job.name }}
+                {{ props.target.name ?? props.target.key }}
             </UBadge>
         </template>
 
@@ -154,7 +176,7 @@ async function onSubmit() {
             <div class="flex">
                 <!-- Presets -->
                 <div class="flex flex-col gap-1 border-r border-default pr-4">
-                    <UButton v-for="preset in presets"
+                    <UButton v-for="preset in visiblePresets"
                              :key="preset.label"
                              :icon="preset.icon"
                              :label="preset.label"
@@ -167,8 +189,11 @@ async function onSubmit() {
 
                 <!-- Calendar -->
                 <div class="flex flex-col w-full pl-4">
-                    <UCalendar v-model="dateRange"
+                    <UCalendar v-if="isJob"
+                               v-model="dateRange"
                                range />
+                    <UCalendar v-else
+                               v-model="singleDate" />
                     <p class="text-xs text-muted mt-3">
                         <template v-if="isRange">
                             This will create a <strong>backfill</strong> with daily runs from {{ startISO }} to {{ endISO }}.

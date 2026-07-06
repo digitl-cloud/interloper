@@ -57,9 +57,9 @@ export const useBackfillsStore = defineStore('backfills', () => {
         return apiFetch<Backfill>(`/backfills/${id}`)
     }
 
-    /** Queue a backfill for a job. Returns the created backfill's id. */
+    /** Queue a backfill for a job (backfills are job-only). Returns the created backfill's id. */
     async function createBackfill(input: {
-        jobId: string
+        componentId: string
         startDate: string
         endDate: string
         concurrency?: number
@@ -68,7 +68,7 @@ export const useBackfillsStore = defineStore('backfills', () => {
         const backfill = await apiFetch<Backfill>('/backfills', {
             method: 'POST',
             body: {
-                job_id: input.jobId,
+                component_id: input.componentId,
                 start_date: input.startDate,
                 end_date: input.endDate,
                 concurrency: input.concurrency ?? 1,

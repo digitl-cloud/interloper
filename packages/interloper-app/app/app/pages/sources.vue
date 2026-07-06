@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
 import { relationIds } from '~/types/component'
 
@@ -32,6 +32,43 @@ const {
 } = useWizardDrawer<ComponentRecord>()
 
 componentsStore.fetchAll(['source', 'destination'])
+
+// ── Run now ─────────────────────────────────────────────────────
+
+const runsStore = useRunsStore()
+const runModalOpen = ref(false)
+const runModalSource = ref<ComponentRecord | null>(null)
+
+/** Whether any of the source's assets is partitioned (then a partition date is prompted). */
+function sourcePartitioned(source: ComponentRecord): boolean {
+    const defn = catalogStore.getSourceDefinition(source.key)
+    return defn?.assets?.some(a => a.partitioning) ?? false
+}
+
+async function runNow(source: ComponentRecord) {
+    if (sourcePartitioned(source)) {
+        runModalSource.value = source
+        runModalOpen.value = true
+        return
+    }
+    try {
+        const runId = await runsStore.createRun(source.id)
+        toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
+    }
+    catch {
+        toast.add({ title: 'Failed to queue run', color: 'error' })
+    }
+}
+
+function rowActions(source: ComponentRecord): DropdownMenuItem[][] {
+    return [[
+        {
+            label: 'Run now',
+            icon: 'i-lucide-play',
+            onSelect: () => runNow(source),
+        },
+    ]]
+}
 
 const columns: TableColumn<ComponentRecord>[] = [
     { accessorKey: 'select' as any, header: '' },
@@ -130,6 +167,7 @@ async function handleDelete(ids: string[]) {
             <DataTable :columns="columns"
                        :data="sources"
                        :loading="componentsStore.loading"
+                       :row-actions="rowActions"
                        search-placeholder="Search sources..."
                        @delete="handleDelete"
                        @edit="handleEdit">
@@ -158,5 +196,10 @@ async function handleDelete(ids: string[]) {
                             @created="handleSaved"
                             @updated="handleSaved" />
         </WizardDrawer>
+
+        <RunModal v-if="runModalSource"
+                  v-model:open="runModalOpen"
+                  :target="runModalSource"
+                  partitioned />
     </div>
 </template>

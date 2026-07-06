@@ -187,7 +187,7 @@ async function fetchRecentRuns() {
         return
     }
     try {
-        recentRuns.value = await apiFetch<Run[]>(`/runs?job_id=${job.id}&limit=7`)
+        recentRuns.value = await apiFetch<Run[]>(`/runs?component_id=${job.id}&limit=7`)
     }
     catch {
         recentRuns.value = []
@@ -216,8 +216,8 @@ const materialization = computed(() => {
     }
 })
 
-/** Job that materialises this asset (from the latest run, else the source's first job). */
-const jobName = computed(() => latestRun.value?.job?.name ?? jobsForSource(props.source)[0]?.name ?? null)
+/** Job that materialises this asset (the source's first job — recent runs are fetched for it). */
+const jobName = computed(() => jobsForSource(props.source)[0]?.name ?? null)
 
 const materializationMeta = computed(() => {
     const head = lastRunText.value ? `Last run ${lastRunText.value}` : 'Not yet materialized'
@@ -233,6 +233,31 @@ function heatColor(status: string): string {
 function historyTooltip(run: Run): string {
     const elapsed = formatElapsed(run.started_at, run.completed_at)
     return `${statusLabel(run.status)}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(run.started_at)}`
+}
+
+// ── Run now ─────────────────────────────────────────────────────
+
+const runsStore = useRunsStore()
+const runModalOpen = ref(false)
+const runSubmitting = ref(false)
+
+/** Partitioned assets prompt for a partition date; the rest run immediately. */
+async function runNow() {
+    if (isPartitioned.value) {
+        runModalOpen.value = true
+        return
+    }
+    runSubmitting.value = true
+    try {
+        const runId = await runsStore.createRun(props.asset.id)
+        toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
+    }
+    catch {
+        toast.add({ title: 'Failed to queue run', color: 'error' })
+    }
+    finally {
+        runSubmitting.value = false
+    }
 }
 
 /** Upstream dependencies as display rows (param → resolved upstream asset). */
@@ -269,6 +294,14 @@ const dependencyRows = computed(() => {
                     </p>
                 </div>
                 <UButton class="shrink-0 ml-auto"
+                         icon="i-lucide-play"
+                         label="Run now"
+                         color="neutral"
+                         variant="outline"
+                         size="xs"
+                         :loading="runSubmitting"
+                         @click="runNow" />
+                <UButton class="shrink-0"
                          icon="i-lucide-x"
                          color="neutral"
                          variant="ghost"
@@ -573,5 +606,9 @@ const dependencyRows = computed(() => {
                 </template>
             </UCollapsible>
         </div>
+
+        <RunModal v-model:open="runModalOpen"
+                  :target="asset"
+                  :partitioned="isPartitioned" />
     </div>
 </template>

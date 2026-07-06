@@ -56,14 +56,14 @@ export const useRunsStore = defineStore('runs', () => {
     /**********************
      * Actions
      **********************/
-    async function fetch(filters?: { jobId?: string; backfillId?: string; status?: string }) {
+    async function fetch(filters?: { componentId?: string; backfillId?: string; status?: string }) {
         loading.value = true
         error.value = null
         try {
             const params = new URLSearchParams()
             params.set('limit', String(pageSize.value))
             params.set('offset', String(pageIndex.value * pageSize.value))
-            if (filters?.jobId) params.set('job_id', filters.jobId)
+            if (filters?.componentId) params.set('component_id', filters.componentId)
             if (filters?.backfillId) params.set('backfill_id', filters.backfillId)
             if (filters?.status) params.set('status', filters.status)
             const res = await apiFetchRaw<Run[]>(`/runs?${params}`)
@@ -82,11 +82,11 @@ export const useRunsStore = defineStore('runs', () => {
         return apiFetch<Run>(`/runs/${id}`)
     }
 
-    /** Queue a manual run for a job. Returns the created run's id. */
-    async function createRun(jobId: string, partitionDate?: string): Promise<string> {
+    /** Queue a manual run for a runnable component (job, source, or asset). Returns the created run's id. */
+    async function createRun(componentId: string, partitionDate?: string): Promise<string> {
         const run = await apiFetch<Run>('/runs', {
             method: 'POST',
-            body: { job_id: jobId, partition_date: partitionDate },
+            body: { component_id: componentId, partition_date: partitionDate },
         })
         return run.id
     }

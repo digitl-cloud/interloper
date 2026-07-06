@@ -1,7 +1,8 @@
 export interface Backfill {
     id: string
     org_id: string
-    job_id: string | null
+    /** Target component (backfills are job-only); null if the job was deleted. */
+    component_id: string | null
     status: string
     start_date: string
     end_date: string
@@ -11,5 +12,4 @@ export interface Backfill {
     started_at: string | null
     completed_at: string | null
     created_at: string | null
-    job: { id: string; name: string } | null
 }
