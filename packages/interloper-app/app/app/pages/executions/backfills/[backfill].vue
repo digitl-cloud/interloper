@@ -22,9 +22,10 @@ const backfillRuns = ref<Run[]>([])
 const runsLoading = ref(false)
 const sorting = ref([{ id: 'partition_date', desc: false }])
 
-const backfillJobName = computed(() =>
-    backfill.value?.job?.name ?? componentsStore.byId(backfill.value?.job_id ?? '')?.name ?? 'Deleted job',
-)
+const backfillTargetName = computed(() => {
+    const target = componentsStore.byId(backfill.value?.component_id ?? '')
+    return target ? (target.name ?? target.key) : 'Deleted job'
+})
 
 const fetchError = ref<unknown>(null)
 
@@ -112,7 +113,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
             <div class="flex items-center gap-1.5">
                 <UIcon name="i-lucide-briefcase"
                        class="size-4" />
-                <span>{{ backfillJobName }}</span>
+                <span>{{ backfillTargetName }}</span>
             </div>
             <div class="flex items-center gap-1.5">
                 <UIcon name="i-lucide-calendar-range"

@@ -13,6 +13,15 @@ const statusFilter = defineModel<string | null>('statusFilter', { default: null 
 
 const stats = useRunStats(toRef(props, 'run'), toRef(props, 'assetExecutions'))
 
+const componentsStore = useComponentsStore()
+
+/** Run target (job, source, or asset), resolved from the components store. */
+const targetName = computed(() => {
+    if (!props.run.component_id) return 'Deleted'
+    const target = componentsStore.byId(props.run.component_id)
+    return target ? (target.name ?? target.key) : 'Deleted'
+})
+
 /** Toggle a status filter; empty buckets aren't selectable (nothing to show). */
 function toggleStatus(bucket: RunStatusBucket) {
     if (bucket.count === 0) return
@@ -41,7 +50,7 @@ function clockTime(value: string | null): string {
 const metaItems = computed(() => [
     { label: 'Duration', icon: 'i-lucide-timer', value: stats.value.duration ?? '—' },
     { label: 'Started', icon: 'i-lucide-play', value: clockTime(props.run.started_at) },
-    { label: 'Job', icon: 'i-lucide-calendar-clock', value: props.run.job?.name ?? 'Manual' },
+    { label: 'Target', icon: 'i-lucide-calendar-clock', value: targetName.value },
     { label: 'Attempt', icon: 'i-lucide-rotate-ccw', value: String(props.run.attempt) },
 ])
 </script>

@@ -29,7 +29,7 @@ onMounted(async () => {
 })
 
 function jobName(backfill: Backfill): string {
-    return backfill.job?.name ?? jobNameMap.value.get(backfill.job_id ?? '') ?? 'Deleted'
+    return jobNameMap.value.get(backfill.component_id ?? '') ?? 'Deleted'
 }
 
 const pagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
@@ -42,8 +42,8 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         cell: ({ row }) => h('span', { class: 'font-mono text-xs' }, row.getValue<string>('id').substring(0, 8)),
     },
     {
-        id: 'job',
-        header: 'Job',
+        id: 'target',
+        header: 'Target',
         cell: ({ row }) => {
             const backfill = row.original as Backfill
             return h(UBadge, { color: 'neutral', variant: 'subtle' }, () => jobName(backfill))

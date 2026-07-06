@@ -101,24 +101,30 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
         return map
     })
 
-    /** Latest run per job. */
-    const lastRunByJobId = computed(() => {
+    /** Latest run per target component (job, source, or asset). */
+    const lastRunByTargetId = computed(() => {
         const map = new Map<string, Run>()
         for (const run of options.runs.value) {
-            if (!run.job_id) continue
-            const existing = map.get(run.job_id)
+            if (!run.component_id) continue
+            const existing = map.get(run.component_id)
             if (!existing || (run.started_at && (!existing.started_at || run.started_at > existing.started_at))) {
-                map.set(run.job_id, run)
+                map.set(run.component_id, run)
             }
         }
         return map
     })
 
     function getLastRunForSource(sourceId: string): { status: string | null; at: string | null } {
-        const sourceJobs = jobsBySourceId.value.get(sourceId) ?? []
+        // Runs targeting the source itself or its assets count, alongside its jobs' runs.
+        const source = options.sources.value.find(s => s.id === sourceId)
+        const targetIds = [
+            sourceId,
+            ...(source?.children.map(a => a.id) ?? []),
+            ...(jobsBySourceId.value.get(sourceId) ?? []).map(j => j.id),
+        ]
         let latest: Run | undefined
-        for (const job of sourceJobs) {
-            const run = lastRunByJobId.value.get(job.id)
+        for (const id of targetIds) {
+            const run = lastRunByTargetId.value.get(id)
             if (!run) continue
             if (!latest || (run.started_at && (!latest.started_at || run.started_at > latest.started_at))) {
                 latest = run
