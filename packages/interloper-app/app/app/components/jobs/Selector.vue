@@ -8,7 +8,8 @@
  *
  * Container-agnostic: the parent wraps this in a UDrawer, modal, etc.
  */
-import type { Job } from '~/types/job'
+import type { ComponentRecord } from '~/types/component'
+import { jobBackfillDays, jobCron, jobEnabled, jobPartitioned, jobTags, jobTargetIds } from '~/types/component'
 import cronstrue from 'cronstrue'
 
 const props = withDefaults(defineProps<{
@@ -22,7 +23,7 @@ const emit = defineEmits<{
     collected: [config: { id?: string; name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; backfillDays: number | null }]
 }>()
 
-const jobsStore = useJobsStore()
+const componentsStore = useComponentsStore()
 
 // ── State ────────────────────────────────────────────────────────
 const searchQuery = ref('')
@@ -30,31 +31,33 @@ const createDrawerOpen = ref(false)
 const createStepperRef = ref<any>(null)
 
 // ── Derived ──────────────────────────────────────────────────────
+const jobs = computed(() => componentsStore.byKind('job'))
+
 const filteredJobs = computed(() => {
-    if (!searchQuery.value) return jobsStore.jobs
+    if (!searchQuery.value) return jobs.value
     const q = searchQuery.value.toLowerCase()
-    return jobsStore.jobs.filter(j =>
-        j.name.toLowerCase().includes(q)
-        || j.cron.includes(q),
+    return jobs.value.filter(j =>
+        (j.name?.toLowerCase().includes(q) ?? false)
+        || jobCron(j).includes(q),
     )
 })
 
 // ── Data fetching ────────────────────────────────────────────────
 onMounted(async () => {
-    await jobsStore.fetch()
+    await componentsStore.fetchAll(['job'])
 })
 
 // ── Handlers ─────────────────────────────────────────────────────
 
-function selectExisting(job: Job) {
+function selectExisting(job: ComponentRecord) {
     emit('collected', {
         id: job.id,
-        name: job.name,
-        cron: job.cron,
-        tags: [...job.tags],
-        enabled: job.enabled,
-        partitioned: job.partitioned,
-        backfillDays: job.backfill_days,
+        name: job.name ?? '',
+        cron: jobCron(job),
+        tags: [...jobTags(job)],
+        enabled: jobEnabled(job),
+        partitioned: jobPartitioned(job),
+        backfillDays: jobBackfillDays(job),
     })
 }
 
@@ -91,7 +94,7 @@ defineExpose({ title })
                      @click="createDrawerOpen = true" />
         </div>
 
-        <UInput v-if="jobsStore.jobs.length > 5"
+        <UInput v-if="jobs.length > 5"
                 v-model="searchQuery"
                 icon="i-lucide-search"
                 placeholder="Search jobs..."
@@ -117,10 +120,10 @@ defineExpose({ title })
                        class="size-5 shrink-0" />
                 <div class="flex flex-col min-w-0 flex-1">
                     <span class="text-sm font-medium">{{ item.name }}</span>
-                    <span class="text-xs text-muted">{{ cronLabel(item.cron) }}</span>
+                    <span class="text-xs text-muted">{{ cronLabel(jobCron(item)) }}</span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <UBadge v-if="item.partitioned"
+                    <UBadge v-if="jobPartitioned(item)"
                             color="neutral"
                             variant="subtle"
                             size="xs">
@@ -128,7 +131,7 @@ defineExpose({ title })
                                class="size-3" />
                         Partitioned
                     </UBadge>
-                    <UBadge v-if="!item.enabled"
+                    <UBadge v-if="!jobEnabled(item)"
                             color="warning"
                             variant="subtle"
                             size="xs">
@@ -137,7 +140,7 @@ defineExpose({ title })
                     <UBadge color="neutral"
                             variant="subtle"
                             size="xs">
-                        {{ item.source_ids.length }} source{{ item.source_ids.length !== 1 ? 's' : '' }}
+                        {{ jobTargetIds(item, 'source').length }} source{{ jobTargetIds(item, 'source').length !== 1 ? 's' : '' }}
                     </UBadge>
                 </div>
             </div>

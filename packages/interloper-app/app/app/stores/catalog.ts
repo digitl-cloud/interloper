@@ -29,7 +29,7 @@ export const useCatalogStore = defineStore('catalog', () => {
     async function fetchCatalog() {
         const [cat, kinds, providers] = await Promise.all([
             apiFetch<Catalog>('/catalog'),
-            apiFetch<string[]>('/resources/kinds'),
+            apiFetch<string[]>('/catalog/resource-kinds'),
             apiFetch<OAuthProviderInfo[]>('/oauth/providers'),
         ])
         catalog.value = cat

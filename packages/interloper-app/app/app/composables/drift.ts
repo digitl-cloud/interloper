@@ -1,5 +1,4 @@
-import type { Source } from '~/types/source'
-import type { ComponentStatus } from '~/types/component'
+import type { ComponentRecord, ComponentStatus } from '~/types/component'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -28,7 +27,9 @@ export interface DriftBadge {
  * quietly, never flagged for cleanup.
  */
 export function useDrift() {
-    const sourcesStore = useSourcesStore()
+    const componentsStore = useComponentsStore()
+
+    const sources = computed(() => componentsStore.byKind('source'))
 
     /** Badge metadata for a status, or `null` when nothing should be shown. */
     function statusBadge(status: SourceDriftStatus): DriftBadge | null {
@@ -45,26 +46,26 @@ export function useDrift() {
     }
 
     /** Rollup drift state for a source (see {@link SourceDriftStatus}). */
-    function sourceDrift(source: Source): SourceDriftStatus {
+    function sourceDrift(source: ComponentRecord): SourceDriftStatus {
         if (source.status !== 'ok') return source.status
-        if (source.assets.some(a => a.status === 'missing')) return 'partial'
+        if (source.children.some(a => a.status === 'missing')) return 'partial'
         return 'ok'
     }
 
     /** Sources whose own key has drifted out of the catalog. */
     const missingSources = computed(() =>
-        sourcesStore.sources.filter(s => s.status === 'missing'),
+        sources.value.filter(s => s.status === 'missing'),
     )
 
     /** Live sources that have at least one drifted asset. */
     const partialSources = computed(() =>
-        sourcesStore.sources.filter(s => s.status === 'ok' && s.assets.some(a => a.status === 'missing')),
+        sources.value.filter(s => s.status === 'ok' && s.children.some(a => a.status === 'missing')),
     )
 
     /** Total count of individual assets whose key has drifted. */
     const missingAssetCount = computed(() =>
-        sourcesStore.sources.reduce(
-            (n, s) => n + s.assets.filter(a => a.status === 'missing').length,
+        sources.value.reduce(
+            (n, s) => n + s.children.filter(a => a.status === 'missing').length,
             0,
         ),
     )

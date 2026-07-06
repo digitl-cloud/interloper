@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
-import type { Source, SourceAsset } from '~/types/source'
+import type { ComponentRecord } from '~/types/component'
 import type { AssetDefinition } from '~/types/catalog'
 
 definePageMeta({ title: 'Catalog', fullBleed: true })
 
-const sourcesStore = useSourcesStore()
-const assetsStore = useAssetsStore()
+const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
-const jobsStore = useJobsStore()
 const runsStore = useRunsStore()
 
 const sourceStepperRef = ref<any>(null)
@@ -20,15 +18,15 @@ const {
     openCreate: onCreateSource,
     openCreateWithType: onCreateSourceFromCatalog,
     openEdit: openEditSource,
-} = useWizardDrawer<Source>()
+} = useWizardDrawer<ComponentRecord>()
 
 // ── Asset panel ────────────────────────────────────────────────
 const panelOpen = ref(false)
 const closing = ref(false)
 const panelVisible = computed(() => panelOpen.value || closing.value)
-const selectedAsset = ref<SourceAsset | undefined>()
+const selectedAsset = ref<ComponentRecord | undefined>()
 const selectedAssetDefn = ref<AssetDefinition | undefined>()
-const selectedSource = ref<Source | undefined>()
+const selectedSource = ref<ComponentRecord | undefined>()
 
 function getAssetDefinition(key: string): AssetDefinition | undefined {
     for (const src of catalogStore.sourceDefinitions) {
@@ -39,9 +37,9 @@ function getAssetDefinition(key: string): AssetDefinition | undefined {
 }
 
 function onViewAsset(assetId: string, sourceId: string) {
-    const source = sourcesStore.findById(sourceId)
+    const source = componentsStore.byId(sourceId)
     if (!source) return
-    const asset = source.assets.find(a => a.id === assetId)
+    const asset = source.children.find(a => a.id === assetId)
     if (!asset) return
 
     selectedSource.value = source
@@ -64,25 +62,23 @@ function onCloseAnimationEnd() {
 
 // Fired in setup so `loading` flags are set before the first render
 // (gates the empty placeholder without a flash).
-sourcesStore.fetch()
-assetsStore.fetch()
-jobsStore.fetch()
+componentsStore.fetchAll()
+componentsStore.fetchRelations('dependency')
 runsStore.fetch()
 if (!catalogStore.loaded) catalogStore.fetchCatalog()
 
 function handleSaved() {
-    sourcesStore.fetch()
-    assetsStore.fetch()
-    jobsStore.fetch()
+    componentsStore.fetchAll()
+    componentsStore.fetchRelations('dependency')
     drawerOpen.value = false
 }
 
 function onEditSource(sourceId: string) {
-    const source = sourcesStore.findById(sourceId)
+    const source = componentsStore.byId(sourceId)
     if (source) openEditSource(source)
 }
 
-const showEmpty = computed(() => !sourcesStore.loading && sourcesStore.sources.length === 0)
+const showEmpty = computed(() => !componentsStore.loading && componentsStore.byKind('source').length === 0)
 </script>
 
 <template>

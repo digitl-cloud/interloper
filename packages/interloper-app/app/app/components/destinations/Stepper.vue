@@ -11,7 +11,8 @@
  * Navigation state is exposed via defineExpose.
  */
 import type { StepperItem } from '@nuxt/ui'
-import type { Destination } from '~/types/destination'
+import type { ComponentRecord, ComponentInput } from '~/types/component'
+import { resourceMap } from '~/types/component'
 import type { DestinationDefinition } from '~/types/catalog'
 
 const props = withDefaults(defineProps<{
@@ -20,7 +21,7 @@ const props = withDefaults(defineProps<{
     /** Compatible destination keys. Empty = all types available. */
     compatibleKeys?: string[]
     /** When set, stepper opens in edit mode with values pre-filled. */
-    destination?: Destination | null
+    destination?: ComponentRecord | null
     /** Preselect this type and open directly on the next step (create mode). */
     initialTypeKey?: string
 }>(), {
@@ -39,8 +40,7 @@ const emit = defineEmits<{
 const isEditMode = computed(() => !!props.destination)
 
 const catalogStore = useCatalogStore()
-const resourcesStore = useResourcesStore()
-const destinationsStore = useDestinationsStore()
+const componentsStore = useComponentsStore()
 const toast = useToast()
 
 // ── State ────────────────────────────────────────────────────────
@@ -58,9 +58,9 @@ const resourceStepRefs = ref<Record<string, any>>({})
 
 if (props.destination) {
     selectedDestKey.value = props.destination.key
-    destName.value = props.destination.name
+    destName.value = props.destination.name ?? ''
     configData.value = { ...(props.destination.config || {}) }
-    resourceSelections.value = { ...props.destination.resources }
+    resourceSelections.value = resourceMap(props.destination)
 }
 
 // ── Derived ──────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ const recapRows = computed(() => resourceSlots.value.map((rs) => {
     return {
         icon: resourceSlotIcon(rs.slotName),
         label: rs.slotName.charAt(0).toUpperCase() + rs.slotName.slice(1),
-        value: id ? (resourcesStore.findById(id)?.name ?? '—') : 'None',
+        value: id ? (componentsStore.byId(id)?.name ?? '—') : 'None',
     }
 }))
 
@@ -176,8 +176,8 @@ watch(resourceSelections, async (selections) => {
         }
         if (resourceDataCache.value[slotName]?._id === resourceId) continue
         try {
-            const detail = await resourcesStore.fetchOne(resourceId)
-            resourceDataCache.value[slotName] = { ...detail.data, _id: resourceId }
+            const detail = await componentsStore.fetchOne(resourceId)
+            resourceDataCache.value[slotName] = { ...detail.config, _id: resourceId }
         }
         catch { /* don't block */ }
     }
@@ -231,20 +231,21 @@ async function submit() {
 
     submitting.value = true
     try {
-        const input = {
-            key: destDefn.value.key,
+        const input: ComponentInput = {
             name: destName.value || destDefn.value.name,
             config: Object.keys(configData.value).length > 0 ? configData.value : undefined,
-            resources: Object.keys(resources).length > 0 ? resources : undefined,
+            relations: {
+                resource: Object.entries(resources).map(([slot, dstId]) => ({ dst_id: dstId, slot })),
+            },
         }
 
         if (isEditMode.value && props.destination) {
-            await destinationsStore.update(props.destination.id, input)
+            await componentsStore.update(props.destination.id, input)
             toast.add({ title: `${destName.value} updated`, color: 'success' })
             emit('updated')
         }
         else {
-            await destinationsStore.create(input)
+            await componentsStore.create({ ...input, kind: 'destination', key: destDefn.value.key })
             toast.add({ title: `${destName.value} created`, color: 'success' })
             emit('created')
         }

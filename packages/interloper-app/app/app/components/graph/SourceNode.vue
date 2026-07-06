@@ -2,6 +2,7 @@
 import type { ContextMenuItem } from '@nuxt/ui'
 import type { Connection } from '@vue-flow/core'
 import { Handle, Position, useNodeConnections, useVueFlow, useNodeId } from '@vue-flow/core'
+import type { ComponentRecord } from '~/types/component'
 
 interface MiniGraph {
     width: number
@@ -11,7 +12,7 @@ interface MiniGraph {
 }
 
 const props = withDefaults(defineProps<{
-    source: Source
+    source: ComponentRecord
     sourceDefn: SourceDefinition | undefined
     /** Source is expanded (showing its assets), in any expand mode. */
     open?: boolean
@@ -39,7 +40,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     edit: [sourceId: string]
     delete: [sourceId: string]
-    'asset-click': [asset: SourceAsset | Asset, assetDefn: AssetDefinition | undefined, source: Source | null]
+    'asset-click': [asset: ComponentRecord, assetDefn: AssetDefinition | undefined, source: ComponentRecord | null]
 }>()
 
 // container = expanded onto the canvas as child nodes (header-only card);
@@ -100,7 +101,7 @@ const driftBadge = computed(() => statusBadge(driftStatus.value))
 const isDrift = computed(() => driftStatus.value === 'missing' || driftStatus.value === 'partial')
 
 const sourceWarnings = computed(() => {
-    const all = props.source.assets.flatMap(a => getWarnings(a.id, a.key))
+    const all = props.source.children.flatMap(a => getWarnings(a.id, a.key))
     const seen = new Set<string>()
     return all.filter((w) => {
         if (seen.has(w.message)) return false
@@ -136,10 +137,10 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => [
 
 const icon = computed(() => componentIcon(props.source.key))
 
-const assetCount = computed(() => props.source.assets?.length ?? 0)
+const assetCount = computed(() => props.source.children?.length ?? 0)
 const destinationBadge = computed(() => getBadgeForSource(props.source))
 const isMaterializing = computed(() =>
-    props.source.assets?.some(a => materializingAssetIds?.value?.has(a.id)) ?? false,
+    props.source.children?.some(a => materializingAssetIds?.value?.has(a.id)) ?? false,
 )
 
 const schedule = computed(() => getSourceSchedule(props.source))

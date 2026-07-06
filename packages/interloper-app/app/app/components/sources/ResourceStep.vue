@@ -8,7 +8,7 @@
  * Fetches its own matching instances on mount — no parent pre-fetch needed.
  */
 import type { ComponentDefinition } from '~/types/catalog'
-import type { Resource } from '~/types/resource'
+import type { ComponentRecord } from '~/types/component'
 
 const selectedId = defineModel<string>({ default: '' })
 
@@ -30,10 +30,10 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-    created: [resource: Resource]
+    created: [resource: ComponentRecord]
 }>()
 
-const resourcesStore = useResourcesStore()
+const componentsStore = useComponentsStore()
 const toast = useToast()
 
 const drawerOpen = ref(false)
@@ -54,15 +54,15 @@ const kindLabel = computed(() => {
 
 /** Matching resource instances for this slot's key. */
 const instances = computed(() =>
-    resourcesStore.resources.filter(r => r.key === props.definition.key),
+    componentsStore.byKind(props.definition.kind).filter(r => r.key === props.definition.key),
 )
 
-/** Fetch resources if the store is empty, then auto-select. */
+/** Fetch resources if the store has none of this kind yet, then auto-select. */
 onMounted(async () => {
-    if (resourcesStore.resources.length === 0 && !resourcesStore.loading) {
+    if (instances.value.length === 0 && !componentsStore.loading) {
         loadingInstances.value = true
         try {
-            await resourcesStore.fetch()
+            await componentsStore.fetchAll([props.definition.kind])
         }
         finally {
             loadingInstances.value = false
@@ -98,11 +98,11 @@ async function handleCreate() {
     if (!newName.value.trim()) return
     creating.value = true
     try {
-        const resource = await resourcesStore.create({
+        const resource = await componentsStore.create({
             kind: props.definition.kind,
             key: props.definition.key,
             name: newName.value.trim(),
-            data: formData.value,
+            config: formData.value,
         })
         selectedId.value = resource.id
         drawerOpen.value = false

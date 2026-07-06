@@ -9,13 +9,14 @@
  * any other container. Navigation state is exposed via defineExpose.
  */
 import type { StepperItem } from '@nuxt/ui'
-import type { Job } from '~/types/job'
+import type { ComponentRecord } from '~/types/component'
+import { jobBackfillDays, jobCron, jobEnabled, jobTags, jobTargetIds } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
 import cronstrue from 'cronstrue'
 
 const props = withDefaults(defineProps<{
     /** Pass an existing job to edit, or null to create. */
-    job: Job | null
+    job: ComponentRecord | null
     /** 'standalone' saves to API, 'collect' emits config without saving. */
     mode?: 'standalone' | 'collect'
     /** Asset keys selected by the parent (collect mode). Used to derive partitioning. */
@@ -31,10 +32,11 @@ const emit = defineEmits<{
     collected: [config: { name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; backfillDays: number | null }]
 }>()
 
-const jobsStore = useJobsStore()
-const sourcesStore = useSourcesStore()
+const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
+
+const sources = computed(() => componentsStore.byKind('source'))
 
 // ── Form state ──────────────────────────────────────────────────
 const name = ref('')
@@ -43,6 +45,8 @@ const tags = ref<string[]>([])
 const enabled = ref(true)
 const backfillDays = ref<number | null>(null)
 const selectedSourceIds = ref<string[]>([])
+/** Asset targets carried through unchanged — the stepper only edits source targets. */
+const selectedAssetIds = ref<string[]>([])
 const submitting = ref(false)
 
 const isEditing = computed(() => !!props.job)
@@ -50,14 +54,15 @@ const isEditing = computed(() => !!props.job)
 // ── Data fetching ────────────────────────────────────────────────
 
 onMounted(async () => {
-    await sourcesStore.fetch()
+    await componentsStore.fetchAll(['source'])
     if (props.job) {
-        name.value = props.job.name
-        cron.value = props.job.cron
-        tags.value = [...props.job.tags]
-        enabled.value = props.job.enabled
-        backfillDays.value = props.job.backfill_days
-        selectedSourceIds.value = [...props.job.source_ids]
+        name.value = props.job.name ?? ''
+        cron.value = jobCron(props.job)
+        tags.value = [...jobTags(props.job)]
+        enabled.value = jobEnabled(props.job)
+        backfillDays.value = jobBackfillDays(props.job)
+        selectedSourceIds.value = jobTargetIds(props.job, 'source')
+        selectedAssetIds.value = jobTargetIds(props.job, 'asset')
     }
 })
 
@@ -76,7 +81,7 @@ const partitioned = computed(() => {
         )
     }
     for (const sourceId of selectedSourceIds.value) {
-        const source = sourcesStore.findById(sourceId)
+        const source = componentsStore.byId(sourceId)
         if (!source) continue
         const defn = catalogStore.getSourceDefinition(source.key)
         if (defn && sourceHasPartitionedAssets(defn)) return true
@@ -122,7 +127,7 @@ const displaySteps = useCheckedSteps(steps, activeStep)
 const recapRows = computed(() => {
     if (props.mode === 'collect') return []
     const names = selectedSourceIds.value
-        .map(id => sourcesStore.findById(id)?.name)
+        .map(id => componentsStore.byId(id)?.name)
         .filter(Boolean)
     return [{
         icon: 'i-lucide-plug',
@@ -159,23 +164,28 @@ async function submit() {
 
     submitting.value = true
     try {
+        const targetIds = selectedSourceIds.value.concat(selectedAssetIds.value)
         const input = {
             name: name.value.trim(),
-            cron: cron.value.trim(),
-            source_ids: selectedSourceIds.value,
-            tags: tags.value,
-            enabled: enabled.value,
-            partitioned: partitioned.value,
-            backfill_days: partitioned.value ? (backfillDays.value ?? null) : null,
+            config: {
+                cron: cron.value.trim(),
+                tags: tags.value,
+                enabled: enabled.value,
+                partitioned: partitioned.value,
+                backfill_days: partitioned.value ? (backfillDays.value ?? null) : null,
+            },
+            relations: {
+                target: targetIds.map(id => ({ dst_id: id })),
+            },
         }
 
         if (props.job) {
-            await jobsStore.update(props.job.id, input)
+            await componentsStore.update(props.job.id, input)
             toast.add({ title: 'Job updated', color: 'success' })
             emit('updated')
         }
         else {
-            await jobsStore.create(input)
+            await componentsStore.create({ ...input, kind: 'job', key: 'job' })
             toast.add({ title: 'Job created', color: 'success' })
             emit('created')
         }
@@ -214,7 +224,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <!-- Sources (first in standalone, skipped in collect mode) -->
         <template #sources>
             <JobsSourceSelect v-model="selectedSourceIds"
-                              :sources="sourcesStore.sources" />
+                              :sources="sources" />
         </template>
 
         <!-- Details -->

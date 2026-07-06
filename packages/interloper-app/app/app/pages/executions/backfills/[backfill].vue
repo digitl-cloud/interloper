@@ -15,7 +15,7 @@ const backfillId = route.params.backfill!.toString()
 
 const { apiFetch } = useApi()
 const backfillsStore = useBackfillsStore()
-const jobsStore = useJobsStore()
+const componentsStore = useComponentsStore()
 
 const backfill = ref<Backfill | null>(null)
 const backfillRuns = ref<Run[]>([])
@@ -23,14 +23,14 @@ const runsLoading = ref(false)
 const sorting = ref([{ id: 'partition_date', desc: false }])
 
 const backfillJobName = computed(() =>
-    backfill.value?.job?.name ?? jobsStore.findById(backfill.value?.job_id ?? '')?.name ?? 'Deleted job',
+    backfill.value?.job?.name ?? componentsStore.byId(backfill.value?.job_id ?? '')?.name ?? 'Deleted job',
 )
 
 const fetchError = ref<unknown>(null)
 
 onMounted(async () => {
     runsLoading.value = true
-    jobsStore.fetch()
+    componentsStore.fetchAll(['job'])
     try {
         const [fetchedBackfill, runs] = await Promise.all([
             backfillsStore.fetchOne(backfillId),

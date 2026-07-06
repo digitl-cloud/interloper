@@ -82,6 +82,15 @@ export const useRunsStore = defineStore('runs', () => {
         return apiFetch<Run>(`/runs/${id}`)
     }
 
+    /** Queue a manual run for a job. Returns the created run's id. */
+    async function createRun(jobId: string, partitionDate?: string): Promise<string> {
+        const run = await apiFetch<Run>('/runs', {
+            method: 'POST',
+            body: { job_id: jobId, partition_date: partitionDate },
+        })
+        return run.id
+    }
+
     async function retryRun(id: string, scope: 'all' | 'failed'): Promise<string> {
         const res = await apiFetch<{ run_id: string }>(`/runs/${id}/retry`, {
             method: 'POST',
@@ -122,6 +131,7 @@ export const useRunsStore = defineStore('runs', () => {
         error,
         fetch,
         fetchOne,
+        createRun,
         retryRun,
         goToPage,
         findById,

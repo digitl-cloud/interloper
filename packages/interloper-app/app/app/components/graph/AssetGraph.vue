@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Connection } from '@vue-flow/core'
 import { qualifiedKey } from '~/types/catalog'
+import type { ComponentRecord } from '~/types/component'
 
 /**
  * Catalog adapter: binds the store-backed catalog model + dependency-editing
@@ -29,18 +30,16 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     'add-source': []
     'edit-source': [sourceId: string]
-    'asset-click': [asset: SourceAsset | Asset, assetDefn: AssetDefinition | undefined, source: Source | null]
+    'asset-click': [asset: ComponentRecord, assetDefn: AssetDefinition | undefined, source: ComponentRecord | null]
     'pane-click': []
     'delete-source': [sourceId: string]
     'create-dependencies': [pairs: Array<{ upstreamAssetId: string; downstreamAssetId: string; paramName: string }>]
     'delete-dependency': [payload: { upstreamAssetId: string; downstreamAssetId: string }]
 }>()
 
-const assetsStore = useAssetsStore()
+const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
-const sourcesStore = useSourcesStore()
-const { loading } = storeToRefs(sourcesStore)
-const { dependencies: assetDependencies } = storeToRefs(assetsStore)
+const { loading, dependencies: assetDependencies } = storeToRefs(componentsStore)
 
 const { model } = useCatalogGraph({ sourceIds: () => props.sourceIds })
 

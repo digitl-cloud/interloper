@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { Asset } from '~/types/asset'
-import type { SourceAsset } from '~/types/source'
+import type { ComponentRecord } from '~/types/component'
 import type { GraphModel } from '~/types/graph'
 
 /**
@@ -39,7 +38,7 @@ const flatModel = computed<GraphModel>(() => ({
     dependencies: model.value.dependencies,
 }))
 
-function onAssetClick(asset: SourceAsset | Asset) {
+function onAssetClick(asset: ComponentRecord) {
     selectedAsset.value = selectedAsset.value === asset.id ? null : asset.id
 }
 </script>

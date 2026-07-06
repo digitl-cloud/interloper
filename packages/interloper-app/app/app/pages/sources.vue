@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { Source } from '~/types/source'
+import type { ComponentRecord } from '~/types/component'
+import { relationIds } from '~/types/component'
 
 definePageMeta({ title: 'Sources' })
 
@@ -9,9 +10,10 @@ const UIcon = resolveComponent('UIcon')
 const UBadge = resolveComponent('UBadge')
 
 const catalogStore = useCatalogStore()
-const sourcesStore = useSourcesStore()
-const destinationsStore = useDestinationsStore()
+const componentsStore = useComponentsStore()
 const { statusBadge, sourceDrift } = useDrift()
+
+const sources = computed(() => componentsStore.byKind('source'))
 
 function typeName(key: string): string {
     return catalogStore.catalog[key]?.name ?? key
@@ -27,11 +29,11 @@ const {
     openCreate: handleCreate,
     openCreateWithType: handleCreateFromCatalog,
     openEdit: handleEdit,
-} = useWizardDrawer<Source>()
+} = useWizardDrawer<ComponentRecord>()
 
-sourcesStore.fetch()
+componentsStore.fetchAll(['source', 'destination'])
 
-const columns: TableColumn<Source>[] = [
+const columns: TableColumn<ComponentRecord>[] = [
     { accessorKey: 'select' as any, header: '' },
     {
         accessorKey: 'name',
@@ -73,13 +75,15 @@ const columns: TableColumn<Source>[] = [
         cell: ({ row }) => h(UBadge, {
             color: 'neutral',
             variant: 'subtle',
-        }, () => `${row.original.assets.length} asset${row.original.assets.length !== 1 ? 's' : ''}`),
+        }, () => `${row.original.children.length} asset${row.original.children.length !== 1 ? 's' : ''}`),
     },
     {
         accessorKey: 'destinations',
         header: 'Destinations',
         cell: ({ row }) => {
-            const dests = row.original.destinations
+            const dests = relationIds(row.original, 'destination')
+                .map(id => componentsStore.byId(id))
+                .filter((d): d is ComponentRecord => !!d)
             if (dests.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = dests[0]!
             const defn = catalogStore.catalog[first.key]
@@ -98,18 +102,18 @@ const columns: TableColumn<Source>[] = [
     {
         accessorKey: 'created_at',
         header: 'Created',
-        accessorFn: (row: Source) => row.created_at ? formatDate(row.created_at) : '—',
+        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '—',
     },
 ]
 
 function handleSaved() {
-    sourcesStore.fetch()
+    componentsStore.fetchAll(['source'])
     drawerOpen.value = false
 }
 
 async function handleDelete(ids: string[]) {
     try {
-        await sourcesStore.remove(ids)
+        await componentsStore.remove(ids)
         toast.add({ title: `${ids.length} source${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch {
@@ -124,8 +128,8 @@ async function handleDelete(ids: string[]) {
 
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
-                       :data="sourcesStore.sources"
-                       :loading="sourcesStore.loading"
+                       :data="sources"
+                       :loading="componentsStore.loading"
                        search-placeholder="Search sources..."
                        @delete="handleDelete"
                        @edit="handleEdit">

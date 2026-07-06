@@ -6,6 +6,8 @@ export interface ComponentDefinition {
     icon: string
     description: string
     config_schema?: Record<string, unknown>
+    /** Relation vocabulary: type → allowed dst kinds + whether slotted. */
+    relations?: Record<string, { kinds: string[]; slotted: boolean }>
     provider?: string
 }
 

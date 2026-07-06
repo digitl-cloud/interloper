@@ -1,5 +1,4 @@
-import type { Asset, AssetDependency } from './asset'
-import type { Source, SourceAsset } from './source'
+import type { ComponentRecord, Relation } from './component'
 import type { AssetDefinition, SourceDefinition } from './catalog'
 import type { ExecutionStatus } from './asset_execution'
 
@@ -50,16 +49,16 @@ export interface GraphDependency {
 }
 
 export interface GraphSourceEntry {
-    source: Source
+    source: ComponentRecord
     sourceDefn: SourceDefinition | undefined
     status?: NodeStatus
 }
 
 export interface GraphAssetEntry {
-    asset: SourceAsset | Asset
+    asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
     /** Owning source, or null for standalone assets. */
-    source: Source | null
+    source: ComponentRecord | null
     status?: NodeStatus
 }
 
@@ -75,7 +74,7 @@ export interface GraphModel {
     dependencies: GraphDependency[]
 }
 
-/** Convert a raw store dependency into the normalised graph shape. */
-export function toGraphDependency(dep: AssetDependency): GraphDependency {
-    return { upstreamAssetId: dep.upstream_asset_id, downstreamAssetId: dep.asset_id }
+/** Convert a `dependency` relation (src = downstream, dst = upstream) into the normalised graph shape. */
+export function toGraphDependency(rel: Relation): GraphDependency {
+    return { upstreamAssetId: rel.dst_id, downstreamAssetId: rel.src_id }
 }

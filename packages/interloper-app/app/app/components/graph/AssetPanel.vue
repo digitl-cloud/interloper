@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { JsonSchemaProperty } from '~/types/catalog'
 import { parseQualifiedKey } from '~/types/catalog'
+import type { ComponentRecord } from '~/types/component'
+import { relationIds } from '~/types/component'
 import type { Run } from '~/types/run'
 
 const props = defineProps<{
-    asset: SourceAsset
+    asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
-    source: Source
+    source: ComponentRecord
 }>()
 
 const emit = defineEmits<{
@@ -14,6 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const catalogStore = useCatalogStore()
+const componentsStore = useComponentsStore()
 const { apiFetch } = useApi()
 const { statusBadge } = useDrift()
 const sourceDefn = computed(() => catalogStore.getSourceDefinition(props.source.key))
@@ -23,11 +26,9 @@ const driftBadge = computed(() => statusBadge(props.asset.status))
 const icon = computed(() => props.assetDefn ? componentIcon(props.assetDefn.key) : 'i-lucide-box')
 const sourceIcon = computed(() => componentIcon(props.source.key))
 
-const destinationsStore = useDestinationsStore()
-
 onMounted(() => {
-    if (destinationsStore.destinations.length === 0 && !destinationsStore.loading) {
-        destinationsStore.fetch()
+    if (componentsStore.byKind('destination').length === 0 && !componentsStore.loading) {
+        componentsStore.fetchAll(['destination'])
     }
 })
 
@@ -51,11 +52,7 @@ async function fetchPartitionCounts() {
     partitionError.value = null
     partitionNotMaterialized.value = false
     try {
-        const response = await apiFetch<{
-            asset_key: string
-            partition_column: string
-            counts: Array<{ partition: string; row_count: number }>
-        }>(`/assets/${props.asset.id}/partition-row-counts`)
+        const response = await componentsStore.fetchPartitionRowCounts(props.asset.id)
         partitionData.value = response.counts.map(c => ({
             partition: c.partition,
             rowCount: c.row_count,
@@ -78,15 +75,18 @@ async function fetchPartitionCounts() {
 watch(() => props.asset.id, () => fetchPartitionCounts(), { immediate: true })
 
 const destinations = computed(() => {
-    return props.source.destinations.map((dest) => {
-        const defn = catalogStore.catalog[dest.key]
-        return {
-            id: dest.id,
-            key: dest.key,
-            label: dest.name ?? defn?.name ?? dest.key,
-            icon: componentIcon(dest.key, 'i-lucide-hard-drive'),
-        }
-    })
+    return relationIds(props.source, 'destination')
+        .map(id => componentsStore.byId(id))
+        .filter((d): d is ComponentRecord => !!d)
+        .map((dest) => {
+            const defn = catalogStore.catalog[dest.key]
+            return {
+                id: dest.id,
+                key: dest.key,
+                label: dest.name ?? defn?.name ?? dest.key,
+                icon: componentIcon(dest.key, 'i-lucide-hard-drive'),
+            }
+        })
 })
 
 /** Parse JSON Schema properties into a flat list of fields for display. */

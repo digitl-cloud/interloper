@@ -15,8 +15,7 @@ const runId = route.params.run!.toString()
 const runsStore = useRunsStore()
 const eventsStore = useEventsStore()
 const assetExecutionsStore = useAssetExecutionsStore()
-const sourcesStore = useSourcesStore()
-const assetsStore = useAssetsStore()
+const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
@@ -101,9 +100,9 @@ onMounted(async () => {
             runsStore.fetchOne(runId),
             eventsStore.fetchForRun(runId),
             assetExecutionsStore.fetchForRun(runId),
-            sourcesStore.sources.length === 0 ? sourcesStore.fetch() : Promise.resolve(),
-            // Asset dependencies back the Graph view's edges.
-            assetsStore.dependencies.length === 0 ? assetsStore.fetch() : Promise.resolve(),
+            componentsStore.byKind('source').length === 0 ? componentsStore.fetchAll(['source', 'asset']) : Promise.resolve(),
+            // Asset dependency relations back the Graph view's edges.
+            componentsStore.dependencies.length === 0 ? componentsStore.fetchRelations('dependency') : Promise.resolve(),
             catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
         ])
         initialRun.value = fetchedRun

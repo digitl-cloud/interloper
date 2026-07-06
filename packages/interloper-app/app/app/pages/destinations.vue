@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { Destination } from '~/types/destination'
+import type { ComponentRecord } from '~/types/component'
+import { resourceMap } from '~/types/component'
 
 definePageMeta({ title: 'Destinations' })
 
@@ -9,8 +10,9 @@ const UIcon = resolveComponent('UIcon')
 const UBadge = resolveComponent('UBadge')
 
 const catalogStore = useCatalogStore()
-const destinationsStore = useDestinationsStore()
-const resourcesStore = useResourcesStore()
+const componentsStore = useComponentsStore()
+
+const destinations = computed(() => componentsStore.byKind('destination'))
 
 const stepperRef = ref<any>(null)
 const toast = useToast()
@@ -22,10 +24,10 @@ const {
     openCreate: handleCreate,
     openCreateWithType: handleCreateFromCatalog,
     openEdit: handleEdit,
-} = useWizardDrawer<Destination>()
+} = useWizardDrawer<ComponentRecord>()
 
-destinationsStore.fetch()
-resourcesStore.fetch()
+// Resource kinds too — the Connection column resolves resource names by id.
+componentsStore.fetchAll(['destination', ...catalogStore.resourceKinds])
 
 function typeIcon(key: string): string {
     return componentIcon(key, 'i-lucide-hard-drive')
@@ -36,7 +38,7 @@ function typeName(key: string): string {
     return defn?.name ?? key
 }
 
-const columns: TableColumn<Destination>[] = [
+const columns: TableColumn<ComponentRecord>[] = [
     { accessorKey: 'select' as any, header: '' },
     {
         accessorKey: 'key',
@@ -64,10 +66,9 @@ const columns: TableColumn<Destination>[] = [
         accessorKey: 'resources',
         header: 'Connection',
         cell: ({ row }) => {
-            const resources = row.original.resources
-            const connId = resources.connection
+            const connId = resourceMap(row.original).connection
             if (!connId) return h('span', { class: 'text-muted' }, '—')
-            const resource = resourcesStore.findById(connId)
+            const resource = componentsStore.byId(connId)
             if (!resource) return h('span', { class: 'text-muted' }, '—')
             const icon = componentIcon(resource.key, 'i-lucide-key-round')
             return h(UBadge, { color: 'neutral', variant: 'subtle' }, () =>
@@ -81,13 +82,13 @@ const columns: TableColumn<Destination>[] = [
     {
         accessorKey: 'created_at',
         header: 'Created',
-        accessorFn: (row: Destination) => row.created_at ? formatDate(row.created_at) : '—',
+        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '—',
     },
 ]
 
 async function handleDelete(ids: string[]) {
     try {
-        await destinationsStore.remove(ids)
+        await componentsStore.remove(ids)
         toast.add({ title: `${ids.length} destination${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch {
@@ -96,7 +97,7 @@ async function handleDelete(ids: string[]) {
 }
 
 function handleSaved() {
-    destinationsStore.fetch()
+    componentsStore.fetchAll(['destination'])
     drawerOpen.value = false
 }
 </script>
@@ -105,8 +106,8 @@ function handleSaved() {
     <div>
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
-                       :data="destinationsStore.destinations"
-                       :loading="destinationsStore.loading"
+                       :data="destinations"
+                       :loading="componentsStore.loading"
                        search-placeholder="Search destinations..."
                        @delete="handleDelete"
                        @edit="handleEdit">

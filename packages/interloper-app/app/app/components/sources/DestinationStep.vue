@@ -22,19 +22,21 @@ const props = defineProps<{
 }>()
 
 const catalogStore = useCatalogStore()
-const destinationsStore = useDestinationsStore()
+const componentsStore = useComponentsStore()
 
 const drawerOpen = ref(false)
 const destStepperRef = ref<any>(null)
 const loading = ref(false)
 
+const destinations = computed(() => componentsStore.byKind('destination'))
+
 // ── Load destinations ───────────────────────────────────────────
 
 onMounted(async () => {
-    if (destinationsStore.destinations.length === 0 && !destinationsStore.loading) {
+    if (destinations.value.length === 0 && !componentsStore.loading) {
         loading.value = true
         try {
-            await destinationsStore.fetch()
+            await componentsStore.fetchAll(['destination'])
         }
         finally {
             loading.value = false
@@ -45,7 +47,7 @@ onMounted(async () => {
 // ── Filtered destinations ───────────────────────────────────────
 
 const availableDestinations = computed(() => {
-    const all = destinationsStore.destinations
+    const all = destinations.value
     if (!props.compatibleKeys?.length) return all
     return all.filter(d => props.compatibleKeys!.includes(d.key))
 })
@@ -66,10 +68,10 @@ function isSelected(id: string) {
 
 async function handleCreated() {
     // Refresh destinations so the new one appears in the list.
-    const before = new Set(destinationsStore.destinations.map(d => d.id))
-    await destinationsStore.fetch()
+    const before = new Set(destinations.value.map(d => d.id))
+    await componentsStore.fetchAll(['destination'])
     // Auto-select the newly created destination.
-    for (const d of destinationsStore.destinations) {
+    for (const d of destinations.value) {
         if (!before.has(d.id) && !selectedIds.value.includes(d.id)) {
             selectedIds.value.push(d.id)
         }

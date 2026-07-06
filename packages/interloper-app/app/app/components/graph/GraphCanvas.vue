@@ -4,6 +4,7 @@ import { VueFlow, useVueFlow, Panel } from '@vue-flow/core'
 import type { Node, Edge, Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
+import type { ComponentRecord } from '~/types/component'
 
 /**
  * Presentational graph renderer. Consumes a normalised {@link GraphModel}
@@ -48,7 +49,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     'add-source': []
     'edit-source': [sourceId: string]
-    'asset-click': [asset: SourceAsset | Asset, assetDefn: AssetDefinition | undefined, source: Source | null]
+    'asset-click': [asset: ComponentRecord, assetDefn: AssetDefinition | undefined, source: ComponentRecord | null]
     'pane-click': []
     'delete-source': [sourceId: string]
     'connect': [connection: Connection]
