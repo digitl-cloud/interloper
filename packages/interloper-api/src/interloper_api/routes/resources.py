@@ -8,8 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.catalog.base import Catalog
 from interloper.errors import NotFoundError
-from interloper_db import Profile, Store
-from interloper_db.models import Resource
+from interloper_db import Component, Profile, Store
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (
@@ -59,7 +58,7 @@ class ResourceDetailResponse(ResourceResponse):
     data: dict[str, Any] = {}
 
 
-def _load_authorized_resource(resource_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Resource:
+def _load_authorized_resource(resource_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Component:
     """Load a resource and authorize the user by membership in its org.
 
     Args:
@@ -112,7 +111,7 @@ def list_resources(
             org_id=r.org_id,
             kind=r.kind,
             key=r.key,
-            name=r.name,
+            name=r.name or "",
             encrypted=r.encrypted,
             created_at=str(r.created_at) if r.created_at else None,
             updated_at=str(r.updated_at) if r.updated_at else None,
@@ -138,7 +137,7 @@ def get_resource(
         org_id=r.org_id,
         kind=r.kind,
         key=r.key,
-        name=r.name,
+        name=r.name or "",
         encrypted=r.encrypted,
         data=store.decode_resource_data(r),
         created_at=str(r.created_at) if r.created_at else None,
@@ -167,7 +166,7 @@ def create_resource(
         org_id=resource.org_id,
         kind=resource.kind,
         key=resource.key,
-        name=resource.name,
+        name=resource.name or "",
         encrypted=resource.encrypted,
         created_at=str(resource.created_at) if resource.created_at else None,
         updated_at=str(resource.updated_at) if resource.updated_at else None,
@@ -199,7 +198,7 @@ def update_resource(
         org_id=resource.org_id,
         kind=resource.kind,
         key=resource.key,
-        name=resource.name,
+        name=resource.name or "",
         encrypted=resource.encrypted,
         created_at=str(resource.created_at) if resource.created_at else None,
         updated_at=str(resource.updated_at) if resource.updated_at else None,

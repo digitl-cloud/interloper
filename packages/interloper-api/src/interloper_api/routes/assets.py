@@ -7,11 +7,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.errors import DataNotFoundError, NotFoundError
-from interloper_db import ComponentStatus, Profile, Store
-from interloper_db.models import Asset, AssetResource, Destination, DestinationResource
+from interloper_db import Component, ComponentStatus, Profile, Store
 from pydantic import BaseModel
-from sqlmodel import Session, select
 
+from interloper_api.components import destination_rows, materializable, resource_map, user_config
 from interloper_api.dependencies import (
     authorize_org_member,
     get_current_user,
@@ -72,7 +71,7 @@ class AssetResponse(BaseModel):
 
 
 class DependencyResponse(BaseModel):
-    """Response body for an asset dependency edge."""
+    """Response body for an asset dependency relation."""
 
     asset_id: UUID
     upstream_asset_id: UUID
@@ -103,28 +102,18 @@ class PartitionRowCountsResponse(BaseModel):
 # -- Helpers ------------------------------------------------------------------
 
 
-def _resource_map(junction_cls: type, fk_column: str, fk_value: UUID) -> dict[str, str]:
-    """Build a {slot_key: resource_id} map from junction rows."""
-    from interloper_db.engine import get_engine
-
-    col = getattr(junction_cls, fk_column)
-    with Session(get_engine()) as s:
-        rows = s.exec(select(junction_cls).where(col == fk_value)).all()
-    return {r.key: str(r.resource_id) for r in rows}  # ty: ignore[unresolved-attribute]
-
-
-def _dest_to_response(dest: Destination) -> DestinationResponse:
+def _dest_to_response(dest: Component) -> DestinationResponse:
     return DestinationResponse(
         id=dest.id,
         key=dest.key,
         name=dest.name,
         config=dest.config,
-        resources=_resource_map(DestinationResource, "destination_id", dest.id),
+        resources=resource_map(dest),
         created_at=str(dest.created_at) if dest.created_at else None,
     )
 
 
-def _load_authorized_asset(asset_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Asset:
+def _load_authorized_asset(asset_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Component:
     """Load an asset and authorize the user by membership in its org.
 
     Args:
@@ -134,7 +123,7 @@ def _load_authorized_asset(asset_id: UUID, user: Profile, store: Store, *, minim
         minimum: Minimum role required in the asset's organisation.
 
     Returns:
-        The Asset row.
+        The asset's component row.
 
     Raises:
         HTTPException: 404 if missing or the user is not a member of the
@@ -148,24 +137,24 @@ def _load_authorized_asset(asset_id: UUID, user: Profile, store: Store, *, minim
     return asset
 
 
-def _asset_to_response(asset: Asset, store: Store) -> AssetResponse:
-    """Convert a DB Asset to an AssetResponse.
+def _asset_to_response(asset: Component, store: Store) -> AssetResponse:
+    """Convert an asset component row to an AssetResponse.
 
     Carries the asset's catalog-resolution ``status`` (derived from the same
     resolver hydration uses) so the UI can flag drifted assets. Source-owned
-    assets resolve through their parent, so ``asset.source`` must be loaded.
+    assets resolve through their parent, so ``asset.parent`` must be loaded.
     """
-    source_key = asset.source.key if asset.source else None
+    source_key = asset.parent.key if asset.parent else None
     return AssetResponse(
         id=asset.id,
-        source_id=asset.source_id,
+        source_id=asset.parent_id,
         org_id=asset.org_id,
         key=asset.key,
-        materializable=asset.materializable,
+        materializable=materializable(asset),
         status=store.asset_status(asset.key, source_key=source_key),
-        config=asset.config,
-        resources=_resource_map(AssetResource, "asset_id", asset.id),
-        destinations=[_dest_to_response(d) for d in asset.destinations],
+        config=user_config(asset),
+        resources=resource_map(asset),
+        destinations=[_dest_to_response(d) for d in destination_rows(asset)],
         created_at=str(asset.created_at) if asset.created_at else None,
     )
 
@@ -208,14 +197,14 @@ def list_dependencies(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> list[DependencyResponse]:
-    """List all asset dependency edges for the current organisation."""
+    """List all asset dependency relations for the current organisation."""
     deps = store.list_dependencies(org_id)
     return [
         DependencyResponse(
-            asset_id=d.asset_id,
-            upstream_asset_id=d.upstream_asset_id,
+            asset_id=rel.src_id,
+            upstream_asset_id=rel.dst_id,
         )
-        for d in deps
+        for rel in deps
     ]
 
 
@@ -285,12 +274,12 @@ def add_dependency(
     if upstream.org_id != asset.org_id:
         raise HTTPException(status_code=404, detail=f"Asset {body.upstream_asset_id} not found")
     try:
-        dep = store.add_dependency(asset_id, body.upstream_asset_id, body.param_name)
+        relation = store.add_dependency(asset_id, body.upstream_asset_id, body.param_name)
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return DependencyResponse(
-        asset_id=dep.asset_id,
-        upstream_asset_id=dep.upstream_asset_id,
+        asset_id=relation.src_id,
+        upstream_asset_id=relation.dst_id,
     )
 
 

@@ -1,4 +1,9 @@
-"""Source persistence: CRUD and hydration."""
+"""Source persistence: CRUD and hydration.
+
+A source is a component row; its assets are child component rows
+(``parent_id``), kept in sync with the catalog class's ``asset_types``.
+Deleting a source cascades to its children and every relation touching them.
+"""
 
 from __future__ import annotations
 
@@ -6,21 +11,14 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import CatalogKeyError, ComponentDriftError, HydrationError, SourceNotFoundError
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, select
+from interloper.errors import CatalogKeyError, ComponentDriftError, HydrationError, NotFoundError, SourceNotFoundError
+from sqlmodel import Session, select
 
 from interloper_db.drift import ComponentStatus, resolve_source_cls, source_status
 from interloper_db.engine import get_engine
 from interloper_db.hydration import Hydrator
-from interloper_db.models import (
-    Asset,
-    AssetDependency,
-    Destination,
-    Source,
-    SourceDestination,
-    SourceResource,
-)
+from interloper_db.models import Component, ComponentRelation
+from interloper_db.store.components import add_relation, list_components, load_component, sync_relations
 
 
 class SourceMixin:
@@ -40,29 +38,23 @@ class SourceMixin:
         asset_keys: list[str] | None = None,
         destination_ids: list[str] | None = None,
         cross_deps: dict[str, dict[str, str]] | None = None,
-    ) -> Source:
+    ) -> Component:
         """Create a source and sync its asset rows.
 
         Args:
             asset_keys: Which asset types to create rows for. None = all.
         """
         with Session(get_engine()) as session:
-            db_source = Source(
-                org_id=org_id,
-                key=key,
-                name=name,
-                config=config,
-            )
+            db_source = Component(org_id=org_id, kind="source", key=key, name=name, config=config)
             session.add(db_source)
             session.flush()
-            self._sync_resource_bindings(session, db_source, resources)
-            self._sync_destination_bindings(session, db_source, destination_ids)
-            self._ensure_assets(session, db_source, asset_keys=asset_keys)
+            sync_relations(session, db_source, "resource", _as_uuid_map(resources))
+            sync_relations(session, db_source, "destination", _as_uuids(destination_ids))
+            self._ensure_children(session, db_source, asset_keys=asset_keys)
             if cross_deps:
                 self._persist_cross_deps(session, db_source, cross_deps)
             session.commit()
-            session.refresh(db_source)
-            return db_source
+            return load_component(session, db_source.id, kind="source")
 
     def update_source(
         self,
@@ -74,92 +66,82 @@ class SourceMixin:
         asset_keys: list[str] | None = None,
         destination_ids: list[str] | None = None,
         cross_deps: dict[str, dict[str, str]] | None = None,
-    ) -> Source:
+    ) -> Component:
         """Update a source and sync its asset rows.
 
         Args:
             asset_keys: Which asset types should exist. None = keep as-is.
         """
         with Session(get_engine()) as session:
-            db_source = session.get(Source, source_id)
-            if not db_source:
+            db_source = session.get(Component, source_id)
+            if not db_source or db_source.kind != "source":
                 raise SourceNotFoundError(f"Source {source_id} not found")
             if name is not None:
                 db_source.name = name
             if config is not None:
                 db_source.config = config
             if resources is not None:
-                self._sync_resource_bindings(session, db_source, resources)
+                sync_relations(session, db_source, "resource", _as_uuid_map(resources))
             if destination_ids is not None:
-                self._sync_destination_bindings(session, db_source, destination_ids)
-            self._ensure_assets(session, db_source, asset_keys=asset_keys)
+                sync_relations(session, db_source, "destination", _as_uuids(destination_ids))
+            self._ensure_children(session, db_source, asset_keys=asset_keys)
             if cross_deps is not None:
                 self._persist_cross_deps(session, db_source, cross_deps)
             session.commit()
-            session.refresh(db_source)
-            return db_source
+            return load_component(session, source_id, kind="source")
 
-    def get_source(self, source_id: UUID) -> Source:
-        """Load a source row by ID.
+    def get_source(self, source_id: UUID) -> Component:
+        """Load a source row by ID, with children and relations eager-loaded.
 
         Args:
             source_id: The source UUID.
 
         Returns:
-            The Source row.
+            The component row.
 
         Raises:
             SourceNotFoundError: If the source is not found.
         """
         with Session(get_engine()) as session:
-            db_source = session.get(Source, source_id)
-            if not db_source:
-                raise SourceNotFoundError(f"Source {source_id} not found")
-            return db_source
+            try:
+                return load_component(session, source_id, kind="source")
+            except NotFoundError:
+                raise SourceNotFoundError(f"Source {source_id} not found") from None
 
-    def list_sources(self, org_id: UUID) -> list[Source]:
-        """List all sources with assets and destinations loaded."""
+    def list_sources(self, org_id: UUID) -> list[Component]:
+        """List all sources with children and relations loaded."""
         with Session(get_engine()) as session:
-            statement = (
-                select(Source)
-                .where(Source.org_id == org_id)
-                .options(
-                    selectinload(Source.assets),  # ty: ignore[invalid-argument-type]
-                    selectinload(Source.resources),  # ty: ignore[invalid-argument-type]
-                    selectinload(Source.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
-                )
-            )
-            return list(session.exec(statement).all())
+            return list_components(session, org_id, kind="source")
 
     def load_source_for_asset(self, asset_id: UUID) -> il.Source:
         """Load and hydrate the source that owns the given asset."""
         with Session(get_engine()) as session:
-            db_asset = session.get(Asset, asset_id)
-            if not db_asset:
+            db_asset = session.get(Component, asset_id)
+            if not db_asset or db_asset.kind != "asset":
                 raise SourceNotFoundError(f"Asset {asset_id} not found")
-            if not db_asset.source_id:
+            if not db_asset.parent_id:
                 raise SourceNotFoundError(f"Asset {asset_id} is standalone (no source)")
-            return self.load_source(db_asset.source_id)
+            return self.load_source(db_asset.parent_id)
 
     def delete_source(self, source_id: UUID) -> None:
-        """Delete a source. Assets cascade via FK."""
+        """Delete a source. Children and relations cascade via FK."""
         with Session(get_engine()) as session:
-            db_source = session.get(Source, source_id)
-            if db_source:
+            db_source = session.get(Component, source_id)
+            if db_source and db_source.kind == "source":
                 session.delete(db_source)
                 session.commit()
 
     # ------------------------------------------------------------------
-    # Asset sync
+    # Child asset sync
     # ------------------------------------------------------------------
 
-    def _ensure_assets(
+    def _ensure_children(
         self,
         session: Session,
-        db_source: Source,
+        db_source: Component,
         asset_keys: list[str] | None = None,
     ) -> None:
-        """Sync asset rows to match the desired set.
+        """Sync child asset rows to match the desired set.
 
         When ``asset_keys`` is provided, only those assets will exist —
         missing ones are created, extra ones are removed. When ``None``,
@@ -173,54 +155,43 @@ class SourceMixin:
         all_keys = {asset_type.key for asset_type in source_cls.asset_types}
         desired = set(asset_keys) & all_keys if asset_keys is not None else None
 
-        existing_assets = session.exec(select(Asset).where(Asset.source_id == db_source.id)).all()
-        existing_by_key = {db_asset.key: db_asset for db_asset in existing_assets}
+        existing = session.exec(select(Component).where(Component.parent_id == db_source.id)).all()
+        existing_by_key = {child.key: child for child in existing}
 
-        # Remove assets no longer desired (only when asset_keys is explicit)
+        # Remove assets no longer desired (only when asset_keys is explicit).
+        # Their relations — including dependencies pointing at them — cascade.
         if desired is not None:
             for key in set(existing_by_key) - desired:
-                db_asset = existing_by_key[key]
-                if db_asset.id:
-                    dependencies = session.exec(
-                        select(AssetDependency).where(
-                            (col(AssetDependency.asset_id) == db_asset.id)
-                            | (col(AssetDependency.upstream_asset_id) == db_asset.id)
-                        )
-                    ).all()
-                    for dependency in dependencies:
-                        session.delete(dependency)
-                session.delete(db_asset)
+                session.delete(existing_by_key[key])
+            session.flush()
 
-        # Determine which keys to ensure exist
         keys_to_ensure = desired if desired is not None else all_keys
 
-        # Add missing
         added_keys: set[str] = set()
-        asset_map: dict[str, Asset] = {}
-        for key in keys_to_ensure & set(existing_by_key):
-            asset_map[key] = existing_by_key[key]
+        children_by_key: dict[str, Component] = {
+            key: child for key, child in existing_by_key.items() if key in keys_to_ensure
+        }
         for asset_type in source_cls.asset_types:
             if asset_type.key in keys_to_ensure and asset_type.key not in existing_by_key:
-                db_asset = Asset(
-                    source_id=db_source.id,
+                child = Component(
                     org_id=db_source.org_id,
+                    kind="asset",
                     key=asset_type.key,
-                    materializable=True,
+                    parent_id=db_source.id,
                 )
-                session.add(db_asset)
-                session.flush()
-                asset_map[asset_type.key] = db_asset
+                session.add(child)
+                children_by_key[asset_type.key] = child
                 added_keys.add(asset_type.key)
+        session.flush()
 
-        # Wire intra-source deps for new assets
         if added_keys:
-            self._create_intra_deps(session, source_cls, asset_map, only_for=added_keys)
+            self._create_intra_deps(session, source_cls, children_by_key, only_for=added_keys)
 
     def _create_intra_deps(
         self,
         session: Session,
         source_cls: type[il.Source],
-        asset_map: dict[str, Asset],
+        children_by_key: dict[str, Component],
         only_for: set[str],
     ) -> None:
         """Persist intra-source deps from class-level metadata.
@@ -234,7 +205,7 @@ class SourceMixin:
 
         for asset_type in source_cls.asset_types:
             asset_key = asset_type.key
-            if asset_key not in only_for or asset_key not in asset_map:
+            if asset_key not in only_for or asset_key not in children_by_key:
                 continue
 
             all_requires = {**asset_type.requires, **asset_type.optional_requires}
@@ -247,54 +218,50 @@ class SourceMixin:
                 else:
                     qualified_asset = required_qualified_key
 
-                if qualified_asset in asset_map:
-                    session.add(
-                        AssetDependency(
-                            asset_id=asset_map[asset_key].id,
-                            upstream_asset_id=asset_map[qualified_asset].id,
-                            param_name=param_name,
-                        )
+                if qualified_asset in children_by_key:
+                    add_relation(
+                        session,
+                        children_by_key[asset_key],
+                        children_by_key[qualified_asset],
+                        "dependency",
+                        param_name,
                     )
 
     def _persist_cross_deps(
         self,
         session: Session,
-        db_source: Source,
+        db_source: Component,
         cross_deps: dict[str, dict[str, str]],
     ) -> None:
         """Persist cross-source deps from user selections.
 
         ``cross_deps`` maps ``{asset_key: {param_name: upstream_asset_id}}``.
-        Existing cross-source deps for the given params are replaced.
+        Existing deps for the given params are replaced; other params keep
+        their relations (intra-source wiring stays intact).
         """
-        key_to_asset: dict[str, Asset] = {}
-        for db_asset in db_source.assets:
-            key_to_asset[db_asset.key] = db_asset
+        children = session.exec(select(Component).where(Component.parent_id == db_source.id)).all()
+        children_by_key = {child.key: child for child in children}
 
         for asset_key, dependency_map in cross_deps.items():
-            db_asset = key_to_asset.get(asset_key)
-            if not db_asset or not db_asset.id:
+            child = children_by_key.get(asset_key)
+            if not child or not child.id:
                 continue
 
-            for param_name in dependency_map:
-                existing_dependencies = session.exec(
-                    select(AssetDependency).where(
-                        AssetDependency.asset_id == db_asset.id,
-                        AssetDependency.param_name == param_name,
+            for param_name, upstream_id in dependency_map.items():
+                existing = session.exec(
+                    select(ComponentRelation).where(
+                        ComponentRelation.src_id == child.id,
+                        ComponentRelation.type == "dependency",
+                        ComponentRelation.slot == param_name,
                     )
                 ).all()
-                for dependency in existing_dependencies:
-                    session.delete(dependency)
-
-            for param_name, upstream_id in dependency_map.items():
+                for relation in existing:
+                    session.delete(relation)
+                session.flush()
                 if upstream_id:
-                    session.add(
-                        AssetDependency(
-                            asset_id=db_asset.id,
-                            upstream_asset_id=UUID(upstream_id),
-                            param_name=param_name,
-                        )
-                    )
+                    upstream = session.get(Component, UUID(upstream_id))
+                    if upstream:
+                        add_relation(session, child, upstream, "dependency", param_name)
 
     # ------------------------------------------------------------------
     # Hydration
@@ -308,17 +275,8 @@ class SourceMixin:
         ``spec.reconstruct()``.
         """
         with Session(get_engine()) as session:
-            db_source = session.get(
-                Source,
-                source_id,
-                options=[
-                    selectinload(Source.assets).selectinload(Asset.resources),  # ty: ignore[invalid-argument-type]
-                    selectinload(Source.assets).selectinload(Asset.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
-                    selectinload(Source.resources),  # ty: ignore[invalid-argument-type]
-                    selectinload(Source.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
-                ],
-            )
-            if not db_source:
+            db_source = session.get(Component, source_id)
+            if not db_source or db_source.kind != "source":
                 raise SourceNotFoundError(f"Source {source_id} not found")
 
             status = source_status(self._catalog, db_source.key)
@@ -328,7 +286,7 @@ class SourceMixin:
                     f"its catalog key is {status.value}."
                 )
 
-            spec = self._hydrator.build_source_spec(session, db_source)
+            spec = self._hydrator.build_component_spec(session, db_source)
 
         try:
             return cast(il.Source, spec.reconstruct())
@@ -338,38 +296,6 @@ class SourceMixin:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _sync_resource_bindings(
-        session: Session,
-        db_source: Source,
-        resources: dict[str, str] | None,
-    ) -> None:
-        """Replace all resource bindings for a source."""
-        existing_bindings = session.exec(select(SourceResource).where(SourceResource.source_id == db_source.id)).all()
-        for binding in existing_bindings:
-            session.delete(binding)
-        for key, resource_id in (resources or {}).items():
-            session.add(
-                SourceResource(source_id=db_source.id, resource_id=UUID(resource_id), key=key)
-            )
-
-    @staticmethod
-    def _sync_destination_bindings(
-        session: Session,
-        db_source: Source,
-        destination_ids: list[str] | None,
-    ) -> None:
-        """Replace all destination bindings for a source."""
-        existing_bindings = session.exec(
-            select(SourceDestination).where(SourceDestination.source_id == db_source.id)
-        ).all()
-        for binding in existing_bindings:
-            session.delete(binding)
-        for destination_id in destination_ids or []:
-            session.add(
-                SourceDestination(source_id=db_source.id, destination_id=UUID(destination_id))
-            )
 
     def _resolve_source_cls(self, key: str) -> type[il.Source]:
         """Import the source class from the catalog (raise-on-miss).
@@ -381,3 +307,13 @@ class SourceMixin:
         if source_cls is None:
             raise CatalogKeyError(f"Unknown source key: {key}")
         return source_cls
+
+
+def _as_uuid_map(bindings: dict[str, str] | None) -> dict[str, UUID]:
+    """Convert a ``{slot: uuid_string}`` binding map to UUIDs."""
+    return {slot: UUID(value) for slot, value in (bindings or {}).items()}
+
+
+def _as_uuids(ids: list[str] | None) -> list[UUID]:
+    """Convert a list of uuid strings to UUIDs."""
+    return [UUID(value) for value in ids or []]

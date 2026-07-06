@@ -39,7 +39,7 @@ import interloper as il
 from interloper.settings import AppSettings
 from interloper_db import create_all, ensure_database, init_engine
 from interloper_db.engine import get_engine
-from interloper_db.models import Organisation, Profile, Source, UserOrganisation
+from interloper_db.models import Component, Organisation, Profile, UserOrganisation
 from interloper_db.store import Store
 from sqlmodel import Session, col, select
 
@@ -181,18 +181,14 @@ def _ensure_org(store: Store, admin_id: UUID) -> Organisation:
     return existing
 
 
-def _ensure_demo_source(store: Store, org_id: UUID) -> Source:
+def _ensure_demo_source(store: Store, org_id: UUID) -> Component:
     """Register the demo source (and its assets) for the org if not present.
 
     Returns the seeded source with its assets eagerly loaded.
     """
     sources = {source.key: source for source in store.list_sources(org_id)}
     if DEMO_SOURCE_KEY not in sources:
-        store.create_source(org_id, key=DEMO_SOURCE_KEY, name=DEMO_SOURCE_NAME)
-        # Re-list so the assets relationship is eagerly loaded (the row
-        # returned by ``create_source`` lazy-loads ``.assets`` and would raise
-        # once its session is closed).
-        sources = {source.key: source for source in store.list_sources(org_id)}
+        return store.create_source(org_id, key=DEMO_SOURCE_KEY, name=DEMO_SOURCE_NAME)
     return sources[DEMO_SOURCE_KEY]
 
 
@@ -232,7 +228,7 @@ def main() -> None:
     assert org.id is not None
     source = _ensure_demo_source(store, org.id)
     assert source.id is not None
-    asset_count = len(source.assets)
+    asset_count = len(source.children)
     job_created = _ensure_demo_job(store, org.id, source.id)
 
     how = {

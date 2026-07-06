@@ -24,7 +24,7 @@ def list_sources(tool_context: ToolContext) -> dict[str, Any]:
         db_by_key: dict[str, Any] = {}
         for s in db_sources:
             entry = serialize(s)
-            entry["asset_count"] = len(s.assets) if s.assets else 0
+            entry["asset_count"] = len(s.children)
             db_by_key[s.key] = entry
 
         # Enrich with catalog metadata

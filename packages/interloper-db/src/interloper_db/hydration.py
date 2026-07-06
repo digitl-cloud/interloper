@@ -7,9 +7,15 @@ happens at the call site via ``spec.reconstruct()``::
 
     hydrator = Hydrator(catalog, decrypt=decrypt_fn)
     with Session(engine) as session:
-        db_source = session.get(Source, source_id, options=[...])
-        spec = hydrator.build_source_spec(session, db_source)
-    source = spec.reconstruct()
+        db_component = session.get(Component, component_id)
+        spec = hydrator.build_component_spec(session, db_component)
+    component = spec.reconstruct()
+
+One builder covers every kind: a component's init is its ``config`` (or its
+decrypted ``data`` for secret-bearing kinds) plus whatever its outgoing
+relations and children contribute. The relation types are constrained per
+kind at the schema level, so the walk needs no kind dispatch — an asset
+simply has no ``target`` relations, a destination no ``dependency`` ones.
 
 The Store wraps this pattern in thin ``load_*`` convenience methods, but
 any caller can use the hydrator directly to assemble a spec (for example,
@@ -19,7 +25,7 @@ to serialize it to JSON and send it across a process boundary).
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -28,23 +34,18 @@ from interloper.component.base import ComponentSpec
 from interloper.errors import CatalogKeyError, HydrationError
 from sqlmodel import Session, select
 
-from interloper_db.models import (
-    Asset,
-    AssetDependency,
-    AssetResource,
-    Destination,
-    DestinationResource,
-    Resource,
-    Source,
-    SourceResource,
-)
+from interloper_db.models import Component, ComponentRelation
+
+# Kinds whose instance payload lives in the (optionally encrypted) ``data``
+# column rather than ``config``.
+SECRET_KINDS = ("connection", "config", "resource")
 
 
 class Hydrator:
     """Builds ``ComponentSpec`` trees from DB rows.
 
     The hydrator holds a catalog (for import-path lookups) and an optional
-    decrypt callable (for resource data).  All methods are pure
+    decrypt callable (for secret payloads).  All methods are pure
     transformations — they read rows and return specs without ever
     instantiating framework classes.  Reconstruction is the caller's job.
     """
@@ -59,289 +60,140 @@ class Hydrator:
         Args:
             catalog: Catalog used to resolve ``key → import path``.
             decrypt: Optional ``(bytes) -> bytes`` callable for decrypting
-                resource data blobs marked ``encrypted=True``.
+                data blobs marked ``encrypted=True``.
         """
         self._catalog = catalog
         self._decrypt = decrypt
 
-    # ------------------------------------------------------------------
-    # Resource
-    # ------------------------------------------------------------------
-
-    def build_resource_spec(self, db_resource: Resource) -> ComponentSpec:
-        """Build a spec from a Resource row.
-
-        Resources are leaves — they carry their full state in ``data``
-        and have no nested specs.  No session is needed.
+    def build_component_spec(self, session: Session, db_component: Component) -> ComponentSpec:
+        """Build a spec for a component row of any kind.
 
         Args:
-            db_resource: The Resource row.
+            session: Active DB session (used to walk relations and children).
+            db_component: The component row.
 
         Returns:
-            A ``ComponentSpec`` with the row's ``id`` and decoded data.
+            A ``ComponentSpec`` with the row's ``id`` and a fully resolved
+            init payload (nested components as nested specs).
         """
-        path = self._resolve_path(db_resource.key, kind="resource")
-        init = self.decode_resource_data(db_resource)
+        init = self._build_init(session, db_component)
         return ComponentSpec(
-            path=path,
-            id=str(db_resource.id) if db_resource.id else "",
+            path=self._resolve_path(db_component),
+            id=str(db_component.id) if db_component.id else "",
             init=init or None,
         )
 
-    def decode_resource_data(self, db_resource: Resource) -> dict[str, Any]:
-        """Decrypt (when needed) and JSON-decode a resource's data blob.
+    def decode_data(self, db_component: Component) -> dict[str, Any]:
+        """Decrypt (when needed) and JSON-decode a component's data blob.
 
         Args:
-            db_resource: The Resource row whose ``data`` bytes should be
-                decoded.
+            db_component: The row whose ``data`` bytes should be decoded.
 
         Returns:
             The decoded configuration dict, or ``{}`` if the row carries
             no data.
         """
-        if db_resource.data is None:
+        if db_component.data is None:
             return {}
-        raw = db_resource.data
-        if db_resource.encrypted:
+        raw = db_component.data
+        if db_component.encrypted:
             if not self._decrypt:
                 raise HydrationError(
-                    f"Resource {db_resource.id} is encrypted but INTERLOPER_ENCRYPTION_KEY "
+                    f"Component {db_component.id} is encrypted but INTERLOPER_ENCRYPTION_KEY "
                     "is not configured; cannot decrypt"
                 )
             try:
                 raw = self._decrypt(raw)
             except Exception as e:
                 raise HydrationError(
-                    f"Failed to decrypt resource {db_resource.id}; the configured "
+                    f"Failed to decrypt component {db_component.id}; the configured "
                     "INTERLOPER_ENCRYPTION_KEY may be wrong or the data was not encrypted "
                     f"with it: {e}"
                 ) from e
         return json.loads(raw)
 
     # ------------------------------------------------------------------
-    # Destination
+    # Internals
     # ------------------------------------------------------------------
 
-    def build_destination_spec(
-        self,
-        session: Session,
-        db_destination: Destination,
-    ) -> ComponentSpec:
-        """Build a spec from a Destination row.
+    def _build_init(self, session: Session, db_component: Component) -> dict[str, Any]:
+        """Build the init payload for a component row.
 
-        Captures the destination's ``config`` dict and resolves its
-        resource bindings as nested resource specs under ``init.resources``.
-
-        Args:
-            session: Active DB session.
-            db_destination: The Destination row.
-
-        Returns:
-            A ``ComponentSpec`` with the row's ``id`` and resolved bindings.
-        """
-        path = self._resolve_path(db_destination.key, kind="destination")
-
-        init: dict[str, Any] = dict(db_destination.config) if db_destination.config else {}
-
-        bindings = session.exec(
-            select(DestinationResource).where(DestinationResource.destination_id == db_destination.id)
-        ).all()
-        resources = self._resource_specs_from_bindings(session, bindings)
-        if resources:
-            init["resources"] = resources
-
-        return ComponentSpec(
-            path=path,
-            id=str(db_destination.id) if db_destination.id else "",
-            init=init or None,
-        )
-
-    # ------------------------------------------------------------------
-    # Asset
-    # ------------------------------------------------------------------
-
-    def build_asset_spec(
-        self,
-        session: Session,
-        db_asset: Asset,
-    ) -> ComponentSpec:
-        """Build a spec from a standalone Asset row.
-
-        Source-owned assets should not be built through this method —
-        they're embedded in the parent source's spec via
-        :meth:`build_source_spec`, which handles the
-        ``"source_path:asset_key"`` path convention.
-
-        Args:
-            session: Active DB session.
-            db_asset: A standalone Asset row (``source_id`` is ``None``).
-
-        Returns:
-            A ``ComponentSpec`` with the row's ``id`` and all per-asset
-            state (materializable, config, resources, destinations, deps).
-        """
-        path = self._resolve_path(db_asset.key, kind="asset")
-        init = self._build_asset_init(session, db_asset)
-        return ComponentSpec(
-            path=path,
-            id=str(db_asset.id) if db_asset.id else "",
-            init=init or None,
-        )
-
-    def _build_asset_init(
-        self,
-        session: Session,
-        db_asset: Asset,
-    ) -> dict[str, Any]:
-        """Build the ``init`` dict for an asset spec.
-
-        Captures materializable, per-field config overrides, resource
-        bindings, destination bindings, and cross-asset dependencies.
+        Relation contributions map onto the framework's field conventions:
+        ``resource`` relations fill ``resources`` (by slot), ``destination``
+        relations fill ``destination``, ``dependency`` relations fill ``deps``
+        (slot → upstream instance id), ``target`` relations fill ``targets``.
+        Children are embedded as the ``assets`` override map — the parent
+        source is the unit of reconstruction, so each child contributes a
+        bare init dict under its key rather than a full spec.
 
         Returns:
             A dict suitable for use as a ``ComponentSpec.init``.
         """
-        init: dict[str, Any] = {"materializable": db_asset.materializable}
+        if db_component.kind in SECRET_KINDS:
+            init = self.decode_data(db_component)
+        else:
+            init = dict(db_component.config or {})
 
-        if db_asset.config:
-            init.update(db_asset.config)
+        relations = self._relations_by_type(session, db_component.id)
 
-        if db_asset.id:
-            resource_bindings = session.exec(
-                select(AssetResource).where(AssetResource.asset_id == db_asset.id)
-            ).all()
-            resources = self._resource_specs_from_bindings(session, resource_bindings)
-            if resources:
-                init["resources"] = resources
+        if resources := {
+            rel.slot: self._dst_spec(session, rel).model_dump(mode="json") for rel in relations.get("resource", [])
+        }:
+            init["resources"] = resources
 
-            destination_specs = [
-                self.build_destination_spec(session, db_dest).model_dump(mode="json")
-                for db_dest in db_asset.destinations
-            ]
-            if destination_specs:
-                init["destination"] = (
-                    destination_specs if len(destination_specs) > 1 else destination_specs[0]
-                )
+        if destinations := [
+            self._dst_spec(session, rel).model_dump(mode="json") for rel in relations.get("destination", [])
+        ]:
+            init["destination"] = destinations if len(destinations) > 1 else destinations[0]
 
-            deps = self._deps_for_asset(session, db_asset.id)
-            if deps:
-                init["deps"] = deps
+        if deps := {rel.slot: str(rel.dst_id) for rel in relations.get("dependency", [])}:
+            init["deps"] = deps
+
+        if targets := [self._dst_spec(session, rel).model_dump(mode="json") for rel in relations.get("target", [])]:
+            init["targets"] = targets
+
+        children = session.exec(
+            select(Component).where(Component.parent_id == db_component.id).order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
+        ).all()
+        if assets := {
+            child.key: {"id": str(child.id), **self._build_init(session, child)} for child in children
+        }:
+            init["assets"] = assets
 
         return init
 
-    def _deps_for_asset(
-        self,
-        session: Session,
-        asset_id: UUID,
-    ) -> dict[str, str]:
-        """Return ``{param_name: upstream_uuid}`` from ``AssetDependency`` rows."""
-        dependency_rows = session.exec(
-            select(AssetDependency).where(AssetDependency.asset_id == asset_id)
+    def _relations_by_type(self, session: Session, src_id: UUID | None) -> dict[str, list[ComponentRelation]]:
+        """Group a component's outgoing relations by type, ordered stably."""
+        if src_id is None:
+            return {}
+        rows = session.exec(
+            select(ComponentRelation)
+            .where(ComponentRelation.src_id == src_id)
+            .order_by(ComponentRelation.slot, ComponentRelation.dst_id)  # ty: ignore[invalid-argument-type]
         ).all()
-        return {d.param_name: str(d.upstream_asset_id) for d in dependency_rows}
+        grouped: dict[str, list[ComponentRelation]] = {}
+        for rel in rows:
+            grouped.setdefault(rel.type, []).append(rel)
+        return grouped
 
-    # ------------------------------------------------------------------
-    # Source
-    # ------------------------------------------------------------------
+    def _dst_spec(self, session: Session, rel: ComponentRelation) -> ComponentSpec:
+        """Build the spec of a relation's destination component."""
+        db_dst = session.get(Component, rel.dst_id)
+        if db_dst is None:  # defensive: FKs make this unreachable
+            raise HydrationError(f"Relation {rel.src_id} -[{rel.type}]-> {rel.dst_id} points at a missing component")
+        return self.build_component_spec(session, db_dst)
 
-    def build_source_spec(
-        self,
-        session: Session,
-        db_source: Source,
-    ) -> ComponentSpec:
-        """Build a spec from a Source row including per-asset overrides.
-
-        The returned spec is self-contained: it carries the source's own
-        config, resource bindings, destination bindings, plus an
-        ``assets`` override map keyed by asset key.  Each entry is the
-        sparse init payload for one asset (materializable, config,
-        resources, destinations, deps).  Reconstruction via
-        ``ComponentSpec.reconstruct()`` produces a live ``Source`` whose
-        ``_apply_asset_overrides`` validator materialises each asset from
-        ``asset_types`` with the overrides applied.
-
-        Args:
-            session: Active DB session.
-            db_source: The Source row (relationships should be eagerly
-                loaded via ``selectinload``).
-
-        Returns:
-            A ``ComponentSpec`` capturing the source and its assets.
-        """
-        path = self._resolve_path(db_source.key, kind="source")
-
-        init: dict[str, Any] = {}
-
-        if db_source.config:
-            init.update(db_source.config)
-
-        resource_bindings = session.exec(
-            select(SourceResource).where(SourceResource.source_id == db_source.id)
-        ).all()
-        resources = self._resource_specs_from_bindings(session, resource_bindings)
-        if resources:
-            init["resources"] = resources
-
-        destination_specs = [
-            self.build_destination_spec(session, db_dest).model_dump(mode="json")
-            for db_dest in db_source.destinations
-        ]
-        if destination_specs:
-            init["destination"] = (
-                destination_specs if len(destination_specs) > 1 else destination_specs[0]
-            )
-
-        asset_overrides: dict[str, dict[str, Any]] = {
-            db_asset.key: {"id": str(db_asset.id), **self._build_asset_init(session, db_asset)}
-            for db_asset in db_source.assets
-        }
-        if asset_overrides:
-            init["assets"] = asset_overrides
-
-        return ComponentSpec(
-            path=path,
-            id=str(db_source.id) if db_source.id else "",
-            init=init or None,
-        )
-
-    # ------------------------------------------------------------------
-    # Shared helpers
-    # ------------------------------------------------------------------
-
-    def _resolve_path(self, key: str, *, kind: str) -> str:
+    def _resolve_path(self, db_component: Component) -> str:
         """Look up a component's import path via the catalog.
-
-        Args:
-            key: The catalog key.
-            kind: Component kind, used only in the error message.
 
         Returns:
             The resolved import path.
 
         Raises:
-            CatalogKeyError: If the catalog has no entry for *key*.
+            CatalogKeyError: If the catalog has no entry for the row's key.
         """
-        definition = self._catalog.get(key)
+        definition = self._catalog.get(db_component.key)
         if not definition:
-            raise CatalogKeyError(f"Unknown {kind} key: {key}")
+            raise CatalogKeyError(f"Unknown {db_component.kind} key: {db_component.key}")
         return definition.path
-
-    def _resource_specs_from_bindings(
-        self,
-        session: Session,
-        bindings: Iterable[Any],
-    ) -> dict[str, dict[str, Any]]:
-        """Build a ``{slot: resource_spec_dict}`` map from binding rows.
-
-        Each binding row must expose ``resource_id`` and ``key`` attributes.
-
-        Returns:
-            A dict mapping slot name → resource spec (as a JSON-safe dict).
-        """
-        result: dict[str, dict[str, Any]] = {}
-        for binding in bindings:
-            db_resource = session.get(Resource, binding.resource_id)
-            if db_resource:
-                spec = self.build_resource_spec(db_resource)
-                result[binding.key] = spec.model_dump(mode="json")
-        return result

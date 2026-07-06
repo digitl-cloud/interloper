@@ -1,4 +1,15 @@
-"""Cron controller: evaluates cron jobs and creates queued runs."""
+"""Cron controller: evaluates cron jobs and creates queued runs.
+
+Jobs are component rows (``kind='job'``): their trigger lives in ``config``
+(the spec, user-owned) and the controller writes only the ``state`` column
+(machine-owned: ``next_run_at``/``last_run_at`` as UTC ISO-8601 strings).
+State is a pure cache — wiping it just makes every job reschedule from its
+cron expression on the next tick.
+
+The ISO strings are written in one canonical form (timezone-aware UTC
+``isoformat()``), which makes lexicographic string comparison in SQL a
+correct chronological comparison — no JSON-to-timestamp casting needed.
+"""
 
 from __future__ import annotations
 
@@ -11,9 +22,9 @@ from typing import cast
 
 from croniter import croniter
 from interloper_db import Store, get_engine
-from interloper_db.models import Backfill, Job, Run
+from interloper_db.models import Backfill, Component, Run
 from sqlalchemy import or_
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +33,8 @@ class CronController:
     """Evaluates cron jobs and creates queued runs.
 
     Runs in a loop:
-    1. ``SELECT FOR UPDATE SKIP LOCKED`` (lock jobs)
-    2. ``UPDATE next_run_at`` (calculate next)
+    1. ``SELECT FOR UPDATE SKIP LOCKED`` (lock due job rows)
+    2. update ``state.next_run_at`` (calculate next)
     3. ``INSERT run`` with ``status='queued'`` (create run)
     4. ``COMMIT`` (release locks)
     """
@@ -87,11 +98,13 @@ class CronController:
         try:
             now = datetime.now(timezone.utc)
 
+            next_run_at = Component.state["next_run_at"].as_string()  # ty: ignore[not-subscriptable]
             statement = (
-                select(Job)
-                .where(Job.enabled)
-                .where(or_(col(Job.next_run_at) <= now, col(Job.next_run_at).is_(None)))
-                .order_by(col(Job.next_run_at).asc().nulls_last())
+                select(Component)
+                .where(Component.kind == "job")
+                .where(Component.config["enabled"].as_boolean())  # ty: ignore[not-subscriptable]
+                .where(or_(next_run_at <= now.isoformat(), next_run_at.is_(None)))
+                .order_by(next_run_at.asc().nulls_last())
                 .limit(self._batch_size)
                 .with_for_update(skip_locked=True)
             )
@@ -103,21 +116,21 @@ class CronController:
             logger.info("Found %d job(s) ready to run", len(jobs))
 
             for job in jobs:
-                next_run_at = self._calculate_next_run(job.cron, now)
+                config = job.config or {}
+                cron_expr = config.get("cron")
+                if not cron_expr:
+                    continue
+
+                next_run = self._calculate_next_run(cron_expr, now)
+                scheduled_time = self._state_datetime(job, "next_run_at")
 
                 # New job: schedule for the future, don't run yet
-                if job.next_run_at is None:
-                    job.next_run_at = next_run_at
-                    session.add(job)
-                    session.flush()
-                    logger.info("Scheduling new job '%s' for %s", job.name, next_run_at)
+                if scheduled_time is None:
+                    self._set_state(session, job, next_run_at=next_run)
+                    logger.info("Scheduling new job '%s' for %s", job.name, next_run)
                     continue
 
                 # Check if too old to execute
-                scheduled_time = job.next_run_at
-                if scheduled_time.tzinfo is None:
-                    scheduled_time = scheduled_time.replace(tzinfo=timezone.utc)
-
                 delay_seconds = (now - scheduled_time).total_seconds()
                 if delay_seconds > self._max_execution_delay:
                     logger.warning(
@@ -126,20 +139,15 @@ class CronController:
                         int(delay_seconds),
                         self._max_execution_delay,
                     )
-                    job.next_run_at = next_run_at
-                    session.add(job)
-                    session.flush()
+                    self._set_state(session, job, next_run_at=next_run)
                     continue
 
-                # Update next_run_at
-                job.next_run_at = next_run_at
-                session.add(job)
-                session.flush()
+                self._set_state(session, job, next_run_at=next_run, last_run_at=now)
 
                 # Create runs
-                if job.partitioned and job.backfill_days:
+                if config.get("partitioned") and config.get("backfill_days"):
                     end_date = now.date() - dt.timedelta(days=1)
-                    start_date = end_date - dt.timedelta(days=job.backfill_days - 1)
+                    start_date = end_date - dt.timedelta(days=config["backfill_days"] - 1)
                     backfill = Backfill(
                         org_id=job.org_id,
                         job_id=job.id,
@@ -183,6 +191,22 @@ class CronController:
             raise
         finally:
             session.close()
+
+    @staticmethod
+    def _state_datetime(job: Component, key: str) -> datetime | None:
+        """Parse a UTC ISO-8601 timestamp from a job's state."""
+        value = (job.state or {}).get(key)
+        if not value:
+            return None
+        parsed = datetime.fromisoformat(value)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+    @staticmethod
+    def _set_state(session: Session, job: Component, **timestamps: datetime) -> None:
+        """Merge timestamps into the job's machine-owned state (spec untouched)."""
+        job.state = {**(job.state or {}), **{key: value.isoformat() for key, value in timestamps.items()}}
+        session.add(job)
+        session.flush()
 
     def _calculate_next_run(self, cron_expr: str, base_time: datetime) -> datetime:
         """Calculate the next run time from a cron expression.

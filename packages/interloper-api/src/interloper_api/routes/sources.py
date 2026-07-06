@@ -7,12 +7,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.errors import NotFoundError
-from interloper_db import ComponentStatus, Profile, Store
-from interloper_db.models import Destination, DestinationResource, Source, SourceResource
+from interloper_db import Component, ComponentStatus, Profile, Store
 from pydantic import BaseModel
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
 
+from interloper_api.components import destination_rows, materializable, resource_map
 from interloper_api.dependencies import (
     authorize_org_member,
     get_current_user,
@@ -72,15 +70,8 @@ class SourceResponse(BaseModel):
     created_at: str | None = None
 
 
-def _resource_map(session: Session, junction_cls: type, fk_column: str, fk_value: UUID) -> dict[str, str]:
-    """Build a {slot_key: resource_id} map from junction rows."""
-    col = getattr(junction_cls, fk_column)
-    rows = session.exec(select(junction_cls).where(col == fk_value)).all()
-    return {r.key: str(r.resource_id) for r in rows}  # ty: ignore[unresolved-attribute]
-
-
-def _build_source_response(session: Session, source: Source, store: Store) -> SourceResponse:
-    """Convert a DB Source to a SourceResponse within a session.
+def _build_source_response(source: Component, store: Store) -> SourceResponse:
+    """Convert a source component row to a SourceResponse.
 
     Each source and asset carries its catalog-resolution ``status`` so the
     UI can flag drift. Status is derived from the same resolver hydration
@@ -90,51 +81,32 @@ def _build_source_response(session: Session, source: Source, store: Store) -> So
         id=source.id,
         org_id=source.org_id,
         key=source.key,
-        name=source.name,
+        name=source.name or "",
         config=source.config,
         status=store.source_status(source.key),
-        resources=_resource_map(session, SourceResource, "source_id", source.id),
+        resources=resource_map(source),
         destinations=[
             DestinationResponse(
-                id=d.id,
-                key=d.key,
-                name=d.name,
-                config=d.config,
-                resources=_resource_map(session, DestinationResource, "destination_id", d.id),
-                created_at=str(d.created_at) if d.created_at else None,
+                id=destination.id,
+                key=destination.key,
+                name=destination.name,
+                config=destination.config,
+                resources=resource_map(destination),
+                created_at=str(destination.created_at) if destination.created_at else None,
             )
-            for d in source.destinations
+            for destination in destination_rows(source)
         ],
         assets=[
             AssetResponse(
-                id=a.id,
-                key=a.key,
-                materializable=a.materializable,
-                status=store.asset_status(a.key, source_key=source.key),
+                id=child.id,
+                key=child.key,
+                materializable=materializable(child),
+                status=store.asset_status(child.key, source_key=source.key),
             )
-            for a in source.assets
+            for child in source.children
         ],
         created_at=str(source.created_at) if source.created_at else None,
     )
-
-
-def _load_source_for_response(source_id: UUID, store: Store) -> SourceResponse:
-    """Load a source with relations and build the response."""
-    from interloper_db.engine import get_engine
-
-    with Session(get_engine()) as session:
-        source = session.get(
-            Source,
-            source_id,
-            options=[
-                selectinload(Source.assets),  # ty: ignore[invalid-argument-type]
-                selectinload(Source.resources),  # ty: ignore[invalid-argument-type]
-                selectinload(Source.destinations).selectinload(Destination.resources),  # ty: ignore[invalid-argument-type]
-            ],
-        )
-        if not source:
-            raise NotFoundError(f"Source {source_id} not found")
-        return _build_source_response(session, source, store)
 
 
 @router.get("/")
@@ -144,11 +116,7 @@ def list_sources(
     store: Store = Depends(get_store),
 ) -> list[SourceResponse]:
     """List all sources for the current organisation."""
-    from interloper_db.engine import get_engine
-
-    sources = store.list_sources(org_id)
-    with Session(get_engine()) as session:
-        return [_build_source_response(session, s, store) for s in sources]
+    return [_build_source_response(source, store) for source in store.list_sources(org_id)]
 
 
 @router.post("/")
@@ -169,7 +137,7 @@ def create_source(
         destination_ids=body.destination_ids,
         cross_deps=body.cross_deps,
     )
-    return _load_source_for_response(source.id, store)
+    return _build_source_response(source, store)
 
 
 def _authorize_source(source_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> None:
@@ -196,7 +164,7 @@ def update_source(
     """Update a source."""
     _authorize_source(source_id, user, store, minimum="editor")
     try:
-        store.update_source(
+        source = store.update_source(
             source_id,
             name=body.name,
             config=body.config,
@@ -207,7 +175,7 @@ def update_source(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
-    return _load_source_for_response(source_id, store)
+    return _build_source_response(source, store)
 
 
 @router.delete("/{source_id}")
