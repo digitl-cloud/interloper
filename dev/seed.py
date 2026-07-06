@@ -70,16 +70,6 @@ def _is_synthetic(profile: Profile) -> bool:
     return (profile.google_id or "").startswith(SYNTHETIC_GOOGLE_ID_PREFIX)
 
 
-def _set_super_admin(profile_id: UUID) -> None:
-    """Force the super-admin flag on (no Store method exposes it)."""
-    with Session(get_engine()) as session:
-        db_profile = session.get(Profile, profile_id)
-        if db_profile and not db_profile.is_super_admin:
-            db_profile.is_super_admin = True
-            session.add(db_profile)
-            session.commit()
-
-
 def _upsert_by_google_id(google_id: str, email: str) -> Profile:
     """Create or promote the profile keyed by ``google_id``.
 
@@ -155,7 +145,7 @@ def _ensure_super_admin(store: Store) -> tuple[Profile, str]:
 
     if chosen is not None:
         assert chosen.id is not None
-        _set_super_admin(chosen.id)
+        store.set_super_admin(chosen.id)
         return chosen, "matched"
 
     # No profile with this email yet — create a synthetic placeholder. A real
@@ -168,7 +158,7 @@ def _ensure_super_admin(store: Store) -> tuple[Profile, str]:
         name=name,
     )
     assert profile.id is not None
-    _set_super_admin(profile.id)
+    store.set_super_admin(profile.id)
     return profile, "synthetic"
 
 

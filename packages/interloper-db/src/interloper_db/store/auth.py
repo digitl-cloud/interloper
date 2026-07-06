@@ -65,6 +65,27 @@ class AuthMixin:
             session.refresh(db_profile)
             return db_profile
 
+    def set_super_admin(self, user_id: UUID, is_super_admin: bool = True) -> Profile | None:
+        """Set the platform-wide super-admin flag on a profile.
+
+        Args:
+            user_id: Profile UUID.
+            is_super_admin: Flag value to set.
+
+        Returns:
+            The updated Profile, or None if not found.
+        """
+        with Session(get_engine()) as session:
+            db_profile = session.get(Profile, user_id)
+            if not db_profile:
+                return None
+            db_profile.is_super_admin = is_super_admin
+            session.add(db_profile)
+            session.commit()
+            session.refresh(db_profile)
+            session.expunge(db_profile)
+            return db_profile
+
     def get_profile(self, user_id: UUID) -> Profile | None:
         """Get a profile by ID.
 

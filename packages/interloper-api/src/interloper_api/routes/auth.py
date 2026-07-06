@@ -131,6 +131,11 @@ def google_callback(
         avatar_url=avatar_url,
     )
 
+    # Bootstrap super-admins from settings. Promote-only: removing an email from
+    # the list never demotes an existing super-admin.
+    if not profile.is_super_admin and email.lower() in auth_config.super_admin_emails:
+        profile = store.set_super_admin(profile.id) or profile
+
     # Create session (no org context — frontend resolves org after login)
     token = store.create_session(user_id=profile.id)
 

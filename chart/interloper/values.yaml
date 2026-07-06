@@ -186,10 +186,14 @@ config:
   #   port: 465
   #   user: "no-reply@example.com"
 
-  # Auth config (OAuth client ID)
+  # Auth config (OAuth client ID). super_admin_emails bootstraps the first
+  # platform super-admin(s): listed users are promoted when they log in
+  # (promote-only — removing an email never demotes).
   auth: {}
   # auth:
   #   google_client_id: "..."
+  #   super_admin_emails:
+  #     - you@example.com
 
 # =============================================================================
 # Secrets

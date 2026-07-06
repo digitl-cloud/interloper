@@ -1,7 +1,8 @@
 """Add is_super_admin flag to profiles.
 
 Grants a profile platform-wide super-admin privileges (cross-org management).
-The first super-admin is bootstrapped manually, e.g.::
+The first super-admin is bootstrapped via ``INTERLOPER_AUTH_SUPER_ADMIN_EMAILS``
+(promoted on login), or manually::
 
     UPDATE profiles SET is_super_admin = true WHERE email = '<you>';
 
