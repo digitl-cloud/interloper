@@ -1,7 +1,15 @@
 from interloper.asset import Asset, AssetDefinition, ExecutionContext, asset
 from interloper.catalog import Catalog
 from interloper.cli.manifest import RunManifest, RunPlan
-from interloper.component import KINDS, Component, ComponentDefinition, ComponentSpec, KindRegistry, RelationDefinition
+from interloper.component import (
+    KINDS,
+    Component,
+    ComponentDefinition,
+    ComponentSpec,
+    KindRegistry,
+    RelationDefinition,
+    RelationSlot,
+)
 from interloper.config import Config, config
 from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuthConnection, connection
 from interloper.dag import DAG
@@ -111,6 +119,7 @@ __all__ = [
     "RangePaginator",
     "RefreshTokenOAuthConnection",
     "RelationDefinition",
+    "RelationSlot",
     "Resource",
     "ResourceDefinition",
     "ResourceRef",

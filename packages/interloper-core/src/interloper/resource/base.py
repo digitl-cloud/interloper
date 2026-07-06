@@ -61,4 +61,5 @@ class Resource(Component):
             description=cls.__doc__ or "",
             tags=list(getattr(cls, "tags", [])),
             config_schema=cls.config_schema(),
+            relations=cls.relation_definitions(),
         )

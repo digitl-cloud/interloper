@@ -12,7 +12,7 @@ from pydantic import Field, PrivateAttr
 from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
-from interloper.component import Component, ComponentDefinition, RelationDefinition
+from interloper.component import Component, ComponentDefinition, RelationDefinition, RelationSlot
 from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
 from interloper.errors import AssetError, NormalizerError, PartitionError
@@ -61,11 +61,8 @@ class AssetDefinition(ComponentDefinition):
     """
 
     source_key: str = Field(default="")
-    resources: dict[str, str] = Field(default_factory=dict)
-    destinations: list[str] = Field(default_factory=list)
+    config_schema: dict[str, Any] = Field(default_factory=dict)
     asset_schema: dict[str, Any] | None = Field(default=None)
-    requires: dict[str, str] = Field(default_factory=dict)
-    optional_requires: dict[str, str] = Field(default_factory=dict)
     partitioning: dict[str, Any] | None = Field(default=None)
 
     @property
@@ -107,6 +104,9 @@ class Asset(Component):
         "destination": RelationDefinition(kinds=["destination"]),
         "dependency": RelationDefinition(kinds=["asset"], slotted=True),
     }
+    internal_fields: ClassVar[frozenset[str]] = frozenset(
+        {"destination", "normalizer", "materialization_strategy", "deps"}
+    )
     requires: ClassVar[dict[str, str]] = {}
     optional_requires: ClassVar[dict[str, str]] = {}
     tags: ClassVar[list[str]] = []
@@ -230,7 +230,6 @@ class Asset(Component):
         Returns:
             An AssetDefinition with metadata derived from the class.
         """
-        res_types: dict[str, type[Resource]] = cls.__dict__.get("resource_types", {})
         schema_dict: dict[str, Any] | None = None
         if cls.schema is not None and hasattr(cls.schema, "json_schema"):
             schema_dict = cls.schema.json_schema()
@@ -249,14 +248,33 @@ class Asset(Component):
             icon=cls.icon,
             description=cls.__doc__ or "",
             tags=list(cls.tags),
-            relations=dict(cls.relation_types),
-            resources={name: res_cls.key for name, res_cls in res_types.items()},
-            destinations=[d.key for d in cls.destination_types],
+            config_schema=cls.config_schema(),
+            relations=cls.relation_definitions(),
             asset_schema=schema_dict,
-            requires=dict(cls.requires),
-            optional_requires=dict(cls.optional_requires),
             partitioning=partitioning_dict,
         )
+
+    @classmethod
+    def relation_definitions(cls) -> dict[str, RelationDefinition]:
+        """Enrich the vocabulary with dependency slots and destination keys.
+
+        Dependency slots come from the class's ``requires`` /
+        ``optional_requires`` contracts (slot key is the — possibly
+        qualified — upstream asset key).
+
+        Returns:
+            Relation type → enriched definition.
+        """
+        relations = super().relation_definitions()
+        if "dependency" in relations:
+            slots = {param: RelationSlot(key=key) for param, key in cls.requires.items()}
+            slots |= {param: RelationSlot(key=key, required=False) for param, key in cls.optional_requires.items()}
+            relations["dependency"] = relations["dependency"].model_copy(update={"slots": slots})
+        if "destination" in relations:
+            relations["destination"] = relations["destination"].model_copy(
+                update={"keys": [dest_cls.key for dest_cls in cls.destination_types]}
+            )
+        return relations
 
     def __call__(
         self,

@@ -57,8 +57,8 @@ class TestFetchField:
 
         defn = Src.definition()
         assert defn.config_schema["properties"]["thing_id"]["x-fetch"]["provider"] == "connection.things"
-        # The annotation-declared slot must be exposed in the catalog resources.
-        assert defn.resources == {"connection": Conn.key}
+        # The annotation-declared slot must be exposed in the relation slots.
+        assert defn.relations["resource"].slots["connection"].key == Conn.key
 
 
 class TestValidation:
