@@ -224,17 +224,17 @@ def test_complete_run_stamps_the_jobs_last_run_at(run_store: RunMixin) -> None:
         job = Component(org_id=org, kind="job", key="job", name="J")
         session.add(job)
         session.flush()
-        run = Run(id=uuid4(), org_id=org, job_id=job.id, status="running")
+        run = Run(id=uuid4(), org_id=org, component_id=job.id, status="running")
         session.add(run)
         session.commit()
-        job_id, run_id = job.id, run.id
+        component_id, run_id = job.id, run.id
 
     completed = run_store.complete_run(run_id, success=True)
     assert completed.status == "success"
     assert completed.completed_at is not None
 
     with Session(engine_module.get_engine()) as session:
-        stamped = session.get(Component, job_id)
+        stamped = session.get(Component, component_id)
         assert stamped is not None and stamped.state is not None
         # SQLite round-trips the column naive; the stamped ISO string is aware UTC.
         stamped_at = datetime.fromisoformat(stamped.state["last_run_at"])

@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from interloper.component import KINDS
 from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
 from interloper_db.models import Event, Run
@@ -34,7 +35,7 @@ class RunResponse(BaseModel):
 
     id: UUID
     org_id: UUID
-    job_id: UUID | None
+    component_id: UUID | None
     backfill_id: UUID | None
     partition_date: dt.date | None
     status: str
@@ -47,9 +48,9 @@ class RunResponse(BaseModel):
 
 
 class RunCreateRequest(BaseModel):
-    """Request body for queuing a run for a job."""
+    """Request body for queuing a run targeting a runnable component."""
 
-    job_id: UUID
+    component_id: UUID
     partition_date: dt.date | None = None
 
 
@@ -101,7 +102,7 @@ def _run_to_response(run: Run) -> RunResponse:
     return RunResponse(
         id=run.id,
         org_id=run.org_id,
-        job_id=run.job_id,
+        component_id=run.component_id,
         backfill_id=run.backfill_id,
         partition_date=run.partition_date,
         status=run.status,
@@ -166,7 +167,7 @@ def _event_to_response(event: Event) -> EventResponse:
 @router.get("/")
 def list_runs(
     response: Response,
-    job_id: UUID | None = None,
+    component_id: UUID | None = None,
     backfill_id: UUID | None = None,
     status: str | None = None,
     limit: int = 50,
@@ -180,11 +181,11 @@ def list_runs(
     The total number of matching runs (ignoring ``limit``/``offset``) is
     returned in the ``X-Total-Count`` response header so clients can paginate.
     """
-    total = store.count_runs(org_id, job_id=job_id, backfill_id=backfill_id, status=status)
+    total = store.count_runs(org_id, component_id=component_id, backfill_id=backfill_id, status=status)
     response.headers["X-Total-Count"] = str(total)
     runs = store.list_runs(
         org_id,
-        job_id=job_id,
+        component_id=component_id,
         backfill_id=backfill_id,
         status=status,
         limit=limit,
@@ -199,9 +200,11 @@ def create_run(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> RunResponse:
-    """Queue a single run for a job."""
-    job = load_authorized(store.get_component, body.job_id, user, store, label="Job", minimum="editor")
-    run = store.create_run(job.org_id, job_id=body.job_id, partition_date=body.partition_date)
+    """Queue a single run targeting a runnable component (job, source, or asset)."""
+    target = load_authorized(store.get_component, body.component_id, user, store, label="Component", minimum="editor")
+    if not KINDS.runnable(target.kind):
+        raise HTTPException(status_code=400, detail=f"Components of kind '{target.kind}' cannot be run")
+    run = store.create_run(target.org_id, component_id=body.component_id, partition_date=body.partition_date)
     return _run_to_response(run)
 
 

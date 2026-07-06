@@ -58,11 +58,11 @@ class RunExecutor:
 
             with Session(get_engine()) as session:
                 db_run = session.get(Run, run_id)
-                if not db_run or not db_run.job_id:
+                if not db_run or not db_run.component_id:
                     logger.info("Run %s not found, skipping", run_id)
                     return False
 
-                job_id = db_run.job_id
+                component_id = db_run.component_id
                 org_id = db_run.org_id
                 backfill_id = str(db_run.backfill_id) if db_run.backfill_id else None
                 partition_date = db_run.partition_date
@@ -70,8 +70,8 @@ class RunExecutor:
 
                 self._mark_running(session, db_run)
 
-            job = cast(il.Job, self._store.load(job_id))
-            assets = _job_assets(job)
+            target = self._store.load(component_id)
+            assets = _target_assets(target)
             if not assets:
                 logger.info("No sources or assets for run %s, marking success", run_id)
                 self._store.complete_run(run_id, success=True)
@@ -195,12 +195,19 @@ class RunExecutor:
         )
 
 
-def _job_assets(job: il.Job) -> list[il.Asset]:
-    """Flatten a hydrated job's targets into the asset list to materialize."""
-    assets: list[il.Asset] = []
-    for target in job.targets:
-        if isinstance(target, il.Source):
-            assets.extend(target.assets)
-        else:
-            assets.append(target)
-    return assets
+def _target_assets(component: il.Component) -> list[il.Asset]:
+    """Flatten a run's hydrated target component into the assets to materialize.
+
+    A job contributes its targets' assets, a source its own assets, and an
+    asset itself — any runnable component resolves to a DAG-able list.
+    """
+    if isinstance(component, il.Job):
+        assets: list[il.Asset] = []
+        for target in component.targets:
+            assets.extend(target.assets if isinstance(target, il.Source) else [target])
+        return assets
+    if isinstance(component, il.Source):
+        return list(component.assets)
+    if isinstance(component, il.Asset):
+        return [component]
+    raise ValueError(f"Component kind '{type(component).kind}' is not runnable")

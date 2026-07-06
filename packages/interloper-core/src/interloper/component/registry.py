@@ -89,6 +89,15 @@ class KindRegistry:
         cls = self.get(kind)
         return bool(cls and cls.sensitive)
 
+    def runnable(self, kind: str) -> bool:
+        """Whether a run can target the kind directly.
+
+        Returns:
+            The anchor class's ``runnable`` declaration (False if unregistered).
+        """
+        cls = self.get(kind)
+        return bool(cls and cls.runnable)
+
     def relation_types(self, kind: str) -> dict[str, RelationDefinition]:
         """The relation vocabulary the kind declares.
 

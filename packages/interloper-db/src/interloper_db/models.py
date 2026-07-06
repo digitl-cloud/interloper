@@ -280,7 +280,7 @@ class Backfill(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
     )
-    job_id: UUID | None = SQLField(
+    component_id: UUID | None = SQLField(
         default=None,
         sa_column=Column(ForeignKey("components.id", ondelete="SET NULL"), index=True),
     )
@@ -315,7 +315,7 @@ class Run(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
     )
-    job_id: UUID | None = SQLField(
+    component_id: UUID | None = SQLField(
         default=None,
         sa_column=Column(ForeignKey("components.id", ondelete="SET NULL"), index=True),
     )

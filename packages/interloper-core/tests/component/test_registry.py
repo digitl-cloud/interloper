@@ -29,6 +29,10 @@ class TestBuiltins:
         for kind in ("source", "asset", "destination", "resource", "connection", "config", "job"):
             assert kind in il.KINDS
 
+    def test_runnable_kinds(self):
+        for kind, expected in (("job", True), ("source", True), ("asset", True), ("connection", False)):
+            assert il.KINDS.runnable(kind) is expected
+
     def test_sensitive_follows_the_resource_subtree(self):
         assert il.KINDS.sensitive("connection") is True
         assert il.KINDS.sensitive("config") is True

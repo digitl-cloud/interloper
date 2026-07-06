@@ -151,7 +151,7 @@ class CronController:
                     start_date = end_date - dt.timedelta(days=config["backfill_days"] - 1)
                     backfill = Backfill(
                         org_id=job.org_id,
-                        job_id=job.id,
+                        component_id=job.id,
                         start_date=start_date,
                         end_date=end_date,
                         status="running",
@@ -164,7 +164,7 @@ class CronController:
                     current = start_date
                     while current <= end_date:
                         run = Run(
-                            job_id=job.id,
+                            component_id=job.id,
                             org_id=job.org_id,
                             backfill_id=backfill.id,
                             status="queued",
@@ -177,7 +177,7 @@ class CronController:
                     session.add(backfill)
                 else:
                     run = Run(
-                        job_id=job.id,
+                        component_id=job.id,
                         org_id=job.org_id,
                         status="queued",
                     )

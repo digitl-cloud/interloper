@@ -24,7 +24,7 @@ def _fake_run(run_id: UUID, org_id: UUID = _ORG_ID) -> SimpleNamespace:
     return SimpleNamespace(
         id=run_id,
         org_id=org_id,
-        job_id=None,
+        component_id=None,
         backfill_id=None,
         partition_date=None,
         status="failed",

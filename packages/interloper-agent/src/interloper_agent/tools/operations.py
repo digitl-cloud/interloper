@@ -11,7 +11,7 @@ from interloper_agent.context import get_org_id, get_store, serialize
 
 
 def list_recent_runs(
-    job_id: str | None = None,
+    component_id: str | None = None,
     status: str | None = None,
     limit: int = 20,
     tool_context: ToolContext | None = None,
@@ -19,7 +19,7 @@ def list_recent_runs(
     """List recent runs with optional filters.
 
     Args:
-        job_id: Filter by job UUID (optional).
+        component_id: Filter by job UUID (optional).
         status: Filter by status: 'queued', 'running', 'success', 'failed', 'canceled' (optional).
         limit: Maximum number of runs to return (default 20).
     """
@@ -28,7 +28,7 @@ def list_recent_runs(
         store = get_store()
         runs = store.list_runs(
             org_id,
-            job_id=UUID(job_id) if job_id else None,
+            component_id=UUID(component_id) if component_id else None,
             status=status,
             limit=limit,
         )
@@ -94,20 +94,20 @@ def list_failures(limit: int = 20, tool_context: ToolContext | None = None) -> d
         return {"status": "error", "error": str(e)}
 
 
-def get_job_health(job_id: str, tool_context: ToolContext) -> dict[str, Any]:
+def get_job_health(component_id: str, tool_context: ToolContext) -> dict[str, Any]:
     """Get health summary for a job: metadata, recent success/failure rate.
 
     Args:
-        job_id: UUID of the job to inspect.
+        component_id: UUID of the job to inspect.
 
     Returns job metadata plus success rate computed from the last 20 runs.
     """
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        jid = UUID(job_id)
+        jid = UUID(component_id)
         job = store.get_component(jid, kind="job")
-        runs = store.list_runs(org_id, job_id=jid, limit=20)
+        runs = store.list_runs(org_id, component_id=jid, limit=20)
 
         total = len(runs)
         success = sum(1 for r in runs if r.status == "success")

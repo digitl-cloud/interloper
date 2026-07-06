@@ -26,7 +26,7 @@ router = APIRouter()
 class BackfillCreateRequest(BaseModel):
     """Request body for queuing a backfill."""
 
-    job_id: UUID
+    component_id: UUID
     start_date: dt.date
     end_date: dt.date
     concurrency: int = 1
@@ -38,7 +38,7 @@ class BackfillResponse(BaseModel):
 
     id: UUID
     org_id: UUID
-    job_id: UUID | None
+    component_id: UUID | None
     status: str
     start_date: dt.date
     end_date: dt.date
@@ -62,7 +62,7 @@ def _backfill_to_response(backfill: Backfill) -> BackfillResponse:
     return BackfillResponse(
         id=backfill.id,
         org_id=backfill.org_id,
-        job_id=backfill.job_id,
+        component_id=backfill.component_id,
         status=backfill.status,
         start_date=backfill.start_date,
         end_date=backfill.end_date,
@@ -97,10 +97,12 @@ def create_backfill(
     store: Store = Depends(get_store),
 ) -> BackfillResponse:
     """Queue a backfill for a job over a date range."""
-    job = load_authorized(store.get_component, body.job_id, user, store, label="Job", minimum="editor")
+    job = load_authorized(
+        lambda i: store.get_component(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
+    )
     backfill = store.create_backfill(
         job.org_id,
-        job_id=body.job_id,
+        component_id=body.component_id,
         start_date=body.start_date,
         end_date=body.end_date,
         concurrency=body.concurrency,
