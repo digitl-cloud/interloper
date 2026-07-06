@@ -1,7 +1,7 @@
 from interloper.asset import Asset, AssetDefinition, ExecutionContext, asset
 from interloper.catalog import Catalog
 from interloper.cli.manifest import RunManifest, RunPlan
-from interloper.component import Component, ComponentDefinition, ComponentSpec, RelationDefinition
+from interloper.component import KINDS, Component, ComponentDefinition, ComponentSpec, KindRegistry, RelationDefinition
 from interloper.config import Config, config
 from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuthConnection, connection
 from interloper.dag import DAG
@@ -61,6 +61,7 @@ from interloper.utils import bounded_gather, run
 
 __all__ = [
     "DAG",
+    "KINDS",
     "Asset",
     "AssetDefinition",
     "AsyncRESTClient",
@@ -89,6 +90,7 @@ __all__ = [
     "JSONLinkPaginator",
     "Job",
     "JsonField",
+    "KindRegistry",
     "MaterializationStrategy",
     "MemoryDestination",
     "MultiProcessRunner",

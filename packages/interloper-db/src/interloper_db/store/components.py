@@ -36,7 +36,7 @@ from sqlmodel import Session, col, select
 
 from interloper_db.drift import ComponentStatus, asset_status, resolve_source_cls, source_status
 from interloper_db.engine import get_engine
-from interloper_db.hydration import SECRET_KINDS, Hydrator
+from interloper_db.hydration import Hydrator
 from interloper_db.models import Component, ComponentRelation
 
 # One relation binding: (destination component id, slot). Slot is "" for
@@ -55,29 +55,6 @@ COMPONENT_LOAD_OPTIONS = [
     .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
     .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
 ]
-
-# Kind → framework base class, for kind-level metadata lookups (relation
-# vocabulary). Satellite-registered kinds will extend this via the catalog.
-_KIND_CLASSES: dict[str, type[il.Component]] = {
-    "source": il.Source,
-    "asset": il.Asset,
-    "destination": il.Destination,
-    "resource": il.Resource,
-    "connection": il.Connection,
-    "config": il.Config,
-    "job": il.Job,
-}
-
-
-def relation_vocabulary(kind: str) -> dict[str, il.RelationDefinition]:
-    """The relation types a component kind may declare.
-
-    Returns:
-        The kind's class-declared vocabulary (empty for unknown kinds).
-    """
-    cls = _KIND_CLASSES.get(kind)
-    return dict(cls.relation_types) if cls else {}
-
 
 class ComponentMixin:
     """Store methods for component CRUD, relations, and hydration."""
@@ -344,7 +321,7 @@ class ComponentMixin:
         Returns:
             The decoded configuration dict.
         """
-        if db_component.kind in SECRET_KINDS:
+        if il.KINDS.sensitive(db_component.kind):
             return self._hydrator.decode_data(db_component)
         return dict(db_component.config or {})
 
@@ -354,7 +331,7 @@ class ComponentMixin:
 
     def _apply_config(self, db_component: Component, config: dict[str, Any] | None, encrypted: bool | None) -> None:
         """Write the config payload onto the row, encrypting secret kinds."""
-        if db_component.kind in SECRET_KINDS:
+        if il.KINDS.sensitive(db_component.kind):
             db_component.data, db_component.encrypted = self._encode_data(config or {}, encrypted)
             db_component.config = None
         else:
@@ -473,7 +450,7 @@ class ComponentMixin:
     @staticmethod
     def _check_vocabulary(kind: str, type_: str) -> None:
         """Reject relation types the kind's class vocabulary doesn't declare."""
-        vocabulary = relation_vocabulary(kind)
+        vocabulary = il.KINDS.relation_types(kind)
         if type_ not in vocabulary:
             raise ConfigError(
                 f"Components of kind '{kind}' declare no '{type_}' relations "

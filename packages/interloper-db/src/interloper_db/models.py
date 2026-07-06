@@ -145,6 +145,8 @@ class Component(SQLModel, table=True):
         UniqueConstraint("id", "org_id", "kind", name="uq_components_id_org_kind"),
         Index("ix_components_org_id_kind", "org_id", "kind"),
         CheckConstraint("parent_id IS NULL OR kind = 'asset'", name="ck_components_parent_kind"),
+        # Snapshot of the sensitive kinds (see interloper.KINDS) — a new
+        # sensitive kind needs this CHECK widened in a migration.
         CheckConstraint(
             "data IS NULL OR kind IN ('connection', 'config', 'resource')",
             name="ck_components_data_kind",

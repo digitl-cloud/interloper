@@ -13,6 +13,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from interloper.component import KINDS
 from interloper.errors import CatalogKeyError, ComponentDriftError, ConfigError, DataNotFoundError, NotFoundError
 from interloper_db import Component, ComponentStatus, Profile, Store
 from pydantic import BaseModel
@@ -27,10 +28,6 @@ from interloper_api.dependencies import (
 )
 
 router = APIRouter()
-
-# Kinds whose config payload is stored encrypted and only decoded on detail
-# responses (mirrors the store's SECRET_KINDS).
-_SECRET_KINDS = {"connection", "config", "resource"}
 
 
 # -- Request/Response models --------------------------------------------------
@@ -158,7 +155,7 @@ def _to_response(
         status = store.source_status(row.key)
 
     config: dict[str, Any] | None = row.config
-    if row.kind in _SECRET_KINDS:
+    if KINDS.sensitive(row.kind):
         config = store.decode_config(row) if include_config else None
 
     return ComponentResponse(

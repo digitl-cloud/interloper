@@ -34,16 +34,13 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from interloper.asset.base import Asset
-from interloper.component import Component, ComponentDefinition
+from interloper.component import KINDS, Component, ComponentDefinition
 from interloper.destination.base import Destination
 from interloper.job.base import Job
-from interloper.resource.base import Resource
 from interloper.settings import AppSettings
 from interloper.source.base import Source
 
 logger = logging.getLogger(__name__)
-
-COMPONENT_TYPES = (Source, Destination, Asset, Resource, Job)
 
 BUILTIN_COMPONENTS: tuple[type[Component], ...] = (Job,)
 
@@ -80,9 +77,9 @@ def _discovered_paths() -> tuple[str, ...]:
         if isinstance(loaded, ModuleType):
             for attr in dir(loaded):
                 obj = getattr(loaded, attr)
-                if isinstance(obj, type) and any(issubclass(obj, t) for t in COMPONENT_TYPES):
+                if isinstance(obj, type) and issubclass(obj, Component) and obj.kind in KINDS:
                     paths.append(get_object_path(obj))
-        elif isinstance(loaded, type) and any(issubclass(loaded, t) for t in COMPONENT_TYPES):
+        elif isinstance(loaded, type) and issubclass(loaded, Component) and loaded.kind in KINDS:
             paths.append(get_object_path(loaded))
     return tuple(paths)
 
@@ -142,9 +139,10 @@ class Catalog(BaseModel):
                 obj = import_from_path(path)
                 if not isinstance(obj, type):
                     continue
-                if not any(issubclass(obj, t) for t in COMPONENT_TYPES):
+                if not (issubclass(obj, Component) and obj.kind in KINDS):
                     continue
 
+                KINDS.register(obj)
                 components[obj.key] = obj.definition()
 
                 # Auto-discover resources and destinations reachable from

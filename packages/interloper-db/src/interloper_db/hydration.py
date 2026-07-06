@@ -30,15 +30,12 @@ from typing import Any
 from uuid import UUID
 
 from interloper.catalog.base import Catalog
+from interloper.component import KINDS
 from interloper.component.base import ComponentSpec
 from interloper.errors import CatalogKeyError, HydrationError
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
-
-# Kinds whose instance payload lives in the (optionally encrypted) ``data``
-# column rather than ``config``.
-SECRET_KINDS = ("connection", "config", "resource")
 
 
 class Hydrator:
@@ -130,7 +127,7 @@ class Hydrator:
         Returns:
             A dict suitable for use as a ``ComponentSpec.init``.
         """
-        if db_component.kind in SECRET_KINDS:
+        if KINDS.sensitive(db_component.kind):
             init = self.decode_data(db_component)
         else:
             init = dict(db_component.config or {})

@@ -22,12 +22,19 @@ def list_catalog(catalog: Catalog = Depends(get_catalog)) -> dict[str, Any]:
 def list_resource_kinds(catalog: Catalog = Depends(get_catalog)) -> list[str]:
     """Return distinct resource kinds from the catalog.
 
-    Resource kinds are all component kinds except the top-level categories
-    (source, asset, destination, job). Currently this yields kinds like
-    ``connection`` and ``config``.
+    A resource kind is any registered kind anchored under ``Resource``
+    (currently ``connection`` and ``config``) — the kinds usable as
+    slot bindings on other components.
     """
-    top_level = {"source", "asset", "destination", "job"}
-    return sorted({defn.kind for defn in catalog.components.values() if defn.kind and defn.kind not in top_level})
+    import interloper as il
+
+    return sorted(
+        {
+            defn.kind
+            for defn in catalog.components.values()
+            if (anchor := il.KINDS.get(defn.kind)) is not None and issubclass(anchor, il.Resource)
+        }
+    )
 
 
 @router.get("/{key}")
