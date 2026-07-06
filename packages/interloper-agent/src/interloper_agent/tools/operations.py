@@ -106,7 +106,7 @@ def get_job_health(job_id: str, tool_context: ToolContext) -> dict[str, Any]:
         org_id = get_org_id(tool_context)
         store = get_store()
         jid = UUID(job_id)
-        job = store.get_job(jid)
+        job = store.get_component(jid, kind="job")
         runs = store.list_runs(org_id, job_id=jid, limit=20)
 
         total = len(runs)
@@ -145,7 +145,7 @@ def list_jobs(tool_context: ToolContext) -> dict[str, Any]:
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        jobs = store.list_jobs(org_id)
+        jobs = store.list_components(org_id, kinds=["job"])
         return {"status": "success", "count": len(jobs), "jobs": [serialize(j) for j in jobs]}
     except Exception as e:
         return {"status": "error", "error": str(e)}

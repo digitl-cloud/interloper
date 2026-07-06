@@ -124,12 +124,12 @@ def freshness_check(tool_context: ToolContext) -> dict[str, Any]:
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        jobs = store.list_jobs(org_id)
+        jobs = store.list_components(org_id, kinds=["job"])
         now = datetime.datetime.now(tz=datetime.timezone.utc)
 
         results = []
         for job in jobs:
-            if not job.enabled:
+            if not (job.config or {}).get("enabled", True):
                 continue
             job_id = job.id
             runs = store.list_runs(org_id, job_id=job_id, status="success", limit=1)

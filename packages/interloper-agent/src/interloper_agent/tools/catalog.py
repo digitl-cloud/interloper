@@ -20,7 +20,7 @@ def list_sources(tool_context: ToolContext) -> dict[str, Any]:
         store = get_store()
         catalog = get_catalog()
 
-        db_sources = store.list_sources(org_id)
+        db_sources = store.list_components(org_id, kinds=["source"])
         db_by_key: dict[str, Any] = {}
         for s in db_sources:
             entry = serialize(s)
@@ -227,7 +227,7 @@ def list_destinations(tool_context: ToolContext) -> dict[str, Any]:
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        destinations = store.list_destinations(org_id)
+        destinations = store.list_components(org_id, kinds=["destination"])
         return {"status": "success", "destinations": [serialize(d) for d in destinations]}
     except Exception as e:
         return {"status": "error", "error": str(e)}

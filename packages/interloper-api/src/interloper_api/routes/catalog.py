@@ -18,6 +18,18 @@ def list_catalog(catalog: Catalog = Depends(get_catalog)) -> dict[str, Any]:
     return catalog.dump()
 
 
+@router.get("/resource-kinds")
+def list_resource_kinds(catalog: Catalog = Depends(get_catalog)) -> list[str]:
+    """Return distinct resource kinds from the catalog.
+
+    Resource kinds are all component kinds except the top-level categories
+    (source, asset, destination, job). Currently this yields kinds like
+    ``connection`` and ``config``.
+    """
+    top_level = {"source", "asset", "destination", "job"}
+    return sorted({defn.kind for defn in catalog.components.values() if defn.kind and defn.kind not in top_level})
+
+
 @router.get("/{key}")
 def get_definition(key: str, catalog: Catalog = Depends(get_catalog)) -> dict[str, Any]:
     """Return a single component definition by key.

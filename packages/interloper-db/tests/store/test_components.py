@@ -1,145 +1,141 @@
-"""Tests for the shared component-relation machinery (``interloper_db.store.components``)."""
+"""Tests for the generic component store (``interloper_db.store.components``)."""
 
 from __future__ import annotations
 
-from uuid import UUID, uuid4
+from uuid import uuid4
 
+import interloper as il
 import pytest
-from interloper.errors import NotFoundError
+from interloper.errors import ConfigError, NotFoundError
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
-from interloper_db.store.components import list_components, load_component, sync_relations
+from interloper_db.store import Store
 
 _ORG = uuid4()
 
 
-def _component(session: Session, kind: str, key: str, org_id: UUID = _ORG, **kwargs) -> Component:
-    row = Component(org_id=org_id, kind=kind, key=key, **kwargs)
-    session.add(row)
-    session.flush()
-    return row
+@pytest.fixture
+def store(component_db: Engine) -> Store:
+    """A store over the in-memory database (no catalog needed for these)."""
+    return Store(catalog=il.Catalog(components={}))
 
 
-def _relations(session: Session, src: Component, type: str | None = None) -> list[ComponentRelation]:
-    statement = select(ComponentRelation).where(ComponentRelation.src_id == src.id)
+def _relations(session: Session, src_id, type: str | None = None) -> list[ComponentRelation]:
+    statement = select(ComponentRelation).where(ComponentRelation.src_id == src_id)
     if type:
         statement = statement.where(ComponentRelation.type == type)
     return list(session.exec(statement).all())
 
 
-class TestSyncRelations:
-    """Replace semantics, denormalized stamping, and error handling."""
+class TestRelations:
+    """Replace semantics, vocabulary validation, denormalized stamping."""
 
-    def test_slot_map_stamps_org_and_kinds(self, component_db: Engine):
+    def test_sync_stamps_org_and_kinds(self, store: Store, component_db: Engine):
+        dest = store.create_component(_ORG, kind="destination", key="dest")
+        asset = store.create_component(_ORG, kind="asset", key="a", relations={"destination": [(dest.id, "")]})
+
         with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            connection = _component(session, "connection", "fake_connection")
-            sync_relations(session, source, "resource", {"conn": connection.id})
-            session.commit()
+            (relation,) = _relations(session, asset.id)
+            assert (relation.type, relation.slot, relation.dst_id) == ("destination", "", dest.id)
+            assert (relation.org_id, relation.src_kind, relation.dst_kind) == (_ORG, "asset", "destination")
 
-            (relation,) = _relations(session, source)
-            assert (relation.type, relation.slot, relation.dst_id) == ("resource", "conn", connection.id)
-            assert (relation.org_id, relation.src_kind, relation.dst_kind) == (_ORG, "source", "connection")
+    def test_update_replaces_only_the_given_type(self, store: Store, component_db: Engine):
+        dest = store.create_component(_ORG, kind="destination", key="dest")
+        first = store.create_component(_ORG, kind="connection", key="first", config={}, encrypted=False)
+        second = store.create_component(_ORG, kind="connection", key="second", config={}, encrypted=False)
+        asset = store.create_component(
+            _ORG,
+            kind="asset",
+            key="a",
+            relations={"destination": [(dest.id, "")], "resource": [(first.id, "conn")]},
+        )
 
-    def test_replaces_only_the_given_type(self, component_db: Engine):
+        store.update_component(asset.id, relations={"resource": [(second.id, "conn")]})
+
         with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            destination = _component(session, "destination", "dest")
-            first = _component(session, "connection", "first")
-            second = _component(session, "connection", "second")
+            assert [r.dst_id for r in _relations(session, asset.id, "resource")] == [second.id]
+            assert len(_relations(session, asset.id, "destination")) == 1
 
-            sync_relations(session, source, "destination", [destination.id])
-            sync_relations(session, source, "resource", {"conn": first.id})
-            sync_relations(session, source, "resource", {"conn": second.id})
-            session.commit()
-
-            resource_relations = _relations(session, source, "resource")
-            assert [relation.dst_id for relation in resource_relations] == [second.id]
-            assert len(_relations(session, source, "destination")) == 1
-
-    def test_list_form_for_slotless_types(self, component_db: Engine):
+    def test_empty_list_clears_the_type(self, store: Store, component_db: Engine):
+        dest = store.create_component(_ORG, kind="destination", key="dest")
+        asset = store.create_component(_ORG, kind="asset", key="a", relations={"destination": [(dest.id, "")]})
+        store.update_component(asset.id, relations={"destination": []})
         with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            dest_a = _component(session, "destination", "a")
-            dest_b = _component(session, "destination", "b")
-            sync_relations(session, source, "destination", [dest_a.id, dest_b.id])
-            session.commit()
+            assert _relations(session, asset.id) == []
 
-            relations = _relations(session, source, "destination")
-            assert {relation.dst_id for relation in relations} == {dest_a.id, dest_b.id}
-            assert {relation.slot for relation in relations} == {""}
+    def test_rejects_types_outside_the_kind_vocabulary(self, store: Store):
+        dest = store.create_component(_ORG, kind="destination", key="dest")
+        with pytest.raises(ConfigError):
+            store.create_component(_ORG, kind="destination", key="d2", relations={"target": [(dest.id, "")]})
 
-    def test_none_clears_the_type(self, component_db: Engine):
+    def test_rejects_missing_and_cross_org_destinations(self, store: Store):
+        other = store.create_component(uuid4(), kind="destination", key="dest")
+        with pytest.raises(NotFoundError):
+            store.create_component(_ORG, kind="asset", key="a", relations={"destination": [(uuid4(), "")]})
+        with pytest.raises(NotFoundError):
+            store.create_component(_ORG, kind="asset", key="b", relations={"destination": [(other.id, "")]})
+
+    def test_add_and_remove_relation(self, store: Store):
+        upstream = store.create_component(_ORG, kind="asset", key="a")
+        downstream = store.create_component(_ORG, kind="asset", key="b")
+
+        relation = store.add_relation(downstream.id, type="dependency", dst_id=upstream.id, slot="a")
+        assert (relation.src_id, relation.dst_id, relation.slot) == (downstream.id, upstream.id, "a")
+        assert len(store.list_relations(_ORG, type="dependency")) == 1
+
+        store.remove_relation(downstream.id, type="dependency", dst_id=upstream.id)
+        assert store.list_relations(_ORG) == []
+
+
+class TestCrud:
+    """Generic CRUD semantics shared by every kind."""
+
+    def test_secret_kinds_encrypt_config_into_data(self, component_db: Engine):
+        store = Store(catalog=il.Catalog(components={}), encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
+        row = store.create_component(_ORG, kind="connection", key="conn", name="C", config={"token": "s3cret"})
+        assert row.config is None
+        assert row.encrypted is True
+        assert store.decode_config(row) == {"token": "s3cret"}
+
+    def test_secret_kinds_fail_closed_without_cipher(self, store: Store):
+        with pytest.raises(ConfigError):
+            store.create_component(_ORG, kind="connection", key="conn", config={"token": "s3cret"})
+
+    def test_children_rejected_for_childless_kinds(self, store: Store):
+        with pytest.raises(ConfigError):
+            store.create_component(_ORG, kind="destination", key="dest", children=["a"])
+
+    def test_delete_refuses_source_owned_assets(self, store: Store, component_db: Engine):
+        job = store.create_component(_ORG, kind="job", key="job")  # any parentable stand-in row
         with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            destination = _component(session, "destination", "dest")
-            sync_relations(session, source, "destination", [destination.id])
-            sync_relations(session, source, "destination", None)
+            child = Component(org_id=_ORG, kind="asset", key="a", parent_id=job.id)
+            session.add(child)
             session.commit()
-            assert _relations(session, source) == []
+            child_id = child.id
+        with pytest.raises(ValueError):
+            store.delete_component(child_id)
 
-    def test_rejects_missing_destination(self, component_db: Engine):
-        with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            with pytest.raises(NotFoundError):
-                sync_relations(session, source, "destination", [uuid4()])
+    def test_delete_cascades_relations(self, store: Store):
+        job = store.create_component(_ORG, kind="job", key="job", name="J")
+        asset = store.create_component(_ORG, kind="asset", key="a")
+        store.add_relation(job.id, type="target", dst_id=asset.id)
 
-    def test_rejects_cross_org_destination(self, component_db: Engine):
-        with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            other = _component(session, "destination", "dest", org_id=uuid4())
-            with pytest.raises(NotFoundError):
-                sync_relations(session, source, "destination", [other.id])
+        store.delete_component(asset.id)
+        assert store.list_relations(_ORG) == []
 
+    def test_list_filters_org_and_kinds(self, store: Store):
+        store.create_component(_ORG, kind="destination", key="mine")
+        store.create_component(_ORG, kind="asset", key="other_kind")
+        store.create_component(uuid4(), kind="destination", key="other_org")
 
-class TestCascades:
-    """FK cascade behaviour of the unified schema."""
+        rows = store.list_components(_ORG, kinds=["destination"])
+        assert [row.key for row in rows] == ["mine"]
+        assert {row.key for row in store.list_components(_ORG)} == {"mine", "other_kind"}
 
-    def test_deleting_a_component_cascades_its_relations(self, component_db: Engine):
-        with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            connection = _component(session, "connection", "conn")
-            sync_relations(session, source, "resource", {"conn": connection.id})
-            session.commit()
-
-            session.delete(session.get(Component, connection.id))
-            session.commit()
-            assert _relations(session, source) == []
-
-    def test_deleting_a_parent_cascades_children_and_their_relations(self, component_db: Engine):
-        with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            asset_a = _component(session, "asset", "a", parent_id=source.id)
-            asset_b = _component(session, "asset", "b", parent_id=source.id)
-            sync_relations(session, asset_b, "dependency", {"a": asset_a.id})
-            session.commit()
-
-            session.delete(session.get(Component, source.id))
-            session.commit()
-
-            assert session.exec(select(Component)).all() == []
-            assert session.exec(select(ComponentRelation)).all() == []
-
-
-class TestLoaders:
-    """Kind-checked fetch and list helpers."""
-
-    def test_load_component_checks_kind(self, component_db: Engine):
-        with Session(component_db) as session:
-            source = _component(session, "source", "demo_source")
-            session.commit()
-            assert load_component(session, source.id, kind="source").id == source.id
-            with pytest.raises(NotFoundError):
-                load_component(session, source.id, kind="asset")
-
-    def test_list_components_filters_org_and_kind(self, component_db: Engine):
-        with Session(component_db) as session:
-            _component(session, "source", "mine")
-            _component(session, "asset", "other_kind")
-            _component(session, "source", "other_org", org_id=uuid4())
-            session.commit()
-
-            rows = list_components(session, _ORG, kind="source")
-            assert [row.key for row in rows] == ["mine"]
+    def test_get_component_checks_kind(self, store: Store):
+        dest = store.create_component(_ORG, kind="destination", key="dest")
+        assert store.get_component(dest.id, kind="destination").id == dest.id
+        with pytest.raises(NotFoundError):
+            store.get_component(dest.id, kind="asset")

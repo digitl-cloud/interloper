@@ -11,9 +11,26 @@ from interloper_db import Profile, Store
 from interloper_db.models import Backfill
 from pydantic import BaseModel
 
-from interloper_api.dependencies import authorize_org_member, get_current_user, get_org_id, get_store, require_viewer
+from interloper_api.dependencies import (
+    authorize_org_member,
+    get_current_user,
+    get_org_id,
+    get_store,
+    load_authorized,
+    require_viewer,
+)
 
 router = APIRouter()
+
+
+class BackfillCreateRequest(BaseModel):
+    """Request body for queuing a backfill."""
+
+    job_id: UUID
+    start_date: dt.date
+    end_date: dt.date
+    concurrency: int = 1
+    fail_fast: bool = False
 
 
 class BackfillResponse(BaseModel):
@@ -71,6 +88,25 @@ def list_backfills(
     else:
         backfills = store.list_backfills(org_id)
     return [_backfill_to_response(b) for b in backfills]
+
+
+@router.post("/", status_code=201)
+def create_backfill(
+    body: BackfillCreateRequest,
+    user: Profile = Depends(get_current_user),
+    store: Store = Depends(get_store),
+) -> BackfillResponse:
+    """Queue a backfill for a job over a date range."""
+    job = load_authorized(store.get_component, body.job_id, user, store, label="Job", minimum="editor")
+    backfill = store.create_backfill(
+        job.org_id,
+        job_id=body.job_id,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        concurrency=body.concurrency,
+        fail_fast=body.fail_fast,
+    )
+    return _backfill_to_response(backfill)
 
 
 @router.get("/{backfill_id}")

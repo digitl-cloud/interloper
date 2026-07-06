@@ -14,7 +14,6 @@ from interloper_db.models import (
 )
 from interloper_db.provision import create_all, downgrade, ensure_database, upgrade
 from interloper_db.store import Store
-from interloper_db.store.jobs import JobRecord
 
 __all__ = [
     "Backfill",
@@ -23,7 +22,6 @@ __all__ = [
     "ComponentStatus",
     "Event",
     "Invitation",
-    "JobRecord",
     "Organisation",
     "Profile",
     "Run",

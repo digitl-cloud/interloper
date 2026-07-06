@@ -11,25 +11,22 @@ Usage::
     init_engine("postgresql://...")
     store = Store.from_settings(catalog)  # wires encryption from settings
 
-    # Hydrate a source from DB
-    source = store.load_source(source_id)
+    # Hydrate any component from DB
+    source = store.load(source_id)
 
     # Save a new resource
-    store.create_resource(org_id, kind="demo_config", name="My Config", ...)
+    store.create_component(org_id, kind="connection", key="demo_connection", ...)
 
 All component kinds persist to the same two tables (``components`` +
-``component_relations``); the shared machinery lives in
-``interloper_db.store.components``. The kind-specific mixins are thin
-facades over it that own the semantics generic code can't: encryption
-(resources), catalog-driven child sync and drift (sources/assets), and
-the flat :class:`~interloper_db.store.jobs.JobRecord` read model (jobs).
+``component_relations``) and share one generic surface
+(:class:`~interloper_db.store.components.ComponentMixin`): CRUD, relations,
+and hydration for any kind, with the semantics a kind genuinely owns
+(encryption, child-asset sync, target drift checks) applied by ``kind``.
 
 - ``AuthMixin`` — profiles, sessions, organisations, memberships
-- ``ResourceMixin`` — resource CRUD, hydration, encryption
-- ``SourceMixin`` — source CRUD, hydration, child-asset sync
-- ``AssetMixin`` — asset get/list/update, dependencies
-- ``JobMixin`` — job CRUD and hydration
+- ``ComponentMixin`` — component CRUD, relations, hydration (all kinds)
 - ``RunMixin`` — runs, events, backfills
+- ``DriftMixin`` — catalog-resolution status for stored keys
 """
 
 from __future__ import annotations
@@ -41,18 +38,14 @@ from interloper.catalog.base import Catalog
 
 from interloper_db.drift import DriftMixin
 from interloper_db.hydration import Hydrator
-from interloper_db.store.assets import AssetMixin
 from interloper_db.store.auth import AuthMixin
-from interloper_db.store.destinations import DestinationMixin
-from interloper_db.store.jobs import JobMixin
-from interloper_db.store.resources import ResourceMixin
+from interloper_db.store.components import ComponentMixin
 from interloper_db.store.runs import RunMixin
-from interloper_db.store.sources import SourceMixin
 
 logger = logging.getLogger(__name__)
 
 
-class Store(AuthMixin, ResourceMixin, SourceMixin, AssetMixin, JobMixin, RunMixin, DestinationMixin, DriftMixin):
+class Store(AuthMixin, ComponentMixin, RunMixin, DriftMixin):
     """Framework-level persistence layer.
 
     Bridges catalog definitions and database rows to hydrate and persist

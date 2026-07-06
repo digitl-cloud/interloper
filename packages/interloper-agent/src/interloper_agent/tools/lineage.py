@@ -23,13 +23,13 @@ def get_upstream(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        deps = store.list_dependencies(org_id)
+        deps = store.list_relations(org_id, type="dependency")
         target = UUID(asset_id)
 
         upstream = []
         for dep in deps:
             if dep.src_id == target:
-                asset = store.get_asset(dep.dst_id)
+                asset = store.get_component(dep.dst_id, kind="asset")
                 upstream.append({
                     "upstream_asset_id": str(dep.dst_id),
                     "param_name": dep.slot,
@@ -53,13 +53,13 @@ def get_downstream(asset_id: str, tool_context: ToolContext) -> dict[str, Any]:
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        deps = store.list_dependencies(org_id)
+        deps = store.list_relations(org_id, type="dependency")
         target = UUID(asset_id)
 
         downstream = []
         for dep in deps:
             if dep.dst_id == target:
-                asset = store.get_asset(dep.src_id)
+                asset = store.get_component(dep.src_id, kind="asset")
                 downstream.append({
                     "asset_id": str(dep.src_id),
                     "param_name": dep.slot,
@@ -168,8 +168,8 @@ def cross_source_dependencies(tool_context: ToolContext) -> dict[str, Any]:
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        deps = store.list_dependencies(org_id)
-        assets = store.list_assets(org_id)
+        deps = store.list_relations(org_id, type="dependency")
+        assets = store.list_components(org_id, kinds=["asset"])
 
         asset_source: dict[UUID, UUID | None] = {}
         asset_info: dict[UUID, dict[str, str]] = {}
@@ -216,8 +216,8 @@ def _build_adjacency(
         (adjacency_map, asset_info_map)
     """
     store = get_store()
-    deps = store.list_dependencies(org_id)
-    assets = store.list_assets(org_id)
+    deps = store.list_relations(org_id, type="dependency")
+    assets = store.list_components(org_id, kinds=["asset"])
 
     asset_info: dict[UUID, dict[str, Any]] = {}
     source_keys: dict[UUID, str] = {}

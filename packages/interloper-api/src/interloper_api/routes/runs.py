@@ -12,7 +12,14 @@ from interloper_db import Profile, Store
 from interloper_db.models import Event, Run
 from pydantic import BaseModel
 
-from interloper_api.dependencies import authorize_org_member, get_current_user, get_org_id, get_store, require_viewer
+from interloper_api.dependencies import (
+    authorize_org_member,
+    get_current_user,
+    get_org_id,
+    get_store,
+    load_authorized,
+    require_viewer,
+)
 
 router = APIRouter()
 
@@ -37,6 +44,13 @@ class RunResponse(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     created_at: str | None = None
+
+
+class RunCreateRequest(BaseModel):
+    """Request body for queuing a run for a job."""
+
+    job_id: UUID
+    partition_date: dt.date | None = None
 
 
 class RetryRequest(BaseModel):
@@ -177,6 +191,18 @@ def list_runs(
         offset=offset,
     )
     return [_run_to_response(r) for r in runs]
+
+
+@router.post("/", status_code=201)
+def create_run(
+    body: RunCreateRequest,
+    user: Profile = Depends(get_current_user),
+    store: Store = Depends(get_store),
+) -> RunResponse:
+    """Queue a single run for a job."""
+    job = load_authorized(store.get_component, body.job_id, user, store, label="Job", minimum="editor")
+    run = store.create_run(job.org_id, job_id=body.job_id, partition_date=body.partition_date)
+    return _run_to_response(run)
 
 
 @router.get("/{run_id}")
