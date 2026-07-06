@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.31.0 (2026-07-06)
+
+### Bug Fixes
+
+- **app**: Root redirect to /graph
+  ([`472e39f`](https://github.com/digitl-cloud/interloper/commit/472e39f2001a482a3f65ced73525ebffcadf04ea))
+
+### Features
+
+- Bootstrap super-admins from INTERLOPER_AUTH_SUPER_ADMIN_EMAILS
+  ([`123ce1d`](https://github.com/digitl-cloud/interloper/commit/123ce1d08ee446ab13af18b08e159e35f5a712e4))
+
+
 ## v0.30.1 (2026-07-03)
 
 ### Bug Fixes
