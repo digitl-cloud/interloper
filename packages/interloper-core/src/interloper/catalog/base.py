@@ -9,6 +9,9 @@ provide through the ``interloper.components`` entry-point group (the
 deployment actually exposes. When no paths are configured, the catalog is
 the full discovered universe.
 
+Framework built-ins (``Job``) are part of the framework itself, not the
+connector universe, so they are always present regardless of enablement.
+
 Usage::
 
     import interloper as il
@@ -31,17 +34,31 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from interloper.asset.base import Asset
-from interloper.component import ComponentDefinition
+from interloper.component import Component, ComponentDefinition
 from interloper.destination.base import Destination
+from interloper.job.base import Job
 from interloper.resource.base import Resource
 from interloper.settings import AppSettings
 from interloper.source.base import Source
 
 logger = logging.getLogger(__name__)
 
-COMPONENT_TYPES = (Source, Destination, Asset, Resource)
+COMPONENT_TYPES = (Source, Destination, Asset, Resource, Job)
+
+BUILTIN_COMPONENTS: tuple[type[Component], ...] = (Job,)
 
 _ENTRY_POINT_GROUP = "interloper.components"
+
+
+def _with_builtins(components: dict[str, ComponentDefinition]) -> dict[str, ComponentDefinition]:
+    """Ensure framework built-ins are present, regardless of enablement.
+
+    Returns:
+        The same mapping, with any missing built-in definitions added.
+    """
+    for builtin in BUILTIN_COMPONENTS:
+        components.setdefault(builtin.key, builtin.definition())
+    return components
 
 
 @cache
@@ -155,7 +172,7 @@ class Catalog(BaseModel):
             except (ImportError, AttributeError) as exc:
                 logger.warning("Failed to import component '%s': %s", path, exc)
 
-        return Catalog(components=components)
+        return Catalog(components=_with_builtins(components))
 
     @classmethod
     def from_settings(cls) -> Catalog:
@@ -181,7 +198,9 @@ class Catalog(BaseModel):
             Catalog of all component definitions.
         """
         return cls(
-            components={source_or_asset.key: source_or_asset.definition() for source_or_asset in sources_or_assets}
+            components=_with_builtins(
+                {source_or_asset.key: source_or_asset.definition() for source_or_asset in sources_or_assets}
+            )
         )
 
     @classmethod

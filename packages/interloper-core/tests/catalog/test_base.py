@@ -37,3 +37,19 @@ class TestFromSettings:
         monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
         catalog = Catalog.from_settings()
         assert "amazon_ads" in catalog.components
+
+
+class TestBuiltins:
+    """Framework built-ins are always present, regardless of enablement."""
+
+    def test_job_in_discovery(self):
+        assert "job" in Catalog.discover().components
+
+    def test_job_survives_explicit_enablement(self, monkeypatch):
+        stub = AppSettings.model_construct(catalog=["interloper_assets.demo.source.DemoSource"])
+        monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
+        catalog = Catalog.from_settings()
+        assert "job" in catalog.components
+
+    def test_job_in_empty_catalog(self):
+        assert "job" in Catalog.from_paths([]).components
