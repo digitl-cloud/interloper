@@ -8,15 +8,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.catalog.base import Catalog
 from interloper.errors import NotFoundError
-from interloper_db import Component, Profile, Store
+from interloper_db import Profile, Store
 from pydantic import BaseModel
 
+from interloper_api.components import timestamp
 from interloper_api.dependencies import (
-    authorize_org_member,
     get_catalog,
     get_current_user,
     get_org_id,
     get_store,
+    load_authorized,
     require_editor,
     require_viewer,
 )
@@ -58,30 +59,6 @@ class ResourceDetailResponse(ResourceResponse):
     data: dict[str, Any] = {}
 
 
-def _load_authorized_resource(resource_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Component:
-    """Load a resource and authorize the user by membership in its org.
-
-    Args:
-        resource_id: The resource UUID.
-        user: The authenticated user.
-        store: The Store instance.
-        minimum: Minimum role required in the resource's organisation.
-
-    Returns:
-        The Resource row.
-
-    Raises:
-        HTTPException: 404 if missing or the user is not a member of the
-            owning org, 403 if the role is insufficient.
-    """
-    try:
-        resource = store.load_resource(resource_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Resource {resource_id} not found")
-    authorize_org_member(user, resource.org_id, store, minimum=minimum, detail=f"Resource {resource_id} not found")
-    return resource
-
-
 @router.get("/kinds")
 def list_resource_kinds(
     catalog: Catalog = Depends(get_catalog),
@@ -113,8 +90,8 @@ def list_resources(
             key=r.key,
             name=r.name or "",
             encrypted=r.encrypted,
-            created_at=str(r.created_at) if r.created_at else None,
-            updated_at=str(r.updated_at) if r.updated_at else None,
+            created_at=timestamp(r.created_at),
+            updated_at=timestamp(r.updated_at),
         )
         for r in resources
     ]
@@ -130,7 +107,7 @@ def get_resource(
 
     Authorized by membership in the resource's org.
     """
-    r = _load_authorized_resource(resource_id, user, store)
+    r = load_authorized(store.load_resource, resource_id, user, store, label="Resource")
 
     return ResourceDetailResponse(
         id=r.id,
@@ -140,8 +117,8 @@ def get_resource(
         name=r.name or "",
         encrypted=r.encrypted,
         data=store.decode_resource_data(r),
-        created_at=str(r.created_at) if r.created_at else None,
-        updated_at=str(r.updated_at) if r.updated_at else None,
+        created_at=timestamp(r.created_at),
+        updated_at=timestamp(r.updated_at),
     )
 
 
@@ -168,8 +145,8 @@ def create_resource(
         key=resource.key,
         name=resource.name or "",
         encrypted=resource.encrypted,
-        created_at=str(resource.created_at) if resource.created_at else None,
-        updated_at=str(resource.updated_at) if resource.updated_at else None,
+        created_at=timestamp(resource.created_at),
+        updated_at=timestamp(resource.updated_at),
     )
 
 
@@ -181,7 +158,7 @@ def update_resource(
     store: Store = Depends(get_store),
 ) -> ResourceResponse:
     """Update an existing resource."""
-    _load_authorized_resource(resource_id, user, store, minimum="editor")
+    load_authorized(store.load_resource, resource_id, user, store, label="Resource", minimum="editor")
     try:
         resource = store.update_resource(
             resource_id,
@@ -200,8 +177,8 @@ def update_resource(
         key=resource.key,
         name=resource.name or "",
         encrypted=resource.encrypted,
-        created_at=str(resource.created_at) if resource.created_at else None,
-        updated_at=str(resource.updated_at) if resource.updated_at else None,
+        created_at=timestamp(resource.created_at),
+        updated_at=timestamp(resource.updated_at),
     )
 
 
@@ -212,6 +189,6 @@ def delete_resource(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete a resource."""
-    _load_authorized_resource(resource_id, user, store, minimum="editor")
+    load_authorized(store.load_resource, resource_id, user, store, label="Resource", minimum="editor")
     store.delete_resource(resource_id)
     return {"status": "deleted"}

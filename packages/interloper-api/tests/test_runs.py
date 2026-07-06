@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import RunNotFoundError
+from interloper.errors import NotFoundError
 
 from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import runs as runs_module
@@ -51,7 +51,7 @@ class FakeStore:
 
     def get_run(self, run_id: UUID):
         if self.raise_not_found:
-            raise RunNotFoundError(f"Run {run_id} not found")
+            raise NotFoundError(f"Run {run_id} not found")
         return _fake_run(run_id, self.run_org_id)
 
     def get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:

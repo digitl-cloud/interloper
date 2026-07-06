@@ -151,25 +151,8 @@ class AuthenticationError(InterloperError, ValueError):
 class NotFoundError(InterloperError, KeyError):
     """A database record was not found.
 
-    Base class for entity-specific not-found errors used by the store
-    layer.  API routes catch these and return HTTP 404.
+    Raised by the store layer; API routes catch it and return HTTP 404.
     """
-
-
-class SourceNotFoundError(NotFoundError):
-    """A source record was not found."""
-
-
-class JobNotFoundError(NotFoundError):
-    """A job record was not found."""
-
-
-class RunNotFoundError(NotFoundError):
-    """A run record was not found."""
-
-
-class ResourceNotFoundError(NotFoundError):
-    """A resource record was not found."""
 
 
 # ---------------------------------------------------------------------------

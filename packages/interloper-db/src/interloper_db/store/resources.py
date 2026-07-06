@@ -12,7 +12,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import ConfigError, HydrationError, ResourceNotFoundError
+from interloper.errors import ConfigError, HydrationError, NotFoundError
 from sqlmodel import Session, col, select
 
 from interloper_db.engine import get_engine
@@ -121,14 +121,14 @@ class ResourceMixin:
             The updated component row.
 
         Raises:
-            ResourceNotFoundError: If the resource is not found.
+            NotFoundError: If the resource is not found.
         """
         raw, encrypted = self._encode_data(data, encrypted)
 
         with Session(get_engine()) as session:
             db_resource = session.get(Component, resource_id)
             if not db_resource or db_resource.kind not in SECRET_KINDS:
-                raise ResourceNotFoundError(f"Resource {resource_id} not found")
+                raise NotFoundError(f"Resource {resource_id} not found")
             db_resource.kind = kind
             db_resource.key = key
             db_resource.name = name
@@ -148,12 +148,12 @@ class ResourceMixin:
             The component row.
 
         Raises:
-            ResourceNotFoundError: If the resource is not found.
+            NotFoundError: If the resource is not found.
         """
         with Session(get_engine()) as session:
             db_resource = session.get(Component, resource_id)
             if not db_resource or db_resource.kind not in SECRET_KINDS:
-                raise ResourceNotFoundError(f"Resource {resource_id} not found")
+                raise NotFoundError(f"Resource {resource_id} not found")
             return db_resource
 
     def list_resources(self, org_id: UUID, kind: str | None = None) -> list[Component]:

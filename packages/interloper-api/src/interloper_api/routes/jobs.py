@@ -10,11 +10,12 @@ from interloper.errors import NotFoundError
 from interloper_db import JobRecord, Profile, Store
 from pydantic import BaseModel
 
+from interloper_api.components import timestamp
 from interloper_api.dependencies import (
-    authorize_org_member,
     get_current_user,
     get_org_id,
     get_store,
+    load_authorized,
     require_editor,
     require_viewer,
 )
@@ -68,30 +69,6 @@ class BackfillRequest(BaseModel):
     fail_fast: bool = False
 
 
-def _load_authorized_job(job_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> JobRecord:
-    """Load a job and authorize the user by membership in its org.
-
-    Args:
-        job_id: The job UUID.
-        user: The authenticated user.
-        store: The Store instance.
-        minimum: Minimum role required in the job's organisation.
-
-    Returns:
-        The job record.
-
-    Raises:
-        HTTPException: 404 if missing or the user is not a member of the
-            owning org, 403 if the role is insufficient.
-    """
-    try:
-        job = store.get_job(job_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    authorize_org_member(user, job.org_id, store, minimum=minimum, detail=f"Job {job_id} not found")
-    return job
-
-
 def _job_to_response(job: JobRecord) -> JobResponse:
     """Convert a JobRecord to a JobResponse."""
     return JobResponse(
@@ -105,9 +82,9 @@ def _job_to_response(job: JobRecord) -> JobResponse:
         backfill_days=job.backfill_days,
         source_ids=job.source_ids,
         asset_ids=job.asset_ids,
-        last_run_at=str(job.last_run_at) if job.last_run_at else None,
-        next_run_at=str(job.next_run_at) if job.next_run_at else None,
-        created_at=str(job.created_at) if job.created_at else None,
+        last_run_at=timestamp(job.last_run_at),
+        next_run_at=timestamp(job.next_run_at),
+        created_at=timestamp(job.created_at),
     )
 
 
@@ -129,7 +106,7 @@ def get_job(
     store: Store = Depends(get_store),
 ) -> JobResponse:
     """Get a single job by ID. Authorized by membership in the job's org."""
-    job = _load_authorized_job(job_id, user, store)
+    job = load_authorized(store.get_job, job_id, user, store, label="Job")
     return _job_to_response(job)
 
 
@@ -163,7 +140,7 @@ def update_job(
     store: Store = Depends(get_store),
 ) -> JobResponse:
     """Update an existing job."""
-    _load_authorized_job(job_id, user, store, minimum="editor")
+    load_authorized(store.get_job, job_id, user, store, label="Job", minimum="editor")
     try:
         job = store.update_job(
             job_id,
@@ -188,7 +165,7 @@ def delete_job(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete a job."""
-    _load_authorized_job(job_id, user, store, minimum="editor")
+    load_authorized(store.get_job, job_id, user, store, label="Job", minimum="editor")
     store.delete_job(job_id)
     return {"status": "deleted"}
 
@@ -201,7 +178,7 @@ def queue_run(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Queue a single run for a job."""
-    job = _load_authorized_job(job_id, user, store, minimum="editor")
+    job = load_authorized(store.get_job, job_id, user, store, label="Job", minimum="editor")
 
     run = store.create_run(
         job.org_id,
@@ -219,7 +196,7 @@ def queue_backfill(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Queue a backfill for a job."""
-    job = _load_authorized_job(job_id, user, store, minimum="editor")
+    job = load_authorized(store.get_job, job_id, user, store, label="Job", minimum="editor")
 
     backfill = store.create_backfill(
         job.org_id,

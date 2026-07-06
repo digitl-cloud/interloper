@@ -10,12 +10,20 @@ from interloper.errors import DataNotFoundError, NotFoundError
 from interloper_db import Component, ComponentStatus, Profile, Store
 from pydantic import BaseModel
 
-from interloper_api.components import destination_rows, materializable, resource_map, user_config
+from interloper_api.components import (
+    DestinationResponse,
+    destination_response,
+    destination_rows,
+    materializable,
+    resource_map,
+    timestamp,
+    user_config,
+)
 from interloper_api.dependencies import (
-    authorize_org_member,
     get_current_user,
     get_org_id,
     get_store,
+    load_authorized,
     require_editor,
     require_viewer,
 )
@@ -42,17 +50,6 @@ class AssetUpdateRequest(BaseModel):
     config: dict[str, Any] | None = None
     resources: dict[str, str] | None = None
     destination_ids: list[str] | None = None
-
-
-class DestinationResponse(BaseModel):
-    """Nested destination in asset response."""
-
-    id: UUID
-    key: str
-    name: str | None = None
-    config: dict[str, Any] | None = None
-    resources: dict[str, str] = {}
-    created_at: str | None = None
 
 
 class AssetResponse(BaseModel):
@@ -102,41 +99,6 @@ class PartitionRowCountsResponse(BaseModel):
 # -- Helpers ------------------------------------------------------------------
 
 
-def _dest_to_response(dest: Component) -> DestinationResponse:
-    return DestinationResponse(
-        id=dest.id,
-        key=dest.key,
-        name=dest.name,
-        config=dest.config,
-        resources=resource_map(dest),
-        created_at=str(dest.created_at) if dest.created_at else None,
-    )
-
-
-def _load_authorized_asset(asset_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Component:
-    """Load an asset and authorize the user by membership in its org.
-
-    Args:
-        asset_id: The asset UUID.
-        user: The authenticated user.
-        store: The Store instance.
-        minimum: Minimum role required in the asset's organisation.
-
-    Returns:
-        The asset's component row.
-
-    Raises:
-        HTTPException: 404 if missing or the user is not a member of the
-            owning org, 403 if the role is insufficient.
-    """
-    try:
-        asset = store.get_asset(asset_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
-    authorize_org_member(user, asset.org_id, store, minimum=minimum, detail=f"Asset {asset_id} not found")
-    return asset
-
-
 def _asset_to_response(asset: Component, store: Store) -> AssetResponse:
     """Convert an asset component row to an AssetResponse.
 
@@ -154,8 +116,8 @@ def _asset_to_response(asset: Component, store: Store) -> AssetResponse:
         status=store.asset_status(asset.key, source_key=source_key),
         config=user_config(asset),
         resources=resource_map(asset),
-        destinations=[_dest_to_response(d) for d in destination_rows(asset)],
-        created_at=str(asset.created_at) if asset.created_at else None,
+        destinations=[destination_response(d) for d in destination_rows(asset)],
+        created_at=timestamp(asset.created_at),
     )
 
 
@@ -215,7 +177,7 @@ def get_asset(
     store: Store = Depends(get_store),
 ) -> AssetResponse:
     """Get a single asset by ID. Authorized by membership in the asset's org."""
-    asset = _load_authorized_asset(asset_id, user, store)
+    asset = load_authorized(store.get_asset, asset_id, user, store, label="Asset")
     return _asset_to_response(asset, store)
 
 
@@ -227,7 +189,7 @@ def update_asset(
     store: Store = Depends(get_store),
 ) -> AssetResponse:
     """Update an asset's configuration, resources, or destinations."""
-    _load_authorized_asset(asset_id, user, store, minimum="editor")
+    load_authorized(store.get_asset, asset_id, user, store, label="Asset", minimum="editor")
     try:
         asset = store.update_asset(
             asset_id,
@@ -248,7 +210,7 @@ def delete_asset(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Delete a standalone asset."""
-    _load_authorized_asset(asset_id, user, store, minimum="editor")
+    load_authorized(store.get_asset, asset_id, user, store, label="Asset", minimum="editor")
     try:
         store.delete_asset(asset_id)
     except NotFoundError:
@@ -269,8 +231,8 @@ def add_dependency(
     store: Store = Depends(get_store),
 ) -> DependencyResponse:
     """Add a dependency between two assets. Both must belong to the same org."""
-    asset = _load_authorized_asset(asset_id, user, store, minimum="editor")
-    upstream = _load_authorized_asset(body.upstream_asset_id, user, store, minimum="editor")
+    asset = load_authorized(store.get_asset, asset_id, user, store, label="Asset", minimum="editor")
+    upstream = load_authorized(store.get_asset, body.upstream_asset_id, user, store, label="Asset", minimum="editor")
     if upstream.org_id != asset.org_id:
         raise HTTPException(status_code=404, detail=f"Asset {body.upstream_asset_id} not found")
     try:
@@ -291,7 +253,7 @@ def remove_dependency(
     store: Store = Depends(get_store),
 ) -> None:
     """Remove an asset dependency."""
-    _load_authorized_asset(asset_id, user, store, minimum="editor")
+    load_authorized(store.get_asset, asset_id, user, store, label="Asset", minimum="editor")
     try:
         store.remove_dependency(asset_id, upstream_asset_id)
     except NotFoundError as e:
@@ -308,7 +270,7 @@ def get_partition_row_counts(
     store: Store = Depends(get_store),
 ) -> PartitionRowCountsResponse:
     """Get row counts grouped by partition for an asset."""
-    _load_authorized_asset(asset_id, user, store)
+    load_authorized(store.get_asset, asset_id, user, store, label="Asset")
     try:
         il_asset = store.load_asset(asset_id)
     except NotFoundError as e:
