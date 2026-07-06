@@ -192,3 +192,50 @@ def test_asset_filter_accepts_multiple_assets(store: RunMixin) -> None:
     page = store.list_events(run_id=_RUN_ID, asset_ids=[asset_a, asset_b], limit=100, offset=0)
     assert len(page) == 15
     assert all(e.asset_id in {asset_a, asset_b} for e in page)
+
+
+# -- complete_run job stamping -------------------------------------------------
+
+
+@pytest.fixture
+def run_store() -> Iterator[RunMixin]:
+    """A RunMixin over a database with runs and components tables."""
+    from interloper_db.models import Component, Run
+
+    eng = engine_module.init_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Component.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+    Run.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+    try:
+        yield RunMixin()
+    finally:
+        eng.dispose()
+        engine_module._engine = None
+
+
+def test_complete_run_stamps_the_jobs_last_run_at(run_store: RunMixin) -> None:
+    from interloper_db.models import Component, Run
+
+    org = uuid4()
+    with Session(engine_module.get_engine()) as session:
+        job = Component(org_id=org, kind="job", key="job", name="J")
+        session.add(job)
+        session.flush()
+        run = Run(id=uuid4(), org_id=org, job_id=job.id, status="running")
+        session.add(run)
+        session.commit()
+        job_id, run_id = job.id, run.id
+
+    completed = run_store.complete_run(run_id, success=True)
+    assert completed.status == "success"
+    assert completed.completed_at is not None
+
+    with Session(engine_module.get_engine()) as session:
+        stamped = session.get(Component, job_id)
+        assert stamped is not None and stamped.state is not None
+        # SQLite round-trips the column naive; the stamped ISO string is aware UTC.
+        stamped_at = datetime.fromisoformat(stamped.state["last_run_at"])
+        assert stamped_at == completed.completed_at.replace(tzinfo=timezone.utc)
