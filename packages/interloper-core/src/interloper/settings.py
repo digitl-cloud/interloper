@@ -12,10 +12,16 @@ are unambiguous.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict, YamlConfigSettingsSource
+from pydantic import Field, field_validator
+from pydantic_settings import (
+    BaseSettings,
+    NoDecode,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    YamlConfigSettingsSource,
+)
 
 PREFIX = "INTERLOPER_"
 
@@ -38,7 +44,13 @@ class PostgresSettings(BaseSettings):
 
 
 class AuthSettings(BaseSettings):
-    """Authentication settings (Google OAuth, cookies)."""
+    """Authentication settings (Google OAuth, cookies).
+
+    ``super_admin_emails`` bootstraps platform-wide super-admins: a user whose
+    Google email is listed gets ``is_super_admin`` set on login. Promotion only —
+    removing an email never demotes an existing super-admin. The env var takes a
+    comma-separated list (``INTERLOPER_AUTH_SUPER_ADMIN_EMAILS=a@x.com,b@x.com``).
+    """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}AUTH_")
 
@@ -47,6 +59,19 @@ class AuthSettings(BaseSettings):
     google_redirect_uri: str = ""
     cookie_secure: bool = True
     session_expiry_days: int = 30
+    super_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
+    @field_validator("super_admin_emails", mode="before")
+    @classmethod
+    def _parse_super_admin_emails(cls, value: Any) -> list[str]:
+        """Accept a comma-separated string (env) or a list (YAML).
+
+        Returns:
+            Trimmed, lowercased email list with empty entries dropped.
+        """
+        if isinstance(value, str):
+            value = value.split(",")
+        return [email.strip().lower() for email in value if email and email.strip()]
 
 
 class SecretsSettings(BaseSettings):
