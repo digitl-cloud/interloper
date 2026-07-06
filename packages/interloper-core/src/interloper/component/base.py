@@ -127,6 +127,9 @@ class Component(BaseModel):
     icon: ClassVar[str] = ""
     resource_types: ClassVar[dict[str, type[Resource]]] = {}
     relation_types: ClassVar[dict[str, RelationDefinition]] = {}
+    # Kinds whose instance payload carries credentials/secrets; the store
+    # encrypts their config at rest and the API only decodes it on detail.
+    sensitive: ClassVar[bool] = False
     # Class-declared config fields that are framework plumbing, stripped from
     # the definition's config_schema on top of the always-internal set.
     internal_fields: ClassVar[frozenset[str]] = frozenset()

@@ -39,6 +39,7 @@ class Resource(Component):
     """
 
     kind: ClassVar[str] = "resource"
+    sensitive: ClassVar[bool] = True
 
     @classmethod
     def definition(cls) -> ResourceDefinition:

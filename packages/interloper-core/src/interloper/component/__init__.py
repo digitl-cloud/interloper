@@ -6,12 +6,15 @@ from interloper.component.base import (
     RelationDefinition,
 )
 from interloper.component.build import build_component_class
+from interloper.component.registry import KINDS, KindRegistry
 
 __all__ = [
+    "KINDS",
     "Component",
     "ComponentDefinition",
     "ComponentDescriptor",
     "ComponentSpec",
+    "KindRegistry",
     "RelationDefinition",
     "build_component_class",
 ]
