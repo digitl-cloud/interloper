@@ -25,6 +25,7 @@ class Job(Component):
     """
 
     icon: ClassVar[str] = "carbon:event-schedule"
+    runnable: ClassVar[bool] = True
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
         "target": RelationDefinition(kinds=["source", "asset"]),
     }

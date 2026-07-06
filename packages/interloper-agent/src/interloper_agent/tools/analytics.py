@@ -12,14 +12,14 @@ from interloper_agent.context import get_org_id, get_store, serialize
 
 
 def run_history_summary(
-    job_id: str | None = None,
+    component_id: str | None = None,
     days: int = 7,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Summarize run statistics over a period.
 
     Args:
-        job_id: Filter to a specific job UUID (optional, all jobs if omitted).
+        component_id: Filter to a specific job UUID (optional, all jobs if omitted).
         days: Number of days to look back (default 7).
 
     Returns aggregate counts (total, success, failed, canceled),
@@ -30,7 +30,7 @@ def run_history_summary(
         store = get_store()
         runs = store.list_runs(
             org_id,
-            job_id=UUID(job_id) if job_id else None,
+            component_id=UUID(component_id) if component_id else None,
             limit=500,
         )
 
@@ -49,7 +49,7 @@ def run_history_summary(
         return {
             "status": "success",
             "period_days": days,
-            "job_id": job_id,
+            "component_id": component_id,
             "total_runs": total,
             "by_status": by_status,
             "success_rate": round(success / total, 2) if total > 0 else None,
@@ -60,7 +60,7 @@ def run_history_summary(
 
 
 def partition_coverage(
-    job_id: str,
+    component_id: str,
     start_date: str,
     end_date: str,
     tool_context: ToolContext | None = None,
@@ -68,7 +68,7 @@ def partition_coverage(
     """Check partition coverage for a job over a date range.
 
     Args:
-        job_id: UUID of the job.
+        component_id: UUID of the job.
         start_date: Start date in ISO format (YYYY-MM-DD).
         end_date: End date in ISO format (YYYY-MM-DD), inclusive.
 
@@ -77,8 +77,8 @@ def partition_coverage(
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        jid = UUID(job_id)
-        runs = store.list_runs(org_id, job_id=jid, limit=1000)
+        jid = UUID(component_id)
+        runs = store.list_runs(org_id, component_id=jid, limit=1000)
 
         start = datetime.date.fromisoformat(start_date)
         end = datetime.date.fromisoformat(end_date)
@@ -102,7 +102,7 @@ def partition_coverage(
 
         return {
             "status": "success",
-            "job_id": job_id,
+            "component_id": component_id,
             "start_date": start_date,
             "end_date": end_date,
             "total_days": len(expected),
@@ -131,8 +131,8 @@ def freshness_check(tool_context: ToolContext) -> dict[str, Any]:
         for job in jobs:
             if not (job.config or {}).get("enabled", True):
                 continue
-            job_id = job.id
-            runs = store.list_runs(org_id, job_id=job_id, status="success", limit=1)
+            component_id = job.id
+            runs = store.list_runs(org_id, component_id=component_id, status="success", limit=1)
             last_success = runs[0] if runs else None
 
             hours_since = None

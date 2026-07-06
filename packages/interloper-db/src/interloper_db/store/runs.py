@@ -191,14 +191,14 @@ class RunMixin:
         self,
         org_id: UUID,
         *,
-        job_id: UUID | None = None,
+        component_id: UUID | None = None,
         partition_date: dt.date | None = None,
     ) -> Run:
         """Create a single queued run.
 
         Args:
             org_id: Organisation UUID.
-            job_id: Optional job UUID.
+            component_id: Optional job UUID.
             partition_date: Optional partition date.
 
         Returns:
@@ -207,7 +207,7 @@ class RunMixin:
         with Session(get_engine()) as session:
             db_run = Run(
                 org_id=org_id,
-                job_id=job_id,
+                component_id=component_id,
                 partition_date=partition_date,
                 status="queued",
             )
@@ -238,7 +238,7 @@ class RunMixin:
         self,
         org_id: UUID,
         *,
-        job_id: UUID | None = None,
+        component_id: UUID | None = None,
         backfill_id: UUID | None = None,
         status: str | None = None,
         limit: int = 50,
@@ -248,7 +248,7 @@ class RunMixin:
 
         Args:
             org_id: Organisation UUID.
-            job_id: Optional job filter.
+            component_id: Optional job filter.
             backfill_id: Optional backfill filter.
             status: Optional status filter.
             limit: Max results (default 50).
@@ -259,8 +259,8 @@ class RunMixin:
         """
         with Session(get_engine()) as session:
             statement = select(Run).where(Run.org_id == org_id)
-            if job_id:
-                statement = statement.where(Run.job_id == job_id)
+            if component_id:
+                statement = statement.where(Run.component_id == component_id)
             if backfill_id:
                 statement = statement.where(Run.backfill_id == backfill_id)
             if status:
@@ -272,7 +272,7 @@ class RunMixin:
         self,
         org_id: UUID,
         *,
-        job_id: UUID | None = None,
+        component_id: UUID | None = None,
         backfill_id: UUID | None = None,
         status: str | None = None,
     ) -> int:
@@ -280,7 +280,7 @@ class RunMixin:
 
         Args:
             org_id: Organisation UUID.
-            job_id: Optional job filter.
+            component_id: Optional job filter.
             backfill_id: Optional backfill filter.
             status: Optional status filter.
 
@@ -289,8 +289,8 @@ class RunMixin:
         """
         with Session(get_engine()) as session:
             statement = select(func.count()).select_from(Run).where(Run.org_id == org_id)
-            if job_id:
-                statement = statement.where(Run.job_id == job_id)
+            if component_id:
+                statement = statement.where(Run.component_id == component_id)
             if backfill_id:
                 statement = statement.where(Run.backfill_id == backfill_id)
             if status:
@@ -323,8 +323,8 @@ class RunMixin:
             db_run.completed_at = datetime.now(timezone.utc)
             session.add(db_run)
 
-            if db_run.job_id:
-                db_job = session.get(Component, db_run.job_id)
+            if db_run.component_id:
+                db_job = session.get(Component, db_run.component_id)
                 if db_job:
                     db_job.state = {**(db_job.state or {}), "last_run_at": db_run.completed_at.isoformat()}
                     session.add(db_job)
@@ -367,7 +367,7 @@ class RunMixin:
 
             db_run = Run(
                 org_id=src.org_id,
-                job_id=src.job_id,
+                component_id=src.component_id,
                 partition_date=src.partition_date,
                 status="queued",
                 retry_of=run_id,
@@ -385,7 +385,7 @@ class RunMixin:
         self,
         org_id: UUID,
         *,
-        job_id: UUID | None = None,
+        component_id: UUID | None = None,
         start_date: dt.date,
         end_date: dt.date,
         concurrency: int = 1,
@@ -398,7 +398,7 @@ class RunMixin:
 
         Args:
             org_id: Organisation UUID.
-            job_id: Optional job UUID.
+            component_id: Optional job UUID.
             start_date: First partition date.
             end_date: Last partition date (inclusive).
             concurrency: Max runs in-flight at once.
@@ -410,7 +410,7 @@ class RunMixin:
         with Session(get_engine()) as session:
             db_backfill = Backfill(
                 org_id=org_id,
-                job_id=job_id,
+                component_id=component_id,
                 start_date=start_date,
                 end_date=end_date,
                 concurrency=concurrency,
@@ -428,7 +428,7 @@ class RunMixin:
                 run_status = "queued" if launched < concurrency else "pending"
                 db_run = Run(
                     org_id=org_id,
-                    job_id=job_id,
+                    component_id=component_id,
                     backfill_id=db_backfill.id,
                     partition_date=current_date,
                     status=run_status,

@@ -95,6 +95,7 @@ class Source(Component):
     destination_types: ClassVar[list[type[Destination]]] = []
     asset_types: ClassVar[list[type[Asset]]] = []
     tags: ClassVar[list[str]] = []
+    runnable: ClassVar[bool] = True
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], slotted=True),
         "destination": RelationDefinition(kinds=["destination"]),

@@ -110,6 +110,7 @@ class Asset(Component):
     requires: ClassVar[dict[str, str]] = {}
     optional_requires: ClassVar[dict[str, str]] = {}
     tags: ClassVar[list[str]] = []
+    runnable: ClassVar[bool] = True
 
     _source_type: ClassVar[type[Source] | None] = None
 
