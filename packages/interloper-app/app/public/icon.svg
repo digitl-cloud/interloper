@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Interloper "i" — flat, minimal: a lowercase i in white on the brand
+       emerald. The tittle doubles as the interloper node. -->
+  <rect width="64" height="64" rx="14" fill="#174F78"/>
+  <!-- the tittle sits off-axis: the interloper, not yet in line -->
+  <circle cx="38.5" cy="17" r="5.75" fill="#FAB957"/>
+  <line x1="30" y1="31" x2="30" y2="47.5" stroke="#FAB957" stroke-width="11.5" stroke-linecap="round"/>
+</svg>

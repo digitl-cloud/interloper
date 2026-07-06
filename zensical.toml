@@ -52,6 +52,9 @@ extra_css = ["stylesheets/extra.css"]
 
 language = "en"
 
+logo = "assets/logo.svg"
+favicon = "assets/favicon.png"
+
 features = [
     "announce.dismiss",
     "content.code.annotate",
