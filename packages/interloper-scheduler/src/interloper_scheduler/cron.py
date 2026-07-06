@@ -2,7 +2,8 @@
 
 Jobs are component rows (``kind='job'``): their trigger lives in ``config``
 (the spec, user-owned) and the controller writes only the ``state`` column
-(machine-owned: ``next_run_at``/``last_run_at`` as UTC ISO-8601 strings).
+(machine-owned, UTC ISO-8601 strings): it advances ``next_run_at`` here;
+``last_run_at`` is stamped by ``complete_run`` when a run finishes.
 State is a pure cache — wiping it just makes every job reschedule from its
 cron expression on the next tick.
 
@@ -142,7 +143,7 @@ class CronController:
                     self._set_state(session, job, next_run_at=next_run)
                     continue
 
-                self._set_state(session, job, next_run_at=next_run, last_run_at=now)
+                self._set_state(session, job, next_run_at=next_run)
 
                 # Create runs
                 if config.get("partitioned") and config.get("backfill_days"):

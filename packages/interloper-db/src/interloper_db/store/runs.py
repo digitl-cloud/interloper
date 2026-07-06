@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
 
 from interloper_db.engine import get_engine
-from interloper_db.models import Backfill, Event, Run
+from interloper_db.models import Backfill, Component, Event, Run
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +300,10 @@ class RunMixin:
     def complete_run(self, run_id: UUID, *, success: bool) -> Run:
         """Mark a run as completed and advance its backfill if applicable.
 
+        Also stamps ``last_run_at`` on the job's machine-owned state — this is
+        the single terminal path every run takes (scheduled, manual, retried),
+        so the job's "last run" reflects all of them.
+
         Args:
             run_id: The run UUID.
             success: Whether the run succeeded.
@@ -318,6 +322,12 @@ class RunMixin:
             db_run.status = "success" if success else "failed"
             db_run.completed_at = datetime.now(timezone.utc)
             session.add(db_run)
+
+            if db_run.job_id:
+                db_job = session.get(Component, db_run.job_id)
+                if db_job:
+                    db_job.state = {**(db_job.state or {}), "last_run_at": db_run.completed_at.isoformat()}
+                    session.add(db_job)
 
             if db_run.backfill_id:
                 _advance_backfill(session, db_run.backfill_id, failed=not success)
