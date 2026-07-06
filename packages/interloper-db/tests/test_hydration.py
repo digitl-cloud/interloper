@@ -1,9 +1,9 @@
-"""Round-trip tests: store writes → generic hydration → live framework objects.
+"""Round-trip tests: generic store writes → generic hydration → live framework objects.
 
 These exercise the full pipeline against a real (SQLite) database using the
-real ``DemoSource`` catalog component: create rows through the store facades,
-hydrate through the one generic spec builder, and assert on the reconstructed
-framework instances.
+real ``DemoSource`` catalog component: create rows through the generic store
+surface, hydrate through the one generic spec builder, and assert on the
+reconstructed framework instances.
 """
 
 from __future__ import annotations
@@ -31,11 +31,11 @@ class TestSourceRoundTrip:
     """Sources with child assets, intra-source deps, and overrides."""
 
     def test_create_source_creates_children_and_intra_deps(self, store: Store):
-        db_source = store.create_source(_ORG, key="demo_source", name="Demo")
+        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
         assert db_source.kind == "source"
         assert sorted(child.key for child in db_source.children) == ["a", "b", "c", "d", "e"]
 
-        deps = store.list_dependencies(_ORG)
+        deps = store.list_relations(_ORG, type="dependency")
         by_child = {}
         children_by_id = {child.id: child.key for child in db_source.children}
         for rel in deps:
@@ -47,9 +47,11 @@ class TestSourceRoundTrip:
             "e": {("b", "b"), ("c", "c"), ("d", "d")},
         }
 
-    def test_load_source_hydrates_with_stable_ids_and_deps(self, store: Store):
-        db_source = store.create_source(_ORG, key="demo_source", name="Demo", config={"hello": "there"})
-        source = store.load_source(db_source.id)
+    def test_load_hydrates_with_stable_ids_and_deps(self, store: Store):
+        db_source = store.create_component(
+            _ORG, kind="source", key="demo_source", name="Demo", config={"hello": "there"}
+        )
+        source = store.load(db_source.id)
 
         assert isinstance(source, DemoSource)
         assert source.id == str(db_source.id)
@@ -64,27 +66,24 @@ class TestSourceRoundTrip:
             "d": rows_by_key["d"],
         }
 
-    def test_update_asset_materializable_survives_config_replacement(self, store: Store):
-        db_source = store.create_source(_ORG, key="demo_source", name="Demo")
+    def test_source_owned_asset_loads_through_its_parent(self, store: Store):
+        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
         child = next(child for child in db_source.children if child.key == "a")
+        store.update_component(child.id, config={"materializable": False})
 
-        store.update_asset(child.id, materializable=False)
-        db_asset = store.update_asset(child.id, config={"dataset": "override"})
-        assert db_asset.config == {"materializable": False, "dataset": "override"}
+        asset = store.load(child.id)
+        assert isinstance(asset, il.Asset)
+        assert type(asset).key == "a"
+        assert asset.materializable is False
 
-        source = store.load_source(db_source.id)
-        asset_a = next(asset for asset in source.assets if type(asset).key == "a")
-        assert asset_a.materializable is False
+    def test_children_selection_drops_rows_and_relations(self, store: Store):
+        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        store.update_component(db_source.id, children=["a", "b"])
 
-    def test_update_source_asset_selection_drops_rows_and_relations(self, store: Store):
-        db_source = store.create_source(_ORG, key="demo_source", name="Demo")
-        store.update_source(db_source.id, asset_keys=["a", "b"])
-
-        refreshed = store.get_source(db_source.id)
-        assert sorted(child.key for child in store.list_assets(_ORG)) == ["a", "b"]
-        assert refreshed.id == db_source.id
+        refreshed = store.get_component(db_source.id, kind="source")
+        assert sorted(child.key for child in refreshed.children) == ["a", "b"]
         # e (and its dependency relations) are gone; b keeps its dep on a.
-        remaining = store.list_dependencies(_ORG)
+        remaining = store.list_relations(_ORG, type="dependency")
         assert [rel.slot for rel in remaining] == ["a"]
 
 
@@ -92,8 +91,9 @@ class TestStandaloneAsset:
     """Standalone assets hydrate directly through the generic builder."""
 
     def test_create_and_load(self, store: Store):
-        db_asset = store.create_asset(_ORG, key="demo_asset", config={"materializable": False})
-        asset = store.load_asset(db_asset.id)
+        db_asset = store.create_component(_ORG, kind="asset", key="demo_asset", config={"materializable": False})
+        asset = store.load(db_asset.id)
+        assert isinstance(asset, il.Asset)
         assert type(asset).key == "demo_asset"
         assert asset.id == str(db_asset.id)
         assert asset.materializable is False
@@ -102,47 +102,43 @@ class TestStandaloneAsset:
 class TestJobRoundTrip:
     """Jobs persist as components with target relations and hydrate to core Jobs."""
 
-    def test_create_and_record(self, store: Store):
-        db_source = store.create_source(_ORG, key="demo_source", name="Demo")
-        record = store.create_job(
+    def test_create_and_read_back(self, store: Store):
+        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        db_job = store.create_component(
             _ORG,
+            kind="job",
+            key="job",
             name="Demo Daily",
-            cron="0 6 * * *",
-            source_ids=[db_source.id],
-            tags=["daily"],
-            partitioned=True,
-            backfill_days=7,
+            config={"cron": "0 6 * * *", "tags": ["daily"], "enabled": True, "partitioned": True},
+            relations={"target": [(db_source.id, "")]},
         )
-        assert record.name == "Demo Daily"
-        assert record.cron == "0 6 * * *"
-        assert record.enabled is True
-        assert record.partitioned is True
-        assert record.backfill_days == 7
-        assert record.source_ids == [db_source.id]
-        assert record.asset_ids == []
-        assert record.next_run_at is None
+        assert db_job.name == "Demo Daily"
+        assert db_job.config == {"cron": "0 6 * * *", "tags": ["daily"], "enabled": True, "partitioned": True}
+        assert db_job.state is None
+        assert [rel.dst_id for rel in db_job.out_relations] == [db_source.id]
 
-        assert [job.id for job in store.list_jobs(_ORG)] == [record.id]
+        assert [job.id for job in store.list_components(_ORG, kinds=["job"])] == [db_job.id]
 
-    def test_load_job_hydrates_targets(self, store: Store):
-        db_source = store.create_source(_ORG, key="demo_source", name="Demo")
-        db_asset = store.create_asset(_ORG, key="demo_asset")
-        record = store.create_job(
+    def test_load_hydrates_targets(self, store: Store):
+        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        db_asset = store.create_component(_ORG, kind="asset", key="demo_asset")
+        db_job = store.create_component(
             _ORG,
+            kind="job",
+            key="job",
             name="Demo Daily",
-            cron="0 6 * * *",
-            source_ids=[db_source.id],
-            asset_ids=[db_asset.id],
+            config={"cron": "0 6 * * *"},
+            relations={"target": [(db_source.id, ""), (db_asset.id, "")]},
         )
 
-        job = store.load_job(record.id)
+        job = store.load(db_job.id)
         assert isinstance(job, il.Job)
         assert job.cron == "0 6 * * *"
         assert {type(target).key for target in job.targets} == {"demo_source", "demo_asset"}
         assert {type(asset).key for asset in job.dag().assets} == {"a", "b", "c", "d", "e", "demo_asset"}
 
-    def test_update_job_preserves_state(self, store: Store):
-        record = store.create_job(_ORG, name="Job", cron="0 6 * * *")
+    def test_update_preserves_state(self, store: Store):
+        db_job = store.create_component(_ORG, kind="job", key="job", name="Job", config={"cron": "0 6 * * *"})
 
         # Simulate the scheduler's targeted state write.
         from sqlmodel import Session
@@ -151,13 +147,12 @@ class TestJobRoundTrip:
         from interloper_db.models import Component
 
         with Session(get_engine()) as session:
-            db_job = session.get(Component, record.id)
-            assert db_job is not None
-            db_job.state = {"next_run_at": "2026-07-07T06:00:00+00:00"}
-            session.add(db_job)
+            row = session.get(Component, db_job.id)
+            assert row is not None
+            row.state = {"next_run_at": "2026-07-07T06:00:00+00:00"}
+            session.add(row)
             session.commit()
 
-        updated = store.update_job(record.id, name="Renamed", cron="0 7 * * *")
+        updated = store.update_component(db_job.id, name="Renamed", config={"cron": "0 7 * * *"})
         assert updated.name == "Renamed"
-        assert updated.next_run_at is not None
-        assert updated.next_run_at.isoformat() == "2026-07-07T06:00:00+00:00"
+        assert updated.state == {"next_run_at": "2026-07-07T06:00:00+00:00"}

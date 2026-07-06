@@ -87,18 +87,8 @@ def toggle_job(
     try:
         store = get_store()
         jid = UUID(job_id)
-        job = store.get_job(jid)
-        updated = store.update_job(
-            jid,
-            name=job.name,
-            cron=job.cron,
-            source_ids=job.source_ids or None,
-            asset_ids=job.asset_ids or None,
-            tags=job.tags,
-            enabled=enabled,
-            partitioned=job.partitioned,
-            backfill_days=job.backfill_days,
-        )
+        job = store.get_component(jid, kind="job")
+        updated = store.update_component(jid, config={**(job.config or {}), "enabled": enabled})
         action = "enabled" if enabled else "disabled"
         return {
             "status": "success",
@@ -122,7 +112,9 @@ def toggle_asset(
     """
     try:
         store = get_store()
-        updated = store.update_asset(UUID(asset_id), materializable=materializable)
+        aid = UUID(asset_id)
+        asset = store.get_component(aid, kind="asset")
+        updated = store.update_component(aid, config={**(asset.config or {}), "materializable": materializable})
         action = "enabled" if materializable else "disabled"
         return {
             "status": "success",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
@@ -70,7 +70,7 @@ class RunExecutor:
 
                 self._mark_running(session, db_run)
 
-            job = self._store.load_job(job_id)
+            job = cast(il.Job, self._store.load(job_id))
             assets = _job_assets(job)
             if not assets:
                 logger.info("No sources or assets for run %s, marking success", run_id)
@@ -165,7 +165,7 @@ class RunExecutor:
                     if relation.dst_id not in visited:
                         visited.add(relation.dst_id)
                         next_frontier.append(relation.dst_id)
-                        upstream_asset = self._store.load_asset(relation.dst_id)
+                        upstream_asset = cast(il.Asset, self._store.load(relation.dst_id))
                         upstream_asset.materializable = False
                         assets.append(upstream_asset)
                 frontier = next_frontier

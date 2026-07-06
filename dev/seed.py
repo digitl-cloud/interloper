@@ -186,9 +186,9 @@ def _ensure_demo_source(store: Store, org_id: UUID) -> Component:
 
     Returns the seeded source with its assets eagerly loaded.
     """
-    sources = {source.key: source for source in store.list_sources(org_id)}
+    sources = {source.key: source for source in store.list_components(org_id, kinds=["source"])}
     if DEMO_SOURCE_KEY not in sources:
-        return store.create_source(org_id, key=DEMO_SOURCE_KEY, name=DEMO_SOURCE_NAME)
+        return store.create_component(org_id, kind="source", key=DEMO_SOURCE_KEY, name=DEMO_SOURCE_NAME)
     return sources[DEMO_SOURCE_KEY]
 
 
@@ -197,14 +197,15 @@ def _ensure_demo_job(store: Store, org_id: UUID, source_id: UUID) -> bool:
 
     Returns True if it created the job, False if one already existed.
     """
-    if any(job.name == DEMO_JOB_NAME for job in store.list_jobs(org_id)):
+    if any(job.name == DEMO_JOB_NAME for job in store.list_components(org_id, kinds=["job"])):
         return False
-    store.create_job(
+    store.create_component(
         org_id,
+        kind="job",
+        key="job",
         name=DEMO_JOB_NAME,
-        cron=DEMO_JOB_CRON,
-        source_ids=[source_id],
-        partitioned=True,
+        config={"cron": DEMO_JOB_CRON, "enabled": True, "partitioned": True},
+        relations={"target": [(source_id, "")]},
     )
     return True
 

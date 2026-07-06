@@ -1,6 +1,6 @@
 """Tests for the resource encrypt-on-write default logic.
 
-These exercise ``ResourceMixin._encode_data`` directly (no DB), which is the
+These exercise ``ComponentMixin._encode_data`` directly (no DB), which is the
 single place that decides whether a resource blob is encrypted.
 """
 
@@ -12,11 +12,11 @@ from collections.abc import Callable
 import pytest
 from interloper.errors import ConfigError
 
-from interloper_db.store.resources import ResourceMixin
+from interloper_db.store.components import ComponentMixin
 
 
-class _Encoder(ResourceMixin):
-    """Minimal ResourceMixin carrier exposing only the cipher hook."""
+class _Encoder(ComponentMixin):
+    """Minimal ComponentMixin carrier exposing only the cipher hook."""
 
     def __init__(self, encrypt: Callable[[bytes], bytes] | None = None) -> None:
         self._encrypt = encrypt
