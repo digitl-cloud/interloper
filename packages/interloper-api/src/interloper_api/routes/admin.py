@@ -67,6 +67,12 @@ class UpdateRoleRequest(BaseModel):
     role: str
 
 
+class JoinOrganisationRequest(BaseModel):
+    """Request body for a super-admin joining an organisation."""
+
+    role: str = "admin"
+
+
 class InviteRequest(BaseModel):
     """Request body for inviting a user."""
 
@@ -210,6 +216,27 @@ def list_members(
         )
         for profile, role in members
     ]
+
+
+@router.post("/organisations/{org_id}/members", status_code=201)
+def join_organisation(
+    org_id: UUID,
+    body: JoinOrganisationRequest,
+    user: Profile = Depends(require_super_admin),
+    store: Store = Depends(get_store),
+) -> MemberResponse:
+    """Add the calling super-admin to any organisation — no invitation needed."""
+    _require_org(store, org_id)
+    _validate_role(body.role)
+    if not store.add_org_member(org_id, user.id, body.role):
+        raise HTTPException(status_code=409, detail="Already a member of this organisation")
+    return MemberResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        avatar_url=user.avatar_url,
+        role=body.role,
+    )
 
 
 @router.patch("/organisations/{org_id}/members/{user_id}")

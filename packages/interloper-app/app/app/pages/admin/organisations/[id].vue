@@ -8,12 +8,16 @@ const route = useRoute()
 const orgId = computed(() => route.params.id as string)
 
 const adminStore = useAdminStore()
+const userStore = useUserStore()
 const toast = useToast()
 
 const rows = ref<OrgMember[]>([])
 const orgName = ref<string | null>(null)
 const loading = ref(false)
 const inviteOpen = ref(false)
+
+const isMember = computed(() =>
+    rows.value.some(r => r.status === 'active' && r.id === userStore.user?.id))
 
 const inviteEndpoint = computed(() => `/admin/organisations/${orgId.value}/invitations`)
 
@@ -84,6 +88,17 @@ async function cancelInvite(member: OrgMember) {
     }
 }
 
+async function joinOrganisation() {
+    try {
+        await adminStore.joinOrganisation(orgId.value)
+        toast.add({ title: `Joined ${orgName.value ?? 'organisation'}`, color: 'success' })
+        await loadData()
+    }
+    catch (err: any) {
+        toast.add({ title: err?.data?.detail || 'Failed to join organisation', color: 'error' })
+    }
+}
+
 async function resendInvite(member: OrgMember) {
     try {
         await adminStore.cancelInvitation(orgId.value, member.id)
@@ -112,6 +127,11 @@ watch(orgId, loadData)
                                   @cancel-invite="cancelInvite"
                                   @resend-invite="resendInvite">
             <template #toolbar>
+                <UButton v-if="!loading && !isMember"
+                         icon="i-lucide-log-in"
+                         label="Join"
+                         variant="outline"
+                         @click="joinOrganisation" />
                 <UButton icon="i-lucide-user-plus"
                          label="Invite"
                          @click="inviteOpen = true" />

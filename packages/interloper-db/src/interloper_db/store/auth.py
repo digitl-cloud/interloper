@@ -334,6 +334,34 @@ class AuthMixin:
                     results.append((db_profile, membership.role))
             return results
 
+    def add_org_member(self, org_id: UUID, user_id: UUID, role: str) -> bool:
+        """Add a user to an organisation directly, without an invitation.
+
+        Args:
+            org_id: Organisation UUID.
+            user_id: Profile UUID to add.
+            role: Role to assign.
+
+        Returns:
+            True if added, False if the user is already a member.
+        """
+        with Session(get_engine()) as session:
+            existing_membership = session.exec(
+                select(UserOrganisation).where(
+                    UserOrganisation.user_id == user_id,
+                    UserOrganisation.organisation_id == org_id,
+                )
+            ).first()
+            if existing_membership:
+                return False
+            session.add(UserOrganisation(
+                user_id=user_id,
+                organisation_id=org_id,
+                role=role,
+            ))
+            session.commit()
+            return True
+
     def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> bool:
         """Update a member's role within an organisation.
 
