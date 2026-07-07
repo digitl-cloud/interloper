@@ -19,6 +19,11 @@ INVITATION_EXPIRY_DAYS = 7
 SESSION_EXPIRY_DAYS = 30
 
 
+def _as_utc(ts: datetime) -> datetime:
+    """Treat naive timestamps as UTC (SQLite test databases drop the offset)."""
+    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+
 class AuthMixin:
     """Store methods for authentication and organisation management."""
 
@@ -142,7 +147,7 @@ class AuthMixin:
             if not db_session:
                 return None
 
-            if db_session.expires_at < datetime.now(timezone.utc):
+            if _as_utc(db_session.expires_at) < datetime.now(timezone.utc):
                 session.delete(db_session)
                 session.commit()
                 return None
@@ -486,7 +491,7 @@ class AuthMixin:
             if not db_invitation:
                 return None
 
-            if db_invitation.expires_at < datetime.now(timezone.utc):
+            if _as_utc(db_invitation.expires_at) < datetime.now(timezone.utc):
                 session.delete(db_invitation)
                 session.commit()
                 return None
@@ -509,5 +514,6 @@ class AuthMixin:
             session.delete(db_invitation)
             session.commit()
             if db_organisation:
+                session.refresh(db_organisation)
                 session.expunge(db_organisation)
             return db_organisation
