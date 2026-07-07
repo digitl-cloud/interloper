@@ -3,7 +3,7 @@
 A **catalog** is a registry of component definitions — sources, assets, connections,
 destinations, and configs — keyed by their component key. It's how Interloper introspects what's
 available without instantiating or executing anything: the API, the web UI, and the declarative
-[run manifests](cli.md) all read catalog metadata.
+[declarative workloads](cli.md) all read catalog metadata.
 
 ## Building a catalog
 
@@ -50,5 +50,5 @@ catalog.dump()                # JSON-serializable dict of all definitions
 
 Each entry is a `ComponentDefinition` carrying the component's metadata — its key, name, tags,
 config schema, declared resources and destinations, and (for assets) schema and partitioning.
-This is the same metadata the API serves and the manifest loader resolves component `type`
+This is the same metadata the API serves and spec reconstruction resolves component `key`
 references against.

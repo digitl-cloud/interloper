@@ -32,7 +32,7 @@ It combines the flexibility of a very lightweight library with powerful executio
 - **Connections & resources** -- Inject credentials and reusable services into assets, with a built-in OAuth connect flow.
 - **REST & pagination** -- Build connectors against paginated REST APIs with composable clients, auth and paginators.
 - **Event system** -- Subscribe to lifecycle events for monitoring and observability.
-- **Catalog & manifests** -- Introspect a catalog of components and materialize DAGs declaratively from YAML.
+- **Catalog & declarative workloads** -- Introspect a catalog of components and materialize Jobs declaratively from YAML specs.
 - **CLI** -- Run and backfill DAGs from the command line.
 
 ---

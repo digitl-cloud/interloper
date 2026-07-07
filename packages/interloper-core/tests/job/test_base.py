@@ -81,3 +81,63 @@ class TestSpec:
         assert isinstance(clone.targets[0], FakeSource)
         assert isinstance(clone.targets[1], FakeStandaloneAsset)
         assert [type(a).key for a in clone.targets[0].assets] == ["fake_asset"]
+
+
+class FakeJobDestination(il.Destination):
+    """Destination fixture for cascade tests."""
+
+    def write(self, context: il.IOContext, data: object) -> None:  # pragma: no cover
+        pass
+
+    def read(self, context: il.IOContext) -> object:  # pragma: no cover
+        return None
+
+
+class FakeJobResource(il.Resource):
+    """Resource fixture for trickle tests."""
+
+    token: str = ""
+
+
+class FakeResourceAsset(il.Asset):
+    """Asset with a resource slot for job trickle tests."""
+
+    resource_types: ClassVar[dict[str, type[il.Resource]]] = {"conn": FakeJobResource}
+
+
+class TestWorkloadDefaults:
+    """Job-level destinations and resources cascade to targets."""
+
+    def test_destinations_cascade_to_targets_without_their_own(self):
+        dest = FakeJobDestination()
+        job = il.Job(targets=[FakeSource(), FakeStandaloneAsset()], destinations=[dest])
+        for target in job.targets:
+            assert target.destinations == [dest]
+
+    def test_explicit_target_destinations_win(self):
+        own = FakeJobDestination()
+        job = il.Job(targets=[FakeStandaloneAsset(destinations=[own])], destinations=[FakeJobDestination()])
+        assert job.targets[0].destinations == [own]
+
+    def test_resources_trickle_into_target_slots(self):
+        res = FakeJobResource(token="abc")
+        job = il.Job(targets=[FakeResourceAsset()], resources={"conn": res})
+        assert job.targets[0].resources["conn"] is res
+
+    def test_resources_trickle_into_destination_slots_by_type(self):
+        class FakeConnectedDestination(FakeJobDestination):
+            resource_types: ClassVar[dict[str, type[il.Resource]]] = {"creds": FakeJobResource}
+
+        res = FakeJobResource(token="abc")
+        job = il.Job(targets=[FakeStandaloneAsset()], destinations=[FakeConnectedDestination()], resources={"any": res})
+        assert job.destinations[0].resources["creds"] is res
+
+    def test_single_destination_coerced_to_list(self):
+        dest = FakeJobDestination()
+        job = il.Job.model_validate({"targets": [FakeStandaloneAsset()], "destinations": dest})
+        assert job.destinations == [dest]
+
+    def test_vocabulary_declares_workload_defaults(self):
+        relations = il.Job.relation_types
+        assert relations["destination"].field == "destinations"
+        assert relations["resource"].slotted is True

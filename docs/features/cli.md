@@ -43,63 +43,59 @@ interloper run <target> --start-date 2025-01-01 --end-date 2025-01-07   # window
 | `--run-id ID` | Optional run identifier forwarded to the runner |
 | `-q, --quiet` / `-v, --verbose` | Decrease / increase log verbosity |
 
-## Run manifests
+## Declarative workloads
 
-A **run manifest** is a YAML file that declares a DAG to materialize — sources, their config and
-destinations, an optional asset selection, the runner, and the partition — without writing any
-Python. It is loaded by `RunManifest`, compiled into a `RunPlan` (a ready `DAG` + partition +
-runner), and executed.
+`interloper run -f` executes a **component spec** — the same `{path|key, init}` document that
+`Component.to_spec()` emits — for any *runnable* component: the run is literally "reconstruct the
+component and run its DAG". A component is referenced by exactly one of `key` (a catalog key,
+resolved against the `catalog` in `interloper.yaml`) or `path` (a fully qualified import path).
+`${VAR}` placeholders in any string value are interpolated from the environment at load time.
+
+A **Job spec** is the composite form: targets plus workload-level defaults, cascading exactly like
+a source cascades to its assets — job `destinations` apply to any target that declares none, and
+job `resources` fill empty resource slots of targets and destinations by name, then by type.
 
 ```sh
-interloper run -f manifest.yaml --dry-run   # validate + print the plan
-interloper run -f manifest.yaml             # materialize
+interloper run -f job.yaml --dry-run              # validate + print the plan
+interloper run -f job.yaml --date 2026-01-01      # materialize
 ```
 
 ```yaml
-name: demo-manifest
+key: job
+init:
+  resources:
+    gcp:
+      key: google_cloud_connection
+      init:
+        service_account_key: ${GCP_KEY}   # interpolated from the environment
 
-runner:
-  type: serial          # serial | async | multi_process | docker | kubernetes
-  # config: { max_workers: 4 }
+  destinations:
+    - key: bigquery_destination           # its connection slot fills from the job resources
 
-# Reusable components referenced by alias with {ref: <alias>}.
-resources:
-  gcp:
-    type: google_cloud_connection
-    config:
-      service_account_key: ${GCP_KEY}   # ${VAR} is interpolated from the environment
-
-destinations:
-  files:
-    type: interloper.destination.file.FileDestination
-    config:
-      base_path: /tmp/interloper-demo
-
-assets:
-  - source: interloper_assets.demo.source.DemoSource
-    config:
-      hello: manifest
-    destinations: [{ref: files}]    # one or more; writes fan out to each
-    select: [a, b]                  # subset of the source's assets; omit to run all
-
-partition:
-  date: 2026-01-01
-  # or a window:
-  # start: 2026-01-01
-  # end: 2026-01-31
+  targets:
+    - key: facebook_ads
+      init:
+        dataset: raw_facebook
+        select: [campaigns, ads]          # subset of the source's assets; omit to run all
+    - path: my_package.assets.OneOffAsset # sources and assets are both just targets
 ```
 
-A component `type` is either a **catalog key** (resolved against the `catalog` in
-`interloper.yaml`) or a fully qualified import path. The `runner` and `partition` blocks are
-overridden by the CLI `--date` / `--start-date` / `--end-date` flags when present.
+A plain source or asset spec runs directly too:
 
-In Python:
+```yaml
+key: demo_source
+init: { hello: spec }
+```
+
+The runner comes from `interloper.yaml` / `INTERLOPER_RUNNER_*` environment variables; the
+partition from the CLI `--date` / `--start-date` / `--end-date` flags. In Python, the same
+document is one call away:
 
 ```py
 import interloper as il
 
-plan = il.RunManifest.from_yaml_file("manifest.yaml").compile()
-plan.dag.materialize(partition_or_window=plan.partition)
+dag = il.DAG.from_spec_file("job.yaml")
+dag.materialize(partition_or_window=il.TimePartition(...))
 ```
 
 ## interloper.yaml

@@ -25,12 +25,11 @@ class ConfigError(InterloperError, ValueError):
     """A configuration value is missing, has the wrong type, or cannot be resolved."""
 
 
-class ManifestError(ConfigError):
-    """A run manifest is invalid or cannot be compiled into a run plan.
+class SpecError(ConfigError):
+    """A component spec document is invalid or cannot be loaded.
 
-    Raised on YAML parse failures, unresolved ``${VAR}`` references,
-    unknown component types or asset keys, and component instantiation
-    failures during manifest compilation.
+    Raised on YAML parse failures, unresolved ``${VAR}`` references, and
+    malformed spec documents.
     """
 
 

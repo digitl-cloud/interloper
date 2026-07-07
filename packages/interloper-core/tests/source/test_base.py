@@ -435,3 +435,31 @@ class TestSerialization:
         assert isinstance(restored.destinations[0], FakeDestination)
         assert isinstance(restored.resources["config"], FakeResource)
         assert restored.assets[0].materializable is False
+
+
+class TestSelect:
+    """Init-time asset selection via the ``select`` field."""
+
+    def test_unselected_assets_stay_as_non_materializable_deps(self):
+        source = FakeSourceWithAssets(select=["fake_second"])
+        by_key = {type(a).key: a for a in source.assets}
+        assert by_key["fake_second"].materializable
+        assert not by_key["fake_first"].materializable
+        # The non-materializable sibling stays wired as a dependency.
+        assert by_key["fake_first"].id in by_key["fake_second"].dependencies.values()
+
+    def test_selected_assets_keep_their_source(self):
+        source = FakeSourceWithAssets(select=["fake_first"])
+        assert all(a.source is source for a in source.assets)
+
+    def test_unknown_select_key_raises(self):
+        # SourceError is a ValueError, so pydantic wraps it at init time.
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="has no asset"):
+            FakeSourceWithAssets(select=["nope"])
+
+    def test_dag_over_selected_source(self):
+        dag = FakeSourceWithAssets(select=["fake_second"]).dag()
+        generations = dag.topological_generations()
+        assert [[type(a).key for a in g] for g in generations] == [["fake_second"]]

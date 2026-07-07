@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
@@ -18,6 +18,9 @@ from interloper.resource import Resource
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label
+
+if TYPE_CHECKING:
+    from interloper.dag.base import DAG
 
 
 class AssetRef(ComponentDescriptor):
@@ -101,7 +104,7 @@ class Source(Component):
         "destination": RelationDefinition(kinds=["destination"], field="destinations"),
     }
     internal_fields: ClassVar[frozenset[str]] = frozenset(
-        {"assets", "destinations", "normalizer", "materialization_strategy"}
+        {"assets", "destinations", "normalizer", "materialization_strategy", "select"}
     )
 
     # State
@@ -109,6 +112,9 @@ class Source(Component):
     normalizer: Normalizer | None = Field(default=None)
     materialization_strategy: MaterializationStrategy | None = Field(default=None)
     assets: list[Asset] = Field(default_factory=list)
+    select: list[str] | None = Field(
+        default=None, description="Asset keys to materialize; others stay as read-only dependencies"
+    )
 
     @field_validator("destinations", mode="before")
     @classmethod
@@ -178,6 +184,16 @@ class Source(Component):
         data["assets"] = instances
         return data
 
+    def dag(self) -> DAG:
+        """Compile this source into an executable DAG over its assets.
+
+        Returns:
+            A DAG containing this source's assets.
+        """
+        from interloper.dag.base import DAG
+
+        return DAG(self)
+
     @classmethod
     def relation_definitions(cls) -> dict[str, RelationDefinition]:
         """Enrich the vocabulary with the source's allowed destination keys.
@@ -198,6 +214,30 @@ class Source(Component):
         if not self.assets:
             self.assets = [cls() for cls in self.asset_types]
         self._resolve()
+        if self.select is not None:
+            self._apply_select()
+
+    def _apply_select(self) -> None:
+        """Mark assets outside ``select`` as non-materializable.
+
+        Unselected assets stay in the list so intra-source dependency wiring
+        keeps validating (and their outputs stay readable), but only the
+        selected assets execute — the same mechanism as
+        :meth:`~interloper.dag.base.DAG.mini_dag`.
+
+        Raises:
+            SourceError: If a selected key matches no asset of this source.
+        """
+        from interloper.errors import SourceError
+
+        known = {type(a).key for a in self.assets}
+        unknown = [k for k in self.select or [] if k not in known]
+        if unknown:
+            raise SourceError(f"Source '{type(self).key}' has no asset(s) {unknown}; available: {sorted(known)}")
+        selected = set(self.select or [])
+        self.assets = [a if type(a).key in selected else a(materializable=False) for a in self.assets]
+        for asset in self.assets:
+            asset._source = self
 
     def to_spec(self) -> ComponentSpec:
         """Serialize to a spec with ``assets`` as a key → init override map.

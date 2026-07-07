@@ -7,9 +7,11 @@ both for direct user invocation and as the entry point that
 Input formats
 -------------
 
-* ``--file/-f <manifest.yaml>`` — a declarative run manifest
-  (:class:`~interloper.cli.manifest.RunManifest`): sources/assets with their
-  config, destinations, an optional runner override, and a partition.
+* ``--file/-f <spec.yaml>`` — a component spec document
+  (:class:`~interloper.component.base.ComponentSpec`, ``{key|path, init}``)
+  for any **runnable** component: the run is literally "reconstruct the
+  component and run its DAG".  A Job spec is the composite form — targets
+  with workload-level default destinations and resources.
 * ``--format inline <json>`` — a serialized :class:`DAGSpec` as JSON.
   This is the mode used by the ``DockerRunner`` to pass a mini-DAG to a
   child container.
@@ -19,13 +21,11 @@ Input formats
 
 The runner is the one configured in ``AppSettings.runner`` (top-level
 ``runner`` key in ``interloper.yaml`` or ``INTERLOPER_RUNNER_*``
-environment variables), unless a manifest provides its own ``runner``
-block.  Likewise the CLI date flags take precedence over a manifest's
-``partition`` block.
+environment variables); the partition comes from the CLI date flags.
 
 ``--dry-run`` validates and prints the resolved plan (assets grouped by
 execution generation, runner, partition) without materializing anything —
-useful for checking a curated set of manifests.
+useful for checking a curated set of workload files.
 
 During execution, run/asset lifecycle events and ``context.logger``
 messages flow through the standard logging stack (via
@@ -75,7 +75,7 @@ def register(
         "-f",
         "--file",
         default=None,
-        help="Path to a declarative run manifest (YAML). Mutually exclusive with positional targets.",
+        help="Path to a runnable component spec (YAML). Mutually exclusive with positional targets.",
     )
     run_parser.add_argument(
         "--dry-run",
@@ -168,18 +168,18 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     try:
         # -- Build the DAG ----------------------------------------------------
-        plan = None
         if args.file is not None:
             if args.target:
                 raise SystemExit("Error: --file cannot be combined with positional targets.")
-            from interloper.cli.manifest import RunManifest
-            from interloper.errors import ManifestError
+            from interloper.dag.base import DAG as _DAG
+            from interloper.errors import DAGError, SpecError
 
             try:
-                plan = RunManifest.from_yaml_file(args.file).compile()
-            except ManifestError as exc:
+                dag = _DAG.from_spec_file(args.file)
+            except (SpecError, DAGError) as exc:
                 raise SystemExit(f"Error: {exc}") from exc
-            dag = plan.dag
+            except Exception as exc:
+                raise SystemExit(f"Error: failed to reconstruct spec '{args.file}': {exc}") from exc
         elif args.format == "inline":
             if len(args.target) != 1:
                 raise SystemExit("Error: --format inline expects exactly one positional argument (the JSON spec).")
@@ -193,20 +193,15 @@ def _cmd_run(args: argparse.Namespace) -> None:
                 raise SystemExit("Error: provide one or more import paths, or a manifest via --file.")
             dag = _dag_from_paths(args.target)
 
-        # -- Resolve the partition (CLI flags win over the manifest) ----------
+        # -- Resolve the partition ---------------------------------------------
         partition = _resolve_partition(args)
-        if partition is None and plan is not None:
-            partition = plan.partition
 
-        # -- Build the runner (manifest override wins over settings) ----------
-        if plan is not None and plan.runner is not None:
-            runner_cls, runner_kwargs = build_runner(plan.runner.type, plan.runner.config)
-        else:
-            runner_cls, runner_kwargs = build_runner(settings.runner.type, settings.runner.config)
+        # -- Build the runner ----------------------------------------------------
+        runner_cls, runner_kwargs = build_runner(settings.runner.type, settings.runner.config)
 
         # -- Dry run: print the plan and stop ----------------------------------
         if args.dry_run:
-            _print_plan(dag, partition, runner_cls.__name__, plan.name if plan else "")
+            _print_plan(dag, partition, runner_cls.__name__, "")
             return
 
         # -- Console event output (interactive mode only) ----------------------

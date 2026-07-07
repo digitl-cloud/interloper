@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import os
+import re
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
 from interloper.utils.imports import get_object_path, import_from_path
 from interloper.utils.text import to_label, to_snake_case
 
 if TYPE_CHECKING:
+    from interloper.catalog.base import Catalog
     from interloper.resource.base import Resource
 
 
@@ -101,15 +105,106 @@ class ComponentDefinition(BaseModel):
     relations: dict[str, RelationDefinition] = Field(default_factory=dict)
 
 
-class ComponentSpec(BaseModel):
-    """Serialized representation of a Component instance."""
+_ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
-    path: str
+
+def _interpolate_env(value: Any, missing: set[str]) -> Any:
+    """Recursively substitute ``${VAR}`` placeholders in string values.
+
+    Unknown variables are collected into *missing* (and left in place) so
+    the caller can report them all at once.
+
+    Returns:
+        The value with all resolvable placeholders substituted.
+    """
+    if isinstance(value, str):
+
+        def sub(match: re.Match[str]) -> str:
+            name = match.group(1)
+            if name not in os.environ:
+                missing.add(name)
+                return match.group(0)
+            return os.environ[name]
+
+        return _ENV_VAR_RE.sub(sub, value)
+    if isinstance(value, dict):
+        return {k: _interpolate_env(v, missing) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_interpolate_env(v, missing) for v in value]
+    return value
+
+
+class ComponentSpec(BaseModel):
+    """Serialized representation of a Component instance.
+
+    A component is referenced by exactly one of two names, each keeping its
+    own meaning: ``path`` is a fully qualified import path (what
+    ``to_spec()`` emits), ``key`` is a catalog key — hand-authored specs may
+    reference components the way the catalog names them.
+    """
+
+    path: str = ""
+    key: str = ""
     id: str = ""
     init: dict[str, Any] | None = None
 
-    def reconstruct(self) -> Component:
+    @model_validator(mode="after")
+    def _check_reference(self) -> ComponentSpec:
+        if bool(self.path) == bool(self.key):
+            raise ValueError("exactly one of 'path' or 'key' must be set")
+        return self
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> ComponentSpec:
+        """Load a spec from a YAML file, interpolating ``${VAR}`` placeholders.
+
+        ``${VAR}`` placeholders in any string value are replaced from the
+        process environment at load time, so credentials never need to live
+        in the file. Unresolved variables are a hard error.
+
+        Returns:
+            The validated spec.
+
+        Raises:
+            SpecError: If the file is missing, unparsable, references
+                undefined environment variables, or is not a valid spec.
+        """
+        import yaml
+        from pydantic import ValidationError
+
+        from interloper.errors import SpecError
+
+        path = Path(path)
+        try:
+            text = path.read_text()
+        except OSError as exc:
+            raise SpecError(f"Cannot read spec file '{path}': {exc}") from exc
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise SpecError(f"Invalid YAML in spec file '{path}': {exc}") from exc
+        if not isinstance(data, dict):
+            raise SpecError(f"Spec file '{path}' must be a YAML mapping")
+
+        missing: set[str] = set()
+        data = _interpolate_env(data, missing)
+        if missing:
+            raise SpecError(
+                f"Spec file '{path}' references undefined environment variable(s): {', '.join(sorted(missing))}"
+            )
+
+        try:
+            return cls.model_validate(data)
+        except ValidationError as exc:
+            raise SpecError(f"Invalid spec file '{path}': {exc}") from exc
+
+    def reconstruct(self, catalog: Catalog | None = None) -> Component:
         """Import the component and rebuild the instance, walking nested specs.
+
+        Args:
+            catalog: Catalog used to resolve ``key`` references, passed down
+                to nested specs. Defaults to the settings-configured catalog,
+                built lazily when a key is first encountered.
 
         Returns:
             The reconstructed Component.
@@ -117,14 +212,14 @@ class ComponentSpec(BaseModel):
 
         def load(v: Any) -> Any:
             if isinstance(v, dict):
-                if "path" in v and v.keys() <= {"path", "id", "init"}:
-                    return ComponentSpec(**v).reconstruct()
+                if ("path" in v or "key" in v) and v.keys() <= {"path", "key", "id", "init"}:
+                    return ComponentSpec(**v).reconstruct(catalog)
                 return {k: load(x) for k, x in v.items()}
             if isinstance(v, list):
                 return [load(x) for x in v]
             return v
 
-        cls = import_from_path(self.path)
+        cls = Component.resolve_key(self.key, catalog) if self.key else Component.resolve_path(self.path)
         kwargs: dict[str, Any] = {"id": self.id} if self.id else {}
         for k, v in (self.init or {}).items():
             kwargs[k] = load(v)
@@ -345,15 +440,101 @@ class Component(BaseModel):
         return ComponentSpec(path=self.path(), id=self.id, init=init or None)
 
     @classmethod
-    def from_spec(cls, spec: ComponentSpec | dict[str, Any]) -> Self:
+    def resolve_key(cls, key: str, catalog: Catalog | None = None) -> type[Self]:
+        """Resolve a catalog key to a component class of this (sub)class.
+
+        The key is looked up in *catalog* — or the settings-configured
+        catalog, built lazily, when none is given — and the class it names
+        is imported.
+
+        Called on a subclass, the resolved class must be of that subclass
+        (``Source.resolve_key("facebook_ads")``) — anything else raises
+        ``TypeError``.
+
+        Returns:
+            The resolved class.
+
+        Raises:
+            CatalogKeyError: If the key is not in the catalog.
+        """
+        if catalog is None:
+            from interloper.catalog.base import Catalog
+
+            catalog = Catalog.from_settings()
+        definition = catalog.get(key)
+        if definition is None:
+            from interloper.errors import CatalogKeyError
+
+            raise CatalogKeyError(f"Unknown catalog key '{key}'")
+        return cls._resolve_import(definition.path, ref=key)
+
+    @classmethod
+    def resolve_path(cls, path: str) -> type[Self]:
+        """Resolve an import path to a component class of this (sub)class.
+
+        Accepts dotted and composite paths (``module.Class``,
+        ``module:Source.Asset``). Called on a subclass, the resolved class
+        must be of that subclass — anything else raises ``TypeError``.
+
+        Returns:
+            The resolved class.
+        """
+        return cls._resolve_import(path, ref=path)
+
+    @classmethod
+    def _resolve_import(cls, path: str, *, ref: str) -> type[Self]:
+        """Import *path* and check the result against the receiving class.
+
+        Returns:
+            The resolved class.
+
+        Raises:
+            TypeError: If the import is not a subclass of the receiving class.
+        """
+        resolved = import_from_path(path)
+        if not isinstance(resolved, type) or not issubclass(resolved, cls):
+            raise TypeError(f"'{ref}' does not resolve to a {cls.__name__} class")
+        return cast("type[Self]", resolved)
+
+    @classmethod
+    def from_spec(cls, spec: ComponentSpec | dict[str, Any], catalog: Catalog | None = None) -> Self:
         """Reconstruct a component from a spec.
+
+        Called on a subclass, the reconstructed component must be of that
+        subclass: ``Source.from_spec(spec)``.
+
+        Args:
+            spec: The spec (or its dict payload) to reconstruct.
+            catalog: Catalog used to resolve ``key`` references. Defaults to
+                the settings-configured catalog, built lazily.
+
+        Returns:
+            The reconstructed component instance.
+
+        Raises:
+            TypeError: If the spec reconstructs to a component that is not
+                an instance of the receiving class.
+        """
+        if isinstance(spec, dict):
+            spec = ComponentSpec(**spec)
+        instance = spec.reconstruct(catalog)
+        if not isinstance(instance, cls):
+            raise TypeError(f"'{spec.key or spec.path}' does not reconstruct to a {cls.__name__}")
+        return instance
+
+    @classmethod
+    def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> Self:
+        """Reconstruct a component from a spec file.
+
+        Loads a :class:`ComponentSpec` document from YAML (with ``${VAR}``
+        env interpolation) and reconstructs it, with the same
+        subclass-scoped check as :meth:`from_spec` — invalid documents
+        surface as ``SpecError``, mismatched kinds as ``TypeError``.
 
         Returns:
             The reconstructed component instance.
         """
-        if isinstance(spec, dict):
-            spec = ComponentSpec(**spec)
-        return cast(Self, spec.reconstruct())
+        return cls.from_spec(ComponentSpec.from_file(path), catalog)
 
     @classmethod
     def config_schema(cls) -> dict[str, Any]:

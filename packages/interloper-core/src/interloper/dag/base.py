@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from interloper.asset.base import Asset
 from interloper.dag.spec import DAGSpec
@@ -10,6 +11,9 @@ from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGEr
 from interloper.partitioning import Partition, PartitionWindow
 from interloper.runner.results import RunResult
 from interloper.source.base import Source
+
+if TYPE_CHECKING:
+    from interloper.catalog.base import Catalog
 
 
 class DAG:
@@ -32,6 +36,36 @@ class DAG:
         self.successors: dict[str, list[str]] = {}
         self._build_graph(items)
         self._validate()
+
+    @classmethod
+    def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> DAG:
+        """Compile a runnable component spec file into a DAG.
+
+        Loads a :class:`~interloper.component.base.ComponentSpec` document
+        (with ``${VAR}`` env interpolation), reconstructs the component, and
+        compiles its DAG — the file-based counterpart of targeting a runnable
+        component by id.
+
+        Args:
+            path: Path to the YAML spec document.
+            catalog: Catalog used to resolve ``key`` references. Defaults to
+                the settings-configured catalog, built lazily.
+
+        Invalid documents surface as ``SpecError`` from the spec loader.
+
+        Returns:
+            The component's DAG.
+
+        Raises:
+            DAGError: If the component's kind is not runnable.
+        """
+        from interloper.component.base import Component
+
+        component = Component.from_spec_file(path, catalog)
+        dag_method = getattr(component, "dag", None)
+        if not type(component).runnable or dag_method is None:
+            raise DAGError(f"'{type(component).kind}' components are not runnable")
+        return dag_method()
 
     def _build_graph(self, items: tuple[Asset | Source | type[Asset | Source], ...]) -> None:
         """Build the dependency graph from assets and sources.

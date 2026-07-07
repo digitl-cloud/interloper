@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from interloper.component import Component, ComponentSpec
 
 if TYPE_CHECKING:
+    from interloper.catalog.base import Catalog
     from interloper.dag.base import DAG
 
 
@@ -24,7 +25,7 @@ class DAGSpec(BaseModel):
 
     items: list[ComponentSpec] = []
 
-    def reconstruct(self) -> DAG:
+    def reconstruct(self, catalog: Catalog | None = None) -> DAG:
         """Reconstruct the DAG from its spec.
 
         Each source spec materialises a live source (with its assets
@@ -34,10 +35,15 @@ class DAGSpec(BaseModel):
         constructor which re-infers the dependency graph from the
         preserved asset ids.
 
+        Args:
+            catalog: Catalog used to resolve ``key`` references, shared
+                across all items. Defaults to the settings-configured
+                catalog, built lazily.
+
         Returns:
             A new DAG instance with the same structure as the original.
         """
         from interloper.dag.base import DAG
 
-        reconstructed = [Component.from_spec(spec) for spec in self.items]
+        reconstructed = [Component.from_spec(spec, catalog) for spec in self.items]
         return DAG(*reconstructed)  # ty: ignore[invalid-argument-type]

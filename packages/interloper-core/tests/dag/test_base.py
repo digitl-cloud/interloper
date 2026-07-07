@@ -740,3 +740,25 @@ class TestMaterialize:
 
         result = await DAG(users()).materialize_async()
         assert result.status is ExecutionStatus.COMPLETED
+
+
+class TestFromSpecFile:
+    """DAG compilation from a runnable component spec document."""
+
+    def test_job_spec_compiles(self, tmp_path):
+        import yaml
+
+        job = il.Job(targets=[FakeAsset()])
+        file = tmp_path / "job.yaml"
+        file.write_text(yaml.safe_dump(job.to_spec().model_dump(mode="json", exclude_none=True)))
+
+        dag = il.DAG.from_spec_file(file)
+        assert [type(a).key for a in dag.assets] == ["fake_asset"]
+
+    def test_non_runnable_spec_rejected(self, tmp_path):
+        from interloper.errors import DAGError
+
+        file = tmp_path / "dest.yaml"
+        file.write_text("path: interloper.destination.memory.MemoryDestination\n")
+        with pytest.raises(DAGError, match="not runnable"):
+            il.DAG.from_spec_file(file)
