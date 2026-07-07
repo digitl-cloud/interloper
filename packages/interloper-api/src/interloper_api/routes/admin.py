@@ -113,6 +113,7 @@ def _send_invitation_email(
 
     smtp_config = get_smtp_config()
     if not smtp_config or not smtp_config.enabled:
+        logger.warning("SMTP not configured; invitation email to %s not sent", invitation.email)
         return
 
     token = invitation.token
