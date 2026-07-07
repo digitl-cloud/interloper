@@ -160,6 +160,49 @@ export const useComponentsStore = defineStore('components', () => {
         await Promise.all([fetchAll(), fetchRelations()])
     }, $reset)
 
+    /**********************
+     * Realtime
+     **********************/
+    const orgStore = useOrganisationStore()
+
+    // Component notifications are slim ({id, kind, parent_id}) — the payload
+    // channel never carries configs — so changes refetch through the API.
+    // A parent refetch keeps sources' embedded children fresh.
+    function _refetchChanged(record: Record<string, any>) {
+        fetchOne(record.id).catch(() => {})
+        if (record.parent_id) fetchOne(record.parent_id).catch(() => {})
+    }
+
+    useRealtimeSubscription({
+        table: 'components',
+        scope: () => orgStore.organisation?.id,
+        onInsert: _refetchChanged,
+        onUpdate: _refetchChanged,
+        onDelete: (record: Record<string, any>) => {
+            _remove(record.id)
+            relations.value = relations.value.filter(r => r.src_id !== record.id && r.dst_id !== record.id)
+            if (record.parent_id) fetchOne(record.parent_id).catch(() => {})
+        },
+    })
+
+    // Relation rows are small and arrive whole — mirror them locally.
+    useRealtimeSubscription({
+        table: 'component_relations',
+        scope: () => orgStore.organisation?.id,
+        onInsert: (record: Record<string, any>) => {
+            const key = (r: Relation) => `${r.src_id}|${r.type}|${r.slot}|${r.dst_id}`
+            const incoming = record as Relation
+            if (!relations.value.some(r => key(r) === key(incoming))) relations.value.push(incoming)
+        },
+        onUpdate: () => {},
+        onDelete: (record: Record<string, any>) => {
+            relations.value = relations.value.filter(
+                r => !(r.src_id === record.src_id && r.type === record.type
+                    && r.slot === record.slot && r.dst_id === record.dst_id),
+            )
+        },
+    })
+
     return {
         components,
         relations,
