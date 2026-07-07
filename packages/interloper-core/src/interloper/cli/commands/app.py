@@ -3,8 +3,9 @@
 Starts any combination of the API server, cron controller, and queue
 worker depending on which packages are installed and which flags are set.
 
-Services run concurrently in threads. ``SIGINT`` / ``SIGTERM`` trigger a
-graceful shutdown.
+Services run concurrently in threads. ``SIGINT`` / ``SIGTERM`` / ``SIGHUP``
+trigger a graceful shutdown; in dev mode, losing the parent process or the
+Nuxt dev server does too.
 
 Available when ``interloper-api`` and/or ``interloper-scheduler`` are installed.
 """
