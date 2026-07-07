@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from abc import abstractmethod
 from collections.abc import Callable
 from functools import cache
@@ -114,6 +115,13 @@ class Runner(Component):
         run, delegates to :meth:`_run`, then flushes pending events and
         unsubscribes — so every emitted event is delivered before returning.
 
+        The subscription is scoped to this run: the EventBus is a
+        process-wide singleton, so when several runs execute concurrently
+        (e.g. the in-process launcher) every handler would otherwise
+        receive every run's events. The run's ``run_id`` is assigned here
+        (before any event is emitted) and only events carrying it in their
+        metadata are delivered to ``on_event``.
+
         Args:
             dag: The DAG to execute.
             partition_or_window: Partition or window to scope the run.
@@ -122,14 +130,25 @@ class Runner(Component):
         Returns:
             A RunResult summarizing the execution outcome.
         """
+        metadata = dict(metadata or {})
+        metadata.setdefault("run_id", str(uuid.uuid4()))
+        run_id = metadata["run_id"]
+
+        handler: Callable[[Event], None] | None = None
         if self.on_event is not None:
-            EventBus.subscribe(self.on_event)
+            on_event = self.on_event
+
+            def handler(event: Event) -> None:
+                if event.metadata.get("run_id") == run_id:
+                    on_event(event)
+
+            EventBus.subscribe(handler)
         try:
             return await self._run(dag, partition_or_window, metadata)
         finally:
-            if self.on_event is not None:
+            if handler is not None:
                 await asyncio.to_thread(EventBus.flush, 5.0)
-                EventBus.unsubscribe(self.on_event)
+                EventBus.unsubscribe(handler)
 
     @abstractmethod
     async def _run(
