@@ -527,13 +527,13 @@ class RunManifest(_ManifestModel):
 
             kwargs = resolver.build_init(item.config)
             if item.destinations is not None:
-                if "destination" in kwargs:
+                if "destinations" in kwargs:
                     raise ManifestError(
-                        f"'{ref}' sets a destination in both 'config' and the 'destinations' field"
+                        f"'{ref}' sets destinations in both 'config' and the 'destinations' field"
                     )
-                kwargs["destination"] = [resolver.build_destination(d) for d in item.destinations]
-            elif "destination" not in kwargs and auto_destinations:
-                kwargs["destination"] = list(auto_destinations)
+                kwargs["destinations"] = [resolver.build_destination(d) for d in item.destinations]
+            elif "destinations" not in kwargs and auto_destinations:
+                kwargs["destinations"] = list(auto_destinations)
 
             if auto_resources:
                 _apply_auto_resources(cls, kwargs, auto_resources)

@@ -340,7 +340,7 @@ class TestGraph:
 
     def test_predecessors_wired_from_deps(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(deps={"upstream": upstream.id})
+        downstream = FakeOtherAsset(dependencies={"upstream": upstream.id})
         dag = DAG(upstream, downstream)
         assert dag.predecessors[downstream.id] == [upstream.id]
         assert dag.successors[upstream.id] == [downstream.id]
@@ -378,18 +378,18 @@ class TestGraph:
         # Non-materializable assets are parents, not roots — their predecessors
         # are not computed (they don't need to execute).
         upstream = FakeAsset(materializable=False)
-        downstream = FakeOtherAsset(deps={"upstream": upstream.id})
+        downstream = FakeOtherAsset(dependencies={"upstream": upstream.id})
         dag = DAG(upstream, downstream)
         assert upstream.id not in dag.predecessors
         assert dag.predecessors[downstream.id] == [upstream.id]
 
     def test_missing_required_dep_raises(self):
-        downstream = FakeAsset(deps={"upstream": "nonexistent-id"})
+        downstream = FakeAsset(dependencies={"upstream": "nonexistent-id"})
         with pytest.raises(DependencyNotFoundError):
             DAG(downstream)
 
     def test_missing_optional_dep_is_tolerated(self):
-        asset = FakeAssetOptionallyRequiringFake(deps={"upstream": "nonexistent-id"})
+        asset = FakeAssetOptionallyRequiringFake(dependencies={"upstream": "nonexistent-id"})
         dag = DAG(asset)
         assert asset.id in dag.asset_map
         assert dag.predecessors[asset.id] == []
@@ -403,26 +403,26 @@ class TestGraph:
 class TestValidation:
     def test_valid_requires_contract_passes(self):
         upstream = FakeAsset()
-        downstream = FakeAssetRequiringFake(deps={"upstream": upstream.id})
+        downstream = FakeAssetRequiringFake(dependencies={"upstream": upstream.id})
         DAG(upstream, downstream)  # no raise
 
     def test_requires_contract_mismatch_raises(self):
         upstream = FakeOtherAsset()
-        downstream = FakeAssetRequiringFake(deps={"upstream": upstream.id})
+        downstream = FakeAssetRequiringFake(dependencies={"upstream": upstream.id})
         with pytest.raises(DependencyContractError):
             DAG(upstream, downstream)
 
     def test_circular_dependency_raises(self):
         a = FakeAsset(id="aaaaaaaa")
         b = FakeOtherAsset(id="bbbbbbbb")
-        a.deps = {"b": b.id}
-        b.deps = {"a": a.id}
+        a.dependencies = {"b": b.id}
+        b.dependencies = {"a": a.id}
         with pytest.raises(CircularDependencyError):
             DAG(a, b)
 
     def test_non_partitioned_depending_on_partitioned_raises(self):
         upstream = FakePartitionedAsset()
-        downstream = FakeAsset(deps={"upstream": upstream.id})
+        downstream = FakeAsset(dependencies={"upstream": upstream.id})
         with pytest.raises(DAGError):
             DAG(upstream, downstream)
 
@@ -446,8 +446,8 @@ class TestTraversal:
 
     def test_topological_generations_linear_chain(self):
         a = FakeAsset()
-        b = FakeOtherAsset(deps={"a": a.id})
-        c = FakeThirdAsset(deps={"b": b.id})
+        b = FakeOtherAsset(dependencies={"a": a.id})
+        c = FakeThirdAsset(dependencies={"b": b.id})
         dag = DAG(a, b, c)
         levels = dag.topological_generations()
         assert len(levels) == 3
@@ -457,8 +457,8 @@ class TestTraversal:
 
     def test_topological_generations_parallel_branches(self):
         a = FakeAsset()
-        b = FakeOtherAsset(deps={"a": a.id})
-        c = FakeThirdAsset(deps={"a": a.id})
+        b = FakeOtherAsset(dependencies={"a": a.id})
+        c = FakeThirdAsset(dependencies={"a": a.id})
         dag = DAG(a, b, c)
         levels = dag.topological_generations()
         assert levels[0] == [a]
@@ -500,21 +500,21 @@ class TestTraversal:
         # Mini-DAG shape: a skipped parent upstream of a live target. The
         # parent's edge counts as satisfied, and only the target appears.
         a = FakeAsset()
-        b = FakeOtherAsset(deps={"a": a.id})
+        b = FakeOtherAsset(dependencies={"a": a.id})
         dag = DAG(a(materializable=False), b)
         levels = dag.topological_generations()
         assert [[asset.id for asset in level] for level in levels] == [[b.id]]
 
     def test_topological_generations_on_mini_dag(self):
         a = FakeAsset()
-        b = FakeOtherAsset(deps={"a": a.id})
+        b = FakeOtherAsset(dependencies={"a": a.id})
         mini = DAG(a, b).mini_dag(b.id)
         levels = mini.topological_generations()
         assert [[asset.id for asset in level] for level in levels] == [[b.id]]
 
     def test_get_predecessors_returns_upstream_ids(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(deps={"upstream": upstream.id})
+        downstream = FakeOtherAsset(dependencies={"upstream": upstream.id})
         dag = DAG(upstream, downstream)
         assert dag.get_predecessors(downstream.id) == [upstream.id]
 
@@ -525,7 +525,7 @@ class TestTraversal:
 
     def test_get_successors_returns_downstream_ids(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(deps={"upstream": upstream.id})
+        downstream = FakeOtherAsset(dependencies={"upstream": upstream.id})
         dag = DAG(upstream, downstream)
         assert dag.get_successors(upstream.id) == [downstream.id]
 
@@ -543,7 +543,7 @@ class TestTraversal:
 class TestMiniDag:
     def test_mini_dag_contains_target_and_parents(self):
         a = FakeAsset()
-        b = FakeOtherAsset(deps={"a": a.id})
+        b = FakeOtherAsset(dependencies={"a": a.id})
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
@@ -553,7 +553,7 @@ class TestMiniDag:
 
     def test_mini_dag_marks_parents_non_materializable(self):
         a = FakeAsset()
-        b = FakeOtherAsset(deps={"a": a.id})
+        b = FakeOtherAsset(dependencies={"a": a.id})
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
@@ -624,7 +624,7 @@ class TestSerialization:
 
     def test_roundtrip_preserves_predecessor_wiring(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(deps={"upstream": upstream.id})
+        downstream = FakeOtherAsset(dependencies={"upstream": upstream.id})
         dag = DAG(upstream, downstream)
         restored = DAG.from_spec(dag.to_spec())
 
@@ -646,7 +646,7 @@ class TestSerialization:
 
     def test_roundtrip_via_json_string(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(deps={"upstream": upstream.id})
+        downstream = FakeOtherAsset(dependencies={"upstream": upstream.id})
         dag = DAG(upstream, downstream)
 
         json_str = dag.to_spec().model_dump_json()
@@ -655,7 +655,7 @@ class TestSerialization:
         assert len(reloaded.assets) == 2
         downstream_restored = next(a for a in reloaded.assets if type(a).key == "fake_other_asset")
         upstream_restored = next(a for a in reloaded.assets if type(a).key == "fake_asset")
-        assert downstream_restored.deps["upstream"] == upstream_restored.id
+        assert downstream_restored.dependencies["upstream"] == upstream_restored.id
 
     def test_roundtrip_preserves_source_owned_assets(self):
         dag = DAG(FakeSource())
@@ -665,7 +665,7 @@ class TestSerialization:
 
     def test_roundtrip_preserves_mini_dag_shape(self):
         a = FakeAsset()
-        b = FakeOtherAsset(deps={"a": a.id})
+        b = FakeOtherAsset(dependencies={"a": a.id})
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 

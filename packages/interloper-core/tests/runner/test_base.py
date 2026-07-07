@@ -94,11 +94,11 @@ class TestOnEventScoping:
         events_two: list[Event] = []
         await asyncio.gather(
             AsyncRunner(on_event=events_one.append).run(
-                il.DAG(ping(id="ping", destination=il.MemoryDestination())),
+                il.DAG(ping(id="ping", destinations=[il.MemoryDestination()])),
                 metadata={"run_id": "run-one"},
             ),
             AsyncRunner(on_event=events_two.append).run(
-                il.DAG(pong(id="pong", destination=il.MemoryDestination())),
+                il.DAG(pong(id="pong", destinations=[il.MemoryDestination()])),
                 metadata={"run_id": "run-two"},
             ),
         )
@@ -114,7 +114,7 @@ class TestOnEventScoping:
             return [{"x": 1}]
 
         events: list[Event] = []
-        await AsyncRunner(on_event=events.append).run(il.DAG(solo(id="solo", destination=il.MemoryDestination())))
+        await AsyncRunner(on_event=events.append).run(il.DAG(solo(id="solo", destinations=[il.MemoryDestination()])))
 
         assert events
         run_ids = {e.metadata.get("run_id") for e in events}

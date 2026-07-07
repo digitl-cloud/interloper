@@ -8,7 +8,7 @@ import traceback
 import warnings
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, field_validator
 from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
@@ -100,12 +100,12 @@ class Asset(Component):
     schema: ClassVar[type[Schema] | None] = None
     partitioning: ClassVar[PartitionConfig | None] = None
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "resource": RelationDefinition(kinds=["connection", "config", "resource"], slotted=True),
-        "destination": RelationDefinition(kinds=["destination"]),
-        "dependency": RelationDefinition(kinds=["asset"], slotted=True),
+        "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
+        "destination": RelationDefinition(kinds=["destination"], field="destinations"),
+        "dependency": RelationDefinition(kinds=["asset"], field="dependencies", slotted=True, inline=False),
     }
     internal_fields: ClassVar[frozenset[str]] = frozenset(
-        {"destination", "normalizer", "materialization_strategy", "deps"}
+        {"destinations", "normalizer", "materialization_strategy", "dependencies"}
     )
     requires: ClassVar[dict[str, str]] = {}
     optional_requires: ClassVar[dict[str, str]] = {}
@@ -115,19 +115,31 @@ class Asset(Component):
     _source_type: ClassVar[type[Source] | None] = None
 
     # State
-    destination: Destination | list[Destination] | None = Field(default=None)
+    destinations: list[Destination] = Field(default_factory=list)
     dataset: str = Field(default="")
     default_destination_key: str = Field(default="")
     materializable: bool = Field(default=True)
     materialization_strategy: MaterializationStrategy = Field(default=MaterializationStrategy.AUTO)
     normalizer: Normalizer | None = Field(default=None)
-    deps: dict[str, str] = Field(default_factory=dict)
+    dependencies: dict[str, str] = Field(default_factory=dict)
 
     # Private
     _source: Source | None = PrivateAttr(default=None)
     # Effective schema of the last conform: the declared schema, or the one
     # inferred from the data. Carried to destinations via IOContext.schema.
     _effective_schema: type[Schema] | None = PrivateAttr(default=None)
+
+    @field_validator("destinations", mode="before")
+    @classmethod
+    def _coerce_destinations(cls, value: Any) -> Any:
+        """Accept a single destination or ``None`` where a list is expected.
+
+        Returns:
+            The value as a list.
+        """
+        if value is None:
+            return []
+        return value if isinstance(value, (list, tuple)) else [value]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Infer ``resource_types`` from ``data()`` type annotations."""
@@ -282,13 +294,13 @@ class Asset(Component):
         *,
         id: str | None = None,
         resources: dict[str, Resource] | None = None,
-        destination: Destination | list[Destination] | None = None,
+        destinations: Destination | list[Destination] | None = None,
         dataset: str | None = None,
         default_destination_key: str | None = None,
         materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
         normalizer: Normalizer | None = _UNSET,  # ty: ignore[invalid-parameter-default]
-        deps: dict[str, str] | None = None,
+        dependencies: dict[str, str] | None = None,
     ) -> Self:
         """Return a reconfigured copy of this asset."""
         overrides: dict[str, Any] = {}
@@ -296,8 +308,8 @@ class Asset(Component):
             overrides["id"] = id
         if resources is not None:
             overrides["resources"] = {**self.resources, **resources}
-        if destination is not None:
-            overrides["destination"] = destination
+        if destinations is not None:
+            overrides["destinations"] = destinations if isinstance(destinations, list) else [destinations]
         if dataset is not None:
             overrides["dataset"] = dataset
         if default_destination_key is not None:
@@ -308,8 +320,8 @@ class Asset(Component):
             overrides["materialization_strategy"] = materialization_strategy
         if normalizer is not _UNSET:
             overrides["normalizer"] = normalizer
-        if deps is not None:
-            overrides["deps"] = deps
+        if dependencies is not None:
+            overrides["dependencies"] = dependencies
         return self.model_copy(update=overrides)
 
     def run(
@@ -330,7 +342,7 @@ class Asset(Component):
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
-            dag: DAG for dependency resolution (required if asset has deps).
+            dag: DAG for dependency resolution (required if asset has dependencies).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
@@ -353,7 +365,7 @@ class Asset(Component):
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
-            dag: DAG for dependency resolution (required if asset has deps).
+            dag: DAG for dependency resolution (required if asset has dependencies).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
@@ -419,7 +431,7 @@ class Asset(Component):
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
-            dag: DAG for dependency resolution (required if asset has deps).
+            dag: DAG for dependency resolution (required if asset has dependencies).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
@@ -437,7 +449,7 @@ class Asset(Component):
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
-            dag: DAG for dependency resolution (required if asset has deps).
+            dag: DAG for dependency resolution (required if asset has dependencies).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
@@ -521,7 +533,7 @@ class Asset(Component):
             elif param_name in type(self).resource_types:
                 kwargs[param_name] = self._resolve_resource(param_name)
             else:
-                if param_name not in self.deps:
+                if param_name not in self.dependencies:
                     continue
                 if dag is None:
                     if param_name in optional_names:
@@ -532,7 +544,7 @@ class Asset(Component):
                         "Pass a DAG to run() or materialize() for dependency resolution."
                     )
 
-                upstream_id = self.deps[param_name]
+                upstream_id = self.dependencies[param_name]
                 upstream_asset = dag.asset_map[upstream_id]
                 if param_name in optional_names:
                     try:
@@ -838,19 +850,16 @@ class Asset(Component):
         """Resolve and validate the destination list for this asset.
 
         Resolution order:
-        1. Asset's own destination(s).
-        2. Source's destination(s) (if asset belongs to a source).
+        1. Asset's own destinations.
+        2. Source's destinations (if asset belongs to a source).
         3. Empty list.
 
         Returns:
             A list of validated destination instances (may be empty).
         """
-        raw = self.destination
-        if raw is None and self._source is not None:
-            raw = self._source.destination
-        if raw is None:
-            return []
-        dests = raw if isinstance(raw, list) else [raw]
+        dests = self.destinations
+        if not dests and self._source is not None:
+            dests = self._source.destinations
         for dest in dests:
             self._validate_destination(dest)
         return dests

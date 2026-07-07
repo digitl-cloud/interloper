@@ -59,7 +59,7 @@ result = my_asset().run()
 `materialize()` executes the asset **and** writes the result to all configured destinations:
 
 ```py
-asset_instance = my_asset(destination=il.FileDestination("./data"))
+asset_instance = my_asset(destinations=il.FileDestination("./data"))
 asset_instance.materialize()
 ```
 
@@ -120,7 +120,7 @@ Call the source definition to create a runtime `Source`:
 
 ```py
 source = my_source()                                       # Default resources from env
-source = my_source(destination=il.FileDestination("./data"))
+source = my_source(destinations=il.FileDestination("./data"))
 source = my_source(resources={"conn": MyConnection(...)})  # With explicit resources
 ```
 
@@ -133,7 +133,7 @@ Assets are available as attributes on both the definition and the instance:
 my_source.asset_a
 
 # On the instance (returns the runtime Asset)
-source = my_source(destination=il.FileDestination("./data"))
+source = my_source(destinations=il.FileDestination("./data"))
 source.asset_a.run()
 source.asset_b.materialize()
 ```
@@ -144,7 +144,7 @@ Calling an existing source instance returns a reconfigured copy, leaving the ori
 untouched:
 
 ```py
-source = my_source(destination=il.FileDestination("./data"))
+source = my_source(destinations=il.FileDestination("./data"))
 
 # A copy whose assets won't be written during materialization
 read_only = source(materializable=False)
@@ -155,7 +155,7 @@ read_only = source(materializable=False)
 A `DAG` (Directed Acyclic Graph) orchestrates the execution of multiple assets, respecting their dependencies:
 
 ```py
-source = my_source(destination=il.FileDestination("./data"))
+source = my_source(destinations=il.FileDestination("./data"))
 dag = il.DAG(source)
 dag.materialize()
 ```

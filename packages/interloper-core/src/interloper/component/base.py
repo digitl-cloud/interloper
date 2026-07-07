@@ -64,10 +64,18 @@ class RelationDefinition(BaseModel):
     marks relations that carry a slot, and ``slots`` enumerates the slots a
     concrete class declares — together they fully describe the pickers a UI
     renders for the relation.
+
+    ``field`` names the instance field that carries relations of this type;
+    its shape follows the definition: slotted types are ``dict[slot, ...]``,
+    unslotted ones ``list[...]``. ``inline`` declares what the field carries:
+    embedded component instances (the default), or bare instance ids resolved
+    at execution time (``inline=False``, e.g. asset dependencies).
     """
 
     kinds: list[str]
+    field: str
     slotted: bool = False
+    inline: bool = True
     keys: list[str] = Field(default_factory=list)
     slots: dict[str, RelationSlot] = Field(default_factory=dict)
 

@@ -84,7 +84,7 @@ Interloper ships with built-in destinations and additional ones via extension pa
 Let's materialize our asset using `FileDestination`, which pickles the data on the filesystem:
 
 ```py
-forecast_asset = forecast(destination=il.FileDestination("./data"))
+forecast_asset = forecast(destinations=il.FileDestination("./data"))
 forecast_asset.materialize()
 ```
 
@@ -132,7 +132,7 @@ def open_meteo():
 Instantiate the source and access individual assets by name:
 
 ```py
-source = open_meteo(destination=il.FileDestination("./data"))
+source = open_meteo(destinations=il.FileDestination("./data"))
 source.forecast.run()
 source.air_quality.materialize()
 ```
@@ -142,7 +142,7 @@ source.air_quality.materialize()
 When you want to materialize multiple assets together, respecting their dependencies, use a `DAG`:
 
 ```py
-source = open_meteo(destination=il.FileDestination("./data"))
+source = open_meteo(destinations=il.FileDestination("./data"))
 dag = il.DAG(source)
 dag.materialize()
 ```
@@ -226,7 +226,7 @@ def open_meteo():
 Materialize for a specific date:
 
 ```py
-source = open_meteo(destination=il.FileDestination("./data"))
+source = open_meteo(destinations=il.FileDestination("./data"))
 dag = il.DAG(source)
 dag.materialize(partition_or_window=il.TimePartition(dt.date.today()))
 ```

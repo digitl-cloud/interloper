@@ -10,7 +10,7 @@ load_dotenv()
 il.EventBus.subscribe(print)
 
 mem = il.MemoryDestination()
-demo = DemoSource(destination=mem)
+demo = DemoSource(destinations=[mem])
 
 
 @il.asset()
@@ -19,8 +19,8 @@ def XXX() -> str:
     return "x"
 
 
-x = XXX(id="xxx", destination=mem)
-demo.b.deps["x"] = x.id
+x = XXX(id="xxx", destinations=[mem])
+demo.b.dependencies["x"] = x.id
 
 dag = il.DAG(demo, x)
 partition = il.TimePartition(dt.date(2024, 1, 1))

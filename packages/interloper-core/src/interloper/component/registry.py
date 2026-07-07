@@ -48,10 +48,21 @@ class KindRegistry:
 
         Returns:
             The class, unchanged (usable as a decorator).
+
+        Raises:
+            ValueError: If a declared relation type's ``field`` does not
+                exist on the anchor — a misdeclared field would silently
+                drop persisted relations on reconstruction.
         """
         anchor = self._anchor_of(cls)
-        if anchor.kind:
-            self._anchors.setdefault(anchor.kind, anchor)
+        if anchor.kind and anchor.kind not in self._anchors:
+            for type_, definition in anchor.relation_types.items():
+                if definition.field not in anchor.model_fields:
+                    raise ValueError(
+                        f"Kind '{anchor.kind}' declares relation type '{type_}' with "
+                        f"field '{definition.field}', but {anchor.__name__} has no such field"
+                    )
+            self._anchors[anchor.kind] = anchor
         return cls
 
     def get(self, kind: str) -> type[Component] | None:

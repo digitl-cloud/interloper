@@ -11,6 +11,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 import interloper as il
+import pydantic
 import pytest
 from interloper_assets.demo.source import DemoSource, demo_asset
 from sqlalchemy import Engine
@@ -60,7 +61,7 @@ class TestSourceRoundTrip:
         rows_by_key = {child.key: str(child.id) for child in db_source.children}
         assets_by_key = {type(asset).key: asset for asset in source.assets}
         assert {key: asset.id for key, asset in assets_by_key.items()} == rows_by_key
-        assert assets_by_key["e"].deps == {
+        assert assets_by_key["e"].dependencies == {
             "b": rows_by_key["b"],
             "c": rows_by_key["c"],
             "d": rows_by_key["d"],
@@ -156,3 +157,30 @@ class TestJobRoundTrip:
         updated = store.update_component(db_job.id, name="Renamed", config={"cron": "0 7 * * *"})
         assert updated.name == "Renamed"
         assert updated.state == {"next_run_at": "2026-07-07T06:00:00+00:00"}
+
+
+class FakeLinker(il.Component):
+    """Test-only kind whose vocabulary the hydrator has never seen."""
+
+    relation_types = {"link": il.RelationDefinition(kinds=["source"], field="links")}
+    links: list[il.Component] = pydantic.Field(default_factory=list)
+
+
+il.KINDS.register(FakeLinker)
+
+
+class TestOpenVocabulary:
+    """A novel kind + relation type persists and hydrates with no per-type code."""
+
+    def test_custom_relation_type_round_trips(self, store: Store):
+        store._catalog.components["fake_linker"] = FakeLinker.definition()
+
+        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        db_linker = store.create_component(
+            _ORG, kind="fake_linker", key="fake_linker", name="L", relations={"link": [(db_source.id, "")]}
+        )
+
+        linker = store.load(db_linker.id)
+        assert isinstance(linker, FakeLinker)
+        assert [type(linked).key for linked in linker.links] == ["demo_source"]
+        assert linker.links[0].id == str(db_source.id)

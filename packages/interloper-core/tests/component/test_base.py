@@ -145,7 +145,7 @@ class TestDefinition:
             """Component declaring a relation vocabulary."""
 
             relation_types: ClassVar[dict[str, RelationDefinition]] = {
-                "wires": RelationDefinition(kinds=["fake_component"], slotted=True)
+                "wires": RelationDefinition(kinds=["fake_component"], field="wires", slotted=True)
             }
 
         relations = FakeRelated.definition().relations

@@ -11,7 +11,7 @@ dotenv.load_dotenv()
 
 
 destination = il.FileDestination(base_path="/tmp/data")
-source = DemoSource(destination=destination)
+source = DemoSource(destinations=[destination])
 dag = il.DAG(source)
 partition = il.TimePartition(value=dt.date(2025, 1, 1))
 

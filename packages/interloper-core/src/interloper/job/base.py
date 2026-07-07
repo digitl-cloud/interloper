@@ -27,7 +27,7 @@ class Job(Component):
     icon: ClassVar[str] = "carbon:event-schedule"
     runnable: ClassVar[bool] = True
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "target": RelationDefinition(kinds=["source", "asset"]),
+        "target": RelationDefinition(kinds=["source", "asset"], field="targets"),
     }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"targets"})
 
