@@ -30,6 +30,8 @@ class FakeStore:
         self.role_updates: list[tuple[UUID, UUID, str]] = []
         self.removed: list[tuple[UUID, UUID]] = []
         self.created_invites: list[dict] = []
+        self.added_members: list[tuple[UUID, UUID, str]] = []
+        self.already_member = False
 
     # -- organisations --
     def list_all_organisations(self):
@@ -47,6 +49,12 @@ class FakeStore:
     # -- members --
     def list_org_members(self, org_id: UUID):
         return [(self.member, "admin")]
+
+    def add_org_member(self, org_id: UUID, user_id: UUID, role: str) -> bool:
+        if self.already_member:
+            return False
+        self.added_members.append((org_id, user_id, role))
+        return True
 
     def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> bool:
         self.role_updates.append((org_id, user_id, role))
@@ -161,6 +169,31 @@ def test_update_member_role(store: FakeStore) -> None:
 def test_update_member_role_rejects_invalid_role(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=True).patch(
         f"/admin/organisations/{store.org.id}/members/{uuid4()}", json={"role": "root"}
+    )
+    assert resp.status_code == 400
+
+
+def test_join_organisation_without_invitation(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).post(
+        f"/admin/organisations/{store.org.id}/members", json={"role": "admin"}
+    )
+    assert resp.status_code == 201
+    assert resp.json()["role"] == "admin"
+    assert store.added_members[0][0] == store.org.id
+    assert store.created_invites == []
+
+
+def test_join_organisation_conflicts_when_already_member(store: FakeStore) -> None:
+    store.already_member = True
+    resp = _client(store, is_super_admin=True).post(
+        f"/admin/organisations/{store.org.id}/members", json={"role": "admin"}
+    )
+    assert resp.status_code == 409
+
+
+def test_join_organisation_rejects_invalid_role(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).post(
+        f"/admin/organisations/{store.org.id}/members", json={"role": "root"}
     )
     assert resp.status_code == 400
 

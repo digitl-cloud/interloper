@@ -42,6 +42,13 @@ export const useAdminStore = defineStore('admin', () => {
         return apiFetch<MemberResponse[]>(`/admin/organisations/${orgId}/members`)
     }
 
+    function joinOrganisation(orgId: string, role: string = 'admin') {
+        return apiFetch<MemberResponse>(`/admin/organisations/${orgId}/members`, {
+            method: 'POST',
+            body: { role },
+        })
+    }
+
     function updateMemberRole(orgId: string, userId: string, role: string) {
         return apiFetch(`/admin/organisations/${orgId}/members/${userId}`, {
             method: 'PATCH',
@@ -77,6 +84,7 @@ export const useAdminStore = defineStore('admin', () => {
         createOrganisation,
         renameOrganisation,
         listMembers,
+        joinOrganisation,
         updateMemberRole,
         removeMember,
         listInvitations,
