@@ -231,18 +231,6 @@ class Asset(Component):
             return f"{source_cls.__module__}:{source_cls.__name__}.{cls.__name__}"
         return get_object_path(cls)
 
-    def path(self) -> str:
-        """Fully qualified import path for this asset instance.
-
-        Mirrors :meth:`classpath` — delegates to it so that instance and
-        class-level paths are always identical and both resolvable
-        through the ``AssetRef`` descriptor without instantiation.
-
-        Returns:
-            Import path string.
-        """
-        return type(self).classpath()
-
     @classmethod
     def definition(cls) -> AssetDefinition:
         """Produce a structured definition of this asset class.

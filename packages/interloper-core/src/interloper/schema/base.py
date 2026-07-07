@@ -234,7 +234,10 @@ class Schema(Component):
                         f"Schema validation failed on row {i}: missing required fields: {sorted(required_missing)}"
                     )
             try:
-                cls.model_validate(row)
+                # Non-strict validation tolerates extra columns; strict mode
+                # has already rejected them above. Filter before validating so
+                # unknown keys never reach component construction.
+                cls.model_validate({k: v for k, v in row.items() if k in cls.model_fields})
             except ValidationError as e:
                 raise SchemaError(f"Schema validation failed on row {i}: {e}") from e
 

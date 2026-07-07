@@ -459,10 +459,16 @@ class ComponentMixin:
 
     @staticmethod
     def _resolve_dst(session: Session, src: Component, type_: str, slot: str, dst_id: UUID) -> Component:
-        """Resolve a relation destination, enforcing existence and same-org."""
+        """Resolve a relation destination, enforcing existence, same-org, and the vocabulary's kinds."""
         dst = session.get(Component, dst_id)
         if dst is None or dst.org_id != src.org_id:
             raise NotFoundError(f"Component {dst_id} not found (relation '{type_}'{f'/{slot}' if slot else ''})")
+        allowed = il.KINDS.relation_types(src.kind)[type_].kinds
+        if dst.kind not in allowed:
+            raise ConfigError(
+                f"Relation '{type_}' on kind '{src.kind}' may not point at a '{dst.kind}' "
+                f"component (allowed: {allowed})"
+            )
         return dst
 
     def _row_status(self, session: Session, db_component: Component) -> ComponentStatus:
