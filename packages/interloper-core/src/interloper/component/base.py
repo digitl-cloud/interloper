@@ -63,11 +63,12 @@ class RelationSlot(BaseModel):
 class RelationDefinition(BaseModel):
     """One relation type a component kind may declare toward other components.
 
-    ``kinds`` lists the component kinds a relation of this type may point at;
-    ``keys`` optionally narrows the allowed destination keys; ``slotted``
-    marks relations that carry a slot, and ``slots`` enumerates the slots a
-    concrete class declares — together they fully describe the pickers a UI
-    renders for the relation.
+    ``kinds`` lists the component kinds a relation of this type may point at
+    (enforced when relations are written); ``keys`` optionally narrows the
+    allowed destination keys — picker metadata for UIs, not write-enforced;
+    ``slotted`` marks relations that carry a slot, and ``slots`` enumerates
+    the slots a concrete class declares — together they fully describe the
+    pickers a UI renders for the relation.
 
     ``field`` names the instance field that carries relations of this type;
     its shape follows the definition: slotted types are ``dict[slot, ...]``,
@@ -338,10 +339,23 @@ class Component(BaseModel):
         dropped by pydantic. Such kwargs are validated against the slot's
         declared type and stored in ``resources`` instead.
 
+        Unknown kwargs are a loud error rather than pydantic's silent
+        ``extra="ignore"`` drop — a misnamed field would otherwise vanish
+        (and a stale persisted config key surfaces as drift at load time,
+        consistent with the fail-closed drift checks).
+
         Raises:
-            TypeError: If a slot kwarg doesn't satisfy the slot's declared type.
+            TypeError: If a kwarg matches no field or resource slot, or a
+                slot kwarg doesn't satisfy the slot's declared type.
             ValueError: If a slot is given both as a kwarg and in ``resources``.
         """
+        unknown = [
+            name for name in data if name not in type(self).model_fields and name not in type(self).resource_types
+        ]
+        if unknown:
+            raise TypeError(
+                f"{type(self).__name__} got unexpected keyword argument(s): {', '.join(sorted(unknown))}"
+            )
         slot_names = [n for n in data if n in type(self).resource_types and n not in type(self).model_fields]
         if slot_names:
             resources = data.get("resources")
@@ -365,7 +379,7 @@ class Component(BaseModel):
     def model_post_init(self, context: Any) -> None:
         """Default ``id`` to a generated UUID if not provided."""
         if not self.id:
-            self.id = uuid.uuid4().hex[:8]
+            self.id = str(uuid.uuid4())
 
     def trickle_resources(self, target: Component) -> None:
         """Fill a child component's empty resource slots from this component's resources.
@@ -414,13 +428,22 @@ class Component(BaseModel):
         """
         return f"{type(self).__name__} (key: {type(self).key}, id: {self.id})"
 
-    def path(self) -> str:
-        """Fully qualified import path for this component.
+    @classmethod
+    def classpath(cls) -> str:
+        """Fully qualified import path for this component class.
 
         Returns:
             Dotted path like ``"module.submodule.ClassName"``.
         """
-        return get_object_path(type(self))
+        return get_object_path(cls)
+
+    def path(self) -> str:
+        """Fully qualified import path for this instance's class.
+
+        Returns:
+            The class's :meth:`classpath`.
+        """
+        return type(self).classpath()
 
     def to_spec(self) -> ComponentSpec:
         """Serialize this instance to a reconstructible spec.

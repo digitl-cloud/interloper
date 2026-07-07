@@ -139,3 +139,27 @@ class TestCrud:
         assert store.get_component(dest.id, kind="destination").id == dest.id
         with pytest.raises(NotFoundError):
             store.get_component(dest.id, kind="asset")
+
+
+class TestRelationKindEnforcement:
+    """Relation writes are checked against the vocabulary's allowed kinds."""
+
+    @pytest.fixture
+    def demo_store(self, component_db: Engine) -> Store:
+        from interloper_assets.demo.source import DemoSource, demo_asset
+
+        return Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
+
+    def test_relation_to_disallowed_kind_rejected(self, demo_store: Store):
+        db_source = demo_store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        db_job = demo_store.create_component(_ORG, kind="job", key="job", name="Job")
+        # A job's 'target' may point at sources/assets — never at another job.
+        with pytest.raises(ConfigError, match="may not point at a 'job'"):
+            demo_store.create_component(
+                _ORG, kind="job", key="job", name="Bad", relations={"target": [(db_job.id, "")]}
+            )
+        # Sanity: the allowed kind passes.
+        ok = demo_store.create_component(
+            _ORG, kind="job", key="job", name="Good", relations={"target": [(db_source.id, "")]}
+        )
+        assert ok.id is not None
