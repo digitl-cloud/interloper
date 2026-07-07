@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 import pytest
 
+import interloper as il
 from interloper.errors import ConfigError
+from interloper.events import Event
 from interloper.runner import build_runner
 from interloper.runner.async_runner import AsyncRunner
 from interloper.runner.base import runners
@@ -54,3 +59,64 @@ class TestBuildRunner:
     def test_unknown_type_raises_actionable_error(self):
         with pytest.raises(ConfigError, match=r"Unknown runner: 'ray'.*available.*async.*serial"):
             build_runner("ray")
+
+
+class TestOnEventScoping:
+    """``on_event`` only receives its own run's events.
+
+    The EventBus is a process-wide singleton, so when two runs execute
+    concurrently in one process (the in-process launcher) an unscoped
+    subscription would deliver each run's events to *both* handlers — and
+    the scheduler's handler persists whatever it receives under its own
+    run_id, cross-attributing events between runs.
+    """
+
+    async def test_concurrent_runs_do_not_cross_deliver(self):
+        il.MemoryDestination.clear()
+
+        # Each asset waits for the other run's asset to start, forcing the
+        # two runs (and their bus subscriptions) to overlap in time.
+        started = {"one": asyncio.Event(), "two": asyncio.Event()}
+
+        @il.asset()
+        async def ping() -> list[dict[str, Any]]:
+            started["one"].set()
+            await asyncio.wait_for(started["two"].wait(), timeout=5)
+            return [{"x": 1}]
+
+        @il.asset()
+        async def pong() -> list[dict[str, Any]]:
+            started["two"].set()
+            await asyncio.wait_for(started["one"].wait(), timeout=5)
+            return [{"x": 2}]
+
+        events_one: list[Event] = []
+        events_two: list[Event] = []
+        await asyncio.gather(
+            AsyncRunner(on_event=events_one.append).run(
+                il.DAG(ping(id="ping", destination=il.MemoryDestination())),
+                metadata={"run_id": "run-one"},
+            ),
+            AsyncRunner(on_event=events_two.append).run(
+                il.DAG(pong(id="pong", destination=il.MemoryDestination())),
+                metadata={"run_id": "run-two"},
+            ),
+        )
+
+        assert events_one and all(e.metadata.get("run_id") == "run-one" for e in events_one)
+        assert events_two and all(e.metadata.get("run_id") == "run-two" for e in events_two)
+
+    async def test_run_id_is_generated_and_events_still_delivered(self):
+        il.MemoryDestination.clear()
+
+        @il.asset()
+        def solo() -> list[dict[str, Any]]:
+            return [{"x": 1}]
+
+        events: list[Event] = []
+        await AsyncRunner(on_event=events.append).run(il.DAG(solo(id="solo", destination=il.MemoryDestination())))
+
+        assert events
+        run_ids = {e.metadata.get("run_id") for e in events}
+        assert len(run_ids) == 1
+        assert None not in run_ids
