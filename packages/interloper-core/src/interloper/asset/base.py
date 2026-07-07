@@ -182,6 +182,16 @@ class Asset(Component):
         """The source this asset belongs to, if any."""
         return self._source
 
+    def dag(self) -> DAG:
+        """Compile this asset into a single-node executable DAG.
+
+        Returns:
+            A DAG containing only this asset.
+        """
+        from interloper.dag.base import DAG
+
+        return DAG(self)
+
     def effective_partition(
         self, partition_or_window: Partition | PartitionWindow | None
     ) -> Partition | PartitionWindow | None:

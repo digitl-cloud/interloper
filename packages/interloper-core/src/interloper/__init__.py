@@ -1,6 +1,5 @@
 from interloper.asset import Asset, AssetDefinition, ExecutionContext, asset
 from interloper.catalog import Catalog
-from interloper.cli.manifest import RunManifest, RunPlan
 from interloper.component import (
     KINDS,
     Component,
@@ -123,8 +122,6 @@ __all__ = [
     "Resource",
     "ResourceDefinition",
     "ResourceRef",
-    "RunManifest",
-    "RunPlan",
     "RunResult",
     "Runner",
     "Schema",

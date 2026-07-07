@@ -42,76 +42,66 @@ def _args(**overrides: Any) -> argparse.Namespace:
     return argparse.Namespace(**base)
 
 
-def _write_manifest(tmp_path: Path, body: str) -> Path:
+def _write_spec(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "run.yaml"
     path.write_text(body)
     return path
 
 
-class TestRunManifestMode:
-    """``interloper run -f <manifest>`` behavior."""
+class TestRunSpecFileMode:
+    """``interloper run -f <spec.yaml>`` reconstructs a runnable component and runs its DAG."""
 
     def test_dry_run_prints_plan(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        manifest = _write_manifest(
+        spec = _write_spec(
             tmp_path,
             f"""
-            name: cli-test
-            runner:
-              type: serial
-            assets:
-              - source: {SOURCE_PATH}
-            partition:
-              date: 2026-06-01
+            key: job
+            init:
+              targets:
+                - path: {SOURCE_PATH}
             """,
         )
-        _cmd_run(_args(file=str(manifest), dry_run=True))
+        _cmd_run(_args(file=str(spec), dry_run=True, date="2026-06-01"))
 
         out = capsys.readouterr().out
-        assert "cli-test" in out
-        assert "SerialRunner" in out
         assert "2026-06-01" in out
         assert "1 materializable / 1 total" in out
         assert "1. fake_run_source.one" in out
 
-    def test_cli_date_overrides_manifest_partition(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        manifest = _write_manifest(
-            tmp_path,
-            f"""
-            runner:
-              type: serial
-            assets:
-              - source: {SOURCE_PATH}
-            partition:
-              date: 2026-06-01
-            """,
-        )
-        _cmd_run(_args(file=str(manifest), dry_run=True, date="2026-02-02"))
+    def test_source_spec_is_runnable_directly(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        spec = _write_spec(tmp_path, f"path: {SOURCE_PATH}\n")
+        _cmd_run(_args(file=str(spec), dry_run=True))
 
-        assert "2026-02-02" in capsys.readouterr().out
+        assert "1. fake_run_source.one" in capsys.readouterr().out
+
+    def test_non_runnable_spec_rejected(self, tmp_path: Path) -> None:
+        spec = _write_spec(tmp_path, "path: interloper.destination.memory.MemoryDestination\n")
+        with pytest.raises(SystemExit, match="not runnable"):
+            _cmd_run(_args(file=str(spec)))
 
     def test_file_with_targets_rejected(self, tmp_path: Path) -> None:
-        manifest = _write_manifest(tmp_path, f"assets: [{{source: {SOURCE_PATH}}}]")
+        spec = _write_spec(tmp_path, f"path: {SOURCE_PATH}\n")
         with pytest.raises(SystemExit, match="cannot be combined"):
-            _cmd_run(_args(file=str(manifest), target=["some.path"]))
+            _cmd_run(_args(file=str(spec), target=["some.path"]))
 
     def test_no_input_rejected(self) -> None:
         with pytest.raises(SystemExit, match="provide one or more import paths"):
             _cmd_run(_args())
 
-    def test_invalid_manifest_rejected(self, tmp_path: Path) -> None:
-        manifest = _write_manifest(tmp_path, "assets: []")
-        with pytest.raises(SystemExit, match="Invalid manifest"):
-            _cmd_run(_args(file=str(manifest)))
+    def test_invalid_spec_rejected(self, tmp_path: Path) -> None:
+        spec = _write_spec(tmp_path, "nonsense: true")
+        with pytest.raises(SystemExit, match="Invalid spec file"):
+            _cmd_run(_args(file=str(spec)))
 
-    def test_manifest_run_materializes(self, tmp_path: Path) -> None:
-        manifest = self._materializing_manifest(tmp_path)
-        _cmd_run(_args(file=str(manifest)))
+    def test_spec_run_materializes(self, tmp_path: Path) -> None:
+        spec = self._materializing_spec(tmp_path)
+        _cmd_run(_args(file=str(spec)))
 
         assert (tmp_path / "data" / "fake_run_source" / "one" / "data.pkl").exists()
 
     def test_run_prints_lifecycle_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        manifest = self._materializing_manifest(tmp_path)
-        _cmd_run(_args(file=str(manifest)))
+        spec = self._materializing_spec(tmp_path)
+        _cmd_run(_args(file=str(spec)))
 
         err = capsys.readouterr().err
         assert "RUN_STARTED" in err
@@ -121,20 +111,20 @@ class TestRunManifestMode:
         assert "DEST_WRITE_STARTED" not in err
 
     def test_verbose_includes_io_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        manifest = self._materializing_manifest(tmp_path)
-        _cmd_run(_args(file=str(manifest), verbose=True))
+        spec = self._materializing_spec(tmp_path)
+        _cmd_run(_args(file=str(spec), verbose=True))
 
         assert "DEST_WRITE_STARTED" in capsys.readouterr().err
 
     def test_quiet_suppresses_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        manifest = self._materializing_manifest(tmp_path)
-        _cmd_run(_args(file=str(manifest), quiet=True))
+        spec = self._materializing_spec(tmp_path)
+        _cmd_run(_args(file=str(spec), quiet=True))
 
         assert "ASSET_COMPLETED" not in capsys.readouterr().err
 
     def test_events_json_streams_to_stdout(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        manifest = self._materializing_manifest(tmp_path)
-        _cmd_run(_args(file=str(manifest), events="json"))
+        spec = self._materializing_spec(tmp_path)
+        _cmd_run(_args(file=str(spec), events="json"))
 
         lines = [line for line in capsys.readouterr().out.splitlines() if line]
         types = {json.loads(line)["type"] for line in lines}
@@ -142,17 +132,44 @@ class TestRunManifestMode:
         assert "asset_completed" in types
 
     @staticmethod
-    def _materializing_manifest(tmp_path: Path) -> Path:
-        return _write_manifest(
+    def _materializing_spec(tmp_path: Path) -> Path:
+        return _write_spec(
             tmp_path,
             f"""
-            runner:
-              type: serial
-            assets:
-              - source: {SOURCE_PATH}
-                destinations:
-                  - type: interloper.destination.file.FileDestination
-                    config:
-                      base_path: {tmp_path}/data
+            key: job
+            init:
+              destinations:
+                - path: interloper.destination.file.FileDestination
+                  init:
+                    base_path: {tmp_path}/data
+              targets:
+                - path: {SOURCE_PATH}
             """,
         )
+
+
+class TestRunJobSpecMode:
+    """``interloper run -f <job-spec>`` reconstructs the Job and runs it."""
+
+    def test_job_spec_dry_run_prints_plan(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        import yaml
+
+        job = il.Job(targets=[FakeRunSource()])
+        spec_file = tmp_path / "job.yaml"
+        spec_file.write_text(yaml.safe_dump(job.to_spec().model_dump(mode="json", exclude_none=True)))
+
+        _cmd_run(_args(file=str(spec_file), dry_run=True))
+
+        out = capsys.readouterr().out
+        assert "1 materializable / 1 total" in out
+        assert "1. fake_run_source.one" in out
+
+    def test_job_spec_run_materializes(self, tmp_path: Path) -> None:
+        import yaml
+
+        dest = il.MemoryDestination()
+        job = il.Job(targets=[FakeRunSource(destinations=[dest])])
+        spec_file = tmp_path / "job.yaml"
+        spec_file.write_text(yaml.safe_dump(job.to_spec().model_dump(mode="json", exclude_none=True)))
+
+        _cmd_run(_args(file=str(spec_file)))

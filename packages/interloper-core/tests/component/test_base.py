@@ -454,3 +454,105 @@ class TestSerialization:
         spec = ComponentSpec(path="does.not.exist.Thing", id="", init=None)
         with pytest.raises((ImportError, AttributeError)):
             spec.reconstruct()
+
+
+class TestCatalogKeySpecs:
+    """Specs reference components by import ``path`` or catalog ``key``."""
+
+    def test_key_resolves_through_catalog(self):
+        from interloper.catalog import Catalog
+
+        catalog = Catalog(components={"fake_resource": FakeResource.definition()})
+        spec = ComponentSpec(key="fake_resource", init={"text": "abc"})
+        instance = spec.reconstruct(catalog)
+        assert isinstance(instance, FakeResource)
+        assert instance.text == "abc"
+
+    def test_unknown_catalog_key_raises(self):
+        from interloper.catalog import Catalog
+        from interloper.errors import CatalogKeyError
+
+        with pytest.raises(CatalogKeyError, match="Unknown catalog key 'nope'"):
+            ComponentSpec(key="nope").reconstruct(Catalog(components={}))
+
+    def test_path_and_key_are_exclusive(self):
+        with pytest.raises(ValueError, match="exactly one of 'path' or 'key'"):
+            ComponentSpec(path="a.B", key="b")
+        with pytest.raises(ValueError, match="exactly one of 'path' or 'key'"):
+            ComponentSpec()
+
+    def test_non_component_path_raises(self):
+        with pytest.raises(TypeError, match="does not resolve to a Component class"):
+            ComponentSpec(path="interloper.errors.SpecError").reconstruct()
+
+
+class TestSpecFromYamlFile:
+    """Spec documents load from YAML with env interpolation."""
+
+    def test_loads_and_reconstructs(self, tmp_path):
+        file = tmp_path / "spec.yaml"
+        file.write_text(f"path: {FakeResource().path()}\ninit: {{text: abc}}\n")
+        instance = ComponentSpec.from_file(file).reconstruct()
+        assert isinstance(instance, FakeResource)
+        assert instance.text == "abc"
+
+    def test_env_placeholders_interpolate(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("FAKE_SPEC_TEXT", "from-env")
+        file = tmp_path / "spec.yaml"
+        file.write_text(f"path: {FakeResource().path()}\ninit:\n  text: ${{FAKE_SPEC_TEXT}}\n")
+        instance = ComponentSpec.from_file(file).reconstruct()
+        assert isinstance(instance, FakeResource)
+        assert instance.text == "from-env"
+
+    def test_missing_env_variable_raises(self, tmp_path):
+        from interloper.errors import SpecError
+
+        file = tmp_path / "spec.yaml"
+        file.write_text(f"path: {FakeResource().path()}\ninit:\n  text: ${{FAKE_SPEC_MISSING}}\n")
+        with pytest.raises(SpecError, match="undefined environment variable"):
+            ComponentSpec.from_file(file)
+
+    def test_invalid_yaml_raises(self, tmp_path):
+        from interloper.errors import SpecError
+
+        file = tmp_path / "spec.yaml"
+        file.write_text("path: [unclosed")
+        with pytest.raises(SpecError, match="Invalid YAML"):
+            ComponentSpec.from_file(file)
+
+    def test_missing_file_raises(self, tmp_path):
+        from interloper.errors import SpecError
+
+        with pytest.raises(SpecError, match="Cannot read spec file"):
+            ComponentSpec.from_file(tmp_path / "nope.yaml")
+
+    def test_non_mapping_raises(self, tmp_path):
+        from interloper.errors import SpecError
+
+        file = tmp_path / "spec.yaml"
+        file.write_text("- a\n- list\n")
+        with pytest.raises(SpecError, match="must be a YAML mapping"):
+            ComponentSpec.from_file(file)
+
+
+class TestSubclassScopedConstruction:
+    """from_spec / from_spec_file honor the receiving class."""
+
+    def test_from_spec_type_checks_the_receiver(self):
+        spec = FakeResource(text="abc").to_spec()
+        with pytest.raises(TypeError, match="does not reconstruct to a FakeComponent"):
+            FakeComponent.from_spec(spec)
+
+    def test_from_spec_file_reconstructs_for_the_receiver(self, tmp_path):
+        file = tmp_path / "spec.yaml"
+        file.write_text(f"path: {FakeResource().path()}\ninit: {{text: abc}}\n")
+        instance = FakeResource.from_spec_file(file)
+        assert isinstance(instance, FakeResource)
+        assert instance.text == "abc"
+
+    def test_from_spec_passes_the_catalog(self):
+        from interloper.catalog import Catalog
+
+        catalog = Catalog(components={"fake_resource": FakeResource.definition()})
+        instance = FakeResource.from_spec(ComponentSpec(key="fake_resource"), catalog)
+        assert isinstance(instance, FakeResource)

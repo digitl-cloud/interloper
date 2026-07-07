@@ -1,0 +1,26 @@
+# Declarative workload — a serialized Job spec, materialized without writing Python.
+#
+#   interloper run -f examples/job.yaml --dry-run              # validate + print the plan
+#   interloper run -f examples/job.yaml --date 2026-01-01      # materialize
+#
+# The file is a ComponentSpec document for any runnable component (job,
+# source, or asset). A component is referenced by exactly one of `key`
+# (catalog key, resolved against the catalog of interloper.yaml) or `path`
+# (fully qualified import path). `${VAR}` placeholders are interpolated from
+# the environment at load time. The runner comes from interloper.yaml /
+# INTERLOPER_RUNNER_* env vars; the partition from the CLI date flags.
+
+key: job
+init:
+  # Workload-level defaults: destinations apply to any target that declares
+  # none, and resources fill empty slots of targets and destinations.
+  destinations:
+    - path: interloper.destination.file.FileDestination
+      init:
+        base_path: /tmp/interloper-demo
+
+  targets:
+    - key: demo_source
+      init:
+        hello: spec
+        select: [a, b] # subset of the a -> b,c,d -> e DAG; omit to run all assets
