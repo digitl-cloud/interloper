@@ -116,13 +116,13 @@ class Hydrator:
     def _build_init(self, session: Session, db_component: Component) -> dict[str, Any]:
         """Build the init payload for a component row.
 
-        Relation contributions map onto the framework's field conventions:
-        ``resource`` relations fill ``resources`` (by slot), ``destination``
-        relations fill ``destination``, ``dependency`` relations fill ``deps``
-        (slot → upstream instance id), ``target`` relations fill ``targets``.
-        Children are embedded as the ``assets`` override map — the parent
-        source is the unit of reconstruction, so each child contributes a
-        bare init dict under its key rather than a full spec.
+        Relations are mapped through the kind's own vocabulary: each type
+        fills its declared ``field``, shaped by its definition — slotted
+        types as ``{slot: value}``, unslotted ones as lists, carrying
+        nested specs (``inline``) or bare instance ids.
+        Children are the one non-relation contribution: they embed as the
+        ``assets`` override map, since the parent source is the unit of
+        reconstruction.
 
         Returns:
             A dict suitable for use as a ``ComponentSpec.init``.
@@ -132,23 +132,21 @@ class Hydrator:
         else:
             init = dict(db_component.config or {})
 
-        relations = self._relations_by_type(session, db_component.id)
-
-        if resources := {
-            rel.slot: self._dst_spec(session, rel).model_dump(mode="json") for rel in relations.get("resource", [])
-        }:
-            init["resources"] = resources
-
-        if destinations := [
-            self._dst_spec(session, rel).model_dump(mode="json") for rel in relations.get("destination", [])
-        ]:
-            init["destination"] = destinations if len(destinations) > 1 else destinations[0]
-
-        if deps := {rel.slot: str(rel.dst_id) for rel in relations.get("dependency", [])}:
-            init["deps"] = deps
-
-        if targets := [self._dst_spec(session, rel).model_dump(mode="json") for rel in relations.get("target", [])]:
-            init["targets"] = targets
+        vocabulary = KINDS.relation_types(db_component.kind)
+        for type_, rels in self._relations_by_type(session, db_component.id).items():
+            definition = vocabulary.get(type_)
+            if definition is None:
+                raise HydrationError(
+                    f"Component {db_component.id} ({db_component.kind}) has '{type_}' relations, "
+                    "which its kind's vocabulary does not declare"
+                )
+            if definition.inline:
+                values = [self._dst_spec(session, rel).model_dump(mode="json") for rel in rels]
+            else:
+                values = [str(rel.dst_id) for rel in rels]
+            init[definition.field] = (
+                {rel.slot: value for rel, value in zip(rels, values)} if definition.slotted else values
+            )
 
         children = session.exec(
             select(Component).where(Component.parent_id == db_component.id).order_by(Component.created_at)  # ty: ignore[invalid-argument-type]

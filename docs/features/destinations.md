@@ -15,19 +15,19 @@ logic.
 ### On a source
 
 ```py
-source = my_source(destination=il.FileDestination(base_path="./data"))
+source = my_source(destinations=il.FileDestination(base_path="./data"))
 ```
 
 ### On an individual asset
 
 ```py
-asset_instance = my_asset(destination=il.FileDestination(base_path="./data"))
+asset_instance = my_asset(destinations=il.FileDestination(base_path="./data"))
 ```
 
 ### Declaring destination types up front
 
 The `@asset`/`@source` decorators accept `destinations=[...]` to declare the destination
-**types** an asset supports. Instances are then supplied via the `destination=` argument at
+**types** an asset supports. Instances are then supplied via the `destinations=` argument at
 instantiation:
 
 ```py
@@ -43,7 +43,7 @@ its `id`:
 
 ```py
 asset_instance = my_asset(
-    destination=[
+    destinations=[
         il.FileDestination(id="file", base_path="./data"),
         il.CSVDestination(id="csv", base_path="./exports"),
     ],
@@ -61,7 +61,7 @@ one named by `default_destination_key` (matched against each destination's `id`)
 In-memory storage backed by a class-level dict. Useful for tests and quick experiments.
 
 ```py
-asset_instance = my_asset(destination=il.MemoryDestination())
+asset_instance = my_asset(destinations=il.MemoryDestination())
 asset_instance.materialize()
 ```
 
@@ -76,7 +76,7 @@ il.MemoryDestination.clear()
 Pickle-based storage on the local filesystem.
 
 ```py
-asset_instance = my_asset(destination=il.FileDestination(base_path="./data"))
+asset_instance = my_asset(destinations=il.FileDestination(base_path="./data"))
 asset_instance.materialize()
 # Writes to ./data/{dataset}/{asset_key}/data.pkl
 ```
@@ -94,7 +94,7 @@ instead of `data.pkl`). Because CSV is untyped, reads reconcile rows against the
 to restore declared types.
 
 ```py
-asset_instance = my_asset(destination=il.CSVDestination(base_path="./data"))
+asset_instance = my_asset(destinations=il.CSVDestination(base_path="./data"))
 ```
 
 ## IOContext
@@ -169,7 +169,7 @@ pip install interloper-google-cloud
 from interloper_google_cloud import BigQueryDestination, GoogleCloudConnection
 
 asset_instance = my_asset(
-    destination=BigQueryDestination(
+    destinations=BigQueryDestination(
         id="bq",
         connection=GoogleCloudConnection(...),
         project="my-gcp-project",

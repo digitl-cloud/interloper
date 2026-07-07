@@ -46,7 +46,7 @@ class Destination(Component):
 
     tags: ClassVar[list[str]] = []
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "resource": RelationDefinition(kinds=["connection", "config", "resource"], slotted=True),
+        "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
     }
 
     @classmethod

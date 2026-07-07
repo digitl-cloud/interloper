@@ -64,7 +64,7 @@ Yes. You can run or materialize individual assets directly:
 
 ```py
 result = my_asset().run()
-my_asset(destination=il.FileDestination("./data")).materialize()
+my_asset(destinations=il.FileDestination("./data")).materialize()
 ```
 
 A DAG is only needed when you have multiple assets with dependencies.

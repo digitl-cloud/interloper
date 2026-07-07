@@ -15,7 +15,7 @@ from interloper.source.base import Source
 class DAG:
     """Directed acyclic graph of assets.
 
-    Dependencies are resolved from pre-computed ``deps`` on each asset
+    Dependencies are resolved from pre-computed ``dependencies`` on each asset
     (mapping parameter names to upstream asset ids).  The DAG validates
     the wiring and provides topological ordering for parallel execution.
     """
@@ -73,14 +73,14 @@ class DAG:
         for asset in self.assets:
             self.successors[asset.id] = []
 
-        # Build dependency graph from resolved deps
+        # Build dependency graph from resolved dependencies
         for asset in self.assets:
             if not asset.materializable:
                 continue
 
             self.predecessors[asset.id] = []
 
-            for param_name, upstream_id in asset.deps.items():
+            for param_name, upstream_id in asset.dependencies.items():
                 if upstream_id not in self.asset_map:
                     if param_name in type(asset).optional_requires:
                         continue
@@ -102,9 +102,9 @@ class DAG:
         self._check_partition_dependencies()
 
     def _check_requires(self) -> None:
-        """Validate that wired deps match the requires contract.
+        """Validate that wired dependencies match the requires contract.
 
-        For each ``(param_name, upstream_id)`` in ``asset.deps``, if
+        For each ``(param_name, upstream_id)`` in ``asset.dependencies``, if
         ``requires`` or ``optional_requires`` declares an expected key
         for that param, the upstream must match — either as a qualified
         key (``source_key.asset_key``) or a bare key.
@@ -118,9 +118,9 @@ class DAG:
             if not asset.materializable:
                 continue
             asset_cls = type(asset)
-            for param_name, upstream_id in asset.deps.items():
+            for param_name, upstream_id in asset.dependencies.items():
                 if upstream_id not in self.asset_map:
-                    continue  # Missing deps are caught in _build_graph
+                    continue  # Missing dependencies are caught in _build_graph
 
                 expected_key = asset_cls.requires.get(param_name) or asset_cls.optional_requires.get(param_name)
                 if not expected_key:

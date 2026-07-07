@@ -238,8 +238,8 @@ class TestResolution:
             class FakeChild(il.Asset):
                 pass
 
-        source = FakeTrickleSource(destination=source_dest)
-        assert source.assets[0].destination is source_dest
+        source = FakeTrickleSource(destinations=[source_dest])
+        assert source.assets[0].destinations == [source_dest]
 
     def test_trickles_normalizer_to_assets(self):
         normalizer = Normalizer()
@@ -300,7 +300,7 @@ class TestResolution:
         second = source.fake_second
         # ``_infer_all_requires`` populated ``second.requires``; ``_resolve_deps``
         # wires those into ``second.deps`` pointing at the sibling's instance id.
-        assert second.deps["fake_first"] == first.id
+        assert second.dependencies["fake_first"] == first.id
 
 
 # ---------------------------------------------------------------------------
@@ -320,8 +320,8 @@ class TestReconfiguration:
 
     def test_override_destination(self):
         new_dest = FakeDestination()
-        reconfigured = FakeSourceWithAssets()(destination=new_dest)
-        assert reconfigured.destination is new_dest
+        reconfigured = FakeSourceWithAssets()(destinations=new_dest)
+        assert reconfigured.destinations == [new_dest]
 
     def test_resources_are_merged_not_replaced(self):
         existing = FakeResource(value="existing")
@@ -347,10 +347,10 @@ class TestReconfiguration:
     def test_omitted_fields_preserved(self):
         source = FakeSourceWithAssets(
             dataset="original",
-            destination=FakeDestination(),
+            destinations=[FakeDestination()],
         )
         reconfigured = source(dataset="updated")
-        assert isinstance(reconfigured.destination, FakeDestination)
+        assert isinstance(reconfigured.destinations[0], FakeDestination)
 
     def test_override_default_destination_key(self):
         reconfigured = FakeSourceWithAssets()(default_destination_key="primary")
@@ -397,16 +397,15 @@ class TestSerialization:
         assert restored.assets[1].materializable is True
 
     def test_source_with_destination_roundtrip(self):
-        source = FakeSource(destination=FakeDestination())
+        source = FakeSource(destinations=[FakeDestination()])
         restored = FakeSource.from_spec(source.to_spec())
-        assert isinstance(restored.destination, FakeDestination)
+        assert isinstance(restored.destinations[0], FakeDestination)
 
     def test_source_with_list_of_destinations_roundtrip(self):
-        source = FakeSource(destination=[FakeDestination(), FakeOtherDestination()])
+        source = FakeSource(destinations=[FakeDestination(), FakeOtherDestination()])
         restored = FakeSource.from_spec(source.to_spec())
-        assert isinstance(restored.destination, list)
-        assert isinstance(restored.destination[0], FakeDestination)
-        assert isinstance(restored.destination[1], FakeOtherDestination)
+        assert isinstance(restored.destinations[0], FakeDestination)
+        assert isinstance(restored.destinations[1], FakeOtherDestination)
 
     def test_source_with_resources_roundtrip(self):
         source = FakeSource(resources={"config": FakeResource(value="abc")})
@@ -423,7 +422,7 @@ class TestSerialization:
     def test_roundtrip_via_json_string(self):
         source = FakeSourceWithAssets(
             dataset="ds",
-            destination=FakeDestination(),
+            destinations=[FakeDestination()],
             resources={"config": FakeResource(value="v")},
         )
         source.assets[0].materializable = False
@@ -433,6 +432,6 @@ class TestSerialization:
 
         assert isinstance(restored, FakeSourceWithAssets)
         assert restored.dataset == "ds"
-        assert isinstance(restored.destination, FakeDestination)
+        assert isinstance(restored.destinations[0], FakeDestination)
         assert isinstance(restored.resources["config"], FakeResource)
         assert restored.assets[0].materializable is False

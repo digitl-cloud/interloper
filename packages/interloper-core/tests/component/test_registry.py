@@ -2,24 +2,29 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
+
+import pytest
+from pydantic import Field
 
 import interloper as il
 from interloper.component.base import Component, RelationDefinition
 from interloper.component.registry import KindRegistry
 
 
-class FakeSensor(Component):
+class FakeKind(Component):
     """A satellite-style kind with its own relation vocabulary."""
 
     sensitive: ClassVar[bool] = True
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "watches": RelationDefinition(kinds=["asset"], slotted=True),
+        "link": RelationDefinition(kinds=["asset"], field="links", slotted=True),
     }
 
+    links: dict[str, Any] = Field(default_factory=dict)
 
-class FakeNestSensor(FakeSensor):
-    """A concrete class of the fake kind (inherits kind ``fake_sensor``)."""
+
+class FakeConcreteKind(FakeKind):
+    """A concrete class of the fake kind (inherits kind ``fake_kind``)."""
 
 
 class TestBuiltins:
@@ -50,23 +55,33 @@ class TestRegistration:
 
     def test_registering_a_subclass_anchors_the_kind(self):
         registry = KindRegistry()
-        registry.register(FakeNestSensor)
-        assert registry.get("fake_sensor") is FakeSensor
+        registry.register(FakeConcreteKind)
+        assert registry.get("fake_kind") is FakeKind
 
     def test_first_anchor_wins(self):
         registry = KindRegistry()
-        registry.register(FakeSensor)
-        registry.register(FakeNestSensor)
-        assert registry.get("fake_sensor") is FakeSensor
+        registry.register(FakeKind)
+        registry.register(FakeConcreteKind)
+        assert registry.get("fake_kind") is FakeKind
+
+    def test_misdeclared_relation_field_is_rejected(self):
+        class Broken(Component):
+            relation_types: ClassVar[dict[str, RelationDefinition]] = {
+                "link": RelationDefinition(kinds=["asset"], field="linkss"),
+            }
+
+        registry = KindRegistry()
+        with pytest.raises(ValueError, match="no such field"):
+            registry.register(Broken)
 
     def test_kind_properties_flow_from_the_anchor(self):
         registry = KindRegistry()
-        registry.register(FakeNestSensor)
-        assert registry.sensitive("fake_sensor") is True
-        assert registry.relation_types("fake_sensor")["watches"].slotted is True
+        registry.register(FakeConcreteKind)
+        assert registry.sensitive("fake_kind") is True
+        assert registry.relation_types("fake_kind")["link"].slotted is True
 
     def test_unregistered_kind(self):
         registry = KindRegistry()
-        assert registry.get("fake_sensor") is None
-        assert "fake_sensor" not in registry
-        assert registry.sensitive("fake_sensor") is False
+        assert registry.get("fake_kind") is None
+        assert "fake_kind" not in registry
+        assert registry.sensitive("fake_kind") is False

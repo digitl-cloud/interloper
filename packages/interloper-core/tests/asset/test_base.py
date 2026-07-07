@@ -295,23 +295,23 @@ class TestResources:
 class TestDestinations:
     def test_resolve_asset_own_destination(self):
         dest = FakeDestination()
-        asset = FakeAsset(destination=dest)
+        asset = FakeAsset(destinations=[dest])
         assert asset._resolve_destinations() == [dest]
 
     def test_resolve_wraps_single_destination_in_list(self):
-        asset = FakeAsset(destination=FakeDestination())
+        asset = FakeAsset(destinations=[FakeDestination()])
         resolved = asset._resolve_destinations()
         assert isinstance(resolved, list)
         assert len(resolved) == 1
 
     def test_resolve_keeps_list_destination(self):
         dests = [FakeDestination(), FakeOtherDestination()]
-        asset = FakeAsset(destination=dests)  # ty: ignore[invalid-argument-type]
+        asset = FakeAsset(destinations=dests)  # ty: ignore[invalid-argument-type]
         assert asset._resolve_destinations() == dests
 
     def test_resolve_falls_back_to_source_destination(self):
         source_dest = FakeDestination()
-        source = FakeParentSource(destination=source_dest)
+        source = FakeParentSource(destinations=[source_dest])
         asset = FakeAsset()
         asset._source = source
         assert asset._resolve_destinations() == [source_dest]
@@ -403,12 +403,12 @@ class TestReconfiguration:
 
     def test_override_destination(self):
         new_dest = FakeOtherDestination()
-        reconfigured = FakeAsset(destination=FakeDestination())(destination=new_dest)
-        assert reconfigured.destination is new_dest
+        reconfigured = FakeAsset(destinations=[FakeDestination()])(destinations=new_dest)
+        assert reconfigured.destinations == [new_dest]
 
     def test_override_deps(self):
-        reconfigured = FakeAsset()(deps={"upstream": "abc"})
-        assert reconfigured.deps == {"upstream": "abc"}
+        reconfigured = FakeAsset()(dependencies={"upstream": "abc"})
+        assert reconfigured.dependencies == {"upstream": "abc"}
 
     def test_resources_are_merged_not_replaced(self):
         existing = FakeResource(value="existing")
@@ -443,17 +443,16 @@ class TestSerialization:
         assert restored.materializable is False
 
     def test_asset_with_destination_roundtrip(self):
-        asset = FakeAsset(destination=FakeDestination())
+        asset = FakeAsset(destinations=[FakeDestination()])
         restored = Component.from_spec(asset.to_spec())
         assert isinstance(restored, FakeAsset)
-        assert isinstance(restored.destination, FakeDestination)
+        assert isinstance(restored.destinations[0], FakeDestination)
 
     def test_asset_with_list_of_destinations_roundtrip(self):
-        asset = FakeAsset(destination=[FakeDestination(), FakeOtherDestination()])
+        asset = FakeAsset(destinations=[FakeDestination(), FakeOtherDestination()])
         restored = FakeAsset.from_spec(asset.to_spec())
-        assert isinstance(restored.destination, list)
-        assert isinstance(restored.destination[0], FakeDestination)
-        assert isinstance(restored.destination[1], FakeOtherDestination)
+        assert isinstance(restored.destinations[0], FakeDestination)
+        assert isinstance(restored.destinations[1], FakeOtherDestination)
 
     def test_asset_with_resources_roundtrip(self):
         asset = FakeAsset(resources={"config": FakeResource(value="abc")})
@@ -463,9 +462,9 @@ class TestSerialization:
         assert config.value == "abc"
 
     def test_asset_with_deps_roundtrip(self):
-        asset = FakeAsset(deps={"upstream": "asset-id-123"})
+        asset = FakeAsset(dependencies={"upstream": "asset-id-123"})
         restored = FakeAsset.from_spec(asset.to_spec())
-        assert restored.deps == {"upstream": "asset-id-123"}
+        assert restored.dependencies == {"upstream": "asset-id-123"}
 
     def test_asset_preserves_instance_id(self):
         asset = FakeAsset(id="fixed123")
@@ -485,7 +484,7 @@ class TestSerialization:
     def test_roundtrip_via_json_string(self):
         asset = FakeAsset(
             dataset="ds",
-            destination=[FakeDestination(), FakeOtherDestination()],
+            destinations=[FakeDestination(), FakeOtherDestination()],
             resources={"config": FakeResource(value="v")},
         )
         spec_json = asset.to_spec().model_dump_json()
@@ -493,7 +492,7 @@ class TestSerialization:
 
         assert isinstance(restored, FakeAsset)
         assert restored.dataset == "ds"
-        assert isinstance(restored.destination, list)
+        assert isinstance(restored.destinations, list)
         assert isinstance(restored.resources["config"], FakeResource)
 
 
@@ -526,7 +525,7 @@ class TestDestinationWrite:
         def empty() -> list[dict[str, Any]]:
             return []
 
-        asset = empty(id="empty", destination=mem)
+        asset = empty(id="empty", destinations=[mem])
         logs = await _capture_log_events(asset.materialize_async())
 
         # Nothing was written.
@@ -549,7 +548,7 @@ class TestDestinationWrite:
         def full() -> list[dict[str, Any]]:
             return [{"a": 1}]
 
-        asset = full(id="full", destination=mem)
+        asset = full(id="full", destinations=[mem])
         logs = await _capture_log_events(asset.materialize_async())
 
         # Data was written and no "no data" warning was emitted.
@@ -617,7 +616,7 @@ class TestAsyncAndSyncData:
         def users() -> list[dict[str, Any]]:
             return [{"id": 1}]
 
-        users(destination=CapturingDestination(id="sync-dest")).materialize()
+        users(destinations=[CapturingDestination(id="sync-dest")]).materialize()
         assert captured["data"] == [{"id": 1}]
 
     async def test_async_destination_write_is_awaited(self):
@@ -636,7 +635,7 @@ class TestAsyncAndSyncData:
         def users() -> list[dict[str, Any]]:
             return [{"id": 1}]
 
-        asset = users(destination=AsyncDestination(id="async-dest"))
+        asset = users(destinations=[AsyncDestination(id="async-dest")])
         await asset.materialize_async()
         assert captured["data"] == [{"id": 1}]
 
@@ -742,7 +741,7 @@ class TestConform:
         def users() -> list[dict[str, Any]]:
             return [{"user_id": 1, "name": "a"}]
 
-        asset = users(destination=CapturingDestination(id="cap"))
+        asset = users(destinations=[CapturingDestination(id="cap")])
         await asset.materialize_async()
         assert captured["schema"] is ConformSchema
 
@@ -760,7 +759,7 @@ class TestConform:
         def users() -> list[dict[str, Any]]:
             return [{"user_id": 1}]
 
-        asset = users(destination=CapturingDestination(id="cap"))
+        asset = users(destinations=[CapturingDestination(id="cap")])
         await asset.materialize_async()
         assert captured["schema"] is not None
         assert [s.name for s in captured["schema"].field_specs()] == ["user_id"]

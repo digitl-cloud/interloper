@@ -24,7 +24,7 @@ def my_source():
 Run for a specific date:
 
 ```py
-source = my_source(destination=il.FileDestination("./data"))
+source = my_source(destinations=il.FileDestination("./data"))
 dag = il.DAG(source)
 dag.materialize(partition_or_window=il.TimePartition(dt.date(2025, 1, 15)))
 ```

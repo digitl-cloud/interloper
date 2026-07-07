@@ -209,8 +209,7 @@ class TestCompile:
         for asset in plan.dag.assets:
             assert asset.source is not None
             assert asset.source.greeting == "hi"
-            assert isinstance(asset.destination, list)
-            assert isinstance(asset.destination[0], il.MemoryDestination)
+            assert isinstance(asset.destinations[0], il.MemoryDestination)
 
     def test_select_marks_unselected_non_materializable(self) -> None:
         plan = _manifest(
@@ -227,7 +226,7 @@ class TestCompile:
         generations = plan.dag.topological_generations()
         assert [[type(a).key for a in g] for g in generations] == [["beta"]]
         # The non-materializable parent stays wired as a dependency.
-        assert by_key["alpha"].id in by_key["beta"].deps.values()
+        assert by_key["alpha"].id in by_key["beta"].dependencies.values()
 
     def test_select_unknown_key_raises(self) -> None:
         with pytest.raises(ManifestError, match="has no asset"):
@@ -251,8 +250,7 @@ class TestCompile:
 
         assert len(plan.dag.assets) == 1
         assert type(plan.dag.assets[0]).key == "fake_standalone_asset"
-        assert isinstance(plan.dag.assets[0].destination, list)
-        assert isinstance(plan.dag.assets[0].destination[0], il.MemoryDestination)
+        assert isinstance(plan.dag.assets[0].destinations[0], il.MemoryDestination)
 
     def test_multiple_destinations_fan_out(self, tmp_path: Any) -> None:
         plan = _manifest(
@@ -270,8 +268,7 @@ class TestCompile:
         ).compile()
 
         for asset in plan.dag.assets:
-            assert isinstance(asset.destination, list)
-            types = {type(d) for d in asset.destination}
+            types = {type(d) for d in asset.destinations}
             assert types == {il.MemoryDestination, il.FileDestination}
 
     def test_ref_reuses_one_instance(self) -> None:
@@ -289,8 +286,7 @@ class TestCompile:
 
         instances = set()
         for a in plan.dag.assets:
-            assert isinstance(a.destination, list)
-            instances.add(id(a.destination[0]))
+            instances.add(id(a.destinations[0]))
         assert len(instances) == 1  # same instance across both items and all assets
 
     def test_ref_resolved_inside_config(self) -> None:
@@ -301,12 +297,12 @@ class TestCompile:
             assets:
               - source: {SOURCE_PATH}
                 config:
-                  destination: {{ref: mem}}
+                  destinations: [{{ref: mem}}]
             """
         ).compile()
 
         for asset in plan.dag.assets:
-            assert isinstance(asset.destination, il.MemoryDestination)
+            assert isinstance(asset.destinations[0], il.MemoryDestination)
 
     def test_unknown_ref_raises(self) -> None:
         with pytest.raises(ManifestError, match="Unknown reference 'nope'"):
@@ -358,8 +354,7 @@ class TestCompile:
         ).compile()
 
         for asset in plan.dag.assets:
-            assert isinstance(asset.destination, list)
-            assert isinstance(asset.destination[0], il.MemoryDestination)
+            assert isinstance(asset.destinations[0], il.MemoryDestination)
 
     def test_explicit_destinations_override_auto(self, tmp_path: Any) -> None:
         plan = _manifest(
@@ -378,8 +373,7 @@ class TestCompile:
         ).compile()
 
         for asset in plan.dag.assets:
-            assert isinstance(asset.destination, list)
-            assert {type(d) for d in asset.destination} == {il.FileDestination}  # auto 'mem' not applied
+            assert {type(d) for d in asset.destinations} == {il.FileDestination}  # auto 'mem' not applied
 
     def test_auto_resource_fills_empty_slot(self) -> None:
         plan = _manifest(
@@ -427,8 +421,8 @@ class TestCompile:
                 assets:
                   - source: {SOURCE_PATH}
                     config:
-                      destination:
-                        type: {MEMORY_DESTINATION_PATH}
+                      destinations:
+                        - type: {MEMORY_DESTINATION_PATH}
                     destinations:
                       - type: {MEMORY_DESTINATION_PATH}
                 """
@@ -440,15 +434,15 @@ class TestCompile:
             assets:
               - source: {SOURCE_PATH}
                 config:
-                  destination:
-                    type: {FILE_DESTINATION_PATH}
-                    config:
-                      base_path: {tmp_path}
+                  destinations:
+                    - type: {FILE_DESTINATION_PATH}
+                      config:
+                        base_path: {tmp_path}
             """
         ).compile()
 
         for asset in plan.dag.assets:
-            assert isinstance(asset.destination, il.FileDestination)
+            assert isinstance(asset.destinations[0], il.FileDestination)
 
     def test_partition_and_runner_carried_into_plan(self) -> None:
         plan = _manifest(

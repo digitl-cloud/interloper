@@ -56,7 +56,7 @@ print(result)
 Add a destination and materialize -- this runs the asset **and** writes the result:
 
 ```py
-greetings_asset = greetings(destination=il.FileDestination("./data"))
+greetings_asset = greetings(destinations=il.FileDestination("./data"))
 greetings_asset.materialize()
 # Data is written to ./data/greetings/data.pkl
 ```
@@ -83,7 +83,7 @@ def my_source():
 ### Build a DAG and materialize everything
 
 ```py
-source = my_source(destination=il.FileDestination("./data"))
+source = my_source(destinations=il.FileDestination("./data"))
 dag = il.DAG(source)
 dag.materialize()
 ```

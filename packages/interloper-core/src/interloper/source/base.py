@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from typing import Any, ClassVar
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
 from interloper.asset import Asset
@@ -82,7 +82,7 @@ class Source(Component):
 
         class MySource(Source):
             resource_types = {"config": ProdConfig}
-            destination = PostgresDest(connection="...")
+            destinations = [PostgresDest(connection="...")]
             asset_types = [Users, Orders]
 
     Access assets by key via attribute access::
@@ -97,18 +97,30 @@ class Source(Component):
     tags: ClassVar[list[str]] = []
     runnable: ClassVar[bool] = True
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "resource": RelationDefinition(kinds=["connection", "config", "resource"], slotted=True),
-        "destination": RelationDefinition(kinds=["destination"]),
+        "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
+        "destination": RelationDefinition(kinds=["destination"], field="destinations"),
     }
     internal_fields: ClassVar[frozenset[str]] = frozenset(
-        {"assets", "destination", "normalizer", "materialization_strategy"}
+        {"assets", "destinations", "normalizer", "materialization_strategy"}
     )
 
     # State
-    destination: Destination | list[Destination] | None = Field(default=None)
+    destinations: list[Destination] = Field(default_factory=list)
     normalizer: Normalizer | None = Field(default=None)
     materialization_strategy: MaterializationStrategy | None = Field(default=None)
     assets: list[Asset] = Field(default_factory=list)
+
+    @field_validator("destinations", mode="before")
+    @classmethod
+    def _coerce_destinations(cls, value: Any) -> Any:
+        """Accept a single destination or ``None`` where a list is expected.
+
+        Returns:
+            The value as a list.
+        """
+        if value is None:
+            return []
+        return value if isinstance(value, (list, tuple)) else [value]
 
     # Exposed fields
     dataset: str = InputField(default="", description="Defaults to the source key when left empty")
@@ -213,7 +225,7 @@ class Source(Component):
                     asset_spec = asset.to_spec()
                     asset_init = dict(asset_spec.init or {})
                     if asset_spec.id:
-                        # Preserve instance id so deps wire up after round-trip
+                        # Preserve instance id so dependencies wire up after round-trip
                         asset_init["id"] = asset_spec.id
                     overrides[type(asset).key] = asset_init
                 if overrides:
@@ -356,8 +368,8 @@ class Source(Component):
                 asset.dataset = self.dataset
             if not asset.default_destination_key and self.default_destination_key:
                 asset.default_destination_key = self.default_destination_key
-            if asset.destination is None and self.destination is not None:
-                asset.destination = self.destination
+            if not asset.destinations and self.destinations:
+                asset.destinations = list(self.destinations)
             if asset.normalizer is None and self.normalizer is not None:
                 asset.normalizer = self.normalizer
             if (
@@ -371,7 +383,7 @@ class Source(Component):
             self._resolve_deps(asset, siblings)
 
         # Trickle source resources down to destinations
-        for dest in self._resolve_own_destinations():
+        for dest in self.destinations:
             self.trickle_resources(dest)
 
     def __getattr__(self, name: str) -> Asset:
@@ -410,15 +422,15 @@ class Source(Component):
 
         Looks at ``requires`` and ``optional_requires`` entries whose
         qualified key belongs to this source.  If a sibling asset
-        matches, wires it into ``asset.deps``.
+        matches, wires it into ``asset.dependencies``.
 
-        Pre-existing ``deps`` entries (e.g. from the ``asset_dependencies``
-        table) are never overwritten.
+        Pre-existing ``dependencies`` entries (e.g. hydrated from persisted
+        relations) are never overwritten.
         """
         asset_cls = type(asset)
         for mapping in (asset_cls.requires, asset_cls.optional_requires):
             for param_name, required_qk in mapping.items():
-                if param_name in asset.deps:
+                if param_name in asset.dependencies:
                     continue
                 # Only wire intra-source: qualified key must belong to this source
                 if "." in required_qk:
@@ -429,18 +441,7 @@ class Source(Component):
                     asset_key = required_qk
                 sibling = siblings.get(asset_key)
                 if sibling is not None and sibling is not asset:
-                    asset.deps[param_name] = sibling.id
-
-    def _resolve_own_destinations(self) -> list[Destination]:
-        """Return the source's own destination list (without validation).
-
-        Unlike ``Asset._resolve_destinations`` this does not cascade — it only
-        returns destinations directly set on this source instance.
-        """
-        raw = self.destination
-        if raw is None:
-            return []
-        return raw if isinstance(raw, list) else [raw]
+                    asset.dependencies[param_name] = sibling.id
 
     @classmethod
     def definition(cls) -> SourceDefinition:
@@ -475,7 +476,7 @@ class Source(Component):
         self,
         *,
         resources: dict[str, Resource] | None = None,
-        destination: Destination | list[Destination] | None = None,
+        destinations: Destination | list[Destination] | None = None,
         dataset: str | None = None,
         default_destination_key: str | None = None,
         materializable: bool | None = None,
@@ -488,8 +489,8 @@ class Source(Component):
             a._source = copy
         if resources is not None:
             copy.resources = {**copy.resources, **resources}
-        if destination is not None:
-            copy.destination = destination
+        if destinations is not None:
+            copy.destinations = destinations if isinstance(destinations, list) else [destinations]
         if dataset is not None:
             copy.dataset = dataset
         if default_destination_key is not None:

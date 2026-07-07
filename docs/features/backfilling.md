@@ -22,7 +22,7 @@ def my_source():
 
     return [daily_data]
 
-source = my_source(destination=il.FileDestination("./data"))
+source = my_source(destinations=il.FileDestination("./data"))
 dag = il.DAG(source)
 
 window = il.TimePartitionWindow(

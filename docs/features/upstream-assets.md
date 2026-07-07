@@ -27,7 +27,7 @@ When the DAG executes, `users` runs first, its result is written to its destinat
 back and passed as the `users` argument to `user_count`.
 
 ```py
-source = my_source(destination=il.FileDestination("./data"))
+source = my_source(destinations=il.FileDestination("./data"))
 dag = il.DAG(source)
 dag.materialize()
 ```
@@ -80,7 +80,7 @@ dag.materialize()
 
 ## Runtime dependency overrides
 
-Each runtime asset carries a `deps` dict mapping a parameter name to an upstream asset's
+Each runtime asset carries a `dependencies` dict mapping a parameter name to an upstream asset's
 **instance id**. You can wire dependencies imperatively — useful for connecting a standalone
 asset to a source asset:
 
@@ -89,8 +89,8 @@ asset to a source asset:
 def extra():
     return "x"
 
-extra_asset = extra(destination=dest)
-source.report.deps["data"] = extra_asset.id
+extra_asset = extra(destinations=dest)
+source.report.dependencies["data"] = extra_asset.id
 
 dag = il.DAG(source, extra_asset)
 ```
@@ -99,7 +99,7 @@ dag = il.DAG(source, extra_asset)
 
 The DAG resolves each parameter in this order:
 
-1. **Explicit mapping** via `asset.deps` / `requires`
+1. **Explicit mapping** via `asset.dependencies` / `requires`
 2. **Same-source implicit** -- parameter name matches a sibling asset key
 3. **Renamed-asset alias** -- parameter name matches the original key of a renamed asset
 4. **Standalone implicit** -- parameter name matches a standalone asset key
