@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from concurrent.futures import Future
 from contextlib import contextmanager
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import interloper as il
 from interloper.errors import RunnerError
@@ -135,3 +137,97 @@ def test_no_fail_fast_keeps_quiet_on_child_reported_failure() -> None:
         runner._handle_completed(future, asset)  # must not raise
 
     assert not [e for e in events if e.type == EventType.ASSET_FAILED]
+
+
+# ----------------------------------------------------------------------
+# Failure recovery: the host-authored terminal carries the pod's real cause
+# (not a bare "Job ... failed") when the live event stream dropped before the
+# child reported its terminal.
+# ----------------------------------------------------------------------
+
+
+def _pod(name: str = "pod-x", *, terminated: SimpleNamespace | None = None) -> SimpleNamespace:
+    container_statuses = None
+    if terminated is not None:
+        container_statuses = [SimpleNamespace(state=SimpleNamespace(terminated=terminated))]
+    return SimpleNamespace(
+        metadata=SimpleNamespace(name=name),
+        status=SimpleNamespace(container_statuses=container_statuses),
+    )
+
+
+def _mock_core_v1(*, pod: SimpleNamespace | None = None, logs: str = "") -> MagicMock:
+    core = MagicMock()
+    core.list_namespaced_pod.return_value = SimpleNamespace(items=[pod] if pod is not None else [])
+    core.read_namespaced_pod_log.return_value = logs
+    return core
+
+
+def _failed_event_line(asset_id: str, error: str, traceback: str | None = None) -> str:
+    metadata: dict[str, str] = {"asset_id": asset_id, "error": error}
+    if traceback is not None:
+        metadata["traceback"] = traceback
+    return Event(type=EventType.ASSET_FAILED, metadata=metadata).to_json()
+
+
+def test_recover_returns_fallback_without_job_or_client() -> None:
+    """No job name (or no k8s client) → the bare fallback, no traceback."""
+    runner, _ = _runner_with_asset("asset-1", "run-1")
+    assert runner._recover_asset_failure(None, "asset-1", fallback="Job x failed") == ("Job x failed", None)
+
+    runner._core_v1 = _mock_core_v1()
+    assert runner._recover_asset_failure(None, "asset-1", fallback="Job x failed") == ("Job x failed", None)
+
+
+def test_recover_reads_rich_terminal_from_pod_logs() -> None:
+    """The child's own error + traceback are recovered from the final logs."""
+    runner, _ = _runner_with_asset("asset-1", "run-1")
+    line = _failed_event_line("asset-1", "429 Too Many Requests", "Traceback...\nHTTPStatusError")
+    runner._core_v1 = _mock_core_v1(pod=_pod(), logs=f"some debug log\n{line}\n")
+
+    error, tb = runner._recover_asset_failure("job-x", "asset-1", fallback="Job job-x failed")
+
+    assert error == "429 Too Many Requests"
+    assert tb is not None and "HTTPStatusError" in tb
+
+
+def test_recover_ignores_other_assets_terminal_in_logs() -> None:
+    """A terminal for a different asset must not be attributed to this one."""
+    runner, _ = _runner_with_asset("asset-1", "run-1")
+    term = SimpleNamespace(reason="Error", exit_code=1, message="log tail")
+    runner._core_v1 = _mock_core_v1(pod=_pod(terminated=term), logs=_failed_event_line("other-asset", "not mine"))
+
+    error, tb = runner._recover_asset_failure("job-x", "asset-1", fallback="Job job-x failed")
+
+    # No matching log terminal → falls through to the termination state.
+    assert error == "Job job-x failed (reason=Error, exit_code=1)"
+    assert tb == "log tail"
+
+
+def test_recover_falls_back_to_termination_state_on_oomkill() -> None:
+    """A SIGKILLed pod has no terminal event; reason/exit_code surface instead."""
+    runner, _ = _runner_with_asset("asset-1", "run-1")
+    term = SimpleNamespace(reason="OOMKilled", exit_code=137, message="killed log tail")
+    runner._core_v1 = _mock_core_v1(pod=_pod(terminated=term), logs="no events here\n")
+
+    error, tb = runner._recover_asset_failure("job-x", "asset-1", fallback="Job job-x failed")
+
+    assert error == "Job job-x failed (reason=OOMKilled, exit_code=137)"
+    assert tb == "killed log tail"
+
+
+def test_handle_completed_emits_recovered_error_and_traceback() -> None:
+    """End to end: the host-authored ``asset_failed`` carries the recovered cause."""
+    runner, asset = _runner_with_asset("asset-1", "run-1")
+    runner._core_v1 = _mock_core_v1(pod=_pod(), logs=_failed_event_line("asset-1", "429 Too Many Requests", "rich-tb"))
+    future: Future[None] = Future()
+    future.set_exception(RunnerError("Job interloper-run-x failed"))
+    runner._job_map[future] = "interloper-run-x"
+
+    with _capture() as events:
+        runner._handle_completed(future, asset)
+
+    failed = [e for e in events if e.type == EventType.ASSET_FAILED]
+    assert len(failed) == 1
+    assert failed[0].metadata.get("error") == "429 Too Many Requests"
+    assert failed[0].metadata.get("traceback") == "rich-tb"

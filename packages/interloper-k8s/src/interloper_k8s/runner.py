@@ -131,6 +131,11 @@ class KubernetesRunner(SyncRunner):
             args=cmd[1:],
             env=env if env else None,
             resources=resources,
+            # On a non-zero exit with an empty termination-log, Kubernetes copies
+            # the tail of the container logs into the pod's termination state, so
+            # the host can recover a real cause even when the live log stream that
+            # carries child events has already dropped.
+            termination_message_policy="FallbackToLogsOnError",
         )
 
         pod_spec = client.V1PodSpec(
@@ -244,9 +249,10 @@ class KubernetesRunner(SyncRunner):
         try:
             future.result()
         except Exception as e:
-            self.state.mark_asset_failed(asset, str(e), emit=True)
+            error, tb = self._recover_asset_failure(job_name, asset.id, fallback=str(e))
+            self.state.mark_asset_failed(asset, error, tb=tb, emit=True)
             if self.fail_fast or self.reraise:
-                raise RunnerError(f"Asset '{type(asset).key}' failed: {e}") from e
+                raise RunnerError(f"Asset '{type(asset).key}' failed: {error}") from e
         else:
             self.state.mark_asset_completed(asset, emit=True)
 
@@ -266,7 +272,8 @@ class KubernetesRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:  # noqa: BLE001
-                self.state.mark_asset_failed(asset, str(e), emit=True)
+                error, tb = self._recover_asset_failure(job_name, asset.id, fallback=str(e))
+                self.state.mark_asset_failed(asset, error, tb=tb, emit=True)
             else:
                 self.state.mark_asset_completed(asset, emit=True)
 
@@ -299,6 +306,141 @@ class KubernetesRunner(SyncRunner):
             time.sleep(self.poll_interval)
 
         raise RunnerError(f"Job {job_name} stopped (runner shutting down)")
+
+    # ------------------------------------------------------------------
+    # Failure recovery
+    # ------------------------------------------------------------------
+
+    def _recover_asset_failure(
+        self,
+        job_name: str | None,
+        target_asset_id: str,
+        *,
+        fallback: str,
+    ) -> tuple[str, str | None]:
+        """Recover the real failure cause from a failed child Job's pod.
+
+        The child streams its rich terminal (error + traceback) over the live
+        pod-log stream, but that follow-stream can drop while the pod is still
+        running (long retries, API-server idle timeouts), leaving the host with
+        only the Job status — a bare ``"Job ... failed"`` and no traceback.
+
+        On failure we re-read the pod's final logs (non-follow) and, failing
+        that, its container termination state, to recover the real error rather
+        than the Job status alone.
+
+        Returns:
+            ``(error, traceback)`` — the richest available; falls back to
+            ``fallback`` with no traceback when nothing can be recovered.
+        """
+        if job_name is None or self._core_v1 is None:
+            return fallback, None
+
+        pod = self._find_pod(job_name)
+        if pod is None:
+            return fallback, None
+
+        pod_name = pod.metadata.name if pod.metadata else None
+
+        # 1. Rich path: the child's own terminal event, re-read from the final
+        #    logs the live stream missed.
+        if pod_name is not None:
+            error, tb = self._terminal_from_pod_logs(pod_name, target_asset_id)
+            if error is not None:
+                return error, tb
+
+        # 2. Fallback: the container's termination state. With
+        #    terminationMessagePolicy=FallbackToLogsOnError, ``message`` carries
+        #    the tail of the logs; ``reason``/``exit_code`` flag OOMKills, signals.
+        return self._terminal_from_termination_state(pod, fallback)
+
+    def _find_pod(self, job_name: str) -> Any | None:
+        """Return the (first) pod owned by ``job_name``, or ``None``."""
+        if self._core_v1 is None:
+            return None
+        try:
+            pods = cast(
+                client.V1PodList,
+                self._core_v1.list_namespaced_pod(
+                    namespace=self.namespace,
+                    label_selector=f"job-name={job_name}",
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            return None
+        return pods.items[0] if pods.items else None
+
+    def _terminal_from_pod_logs(
+        self,
+        pod_name: str,
+        target_asset_id: str,
+    ) -> tuple[str | None, str | None]:
+        """Re-read the pod's final logs and parse the child's terminal event.
+
+        Returns the error/traceback of the last ``asset_failed`` /
+        ``asset_exec_failed`` event for the target asset, or ``(None, None)``
+        when the logs hold no parseable terminal (e.g. the pod was SIGKILLed).
+        """
+        if self._core_v1 is None:
+            return None, None
+        try:
+            logs = cast(
+                str,
+                self._core_v1.read_namespaced_pod_log(
+                    name=pod_name,
+                    namespace=self.namespace,
+                    container="interloper",
+                    tail_lines=2000,
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            return None, None
+
+        error: str | None = None
+        tb: str | None = None
+        for line in logs.splitlines():
+            line = line.rstrip()
+            if not line:
+                continue
+            try:
+                event = parse_event_from_log_line(line)
+            except Exception:  # noqa: BLE001
+                continue
+            if event is None or event.type not in (EventType.ASSET_FAILED, EventType.ASSET_EXEC_FAILED):
+                continue
+            event_asset_id = event.metadata.get("asset_id")
+            if event_asset_id and event_asset_id != target_asset_id:
+                continue
+            err = event.metadata.get("error")
+            if err:
+                error = err
+                tb = event.metadata.get("traceback") or tb
+        return error, tb
+
+    def _terminal_from_termination_state(self, pod: Any, fallback: str) -> tuple[str, str | None]:
+        """Build a cause from the pod's terminated container state.
+
+        ``reason``/``exit_code`` are appended to ``fallback`` (so an OOMKill or
+        signal is no longer hidden behind a bare "Job failed"); the termination
+        ``message`` — the log tail under FallbackToLogsOnError — becomes the
+        traceback shown in the UI.
+        """
+        status = getattr(pod, "status", None)
+        if status is None:
+            return fallback, None
+        for cs in status.container_statuses or []:
+            term = cs.state.terminated if cs.state else None
+            if term is None:
+                continue
+            bits: list[str] = []
+            if term.reason:
+                bits.append(f"reason={term.reason}")
+            if term.exit_code is not None:
+                bits.append(f"exit_code={term.exit_code}")
+            error = f"{fallback} ({', '.join(bits)})" if bits else fallback
+            tb = term.message or None
+            return error, tb
+        return fallback, None
 
     # ------------------------------------------------------------------
     # Job helpers
