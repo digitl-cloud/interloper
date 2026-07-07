@@ -222,6 +222,8 @@ def invite_member(
         org_name = org.name if org else "Unknown"
         inviter_name = user.name or user.email
         _send_invitation_email(request, smtp_config, invitation, org_name, inviter_name)
+    else:
+        logger.warning("SMTP not configured; invitation email to %s not sent", invitation.email)
 
     return InvitationResponse(
         id=invitation.id,
@@ -278,5 +280,7 @@ def resend_invitation(
         org_name = org.name if org else "Unknown"
         inviter_name = user.name or user.email
         _send_invitation_email(request, smtp_config, new_invitation, org_name, inviter_name)
+    else:
+        logger.warning("SMTP not configured; invitation email to %s not sent", new_invitation.email)
 
     return {"status": "ok"}
