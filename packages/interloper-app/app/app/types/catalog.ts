@@ -29,6 +29,8 @@ export interface ComponentDefinition {
     description: string
     tags: string[]
     config_schema: Record<string, unknown>
+    /** JSON Schema of the kind's machine-owned state (`{}` = stateless). */
+    state_schema: Record<string, unknown>
     /** Relation vocabulary: type → allowed dst kinds, keys and slots. */
     relations: Record<string, RelationDefinition>
     provider?: string
@@ -73,6 +75,30 @@ export function requiredDependencies(defn: ComponentDefinition): Record<string, 
 /** Compatible destination keys from the `destination` relation. Empty = all compatible. */
 export function allowedDestinationKeys(defn: ComponentDefinition): string[] {
     return defn.relations?.destination?.keys ?? []
+}
+
+// ─── State schema ────────────────────────────────────────────────────
+
+/** A displayable column derived from a definition's `state_schema`. */
+export interface StateColumn {
+    key: string
+    label: string
+    format: 'datetime' | 'text'
+}
+
+/** Humanize a snake_case key: `last_run_at` → "Last Run At". */
+function humanizeKey(key: string): string {
+    return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
+
+/** Columns for a definition's `state_schema` properties. `_at` keys are datetimes. */
+export function stateColumns(defn: ComponentDefinition): StateColumn[] {
+    const properties = (defn.state_schema?.properties ?? {}) as Record<string, JsonSchemaProperty>
+    return Object.entries(properties).map(([key, prop]) => ({
+        key,
+        label: prop.title ?? humanizeKey(key),
+        format: key.endsWith('_at') ? 'datetime' as const : 'text' as const,
+    }))
 }
 
 // ─── Qualified keys ──────────────────────────────────────────────────

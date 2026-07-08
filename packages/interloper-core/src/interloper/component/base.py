@@ -103,6 +103,7 @@ class ComponentDefinition(BaseModel):
     description: str = ""
     tags: list[str] = Field(default_factory=list)
     config_schema: dict[str, Any] = Field(default_factory=dict)
+    state_schema: dict[str, Any] = Field(default_factory=dict)
     relations: dict[str, RelationDefinition] = Field(default_factory=dict)
 
 
@@ -591,6 +592,7 @@ class Component(BaseModel):
             description=cls.__doc__ or "",
             tags=list(getattr(cls, "tags", [])),
             config_schema=cls.config_schema(),
+            state_schema=cls.state_model.model_json_schema() if cls.state_model else {},
             relations=cls.relation_definitions(),
         )
 

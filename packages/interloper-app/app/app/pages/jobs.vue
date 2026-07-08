@@ -3,13 +3,14 @@ import { h, resolveComponent } from 'vue'
 import cronstrue from 'cronstrue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobCron, jobEnabled, jobLastRunAt, jobTargetIds } from '~/types/component'
+import { jobCron, jobEnabled, jobTargetIds } from '~/types/component'
 
 definePageMeta({ title: 'Jobs' })
 
 const UBadge = resolveComponent('UBadge')
 
 const componentsStore = useComponentsStore()
+const catalogStore = useCatalogStore()
 const toast = useToast()
 
 const jobs = computed(() => componentsStore.byKind('job'))
@@ -47,7 +48,7 @@ const SETUP_STEPS = [
     { to: '/destinations', icon: 'i-lucide-database', title: 'Step 2 · Add a destination', sub: 'Choose where assets are materialized', link: 'Go to Destinations' },
 ]
 
-const columns: TableColumn<ComponentRecord>[] = [
+const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     { accessorKey: 'select' as any, header: '' },
     {
         accessorKey: 'name',
@@ -81,17 +82,13 @@ const columns: TableColumn<ComponentRecord>[] = [
             variant: 'subtle',
         }, () => jobEnabled(row.original) ? 'Enabled' : 'Disabled'),
     },
-    {
-        accessorKey: 'last_run_at',
-        header: 'Last run',
-        accessorFn: (row: ComponentRecord) => jobLastRunAt(row) ? formatDate(jobLastRunAt(row)!) : '—',
-    },
+    ...stateSchemaColumns(catalogStore.definitionsForKind('job')[0]),
     {
         accessorKey: 'created_at',
         header: 'Created',
         accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '—',
     },
-]
+])
 
 function rowActions(job: ComponentRecord): DropdownMenuItem[][] {
     return [[
