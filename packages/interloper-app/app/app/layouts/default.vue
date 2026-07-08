@@ -90,6 +90,12 @@ const items = computed<NavigationMenuItem[]>(() => {
             active: route.path === '/jobs',
         },
         {
+            label: 'Hooks',
+            icon: 'i-carbon-lightning',
+            to: '/hooks',
+            active: route.path === '/hooks',
+        },
+        {
             label: 'Executions',
             icon: 'i-lucide-activity',
             to: '/executions',

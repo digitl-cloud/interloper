@@ -125,3 +125,13 @@ export function jobTargetIds(c: ComponentRecord, kind: string): string[] {
         .filter(r => r.dst_kind === kind)
         .map(r => r.dst_id)
 }
+
+// ─── Hook accessors (config fields) ──────────────────────────────────
+
+export function hookEvents(c: ComponentRecord): string[] {
+    return c.config?.events ?? []
+}
+
+export function hookEnabled(c: ComponentRecord): boolean {
+    return c.config?.enabled ?? true
+}

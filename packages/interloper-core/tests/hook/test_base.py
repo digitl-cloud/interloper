@@ -48,6 +48,11 @@ class TestDefinition:
         assert il.KINDS.state_model("job") is il.JobState
         assert il.KINDS.state_model("source") is None
 
+    def test_definition_describes_state(self):
+        assert set(il.Hook.definition().state_schema["properties"]) == {"last_fired_at", "last_run_id"}
+        assert set(il.Job.definition().state_schema["properties"]) == {"next_run_at", "last_run_at"}
+        assert il.Source.definition().state_schema == {}
+
     def test_config_schema_hides_relation_fields(self):
         schema = il.Hook.config_schema()
         assert "events" in schema["properties"]

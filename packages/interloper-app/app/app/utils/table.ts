@@ -2,6 +2,9 @@ import { h } from 'vue'
 import { UButton } from '#components'
 import type { Column } from '@tanstack/vue-table'
 import type { TableColumn } from '@nuxt/ui'
+import { stateColumns, type ComponentDefinition } from '~/types/catalog'
+import type { ComponentRecord } from '~/types/component'
+import { formatDate } from '~/utils/time'
 
 /**
  * Builds a clickable column header that toggles sorting (none → asc → desc)
@@ -28,6 +31,36 @@ export function sortableHeader<T>(label: string) {
             onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
         })
     }
+}
+
+/**
+ * Table columns for a component row's `state`, derived from its definition's
+ * `state_schema`. Datetime values render via `formatDate`; `_id` values as a
+ * short monospace id.
+ */
+export function stateSchemaColumns(defn: ComponentDefinition | undefined): TableColumn<ComponentRecord>[] {
+    if (!defn) return []
+    return stateColumns(defn).map((col) => {
+        if (col.format === 'datetime') {
+            return {
+                accessorKey: col.key,
+                header: col.label,
+                accessorFn: (row: ComponentRecord) => row.state?.[col.key] ? formatDate(row.state[col.key]) : '—',
+            } as TableColumn<ComponentRecord>
+        }
+        return {
+            accessorKey: col.key,
+            header: col.label,
+            accessorFn: (row: ComponentRecord) => row.state?.[col.key] ?? '',
+            cell: ({ row }: { row: { original: ComponentRecord } }) => {
+                const value = row.original.state?.[col.key]
+                if (value == null || value === '') return '—'
+                const text = String(value)
+                if (col.key.endsWith('_id')) return h('span', { class: 'font-mono text-xs' }, text.substring(0, 8))
+                return text
+            },
+        } as TableColumn<ComponentRecord>
+    })
 }
 
 /**
