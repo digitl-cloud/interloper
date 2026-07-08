@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from interloper.asset.base import Asset
 from interloper.component.base import Component, RelationDefinition
@@ -13,6 +13,18 @@ from interloper.source.base import Source
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
+
+
+class JobState(BaseModel):
+    """Machine-owned job state (see ``Component.state_model``).
+
+    Timestamps are canonical timezone-aware ISO-8601 strings — the scheduler
+    compares them lexicographically in SQL, so they are validated here but
+    never rewritten.
+    """
+
+    next_run_at: str | None = None
+    last_run_at: str | None = None
 
 
 class Job(Component):
@@ -38,6 +50,7 @@ class Job(Component):
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
     }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"targets", "destinations"})
+    state_model: ClassVar[type[BaseModel] | None] = JobState
 
     targets: list[Source | Asset] = Field(default_factory=list)
     destinations: list[Destination] = Field(default_factory=list)

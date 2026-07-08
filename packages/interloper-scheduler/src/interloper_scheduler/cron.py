@@ -204,8 +204,18 @@ class CronController:
 
     @staticmethod
     def _set_state(session: Session, job: Component, **timestamps: datetime) -> None:
-        """Merge timestamps into the job's machine-owned state (spec untouched)."""
-        job.state = {**(job.state or {}), **{key: value.isoformat() for key, value in timestamps.items()}}
+        """Merge timestamps into the job's machine-owned state (spec untouched).
+
+        The merged payload is validated against the kind's ``state_model``
+        (shape only — the stored ISO strings are never rewritten).
+        """
+        import interloper as il
+
+        state = {**(job.state or {}), **{key: value.isoformat() for key, value in timestamps.items()}}
+        model = il.KINDS.state_model(job.kind)
+        if model is not None:
+            model.model_validate(state)
+        job.state = state
         session.add(job)
         session.flush()
 

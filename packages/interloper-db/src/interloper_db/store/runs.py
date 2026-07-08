@@ -326,7 +326,9 @@ class RunMixin:
             if db_run.component_id:
                 db_job = session.get(Component, db_run.component_id)
                 if db_job:
-                    db_job.state = {**(db_job.state or {}), "last_run_at": db_run.completed_at.isoformat()}
+                    db_job.state = _checked_state(
+                        db_job.kind, {**(db_job.state or {}), "last_run_at": db_run.completed_at.isoformat()}
+                    )
                     session.add(db_job)
 
             if db_run.backfill_id:
@@ -547,3 +549,17 @@ def _advance_backfill(session: Session, backfill_id: UUID, *, failed: bool) -> N
     for pending_run in pending_runs[:available_slots]:
         pending_run.status = "queued"
         session.add(pending_run)
+
+
+def _checked_state(kind: str, state: dict) -> dict:
+    """Validate a state payload against the kind's declared model (non-normalizing).
+
+    Returns:
+        The original payload, unchanged — validation only checks shape, so the
+        stored string format (lexicographically comparable ISO timestamps)
+        never drifts.
+    """
+    model = il.KINDS.state_model(kind)
+    if model is not None:
+        model.model_validate(state)
+    return state

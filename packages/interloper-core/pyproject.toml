@@ -38,6 +38,7 @@ resource = "interloper.resource.base:Resource"
 connection = "interloper.connection.base:Connection"
 config = "interloper.config.base:Config"
 job = "interloper.job.base:Job"
+hook = "interloper.hook.base:Hook"
 
 [project.entry-points."interloper.oauth_providers"]
 amazon = "interloper.oauth.builtin:AMAZON"

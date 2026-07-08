@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from importlib.metadata import entry_points
 
+from pydantic import BaseModel
+
 from interloper.component.base import Component, RelationDefinition
 
 _ENTRY_POINT_GROUP = "interloper.kinds"
@@ -108,6 +110,16 @@ class KindRegistry:
         """
         cls = self.get(kind)
         return bool(cls and cls.runnable)
+
+    def state_model(self, kind: str) -> type[BaseModel] | None:
+        """The kind's machine-owned state model, if it declares one.
+
+        Returns:
+            The anchor class's ``state_model`` (``None`` for stateless or
+            unknown kinds).
+        """
+        cls = self.get(kind)
+        return cls.state_model if cls else None
 
     def relation_types(self, kind: str) -> dict[str, RelationDefinition]:
         """The relation vocabulary the kind declares.

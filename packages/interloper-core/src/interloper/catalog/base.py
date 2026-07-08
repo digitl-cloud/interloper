@@ -36,13 +36,14 @@ from pydantic import BaseModel, Field
 from interloper.asset.base import Asset
 from interloper.component import KINDS, Component, ComponentDefinition
 from interloper.destination.base import Destination
+from interloper.hook import TriggerHook, WebhookHook
 from interloper.job.base import Job
 from interloper.settings import AppSettings
 from interloper.source.base import Source
 
 logger = logging.getLogger(__name__)
 
-BUILTIN_COMPONENTS: tuple[type[Component], ...] = (Job,)
+BUILTIN_COMPONENTS: tuple[type[Component], ...] = (Job, TriggerHook, WebhookHook)
 
 _ENTRY_POINT_GROUP = "interloper.components"
 

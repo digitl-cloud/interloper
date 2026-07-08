@@ -255,6 +255,9 @@ class Component(BaseModel):
     # Class-declared config fields that are framework plumbing, stripped from
     # the definition's config_schema on top of the always-internal set.
     internal_fields: ClassVar[frozenset[str]] = frozenset()
+    # Model of the kind's machine-owned persisted state (None = stateless).
+    # The store validates state payloads against it at the write boundary.
+    state_model: ClassVar[type[BaseModel] | None] = None
 
     id: str = Field(default="")
     resources: dict[str, Any] = Field(default_factory=dict)
