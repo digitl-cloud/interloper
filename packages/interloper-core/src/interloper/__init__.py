@@ -23,7 +23,8 @@ from interloper.destination import (
     destination,
 )
 from interloper.events import Event, EventBus, EventType
-from interloper.job import Job
+from interloper.hook import HOOK_EVENT_TYPES, Hook, HookContext, HookState, TriggerHook, WebhookHook
+from interloper.job import Job, JobState
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.oauth import OAuthConfig, OAuthProvider
 from interloper.partitioning import (
@@ -68,6 +69,7 @@ from interloper.utils import bounded_gather, run
 
 __all__ = [
     "DAG",
+    "HOOK_EVENT_TYPES",
     "KINDS",
     "Asset",
     "AssetDefinition",
@@ -91,11 +93,15 @@ __all__ = [
     "FileDestination",
     "HTTPBearerAuth",
     "HeaderLinkPaginator",
+    "Hook",
+    "HookContext",
+    "HookState",
     "IOContext",
     "InputField",
     "JSONCursorPaginator",
     "JSONLinkPaginator",
     "Job",
+    "JobState",
     "JsonField",
     "KindRegistry",
     "MaterializationStrategy",
@@ -135,6 +141,8 @@ __all__ = [
     "TimePartition",
     "TimePartitionConfig",
     "TimePartitionWindow",
+    "TriggerHook",
+    "WebhookHook",
     "asset",
     "bounded_gather",
     "config",
