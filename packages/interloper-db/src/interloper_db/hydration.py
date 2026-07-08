@@ -75,7 +75,7 @@ class Hydrator:
         """
         init = self._build_init(session, db_component)
         return ComponentSpec(
-            path=self._resolve_path(db_component),
+            path=self._resolve_path(session, db_component),
             id=str(db_component.id) if db_component.id else "",
             init=init or None,
         )
@@ -179,8 +179,13 @@ class Hydrator:
             raise HydrationError(f"Relation {rel.src_id} -[{rel.type}]-> {rel.dst_id} points at a missing component")
         return self.build_component_spec(session, db_dst)
 
-    def _resolve_path(self, db_component: Component) -> str:
+    def _resolve_path(self, session: Session, db_component: Component) -> str:
         """Look up a component's import path via the catalog.
+
+        Source-owned assets are not top-level catalog entries: their composite
+        path (``module:Source.Asset``) comes from the parent source's
+        definition, so an asset row referenced as a relation destination
+        (a job target, a hook watch) builds a reconstructible spec.
 
         Returns:
             The resolved import path.
@@ -188,6 +193,13 @@ class Hydrator:
         Raises:
             CatalogKeyError: If the catalog has no entry for the row's key.
         """
+        if db_component.kind == "asset" and db_component.parent_id is not None:
+            parent = session.get(Component, db_component.parent_id)
+            parent_definition = self._catalog.get(parent.key) if parent else None
+            for asset_definition in getattr(parent_definition, "assets", []):
+                if asset_definition.key == db_component.key:
+                    return asset_definition.path
+
         definition = self._catalog.get(db_component.key)
         if not definition:
             raise CatalogKeyError(f"Unknown {db_component.kind} key: {db_component.key}")

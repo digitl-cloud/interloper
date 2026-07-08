@@ -17,6 +17,10 @@ class EventType(Enum):
     - **User logging**: messages emitted via ``context.logger``.
     """
 
+    # Hooks (recorded by the hook evaluator)
+    HOOK_FIRED = "hook_fired"
+    HOOK_FAILED = "hook_failed"
+
     # Asset lifecycle (managed by Runner)
     ASSET_QUEUED = "asset_queued"
     ASSET_STARTED = "asset_started"

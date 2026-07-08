@@ -222,22 +222,9 @@ class ComponentRelation(SQLModel, table=True):
             ondelete="CASCADE",
             name="fk_component_relations_dst",
         ),
-        CheckConstraint(
-            "type <> 'dependency' OR (src_kind = 'asset' AND dst_kind = 'asset')",
-            name="ck_component_relations_dependency",
-        ),
-        CheckConstraint(
-            "type <> 'resource' OR dst_kind IN ('connection', 'config', 'resource')",
-            name="ck_component_relations_resource",
-        ),
-        CheckConstraint(
-            "type <> 'destination' OR (dst_kind = 'destination' AND slot = '')",
-            name="ck_component_relations_destination",
-        ),
-        CheckConstraint(
-            "type <> 'target' OR (src_kind = 'job' AND dst_kind IN ('source', 'asset') AND slot = '')",
-            name="ck_component_relations_target",
-        ),
+        # Relation shapes (which types a kind may declare, which kinds they may
+        # point at, slotted or not) are enforced by the store from the class
+        # vocabulary — an open set, so it is deliberately not mirrored in CHECKs.
         Index(
             "uq_component_relations_slot",
             "src_id",

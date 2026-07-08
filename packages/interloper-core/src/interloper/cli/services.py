@@ -98,9 +98,12 @@ def run_services(
         )
         api_server = uvicorn.Server(uvi_config)
 
-    # -- Cron controller ------------------------------------------------------
+    # -- Cron controller + hook evaluator ---------------------------------------
+    # The hook evaluator rides the cron service: both are cluster singletons
+    # that turn declarative component intent into runs/side effects.
+    hook_controller = None
     if run_cron:
-        from interloper_scheduler import CronController
+        from interloper_scheduler import CronController, HookController
 
         cron_controller = CronController(
             store=store,
@@ -108,6 +111,7 @@ def run_services(
             max_execution_delay=settings.cron.max_execution_delay,
             batch_size=settings.cron.batch_size,
         )
+        hook_controller = HookController(store=store)
 
     # -- Queue worker / reaper ------------------------------------------------
     # Both need a Launcher; build it once if either is enabled.
@@ -153,6 +157,8 @@ def run_services(
         signal_nuxt(signal.SIGTERM)
         if cron_controller:
             cron_controller.stop()
+        if hook_controller:
+            hook_controller.stop()
         if queue_controller:
             queue_controller.stop()
         if reaper:
@@ -221,6 +227,8 @@ def run_services(
     threads: list[threading.Thread] = []
     if cron_controller:
         threads.append(threading.Thread(target=cron_controller.start, name="cron", daemon=True))
+    if hook_controller:
+        threads.append(threading.Thread(target=hook_controller.start, name="hooks", daemon=True))
     if queue_controller:
         threads.append(threading.Thread(target=queue_controller.start, name="worker", daemon=True))
     if reaper:
