@@ -742,6 +742,16 @@ class TestMaterialize:
         assert result.status is ExecutionStatus.COMPLETED
 
 
+class TestFromSpec:
+    """Spec reconstruction passes the catalog through to items."""
+
+    def test_from_spec_passes_the_catalog(self):
+        catalog = il.Catalog.from_assets([FakeAsset])
+        spec = DAGSpec(items=[ComponentSpec(key="fake_asset")])
+        dag = DAG.from_spec(spec, catalog)
+        assert [type(a).key for a in dag.assets] == ["fake_asset"]
+
+
 class TestFromSpecFile:
     """DAG compilation from a runnable component spec document."""
 

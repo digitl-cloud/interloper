@@ -37,40 +37,6 @@ class DAG:
         self._build_graph(items)
         self._validate()
 
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> DAG:
-        """Compile a runnable component spec file into a DAG.
-
-        Loads a :class:`~interloper.component.base.ComponentSpec` document
-        (with ``${VAR}`` env interpolation), reconstructs the component, and
-        compiles its DAG — the file-based counterpart of targeting a runnable
-        component by id.
-
-        Args:
-            path: Path to the YAML spec document.
-            catalog: Catalog used to resolve ``key`` references. Defaults to
-                the settings-configured catalog, built lazily.
-
-        Invalid documents surface as ``SpecError`` from the spec loader.
-
-        Returns:
-            The component's DAG.
-
-        Raises:
-            DAGError: If the component's kind is not runnable.
-        """
-        from interloper.component.base import Component
-
-        component = Component.from_spec_file(path, catalog)
-        dag_method = getattr(component, "dag", None)
-        if not type(component).runnable or dag_method is None:
-            raise DAGError(f"'{type(component).kind}' components are not runnable")
-        return dag_method()
-
     def _build_graph(self, items: tuple[Asset | Source | type[Asset | Source], ...]) -> None:
         """Build the dependency graph from assets and sources.
 
@@ -380,17 +346,50 @@ class DAG:
 
         return DAGSpec(items=items)
 
-    @staticmethod
-    def from_spec(spec: DAGSpec) -> DAG:
+    @classmethod
+    def from_spec(cls, spec: DAGSpec, catalog: Catalog | None = None) -> DAG:
         """Reconstruct a DAG from a spec.
 
         Args:
             spec: A DAGSpec produced by :meth:`to_spec`.
+            catalog: Catalog used to resolve ``key`` references, shared
+                across the spec's items. Defaults to the settings-configured
+                catalog, built lazily.
 
         Returns:
             A new DAG with the same structure.
         """
-        return spec.reconstruct()
+        return spec.reconstruct(catalog)
+
+    @classmethod
+    def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> DAG:
+        """Compile a runnable component spec file into a DAG.
+
+        Loads a :class:`~interloper.component.base.ComponentSpec` document
+        (with ``${VAR}`` env interpolation), reconstructs the component, and
+        compiles its DAG — the file-based counterpart of targeting a runnable
+        component by id.
+
+        Args:
+            path: Path to the YAML spec document.
+            catalog: Catalog used to resolve ``key`` references. Defaults to
+                the settings-configured catalog, built lazily.
+
+        Invalid documents surface as ``SpecError`` from the spec loader.
+
+        Returns:
+            The component's DAG.
+
+        Raises:
+            DAGError: If the component's kind is not runnable.
+        """
+        from interloper.component.base import Component
+
+        component = Component.from_spec_file(path, catalog)
+        dag_method = getattr(component, "dag", None)
+        if not type(component).runnable or dag_method is None:
+            raise DAGError(f"'{type(component).kind}' components are not runnable")
+        return dag_method()
 
     # ------------------------------------------------------------------
     # Subgraph

@@ -183,11 +183,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
         elif args.format == "inline":
             if len(args.target) != 1:
                 raise SystemExit("Error: --format inline expects exactly one positional argument (the JSON spec).")
+            from interloper.dag.base import DAG
+
             try:
                 spec = DAGSpec.model_validate_json(args.target[0])
             except Exception as exc:
                 raise SystemExit(f"Error: failed to parse inline DAGSpec: {exc}") from exc
-            dag = spec.reconstruct()
+            dag = DAG.from_spec(spec)
         else:
             if not args.target:
                 raise SystemExit("Error: provide one or more import paths, or a manifest via --file.")
