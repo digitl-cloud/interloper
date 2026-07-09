@@ -50,15 +50,15 @@ serial = "interloper.runner.serial:SerialRunner"
 multi_process = "interloper.runner.multi_process:MultiProcessRunner"
 
 [project.entry-points."interloper.oauth_providers"]
-amazon = "interloper.oauth.builtin:AMAZON"
-criteo = "interloper.oauth.builtin:CRITEO"
-facebook = "interloper.oauth.builtin:FACEBOOK"
-google = "interloper.oauth.builtin:GOOGLE"
-linkedin = "interloper.oauth.builtin:LINKEDIN"
-microsoft = "interloper.oauth.builtin:MICROSOFT"
-pinterest = "interloper.oauth.builtin:PINTEREST"
-snapchat = "interloper.oauth.builtin:SNAPCHAT"
-tiktok = "interloper.oauth.builtin:TIKTOK"
+amazon = "interloper.oauth.providers:AMAZON"
+criteo = "interloper.oauth.providers:CRITEO"
+facebook = "interloper.oauth.providers:FACEBOOK"
+google = "interloper.oauth.providers:GOOGLE"
+linkedin = "interloper.oauth.providers:LINKEDIN"
+microsoft = "interloper.oauth.providers:MICROSOFT"
+pinterest = "interloper.oauth.providers:PINTEREST"
+snapchat = "interloper.oauth.providers:SNAPCHAT"
+tiktok = "interloper.oauth.providers:TIKTOK"
 
 [build-system]
 requires = ["uv_build>=0.11.5,<0.12"]

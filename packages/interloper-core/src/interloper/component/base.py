@@ -26,6 +26,30 @@ if TYPE_CHECKING:
 
 
 # ------------------------------------------------------------------
+# Registry
+# ------------------------------------------------------------------
+_KINDS_ENTRY_POINT = "interloper.kinds"
+
+
+def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
+    """Resolve a loaded kinds entry to its ``(kind, anchor)`` pair.
+
+    Returns:
+        The pair the registry stores.
+
+    Raises:
+        TypeError: If the entry does not point at a ``Component`` class.
+    """
+    if not (isinstance(loaded, type) and issubclass(loaded, Component)):
+        raise TypeError(f"Entry '{name}' in the '{_KINDS_ENTRY_POINT}' group is not a Component class: {loaded!r}")
+    anchor = loaded.anchor()
+    return anchor.kind, anchor
+
+
+KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)
+
+
+# ------------------------------------------------------------------
 # Relations
 # ------------------------------------------------------------------
 class RelationSlot(BaseModel):
@@ -395,33 +419,3 @@ class Component(Serializable):
                 update={"slots": {name: RelationSlot(key=res.key) for name, res in cls.resource_types.items()}}
             )
         return relations
-
-
-# ------------------------------------------------------------------
-# Registry
-# ------------------------------------------------------------------
-_KINDS_ENTRY_POINT = "interloper.kinds"
-
-
-def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
-    """Resolve a loaded kinds entry to its ``(kind, anchor)`` pair.
-
-    Returns:
-        The pair the registry stores.
-
-    Raises:
-        TypeError: If the entry does not point at a ``Component`` class.
-    """
-    if not (isinstance(loaded, type) and issubclass(loaded, Component)):
-        raise TypeError(f"Entry '{name}' in the '{_KINDS_ENTRY_POINT}' group is not a Component class: {loaded!r}")
-    anchor = loaded.anchor()
-    return anchor.kind, anchor
-
-
-#: Kind → anchor class, fed by the ``interloper.kinds`` entry-point group
-#: (each entry names a ``Component`` subclass, resolved via
-#: ``Component.anchor()``; core declares its own in its own
-#: ``pyproject.toml``). The catalog never registers kinds: a component
-#: whose kind has no registered anchor fails the catalog build loudly —
-#: kinds first, components second.
-KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)

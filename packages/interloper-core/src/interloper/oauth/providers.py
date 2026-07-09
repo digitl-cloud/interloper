@@ -1,4 +1,4 @@
-"""Built-in OAuth providers.
+"""Core-shipped OAuth providers.
 
 Each constant is registered through interloper-core's own
 ``interloper.oauth_providers`` entry points (see ``pyproject.toml``) —
