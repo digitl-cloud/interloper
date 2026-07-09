@@ -384,12 +384,13 @@ class DAG:
             DAGError: If the component's kind is not runnable.
         """
         from interloper.component.base import Component
+        from interloper.job.base import Job
 
         component = Component.from_spec_file(path, catalog)
-        dag_method = getattr(component, "dag", None)
-        if not type(component).runnable or dag_method is None:
+        if not type(component).runnable:
             raise DAGError(f"'{type(component).kind}' components are not runnable")
-        return dag_method()
+        items = component.targets if isinstance(component, Job) else [component]
+        return cls(*items)  # ty: ignore[invalid-argument-type]
 
     # ------------------------------------------------------------------
     # Subgraph

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
@@ -18,9 +18,6 @@ from interloper.resource import Resource
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label
-
-if TYPE_CHECKING:
-    from interloper.dag.base import DAG
 
 
 class AssetRef(ComponentDescriptor):
@@ -187,16 +184,6 @@ class Source(Component):
                 instances.append(asset_cls(**assets[asset_cls.key]))
         data["assets"] = instances
         return data
-
-    def dag(self) -> DAG:
-        """Compile this source into an executable DAG over its assets.
-
-        Returns:
-            A DAG containing this source's assets.
-        """
-        from interloper.dag.base import DAG
-
-        return DAG(self)
 
     @classmethod
     def relation_definitions(cls) -> dict[str, RelationDefinition]:

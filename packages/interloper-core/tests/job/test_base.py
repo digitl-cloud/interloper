@@ -50,12 +50,12 @@ class TestDag:
 
     def test_dag_over_source_and_asset_targets(self):
         job = il.Job(targets=[FakeSource(), FakeStandaloneAsset()])
-        dag = job.dag()
+        dag = il.DAG(*job.targets)
         assert sorted(type(a).key for a in dag.assets) == ["fake_asset", "fake_standalone_asset"]
 
     def test_dag_requires_targets(self):
         with pytest.raises(DAGError):
-            il.Job().dag()
+            il.DAG(*il.Job().targets)
 
 
 class TestSpec:

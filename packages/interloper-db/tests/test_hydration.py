@@ -136,7 +136,7 @@ class TestJobRoundTrip:
         assert isinstance(job, il.Job)
         assert job.cron == "0 6 * * *"
         assert {type(target).key for target in job.targets} == {"demo_source", "demo_asset"}
-        assert {type(asset).key for asset in job.dag().assets} == {"a", "b", "c", "d", "e", "demo_asset"}
+        assert {type(asset).key for asset in il.DAG(*job.targets).assets} == {"a", "b", "c", "d", "e", "demo_asset"}
 
     def test_update_preserves_state(self, store: Store):
         db_job = store.create_component(_ORG, kind="job", key="job", name="Job", config={"cron": "0 6 * * *"})

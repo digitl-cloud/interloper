@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -10,9 +10,6 @@ from interloper.asset.base import Asset
 from interloper.component.base import Component, RelationDefinition
 from interloper.destination import Destination
 from interloper.source.base import Source
-
-if TYPE_CHECKING:
-    from interloper.dag.base import DAG
 
 
 class JobState(BaseModel):
@@ -81,13 +78,3 @@ class Job(Component):
             self.trickle_resources(target)
         for dest in self.destinations:
             self.trickle_resources(dest)
-
-    def dag(self) -> DAG:
-        """Compile the job's targets into an executable DAG.
-
-        Returns:
-            A DAG over all target sources and assets.
-        """
-        from interloper.dag.base import DAG
-
-        return DAG(*self.targets)

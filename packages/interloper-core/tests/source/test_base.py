@@ -460,6 +460,6 @@ class TestSelect:
             FakeSourceWithAssets(select=["nope"])
 
     def test_dag_over_selected_source(self):
-        dag = FakeSourceWithAssets(select=["fake_second"]).dag()
+        dag = il.DAG(FakeSourceWithAssets(select=["fake_second"]))
         generations = dag.topological_generations()
         assert [[type(a).key for a in g] for g in generations] == [["fake_second"]]
