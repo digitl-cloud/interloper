@@ -6,11 +6,13 @@
 # The file is a ComponentSpec document for any runnable component (job,
 # source, or asset). A component is referenced by exactly one of `key`
 # (catalog key, resolved against the catalog of interloper.yaml) or `path`
-# (fully qualified import path). `${VAR}` placeholders are interpolated from
+# (fully qualified import path). An ad-hoc workload is a bare `Job` (the
+# framework's workload object, by path); a scheduled one is a `cron_job`
+# (catalog content, by key). `${VAR}` placeholders are interpolated from
 # the environment at load time. The runner comes from interloper.yaml /
 # INTERLOPER_RUNNER_* env vars; the partition from the CLI date flags.
 
-key: job
+path: interloper.job.base.Job
 init:
   # Workload-level defaults: destinations apply to any target that declares
   # none, and resources fill empty slots of targets and destinations.

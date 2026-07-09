@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from interloper.catalog.base import Catalog
 from interloper.settings import AppSettings
 
@@ -25,13 +27,6 @@ class TestDiscovery:
 class TestFromSettings:
     """Explicit settings paths are the enablement list; discovery is the fallback."""
 
-    def test_explicit_paths_win(self, monkeypatch):
-        stub = AppSettings.model_construct(catalog=["interloper_assets.demo.source.DemoSource"])
-        monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
-        catalog = Catalog.from_settings()
-        assert "demo_source" in catalog.components
-        assert "amazon_ads" not in catalog.components  # not enabled
-
     def test_empty_settings_fall_back_to_discovery(self, monkeypatch):
         stub = AppSettings.model_construct(catalog=[])
         monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
@@ -39,17 +34,36 @@ class TestFromSettings:
         assert "amazon_ads" in catalog.components
 
 
-class TestBuiltins:
-    """Framework built-ins are always present, regardless of enablement."""
+class TestDeclaredUniverse:
+    """Every catalog contains the declared universe; anchors never appear."""
 
-    def test_job_in_discovery(self):
-        assert "job" in Catalog.discover().components
+    def test_universe_in_discovery(self):
+        components = Catalog.discover().components
+        assert {"cron_job", "trigger_hook", "webhook_hook", "demo_source"} <= set(components)
 
-    def test_job_survives_explicit_enablement(self, monkeypatch):
+    def test_configured_paths_add_rather_than_narrow(self, monkeypatch):
         stub = AppSettings.model_construct(catalog=["interloper_assets.demo.source.DemoSource"])
         monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
         catalog = Catalog.from_settings()
-        assert "job" in catalog.components
+        assert "cron_job" in catalog.components
+        assert "demo_source" in catalog.components
 
-    def test_job_in_empty_catalog(self):
-        assert "job" in Catalog.from_paths([]).components
+    def test_universe_in_empty_catalog(self):
+        components = Catalog.from_paths([]).components
+        assert "cron_job" in components
+        assert "job" not in components  # the anchor is framework, not content
+
+
+class TestKindContract:
+    """Kinds are registered first; unknown kinds fail the catalog build."""
+
+    def test_component_of_unregistered_kind_fails_loudly(self):
+        from interloper.catalog.base import _definitions_from
+        from interloper.component import Component
+        from interloper.errors import ConfigError
+
+        class FakeUnregisteredKind(Component):
+            """Direct Component subclass: its auto-derived kind has no anchor."""
+
+        with pytest.raises(ConfigError, match="kind 'fake_unregistered_kind'"):
+            _definitions_from([FakeUnregisteredKind])

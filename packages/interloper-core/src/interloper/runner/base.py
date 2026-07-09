@@ -23,7 +23,7 @@ from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.runner.state import RunState
 
-_ENTRY_POINT_GROUP = "interloper.runners"
+_ENTRY_POINT = "interloper.runners"
 
 
 @cache
@@ -38,7 +38,7 @@ def runners() -> dict[str, type[Runner]]:
     Returns:
         Mapping of runner type key to runner class.
     """
-    return {entry_point.name: entry_point.load() for entry_point in entry_points(group=_ENTRY_POINT_GROUP)}
+    return {entry_point.name: entry_point.load() for entry_point in entry_points(group=_ENTRY_POINT)}
 
 
 def build_runner(

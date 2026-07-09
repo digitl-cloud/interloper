@@ -108,7 +108,7 @@ class TestCrud:
             store.create_component(_ORG, kind="destination", key="dest", children=["a"])
 
     def test_delete_refuses_source_owned_assets(self, store: Store, component_db: Engine):
-        job = store.create_component(_ORG, kind="job", key="job")  # any parentable stand-in row
+        job = store.create_component(_ORG, kind="job", key="cron_job")  # any parentable stand-in row
         with Session(component_db) as session:
             child = Component(org_id=_ORG, kind="asset", key="a", parent_id=job.id)
             session.add(child)
@@ -118,7 +118,7 @@ class TestCrud:
             store.delete_component(child_id)
 
     def test_delete_cascades_relations(self, store: Store):
-        job = store.create_component(_ORG, kind="job", key="job", name="J")
+        job = store.create_component(_ORG, kind="job", key="cron_job", name="J")
         asset = store.create_component(_ORG, kind="asset", key="a")
         store.add_relation(job.id, type="target", dst_id=asset.id)
 
@@ -152,14 +152,14 @@ class TestRelationKindEnforcement:
 
     def test_relation_to_disallowed_kind_rejected(self, demo_store: Store):
         db_source = demo_store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        db_job = demo_store.create_component(_ORG, kind="job", key="job", name="Job")
+        db_job = demo_store.create_component(_ORG, kind="job", key="cron_job", name="Job")
         # A job's 'target' may point at sources/assets — never at another job.
         with pytest.raises(ConfigError, match="may not point at a 'job'"):
             demo_store.create_component(
-                _ORG, kind="job", key="job", name="Bad", relations={"target": [(db_job.id, "")]}
+                _ORG, kind="job", key="cron_job", name="Bad", relations={"target": [(db_job.id, "")]}
             )
         # Sanity: the allowed kind passes.
         ok = demo_store.create_component(
-            _ORG, kind="job", key="job", name="Good", relations={"target": [(db_source.id, "")]}
+            _ORG, kind="job", key="cron_job", name="Good", relations={"target": [(db_source.id, "")]}
         )
         assert ok.id is not None

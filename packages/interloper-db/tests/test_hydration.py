@@ -108,7 +108,7 @@ class TestJobRoundTrip:
         db_job = store.create_component(
             _ORG,
             kind="job",
-            key="job",
+            key="cron_job",
             name="Demo Daily",
             config={"cron": "0 6 * * *", "tags": ["daily"], "enabled": True, "partitioned": True},
             relations={"target": [(db_source.id, "")]},
@@ -126,20 +126,20 @@ class TestJobRoundTrip:
         db_job = store.create_component(
             _ORG,
             kind="job",
-            key="job",
+            key="cron_job",
             name="Demo Daily",
             config={"cron": "0 6 * * *"},
             relations={"target": [(db_source.id, ""), (db_asset.id, "")]},
         )
 
         job = store.load(db_job.id)
-        assert isinstance(job, il.Job)
+        assert isinstance(job, il.CronJob)
         assert job.cron == "0 6 * * *"
         assert {type(target).key for target in job.targets} == {"demo_source", "demo_asset"}
         assert {type(asset).key for asset in il.DAG(*job.targets).assets} == {"a", "b", "c", "d", "e", "demo_asset"}
 
     def test_update_preserves_state(self, store: Store):
-        db_job = store.create_component(_ORG, kind="job", key="job", name="Job", config={"cron": "0 6 * * *"})
+        db_job = store.create_component(_ORG, kind="job", key="cron_job", name="Job", config={"cron": "0 6 * * *"})
 
         # Simulate the scheduler's targeted state write.
         from sqlmodel import Session

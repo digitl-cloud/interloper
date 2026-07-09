@@ -29,7 +29,7 @@ from interloper.conformer import Conformer, RowsConformer
 from interloper.errors import RepresentationError
 from interloper.utils.data import coerce_to_records
 
-_ENTRY_POINT_GROUP = "interloper.representations"
+_ENTRY_POINT = "interloper.representations"
 
 
 class Representation(ABC):
@@ -142,7 +142,7 @@ def representations() -> dict[str, Representation]:
         Mapping of representation key to instance.
     """
     registry: dict[str, Representation] = {RowsRepresentation.key: _ROWS_REPRESENTATION}
-    for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
+    for entry_point in entry_points(group=_ENTRY_POINT):
         loaded = entry_point.load()
         instance: Representation = loaded() if isinstance(loaded, type) else loaded
         registry[instance.key] = instance

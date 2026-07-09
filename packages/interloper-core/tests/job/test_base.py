@@ -30,19 +30,24 @@ class TestDefinition:
         assert il.Job.key == "job"
 
     def test_definition_self_describes(self):
-        defn = il.Job.definition()
+        defn = il.CronJob.definition()
         assert set(defn.config_schema["properties"]) == {"cron", "enabled", "tags", "partitioned", "backfill_days"}
+        assert "cron" in defn.config_schema.get("required", [])
         assert defn.relations["target"].kinds == ["source", "asset"]
         assert defn.relations["target"].slotted is False
 
+    def test_anchor_carries_the_workload_only(self):
+        defn = il.Job.definition()
+        assert set(defn.config_schema["properties"]) == {"enabled", "tags"}
+        assert il.CronJob.kind == "job"
+
     def test_defaults(self):
-        job = il.Job()
+        job = il.CronJob(cron="0 6 * * *")
         assert job.targets == []
-        assert job.cron is None
         assert job.enabled is True
         assert job.tags == []
         assert job.partitioned is False
-        assert job.backfill_days is None
+        assert job.backfill_days == 1
 
 
 class TestDag:
@@ -62,7 +67,7 @@ class TestSpec:
     """ComponentSpec round-trip, including nested targets."""
 
     def test_round_trip(self):
-        job = il.Job(
+        job = il.CronJob(
             cron="0 6 * * *",
             enabled=False,
             tags=["daily"],
@@ -70,7 +75,7 @@ class TestSpec:
             backfill_days=7,
             targets=[FakeSource(), FakeStandaloneAsset()],
         )
-        clone = il.Job.from_spec(job.to_spec())
+        clone = il.CronJob.from_spec(job.to_spec())
 
         assert clone.id == job.id
         assert clone.cron == "0 6 * * *"

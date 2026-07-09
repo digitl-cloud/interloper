@@ -30,7 +30,7 @@ from typing import Literal
 
 from interloper.errors import ConfigError
 
-_ENTRY_POINT_GROUP = "interloper.oauth_providers"
+_ENTRY_POINT = "interloper.oauth_providers"
 
 
 # ------------------------------------------------------------------
@@ -120,7 +120,7 @@ def providers() -> dict[str, OAuthProvider]:
         Mapping of provider key to provider spec.
     """
     registry: dict[str, OAuthProvider] = {}
-    for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
+    for entry_point in entry_points(group=_ENTRY_POINT):
         loaded = entry_point.load()
         instance: OAuthProvider = loaded() if isinstance(loaded, type) else loaded
         registry[instance.key] = instance

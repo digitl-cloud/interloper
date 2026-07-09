@@ -221,7 +221,7 @@ def test_complete_run_stamps_the_jobs_last_run_at(run_store: RunMixin) -> None:
 
     org = uuid4()
     with Session(engine_module.get_engine()) as session:
-        job = Component(org_id=org, kind="job", key="job", name="J")
+        job = Component(org_id=org, kind="job", key="cron_job", name="J")
         session.add(job)
         session.flush()
         run = Run(id=uuid4(), org_id=org, component_id=job.id, status="running")

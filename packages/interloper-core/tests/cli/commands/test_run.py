@@ -55,7 +55,7 @@ class TestRunSpecFileMode:
         spec = _write_spec(
             tmp_path,
             f"""
-            key: job
+            path: interloper.job.base.Job
             init:
               targets:
                 - path: {SOURCE_PATH}
@@ -136,7 +136,7 @@ class TestRunSpecFileMode:
         return _write_spec(
             tmp_path,
             f"""
-            key: job
+            path: interloper.job.base.Job
             init:
               destinations:
                 - path: interloper.destination.file.FileDestination

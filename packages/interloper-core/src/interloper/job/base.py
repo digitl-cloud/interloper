@@ -25,13 +25,14 @@ class JobState(BaseModel):
 
 
 class Job(Component):
-    """A materialization workload with an optional schedule.
+    """A materialization workload: the anchor of the ``job`` kind.
 
-    A job declares *what* to materialize (``targets``) and optionally *when*
-    (``cron``). Like an asset's partitioning, the trigger fields are inert
-    declarative intent: the framework carries them, and an operator (the
-    scheduler) acts on them. The workload itself compiles to the same
-    :class:`~interloper.dag.base.DAG` that every other entry point executes.
+    A job declares *what* to materialize (``targets``); concrete job classes
+    add *when* — :class:`~interloper.job.cron.CronJob` carries a cron trigger.
+    Trigger fields are inert declarative intent: the framework carries them,
+    and an operator (the scheduler) acts on them. The workload itself
+    compiles to the same :class:`~interloper.dag.base.DAG` that every other
+    entry point executes.
 
     A job also carries workload-level defaults, cascading to its targets the
     way a source cascades to its assets: ``destinations`` become the
@@ -51,11 +52,8 @@ class Job(Component):
 
     targets: list[Source | Asset] = Field(default_factory=list)
     destinations: list[Destination] = Field(default_factory=list)
-    cron: str | None = Field(default=None, description="Cron trigger; interpreted by the scheduler")
     enabled: bool = Field(default=True)
     tags: list[str] = Field(default_factory=list)
-    partitioned: bool = Field(default=False)
-    backfill_days: int | None = Field(default=None)
 
     @field_validator("destinations", mode="before")
     @classmethod

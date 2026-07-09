@@ -24,7 +24,7 @@ from interloper.destination import (
 )
 from interloper.events import Event, EventBus, EventType
 from interloper.hook import HOOK_EVENT_TYPES, Hook, HookContext, HookState, TriggerHook, WebhookHook
-from interloper.job import Job, JobState
+from interloper.job import CronJob, Job, JobState
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.oauth import OAuthConfig, OAuthProvider
 from interloper.partitioning import (
@@ -83,6 +83,7 @@ __all__ = [
     "ComponentSpec",
     "Config",
     "Connection",
+    "CronJob",
     "Destination",
     "DestinationDefinition",
     "Event",

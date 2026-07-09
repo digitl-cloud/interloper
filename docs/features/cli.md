@@ -61,7 +61,7 @@ interloper run -f job.yaml --date 2026-01-01      # materialize
 ```
 
 ```yaml
-key: job
+path: interloper.job.base.Job    # ad-hoc workload; scheduled jobs are `key: cron_job`
 init:
   resources:
     gcp:

@@ -185,7 +185,7 @@ async function submit() {
             emit('updated')
         }
         else {
-            await componentsStore.create({ ...input, kind: 'job', key: 'job' })
+            await componentsStore.create({ ...input, kind: 'job', key: 'cron_job' })
             toast.add({ title: 'Job created', color: 'success' })
             emit('created')
         }

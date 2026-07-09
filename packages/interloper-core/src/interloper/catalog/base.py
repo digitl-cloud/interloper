@@ -1,31 +1,32 @@
 """Catalog: flat registry of all component definitions keyed by component key.
 
-The catalog collects definitions from sources, their assets, resources,
-and destinations into a single ``dict[str, ComponentDefinition]``.
+Registration is two entry-point groups, and nothing else:
 
-Discovery vs enablement: installed packages declare the components they
-provide through the ``interloper.components`` entry-point group (the
-*available universe*); the ``AppSettings.catalog`` import paths select what a
-deployment actually exposes. When no paths are configured, the catalog is
-the full discovered universe.
+- ``interloper.kinds`` — what kinds exist: one entry per kind, naming its
+  anchor class (consumed by :data:`interloper.KINDS`).
+- ``interloper.components`` — what component classes exist: every concrete
+  component an installed package provides, framework classes included
+  (core declares ``cron_job``/``trigger_hook``/``webhook_hook`` here, the
+  same way ``interloper-assets`` declares its connectors).
 
-Framework built-ins (``Job``) are part of the framework itself, not the
-connector universe, so they are always present regardless of enablement.
+Every catalog contains the full declared universe — installation is the
+opt-in. The ``AppSettings.catalog`` import paths *add* components that are
+not shipped as entry points (e.g. local deployment-specific classes); they
+never narrow. Kind anchors are framework, not content: they live in the
+registry and never appear in the catalog.
 
 Usage::
 
     import interloper as il
 
-    # From settings; falls back to entry-point discovery when unset
-    catalog = il.Catalog.from_settings()
-
-    # The full discovered universe, regardless of settings
-    catalog = il.Catalog.discover()
+    catalog = il.Catalog.from_settings()   # universe + configured extras
+    catalog = il.Catalog.discover()        # the declared universe
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from functools import cache
 from importlib.metadata import entry_points
 from types import ModuleType
@@ -35,17 +36,13 @@ from pydantic import BaseModel, Field
 
 from interloper.asset.base import Asset
 from interloper.component import KINDS, Component, ComponentDefinition
-from interloper.destination.base import Destination
-from interloper.hook import TriggerHook, WebhookHook
-from interloper.job.base import Job
+from interloper.errors import ConfigError
 from interloper.settings import AppSettings
 from interloper.source.base import Source
 
 logger = logging.getLogger(__name__)
 
-BUILTIN_COMPONENTS: tuple[type[Component], ...] = (Job, TriggerHook, WebhookHook)
-
-_ENTRY_POINT_GROUP = "interloper.components"
+_ENTRY_POINT = "interloper.components"
 
 
 # ------------------------------------------------------------------
@@ -53,41 +50,78 @@ _ENTRY_POINT_GROUP = "interloper.components"
 # ------------------------------------------------------------------
 
 
-def _with_builtins(components: dict[str, ComponentDefinition]) -> dict[str, ComponentDefinition]:
-    """Ensure framework built-ins are present, regardless of enablement.
+def _declared_classes() -> tuple[type[Component], ...]:
+    """Component classes declared under ``interloper.components``.
+
+    Each entry names a component class directly, or a module whose public
+    attributes are scanned for component classes.
 
     Returns:
-        The same mapping, with any missing built-in definitions added.
+        Every declared component class.
     """
-    for builtin in BUILTIN_COMPONENTS:
-        components.setdefault(builtin.key, builtin.definition())
-    return components
-
-
-@cache
-def _discovered_paths() -> tuple[str, ...]:
-    """Collect component import paths from installed entry points.
-
-    Each entry under ``interloper.components`` names a module whose public
-    attributes are scanned for component classes (or a component class
-    directly).
-
-    Returns:
-        Import paths of every discovered component class.
-    """
-    from interloper.utils.imports import get_object_path
-
-    paths: list[str] = []
-    for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
+    classes: list[type[Component]] = []
+    for entry_point in entry_points(group=_ENTRY_POINT):
         loaded = entry_point.load()
         if isinstance(loaded, ModuleType):
             for attr in dir(loaded):
                 obj = getattr(loaded, attr)
-                if isinstance(obj, type) and issubclass(obj, Component) and obj.kind in KINDS:
-                    paths.append(get_object_path(obj))
-        elif isinstance(loaded, type) and issubclass(loaded, Component) and loaded.kind in KINDS:
-            paths.append(get_object_path(loaded))
-    return tuple(paths)
+                if isinstance(obj, type) and issubclass(obj, Component):
+                    classes.append(obj)
+        elif isinstance(loaded, type) and issubclass(loaded, Component):
+            classes.append(loaded)
+    return tuple(classes)
+
+
+def _definitions_from(components: Iterable[type[Component]]) -> dict[str, ComponentDefinition]:
+    """Build definitions from component classes.
+
+    Every class self-describes through ``definition()``; nothing is walked,
+    inferred, or registered — the catalog contains exactly what was
+    declared, and kinds must already be registered when it loads.
+
+    Returns:
+        Mapping from component key to definition.
+
+    Raises:
+        ConfigError: If a declared component's kind has no registered
+            anchor — declare it under the ``interloper.kinds`` group.
+    """
+    definitions: dict[str, ComponentDefinition] = {}
+    for component in components:
+        if not (isinstance(component, type) and issubclass(component, Component)):
+            continue
+        if component.kind not in KINDS:
+            raise ConfigError(
+                f"Component '{component.key}' declares kind '{component.kind}', which is not registered — "
+                "declare its anchor under the 'interloper.kinds' entry-point group"
+            )
+        definitions.setdefault(component.key, component.definition())
+    return definitions
+
+
+@cache
+def _declared_definitions() -> dict[str, ComponentDefinition]:
+    """Definitions of the declared universe (cached).
+
+    Returns:
+        Mapping from component key to definition.
+    """
+    return _definitions_from(_declared_classes())
+
+
+def _with_declared(definitions: dict[str, ComponentDefinition]) -> dict[str, ComponentDefinition]:
+    """Ensure the declared universe is present.
+
+    Every catalog contains every component the installed packages declare —
+    installation is the opt-in. Explicitly provided definitions win over
+    declared ones with the same key.
+
+    Returns:
+        The same mapping, with any missing declared definitions added.
+    """
+    for key, definition in _declared_definitions().items():
+        definitions.setdefault(key, definition)
+    return definitions
 
 
 class Catalog(BaseModel):
@@ -137,70 +171,43 @@ class Catalog(BaseModel):
 
     @classmethod
     def from_paths(cls, paths: list[str]) -> Catalog:
-        """Reconstruct a catalog from a list of import paths.
+        """Build a catalog from import paths, plus the declared universe.
 
         Args:
-            paths: Fully qualified import paths to component classes.
+            paths: Fully qualified import paths to additional component
+                classes (e.g. local components not shipped as entry points,
+                or a ``to_paths()`` list crossing a process boundary).
 
         Returns:
             Catalog of all component definitions.
         """
         from interloper.utils.imports import import_from_path
 
-        components: dict[str, ComponentDefinition] = {}
+        classes: list[type[Component]] = []
         for path in paths:
             try:
-                obj = import_from_path(path)
-                if not isinstance(obj, type):
-                    continue
-                if not (issubclass(obj, Component) and obj.kind in KINDS):
-                    continue
-
-                KINDS.register(obj)
-                components[obj.key] = obj.definition()
-
-                # Auto-discover resources and destinations reachable from
-                # sources and assets so the catalog is complete without
-                # requiring every nested type to be listed explicitly.
-                if issubclass(obj, Source):
-                    for resources in obj.resource_types.values():
-                        components.setdefault(resources.key, resources.definition())
-                    for assets in obj.asset_types:
-                        for resources in assets.resource_types.values():
-                            components.setdefault(resources.key, resources.definition())
-                        for destinations in assets.destination_types:
-                            components.setdefault(destinations.key, destinations.definition())
-
-                elif issubclass(obj, Asset):
-                    for resources in obj.resource_types.values():
-                        components.setdefault(resources.key, resources.definition())
-                    for destinations in obj.destination_types:
-                        components.setdefault(destinations.key, destinations.definition())
-
-                elif issubclass(obj, Destination):
-                    for resources in obj.resource_types.values():
-                        components.setdefault(resources.key, resources.definition())
-
+                loaded = import_from_path(path)
             except (ImportError, AttributeError) as exc:
                 logger.warning("Failed to import component '%s': %s", path, exc)
+                continue
+            if isinstance(loaded, type) and issubclass(loaded, Component):
+                classes.append(loaded)
 
-        return Catalog(components=_with_builtins(components))
+        return Catalog(components=_with_declared(_definitions_from(classes)))
 
     @classmethod
     def from_settings(cls) -> Catalog:
-        """Load catalog from the ``AppSettings.catalog`` import paths.
+        """Load the catalog, adding any ``AppSettings.catalog`` import paths.
 
-        The configured paths are the deployment's *enablement* list; when no
-        paths are configured, falls back to :meth:`discover` — everything the
-        installed packages declare.
+        The declared universe is always present; the configured paths add
+        components that are not shipped as entry points (e.g. local
+        deployment-specific classes).
 
         Returns:
             Catalog of all component definitions.
         """
         settings = AppSettings.get()
-        if settings.catalog:
-            return cls.from_paths(settings.catalog)
-        return cls.discover()
+        return cls.from_paths(settings.catalog or [])
 
     @classmethod
     def from_assets(cls, sources_or_assets: list[type[Source | Asset]]) -> Catalog:
@@ -209,21 +216,13 @@ class Catalog(BaseModel):
         Returns:
             Catalog of all component definitions.
         """
-        return cls(
-            components=_with_builtins(
-                {source_or_asset.key: source_or_asset.definition() for source_or_asset in sources_or_assets}
-            )
-        )
+        return cls(components=_with_declared(_definitions_from(sources_or_assets)))
 
     @classmethod
     def discover(cls) -> Catalog:
-        """Load the catalog from installed ``interloper.components`` entry points.
-
-        The available universe: every component declared by every installed
-        package, discovered from package metadata — no hardcoded package
-        names, no import-order dependence.
+        """Load the declared universe from ``interloper.components`` entry points.
 
         Returns:
-            Catalog of all discovered component definitions.
+            Catalog of every component declared by every installed package.
         """
-        return cls.from_paths(list(_discovered_paths()))
+        return cls.from_paths([])

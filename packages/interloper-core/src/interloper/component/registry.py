@@ -12,13 +12,9 @@ Population — one mechanism, three feeders:
   ``interloper.kinds`` entry-point group (each entry names a ``Component``
   subclass; core declares its own seven in its own ``pyproject.toml``),
   loaded lazily on first lookup;
-- catalog discovery auto-registers the anchor of every component class it
-  imports, so a package shipping concrete components under
-  ``interloper.components`` never *needs* the kinds group — declare it
-  anyway when the kind's metadata must resolve without catalog discovery
-  (the store and API ask ``sensitive``/``relation_types`` in paths that
-  never build a catalog, and the kinds group loads one class where
-  discovery imports every connector module);
+- the catalog never registers kinds: a component declared under
+  ``interloper.components`` whose kind has no registered anchor fails the
+  catalog build loudly — kinds first, components second;
 - ``KINDS.register`` accepts any component class and resolves it to its
   anchor, so registering ``FacebookAdsConnection`` registers ``connection``.
 """
@@ -31,7 +27,7 @@ from pydantic import BaseModel
 
 from interloper.component.base import Component, RelationDefinition
 
-_ENTRY_POINT_GROUP = "interloper.kinds"
+_ENTRY_POINT = "interloper.kinds"
 
 
 class KindRegistry:
@@ -169,7 +165,7 @@ class KindRegistry:
         if self._discovered:
             return
         self._discovered = True
-        for entry_point in entry_points(group=_ENTRY_POINT_GROUP):
+        for entry_point in entry_points(group=_ENTRY_POINT):
             loaded = entry_point.load()
             if isinstance(loaded, type) and issubclass(loaded, Component):
                 self.register(loaded)
