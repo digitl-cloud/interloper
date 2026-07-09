@@ -212,7 +212,7 @@ class CronController:
         import interloper as il
 
         state = {**(job.state or {}), **{key: value.isoformat() for key, value in timestamps.items()}}
-        model = il.KINDS.state_model(job.kind)
+        model = il.KINDS[job.kind].state_model
         if model is not None:
             model.model_validate(state)
         job.state = state

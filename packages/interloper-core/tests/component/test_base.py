@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import datetime as dt
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from pydantic import Field
 
 import interloper as il
-from interloper.component.base import Component, ComponentDefinition, ComponentSpec
+from interloper.component.base import (
+    Component,
+    ComponentDefinition,
+    RelationDefinition,
+    _adopt_kind,
+)
+from interloper.serializable import Spec
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -51,6 +57,21 @@ class FakeOtherComponent(Component):
     """Second component class used to verify subclass identity through round-trips."""
 
     value: str = ""
+
+
+class FakeKind(Component):
+    """A satellite-style kind with its own relation vocabulary."""
+
+    sensitive: ClassVar[bool] = True
+    relation_types: ClassVar[dict[str, RelationDefinition]] = {
+        "link": RelationDefinition(kinds=["asset"], field="links", slotted=True),
+    }
+
+    links: dict[str, Any] = Field(default_factory=dict)
+
+
+class FakeConcreteKind(FakeKind):
+    """A concrete class of the fake kind (inherits kind ``fake_kind``)."""
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +125,59 @@ class TestIdentity:
         assert not FakeResource.has_own_field("does_not_exist")
 
 
+class TestAnchor:
+    def test_subclass_resolves_to_the_kind_declarer(self):
+        assert FakeResource.anchor() is il.Resource
+        assert FakeConcreteKind.anchor() is FakeKind
+
+    def test_direct_declarer_is_its_own_anchor(self):
+        assert il.Resource.anchor() is il.Resource
+        assert FakeComponent.anchor() is FakeComponent
+
+    def test_misdeclared_relation_field_is_rejected(self):
+        class Broken(Component):
+            relation_types: ClassVar[dict[str, RelationDefinition]] = {
+                "link": RelationDefinition(kinds=["asset"], field="linkss"),
+            }
+
+        with pytest.raises(ValueError, match="no such field"):
+            Broken.anchor()
+
+
+class TestKinds:
+    """The framework's kinds are registered on package import."""
+
+    def test_builtin_kinds_present(self):
+        for kind in ("source", "asset", "destination", "resource", "connection", "config", "job"):
+            assert kind in il.KINDS
+
+    def test_runnable_kinds(self):
+        for kind, expected in (("job", True), ("source", True), ("asset", True), ("connection", False)):
+            assert il.KINDS[kind].runnable is expected
+
+    def test_sensitive_follows_the_resource_subtree(self):
+        assert il.KINDS["connection"].sensitive is True
+        assert il.KINDS["config"].sensitive is True
+        assert il.KINDS["source"].sensitive is False
+        assert il.KINDS["job"].sensitive is False
+
+    def test_relation_vocabulary_from_anchors(self):
+        assert set(il.KINDS["asset"].relation_types) == {"resource", "destination", "dependency"}
+        assert il.KINDS["job"].relation_types["target"].kinds == ["source", "asset"]
+
+    def test_unknown_kind_fails_loudly(self):
+        assert il.KINDS.get("nope") is None
+        with pytest.raises(KeyError, match="'nope' is not registered"):
+            il.KINDS["nope"]
+
+    def test_entry_point_adoption_anchors_the_kind(self):
+        assert _adopt_kind("fake_concrete_kind", FakeConcreteKind) == ("fake_kind", FakeKind)
+
+    def test_non_component_entry_is_rejected(self):
+        with pytest.raises(TypeError, match="not a Component class"):
+            _adopt_kind("bogus", object)
+
+
 # ---------------------------------------------------------------------------
 # Definition metadata
 # ---------------------------------------------------------------------------
@@ -127,7 +201,7 @@ class TestDefinition:
         assert FakeDocumentedComponent.definition().description == "A documented component."
 
     def test_definition_config_schema_strips_internal_fields(self):
-        class FakeConfigured(Component):
+        class FakeSerializable(Component):
             """Component with one user field and one class-declared internal field."""
 
             internal_fields = frozenset({"plumbing"})
@@ -135,11 +209,10 @@ class TestDefinition:
             value: str = ""
             plumbing: str = ""
 
-        schema = FakeConfigured.definition().config_schema
+        schema = FakeSerializable.definition().config_schema
         assert set(schema["properties"]) == {"value"}
 
     def test_definition_relations_from_class_vocabulary(self):
-        from typing import ClassVar
 
         from interloper.component.base import RelationDefinition
 
@@ -180,7 +253,6 @@ class TestResources:
 
     def test_explicit_resource_types_entry_not_overwritten(self):
         """When ``resource_types`` already has the slot, the annotation loop skips it."""
-        from typing import ClassVar
 
         class FakeExplicitConsumer(Component):
             resource_types: ClassVar[dict[str, type]] = {"slot": FakeResource}
@@ -250,7 +322,6 @@ class TestResources:
 
     def test_init_kwarg_for_explicit_model_field_untouched(self):
         """A slot that is also a real pydantic field goes through pydantic, not ``resources``."""
-        from typing import ClassVar
 
         class FakeExplicitFieldConsumer(Component):
             resource_types: ClassVar[dict[str, type]] = {"slot": FakeResource}
@@ -278,7 +349,7 @@ class TestSerialization:
 
     def test_to_spec_returns_component_spec(self):
         spec = FakeResource(text="abc").to_spec()
-        assert isinstance(spec, ComponentSpec)
+        assert isinstance(spec, Spec)
 
     def test_to_spec_captures_path_and_id(self):
         c = FakeResource(id="fixed123", text="abc")
@@ -327,7 +398,7 @@ class TestSerialization:
         assert restored.id == "fixedid1"
 
     def test_roundtrip_generates_new_id_when_absent(self):
-        spec = ComponentSpec(path=FakeResource().path(), id="", init={"text": "abc"})
+        spec = Spec(path=FakeResource().path(), id="", init={"text": "abc"})
         restored = Component.from_spec(spec)
         assert restored.id  # generated by model_post_init
         import uuid as _uuid
@@ -398,7 +469,7 @@ class TestSerialization:
             resources={"r": FakeResource(text="abc")},
         )
         spec_json = c.to_spec().model_dump_json()
-        reloaded_spec = ComponentSpec.model_validate_json(spec_json)
+        reloaded_spec = Spec.model_validate_json(spec_json)
         restored = reloaded_spec.reconstruct()
 
         assert isinstance(restored, FakeComponent)
@@ -447,7 +518,7 @@ class TestSerialization:
         assert restored.data == {"path": "foo", "extra": "bar"}
 
     def test_component_shaped_dict_inside_user_dict_is_reconstructed(self):
-        """A ComponentSpec-shaped dict nested inside a user dict is walked and reconstructed."""
+        """A Spec-shaped dict nested inside a user dict is walked and reconstructed."""
         c = FakeComponent(resources={"r": FakeResource(text="abc")})
         restored = Component.from_spec(c.to_spec())
         assert isinstance(restored.resources["r"], FakeResource)
@@ -455,7 +526,7 @@ class TestSerialization:
     # -- Error cases -------------------------------------------------------
 
     def test_reconstruct_raises_on_bad_path(self):
-        spec = ComponentSpec(path="does.not.exist.Thing", id="", init=None)
+        spec = Spec(path="does.not.exist.Thing", id="", init=None)
         with pytest.raises((ImportError, AttributeError)):
             spec.reconstruct()
 
@@ -467,7 +538,7 @@ class TestCatalogKeySpecs:
         from interloper.catalog import Catalog
 
         catalog = Catalog(components={"fake_resource": FakeResource.definition()})
-        spec = ComponentSpec(key="fake_resource", init={"text": "abc"})
+        spec = Spec(key="fake_resource", init={"text": "abc"})
         instance = spec.reconstruct(catalog)
         assert isinstance(instance, FakeResource)
         assert instance.text == "abc"
@@ -477,88 +548,13 @@ class TestCatalogKeySpecs:
         from interloper.errors import CatalogKeyError
 
         with pytest.raises(CatalogKeyError, match="Unknown catalog key 'nope'"):
-            ComponentSpec(key="nope").reconstruct(Catalog(components={}))
-
-    def test_path_and_key_are_exclusive(self):
-        with pytest.raises(ValueError, match="exactly one of 'path' or 'key'"):
-            ComponentSpec(path="a.B", key="b")
-        with pytest.raises(ValueError, match="exactly one of 'path' or 'key'"):
-            ComponentSpec()
-
-    def test_non_component_path_raises(self):
-        with pytest.raises(TypeError, match="does not resolve to a Component class"):
-            ComponentSpec(path="interloper.errors.SpecError").reconstruct()
-
-
-class TestSpecFromYamlFile:
-    """Spec documents load from YAML with env interpolation."""
-
-    def test_loads_and_reconstructs(self, tmp_path):
-        file = tmp_path / "spec.yaml"
-        file.write_text(f"path: {FakeResource().path()}\ninit: {{text: abc}}\n")
-        instance = ComponentSpec.from_file(file).reconstruct()
-        assert isinstance(instance, FakeResource)
-        assert instance.text == "abc"
-
-    def test_env_placeholders_interpolate(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("FAKE_SPEC_TEXT", "from-env")
-        file = tmp_path / "spec.yaml"
-        file.write_text(f"path: {FakeResource().path()}\ninit:\n  text: ${{FAKE_SPEC_TEXT}}\n")
-        instance = ComponentSpec.from_file(file).reconstruct()
-        assert isinstance(instance, FakeResource)
-        assert instance.text == "from-env"
-
-    def test_missing_env_variable_raises(self, tmp_path):
-        from interloper.errors import SpecError
-
-        file = tmp_path / "spec.yaml"
-        file.write_text(f"path: {FakeResource().path()}\ninit:\n  text: ${{FAKE_SPEC_MISSING}}\n")
-        with pytest.raises(SpecError, match="undefined environment variable"):
-            ComponentSpec.from_file(file)
-
-    def test_invalid_yaml_raises(self, tmp_path):
-        from interloper.errors import SpecError
-
-        file = tmp_path / "spec.yaml"
-        file.write_text("path: [unclosed")
-        with pytest.raises(SpecError, match="Invalid YAML"):
-            ComponentSpec.from_file(file)
-
-    def test_missing_file_raises(self, tmp_path):
-        from interloper.errors import SpecError
-
-        with pytest.raises(SpecError, match="Cannot read spec file"):
-            ComponentSpec.from_file(tmp_path / "nope.yaml")
-
-    def test_non_mapping_raises(self, tmp_path):
-        from interloper.errors import SpecError
-
-        file = tmp_path / "spec.yaml"
-        file.write_text("- a\n- list\n")
-        with pytest.raises(SpecError, match="must be a YAML mapping"):
-            ComponentSpec.from_file(file)
-
-
-class TestSubclassScopedConstruction:
-    """from_spec / from_spec_file honor the receiving class."""
-
-    def test_from_spec_type_checks_the_receiver(self):
-        spec = FakeResource(text="abc").to_spec()
-        with pytest.raises(TypeError, match="does not reconstruct to a FakeComponent"):
-            FakeComponent.from_spec(spec)
-
-    def test_from_spec_file_reconstructs_for_the_receiver(self, tmp_path):
-        file = tmp_path / "spec.yaml"
-        file.write_text(f"path: {FakeResource().path()}\ninit: {{text: abc}}\n")
-        instance = FakeResource.from_spec_file(file)
-        assert isinstance(instance, FakeResource)
-        assert instance.text == "abc"
+            Spec(key="nope").reconstruct(Catalog(components={}))
 
     def test_from_spec_passes_the_catalog(self):
         from interloper.catalog import Catalog
 
         catalog = Catalog(components={"fake_resource": FakeResource.definition()})
-        instance = FakeResource.from_spec(ComponentSpec(key="fake_resource"), catalog)
+        instance = FakeResource.from_spec(Spec(key="fake_resource"), catalog)
         assert isinstance(instance, FakeResource)
 
 

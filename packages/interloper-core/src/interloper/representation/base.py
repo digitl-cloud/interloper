@@ -6,9 +6,9 @@ generic table views (records, columns, partition filtering) with the
 representation's :class:`~interloper.conformer.Conformer`, so core never
 names a concrete dataframe library anywhere.
 
-Core ships the rows representation (``list[dict]``). Integration packages
-ship theirs and declare them as package entry points under the
-``interloper.representations`` group::
+Every representation — the rows built-in (``list[dict]``) included — is
+declared as a package entry point under the ``interloper.representations``
+group (core declares rows in its own ``pyproject.toml``)::
 
     [project.entry-points."interloper.representations"]
     dataframe = "interloper_pandas.representation:DATAFRAME_REPRESENTATION"
@@ -21,15 +21,24 @@ dependence, no explicit registration calls.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from functools import cache
-from importlib.metadata import entry_points
 from typing import Any, ClassVar
 
-from interloper.conformer import Conformer, RowsConformer
-from interloper.errors import RepresentationError
+from interloper.conformer import ROWS_CONFORMER, Conformer
+from interloper.registry import Registry
 from interloper.utils.data import coerce_to_records
 
-_ENTRY_POINT = "interloper.representations"
+
+def _adopt_representation(_name: str, loaded: Any) -> tuple[str, Representation]:
+    """Instantiate a loaded representation entry and key it by its own ``key``.
+
+    Returns:
+        The ``(key, representation)`` pair.
+    """
+    instance: Representation = loaded() if isinstance(loaded, type) else loaded
+    return instance.key, instance
+
+
+REPRESENTATIONS: Registry[Representation] = Registry("interloper.representations", adopt=_adopt_representation)
 
 
 class Representation(ABC):
@@ -66,6 +75,22 @@ class Representation(ABC):
     @abstractmethod
     def conformer(self) -> Conformer:
         """The schema operations for this representation."""
+
+    @classmethod
+    def of(cls, data: Any) -> Representation:
+        """Resolve the representation matching *data*.
+
+        Non-rows representations are checked first; everything unmatched
+        falls back to rows, whose record coercion rejects non-tabular data
+        with a clear error.
+
+        Returns:
+            The representation for *data*.
+        """
+        for key, instance in REPRESENTATIONS.items():
+            if key != RowsRepresentation.key and instance.matches(data):
+                return instance
+        return REPRESENTATIONS[RowsRepresentation.key]
 
 
 class RowsRepresentation(Representation):
@@ -122,62 +147,4 @@ class RowsRepresentation(Representation):
         Returns:
             The shared :class:`RowsConformer` instance.
         """
-        return _ROWS_CONFORMER
-
-
-_ROWS_CONFORMER = RowsConformer()
-_ROWS_REPRESENTATION = RowsRepresentation()
-
-
-# ------------------------------------------------------------------
-# Registry
-# ------------------------------------------------------------------
-
-
-@cache
-def representations() -> dict[str, Representation]:
-    """Load the representation registry: built-ins plus installed entry points.
-
-    Returns:
-        Mapping of representation key to instance.
-    """
-    registry: dict[str, Representation] = {RowsRepresentation.key: _ROWS_REPRESENTATION}
-    for entry_point in entry_points(group=_ENTRY_POINT):
-        loaded = entry_point.load()
-        instance: Representation = loaded() if isinstance(loaded, type) else loaded
-        registry[instance.key] = instance
-    return registry
-
-
-def representation(key: str) -> Representation:
-    """Return the representation registered under *key*.
-
-    Returns:
-        The registered representation.
-
-    Raises:
-        RepresentationError: If no representation is registered under *key*.
-    """
-    registry = representations()
-    if key not in registry:
-        raise RepresentationError(
-            f"No data representation registered under key '{key}' (available: {sorted(registry)}). "
-            f"Is the matching interloper integration package installed?"
-        )
-    return registry[key]
-
-
-def representation_for(data: Any) -> Representation:
-    """Resolve the representation matching *data*.
-
-    Non-rows representations are checked first; everything unmatched falls
-    back to rows, whose record coercion rejects non-tabular data with a
-    clear error.
-
-    Returns:
-        The representation for *data*.
-    """
-    for instance in representations().values():
-        if instance is not _ROWS_REPRESENTATION and instance.matches(data):
-            return instance
-    return _ROWS_REPRESENTATION
+        return ROWS_CONFORMER

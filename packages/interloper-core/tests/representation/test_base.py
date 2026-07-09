@@ -2,47 +2,42 @@
 
 import pytest
 
-from interloper.errors import NormalizerError, RepresentationError
-from interloper.representation import (
-    RowsRepresentation,
-    representation,
-    representation_for,
-    representations,
-)
+from interloper.errors import NormalizerError
+from interloper.representation import REPRESENTATIONS, Representation, RowsRepresentation
 
 
 class TestRegistry:
     """Registry loading: built-ins plus installed entry points."""
 
     def test_rows_is_builtin(self):
-        assert "rows" in representations()
+        assert "rows" in REPRESENTATIONS
 
     def test_entry_points_are_discovered(self):
         # interloper-pandas is installed in the workspace and declares the
         # "dataframe" representation as an entry point — this asserts the
         # discovery mechanism end to end, without any explicit import.
-        assert "dataframe" in representations()
+        assert "dataframe" in REPRESENTATIONS
 
     def test_lookup_by_key(self):
-        assert isinstance(representation("rows"), RowsRepresentation)
+        assert isinstance(REPRESENTATIONS["rows"], RowsRepresentation)
 
     def test_unknown_key_raises_actionable_error(self):
-        with pytest.raises(RepresentationError, match="No data representation registered under key 'polars'"):
-            representation("polars")
+        with pytest.raises(KeyError, match="'polars' is not registered"):
+            REPRESENTATIONS["polars"]
 
 
 class TestResolution:
-    """representation_for resolves from the data itself."""
+    """Representation.of resolves from the data itself."""
 
     def test_lists_resolve_to_rows(self):
-        assert isinstance(representation_for([{"a": 1}]), RowsRepresentation)
+        assert isinstance(Representation.of([{"a": 1}]), RowsRepresentation)
 
     def test_unmatched_data_falls_back_to_rows(self):
-        assert isinstance(representation_for("anything"), RowsRepresentation)
+        assert isinstance(Representation.of("anything"), RowsRepresentation)
 
     def test_dataframes_resolve_to_the_pandas_representation(self):
         pd = pytest.importorskip("pandas")
-        assert representation_for(pd.DataFrame()).key == "dataframe"
+        assert Representation.of(pd.DataFrame()).key == "dataframe"
 
 
 class TestRowsRepresentation:

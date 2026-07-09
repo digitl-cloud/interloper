@@ -8,7 +8,7 @@ Input formats
 -------------
 
 * ``--file/-f <spec.yaml>`` — a component spec document
-  (:class:`~interloper.component.base.ComponentSpec`, ``{key|path, init}``)
+  (:class:`~interloper.component.base.Spec`, ``{key|path, init}``)
   for any **runnable** component: the run is literally "reconstruct the
   component and run its DAG".  A Job spec is the composite form — targets
   with workload-level default destinations and resources.
@@ -93,8 +93,7 @@ def register(
         "-q",
         "--quiet",
         action="store_true",
-        help="Only show warnings and errors (takes precedence over --verbose; "
-        "does not affect --events json output)",
+        help="Only show warnings and errors (takes precedence over --verbose; does not affect --events json output)",
     )
     run_parser.add_argument(
         "-v",
@@ -140,9 +139,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
     import os
     import sys
 
-    from interloper.dag.spec import DAGSpec
+    from interloper.dag import DAGSpec
     from interloper.events import EventBus, StderrEventHandler
-    from interloper.runner import ExecutionStatus, build_runner
+    from interloper.runner import ExecutionStatus, Runner
     from interloper.settings import AppSettings
 
     # One logging setup for everything the command prints: framework log
@@ -195,15 +194,11 @@ def _cmd_run(args: argparse.Namespace) -> None:
                 raise SystemExit("Error: provide one or more import paths, or a manifest via --file.")
             dag = _dag_from_paths(args.target)
 
-        # -- Resolve the partition ---------------------------------------------
         partition = _resolve_partition(args)
+        runner = Runner.from_settings(settings.runner)
 
-        # -- Build the runner ----------------------------------------------------
-        runner_cls, runner_kwargs = build_runner(settings.runner.type, settings.runner.config)
-
-        # -- Dry run: print the plan and stop ----------------------------------
         if args.dry_run:
-            _print_plan(dag, partition, runner_cls.__name__, "")
+            _print_plan(dag, partition, type(runner).__name__, "")
             return
 
         # -- Console event output (interactive mode only) ----------------------
@@ -228,11 +223,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
             "Running DAG with %d materializable asset(s) (%d total) using %s",
             len(materializable),
             len(dag.assets),
-            runner_cls.__name__,
+            type(runner).__name__,
         )
 
-        runner = runner_cls(**runner_kwargs, on_event=on_event)
-        # The CLI process is the sync edge: drive the async run to completion here.
+        runner.on_event = on_event
         result = asyncio.run(runner.run(dag, partition, metadata=metadata or None))
 
         logger.info("Run completed: %s", result.status.name)

@@ -41,6 +41,9 @@ cron_job = "interloper.job.cron:CronJob"
 trigger_hook = "interloper.hook.trigger:TriggerHook"
 webhook_hook = "interloper.hook.webhook:WebhookHook"
 
+[project.entry-points."interloper.representations"]
+rows = "interloper.representation.base:RowsRepresentation"
+
 [project.entry-points."interloper.runners"]
 async = "interloper.runner.async_runner:AsyncRunner"
 serial = "interloper.runner.serial:SerialRunner"

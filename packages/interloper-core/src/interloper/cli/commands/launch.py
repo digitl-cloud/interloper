@@ -43,7 +43,7 @@ def _cmd_launch(args: argparse.Namespace) -> None:
         SystemExit: On any failure.
     """
     from interloper.catalog import Catalog
-    from interloper.runner import build_runner
+    from interloper.runner import Runner
     from interloper.settings import AppSettings
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -61,8 +61,8 @@ def _cmd_launch(args: argparse.Namespace) -> None:
     try:
         from interloper_scheduler import RunExecutor
 
-        runner_cls, runner_kwargs = build_runner(settings.runner.type, settings.runner.config)
-        executor = RunExecutor(store=store, runner_type=runner_cls, runner_kwargs=runner_kwargs)
+        runner = Runner.from_settings(settings.runner)
+        executor = RunExecutor(store=store, runner=runner)
         success = executor.execute(args.run_id)
     except Exception as e:
         logger.exception("Launch failed for run %s", args.run_id)

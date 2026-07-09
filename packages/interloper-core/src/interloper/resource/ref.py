@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, overload
 
-from interloper.component.base import ComponentDescriptor
+from interloper.serializable import IgnoredDescriptor
 
 if TYPE_CHECKING:
     from interloper.component.base import Component
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 T = TypeVar("T", bound="Resource")
 
 
-class ResourceRef(ComponentDescriptor, Generic[T]):
+class ResourceRef(IgnoredDescriptor, Generic[T]):
     """Descriptor that declares a resource dependency and provides typed access.
 
     When placed on a Component subclass (Source, Asset, Destination), it

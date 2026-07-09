@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from interloper.oauth import OAuthProvider, providers
+from interloper.oauth import PROVIDERS, OAuthProvider
 from interloper_db import Profile
 from pydantic import BaseModel
 
@@ -58,7 +58,7 @@ class _ProviderConfig:
 
 
 def _load_providers() -> dict[str, _ProviderConfig]:
-    return {key: _ProviderConfig(key) for key in providers()}
+    return {key: _ProviderConfig(key) for key in PROVIDERS.keys()}
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +142,7 @@ def list_providers() -> list[ProviderInfo]:
     ``REDIRECT_URI`` environment variables set are included.  Metadata
     (auth_url, label, icon) comes from the provider registry.
     """
-    specs = providers()
+    specs = dict(PROVIDERS.items())
     return [
         ProviderInfo(
             key=cfg.key,
@@ -169,7 +169,7 @@ async def exchange_token(
     in-house OAuth credentials are never included — connections resolve them
     from env at runtime.
     """
-    spec = providers().get(provider)
+    spec = PROVIDERS.get(provider)
     if spec is None:
         raise HTTPException(status_code=400, detail=f"Unknown OAuth provider: {provider}")
 

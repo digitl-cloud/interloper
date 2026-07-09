@@ -64,7 +64,7 @@ class TestDag:
 
 
 class TestSpec:
-    """ComponentSpec round-trip, including nested targets."""
+    """Spec round-trip, including nested targets."""
 
     def test_round_trip(self):
         job = il.CronJob(

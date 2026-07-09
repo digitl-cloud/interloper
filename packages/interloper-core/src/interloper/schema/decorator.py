@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, overload
 
-from interloper.component.build import build_component_class
 from interloper.schema.base import Schema
 
 
@@ -51,9 +50,9 @@ def schema(
         classvars["name"] = name
 
     if cls is not None:
-        return build_component_class(cls, base=Schema, classvars=classvars)
+        return Schema.build_class(cls, classvars=classvars)
 
     def wrapper(cls: type) -> type[Schema]:
-        return build_component_class(cls, base=Schema, classvars=classvars)
+        return Schema.build_class(cls, classvars=classvars)
 
     return wrapper

@@ -30,16 +30,14 @@ class RunExecutor:
     def __init__(
         self,
         store: Store | None = None,
-        runner_type: type[Runner] = il.AsyncRunner,
-        runner_kwargs: dict[str, Any] | None = None,
+        runner: Runner | None = None,
     ) -> None:
         if store is None:
             from interloper.catalog import Catalog
 
             store = Store.from_settings(catalog=Catalog.from_settings())
         self._store = store
-        self._runner_type = runner_type
-        self._runner_kwargs = runner_kwargs or {}
+        self._runner = runner or il.AsyncRunner()
 
     def execute(self, run_id: UUID) -> bool:
         """Execute a run with full lifecycle tracking.
@@ -182,7 +180,9 @@ class RunExecutor:
         def handle_event(event: il.Event) -> None:
             self._store.save_event(event, org_id=org_id, run_id=run_id)
 
-        runner = self._runner_type(**self._runner_kwargs, on_event=handle_event)
+        # A fresh copy per execution: the runner template is shared across
+        # runs, but run state and the event handler are per-run.
+        runner = self._runner.model_copy(update={"on_event": handle_event})
         return asyncio.run(
             runner.run(
                 dag,

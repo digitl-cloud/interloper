@@ -298,7 +298,7 @@ class ComponentMixin:
             spec = self._hydrator.build_component_spec(session, db_component)
 
         try:
-            return spec.reconstruct()
+            return il.Component.from_spec(spec)
         except Exception as e:
             raise HydrationError(
                 f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): {e}"
@@ -321,7 +321,7 @@ class ComponentMixin:
         Returns:
             The decoded configuration dict.
         """
-        if il.KINDS.sensitive(db_component.kind):
+        if il.KINDS[db_component.kind].sensitive:
             return self._hydrator.decode_data(db_component)
         return dict(db_component.config or {})
 
@@ -331,7 +331,7 @@ class ComponentMixin:
 
     def _apply_config(self, db_component: Component, config: dict[str, Any] | None, encrypted: bool | None) -> None:
         """Write the config payload onto the row, encrypting secret kinds."""
-        if il.KINDS.sensitive(db_component.kind):
+        if il.KINDS[db_component.kind].sensitive:
             db_component.data, db_component.encrypted = self._encode_data(config or {}, encrypted)
             db_component.config = None
         else:
@@ -450,7 +450,7 @@ class ComponentMixin:
     @staticmethod
     def _check_vocabulary(kind: str, type_: str) -> None:
         """Reject relation types the kind's class vocabulary doesn't declare."""
-        vocabulary = il.KINDS.relation_types(kind)
+        vocabulary = il.KINDS[kind].relation_types
         if type_ not in vocabulary:
             raise ConfigError(
                 f"Components of kind '{kind}' declare no '{type_}' relations "
@@ -463,7 +463,7 @@ class ComponentMixin:
         dst = session.get(Component, dst_id)
         if dst is None or dst.org_id != src.org_id:
             raise NotFoundError(f"Component {dst_id} not found (relation '{type_}'{f'/{slot}' if slot else ''})")
-        definition = il.KINDS.relation_types(src.kind)[type_]
+        definition = il.KINDS[src.kind].relation_types[type_]
         if dst.kind not in definition.kinds:
             raise ConfigError(
                 f"Relation '{type_}' on kind '{src.kind}' may not point at a '{dst.kind}' "

@@ -21,7 +21,7 @@ from interloper.destination import IOContext, destination
 from interloper.destination.database import DatabaseDestination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionConfig, TimePartitionConfig
-from interloper.representation import representation_for
+from interloper.representation import Representation
 from interloper.resource.fields import FetchField, InputField, SelectField
 from interloper.schema import FieldSpec, Schema
 
@@ -243,7 +243,7 @@ class BigQueryDestination(DatabaseDestination):
                 tp = _time_partitioning(partitioning, bq_schema)
                 self._create_table(table, schema, bq_schema, time_partitioning=tp, description=description)
             elif not isinstance(data, pd.DataFrame):
-                rows = representation_for(data).to_records(data)
+                rows = Representation.of(data).to_records(data)
                 if not rows:
                     return
                 inferred = _infer_bq_schema(rows)
@@ -259,7 +259,7 @@ class BigQueryDestination(DatabaseDestination):
             tp = _time_partitioning(partitioning, bq_schema) if creating and bq_schema is None else None
             self._load_dataframe(ref, data, bq_schema, time_partitioning=tp)
         else:
-            rows = representation_for(data).to_records(data)
+            rows = Representation.of(data).to_records(data)
             if rows:
                 self._load_rows(ref, rows, bq_schema)
 

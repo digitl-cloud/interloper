@@ -19,7 +19,7 @@ from interloper.errors import AssetError, NormalizerError, PartitionError
 from interloper.events import EventBus, EventType
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
-from interloper.representation import representation_for
+from interloper.representation import Representation
 from interloper.resource import Resource
 from interloper.schema import Schema
 from interloper.utils import concurrency
@@ -712,7 +712,7 @@ class Asset(Component):
         if schema is None and strategy != MaterializationStrategy.AUTO:
             raise AssetError(f"Asset '{type(self).key}': strategy='{strategy.value}' requires a schema.")
 
-        conformer = representation_for(result).conformer
+        conformer = Representation.of(result).conformer
         try:
             result = conformer.prepare(result)
         except NormalizerError as e:

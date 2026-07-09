@@ -32,8 +32,8 @@ class DockerLauncher(Launcher):
     which hydrates the DAG from the database and runs it to completion.
 
     Postgres connection parameters are passed as plain values. The caller
-    (``_build_launcher``) injects the app-level defaults; any overrides
-    from the launcher YAML config take precedence.
+    (``Launcher.from_settings``) injects the app-level defaults; any
+    overrides from the launcher YAML config take precedence.
     """
 
     @classmethod

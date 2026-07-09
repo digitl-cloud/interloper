@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar
+from typing import Any
 
 from pydantic import Field
 
-from interloper.component import Component
+from interloper.serializable import Serializable
 from interloper.utils.data import coerce_to_records
 from interloper.utils.text import to_snake_case
 
 
-class Normalizer(Component):
+class Normalizer(Serializable):
     """Type-native normalizer for ``list[dict]`` asset data.
 
     Accepts arbitrary return types (``dict``, ``list[dict]``, ``BaseModel``,
@@ -20,9 +20,9 @@ class Normalizer(Component):
     applies optional transformations (column-name normalization, nested-dict
     flattening, missing-column fill).
 
-    Normalizer is a :class:`Component` so configured instances round-trip
-    through ``ComponentSpec`` with their concrete subclass intact — e.g.
-    across the host → child-pod DAG-spec boundary.
+    Normalizer is :class:`Serializable` so instances round-trip through
+    ``Spec`` with their concrete subclass intact — e.g. across the
+    host → child-pod DAG-spec boundary.
 
     Usage::
 
@@ -50,10 +50,6 @@ class Normalizer(Component):
             rule can handle (``eCPAddToCart`` → ``ecp_add_to_cart``).
     """
 
-    # Shadow Component.id — normalizers are pure configuration, not runtime
-    # instances that need identity. (Same pattern as Schema.)
-    id: ClassVar[str] = ""
-
     normalize_columns_names: bool = True
     flatten_max_level: int | None = 0
     flatten_separator: str = "_"
@@ -63,10 +59,6 @@ class Normalizer(Component):
     column_overrides: dict[str, str] = Field(default_factory=dict)
     replace_empty_dicts: bool = False
     replace_empty_strings: bool = False
-
-    # Override Component.model_post_init to avoid setting an instance id.
-    def model_post_init(self, context: Any) -> None:
-        """No-op: normalizers don't need instance identity."""
 
     # ------------------------------------------------------------------
     # Public API

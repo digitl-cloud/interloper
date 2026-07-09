@@ -13,10 +13,11 @@ import pytest
 
 import interloper as il
 from interloper.asset.base import AssetDefinition
-from interloper.component.base import Component, ComponentSpec
+from interloper.component.base import Component
 from interloper.errors import AssetError, DestinationError, PartitionError
 from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
+from interloper.serializable import Spec
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -488,7 +489,7 @@ class TestSerialization:
             resources={"config": FakeResource(value="v")},
         )
         spec_json = asset.to_spec().model_dump_json()
-        restored = ComponentSpec.model_validate_json(spec_json).reconstruct()
+        restored = Spec.model_validate_json(spec_json).reconstruct()
 
         assert isinstance(restored, FakeAsset)
         assert restored.dataset == "ds"

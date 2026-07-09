@@ -11,16 +11,16 @@ from typing_extensions import Self
 from interloper.asset import Asset
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition, RelationDefinition
-from interloper.component.base import ComponentDescriptor, ComponentSpec, dump_spec_value
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.resource import Resource
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
+from interloper.serializable import IgnoredDescriptor, Spec, dump_spec_value
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label
 
 
-class AssetRef(ComponentDescriptor):
+class AssetRef(IgnoredDescriptor):
     """Class attribute that exposes a source-owned asset.
 
     At **class access** (``FacebookAds.campaigns``) returns the asset
@@ -166,7 +166,7 @@ class Source(Component):
           unmapped keys to a bare ``asset_cls()``.
 
         This is what ``Source.to_spec()`` emits and what
-        ``ComponentSpec.reconstruct()`` hands back in after the walker
+        ``Spec.reconstruct()`` hands back in after the walker
         has resolved any nested component specs inside the overrides.
 
         Returns:
@@ -234,18 +234,18 @@ class Source(Component):
     # Serialization
     # ------------------------------------------------------------------
 
-    def to_spec(self) -> ComponentSpec:
+    def to_spec(self) -> Spec:
         """Serialize to a spec with ``assets`` as a key → init override map.
 
         Source is the unit of reconstruction: each asset's own state is
         serialised as a plain dict under the asset's key, with no
         individual ``path``.  This mirrors :meth:`_apply_asset_overrides`
         on the reconstruction side, and keeps the source spec compact
-        (no duplicated class paths, no nested ``ComponentSpec`` wrapping
+        (no duplicated class paths, no nested ``Spec`` wrapping
         for each asset).
 
         Returns:
-            A ``ComponentSpec`` capturing this source and its assets.
+            A ``Spec`` capturing this source and its assets.
         """
         init: dict[str, Any] = {}
         for name in type(self).model_fields:
@@ -268,7 +268,7 @@ class Source(Component):
                 continue
             init[name] = dump_spec_value(value)
 
-        return ComponentSpec(path=self.path(), id=self.id, init=init or None)
+        return Spec(path=self.path(), id=self.id, init=init or None)
 
     # ------------------------------------------------------------------
     # Assets

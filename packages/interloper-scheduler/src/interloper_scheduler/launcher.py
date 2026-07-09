@@ -7,12 +7,11 @@ import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from functools import cache
-from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from interloper.errors import ConfigError
+from interloper.registry import Registry
 from interloper_db import Store
 
 if TYPE_CHECKING:
@@ -39,64 +38,11 @@ class RunState:
     error: str | None = None
 
 
-_ENTRY_POINT_GROUP = "interloper.launchers"
-
-
-@cache
-def launchers() -> dict[str, type[Launcher]]:
-    """Load the launcher registry from installed entry points.
-
-    Every launcher — including the built-in in-process one — registers
-    through the ``interloper.launchers`` entry-point group; the entry name
-    is the launcher type key used in ``LauncherSettings.type``. Installed
-    means discovered: no import-order dependence, and a new launcher is one
-    new package with one entry point.
-
-    Returns:
-        Mapping of launcher type key to launcher class.
-    """
-    return {entry_point.name: entry_point.load() for entry_point in entry_points(group=_ENTRY_POINT_GROUP)}
-
-
-def build_launcher(
-    launcher: LauncherSettings,
-    *,
-    postgres: PostgresSettings,
-    runner: RunnerSettings,
-    catalog: Catalog | None,
-    store: Any | None = None,
-) -> Launcher:
-    """Build a launcher instance from settings.
-
-    Resolves the launcher class from the registry by ``launcher.type`` and
-    delegates construction to the class's own :meth:`Launcher.from_settings`
-    — each integration package owns its construction recipe.
-
-    Args:
-        launcher: Launcher settings (type + type-specific config).
-        postgres: Postgres settings forwarded to launchers that spawn
-            isolated processes (e.g. Docker).
-        runner: Runner settings forwarded to every launcher.
-        catalog: Catalog forwarded to launchers that spawn isolated
-            processes so they can reproduce an identical catalog
-            (``None`` is accepted by launchers that don't consume it).
-        store: Optional Store instance shared with in-process launchers.
-
-    Returns:
-        A scheduler ``Launcher`` instance.
-
-    Raises:
-        ConfigError: If no launcher is registered under ``launcher.type``.
-    """
-    registry = launchers()
-    if launcher.type not in registry:
-        raise ConfigError(
-            f"Unknown launcher: {launcher.type!r} (available: {sorted(registry)}). "
-            f"Is the matching interloper package installed?"
-        )
-    return registry[launcher.type].from_settings(
-        launcher, postgres=postgres, runner=runner, catalog=catalog, store=store
-    )
+#: Launcher classes by type key (``LauncherSettings.type``), fed by the
+#: ``interloper.launchers`` entry-point group — every launcher, the
+#: built-in in-process one included, registers through it. Installed means
+#: discovered: a new launcher is one new package with one entry point.
+LAUNCHERS: Registry[type[Launcher]] = Registry("interloper.launchers")
 
 
 class Launcher(ABC):
@@ -108,7 +54,6 @@ class Launcher(ABC):
     """
 
     @classmethod
-    @abstractmethod
     def from_settings(
         cls,
         settings: LauncherSettings,
@@ -118,12 +63,41 @@ class Launcher(ABC):
         catalog: Catalog | None,
         store: Any | None = None,
     ) -> Launcher:
-        """Construct this launcher from scheduler settings.
+        """Construct the launcher the settings describe.
 
-        The registry construction hook: each launcher owns its recipe
-        (which settings it consumes, how ``settings.config`` maps to its
-        constructor).
+        Called on ``Launcher``, resolves ``settings.type`` in ``LAUNCHERS``
+        and delegates to that class's own ``from_settings`` — each launcher
+        owns its recipe (which settings it consumes, how ``settings.config``
+        maps to its constructor). Concrete launchers must override this
+        with theirs.
+
+        Args:
+            settings: Launcher settings (type + type-specific config).
+            postgres: Postgres settings forwarded to launchers that spawn
+                isolated processes (e.g. Docker).
+            runner: Runner settings forwarded to every launcher.
+            catalog: Catalog forwarded to launchers that spawn isolated
+                processes so they can reproduce an identical catalog
+                (``None`` is accepted by launchers that don't consume it).
+            store: Optional Store instance shared with in-process launchers.
+
+        Returns:
+            The configured launcher instance.
+
+        Raises:
+            ConfigError: If no launcher is registered under ``settings.type``.
+            NotImplementedError: If the resolved launcher class does not
+                implement its own ``from_settings``.
         """
+        if cls is not Launcher:
+            raise NotImplementedError(f"{cls.__name__} must implement from_settings")
+        launcher_cls = LAUNCHERS.get(settings.type)
+        if launcher_cls is None:
+            raise ConfigError(
+                f"Unknown launcher: {settings.type!r} (available: {list(LAUNCHERS.keys())}). "
+                f"Is the matching interloper package installed?"
+            )
+        return launcher_cls.from_settings(settings, postgres=postgres, runner=runner, catalog=catalog, store=store)
 
     def __init__(
         self,
@@ -206,16 +180,13 @@ class InProcessLauncher(Launcher):
         Args:
             run_id: The run UUID to execute.
         """
-        from interloper.runner import build_runner
+        from interloper.runner import Runner
+        from interloper.settings import RunnerSettings
 
         from interloper_scheduler.executor import RunExecutor
 
-        runner_cls, runner_kwargs = build_runner(self._runner_type, self._runner_config)
-        executor = RunExecutor(
-            store=self._store,
-            runner_type=runner_cls,
-            runner_kwargs=runner_kwargs,
-        )
+        runner = Runner.from_settings(RunnerSettings(type=self._runner_type, config=self._runner_config))
+        executor = RunExecutor(store=self._store, runner=runner)
         thread = threading.Thread(target=executor.execute, args=(run_id,), daemon=True)
         thread.start()
         logger.info("Launched run %s in background thread", run_id)

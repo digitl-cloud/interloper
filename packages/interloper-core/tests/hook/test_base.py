@@ -33,20 +33,20 @@ class TestDefinition:
         assert il.Hook.kind == "hook"
         assert "hook" in il.KINDS
         assert il.KINDS.get("hook") is il.Hook
-        assert il.KINDS.runnable("hook") is False
-        assert il.KINDS.sensitive("hook") is False
+        assert il.KINDS["hook"].runnable is False
+        assert il.KINDS["hook"].sensitive is False
 
     def test_vocabulary(self):
-        relations = il.KINDS.relation_types("hook")
+        relations = il.KINDS["hook"].relation_types
         assert relations["watch"].field == "watches"
         assert relations["watch"].kinds == ["source", "asset", "job"]
         assert relations["target"].field == "targets"
         assert relations["resource"].slotted is True
 
     def test_state_model(self):
-        assert il.KINDS.state_model("hook") is il.HookState
-        assert il.KINDS.state_model("job") is il.JobState
-        assert il.KINDS.state_model("source") is None
+        assert il.KINDS["hook"].state_model is il.HookState
+        assert il.KINDS["job"].state_model is il.JobState
+        assert il.KINDS["source"].state_model is None
 
     def test_definition_describes_state(self):
         assert set(il.Hook.definition().state_schema["properties"]) == {"last_fired_at", "last_run_id"}

@@ -10,7 +10,7 @@ from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
 from interloper.destination.partitioned import PartitionedDestination
 from interloper.partitioning.base import Partition
-from interloper.representation import representation_for
+from interloper.representation import Representation
 
 
 @destination(name="CSV")
@@ -52,7 +52,7 @@ class CSVDestination(PartitionedDestination):
 
     def _write_scope(self, context: IOContext, partition: Partition | None, data: Any) -> None:
         """Write one scope's data as CSV (converted to records through its representation)."""
-        rows = representation_for(data).to_records(data)
+        rows = Representation.of(data).to_records(data)
         self._write_csv(self._scope_path(context, partition), rows)
 
     def _read_scope(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:

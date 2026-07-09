@@ -7,7 +7,6 @@ from collections.abc import Callable
 from typing import Any, overload
 
 from interloper.asset import Asset
-from interloper.component.build import build_component_class
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.resource import Resource
@@ -208,12 +207,12 @@ def _build_source_from_class(
 
     Asset subclasses defined in the class body (via ``@asset`` on methods)
     are auto-collected by ``Source.__init_subclass__._collect_asset_types()``.
-    Field annotations are handled by ``build_component_class``.
+    Field annotations are handled by ``Source.build_class``.
 
     Returns:
         A dynamically created Source subclass.
     """
-    source_cls = build_component_class(cls, base=Source, classvars=classvars, fields=fields)
+    source_cls = Source.build_class(cls, classvars=classvars, fields=fields)
 
     # Set _source_type backref on each asset.
     for asset_cls in source_cls.asset_types:

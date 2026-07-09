@@ -10,8 +10,9 @@ import pytest
 
 import interloper as il
 from interloper.asset.base import AssetDefinition
-from interloper.component.base import Component, ComponentSpec
+from interloper.component.base import Component
 from interloper.normalizer import MaterializationStrategy, Normalizer
+from interloper.serializable import Spec
 from interloper.source.base import SourceDefinition
 
 # ---------------------------------------------------------------------------
@@ -428,7 +429,7 @@ class TestSerialization:
         source.assets[0].materializable = False
 
         spec_json = source.to_spec().model_dump_json()
-        restored = ComponentSpec.model_validate_json(spec_json).reconstruct()
+        restored = Spec.model_validate_json(spec_json).reconstruct()
 
         assert isinstance(restored, FakeSourceWithAssets)
         assert restored.dataset == "ds"

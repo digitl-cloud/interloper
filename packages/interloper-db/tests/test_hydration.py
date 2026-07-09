@@ -166,7 +166,7 @@ class FakeLinker(il.Component):
     links: list[il.Component] = pydantic.Field(default_factory=list)
 
 
-il.KINDS.register(FakeLinker)
+il.KINDS.register(FakeLinker.kind, FakeLinker.anchor())
 
 
 class TestOpenVocabulary:

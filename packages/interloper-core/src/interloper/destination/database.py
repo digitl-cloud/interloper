@@ -12,7 +12,7 @@ from typing import Any, ClassVar
 from interloper.destination.context import IOContext
 from interloper.destination.partitioned import PartitionedDestination
 from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.representation import representation, representation_for
+from interloper.representation import REPRESENTATIONS, Representation
 from interloper.utils.data import is_empty
 
 
@@ -127,7 +127,7 @@ class DatabaseDestination(PartitionedDestination):
         Returns:
             Data in the ``read_representation`` format.
         """
-        return representation(self.read_representation).from_records(rows)
+        return REPRESENTATIONS[self.read_representation].from_records(rows)
 
     # ------------------------------------------------------------------
     # Destination interface
@@ -148,7 +148,7 @@ class DatabaseDestination(PartitionedDestination):
             data: The data in its native format (DataFrame, list[dict], ...).
             context: IO context carrying the asset and effective schema.
         """
-        rows = representation_for(data).to_records(data)
+        rows = Representation.of(data).to_records(data)
         if rows:
             self._insert(table, schema, rows)
 
@@ -170,7 +170,7 @@ class DatabaseDestination(PartitionedDestination):
 
         if context.partition_or_window is not None and context.asset.partitioning is not None:
             col = context.asset.partitioning.column
-            columns = representation_for(data).columns(data)
+            columns = Representation.of(data).columns(data)
             if columns and col not in columns:
                 warnings.warn(
                     f"Partition column '{col}' not found in data for asset "

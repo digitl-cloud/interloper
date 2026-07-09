@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
-from interloper.component.build import build_component_class
 from interloper.config.base import Config
 
 # Bounded TypeVar so that classes already extending Config preserve their
@@ -67,9 +66,9 @@ def config(
         classvars["tags"] = tags
 
     if cls is not None:
-        return build_component_class(cls, base=Config, classvars=classvars)
+        return Config.build_class(cls, classvars=classvars)
 
     def wrapper(cls: type) -> type[Config]:
-        return build_component_class(cls, base=Config, classvars=classvars)
+        return Config.build_class(cls, classvars=classvars)
 
     return wrapper

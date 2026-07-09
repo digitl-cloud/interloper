@@ -84,3 +84,6 @@ class RowsConformer(Conformer):
             A dynamically created Schema subclass.
         """
         return Schema.infer(data)
+
+
+ROWS_CONFORMER = RowsConformer()

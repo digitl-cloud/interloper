@@ -10,9 +10,8 @@ from typing import Any, ClassVar
 import pytest
 
 import interloper as il
-from interloper.component.base import ComponentSpec
+from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
-from interloper.dag.spec import DAGSpec
 from interloper.errors import (
     AssetNotFoundError,
     CircularDependencyError,
@@ -22,6 +21,7 @@ from interloper.errors import (
 )
 from interloper.partitioning.base import PartitionConfig
 from interloper.runner.results import ExecutionStatus
+from interloper.serializable import Spec
 
 # ---------------------------------------------------------------------------
 # Minimal asset/source fixtures used by small-topology tests
@@ -607,7 +607,7 @@ class TestSerialization:
         dag = DAG(FakeAsset(), FakeOtherAsset())
         spec = dag.to_spec()
         for entry in spec.items:
-            assert isinstance(entry, ComponentSpec)
+            assert isinstance(entry, Spec)
 
     def test_plain_roundtrip_preserves_asset_classes(self):
         dag = DAG(FakeAsset(), FakeOtherAsset())
@@ -747,7 +747,7 @@ class TestFromSpec:
 
     def test_from_spec_passes_the_catalog(self):
         catalog = il.Catalog.from_assets([FakeAsset])
-        spec = DAGSpec(items=[ComponentSpec(key="fake_asset")])
+        spec = DAGSpec(items=[Spec(key="fake_asset")])
         dag = DAG.from_spec(spec, catalog)
         assert [type(a).key for a in dag.assets] == ["fake_asset"]
 

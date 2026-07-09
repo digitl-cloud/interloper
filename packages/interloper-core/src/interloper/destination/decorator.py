@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
-from interloper.component.build import build_component_class
 from interloper.destination.base import Destination
 from interloper.resource import Resource
 
@@ -81,9 +80,9 @@ def destination(
         classvars["icon"] = icon
 
     if cls is not None:
-        return build_component_class(cls, base=Destination, classvars=classvars)
+        return Destination.build_class(cls, classvars=classvars)
 
     def wrapper(cls: type) -> type[Destination]:
-        return build_component_class(cls, base=Destination, classvars=classvars)
+        return Destination.build_class(cls, classvars=classvars)
 
     return wrapper

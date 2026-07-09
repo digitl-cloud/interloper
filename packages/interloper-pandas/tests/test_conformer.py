@@ -6,7 +6,7 @@ import json
 import pandas as pd
 import pytest
 from interloper.errors import SchemaError
-from interloper.representation import representation_for
+from interloper.representation import Representation
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -29,7 +29,7 @@ class TestResolution:
     """The DataFrame representation carries the pandas conformer."""
 
     def test_dataframe_resolves_to_dataframe_conformer(self):
-        assert isinstance(representation_for(pd.DataFrame()).conformer, DataFrameConformer)
+        assert isinstance(Representation.of(pd.DataFrame()).conformer, DataFrameConformer)
 
 
 class TestDataFrameConformerValidate:

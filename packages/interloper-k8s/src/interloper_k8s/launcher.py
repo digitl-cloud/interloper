@@ -27,7 +27,7 @@ class KubernetesLauncher(Launcher):
     database and runs it to completion.
 
     Postgres connection parameters and the catalog are injected as
-    environment variables.  The caller (``build_launcher``) provides
+    environment variables.  The caller (``Launcher.from_settings``) provides
     the app-level defaults; any overrides from the launcher YAML
     config take precedence.
     """

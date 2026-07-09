@@ -207,7 +207,7 @@ class HookController:
             "last_fired_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "last_run_id": str(run.id),
         }
-        model = il.KINDS.state_model(hook_row.kind)
+        model = il.KINDS[hook_row.kind].state_model
         if model is not None:
             model.model_validate(state)
         hook_row.state = state

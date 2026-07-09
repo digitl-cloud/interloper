@@ -98,15 +98,6 @@ class NormalizerError(InterloperError, TypeError):
     """The normalizer received data it cannot coerce to ``list[dict]``."""
 
 
-class RepresentationError(InterloperError, TypeError):
-    """No data representation is registered for the requested key."""
-
-
-# ------------------------------------------------------------------
-# Destination
-# ------------------------------------------------------------------
-
-
 class DestinationError(InterloperError):
     """Base class for destination-related errors."""
 
@@ -187,29 +178,3 @@ class ComponentDriftError(InterloperError):
     the API layer can treat drift as a recoverable, user-resolvable state
     rather than a hard failure.
     """
-
-
-# ------------------------------------------------------------------
-# Scheduling
-# ------------------------------------------------------------------
-
-
-class SchedulingError(RunnerError):
-    """An error in cron evaluation, queue polling, or run dispatch."""
-
-
-# ------------------------------------------------------------------
-# External Providers
-# ------------------------------------------------------------------
-
-
-class ExternalProviderError(InterloperError):
-    """An external API call failed (e.g. Amazon Ads, Google Ads)."""
-
-
-class ProviderAuthError(ExternalProviderError, AuthenticationError):
-    """Authentication with an external provider failed (invalid/expired token)."""
-
-
-class ProviderRateLimitError(ExternalProviderError):
-    """An external provider returned a rate-limit response (retriable)."""

@@ -559,7 +559,7 @@ def _checked_state(kind: str, state: dict) -> dict:
         stored string format (lexicographically comparable ISO timestamps)
         never drifts.
     """
-    model = il.KINDS.state_model(kind)
+    model = il.KINDS[kind].state_model
     if model is not None:
         model.model_validate(state)
     return state

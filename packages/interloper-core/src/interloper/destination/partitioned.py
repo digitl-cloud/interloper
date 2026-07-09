@@ -7,7 +7,7 @@ from typing import Any
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.representation import representation_for
+from interloper.representation import Representation
 
 
 class PartitionedDestination(Destination):
@@ -90,7 +90,7 @@ def _partition_slice(data: Any, column: str, partition: Partition) -> Any:
     Returns:
         The partition's slice of the data.
     """
-    rep = representation_for(data)
+    rep = Representation.of(data)
     if rep.matches(data):
         return rep.filter_eq(data, column, partition.id)
     return data

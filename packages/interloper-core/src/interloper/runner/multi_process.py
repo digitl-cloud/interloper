@@ -29,7 +29,7 @@ def _worker(
     Returns:
         Tuple of ``(id, success, error_message, formatted_traceback)``.
     """
-    from interloper.dag.spec import DAGSpec
+    from interloper.dag import DAGSpec
 
     try:
         dag = DAGSpec(**dag_spec).reconstruct()
@@ -54,7 +54,7 @@ class MultiProcessRunner(SyncRunner):
     """Process-based parallel runner.
 
     Executes independent assets concurrently using a process pool.
-    Each asset is serialized via :class:`~interloper.dag.spec.DAGSpec`,
+    Each asset is serialized via :class:`~interloper.dag.base.DAGSpec`,
     reconstructed in a child process, and materialized there.  State
     tracking remains in the main process.
 

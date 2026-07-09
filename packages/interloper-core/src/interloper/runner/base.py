@@ -6,67 +6,27 @@ import asyncio
 import uuid
 from abc import abstractmethod
 from collections.abc import Callable
-from functools import cache
-from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
 from pydantic import Field, PrivateAttr
+from typing_extensions import Self
 
-from interloper.component import Component
 from interloper.errors import ConfigError, PartitionError, RunnerError
-from interloper.events import EventBus
+from interloper.events import Event, EventBus
+from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.registry import Registry
+from interloper.runner.results import ExecutionStatus, RunResult
+from interloper.runner.state import RunState
+from interloper.serializable import Serializable
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
-from interloper.events.event import Event
-from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.runner.results import ExecutionStatus, RunResult
-from interloper.runner.state import RunState
+    from interloper.settings import RunnerSettings
 
-_ENTRY_POINT = "interloper.runners"
+RUNNERS: Registry[type[Runner]] = Registry("interloper.runners")
 
 
-@cache
-def runners() -> dict[str, type[Runner]]:
-    """Load the runner registry from installed entry points.
-
-    Every runner — including the built-ins — registers through the
-    ``interloper.runners`` entry-point group; the entry name is the runner
-    type key used in ``RunnerSettings.type``. Installed means discovered: a
-    new runner is one new package with one entry point.
-
-    Returns:
-        Mapping of runner type key to runner class.
-    """
-    return {entry_point.name: entry_point.load() for entry_point in entry_points(group=_ENTRY_POINT)}
-
-
-def build_runner(
-    runner_type: str = "async",
-    runner_config: dict[str, Any] | None = None,
-) -> tuple[type[Runner], dict[str, Any]]:
-    """Resolve a runner type key to a concrete class and forward its kwargs.
-
-    Args:
-        runner_type: Runner type key (an ``interloper.runners`` entry name).
-        runner_config: Runner-specific kwargs forwarded to the constructor.
-
-    Returns:
-        A tuple of ``(runner_class, runner_kwargs)``.
-
-    Raises:
-        ConfigError: If no runner is registered under ``runner_type``.
-    """
-    registry = runners()
-    if runner_type not in registry:
-        raise ConfigError(
-            f"Unknown runner: {runner_type!r} (available: {sorted(registry)}). "
-            f"Is the matching interloper package installed?"
-        )
-    return registry[runner_type], dict(runner_config or {})
-
-
-class Runner(Component):
+class Runner(Serializable):
     """Abstract base class for all runners.
 
     Async-native: :meth:`run` is a coroutine. It owns the ``on_event``
@@ -83,6 +43,35 @@ class Runner(Component):
     on_event: Callable[[Event], None] | None = Field(default=None, exclude=True, repr=False)
 
     _state: RunState | None = PrivateAttr(default=None)
+
+    # ------------------------------------------------------------------
+    # Construction
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_settings(cls, settings: RunnerSettings) -> Self:
+        """Construct the runner the settings describe.
+
+        Resolves ``settings.type`` in ``RUNNERS`` and constructs it with
+        ``settings.config``. Called on a subclass, the resolved runner must
+        be of that subclass.
+
+        Returns:
+            The configured runner instance.
+
+        Raises:
+            ConfigError: If no runner is registered under ``settings.type``,
+                or the registered class is not of the receiving class.
+        """
+        runner_cls = RUNNERS.get(settings.type)
+        if runner_cls is None:
+            raise ConfigError(
+                f"Unknown runner: {settings.type!r} (available: {list(RUNNERS.keys())}). "
+                f"Is the matching interloper package installed?"
+            )
+        if not issubclass(runner_cls, cls):
+            raise ConfigError(f"Runner '{settings.type}' does not resolve to a {cls.__name__}")
+        return runner_cls(**settings.config)
 
     # ------------------------------------------------------------------
     # State

@@ -1,7 +1,7 @@
-"""Hydration: translates DB rows into ``ComponentSpec`` trees.
+"""Hydration: translates DB rows into ``Spec`` trees.
 
 This module is a pure transformation layer.  It reads rows from the
-database and builds the ``ComponentSpec`` tree that ``Component.from_spec``
+database and builds the ``Spec`` tree that ``Component.from_spec``
 expects.  No framework classes are instantiated here — reconstruction
 happens at the call site via ``spec.reconstruct()``::
 
@@ -31,15 +31,15 @@ from uuid import UUID
 
 from interloper.catalog.base import Catalog
 from interloper.component import KINDS
-from interloper.component.base import ComponentSpec
 from interloper.errors import CatalogKeyError, HydrationError
+from interloper.serializable import Spec
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
 
 
 class Hydrator:
-    """Builds ``ComponentSpec`` trees from DB rows.
+    """Builds ``Spec`` trees from DB rows.
 
     The hydrator holds a catalog (for import-path lookups) and an optional
     decrypt callable (for secret payloads).  All methods are pure
@@ -62,7 +62,7 @@ class Hydrator:
         self._catalog = catalog
         self._decrypt = decrypt
 
-    def build_component_spec(self, session: Session, db_component: Component) -> ComponentSpec:
+    def build_component_spec(self, session: Session, db_component: Component) -> Spec:
         """Build a spec for a component row of any kind.
 
         Args:
@@ -70,11 +70,11 @@ class Hydrator:
             db_component: The component row.
 
         Returns:
-            A ``ComponentSpec`` with the row's ``id`` and a fully resolved
+            A ``Spec`` with the row's ``id`` and a fully resolved
             init payload (nested components as nested specs).
         """
         init = self._build_init(session, db_component)
-        return ComponentSpec(
+        return Spec(
             path=self._resolve_path(session, db_component),
             id=str(db_component.id) if db_component.id else "",
             init=init or None,
@@ -125,14 +125,14 @@ class Hydrator:
         reconstruction.
 
         Returns:
-            A dict suitable for use as a ``ComponentSpec.init``.
+            A dict suitable for use as a ``Spec.init``.
         """
-        if KINDS.sensitive(db_component.kind):
+        if KINDS[db_component.kind].sensitive:
             init = self.decode_data(db_component)
         else:
             init = dict(db_component.config or {})
 
-        vocabulary = KINDS.relation_types(db_component.kind)
+        vocabulary = KINDS[db_component.kind].relation_types
         for type_, rels in self._relations_by_type(session, db_component.id).items():
             definition = vocabulary.get(type_)
             if definition is None:
@@ -172,7 +172,7 @@ class Hydrator:
             grouped.setdefault(rel.type, []).append(rel)
         return grouped
 
-    def _dst_spec(self, session: Session, rel: ComponentRelation) -> ComponentSpec:
+    def _dst_spec(self, session: Session, rel: ComponentRelation) -> Spec:
         """Build the spec of a relation's destination component."""
         db_dst = session.get(Component, rel.dst_id)
         if db_dst is None:  # defensive: FKs make this unreachable

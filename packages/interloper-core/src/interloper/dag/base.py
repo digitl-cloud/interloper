@@ -5,17 +5,60 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel
+
 from interloper.asset.base import Asset
-from interloper.dag.spec import DAGSpec
+from interloper.component import Component
 from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, DependencyNotFoundError
 from interloper.partitioning import Partition, PartitionWindow
 from interloper.runner.results import RunResult
+from interloper.serializable import Spec
 from interloper.source.base import Source
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
 
 
+# ------------------------------------------------------------------
+# Specs
+# ------------------------------------------------------------------
+class DAGSpec(BaseModel):
+    """Serializable representation of a DAG.
+
+    Holds a flat list of component specs which may be either
+    :class:`~interloper.source.Source` specs (each carrying their
+    asset-override map) or individual standalone
+    :class:`~interloper.asset.Asset` specs.  The DAG constructor flattens
+    sources back into their asset lists on reconstruction.
+    """
+
+    items: list[Spec] = []
+
+    def reconstruct(self, catalog: Catalog | None = None) -> DAG:
+        """Reconstruct the DAG from its spec.
+
+        Each source spec materialises a live source (with its assets
+        pre-bound through ``Source.model_post_init`` → ``_resolve``),
+        and each standalone asset spec materialises a bare asset.  All
+        reconstructed items are then handed to the :class:`DAG`
+        constructor which re-infers the dependency graph from the
+        preserved asset ids.
+
+        Args:
+            catalog: Catalog used to resolve ``key`` references, shared
+                across all items. Defaults to the settings-configured
+                catalog, built lazily.
+
+        Returns:
+            A new DAG instance with the same structure as the original.
+        """
+        reconstructed = [Component.from_spec(spec, catalog) for spec in self.items]
+        return DAG(*reconstructed)  # ty: ignore[invalid-argument-type]
+
+
+# ------------------------------------------------------------------
+# DAG
+# ------------------------------------------------------------------
 class DAG:
     """Directed acyclic graph of assets.
 
@@ -312,9 +355,7 @@ class DAG:
         Returns:
             A DAGSpec that can reconstruct an equivalent DAG.
         """
-        from interloper.component import ComponentSpec
-
-        items: list[ComponentSpec] = []
+        items: list[Spec] = []
 
         # Group DAG assets by source, preserving their current state
         source_assets: dict[str, list[Asset]] = {}
@@ -365,7 +406,7 @@ class DAG:
     def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> DAG:
         """Compile a runnable component spec file into a DAG.
 
-        Loads a :class:`~interloper.component.base.ComponentSpec` document
+        Loads a :class:`~interloper.component.base.Spec` document
         (with ``${VAR}`` env interpolation), reconstructs the component, and
         compiles its DAG — the file-based counterpart of targeting a runnable
         component by id.

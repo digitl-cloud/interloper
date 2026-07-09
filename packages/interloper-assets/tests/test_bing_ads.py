@@ -16,9 +16,9 @@ from typing import Any
 
 import pandas as pd
 import pytest
+from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
-from interloper.dag.spec import DAGSpec
-from interloper.representation import representation_for
+from interloper.representation import Representation
 from interloper_pandas import DataFrameNormalizer
 from suds import WebFault
 
@@ -75,7 +75,7 @@ class TestSpecRoundtrip:
         normalizer = child_asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(df)
-        representation_for(normalized).conformer.validate(normalized, AdsStats)  # must not raise
+        Representation.of(normalized).conformer.validate(normalized, AdsStats)  # must not raise
 
 
 def _web_fault(detail: SimpleNamespace) -> WebFault:

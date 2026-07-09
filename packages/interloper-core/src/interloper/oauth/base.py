@@ -24,14 +24,9 @@ dependence, no explicit registration calls.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import cache
-from importlib.metadata import entry_points
-from typing import Literal
+from typing import Any, Literal
 
-from interloper.errors import ConfigError
-
-_ENTRY_POINT = "interloper.oauth_providers"
-
+from interloper.registry import Registry
 
 # ------------------------------------------------------------------
 # Provider spec
@@ -106,40 +101,14 @@ class OAuthProvider:
 # ------------------------------------------------------------------
 
 
-@cache
-def providers() -> dict[str, OAuthProvider]:
-    """Load the OAuth provider registry from installed entry points.
-
-    Every provider — including the built-ins — registers through the
-    ``interloper.oauth_providers`` entry-point group; the provider's
-    ``key`` is the registry key. Installed means discovered: no
-    import-order dependence, and a new provider is one new package with
-    one entry point.
+def _adopt_provider(_name: str, loaded: Any) -> tuple[str, OAuthProvider]:
+    """Instantiate a loaded provider entry and key it by its own ``key``.
 
     Returns:
-        Mapping of provider key to provider spec.
+        The ``(key, provider)`` pair.
     """
-    registry: dict[str, OAuthProvider] = {}
-    for entry_point in entry_points(group=_ENTRY_POINT):
-        loaded = entry_point.load()
-        instance: OAuthProvider = loaded() if isinstance(loaded, type) else loaded
-        registry[instance.key] = instance
-    return registry
+    instance: OAuthProvider = loaded() if isinstance(loaded, type) else loaded
+    return instance.key, instance
 
 
-def provider(key: str) -> OAuthProvider:
-    """Return the OAuth provider registered under *key*.
-
-    Returns:
-        The registered provider spec.
-
-    Raises:
-        ConfigError: If no provider is registered under *key*.
-    """
-    registry = providers()
-    if key not in registry:
-        raise ConfigError(
-            f"Unknown OAuth provider: {key!r} (available: {sorted(registry)}). "
-            f"Is the matching interloper package installed?"
-        )
-    return registry[key]
+PROVIDERS: Registry[OAuthProvider] = Registry("interloper.oauth_providers", adopt=_adopt_provider)

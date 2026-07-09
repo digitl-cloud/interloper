@@ -17,7 +17,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.oauth import provider, providers
+from interloper.oauth import PROVIDERS
 
 from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import oauth as oauth_module
@@ -28,7 +28,7 @@ _SUFFIXES = ("CLIENT_ID", "CLIENT_SECRET", "REDIRECT_URI")
 @pytest.fixture(autouse=True)
 def _clean_oauth_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate tests from ambient / .env connector OAuth variables."""
-    for key in providers():
+    for key in dict(PROVIDERS.items()):
         for suffix in _SUFFIXES:
             monkeypatch.delenv(f"INTERLOPER_{key.upper()}_{suffix}", raising=False)
 
@@ -130,7 +130,7 @@ def _cfg(monkeypatch: pytest.MonkeyPatch, provider: str) -> oauth_module._Provid
 
 async def test_exchange_post_json(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
-    spec = provider("amazon")
+    spec = PROVIDERS["amazon"]
 
     async with _capture_client(captured) as client:
         result = await oauth_module._exchange(client, spec, _cfg(monkeypatch, "amazon"), "the-code")
@@ -151,7 +151,7 @@ async def test_exchange_post_json(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_exchange_post_form(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
-    spec = provider("linkedin")
+    spec = PROVIDERS["linkedin"]
 
     async with _capture_client(captured) as client:
         await oauth_module._exchange(client, spec, _cfg(monkeypatch, "linkedin"), "the-code")
@@ -165,7 +165,7 @@ async def test_exchange_post_form(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_exchange_get_omits_grant_type(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
-    spec = provider("facebook")
+    spec = PROVIDERS["facebook"]
 
     async with _capture_client(captured) as client:
         await oauth_module._exchange(client, spec, _cfg(monkeypatch, "facebook"), "the-code")
@@ -178,7 +178,7 @@ async def test_exchange_get_omits_grant_type(monkeypatch: pytest.MonkeyPatch) ->
 
 async def test_exchange_basic_auth_header(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
-    spec = provider("pinterest")
+    spec = PROVIDERS["pinterest"]
 
     async with _capture_client(captured) as client:
         await oauth_module._exchange(client, spec, _cfg(monkeypatch, "pinterest"), "the-code")
@@ -189,7 +189,7 @@ async def test_exchange_basic_auth_header(monkeypatch: pytest.MonkeyPatch) -> No
 async def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
     # Providers such as TikTok 3xx-redirect to the trailing-slash URL; httpx
     # must follow it rather than surfacing the redirect page as an error.
-    spec = provider("amazon")
+    spec = PROVIDERS["amazon"]
 
     def handler(request: httpx.Request) -> httpx.Response:
         if not request.url.path.endswith("/token/"):
@@ -206,7 +206,7 @@ async def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.Monk
 
 async def test_exchange_renamed_params(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[httpx.Request] = []
-    spec = provider("tiktok")
+    spec = PROVIDERS["tiktok"]
 
     async with _capture_client(captured) as client:
         await oauth_module._exchange(client, spec, _cfg(monkeypatch, "tiktok"), "the-code")

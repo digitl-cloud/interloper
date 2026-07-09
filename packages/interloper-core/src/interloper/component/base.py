@@ -1,51 +1,28 @@
-"""Base component: the fundamental building block of the interloper framework."""
+"""Base component: the fundamental building block of the interloper framework.
+
+Two layers: :class:`Serializable` is anything that is "a class plus its
+configuration" — serializable through :class:`Spec` and resolvable
+from its import path; :class:`Component` extends it into a catalog citizen
+with kind, identity and relations. ``KINDS`` maps each kind to its anchor
+class — the single per-kind authority every kind-level question reads from.
+"""
 
 from __future__ import annotations
 
-import os
-import re
 import uuid
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field
 from typing_extensions import Self
 
-from interloper.utils.imports import get_object_path, import_from_path
+from interloper.registry import Registry
+from interloper.serializable.base import Serializable, Spec
+from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label, to_snake_case
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
     from interloper.resource.base import Resource
-
-
-class ComponentDescriptor:
-    """Marker base class for descriptors that Pydantic should ignore on Components.
-
-    Any descriptor extending this class is automatically excluded from Pydantic
-    model field processing via ``Component.model_config["ignored_types"]``.
-    """
-
-
-def dump_spec_value(value: Any) -> Any:
-    """Serialize a component field value for a :class:`ComponentSpec` init payload.
-
-    The wire format is uniform: **anything with class identity is a
-    Component** and serializes via its own spec; lists and dicts are walked;
-    everything else must be a JSON-able scalar.
-
-    Returns:
-        A JSON-able value understood by ``ComponentSpec.reconstruct``.
-    """
-    from pydantic_core import to_jsonable_python
-
-    if isinstance(value, Component):
-        return value.to_spec().model_dump(mode="json")
-    if isinstance(value, (list, tuple)):
-        return [dump_spec_value(v) for v in value]
-    if isinstance(value, dict):
-        return {k: dump_spec_value(v) for k, v in value.items()}
-    return to_jsonable_python(value)
 
 
 # ------------------------------------------------------------------
@@ -114,155 +91,27 @@ class ComponentDefinition(BaseModel):
 
 
 # ------------------------------------------------------------------
-# Specs
-# ------------------------------------------------------------------
-_ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-
-
-def _interpolate_env(value: Any, missing: set[str]) -> Any:
-    """Recursively substitute ``${VAR}`` placeholders in string values.
-
-    Unknown variables are collected into *missing* (and left in place) so
-    the caller can report them all at once.
-
-    Returns:
-        The value with all resolvable placeholders substituted.
-    """
-    if isinstance(value, str):
-
-        def sub(match: re.Match[str]) -> str:
-            name = match.group(1)
-            if name not in os.environ:
-                missing.add(name)
-                return match.group(0)
-            return os.environ[name]
-
-        return _ENV_VAR_RE.sub(sub, value)
-    if isinstance(value, dict):
-        return {k: _interpolate_env(v, missing) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_interpolate_env(v, missing) for v in value]
-    return value
-
-
-class ComponentSpec(BaseModel):
-    """Serialized representation of a Component instance.
-
-    A component is referenced by exactly one of two names, each keeping its
-    own meaning: ``path`` is a fully qualified import path (what
-    ``to_spec()`` emits), ``key`` is a catalog key — hand-authored specs may
-    reference components the way the catalog names them.
-    """
-
-    path: str = ""
-    key: str = ""
-    id: str = ""
-    init: dict[str, Any] | None = None
-
-    @model_validator(mode="after")
-    def _check_reference(self) -> ComponentSpec:
-        if bool(self.path) == bool(self.key):
-            raise ValueError("exactly one of 'path' or 'key' must be set")
-        return self
-
-    @classmethod
-    def from_file(cls, path: str | Path) -> ComponentSpec:
-        """Load a spec from a YAML file, interpolating ``${VAR}`` placeholders.
-
-        ``${VAR}`` placeholders in any string value are replaced from the
-        process environment at load time, so credentials never need to live
-        in the file. Unresolved variables are a hard error.
-
-        Returns:
-            The validated spec.
-
-        Raises:
-            SpecError: If the file is missing, unparsable, references
-                undefined environment variables, or is not a valid spec.
-        """
-        import yaml
-        from pydantic import ValidationError
-
-        from interloper.errors import SpecError
-
-        path = Path(path)
-        try:
-            text = path.read_text()
-        except OSError as exc:
-            raise SpecError(f"Cannot read spec file '{path}': {exc}") from exc
-        try:
-            data = yaml.safe_load(text)
-        except yaml.YAMLError as exc:
-            raise SpecError(f"Invalid YAML in spec file '{path}': {exc}") from exc
-        if not isinstance(data, dict):
-            raise SpecError(f"Spec file '{path}' must be a YAML mapping")
-
-        missing: set[str] = set()
-        data = _interpolate_env(data, missing)
-        if missing:
-            raise SpecError(
-                f"Spec file '{path}' references undefined environment variable(s): {', '.join(sorted(missing))}"
-            )
-
-        try:
-            return cls.model_validate(data)
-        except ValidationError as exc:
-            raise SpecError(f"Invalid spec file '{path}': {exc}") from exc
-
-    def reconstruct(self, catalog: Catalog | None = None) -> Component:
-        """Import the component and rebuild the instance, walking nested specs.
-
-        Args:
-            catalog: Catalog used to resolve ``key`` references, passed down
-                to nested specs. Defaults to the settings-configured catalog,
-                built lazily when a key is first encountered.
-
-        Returns:
-            The reconstructed Component.
-        """
-
-        def load(v: Any) -> Any:
-            if isinstance(v, dict):
-                if ("path" in v or "key" in v) and v.keys() <= {"path", "key", "id", "init"}:
-                    return ComponentSpec(**v).reconstruct(catalog)
-                return {k: load(x) for k, x in v.items()}
-            if isinstance(v, list):
-                return [load(x) for x in v]
-            return v
-
-        cls = Component.resolve_key(self.key, catalog) if self.key else Component.resolve_path(self.path)
-        kwargs: dict[str, Any] = {"id": self.id} if self.id else {}
-        for k, v in (self.init or {}).items():
-            kwargs[k] = load(v)
-        return cls(**kwargs)
-
-
-# ------------------------------------------------------------------
 # Component
 # ------------------------------------------------------------------
-class Component(BaseModel):
+class Component(Serializable):
     """Fundamental building block: identifiable, composable, serializable.
 
-    Every entity in the framework extends ``Component``. It provides:
+    Every catalog citizen extends ``Component``. On top of
+    :class:`Serializable` it provides:
 
-    - **Identity** — ``kind`` (class-level category), ``key`` (class-level
-      snake_case name), and ``id`` (instance-level, overridable).
-    - **Path** — fully qualified import path for dynamic reconstruction.
-    - **Serialization** — ``to_spec()`` / ``from_spec()`` round-trip.
+    - **Identity** — ``kind`` (class-level category) and ``id``
+      (instance-level, overridable).
+    - **Relations** — ``relation_types`` vocabulary toward other components
+      and ``resources`` slot routing.
     - **Definition** — ``definition()`` exposes class metadata for API consumers.
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, ignored_types=(ComponentDescriptor,))
-
     kind: ClassVar[str] = ""
-    key: ClassVar[str] = ""
-    name: ClassVar[str] = ""
     icon: ClassVar[str] = ""
     resource_types: ClassVar[dict[str, type[Resource]]] = {}
     relation_types: ClassVar[dict[str, RelationDefinition]] = {}
     sensitive: ClassVar[bool] = False
     runnable: ClassVar[bool] = False
-    internal_fields: ClassVar[frozenset[str]] = frozenset()
     state_model: ClassVar[type[BaseModel] | None] = None
 
     id: str = Field(default="")
@@ -272,14 +121,12 @@ class Component(BaseModel):
     # Construction
     # ------------------------------------------------------------------
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-derive ``kind`` and ``key`` for subclasses.
+        """Auto-derive ``kind`` and infer resource references.
 
         ``kind`` is set only for direct children of ``Component``
         (``Source``, ``Asset``, ``Config``, ...).  Further subclasses
         inherit their parent's ``kind`` unless they explicitly declare one.
-
-        ``key`` is set for all subclasses as the snake_cased class name
-        unless explicitly declared.
+        (``key`` derivation comes from :class:`Serializable`.)
 
         Annotations typed as ``Resource`` subclasses are automatically
         converted to ``ResourceRef`` descriptors, registering them in
@@ -288,8 +135,6 @@ class Component(BaseModel):
         super().__init_subclass__(**kwargs)
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
-        if "key" not in cls.__dict__:
-            cls.key = to_snake_case(cls.__name__)
         cls._infer_resource_refs()
 
     @classmethod
@@ -426,16 +271,6 @@ class Component(BaseModel):
     # ------------------------------------------------------------------
     # Identity
     # ------------------------------------------------------------------
-    @classmethod
-    def has_own_field(cls, field: str) -> bool:
-        """Check if this class declares a non-None default for a field.
-
-        Returns:
-            True if the class defines a non-None default for the field.
-        """
-        info = cls.model_fields.get(field)
-        return info is not None and info.default is not None
-
     def __str__(self) -> str:
         """Human-readable representation: ``Name (key: k, id: i)``.
 
@@ -445,41 +280,50 @@ class Component(BaseModel):
         return f"{type(self).__name__} (key: {type(self).key}, id: {self.id})"
 
     @classmethod
-    def classpath(cls) -> str:
-        """Fully qualified import path for this component class.
+    def anchor(cls) -> type[Component]:
+        """The class anchoring this component's kind.
+
+        The anchor is the base-most class in the MRO that declares the
+        kind (``Connection`` for any connection subclass), so any component
+        class resolves to the single per-kind authority. The anchor's
+        relation vocabulary is validated on the way out: a relation type
+        naming a field the anchor lacks would silently drop persisted
+        relations on reconstruction.
 
         Returns:
-            Dotted path like ``"module.submodule.ClassName"``.
-        """
-        return get_object_path(cls)
+            The anchoring class.
 
-    def path(self) -> str:
-        """Fully qualified import path for this instance's class.
-
-        Returns:
-            The class's :meth:`classpath`.
+        Raises:
+            ValueError: If a declared relation type's ``field`` does not
+                exist on the anchor.
         """
-        return type(self).classpath()
+        anchor = cls
+        for base in cls.__mro__:
+            if (
+                base is not Component
+                and isinstance(base, type)
+                and issubclass(base, Component)
+                and getattr(base, "kind", "") == cls.kind
+            ):
+                anchor = base
+        for type_, definition in anchor.relation_types.items():
+            if definition.field not in anchor.model_fields:
+                raise ValueError(
+                    f"Kind '{anchor.kind}' declares relation type '{type_}' with "
+                    f"field '{definition.field}', but {anchor.__name__} has no such field"
+                )
+        return anchor
 
     # ------------------------------------------------------------------
     # Serialization & resolution
     # ------------------------------------------------------------------
-    def to_spec(self) -> ComponentSpec:
-        """Serialize this instance to a reconstructible spec.
+    def to_spec(self) -> Spec:
+        """Serialize this instance to a reconstructible spec, carrying its id.
 
         Returns:
-            A ComponentSpec capturing this instance's state.
+            A Spec capturing this instance's state and identity.
         """
-        init: dict[str, Any] = {}
-        for name in type(self).model_fields:
-            if name == "id":
-                continue
-            value = getattr(self, name)
-            if value is None:
-                continue
-            init[name] = dump_spec_value(value)
-
-        return ComponentSpec(path=self.path(), id=self.id, init=init or None)
+        return super().to_spec().model_copy(update={"id": self.id})
 
     @classmethod
     def resolve_key(cls, key: str, catalog: Catalog | None = None) -> type[Self]:
@@ -510,90 +354,9 @@ class Component(BaseModel):
             raise CatalogKeyError(f"Unknown catalog key '{key}'")
         return cls._resolve_import(definition.path, ref=key)
 
-    @classmethod
-    def resolve_path(cls, path: str) -> type[Self]:
-        """Resolve an import path to a component class of this (sub)class.
-
-        Accepts dotted and composite paths (``module.Class``,
-        ``module:Source.Asset``). Called on a subclass, the resolved class
-        must be of that subclass — anything else raises ``TypeError``.
-
-        Returns:
-            The resolved class.
-        """
-        return cls._resolve_import(path, ref=path)
-
-    @classmethod
-    def _resolve_import(cls, path: str, *, ref: str) -> type[Self]:
-        """Import *path* and check the result against the receiving class.
-
-        Returns:
-            The resolved class.
-
-        Raises:
-            TypeError: If the import is not a subclass of the receiving class.
-        """
-        resolved = import_from_path(path)
-        if not isinstance(resolved, type) or not issubclass(resolved, cls):
-            raise TypeError(f"'{ref}' does not resolve to a {cls.__name__} class")
-        return cast("type[Self]", resolved)
-
-    @classmethod
-    def from_spec(cls, spec: ComponentSpec | dict[str, Any], catalog: Catalog | None = None) -> Self:
-        """Reconstruct a component from a spec.
-
-        Called on a subclass, the reconstructed component must be of that
-        subclass: ``Source.from_spec(spec)``.
-
-        Args:
-            spec: The spec (or its dict payload) to reconstruct.
-            catalog: Catalog used to resolve ``key`` references. Defaults to
-                the settings-configured catalog, built lazily.
-
-        Returns:
-            The reconstructed component instance.
-
-        Raises:
-            TypeError: If the spec reconstructs to a component that is not
-                an instance of the receiving class.
-        """
-        if isinstance(spec, dict):
-            spec = ComponentSpec(**spec)
-        instance = spec.reconstruct(catalog)
-        if not isinstance(instance, cls):
-            raise TypeError(f"'{spec.key or spec.path}' does not reconstruct to a {cls.__name__}")
-        return instance
-
-    @classmethod
-    def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> Self:
-        """Reconstruct a component from a spec file.
-
-        Loads a :class:`ComponentSpec` document from YAML (with ``${VAR}``
-        env interpolation) and reconstructs it, with the same
-        subclass-scoped check as :meth:`from_spec` — invalid documents
-        surface as ``SpecError``, mismatched kinds as ``TypeError``.
-
-        Returns:
-            The reconstructed component instance.
-        """
-        return cls.from_spec(ComponentSpec.from_file(path), catalog)
-
     # ------------------------------------------------------------------
     # Definition
     # ------------------------------------------------------------------
-    @classmethod
-    def config_schema(cls) -> dict[str, Any]:
-        """JSON Schema of the class's user-configurable fields.
-
-        Returns:
-            The stripped schema, or ``{}`` when no configurable field remains.
-        """
-        from interloper.resource.fields import strip_internal_fields
-
-        raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
-        schema = strip_internal_fields(raw, extra=cls.internal_fields)
-        return schema if schema.get("properties") else {}
-
     @classmethod
     def definition(cls) -> ComponentDefinition:
         """Produce a structured definition of this component class.
@@ -632,3 +395,33 @@ class Component(BaseModel):
                 update={"slots": {name: RelationSlot(key=res.key) for name, res in cls.resource_types.items()}}
             )
         return relations
+
+
+# ------------------------------------------------------------------
+# Registry
+# ------------------------------------------------------------------
+_KINDS_ENTRY_POINT = "interloper.kinds"
+
+
+def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
+    """Resolve a loaded kinds entry to its ``(kind, anchor)`` pair.
+
+    Returns:
+        The pair the registry stores.
+
+    Raises:
+        TypeError: If the entry does not point at a ``Component`` class.
+    """
+    if not (isinstance(loaded, type) and issubclass(loaded, Component)):
+        raise TypeError(f"Entry '{name}' in the '{_KINDS_ENTRY_POINT}' group is not a Component class: {loaded!r}")
+    anchor = loaded.anchor()
+    return anchor.kind, anchor
+
+
+#: Kind → anchor class, fed by the ``interloper.kinds`` entry-point group
+#: (each entry names a ``Component`` subclass, resolved via
+#: ``Component.anchor()``; core declares its own in its own
+#: ``pyproject.toml``). The catalog never registers kinds: a component
+#: whose kind has no registered anchor fails the catalog build loudly —
+#: kinds first, components second.
+KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)

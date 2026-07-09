@@ -116,9 +116,9 @@ def run_services(
     # -- Queue worker / reaper ------------------------------------------------
     # Both need a Launcher; build it once if either is enabled.
     if run_worker or run_reaper:
-        from interloper_scheduler import build_launcher
+        from interloper_scheduler import Launcher
 
-        launcher = build_launcher(
+        launcher = Launcher.from_settings(
             settings.launcher,
             postgres=settings.postgres,
             runner=settings.runner,

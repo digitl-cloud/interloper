@@ -9,7 +9,7 @@ Key design decisions:
 - One row per component instance; ``kind`` discriminates. New kinds need no
   schema changes.
 - Three payload columns with distinct contracts: ``config`` (the spec — user
-  intent, the ComponentSpec init payload), ``state`` (machine-owned runtime
+  intent, the Spec init payload), ``state`` (machine-owned runtime
   state, written only by operators via targeted updates, always safe to
   discard), and ``data`` (Fernet-encrypted secrets).
 - Relations carry ``org_id``/``src_kind``/``dst_kind`` denormalized but drift-proof:

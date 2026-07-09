@@ -51,7 +51,7 @@ class Store(AuthMixin, ComponentMixin, RunMixin, DriftMixin):
     Bridges catalog definitions and database rows to hydrate and persist
     interloper components. All operations use short-lived sessions.
     Hydration is delegated to a :class:`~interloper_db.hydration.Hydrator`
-    that builds ``ComponentSpec`` trees; reconstruction happens at the
+    that builds ``Spec`` trees; reconstruction happens at the
     call site via ``spec.reconstruct()``.
     """
 

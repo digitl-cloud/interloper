@@ -4,8 +4,6 @@ from interloper.component import (
     KINDS,
     Component,
     ComponentDefinition,
-    ComponentSpec,
-    KindRegistry,
     RelationDefinition,
     RelationSlot,
 )
@@ -35,6 +33,7 @@ from interloper.partitioning import (
     TimePartitionConfig,
     TimePartitionWindow,
 )
+from interloper.registry import Registry
 from interloper.resource import Resource, ResourceDefinition, ResourceRef
 from interloper.resource.fields import (
     FetchField,
@@ -64,6 +63,7 @@ from interloper.rest import (
 )
 from interloper.runner import AsyncRunner, MultiProcessRunner, Runner, RunResult, SerialRunner
 from interloper.schema import Schema, schema
+from interloper.serializable import Serializable, Spec
 from interloper.source import Source, SourceDefinition, source
 from interloper.utils import bounded_gather, run
 
@@ -80,7 +80,6 @@ __all__ = [
     "Catalog",
     "Component",
     "ComponentDefinition",
-    "ComponentSpec",
     "Config",
     "Connection",
     "CronJob",
@@ -104,7 +103,6 @@ __all__ = [
     "Job",
     "JobState",
     "JsonField",
-    "KindRegistry",
     "MaterializationStrategy",
     "MemoryDestination",
     "MultiProcessRunner",
@@ -124,6 +122,7 @@ __all__ = [
     "RESTClient",
     "RangePaginator",
     "RefreshTokenOAuthConnection",
+    "Registry",
     "RelationDefinition",
     "RelationSlot",
     "Resource",
@@ -135,9 +134,11 @@ __all__ = [
     "SecretField",
     "SelectField",
     "SerialRunner",
+    "Serializable",
     "SinglePagePaginator",
     "Source",
     "SourceDefinition",
+    "Spec",
     "TextField",
     "TimePartition",
     "TimePartitionConfig",

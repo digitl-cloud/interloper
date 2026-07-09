@@ -6,7 +6,7 @@ report rows hit schema validation and every report asset failed with
 "Field required" errors. Two distinct defects were involved:
 
 1. ``@il.source(normalizer=...)`` field args were silently dropped on
-   class-based sources (``build_component_class`` setattr on a built
+   class-based sources (``build_class`` setattr on a built
    pydantic class).
 2. The host→child DAG-spec round-trip dumped the normalizer as a bare
    dict, degrading ``DataFrameNormalizer`` to the base ``Normalizer``.
@@ -20,9 +20,9 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
+from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
-from interloper.dag.spec import DAGSpec
-from interloper.representation import representation_for
+from interloper.representation import Representation
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.amazon_ads import constants, schemas
@@ -86,4 +86,4 @@ class TestSpecRoundtrip:
         normalizer = child_asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(df)
-        representation_for(normalized).conformer.validate(normalized, schemas.ProductsCampaignsStats)  # must not raise
+        Representation.of(normalized).conformer.validate(normalized, schemas.ProductsCampaignsStats)  # must not raise

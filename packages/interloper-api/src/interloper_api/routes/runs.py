@@ -202,7 +202,7 @@ def create_run(
 ) -> RunResponse:
     """Queue a single run targeting a runnable component (job, source, or asset)."""
     target = load_authorized(store.get_component, body.component_id, user, store, label="Component", minimum="editor")
-    if not KINDS.runnable(target.kind):
+    if not KINDS[target.kind].runnable:
         raise HTTPException(status_code=400, detail=f"Components of kind '{target.kind}' cannot be run")
     run = store.create_run(target.org_id, component_id=body.component_id, partition_date=body.partition_date)
     return _run_to_response(run)

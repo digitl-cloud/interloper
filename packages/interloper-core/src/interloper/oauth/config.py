@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from interloper.errors import ConfigError
-from interloper.oauth.base import providers
+from interloper.oauth.base import PROVIDERS
 
 #: Default ``fields`` mapping — the standard credential trio, named identically.
 _DEFAULT_FIELDS = {
@@ -92,12 +92,12 @@ class OAuthConfig:
             ConfigError: If the provider is unregistered and no ``auth_url``
                 is given.
         """
-        spec = providers().get(provider)
+        spec = PROVIDERS.get(provider)
         self.provider = provider
         self.auth_url = auth_url or (spec.auth_url if spec else "")
         if not self.auth_url:
             raise ConfigError(
-                f"Unknown OAuth provider: {provider!r} (available: {sorted(providers())}). "
+                f"Unknown OAuth provider: {provider!r} (available: {list(PROVIDERS.keys())}). "
                 f"Declare it under the 'interloper.oauth_providers' entry-point group "
                 f"or pass auth_url explicitly."
             )

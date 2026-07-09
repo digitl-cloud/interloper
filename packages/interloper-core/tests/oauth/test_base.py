@@ -2,8 +2,7 @@
 
 import pytest
 
-from interloper.errors import ConfigError
-from interloper.oauth import DEFAULT_TOKEN_PARAMS, OAuthProvider, provider, providers, token_params
+from interloper.oauth import DEFAULT_TOKEN_PARAMS, PROVIDERS, OAuthProvider, token_params
 
 
 class TestRegistry:
@@ -23,14 +22,14 @@ class TestRegistry:
             "pinterest",
             "snapchat",
             "tiktok",
-        } <= set(providers())
+        } <= set(PROVIDERS.keys())
 
     def test_lookup_by_key(self):
-        assert provider("amazon").auth_url == "https://www.amazon.com/ap/oa"
+        assert PROVIDERS["amazon"].auth_url == "https://www.amazon.com/ap/oa"
 
     def test_unknown_key_raises_actionable_error(self):
-        with pytest.raises(ConfigError, match=r"Unknown OAuth provider: 'nope' \(available: "):
-            provider("nope")
+        with pytest.raises(KeyError, match="'nope' is not registered"):
+            PROVIDERS["nope"]
 
 
 class TestOAuthProvider:

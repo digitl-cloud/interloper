@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
-from interloper.component.build import build_component_class
 from interloper.connection.base import Connection, OAuthConnection
 from interloper.oauth import OAuthConfig
 
@@ -85,7 +84,7 @@ def connection(
         classvars["oauth"] = oauth
 
     def build(cls: type) -> type[Connection]:
-        result = build_component_class(cls, base=Connection, classvars=classvars)
+        result = Connection.build_class(cls, classvars=classvars)
         # OAuth lives on OAuthConnection — reject it on a plain Connection.
         if oauth is not None and not issubclass(result, OAuthConnection):
             raise TypeError(

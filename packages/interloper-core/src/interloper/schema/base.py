@@ -5,13 +5,13 @@ from __future__ import annotations
 import types
 import warnings
 from dataclasses import dataclass
-from typing import Any, ClassVar, Union, get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, ValidationError, create_model
 from typing_extensions import Self
 
-from interloper.component import Component
 from interloper.errors import SchemaError
+from interloper.serializable import Serializable
 
 warnings.filterwarnings("ignore", message=r'Field name ".*" in ".*" shadows an attribute in parent "Schema"')
 
@@ -81,8 +81,8 @@ def _field_spec(name: str, annotation: Any, description: str | None = None) -> F
     )
 
 
-class Schema(Component):
-    """A component that defines the expected output structure of an asset.
+class Schema(Serializable):
+    """Defines the expected output structure of an asset.
 
     Subclass to declare output fields::
 
@@ -96,20 +96,9 @@ class Schema(Component):
         Schema.infer(rows)
         UserSchema.validate_rows(rows)
         UserSchema.reconcile(rows)
-
-    Note: ``id`` is excluded from Schema's model fields so subclasses
-    can freely declare ``id`` as a data column with any type.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    # Shadow Component.id so it's not a model field — schemas are structural
-    # definitions, not runtime instances that need identity.
-    id: ClassVar[str] = ""
-
-    # Override Component.model_post_init to avoid setting an instance id.
-    def model_post_init(self, context: Any) -> None:
-        """No-op: schemas don't need instance identity."""
 
     # ------------------------------------------------------------------
     # Introspection
@@ -119,12 +108,12 @@ class Schema(Component):
     def field_specs(cls) -> list[FieldSpec]:
         """Extract backend-agnostic field specs from this schema.
 
-        Fields inherited from :class:`Component` (e.g. ``resources``) are
-        framework plumbing, not data columns, and are excluded.  Fields are
-        returned in the subclass's declaration order: pydantic positions a
-        field that shadows a ``Component`` attribute (``id``, ``name``, ...)
-        at the *parent's* annotation slot, so ``model_fields`` order alone
-        would scramble the author's column order.
+        Fields declared by :class:`Schema` itself (framework plumbing, if
+        any) are excluded — only the subclass's data columns count.  Fields
+        are returned in the subclass's declaration order: pydantic positions
+        a field that shadows a parent attribute at the *parent's* annotation
+        slot, so ``model_fields`` order alone would scramble the author's
+        column order.
 
         Returns:
             One :class:`FieldSpec` per declared data field, in declaration order.
@@ -141,11 +130,10 @@ class Schema(Component):
     def json_schema(cls) -> dict[str, Any]:
         """JSON Schema for this schema's data fields only.
 
-        Like :meth:`pydantic.BaseModel.model_json_schema` but excludes the
-        fields inherited from :class:`Component` (e.g. ``resources``), which are
-        framework plumbing rather than data columns, and orders ``properties``
-        by declaration order (see :meth:`field_specs`) so the column order
-        matches the author's intent rather than pydantic's parent-first layout.
+        Like :meth:`pydantic.BaseModel.model_json_schema` but restricted to
+        the subclass's data columns, and orders ``properties`` by declaration
+        order (see :meth:`field_specs`) so the column order matches the
+        author's intent rather than pydantic's parent-first layout.
 
         Returns:
             A JSON Schema dict whose ``properties`` are the data columns.
@@ -303,9 +291,9 @@ class Schema(Component):
     def _data_fields(cls) -> set[str]:
         """Return the names of the schema's data fields.
 
-        Excludes fields inherited from :class:`Component` (e.g. ``resources``),
-        which are framework plumbing — they must not appear in reconciled rows
-        or count as schema columns.
+        Excludes any field declared by :class:`Schema` itself — framework
+        plumbing must not appear in reconciled rows or count as schema
+        columns.
         """
         return {name for name in cls.model_fields if name not in Schema.model_fields}
 

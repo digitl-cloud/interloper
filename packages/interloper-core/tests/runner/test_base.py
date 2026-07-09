@@ -10,10 +10,10 @@ import pytest
 import interloper as il
 from interloper.errors import ConfigError
 from interloper.events import Event
-from interloper.runner import build_runner
 from interloper.runner.async_runner import AsyncRunner
-from interloper.runner.base import runners
+from interloper.runner.base import RUNNERS
 from interloper.runner.serial import SerialRunner
+from interloper.settings import RunnerSettings
 
 
 class TestRegistry:
@@ -22,10 +22,10 @@ class TestRegistry:
     def test_all_workspace_runners_are_discovered(self):
         # Built-ins register through core's own pyproject; docker/k8s through
         # theirs — asserting the discovery end to end.
-        assert {"async", "serial", "multi_process", "docker", "kubernetes"} <= set(runners())
+        assert {"async", "serial", "multi_process", "docker", "kubernetes"} <= set(RUNNERS.keys())
 
     def test_registry_maps_keys_to_classes(self):
-        registry = runners()
+        registry = dict(RUNNERS.items())
         assert registry["async"] is AsyncRunner
         assert registry["serial"] is SerialRunner
         assert registry["docker"].__name__ == "DockerRunner"
@@ -34,7 +34,7 @@ class TestRegistry:
     def test_k8s_is_a_compat_alias_for_kubernetes(self):
         # Pre-existing configs use runner.type=k8s; both keys resolve to the
         # same class so deployed values keep working.
-        registry = runners()
+        registry = dict(RUNNERS.items())
         assert registry["k8s"] is registry["kubernetes"]
 
     def test_serial_is_the_async_engine_with_one_slot(self):
@@ -44,21 +44,24 @@ class TestRegistry:
         assert SerialRunner().max_workers == 1
 
 
-class TestBuildRunner:
-    """Key resolution and kwargs forwarding."""
+class TestFromSettings:
+    """Settings-driven construction through the registry."""
 
-    def test_resolves_class_and_forwards_kwargs(self):
-        cls, kwargs = build_runner("async", {"max_workers": 2})
-        assert cls is AsyncRunner
-        assert kwargs == {"max_workers": 2}
+    def test_constructs_the_configured_runner(self):
+        runner = il.Runner.from_settings(RunnerSettings(type="async", config={"max_workers": 2}))
+        assert type(runner) is AsyncRunner
+        assert runner.max_workers == 2
 
     def test_default_type_is_async(self):
-        cls, _ = build_runner()
-        assert cls is AsyncRunner
+        assert type(il.Runner.from_settings(RunnerSettings())) is AsyncRunner
 
     def test_unknown_type_raises_actionable_error(self):
         with pytest.raises(ConfigError, match=r"Unknown runner: 'ray'.*available.*async.*serial"):
-            build_runner("ray")
+            il.Runner.from_settings(RunnerSettings(type="ray"))
+
+    def test_subclass_scoped_resolution(self):
+        with pytest.raises(ConfigError, match="does not resolve to a SerialRunner"):
+            SerialRunner.from_settings(RunnerSettings(type="async"))
 
 
 class TestOnEventScoping:

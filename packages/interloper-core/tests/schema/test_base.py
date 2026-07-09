@@ -112,9 +112,6 @@ class TestJsonSchema:
     """JSON Schema generation restricted to data fields."""
 
     def test_component_fields_excluded(self):
-        # The inherited ``resources`` field is framework plumbing; raw pydantic
-        # leaks it (and at the parent's slot, first), json_schema() must not.
-        assert "resources" in FullSchema.model_json_schema()["properties"]
         assert "resources" not in FullSchema.json_schema()["properties"]
 
     def test_properties_in_declaration_order(self):

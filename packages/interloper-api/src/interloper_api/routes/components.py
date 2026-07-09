@@ -155,7 +155,7 @@ def _to_response(
         status = store.source_status(row.key)
 
     config: dict[str, Any] | None = row.config
-    if KINDS.sensitive(row.kind):
+    if KINDS[row.kind].sensitive:
         config = store.decode_config(row) if include_config else None
 
     return ComponentResponse(
