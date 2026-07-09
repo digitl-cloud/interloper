@@ -20,6 +20,11 @@ from typing import Any
 
 import httpx
 
+# ------------------------------------------------------------------
+# Data selection
+# ------------------------------------------------------------------
+
+
 #: How a page's records are pulled from a response: a dotted JSON path
 #: (``"data.list"``), a callable taking the response, or ``None`` (raw ``.json()``).
 DataSelector = str | Callable[[httpx.Response], Any] | None
@@ -62,6 +67,11 @@ def select(response: httpx.Response, selector: DataSelector) -> Any:
     return selector(response)
 
 
+# ------------------------------------------------------------------
+# Request helpers
+# ------------------------------------------------------------------
+
+
 def _with_param(request: httpx.Request, key: str, value: Any) -> None:
     """Override a single query param on ``request`` in place."""
     request.url = request.url.copy_set_param(key, str(value))
@@ -74,6 +84,11 @@ def _clone_with_param(request: httpx.Request, key: str, value: Any) -> httpx.Req
         A new request identical to ``request`` but with ``key=value``.
     """
     return httpx.Request(request.method, request.url.copy_set_param(key, str(value)), headers=request.headers)
+
+
+# ------------------------------------------------------------------
+# Paginator protocols
+# ------------------------------------------------------------------
 
 
 class BasePaginator(ABC):
@@ -113,6 +128,11 @@ class RangePaginator(BasePaginator):
         self, base_request: httpx.Request, first_response: httpx.Response
     ) -> list[httpx.Request] | None:
         """Requests for every page after the first, or ``None`` if the total is unknown."""
+
+
+# ------------------------------------------------------------------
+# Paginators
+# ------------------------------------------------------------------
 
 
 class SinglePagePaginator(BasePaginator):

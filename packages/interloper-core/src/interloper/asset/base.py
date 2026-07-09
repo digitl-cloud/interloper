@@ -177,6 +177,10 @@ class Asset(Component):
         if inferred:
             cls.resource_types = {**explicit, **inferred}
 
+    # ------------------------------------------------------------------
+    # Identity & definition
+    # ------------------------------------------------------------------
+
     @property
     def source(self) -> Source | None:
         """The source this asset belongs to, if any."""
@@ -287,6 +291,10 @@ class Asset(Component):
             )
         return relations
 
+    # ------------------------------------------------------------------
+    # Reconfiguration
+    # ------------------------------------------------------------------
+
     def __call__(
         self,
         *,
@@ -321,6 +329,10 @@ class Asset(Component):
         if dependencies is not None:
             overrides["dependencies"] = dependencies
         return self.model_copy(update=overrides)
+
+    # ------------------------------------------------------------------
+    # Execution
+    # ------------------------------------------------------------------
 
     def run(
         self,
@@ -498,7 +510,7 @@ class Asset(Component):
         return dests[0].partition_row_counts(context)
 
     # ------------------------------------------------------------------
-    # Internal
+    # Internals
     # ------------------------------------------------------------------
     async def _build_kwargs(
         self,

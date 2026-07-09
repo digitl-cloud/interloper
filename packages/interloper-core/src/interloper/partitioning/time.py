@@ -8,6 +8,10 @@ from dataclasses import dataclass
 
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 
+# ------------------------------------------------------------------
+# Date helpers
+# ------------------------------------------------------------------
+
 
 def coerce_to_date(value: object) -> dt.date:
     """Coerce a partition value to a ``datetime.date``.
@@ -58,6 +62,11 @@ def date_range(start_date: dt.date, end_date: dt.date, reversed: bool = False) -
         while start_date <= end_date:
             yield start_date
             start_date += dt.timedelta(days=1)
+
+
+# ------------------------------------------------------------------
+# Time partitions
+# ------------------------------------------------------------------
 
 
 @dataclass(frozen=True)

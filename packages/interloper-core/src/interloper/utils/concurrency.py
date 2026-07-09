@@ -11,6 +11,12 @@ from typing import Any, TypeVar
 
 _T = TypeVar("_T")
 
+
+# ------------------------------------------------------------------
+# Sync bridge
+# ------------------------------------------------------------------
+
+
 # The background event loop backing ``run()``. Started lazily on first use and
 # kept for the lifetime of the process so that loop-bound state created by one
 # ``run()`` call — an ``AsyncRESTClient``'s connection pool, most notably —
@@ -91,6 +97,11 @@ def run(coro: Coroutine[Any, Any, _T]) -> _T:
     except KeyboardInterrupt:
         future.cancel()
         raise
+
+
+# ------------------------------------------------------------------
+# Async helpers
+# ------------------------------------------------------------------
 
 
 async def bounded_gather(coros: Iterable[Coroutine[Any, Any, _T]], *, limit: int) -> list[_T]:

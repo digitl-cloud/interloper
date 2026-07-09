@@ -48,6 +48,11 @@ BUILTIN_COMPONENTS: tuple[type[Component], ...] = (Job, TriggerHook, WebhookHook
 _ENTRY_POINT_GROUP = "interloper.components"
 
 
+# ------------------------------------------------------------------
+# Discovery
+# ------------------------------------------------------------------
+
+
 def _with_builtins(components: dict[str, ComponentDefinition]) -> dict[str, ComponentDefinition]:
     """Ensure framework built-ins are present, regardless of enablement.
 
@@ -90,6 +95,10 @@ class Catalog(BaseModel):
 
     components: dict[str, ComponentDefinition] = Field(default_factory=dict)
 
+    # ------------------------------------------------------------------
+    # Lookup & export
+    # ------------------------------------------------------------------
+
     def get(self, key: str, default: Any = None) -> ComponentDefinition | None:
         """Look up a component definition by key.
 
@@ -121,6 +130,10 @@ class Catalog(BaseModel):
             Mapping from component key to serialized definition.
         """
         return {k: v.model_dump(mode="json") for k, v in self.components.items()}
+
+    # ------------------------------------------------------------------
+    # Constructors
+    # ------------------------------------------------------------------
 
     @classmethod
     def from_paths(cls, paths: list[str]) -> Catalog:

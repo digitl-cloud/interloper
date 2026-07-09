@@ -15,6 +15,12 @@ from pydantic import BaseModel, Field
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+
+# ------------------------------------------------------------------
+# Fetch providers
+# ------------------------------------------------------------------
+
+
 #: Attribute stamped on a method by :func:`fetch_field_provider`.
 FETCH_FIELD_PROVIDER_ATTR = "__is_fetch_field_provider__"
 
@@ -95,6 +101,11 @@ def validate_fetch_field_providers(cls: type[BaseModel], res_types: dict[str, An
             )
 
 
+# ------------------------------------------------------------------
+# Schema stripping
+# ------------------------------------------------------------------
+
+
 # Internal fields that should be stripped from config schemas exposed
 # to the UI.  These are framework plumbing, not user-configurable.
 _INTERNAL_FIELDS = frozenset({"id", "resources"})
@@ -134,9 +145,9 @@ def strip_internal_fields(schema: dict[str, Any], extra: Iterable[str] = ()) -> 
     return filtered
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
@@ -150,9 +161,9 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
     return extra
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Field factories
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def InputField(default: Any = ..., **kwargs: Any) -> Any:

@@ -48,6 +48,9 @@ def dump_spec_value(value: Any) -> Any:
     return to_jsonable_python(value)
 
 
+# ------------------------------------------------------------------
+# Relations
+# ------------------------------------------------------------------
 class RelationSlot(BaseModel):
     """A declared slot on a slotted relation type.
 
@@ -85,6 +88,9 @@ class RelationDefinition(BaseModel):
     slots: dict[str, RelationSlot] = Field(default_factory=dict)
 
 
+# ------------------------------------------------------------------
+# Definitions
+# ------------------------------------------------------------------
 class ComponentDefinition(BaseModel):
     """Read-only view of a Component class's metadata.
 
@@ -107,6 +113,9 @@ class ComponentDefinition(BaseModel):
     relations: dict[str, RelationDefinition] = Field(default_factory=dict)
 
 
+# ------------------------------------------------------------------
+# Specs
+# ------------------------------------------------------------------
 _ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
@@ -228,6 +237,9 @@ class ComponentSpec(BaseModel):
         return cls(**kwargs)
 
 
+# ------------------------------------------------------------------
+# Component
+# ------------------------------------------------------------------
 class Component(BaseModel):
     """Fundamental building block: identifiable, composable, serializable.
 
@@ -248,21 +260,17 @@ class Component(BaseModel):
     icon: ClassVar[str] = ""
     resource_types: ClassVar[dict[str, type[Resource]]] = {}
     relation_types: ClassVar[dict[str, RelationDefinition]] = {}
-    # Kinds whose instance payload carries credentials/secrets; the store
-    # encrypts their config at rest and the API only decodes it on detail.
     sensitive: ClassVar[bool] = False
-    # Kinds a run can target directly (they resolve to a materializable DAG).
     runnable: ClassVar[bool] = False
-    # Class-declared config fields that are framework plumbing, stripped from
-    # the definition's config_schema on top of the always-internal set.
     internal_fields: ClassVar[frozenset[str]] = frozenset()
-    # Model of the kind's machine-owned persisted state (None = stateless).
-    # The store validates state payloads against it at the write boundary.
     state_model: ClassVar[type[BaseModel] | None] = None
 
     id: str = Field(default="")
     resources: dict[str, Any] = Field(default_factory=dict)
 
+    # ------------------------------------------------------------------
+    # Construction
+    # ------------------------------------------------------------------
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-derive ``kind`` and ``key`` for subclasses.
 
@@ -357,9 +365,7 @@ class Component(BaseModel):
             name for name in data if name not in type(self).model_fields and name not in type(self).resource_types
         ]
         if unknown:
-            raise TypeError(
-                f"{type(self).__name__} got unexpected keyword argument(s): {', '.join(sorted(unknown))}"
-            )
+            raise TypeError(f"{type(self).__name__} got unexpected keyword argument(s): {', '.join(sorted(unknown))}")
         slot_names = [n for n in data if n in type(self).resource_types and n not in type(self).model_fields]
         if slot_names:
             resources = data.get("resources")
@@ -385,6 +391,9 @@ class Component(BaseModel):
         if not self.id:
             self.id = str(uuid.uuid4())
 
+    # ------------------------------------------------------------------
+    # Resources
+    # ------------------------------------------------------------------
     def trickle_resources(self, target: Component) -> None:
         """Fill a child component's empty resource slots from this component's resources.
 
@@ -414,6 +423,9 @@ class Component(BaseModel):
                         target.resources[name] = sr
                         break
 
+    # ------------------------------------------------------------------
+    # Identity
+    # ------------------------------------------------------------------
     @classmethod
     def has_own_field(cls, field: str) -> bool:
         """Check if this class declares a non-None default for a field.
@@ -449,6 +461,9 @@ class Component(BaseModel):
         """
         return type(self).classpath()
 
+    # ------------------------------------------------------------------
+    # Serialization & resolution
+    # ------------------------------------------------------------------
     def to_spec(self) -> ComponentSpec:
         """Serialize this instance to a reconstructible spec.
 
@@ -563,6 +578,9 @@ class Component(BaseModel):
         """
         return cls.from_spec(ComponentSpec.from_file(path), catalog)
 
+    # ------------------------------------------------------------------
+    # Definition
+    # ------------------------------------------------------------------
     @classmethod
     def config_schema(cls) -> dict[str, Any]:
         """JSON Schema of the class's user-configurable fields.

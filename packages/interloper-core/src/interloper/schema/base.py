@@ -111,6 +111,10 @@ class Schema(Component):
     def model_post_init(self, context: Any) -> None:
         """No-op: schemas don't need instance identity."""
 
+    # ------------------------------------------------------------------
+    # Introspection
+    # ------------------------------------------------------------------
+
     @classmethod
     def field_specs(cls) -> list[FieldSpec]:
         """Extract backend-agnostic field specs from this schema.
@@ -157,6 +161,10 @@ class Schema(Component):
             else:
                 del schema["required"]
         return schema
+
+    # ------------------------------------------------------------------
+    # Data operations
+    # ------------------------------------------------------------------
 
     @classmethod
     def infer(
@@ -286,6 +294,10 @@ class Schema(Component):
                 raise SchemaError(f"Reconciliation failed on row {i}: {e}") from e
             result.append(instance.model_dump(include=schema_fields))
         return result
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
 
     @classmethod
     def _data_fields(cls) -> set[str]:

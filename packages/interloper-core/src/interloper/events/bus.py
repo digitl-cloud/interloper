@@ -160,7 +160,7 @@ class EventBus:
             inst._worker.join(timeout=2.0)
 
     # ------------------------------------------------------------------
-    # Internal
+    # Internals
     # ------------------------------------------------------------------
 
     def _enqueue(self, event: Event) -> None:

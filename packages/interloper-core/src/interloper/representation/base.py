@@ -129,6 +129,11 @@ _ROWS_CONFORMER = RowsConformer()
 _ROWS_REPRESENTATION = RowsRepresentation()
 
 
+# ------------------------------------------------------------------
+# Registry
+# ------------------------------------------------------------------
+
+
 @cache
 def representations() -> dict[str, Representation]:
     """Load the representation registry: built-ins plus installed entry points.

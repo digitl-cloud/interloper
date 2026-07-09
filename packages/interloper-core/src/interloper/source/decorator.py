@@ -91,6 +91,11 @@ def source(
     return wrapper
 
 
+# ------------------------------------------------------------------
+# Internals
+# ------------------------------------------------------------------
+
+
 def _split_params(
     kwargs: dict[str, Any],
     param_map: dict[str, tuple[str, str]],

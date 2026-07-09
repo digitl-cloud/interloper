@@ -32,6 +32,12 @@ from interloper.errors import ConfigError
 
 _ENTRY_POINT_GROUP = "interloper.oauth_providers"
 
+
+# ------------------------------------------------------------------
+# Provider spec
+# ------------------------------------------------------------------
+
+
 # Logical token-exchange parameters.  ``OAuthProvider.token_params`` maps
 # each logical name to its wire parameter name; logical names absent from
 # the mapping are omitted from the exchange request entirely.
@@ -93,6 +99,11 @@ class OAuthProvider:
         """Default the label to the titlecased key."""
         if not self.label:
             object.__setattr__(self, "label", self.key.title())
+
+
+# ------------------------------------------------------------------
+# Registry
+# ------------------------------------------------------------------
 
 
 @cache

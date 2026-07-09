@@ -137,6 +137,10 @@ class Source(Component):
         description="When an asset has multiple destinations, downstream assets use this to know where to read from",
     )
 
+    # ------------------------------------------------------------------
+    # Construction & resolution
+    # ------------------------------------------------------------------
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-discover assets and infer requires at source definition time.
 
@@ -239,6 +243,10 @@ class Source(Component):
         for asset in self.assets:
             asset._source = self
 
+    # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
+
     def to_spec(self) -> ComponentSpec:
         """Serialize to a spec with ``assets`` as a key → init override map.
 
@@ -274,6 +282,10 @@ class Source(Component):
             init[name] = dump_spec_value(value)
 
         return ComponentSpec(path=self.path(), id=self.id, init=init or None)
+
+    # ------------------------------------------------------------------
+    # Assets
+    # ------------------------------------------------------------------
 
     @classmethod
     def _collect_asset_types(cls) -> None:
@@ -483,6 +495,10 @@ class Source(Component):
                 if sibling is not None and sibling is not asset:
                     asset.dependencies[param_name] = sibling.id
 
+    # ------------------------------------------------------------------
+    # Definition
+    # ------------------------------------------------------------------
+
     @classmethod
     def definition(cls) -> SourceDefinition:
         """Produce a structured definition of this source including its assets.
@@ -511,6 +527,10 @@ class Source(Component):
             relations=cls.relation_definitions(),
             assets=[asset_cls.definition().model_copy(update={"source_key": cls.key}) for asset_cls in cls.asset_types],
         )
+
+    # ------------------------------------------------------------------
+    # Reconfiguration
+    # ------------------------------------------------------------------
 
     def __call__(
         self,

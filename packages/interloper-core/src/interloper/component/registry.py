@@ -42,6 +42,10 @@ class KindRegistry:
         self._anchors: dict[str, type[Component]] = {}
         self._discovered = False
 
+    # ------------------------------------------------------------------
+    # Registration
+    # ------------------------------------------------------------------
+
     def register(self, cls: type[Component]) -> type[Component]:
         """Register a component class's kind (idempotent).
 
@@ -66,6 +70,10 @@ class KindRegistry:
                     )
             self._anchors[anchor.kind] = anchor
         return cls
+
+    # ------------------------------------------------------------------
+    # Lookup
+    # ------------------------------------------------------------------
 
     def get(self, kind: str) -> type[Component] | None:
         """Look up the anchoring class for a kind.
@@ -92,6 +100,10 @@ class KindRegistry:
         """
         self._load_entry_points()
         return tuple(sorted(self._anchors))
+
+    # ------------------------------------------------------------------
+    # Kind metadata
+    # ------------------------------------------------------------------
 
     def sensitive(self, kind: str) -> bool:
         """Whether the kind's instance payload is sensitive (encrypted at rest).
@@ -129,6 +141,10 @@ class KindRegistry:
         """
         cls = self.get(kind)
         return dict(cls.relation_types) if cls else {}
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _anchor_of(component_cls: type[Component]) -> type[Component]:

@@ -37,6 +37,10 @@ class DAG:
         self._build_graph(items)
         self._validate()
 
+    # ------------------------------------------------------------------
+    # Construction
+    # ------------------------------------------------------------------
+
     @classmethod
     def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> DAG:
         """Compile a runnable component spec file into a DAG.
