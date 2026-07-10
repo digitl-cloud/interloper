@@ -35,9 +35,8 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
 from interloper_db.drift import ComponentStatus, asset_status, resolve_source_cls, source_status
-from interloper_db.engine import get_engine
-from interloper_db.hydration import Hydrator
 from interloper_db.models import Component, ComponentRelation
+from interloper_db.store.base import StoreBase
 
 # One relation binding: (destination component id, slot). Slot is "" for
 # slotless relation types.
@@ -56,13 +55,8 @@ COMPONENT_LOAD_OPTIONS = [
     .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
 ]
 
-class ComponentMixin:
+class ComponentMixin(StoreBase):
     """Store methods for component CRUD, relations, and hydration."""
-
-    _encrypt: Any
-    _decrypt: Any
-    _hydrator: Hydrator
-    _catalog: il.Catalog
 
     # ------------------------------------------------------------------
     # CRUD
@@ -98,7 +92,7 @@ class ComponentMixin:
         Returns:
             The created component row, eager-loaded.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_component = Component(org_id=org_id, kind=kind, key=key, name=name)
             self._apply_config(db_component, config, encrypted)
             session.add(db_component)
@@ -124,7 +118,7 @@ class ComponentMixin:
         Raises:
             NotFoundError: If no row exists (or it has a different kind).
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             return load_component(session, component_id, kind=kind)
 
     def list_components(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
@@ -137,7 +131,7 @@ class ComponentMixin:
         Returns:
             Eager-loaded component rows, oldest first.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             statement = (
                 select(Component)
                 .where(Component.org_id == org_id)
@@ -170,7 +164,7 @@ class ComponentMixin:
         Raises:
             NotFoundError: If the component is not found.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_component = session.get(Component, component_id)
             if not db_component:
                 raise NotFoundError(f"Component {component_id} not found")
@@ -194,7 +188,7 @@ class ComponentMixin:
             ValueError: If the component is source-owned (delete or update
                 the parent source instead).
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_component = session.get(Component, component_id)
             if not db_component:
                 raise NotFoundError(f"Component {component_id} not found")
@@ -209,7 +203,7 @@ class ComponentMixin:
 
     def list_relations(self, org_id: UUID, *, type: str | None = None) -> list[ComponentRelation]:
         """List an organisation's component relations, optionally by type."""
-        with Session(get_engine()) as session:
+        with self._session() as session:
             statement = select(ComponentRelation).where(ComponentRelation.org_id == org_id)
             if type:
                 statement = statement.where(ComponentRelation.type == type)
@@ -225,19 +219,18 @@ class ComponentMixin:
             NotFoundError: If either endpoint is missing or cross-org.
             ConfigError: If the kind's vocabulary doesn't declare the type.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             src = session.get(Component, component_id)
             if not src:
                 raise NotFoundError(f"Component {component_id} not found")
             self._check_vocabulary(src.kind, type)
             relation = _add_relation(session, src, self._resolve_dst(session, src, type, slot, dst_id), type, slot)
             session.commit()
-            session.refresh(relation)
             return relation
 
     def remove_relation(self, component_id: UUID, *, type: str, dst_id: UUID) -> None:
         """Remove a component's relations of one type toward one destination."""
-        with Session(get_engine()) as session:
+        with self._session() as session:
             statement = select(ComponentRelation).where(
                 ComponentRelation.src_id == component_id,
                 ComponentRelation.type == type,
@@ -266,43 +259,53 @@ class ComponentMixin:
             ComponentDriftError: If a catalog key no longer resolves.
             HydrationError: If reconstruction fails.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_component = session.get(Component, component_id)
             if not db_component:
                 raise NotFoundError(f"Component {component_id} not found")
+            owned_asset = db_component.kind == "asset" and db_component.parent_id is not None
+            if not owned_asset:
+                status = self._row_status(session, db_component)
+                if status is not ComponentStatus.OK:
+                    raise ComponentDriftError(
+                        f"{db_component.kind.capitalize()} '{db_component.key}' ({db_component.id}) "
+                        f"cannot be hydrated: its catalog key is {status.value}."
+                    )
+                if db_component.kind == "job":
+                    self._check_job_targets(session, db_component)
+                spec = self._hydrator.build_component_spec(session, db_component)
 
-            if db_component.kind == "asset" and db_component.parent_id is not None:
-                parent_id, child_key, child_id = db_component.parent_id, db_component.key, db_component.id
-
-        if db_component.kind == "asset" and db_component.parent_id is not None:
-            source = cast(il.Source, self.load(parent_id))
-            for asset in source.assets:
-                if type(asset).key == child_key:
-                    return asset
-            raise ComponentDriftError(
-                f"Asset '{child_key}' ({child_id}) is no longer declared "
-                f"by source '{type(source).key}'; its catalog key has drifted."
-            )
-
-        with Session(get_engine()) as session:
-            db_component = session.get(Component, component_id)
-            assert db_component is not None  # checked above
-            status = self._row_status(session, db_component)
-            if status is not ComponentStatus.OK:
-                raise ComponentDriftError(
-                    f"{db_component.kind.capitalize()} '{db_component.key}' ({db_component.id}) "
-                    f"cannot be hydrated: its catalog key is {status.value}."
-                )
-            if db_component.kind == "job":
-                self._check_job_targets(session, db_component)
-            spec = self._hydrator.build_component_spec(session, db_component)
-
+        # Reconstruction happens outside the session: it imports classes and,
+        # for owned assets, recursively loads the parent source.
+        if owned_asset:
+            return self._load_owned_asset(db_component.parent_id, db_component.key, component_id)
         try:
             return il.Component.from_spec(spec)
         except Exception as e:
             raise HydrationError(
                 f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): {e}"
             ) from e
+
+    def _load_owned_asset(self, parent_id: UUID, key: str, asset_id: UUID) -> il.Asset:
+        """Hydrate a source-owned asset through its parent source.
+
+        The parent source is the unit of reconstruction — loading it binds
+        all its assets — and the child is picked out by key.
+
+        Returns:
+            The bound asset instance.
+
+        Raises:
+            ComponentDriftError: If the source no longer declares the key.
+        """
+        source = cast(il.Source, self.load(parent_id))
+        for asset in source.assets:
+            if type(asset).key == key:
+                return asset
+        raise ComponentDriftError(
+            f"Asset '{key}' ({asset_id}) is no longer declared "
+            f"by source '{type(source).key}'; its catalog key has drifted."
+        )
 
     def component_status(self, db_component: Component) -> ComponentStatus:
         """Catalog-resolution status of a component row (drift detection).
@@ -375,32 +378,32 @@ class ComponentMixin:
         if source_cls is None:
             raise CatalogKeyError(f"Unknown source key: {db_source.key}")
         all_keys = {asset_type.key for asset_type in source_cls.asset_types}
-        desired = set(child_keys) & all_keys if child_keys is not None else None
+        if child_keys is not None and (unknown := set(child_keys) - all_keys):
+            raise ConfigError(
+                f"Source '{db_source.key}' declares no asset(s) {sorted(unknown)} (available: {sorted(all_keys)})"
+            )
 
-        existing = session.exec(select(Component).where(Component.parent_id == db_source.id)).all()
-        existing_by_key = {child.key: child for child in existing}
-
-        if desired is not None:
-            for key in set(existing_by_key) - desired:
-                session.delete(existing_by_key[key])
-            session.flush()
-
-        keys_to_ensure = desired if desired is not None else all_keys
-
-        added_keys: set[str] = set()
-        children_by_key: dict[str, Component] = {
-            key: child for key, child in existing_by_key.items() if key in keys_to_ensure
+        existing = {
+            child.key: child
+            for child in session.exec(select(Component).where(Component.parent_id == db_source.id)).all()
         }
-        for asset_type in source_cls.asset_types:
-            if asset_type.key in keys_to_ensure and asset_type.key not in existing_by_key:
-                child = Component(org_id=db_source.org_id, kind="asset", key=asset_type.key, parent_id=db_source.id)
-                session.add(child)
-                children_by_key[asset_type.key] = child
-                added_keys.add(asset_type.key)
+        # An explicit list is the exact child set; None keeps existing rows
+        # (drifted keys included) and tops up new catalog assets.
+        target = set(child_keys) if child_keys is not None else set(existing) | all_keys
+        to_create = target - set(existing)
+
+        for key in set(existing) - target:
+            session.delete(existing[key])
         session.flush()
 
-        if added_keys:
-            self._wire_intra_deps(session, source_cls, children_by_key, only_for=added_keys)
+        children = {key: child for key, child in existing.items() if key in target}
+        for key in to_create:
+            children[key] = Component(org_id=db_source.org_id, kind="asset", key=key, parent_id=db_source.id)
+            session.add(children[key])
+        session.flush()
+
+        if to_create:
+            self._wire_intra_deps(session, source_cls, children, only_for=to_create)
 
     @staticmethod
     def _wire_intra_deps(

@@ -9,7 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from interloper.catalog.base import Catalog
-from interloper.errors import ComponentDriftError
+from interloper.errors import ComponentDriftError, NotFoundError
 from interloper_db import Store
 
 from interloper_api.dependencies import set_auth_config, set_catalog, set_features, set_smtp_config, set_store
@@ -55,6 +55,11 @@ def create_app(
         The configured FastAPI application.
     """
     app = FastAPI(title="Interloper API", lifespan=ws.realtime_lifespan, **kwargs)
+
+    @app.exception_handler(NotFoundError)
+    async def _not_found_handler(_request: Request, exc: NotFoundError) -> JSONResponse:
+        """Store mutations raise NotFoundError on missing targets — a plain 404."""
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
 
     @app.exception_handler(ComponentDriftError)
     async def _component_drift_handler(_request: Request, exc: ComponentDriftError) -> JSONResponse:

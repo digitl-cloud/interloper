@@ -2,19 +2,17 @@
 
 These exercise the pure resolver functions against constructed catalogs — the
 single source of truth that hydration and detection both consume — plus the
-thin ``DriftMixin`` delegation. The ``DemoSource`` fixture is a real catalog
+The ``DemoSource`` fixture is a real catalog
 component, so resolution goes through the actual import path it would in prod.
 """
 
 from __future__ import annotations
 
 import interloper as il
-import pytest
 from interloper_assets.demo.source import DemoSource
 
 from interloper_db.drift import (
     ComponentStatus,
-    DriftMixin,
     asset_status,
     resolve_source_cls,
     source_status,
@@ -85,23 +83,3 @@ def test_resolve_source_cls_returns_class_when_present() -> None:
 
 def test_resolve_source_cls_returns_none_when_absent() -> None:
     assert resolve_source_cls(_EMPTY, _SOURCE_KEY) is None
-
-
-# -- DriftMixin delegation ----------------------------------------------------
-
-
-class _Store(DriftMixin):
-    def __init__(self, catalog: il.Catalog) -> None:
-        self._catalog = catalog
-
-
-def test_drift_mixin_delegates_to_resolver() -> None:
-    store = _Store(_ENABLED)
-    assert store.source_status(_SOURCE_KEY) is ComponentStatus.OK
-    assert store.asset_status(_ASSET_KEY, source_key=_SOURCE_KEY) is ComponentStatus.OK
-
-
-@pytest.mark.parametrize("key", ["definitely_not_a_real_component_key"])
-def test_drift_mixin_reports_missing_against_real_universe(key: str) -> None:
-    # No discovered override: resolves against the real installed universe.
-    assert _Store(_EMPTY).source_status(key) is ComponentStatus.MISSING

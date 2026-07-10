@@ -10,7 +10,7 @@ from fastapi import Cookie, Depends, HTTPException
 from interloper.catalog.base import Catalog
 from interloper.errors import NotFoundError
 from interloper_db import Organisation, Profile, Store
-from interloper_db.models import Session as SessionModel
+from interloper_db.models import AuthSession
 
 _store: Store | None = None
 _catalog: Catalog | None = None
@@ -167,7 +167,7 @@ def get_current_user(
 def get_session_context(
     store: Store = Depends(get_store),
     session_token: str | None = Cookie(default=None),
-) -> tuple[Profile, SessionModel]:
+) -> tuple[Profile, AuthSession]:
     """Resolve user and session from the cookie.
 
     Args:

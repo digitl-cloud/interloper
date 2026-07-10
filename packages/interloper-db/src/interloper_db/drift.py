@@ -1,9 +1,9 @@
 """Catalog drift: the single resolution primitive for stored component keys.
 
-Catalog keys (``Source.key`` / ``Asset.key``, derived from class names) are
-the only join between *code* (the catalog of Python classes) and *data* (the
-``sources`` / ``assets`` rows that reference those keys as bare strings, with
-no foreign key back to the catalog). When a class is renamed or removed, the
+Catalog keys (``Component.key``, derived from class names) are the only
+join between *code* (the catalog of Python classes) and *data* (the
+``components`` rows that reference those keys as bare strings, with no
+foreign key back to the catalog). When a class is renamed or removed, the
 stored key *drifts* — it no longer resolves against the catalog.
 
 Rather than discover drift with a separate scanner, drift is computed as the
@@ -143,22 +143,3 @@ def asset_status(
         return ComponentStatus.MISSING
     valid_keys = {asset_type.key for asset_type in source_cls.asset_types}
     return ComponentStatus.OK if key in valid_keys else ComponentStatus.MISSING
-
-
-class DriftMixin:
-    """Store methods that surface catalog drift for persisted components.
-
-    Thin delegation to the pure resolver functions, passing the Store's
-    enabled ``_catalog`` so callers (API routes, hydration) never reach into
-    catalog internals.
-    """
-
-    _catalog: Catalog
-
-    def source_status(self, key: str) -> ComponentStatus:
-        """Resolution state of a stored source key against the catalog."""
-        return source_status(self._catalog, key)
-
-    def asset_status(self, key: str, *, source_key: str | None = None) -> ComponentStatus:
-        """Resolution state of a stored asset key against the catalog."""
-        return asset_status(self._catalog, key, source_key=source_key)

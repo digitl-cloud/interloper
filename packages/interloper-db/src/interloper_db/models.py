@@ -111,8 +111,12 @@ class Invitation(SQLModel, table=True):
     expires_at: datetime = SQLField(sa_column=Column(TZDateTime))
 
 
-class Session(SQLModel, table=True):
-    """A cookie-based user session with optional org context."""
+class AuthSession(SQLModel, table=True):
+    """A cookie-based user login session with optional org context.
+
+    Named ``AuthSession`` (table stays ``sessions``) so it can never be
+    confused with the SQLAlchemy ``Session`` used throughout the store.
+    """
 
     __tablename__: ClassVar[str] = "sessions"
 

@@ -6,6 +6,7 @@ import datetime as dt
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -14,8 +15,8 @@ from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
 
-from interloper_db.engine import get_engine
 from interloper_db.models import Backfill, Component, Event, Run
+from interloper_db.store.base import StoreBase
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,53 @@ def _sanitize_text(value: str | None, *, max_len: int = _MAX_EVENT_TEXT) -> str 
     return cleaned
 
 
-class RunMixin:
+def _event_filters(
+    run_id: UUID | None,
+    org_id: UUID | None,
+    asset_ids: Sequence[UUID] | None,
+    event_types: Sequence[str] | None,
+) -> list[Any]:
+    """The shared where-clauses of :meth:`RunMixin.list_events` / ``count_events``.
+
+    One builder for both so listing and counting can never disagree.
+
+    Returns:
+        Filter expressions for the given (optional) criteria.
+    """
+    filters: list[Any] = []
+    if run_id:
+        filters.append(Event.run_id == run_id)
+    if org_id:
+        filters.append(Event.org_id == org_id)
+    if asset_ids:
+        filters.append(col(Event.asset_id).in_(asset_ids))
+    if event_types:
+        filters.append(col(Event.event_type).in_(event_types))
+    return filters
+
+
+def _run_filters(
+    org_id: UUID,
+    component_id: UUID | None,
+    backfill_id: UUID | None,
+    status: str | None,
+) -> list[Any]:
+    """The shared where-clauses of :meth:`RunMixin.list_runs` / ``count_runs``.
+
+    Returns:
+        Filter expressions for the given criteria.
+    """
+    filters: list[Any] = [Run.org_id == org_id]
+    if component_id:
+        filters.append(Run.component_id == component_id)
+    if backfill_id:
+        filters.append(Run.backfill_id == backfill_id)
+    if status:
+        filters.append(Run.status == status)
+    return filters
+
+
+class RunMixin(StoreBase):
     """Store methods for runs, events, and backfills."""
 
     def save_event(self, event: il.Event, org_id: UUID, run_id: UUID | None = None) -> Event:
@@ -86,7 +133,7 @@ class RunMixin:
             "timestamp": event.timestamp,
         }
 
-        with Session(get_engine()) as session:
+        with self._session() as session:
             stmt = pg_insert(Event).values(**values).on_conflict_do_nothing(index_elements=["id"])
             session.execute(stmt)  # ty: ignore[deprecated]
             session.commit()
@@ -122,18 +169,13 @@ class RunMixin:
         Returns:
             List of Event rows.
         """
-        with Session(get_engine()) as session:
-            statement = select(Event)
-            if run_id:
-                statement = statement.where(Event.run_id == run_id)
-            if org_id:
-                statement = statement.where(Event.org_id == org_id)
-            if asset_ids:
-                statement = statement.where(col(Event.asset_id).in_(asset_ids))
-            if event_types:
-                statement = statement.where(col(Event.event_type).in_(event_types))
+        with self._session() as session:
             statement = (
-                statement.order_by(col(Event.timestamp).asc(), col(Event.id).asc()).offset(offset).limit(limit)
+                select(Event)
+                .where(*_event_filters(run_id, org_id, asset_ids, event_types))
+                .order_by(col(Event.timestamp).asc(), col(Event.id).asc())
+                .offset(offset)
+                .limit(limit)
             )
             return list(session.exec(statement).all())
 
@@ -156,16 +198,10 @@ class RunMixin:
         Returns:
             Total number of matching events (ignoring limit/offset).
         """
-        with Session(get_engine()) as session:
-            statement = select(func.count()).select_from(Event)
-            if run_id:
-                statement = statement.where(Event.run_id == run_id)
-            if org_id:
-                statement = statement.where(Event.org_id == org_id)
-            if asset_ids:
-                statement = statement.where(col(Event.asset_id).in_(asset_ids))
-            if event_types:
-                statement = statement.where(col(Event.event_type).in_(event_types))
+        with self._session() as session:
+            statement = (
+                select(func.count()).select_from(Event).where(*_event_filters(run_id, org_id, asset_ids, event_types))
+            )
             return session.exec(statement).one()
 
     def list_asset_executions(self, run_id: UUID) -> list[dict]:
@@ -178,7 +214,7 @@ class RunMixin:
             List of dicts with run_id, org_id, asset_key, status,
             started_at, completed_at, created_at.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             result = session.execute(  # ty: ignore[deprecated]
                 text("SELECT * FROM asset_executions WHERE run_id = :run_id"),
                 {"run_id": str(run_id)},
@@ -198,13 +234,13 @@ class RunMixin:
 
         Args:
             org_id: Organisation UUID.
-            component_id: Optional job UUID.
+            component_id: Optional target component UUID (any runnable kind).
             partition_date: Optional partition date.
 
         Returns:
             The created Run row.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_run = Run(
                 org_id=org_id,
                 component_id=component_id,
@@ -226,9 +262,9 @@ class RunMixin:
             The Run row.
 
         Raises:
-            ValueError: If the run is not found.
+            NotFoundError: If the run is not found.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_run = session.get(Run, run_id)
             if not db_run:
                 raise NotFoundError(f"Run {run_id} not found")
@@ -248,7 +284,7 @@ class RunMixin:
 
         Args:
             org_id: Organisation UUID.
-            component_id: Optional job filter.
+            component_id: Optional target component filter.
             backfill_id: Optional backfill filter.
             status: Optional status filter.
             limit: Max results (default 50).
@@ -257,15 +293,14 @@ class RunMixin:
         Returns:
             List of Run rows.
         """
-        with Session(get_engine()) as session:
-            statement = select(Run).where(Run.org_id == org_id)
-            if component_id:
-                statement = statement.where(Run.component_id == component_id)
-            if backfill_id:
-                statement = statement.where(Run.backfill_id == backfill_id)
-            if status:
-                statement = statement.where(Run.status == status)
-            statement = statement.order_by(col(Run.created_at).desc()).offset(offset).limit(limit)
+        with self._session() as session:
+            statement = (
+                select(Run)
+                .where(*_run_filters(org_id, component_id, backfill_id, status))
+                .order_by(col(Run.created_at).desc())
+                .offset(offset)
+                .limit(limit)
+            )
             return list(session.exec(statement).all())
 
     def count_runs(
@@ -280,29 +315,25 @@ class RunMixin:
 
         Args:
             org_id: Organisation UUID.
-            component_id: Optional job filter.
+            component_id: Optional target component filter.
             backfill_id: Optional backfill filter.
             status: Optional status filter.
 
         Returns:
             Total number of matching runs (ignoring limit/offset).
         """
-        with Session(get_engine()) as session:
-            statement = select(func.count()).select_from(Run).where(Run.org_id == org_id)
-            if component_id:
-                statement = statement.where(Run.component_id == component_id)
-            if backfill_id:
-                statement = statement.where(Run.backfill_id == backfill_id)
-            if status:
-                statement = statement.where(Run.status == status)
+        with self._session() as session:
+            statement = (
+                select(func.count()).select_from(Run).where(*_run_filters(org_id, component_id, backfill_id, status))
+            )
             return session.exec(statement).one()
 
     def complete_run(self, run_id: UUID, *, success: bool) -> Run:
         """Mark a run as completed and advance its backfill if applicable.
 
-        Also stamps ``last_run_at`` on the job's machine-owned state — this is
-        the single terminal path every run takes (scheduled, manual, retried),
-        so the job's "last run" reflects all of them.
+        Also stamps ``last_run_at`` on the target component's machine-owned
+        state — this is the single terminal path every run takes (scheduled,
+        manual, retried), so the component's "last run" reflects all of them.
 
         Args:
             run_id: The run UUID.
@@ -312,9 +343,9 @@ class RunMixin:
             The updated Run row.
 
         Raises:
-            ValueError: If the run is not found.
+            NotFoundError: If the run is not found.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_run = session.get(Run, run_id)
             if not db_run:
                 raise NotFoundError(f"Run {run_id} not found")
@@ -335,7 +366,6 @@ class RunMixin:
                 _advance_backfill(session, db_run.backfill_id, failed=not success)
 
             session.commit()
-            session.refresh(db_run)
             return db_run
 
     def retry_run(self, run_id: UUID, *, scope: str = "all") -> Run:
@@ -360,7 +390,7 @@ class RunMixin:
         if scope not in ("all", "failed"):
             raise ValueError(f"Invalid retry scope: {scope!r} (expected 'all' or 'failed')")
 
-        with Session(get_engine()) as session:
+        with self._session() as session:
             src = session.get(Run, run_id)
             if not src:
                 raise NotFoundError(f"Run {run_id} not found")
@@ -400,7 +430,7 @@ class RunMixin:
 
         Args:
             org_id: Organisation UUID.
-            component_id: Optional job UUID.
+            component_id: Optional target component UUID.
             start_date: First partition date.
             end_date: Last partition date (inclusive).
             concurrency: Max runs in-flight at once.
@@ -409,7 +439,7 @@ class RunMixin:
         Returns:
             The created Backfill row with runs.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_backfill = Backfill(
                 org_id=org_id,
                 component_id=component_id,
@@ -457,9 +487,9 @@ class RunMixin:
             The Backfill row.
 
         Raises:
-            ValueError: If the backfill is not found.
+            NotFoundError: If the backfill is not found.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             db_backfill = session.get(Backfill, backfill_id)
             if not db_backfill:
                 raise NotFoundError(f"Backfill {backfill_id} not found")
@@ -474,7 +504,7 @@ class RunMixin:
         Returns:
             List of Backfill rows.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             statement = select(Backfill).where(Backfill.org_id == org_id).order_by(col(Backfill.created_at).desc())
             return list(session.exec(statement).all())
 
@@ -487,7 +517,7 @@ class RunMixin:
         Returns:
             List of Backfill rows with status ``"running"`` or ``"queued"``.
         """
-        with Session(get_engine()) as session:
+        with self._session() as session:
             statement = select(Backfill).where(
                 Backfill.org_id == org_id,
                 col(Backfill.status).in_(["running", "queued"]),

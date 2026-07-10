@@ -36,7 +36,9 @@ def store() -> Iterator[RunMixin]:
     # pull in Postgres-only column types (e.g. ARRAY) that SQLite can't render.
     Event.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
-        yield RunMixin()
+        mixin = RunMixin()
+        mixin._engine = eng
+        yield mixin
     finally:
         eng.dispose()
         engine_module._engine = None
@@ -210,7 +212,9 @@ def run_store() -> Iterator[RunMixin]:
     Component.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     Run.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
-        yield RunMixin()
+        mixin = RunMixin()
+        mixin._engine = eng
+        yield mixin
     finally:
         eng.dispose()
         engine_module._engine = None

@@ -170,8 +170,7 @@ def remove_member(
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
 
-    if not store.remove_org_member(org_id, user_id):
-        raise HTTPException(status_code=404, detail="Member not found")
+    store.remove_org_member(org_id, user_id)
 
     return {"status": "ok"}
 
@@ -242,11 +241,11 @@ def cancel_invitation(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Cancel a pending invitation. Requires admin role."""
+    # The org-scoping guard: the id must belong to this organisation.
     invitations = store.list_invitations(org_id)
     if not any(inv.id == invitation_id for inv in invitations):
         raise HTTPException(status_code=404, detail="Invitation not found")
-    if not store.delete_invitation(invitation_id):
-        raise HTTPException(status_code=404, detail="Invitation not found")
+    store.delete_invitation(invitation_id)
 
     return {"status": "ok"}
 

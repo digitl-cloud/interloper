@@ -50,9 +50,8 @@ def _cmd_launch(args: argparse.Namespace) -> None:
 
     settings = AppSettings.get()
 
-    from interloper_db import Store, init_engine
+    from interloper_db import Store
 
-    init_engine(settings.postgres.dsn)
     catalog = Catalog.from_settings()
     logger.info(f"Catalog: {catalog.to_paths()}")
 

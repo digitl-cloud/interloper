@@ -107,6 +107,13 @@ class TestCrud:
         with pytest.raises(ConfigError):
             store.create_component(_ORG, kind="destination", key="dest", children=["a"])
 
+    def test_unknown_child_keys_rejected(self, component_db: Engine):
+        from interloper_assets.demo.source import DemoSource
+
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        with pytest.raises(ConfigError, match=r"declares no asset\(s\) \['typo'\]"):
+            store.create_component(_ORG, kind="source", key="demo_source", children=["a", "typo"])
+
     def test_delete_refuses_source_owned_assets(self, store: Store, component_db: Engine):
         job = store.create_component(_ORG, kind="job", key="cron_job")  # any parentable stand-in row
         with Session(component_db) as session:

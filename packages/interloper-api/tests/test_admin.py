@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.errors import NotFoundError
 
 from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import admin as admin_module
@@ -56,13 +57,11 @@ class FakeStore:
         self.added_members.append((org_id, user_id, role))
         return True
 
-    def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> bool:
+    def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
         self.role_updates.append((org_id, user_id, role))
-        return True
 
-    def remove_org_member(self, org_id: UUID, user_id: UUID) -> bool:
+    def remove_org_member(self, org_id: UUID, user_id: UUID) -> None:
         self.removed.append((org_id, user_id))
-        return True
 
     # -- invitations --
     def list_invitations(self, org_id: UUID):
@@ -86,8 +85,8 @@ class FakeStore:
             expires_at=datetime.now(timezone.utc),
         )
 
-    def delete_invitation(self, invitation_id: UUID) -> bool:
-        return True
+    def delete_invitation(self, invitation_id: UUID) -> None:
+        pass
 
 
 def _profile(*, is_super_admin: bool):
@@ -103,6 +102,13 @@ def _profile(*, is_super_admin: bool):
 def _client(store: FakeStore, *, is_super_admin: bool) -> TestClient:
     app = FastAPI()
     app.include_router(admin_module.router)
+
+    @app.exception_handler(NotFoundError)
+    async def _not_found(_request, exc: NotFoundError):  # mirrors create_app's handler
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: _profile(is_super_admin=is_super_admin)
     return TestClient(app)
@@ -171,6 +177,19 @@ def test_update_member_role_rejects_invalid_role(store: FakeStore) -> None:
         f"/admin/organisations/{store.org.id}/members/{uuid4()}", json={"role": "root"}
     )
     assert resp.status_code == 400
+
+
+def test_missing_member_maps_to_404() -> None:
+    # Store mutations raise NotFoundError; the app-level handler turns it into 404.
+    class RaisingStore(FakeStore):
+        def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
+            raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
+
+    store = RaisingStore()
+    resp = _client(store, is_super_admin=True).patch(
+        f"/admin/organisations/{store.org.id}/members/{uuid4()}", json={"role": "editor"}
+    )
+    assert resp.status_code == 404
 
 
 def test_join_organisation_without_invitation(store: FakeStore) -> None:

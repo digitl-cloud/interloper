@@ -184,8 +184,6 @@ def update_organisation(
 ) -> AdminOrganisationResponse:
     """Rename an organisation."""
     org = store.update_organisation(org_id, body.name)
-    if not org:
-        raise HTTPException(status_code=404, detail="Organisation not found")
     members = store.list_org_members(org_id)
     return AdminOrganisationResponse(
         id=org.id,
@@ -250,8 +248,7 @@ def update_member_role(
 ) -> dict[str, str]:
     """Change a member's role in any organisation."""
     _validate_role(body.role)
-    if not store.update_member_role(org_id, user_id, body.role):
-        raise HTTPException(status_code=404, detail="Member not found")
+    store.update_member_role(org_id, user_id, body.role)
     return {"status": "ok"}
 
 
@@ -263,8 +260,7 @@ def remove_member(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Remove a member from any organisation."""
-    if not store.remove_org_member(org_id, user_id):
-        raise HTTPException(status_code=404, detail="Member not found")
+    store.remove_org_member(org_id, user_id)
     return {"status": "ok"}
 
 
@@ -329,6 +325,5 @@ def cancel_invitation(
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Cancel a pending invitation in any organisation."""
-    if not store.delete_invitation(invitation_id):
-        raise HTTPException(status_code=404, detail="Invitation not found")
+    store.delete_invitation(invitation_id)
     return {"status": "ok"}

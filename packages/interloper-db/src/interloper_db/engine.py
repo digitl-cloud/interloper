@@ -44,3 +44,16 @@ def get_engine() -> Engine:
     if _engine is None:
         raise RuntimeError("Database engine not initialized. Call init_engine() first.")
     return _engine
+
+
+def engine_from_settings() -> Engine:
+    """Return the process engine, initializing it from settings when absent.
+
+    Returns:
+        The SQLAlchemy engine.
+    """
+    if _engine is not None:
+        return _engine
+    from interloper.settings import AppSettings
+
+    return init_engine(AppSettings.get().postgres.dsn)
