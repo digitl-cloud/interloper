@@ -22,8 +22,8 @@ class _FakeStore:
     def __init__(self, executions: dict[UUID, list[dict[str, str]]]) -> None:
         self._executions = executions
 
-    def list_asset_executions(self, run_id: UUID) -> list[dict[str, str]]:
-        return self._executions.get(run_id, [])
+    def list_asset_executions(self, run_id: UUID) -> list[SimpleNamespace]:
+        return [SimpleNamespace(**row) for row in self._executions.get(run_id, [])]
 
 
 class _FakeSession:

@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Event
+from interloper_db.models import AssetExecution, Event
 from interloper_db.store.runs import RunMixin
 
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
@@ -243,3 +243,31 @@ def test_complete_run_stamps_the_jobs_last_run_at(run_store: RunMixin) -> None:
         # SQLite round-trips the column naive; the stamped ISO string is aware UTC.
         stamped_at = datetime.fromisoformat(stamped.state["last_run_at"])
         assert stamped_at == completed.completed_at.replace(tzinfo=timezone.utc)
+
+
+def test_asset_executions_read_model_maps_the_view(store: RunMixin) -> None:
+    """The typed read model round-trips rows shaped like the view's output.
+
+    SQLite stands in: the model's table definition doubles as the view's
+    schema, so creating it as a table exercises the exact mapping the view
+    serves in production.
+    """
+    eng = engine_module.get_engine()
+    AssetExecution.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+    run_id, asset_id, org = uuid4(), uuid4(), uuid4()
+    with Session(eng) as session:
+        session.add(
+            AssetExecution(
+                run_id=run_id,
+                asset_id=asset_id,
+                org_id=org,
+                asset_key="a",
+                status="success",
+                completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            )
+        )
+        session.commit()
+
+    rows = store.list_asset_executions(run_id)
+    assert [(row.asset_key, row.status) for row in rows] == [("a", "success")]
+    assert store.list_asset_executions(uuid4()) == []

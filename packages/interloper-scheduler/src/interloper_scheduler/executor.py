@@ -133,7 +133,8 @@ class RunExecutor:
             while parent_id:
                 for row in self._store.list_asset_executions(parent_id):
                     # Closest ancestor wins: only record a key the first time we see it.
-                    statuses.setdefault(row["asset_key"], row["status"])
+                    if row.asset_key:
+                        statuses.setdefault(row.asset_key, row.status)
                 parent = session.get(Run, parent_id)
                 parent_id = parent.retry_of if parent else None
 

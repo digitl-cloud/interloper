@@ -230,14 +230,14 @@ def list_asset_executions(
     rows = store.list_asset_executions(run_id)
     return [
         AssetExecutionResponse(
-            run_id=row["run_id"],
-            org_id=row["org_id"],
-            asset_id=row.get("asset_id"),
-            asset_key=row["asset_key"],
-            status=row["status"],
-            started_at=str(row["started_at"]) if row.get("started_at") else None,
-            completed_at=str(row["completed_at"]) if row.get("completed_at") else None,
-            created_at=str(row["created_at"]) if row.get("created_at") else None,
+            run_id=row.run_id,
+            org_id=row.org_id,
+            asset_id=row.asset_id,
+            asset_key=row.asset_key or "",
+            status=row.status,
+            started_at=str(row.started_at) if row.started_at else None,
+            completed_at=str(row.completed_at) if row.completed_at else None,
+            created_at=str(row.created_at) if row.created_at else None,
         )
         for row in rows
     ]

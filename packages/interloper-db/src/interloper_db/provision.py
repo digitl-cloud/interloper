@@ -67,7 +67,9 @@ def create_all(engine: Engine | None = None) -> None:
     with eng.connect() as lock_conn:
         lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": PROVISION_LOCK_KEY})
         try:
-            SQLModel.metadata.create_all(eng)
+            # View-backed read models (info["is_view"]) are Alembic's to create.
+            tables = [table for table in SQLModel.metadata.sorted_tables if not table.info.get("is_view")]
+            SQLModel.metadata.create_all(eng, tables=tables)
             upgrade(engine=eng)
         finally:
             lock_conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": PROVISION_LOCK_KEY})

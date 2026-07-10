@@ -353,3 +353,25 @@ class Event(SQLModel, table=True):
     message: str | None = None
     level: str | None = None
     timestamp: datetime = SQLField(sa_column=Column(TZDateTime))
+
+
+class AssetExecution(SQLModel, table=True):
+    """Read model over the ``asset_executions`` view — never written.
+
+    One row per ``(run, asset)``: the current status derived from lifecycle
+    events (severity then recency) plus the queued/started/completed
+    timestamps. The view itself is created by migration 002; ``create_all``
+    skips view-backed models (see the ``is_view`` marker).
+    """
+
+    __tablename__: ClassVar[str] = "asset_executions"
+    __table_args__: ClassVar[dict[str, Any]] = {"info": {"is_view": True}}
+
+    run_id: UUID = SQLField(primary_key=True)
+    asset_id: UUID = SQLField(primary_key=True)
+    org_id: UUID
+    asset_key: str | None = None
+    status: str
+    started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
+    completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
+    created_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))

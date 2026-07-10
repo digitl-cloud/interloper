@@ -11,11 +11,11 @@ from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import NotFoundError
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
 
-from interloper_db.models import Backfill, Component, Event, Run
+from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
 from interloper_db.store.base import StoreBase
 
 logger = logging.getLogger(__name__)
@@ -204,22 +204,18 @@ class RunMixin(StoreBase):
             )
             return session.exec(statement).one()
 
-    def list_asset_executions(self, run_id: UUID) -> list[dict]:
-        """List asset executions for a run from the ``asset_executions`` view.
+    def list_asset_executions(self, run_id: UUID) -> list[AssetExecution]:
+        """List a run's asset executions from the ``asset_executions`` view.
 
         Args:
             run_id: The run UUID.
 
         Returns:
-            List of dicts with run_id, org_id, asset_key, status,
-            started_at, completed_at, created_at.
+            One read-model row per asset touched by the run.
         """
         with self._session() as session:
-            result = session.execute(  # ty: ignore[deprecated]
-                text("SELECT * FROM asset_executions WHERE run_id = :run_id"),
-                {"run_id": str(run_id)},
-            )
-            return [dict(row._mapping) for row in result.fetchall()]
+            statement = select(AssetExecution).where(AssetExecution.run_id == run_id)
+            return list(session.exec(statement).all())
 
     # -- Runs -----------------------------------------------------------------
 

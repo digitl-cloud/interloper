@@ -1,6 +1,7 @@
 from interloper_db.drift import ComponentStatus
 from interloper_db.engine import get_engine, init_engine
 from interloper_db.models import (
+    AssetExecution,
     AuthSession,
     Backfill,
     Component,
@@ -16,6 +17,7 @@ from interloper_db.provision import create_all, downgrade, ensure_database, upgr
 from interloper_db.store import Store
 
 __all__ = [
+    "AssetExecution",
     "AuthSession",
     "Backfill",
     "Component",
