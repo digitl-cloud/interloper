@@ -264,7 +264,7 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
             })
 
             map.set(source.id, {
-                name: sourceDefn?.name ?? source.name ?? source.key,
+                name: source.name ?? sourceDefn?.name ?? source.key,
                 icon: componentIcon(source.key, 'i-lucide-database'),
                 assetCount: source.children.length,
                 warnings,

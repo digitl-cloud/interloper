@@ -29,7 +29,7 @@ export function useDestinationBadge() {
 
         return {
             icon: defn?.icon ?? 'i-lucide-hard-drive',
-            label: defn?.name ?? destination.name ?? destination.key,
+            label: destination.name ?? defn?.name ?? destination.key,
             count: 1,
             isMulti: false,
         }

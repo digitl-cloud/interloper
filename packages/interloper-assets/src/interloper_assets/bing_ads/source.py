@@ -175,11 +175,8 @@ class BingAds(il.Source):
         provider="connection.accounts",
         label_key="name",
         value_key="account_id",
+        discriminator=True,
     )
-
-    def asset_table(self, asset: il.Asset) -> str:
-        """Suffix tables with the account_id so instances materialize side by side."""
-        return f"{asset.key}__{self.account_id}"
 
     @il.asset(
         schema=AdsStats,

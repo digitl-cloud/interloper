@@ -19,10 +19,7 @@ class PinterestAds(il.Source):
         label_key="name",
         value_key="id",
         description="Pinterest Ads account",
+        discriminator=True,
     )
 
     # --- Entity assets ---
-
-    def asset_table(self, asset: il.Asset) -> str:
-        """Suffix tables with the account_id so instances materialize side by side."""
-        return f"{asset.key}__{self.account_id}"

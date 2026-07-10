@@ -164,6 +164,18 @@ class Component(Serializable):
         cls._infer_resource_refs()
 
     @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Validate that at most one config field is marked as the discriminator.
+
+        Raises:
+            TypeError: If several fields carry ``discriminator=True``.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+        marked = cls._discriminator_fields()
+        if len(marked) > 1:
+            raise TypeError(f"Component '{cls.__name__}' marks multiple discriminator fields: {sorted(marked)}")
+
+    @classmethod
     def _infer_resource_refs(cls) -> None:
         """Convert Resource-typed annotations into ``ResourceRef`` descriptors.
 
@@ -261,6 +273,61 @@ class Component(Serializable):
         """Default ``id`` to a generated UUID if not provided."""
         if not self.id:
             self.id = str(uuid.uuid4())
+
+    # -- Instance discrimination -------------------------------------------------
+
+    @classmethod
+    def _discriminator_fields(cls) -> list[str]:
+        """Names of the config fields marked ``discriminator=True``.
+
+        Returns:
+            The marked field names (normally zero or one).
+        """
+        return [
+            name
+            for name, field in cls.model_fields.items()
+            if isinstance(field.json_schema_extra, dict) and field.json_schema_extra.get("x-discriminator")
+        ]
+
+    @classmethod
+    def discriminator_field(cls) -> str | None:
+        """The config field marked ``discriminator=True``, if any.
+
+        Returns:
+            The field name, or ``None`` when the class declares no discriminator.
+        """
+        marked = cls._discriminator_fields()
+        return marked[0] if marked else None
+
+    @property
+    def discriminator(self) -> str | None:
+        """This instance's discriminator value, if declared and set.
+
+        The value of the config field marked ``discriminator=True`` — what
+        distinguishes instances of the same component class (an ad account
+        id, a site URL, …). Drives the derived :meth:`instance_name` and, for
+        sources, the per-instance asset table names.
+        """
+        field_name = type(self).discriminator_field()
+        if field_name is None:
+            return None
+        value = getattr(self, field_name)
+        return str(value) if value else None
+
+    def instance_name(self) -> str:
+        """Display name for this instance: the class label plus the discriminator.
+
+        A derived *default*, not an identity: the persistence layer uses it to
+        seed a blank component name, and users may override it freely. It never
+        feeds physical naming.
+
+        Returns:
+            E.g. ``"Facebook Ads act_123"``, or just ``"Facebook Ads"`` without
+            a discriminator.
+        """
+        base = type(self).name or to_label(type(self).__name__)
+        discriminator = self.discriminator
+        return f"{base} {discriminator}" if discriminator else base
 
     # -- Resources -------------------------------------------------------------
     def trickle_resources(self, target: Component) -> None:

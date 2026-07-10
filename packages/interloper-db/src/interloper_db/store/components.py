@@ -36,7 +36,7 @@ from interloper.errors import (
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
-from interloper_db.drift import ComponentStatus, asset_status, resolve_source_cls, source_status
+from interloper_db.drift import ComponentStatus, asset_status, resolve_component_cls, resolve_source_cls, source_status
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.store.base import StoreBase
 
@@ -95,6 +95,8 @@ class ComponentMixin(StoreBase):
         with self._session() as session:
             db_component = Component(org_id=org_id, kind=kind, key=key, name=name)
             self._apply_config(db_component, config, encrypted)
+            if name is None:
+                db_component.name = self._derived_name(db_component, config)
             session.add(db_component)
             session.flush()
             if kind == "source":
@@ -172,6 +174,7 @@ class ComponentMixin(StoreBase):
             if name is not None:
                 db_component.name = name
             if config is not None:
+                self._refresh_derived_name(db_component, new_config=config, explicit_rename=name is not None)
                 self._apply_config(db_component, config, encrypted)
             if db_component.kind == "source":
                 self._check_source_collision(session, db_component)
@@ -359,6 +362,45 @@ class ComponentMixin(StoreBase):
                 )
             raw = self._encrypt(raw)
         return raw, should_encrypt
+
+    def _derived_name(self, db_component: Component, config: dict[str, Any] | None) -> str | None:
+        """The display name the component class derives from *config*.
+
+        Returns:
+            ``instance_name()`` of an instance constructed from the config, or
+            ``None`` when the key doesn't resolve or the config can't construct
+            the class.
+        """
+        cls = resolve_component_cls(self._catalog, db_component.key)
+        if cls is None or cls.kind != db_component.kind:
+            return None
+        try:
+            instance = cls(**(config or {}))
+        except Exception:  # noqa: BLE001 — incomplete/stale config: nothing to derive
+            return None
+        return instance.instance_name()
+
+    def _refresh_derived_name(
+        self, db_component: Component, *, new_config: dict[str, Any], explicit_rename: bool
+    ) -> None:
+        """Let a never-customized display name follow a config change.
+
+        A name equal to the old config's derived default (or blank) is
+        system-owned and follows along; anything else — including a rename in
+        this same call — is user-owned and untouched.
+        """
+        if explicit_rename:
+            return
+        old_default = self._derived_name(db_component, self._current_config(db_component))
+        if db_component.name is None or db_component.name == old_default:
+            db_component.name = self._derived_name(db_component, new_config) or db_component.name
+
+    def _current_config(self, db_component: Component) -> dict[str, Any] | None:
+        """The row's stored config payload, decoding secret kinds (``None`` when undecodable)."""
+        try:
+            return self.decode_config(db_component)
+        except Exception:  # noqa: BLE001 — no cipher / corrupt payload: treat as underivable
+            return None
 
     def _check_source_collision(self, session: Session, db_source: Component) -> None:
         """Reject a source instance whose materialization target collides with a sibling.

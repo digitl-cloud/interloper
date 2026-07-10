@@ -121,6 +121,37 @@ class TestIdentity:
         assert not FakeResource.has_own_field("does_not_exist")
 
 
+class TestDiscriminator:
+    """The config field marked ``discriminator=True`` identifies instances."""
+
+    def test_none_declared_by_default(self):
+        assert FakeComponent.discriminator_field() is None
+        assert FakeComponent().discriminator is None
+
+    def test_marked_field_discovered_and_value_exposed(self):
+        class FakeDiscriminated(Component):
+            account_id: str = il.InputField(default="", discriminator=True)
+
+        assert FakeDiscriminated.discriminator_field() == "account_id"
+        assert FakeDiscriminated(account_id="42").discriminator == "42"
+        # An empty value means "not discriminated" rather than an empty suffix.
+        assert FakeDiscriminated().discriminator is None
+
+    def test_multiple_marked_fields_rejected_at_class_definition(self):
+        with pytest.raises(TypeError, match="multiple discriminator fields"):
+
+            class FakeDoublyDiscriminated(Component):
+                a: str = il.InputField(default="", discriminator=True)
+                b: str = il.InputField(default="", discriminator=True)
+
+    def test_instance_name_appends_discriminator(self):
+        class FakeShop(Component):
+            shop_id: str = il.InputField(default="", discriminator=True)
+
+        assert FakeShop().instance_name() == "Fake Shop"
+        assert FakeShop(shop_id="99").instance_name() == "Fake Shop 99"
+
+
 class TestAnchor:
     def test_subclass_resolves_to_the_kind_declarer(self):
         assert FakeResource.anchor() is il.Resource

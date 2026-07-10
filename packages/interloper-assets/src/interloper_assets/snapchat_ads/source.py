@@ -125,13 +125,10 @@ class SnapchatAds(il.Source):
         label_key="name",
         value_key="id",
         description="Snapchat Ads ad account",
+        discriminator=True,
     )
 
     # --- Time-series reports (SnapchatStatsNormalizer from the source) ---
-
-    def asset_table(self, asset: il.Asset) -> str:
-        """Suffix tables with the account_id so instances materialize side by side."""
-        return f"{asset.key}__{self.account_id}"
 
     @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
     async def ads_stats(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:

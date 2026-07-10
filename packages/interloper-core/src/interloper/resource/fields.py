@@ -147,11 +147,19 @@ def strip_internal_fields(schema: dict[str, Any], extra: Iterable[str] = ()) -> 
 def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
     """Pop json_schema_extra from kwargs and inject the widget hint.
 
+    Also lifts the ``discriminator=True`` marker (accepted by every field
+    factory) into ``x-discriminator``: it marks the config field whose value
+    distinguishes instances of a component, driving the derived display name
+    (:meth:`Component.instance_name`) and — for sources — the per-instance
+    asset table names (:meth:`Source.asset_table`).
+
     Returns:
-        The extra dict with ``x-widget`` set.
+        The extra dict with ``x-widget`` (and possibly ``x-discriminator``) set.
     """
     extra = kwargs.pop("json_schema_extra", {})
     extra["x-widget"] = widget
+    if kwargs.pop("discriminator", False):
+        extra["x-discriminator"] = True
     return extra
 
 
@@ -163,7 +171,8 @@ def InputField(default: Any = ..., **kwargs: Any) -> Any:
 
     Args:
         default: Default value (``...`` means required).
-        **kwargs: Forwarded to ``pydantic.Field``.
+        **kwargs: Forwarded to ``pydantic.Field``. Pass ``discriminator=True``
+            to mark the field as the component's instance discriminator.
 
     Returns:
         A Pydantic Field descriptor.
@@ -292,7 +301,8 @@ def FetchField(
             method on the resource in slot ``<slot>``.
         label_key: Key in each response item used as the display label.
         value_key: Key in each response item used as the stored value.
-        **kwargs: Forwarded to ``pydantic.Field``.
+        **kwargs: Forwarded to ``pydantic.Field``. Pass ``discriminator=True``
+            to mark the field as the component's instance discriminator.
 
     Returns:
         A Pydantic Field descriptor.

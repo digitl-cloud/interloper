@@ -391,22 +391,22 @@ class Source(Component):
     def asset_table(self, asset: Asset) -> str:
         """Physical table name for one of this source's assets.
 
-        Override to give each instance of the source its own tables — e.g.
-        suffix the asset key with the account id the instance is configured
-        for, so two accounts materialize side by side in one dataset instead
-        of overwriting each other's data::
+        Defaults to suffixing the asset key with the instance's
+        :attr:`~interloper.component.base.Component.discriminator` (the config
+        field marked ``discriminator=True``), so instances of a multi-account
+        source materialize side by side in one dataset instead of overwriting
+        each other's data. Without a discriminator the asset key is used as-is.
 
-            def asset_table(self, asset: il.Asset) -> str:
-                return f"{asset.key}__{self.account_id}"
-
-        Keep the ``{asset.key}__{suffix}`` shape so a source's tables stay
-        wildcard-queryable per asset. The return value is coerced to a valid
-        identifier by :attr:`Asset.table`.
+        Override for full control over the composition; keep the
+        ``{asset.key}__{suffix}`` shape so tables stay wildcard-queryable per
+        asset. The return value is coerced to a valid identifier by
+        :attr:`Asset.table`.
 
         Returns:
-            The physical table name for the asset (defaults to the asset key).
+            The physical table name for the asset.
         """
-        return asset.key
+        discriminator = self.discriminator
+        return f"{asset.key}__{discriminator}" if discriminator else asset.key
 
     def _resolve(self) -> None:
         """Apply source-level defaults to assets that don't define their own."""

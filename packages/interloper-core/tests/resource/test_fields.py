@@ -25,6 +25,22 @@ class TestFetchProvider:
         assert not is_fetch_field_provider(Conn.not_a_provider)
 
 
+class TestDiscriminatorMarker:
+    def test_marker_serialized_as_x_discriminator(self):
+        class FakeMarkedSource(il.Source):
+            account_id: str = il.InputField(default="", discriminator=True)
+
+        prop = FakeMarkedSource.definition().config_schema["properties"]["account_id"]
+        assert prop["x-discriminator"] is True
+
+    def test_unmarked_field_carries_no_marker(self):
+        class FakeUnmarkedSource(il.Source):
+            account_id: str = il.InputField(default="")
+
+        prop = FakeUnmarkedSource.definition().config_schema["properties"]["account_id"]
+        assert "x-discriminator" not in prop
+
+
 class TestFetchField:
     def test_emits_provider_only(self):
         @il.source(resources={"connection": Conn})
