@@ -30,6 +30,7 @@ nav = [
         { "Data Validation" = "features/data-validation.md" },
         { "Partitioning" = "features/partitioning.md" },
         { "Backfilling" = "features/backfilling.md" },
+        { "Hooks" = "features/hooks.md" },
         { "Connections" = "features/connections.md" },
         { "Resources" = "features/resources.md" },
         { "OAuth" = "features/oauth.md" },

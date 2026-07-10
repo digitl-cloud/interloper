@@ -3,6 +3,10 @@
 Interloper has a built-in event system for monitoring asset execution, destination I/O, and run
 lifecycle. Events flow through a process-wide `EventBus`.
 
+!!! note
+    This page covers the *in-process* event bus. To react to run outcomes in a deployed
+    instance — notify, or trigger downstream pipelines — see [Hooks](hooks.md).
+
 ## Subscribing to events
 
 Subscribe and unsubscribe handlers with the `EventBus` class methods:
