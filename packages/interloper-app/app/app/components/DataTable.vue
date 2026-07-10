@@ -120,8 +120,18 @@ function onRowContextMenu(e: Event, row: { original: TData }) {
 
 // ── Empty state ──
 const slots = useSlots()
+/**
+ * Loading has completed at least once. Before that, an empty `data` just means
+ * "not fetched yet"; after, background refetches (the store's loading flag is
+ * global, e.g. a wizard fetching candidate components) must not swap the empty
+ * state out for the table.
+ */
+const hasLoaded = ref(!props.loading)
+watch(() => props.loading, (loading) => {
+    if (!loading) hasLoaded.value = true
+})
 /** With no data at all (not just filtered out), render the #empty slot instead of the table. */
-const showEmpty = computed(() => !props.loading && props.data.length === 0 && !!slots.empty)
+const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !!slots.empty)
 </script>
 
 <template>
