@@ -2,6 +2,156 @@
 
 <!-- version list -->
 
+## v0.32.0 (2026-07-10)
+
+### Bug Fixes
+
+- **api**: Warn when an invitation email is skipped because SMTP is unconfigured
+  ([`e97d4eb`](https://github.com/digitl-cloud/interloper/commit/e97d4eb5f7498322efed56e31faba8b5dca4afb1))
+
+- **app**: Bump vue-router to v5 to match nuxt 4.4
+  ([`bbb5abd`](https://github.com/digitl-cloud/interloper/commit/bbb5abde5733e3445e892a6062f3c92d00bd1e0a))
+
+- **app**: Keep the table empty state stable during background refetches
+  ([`53387fd`](https://github.com/digitl-cloud/interloper/commit/53387fdd5de9e67ea8162a67d00a589c1aed7332))
+
+- **core**: DAG.from_spec follows the construction grammar
+  ([`df4adb7`](https://github.com/digitl-cloud/interloper/commit/df4adb7b7e1fae40b2becb8e271b63316587f6a8))
+
+- **core**: Scope runner on_event delivery to its own run
+  ([`2740e7b`](https://github.com/digitl-cloud/interloper/commit/2740e7bb8588f73c2a01191986b8d28b639a4c05))
+
+- **core**: Tear down the full dev process tree on shutdown
+  ([`57b636f`](https://github.com/digitl-cloud/interloper/commit/57b636f79d8190cb54ffbffcec80b1c9773b15f0))
+
+- **db**: Refresh organisation before expunge in accept_invitation
+  ([`3285515`](https://github.com/digitl-cloud/interloper/commit/3285515c40f9d198152d28b95c78dddd485a0c2a))
+
+- **db**: Stamp the job's last_run_at when a run completes
+  ([`2e70c8e`](https://github.com/digitl-cloud/interloper/commit/2e70c8e6becfffcae9651340b221ae4dd0760175))
+
+- **dev**: Make host-harness runs executable
+  ([`0ad9af2`](https://github.com/digitl-cloud/interloper/commit/0ad9af26b70b2702b14ef924a1d72bb19962d075))
+
+- **k8s**: Exclude kubernetes client 36.0.0 with broken in-cluster auth
+  ([`0fd4435`](https://github.com/digitl-cloud/interloper/commit/0fd4435c4d6740cd689ce05b46f1dd065d5cdad7))
+
+### Chores
+
+- **db**: Drop alteration migrations, keep only fresh-provisioning bootstrap
+  ([`deebf40`](https://github.com/digitl-cloud/interloper/commit/deebf4055de7bf41753da1725adbce9f982bcdd5))
+
+### Code Style
+
+- Collapse 3-line section comments into one-line headers
+  ([`54fcfde`](https://github.com/digitl-cloud/interloper/commit/54fcfde2f0e678f73d8dc51bddce4dbff713a5eb))
+
+- Organize interloper-core modules with comment sections
+  ([`79064db`](https://github.com/digitl-cloud/interloper/commit/79064db49b54489e6710a60a67e213586760d695))
+
+### Documentation
+
+- Hooks feature page
+  ([`891c16f`](https://github.com/digitl-cloud/interloper/commit/891c16f2cb96b4e3ffebfa2a5ddddbacc539aab0))
+
+### Features
+
+- Component-model consistency debts
+  ([`6b3661a`](https://github.com/digitl-cloud/interloper/commit/6b3661ac89c7ba8597fa13147b2a9897149de693))
+
+- Discriminator fields drive per-instance table names and display names
+  ([`f696d27`](https://github.com/digitl-cloud/interloper/commit/f696d27a42ba4998559324cf4c9dc7eb2c7ddaae))
+
+- Generic component store and /components API
+  ([`97dcfbd`](https://github.com/digitl-cloud/interloper/commit/97dcfbd5ff1a086456453d4d704807377f70414d))
+
+- Hook evaluator in the scheduler
+  ([`18cad23`](https://github.com/digitl-cloud/interloper/commit/18cad2307a321187e904f7334a1b2b3cc5490e3e))
+
+- Hooks page and definition-driven state columns
+  ([`37d9eff`](https://github.com/digitl-cloud/interloper/commit/37d9eff3cd2f9240e317788ad894411883501c5f))
+
+- New icon
+  ([`3b29578`](https://github.com/digitl-cloud/interloper/commit/3b29578bf01d69948d5ba6a2d68a9487ab4a4386))
+
+- One registry primitive and the Serializable/Component split
+  ([`376407d`](https://github.com/digitl-cloud/interloper/commit/376407d6f5ebf64a704445eb2d54d3c0630d8a37))
+
+- Per-instance asset table names via Source.asset_table
+  ([`5e144af`](https://github.com/digitl-cloud/interloper/commit/5e144af4018de2bc75bd1181dbb7914c2c662db1))
+
+- Realtime updates for components
+  ([`dd2cfb5`](https://github.com/digitl-cloud/interloper/commit/dd2cfb5c76eebb2a0f7e1653e13cffe304f070f3))
+
+- Registration is two entry-point groups
+  ([`deface2`](https://github.com/digitl-cloud/interloper/commit/deface20d46c4199c5779bae9021f1182bcb0ba2))
+
+- Relation fields follow the kind vocabulary
+  ([`198da51`](https://github.com/digitl-cloud/interloper/commit/198da515a093940ff506063636dcf3a370c49380))
+
+- Runs target any runnable component
+  ([`a07c9f9`](https://github.com/digitl-cloud/interloper/commit/a07c9f9814f71094a4c9c53166eed5e61c31faa3))
+
+- Super-admins join organisations without an invitation
+  ([`42e0c75`](https://github.com/digitl-cloud/interloper/commit/42e0c754fe5c26d81e6790f51c0dc9507edb8808))
+
+- Unify component persistence into components + component_relations
+  ([`7a45639`](https://github.com/digitl-cloud/interloper/commit/7a45639c4f7291889b0b330b91f5c9c1dc0dbb00))
+
+- Unify the run manifest with ComponentSpec and Job
+  ([`65d2400`](https://github.com/digitl-cloud/interloper/commit/65d240024813295bad8768c87abcf76f630cd2fc))
+
+- **app**: Consume the generic /components API
+  ([`df711b3`](https://github.com/digitl-cloud/interloper/commit/df711b3c212b2968e928684eed29f158990d1c75))
+
+- **app**: Render relation pickers and asset config from definitions
+  ([`aabaa08`](https://github.com/digitl-cloud/interloper/commit/aabaa082a39edeec2c7e472824e60dd76c79fb10))
+
+- **app**: Run any component from the UI
+  ([`86afe7b`](https://github.com/digitl-cloud/interloper/commit/86afe7b98ad27fe31b23d50770476c5b6ed54804))
+
+- **app**: Source form derives the instance name from the discriminator
+  ([`1b9dbe4`](https://github.com/digitl-cloud/interloper/commit/1b9dbe43fe9e75442b8b9ee38af30e24db8ce099))
+
+- **core**: Add Job component and catalog built-ins
+  ([`4c8003f`](https://github.com/digitl-cloud/interloper/commit/4c8003f54dff6a97bef5df4218bf945fe2dfcb35))
+
+- **core**: Assets self-describe; relation vocabularies carry declared slots
+  ([`47298ad`](https://github.com/digitl-cloud/interloper/commit/47298adf9b27495f1ddc1b0a1b8ff9d3ae127ab7))
+
+- **core**: Hook component kind
+  ([`543990c`](https://github.com/digitl-cloud/interloper/commit/543990c96cc3f61e998bec43d5e809b170ca285b))
+
+- **core**: Kind registry as the single authority on component kinds
+  ([`0ff2bf6`](https://github.com/digitl-cloud/interloper/commit/0ff2bf6b95b0cc3a1fb0c2254706afc8cc6f6860))
+
+- **core**: Self-describing component kinds
+  ([`f106b72`](https://github.com/digitl-cloud/interloper/commit/f106b72f354928db755731a0b77555a5c0b7b6d2))
+
+### Refactoring
+
+- Dedupe entity authorization and shared API response plumbing
+  ([`485d0b4`](https://github.com/digitl-cloud/interloper/commit/485d0b4f8206363a5b254394464c7467b40053d7))
+
+- **core**: Compile runnable specs in the DAG domain
+  ([`9f380d8`](https://github.com/digitl-cloud/interloper/commit/9f380d8f08a6fb0c895ebf155fae590df9b01c09))
+
+- **core**: Oauth builtins module becomes oauth.providers
+  ([`75c9a53`](https://github.com/digitl-cloud/interloper/commit/75c9a53e705bf3e4160d9f917a32d18af4e5812f))
+
+- **core**: The target verb moves from Hook to TriggerHook
+  ([`6d052b0`](https://github.com/digitl-cloud/interloper/commit/6d052b0cf4e7e36a3cd68ac44a443df1a8cdb0d7))
+
+- **db**: Store owns its engine, one session policy, honest contracts
+  ([`1473d3e`](https://github.com/digitl-cloud/interloper/commit/1473d3e3d376f03183287c6826cce11bbbdae7bb))
+
+- **db**: Typed AssetExecution read model over the view
+  ([`bb7a3a5`](https://github.com/digitl-cloud/interloper/commit/bb7a3a519553b83db27c74cb8a4223cc51309d33))
+
+- **scheduler**: Shared controller loop, one terminal path, store-owned sessions
+  ([`71c769b`](https://github.com/digitl-cloud/interloper/commit/71c769b23d4e83912bd6dc59624834af54925e59))
+
+
 ## v0.31.0 (2026-07-06)
 
 ### Bug Fixes
