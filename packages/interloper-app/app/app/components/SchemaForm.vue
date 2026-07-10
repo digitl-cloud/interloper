@@ -36,6 +36,7 @@ interface JsonSchemaProperty {
     'x-options'?: { label: string, value: string }[]
     'x-options-from'?: string
     'x-fetch'?: FetchMeta
+    'x-discriminator'?: boolean
     minimum?: number
     maximum?: number
     minLength?: number
@@ -365,6 +366,40 @@ const fields = computed(() => {
             fetchMeta: prop['x-fetch'] ?? null,
         }))
 })
+
+// ── Discriminator label ──────────────────────────────────────────
+
+/**
+ * Display label of the discriminator field's current value (the field marked
+ * `x-discriminator` — what distinguishes instances of the component). For
+ * fetch/select widgets this is the selected option's label, so parents can
+ * derive a human-friendly instance name; otherwise the raw value.
+ */
+const discriminatorLabel = defineModel<string | null>('discriminatorLabel', { default: null })
+
+const discriminatorKey = computed<string | null>(() => {
+    const properties = props.schema?.properties ?? {}
+    return Object.entries(properties).find(([, prop]) => prop['x-discriminator'])?.[0] ?? null
+})
+
+watch(
+    [data, fetchState, discriminatorKey],
+    () => {
+        const key = discriminatorKey.value
+        const value = key ? data.value[key] : undefined
+        if (!key || value === undefined || value === '') {
+            discriminatorLabel.value = null
+            return
+        }
+        const prop = props.schema?.properties?.[key]
+        const options = prop?.['x-fetch'] ? fetchState.value[key]?.options : resolveOptions(prop!)
+        const match = (options ?? []).find(
+            o => typeof o === 'object' && o !== null && String((o as { value: unknown }).value) === String(value),
+        )
+        discriminatorLabel.value = match ? (match as { label: string }).label : String(value)
+    },
+    { deep: true, immediate: true },
+)
 
 /** Fields visible in the current mode. */
 const visibleFields = computed(() => {
