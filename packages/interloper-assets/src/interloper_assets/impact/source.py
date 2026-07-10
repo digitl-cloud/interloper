@@ -163,11 +163,8 @@ class Impact(il.Source):
         label_key="Name",
         value_key="Id",
         description="Impact program (campaign) ID",
+        discriminator=True,
     )
-
-    def asset_table(self, asset: il.Asset) -> str:
-        """Suffix tables with the program_id so instances materialize side by side."""
-        return f"{asset.key}__{self.program_id}"
 
     @il.asset(
         schema=schemas.Actions,

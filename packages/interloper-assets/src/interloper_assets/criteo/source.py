@@ -62,11 +62,8 @@ class Criteo(il.Source):
         label_key="name",
         value_key="id",
         description="Criteo advertiser account",
+        discriminator=True,
     )
-
-    def asset_table(self, asset: il.Asset) -> str:
-        """Suffix tables with the advertiser_id so instances materialize side by side."""
-        return f"{asset.key}__{self.advertiser_id}"
 
     @il.asset(
         schema=AdsStats,

@@ -19,12 +19,9 @@ class GoogleAds(il.Source):
         label_key="name",
         value_key="customer_id",
         description="Google Ads customer ID (without hyphens)",
+        discriminator=True,
     )
     login_customer_id: str | None = il.InputField(
         default=None,
         description="Manager account customer ID (required if accessing through a manager account)",
     )
-
-    def asset_table(self, asset: il.Asset) -> str:
-        """Suffix tables with the customer_id so instances materialize side by side."""
-        return f"{asset.key}__{self.customer_id}"

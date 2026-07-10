@@ -50,16 +50,13 @@ def plain_asset() -> list:  # noqa: D103
     return []
 
 
-class AliasedSource(il.Source):
+class DiscriminatedSource(il.Source):
     """Source whose assets materialize under instance-suffixed table names."""
 
-    account_id: str = ""
+    account_id: str = il.InputField(default="", discriminator=True)
 
-    class AliasedRows(il.Asset):
+    class DiscriminatedRows(il.Asset):
         """Asset carrying the instance discriminator in its table name."""
-
-    def asset_table(self, asset: il.Asset) -> str:
-        return f"{asset.key}__{self.account_id}"
 
 
 def make_ctx(asset: il.Asset, partition_or_window=None, schema=None) -> IOContext:  # noqa: D103
@@ -107,14 +104,14 @@ class TestWrite:
         assert dest.calls == []
 
     def test_write_targets_instance_aliased_table(self):
-        source = AliasedSource(account_id="42")
+        source = DiscriminatedSource(account_id="42")
         (asset,) = source.assets
         dest = RecordingDB(id="db")
         rows = [{"a": 1}]
         dest.write(make_ctx(asset), rows)
         assert dest.calls == [
-            ("delete_all", ("aliased_rows__42", "aliased_source")),
-            ("insert", ("aliased_rows__42", "aliased_source", rows)),
+            ("delete_all", ("discriminated_rows__42", "discriminated_source")),
+            ("insert", ("discriminated_rows__42", "discriminated_source", rows)),
         ]
 
     def test_dataframe_converts_via_null_safe_fallback(self):

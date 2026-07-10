@@ -69,8 +69,8 @@ def _discovered_catalog() -> Catalog:
     return Catalog.discover()
 
 
-def resolve_source_cls(catalog: Catalog, key: str) -> type[il.Source] | None:
-    """Return the source class for *key*, or ``None`` if it does not resolve.
+def resolve_component_cls(catalog: Catalog, key: str) -> type[il.Component] | None:
+    """Return the component class for *key*, or ``None`` if it does not resolve.
 
     Value-based counterpart to the raise-on-miss lookup used by writes. The
     catalog only holds keys whose classes imported cleanly at build time, but
@@ -84,7 +84,13 @@ def resolve_source_cls(catalog: Catalog, key: str) -> type[il.Source] | None:
         obj = import_from_path(definition.path)
     except (ImportError, AttributeError):
         return None
-    return obj if isinstance(obj, type) and issubclass(obj, il.Source) else None
+    return obj if isinstance(obj, type) and issubclass(obj, il.Component) else None
+
+
+def resolve_source_cls(catalog: Catalog, key: str) -> type[il.Source] | None:
+    """Return the source class for *key*, or ``None`` if it does not resolve."""
+    obj = resolve_component_cls(catalog, key)
+    return obj if obj is not None and issubclass(obj, il.Source) else None
 
 
 def source_status(

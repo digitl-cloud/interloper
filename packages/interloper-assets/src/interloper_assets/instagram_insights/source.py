@@ -16,8 +16,5 @@ class InstagramInsights(il.Source):
         label_key="name",
         value_key="id",
         description="Instagram Business or Creator account ID",
+        discriminator=True,
     )
-
-    def asset_table(self, asset: il.Asset) -> str:
-        """Suffix tables with the account_id so instances materialize side by side."""
-        return f"{asset.key}__{self.account_id}"
