@@ -140,6 +140,42 @@ class TestAnchor:
             Broken.anchor()
 
 
+class TestVocabularyMerge:
+    """Subclass ``relation_types`` declarations extend, never replace."""
+
+    def test_subclass_extends_the_inherited_vocabulary(self):
+        assert set(FakeConcreteKind.relation_types) == {"link"}
+
+        class FakeExtendedKind(FakeKind):
+            relation_types: ClassVar[dict[str, RelationDefinition]] = {
+                "wire": RelationDefinition(kinds=["asset"], field="wires"),
+            }
+
+            wires: list[str] = Field(default_factory=list)
+
+        assert set(FakeExtendedKind.relation_types) == {"link", "wire"}
+        # Extend-only: the parent's vocabulary is untouched.
+        assert set(FakeKind.relation_types) == {"link"}
+
+    def test_redeclared_type_replaces_that_definition(self):
+        class FakeNarrowedKind(FakeKind):
+            relation_types: ClassVar[dict[str, RelationDefinition]] = {
+                "link": RelationDefinition(kinds=["job"], field="links", slotted=True),
+            }
+
+        assert FakeNarrowedKind.relation_types["link"].kinds == ["job"]
+        assert FakeKind.relation_types["link"].kinds == ["asset"]
+
+    def test_definition_validates_the_extended_vocabulary(self):
+        class FakeBrokenExtension(FakeKind):
+            relation_types: ClassVar[dict[str, RelationDefinition]] = {
+                "wire": RelationDefinition(kinds=["asset"], field="wiress"),
+            }
+
+        with pytest.raises(ValueError, match="no such field"):
+            FakeBrokenExtension.definition()
+
+
 class TestKinds:
     """The framework's kinds are registered on package import."""
 
@@ -216,6 +252,8 @@ class TestDefinition:
             relation_types: ClassVar[dict[str, RelationDefinition]] = {
                 "wires": RelationDefinition(kinds=["fake_component"], field="wires", slotted=True)
             }
+
+            wires: dict[str, Any] = Field(default_factory=dict)
 
         relations = FakeRelated.definition().relations
         assert relations["wires"].kinds == ["fake_component"]

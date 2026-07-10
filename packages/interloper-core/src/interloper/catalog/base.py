@@ -35,7 +35,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from interloper.asset.base import Asset
-from interloper.component import KINDS, Component, ComponentDefinition
+from interloper.component import KINDS, Component, ComponentDefinition, RelationDefinition
 from interloper.errors import ConfigError
 from interloper.settings import AppSettings
 from interloper.source.base import Source
@@ -140,6 +140,27 @@ class Catalog(BaseModel):
             The component definition, or *default* if not found.
         """
         return self.components.get(key, default)
+
+    def vocabulary(self, kind: str, key: str) -> dict[str, RelationDefinition]:
+        """The relation vocabulary governing a persisted component row.
+
+        The class definition is authoritative — a concrete class may extend
+        its anchor's vocabulary (``TriggerHook`` adds ``target``). The
+        kind's anchor is the fallback when the key does not resolve to a
+        matching definition (source-owned assets, drifted keys), keeping
+        validation fail-closed on the kind's shared minimum.
+
+        Args:
+            kind: The row's component kind.
+            key: The row's catalog key.
+
+        Returns:
+            Relation type → definition.
+        """
+        definition = self.get(key)
+        if definition is not None and definition.kind == kind:
+            return definition.relations
+        return KINDS[kind].relation_types
 
     def to_paths(self) -> list[str]:
         """Extract the import paths of all components in the catalog.

@@ -213,6 +213,18 @@ class TestRelationKindEnforcement:
 
         return Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
 
+    def test_class_vocabulary_governs_writes(self, demo_store: Store):
+        db_job = demo_store.create_component(_ORG, kind="job", key="cron_job", name="J")
+        # TriggerHook declares `target`; WebhookHook does not.
+        ok = demo_store.create_component(
+            _ORG, kind="hook", key="trigger_hook", name="T", relations={"target": [(db_job.id, "")]}
+        )
+        assert ok.id is not None
+        with pytest.raises(ConfigError, match="'webhook_hook'.*declare no 'target' relations"):
+            demo_store.create_component(
+                _ORG, kind="hook", key="webhook_hook", name="W", relations={"target": [(db_job.id, "")]}
+            )
+
     def test_relation_to_disallowed_kind_rejected(self, demo_store: Store):
         db_source = demo_store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
         db_job = demo_store.create_component(_ORG, kind="job", key="cron_job", name="Job")

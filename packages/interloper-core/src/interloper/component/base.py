@@ -135,12 +135,18 @@ class Component(Serializable):
 
     # -- Construction ----------------------------------------------------------
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-derive ``kind`` and infer resource references.
+        """Auto-derive ``kind``, merge the relation vocabulary, infer resources.
 
         ``kind`` is set only for direct children of ``Component``
         (``Source``, ``Asset``, ``Config``, ...).  Further subclasses
         inherit their parent's ``kind`` unless they explicitly declare one.
         (``key`` derivation comes from :class:`Serializable`.)
+
+        A subclass's ``relation_types`` declaration is **extend-only**: it
+        merges over the nearest ancestor's vocabulary (a redeclared type
+        replaces that type's definition; nothing is ever removed), so the
+        anchor stays the kind's shared minimum while concrete classes add
+        the verbs only they act on (``TriggerHook`` adds ``target``).
 
         Annotations typed as ``Resource`` subclasses are automatically
         converted to ``ResourceRef`` descriptors, registering them in
@@ -149,6 +155,12 @@ class Component(Serializable):
         super().__init_subclass__(**kwargs)
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
+        if own_relations := cls.__dict__.get("relation_types"):
+            for base in cls.__mro__[1:]:
+                inherited = getattr(base, "relation_types", None)
+                if isinstance(inherited, dict):
+                    cls.relation_types = {**inherited, **own_relations}
+                    break
         cls._infer_resource_refs()
 
     @classmethod
@@ -296,16 +308,11 @@ class Component(Serializable):
         The anchor is the base-most class in the MRO that declares the
         kind (``Connection`` for any connection subclass), so any component
         class resolves to the single per-kind authority. The anchor's
-        relation vocabulary is validated on the way out: a relation type
-        naming a field the anchor lacks would silently drop persisted
-        relations on reconstruction.
+        relation vocabulary is validated on the way out — errors propagate
+        from ``_check_relation_fields``.
 
         Returns:
             The anchoring class.
-
-        Raises:
-            ValueError: If a declared relation type's ``field`` does not
-                exist on the anchor.
         """
         anchor = cls
         for base in cls.__mro__:
@@ -316,13 +323,24 @@ class Component(Serializable):
                 and getattr(base, "kind", "") == cls.kind
             ):
                 anchor = base
-        for type_, definition in anchor.relation_types.items():
-            if definition.field not in anchor.model_fields:
-                raise ValueError(
-                    f"Kind '{anchor.kind}' declares relation type '{type_}' with "
-                    f"field '{definition.field}', but {anchor.__name__} has no such field"
-                )
+        anchor._check_relation_fields()
         return anchor
+
+    @classmethod
+    def _check_relation_fields(cls) -> None:
+        """Check the class's relation vocabulary against its fields.
+
+        Raises:
+            ValueError: If a declared relation type's ``field`` does not
+                exist on the class — a misdeclared field would silently
+                drop persisted relations on reconstruction.
+        """
+        for type_, definition in cls.relation_types.items():
+            if definition.field not in cls.model_fields:
+                raise ValueError(
+                    f"'{cls.__name__}' (kind '{cls.kind}') declares relation type '{type_}' "
+                    f"with field '{definition.field}', but has no such field"
+                )
 
     # -- Serialization & resolution --------------------------------------------
     def to_spec(self) -> Spec:
@@ -367,9 +385,15 @@ class Component(Serializable):
     def definition(cls) -> ComponentDefinition:
         """Produce a structured definition of this component class.
 
+        Validates the class's (possibly extended) relation vocabulary on the
+        way out — the per-class counterpart of the anchor check in
+        :meth:`anchor`, run for every declared class at catalog build.
+        Validation errors propagate from ``_check_relation_fields``.
+
         Returns:
             A ComponentDefinition with metadata derived from the class.
         """
+        cls._check_relation_fields()
         return ComponentDefinition(
             kind=cls.kind,
             key=cls.key,
@@ -387,9 +411,10 @@ class Component(Serializable):
     def relation_definitions(cls) -> dict[str, RelationDefinition]:
         """The class's relation vocabulary, enriched with its declared slots.
 
-        The anchor's ``relation_types`` gives the vocabulary; the concrete
-        class contributes the slots — resource slots come from
-        ``resource_types`` here, subclasses layer in what they declare
+        The class's merged ``relation_types`` gives the vocabulary (the
+        anchor's shared minimum plus whatever the concrete class extends it
+        with); the class also contributes the slots — resource slots come
+        from ``resource_types`` here, subclasses layer in what they declare
         (dependency parameters, allowed destination keys).
 
         Returns:

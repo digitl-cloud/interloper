@@ -12,9 +12,11 @@ genuinely owns are applied where the row's ``kind`` demands them:
   status cascades through the parent's.
 - **job**: hydration drift-checks every target before reconstruction.
 
-Relation writes are validated against the kind's class-declared relation
-vocabulary (``Component.relation_types``) and stamped with the denormalized
-``org_id``/``src_kind``/``dst_kind`` triple the composite foreign keys verify.
+Relation writes are validated against the row's relation vocabulary — the
+catalog class's definition is authoritative (a concrete class may extend its
+anchor's vocabulary), the kind's anchor is the drift fallback — and stamped
+with the denormalized ``org_id``/``src_kind``/``dst_kind`` triple the
+composite foreign keys verify.
 """
 
 from __future__ import annotations
@@ -221,7 +223,7 @@ class ComponentMixin(StoreBase):
             src = session.get(Component, component_id)
             if not src:
                 raise NotFoundError(f"Component {component_id} not found")
-            self._check_vocabulary(src.kind, type)
+            self._check_vocabulary(src, type)
             relation = _add_relation(session, src, self._resolve_dst(session, src, type, slot, dst_id), type, slot)
             session.commit()
             return relation
@@ -481,7 +483,7 @@ class ComponentMixin(StoreBase):
     ) -> None:
         """Replace the relation types present in *relations* (empty list clears)."""
         for type_, bindings in (relations or {}).items():
-            self._check_vocabulary(src.kind, type_)
+            self._check_vocabulary(src, type_)
             existing = session.exec(
                 select(ComponentRelation).where(ComponentRelation.src_id == src.id, ComponentRelation.type == type_)
             ).all()
@@ -491,23 +493,21 @@ class ComponentMixin(StoreBase):
             for dst_id, slot in bindings:
                 _add_relation(session, src, self._resolve_dst(session, src, type_, slot, dst_id), type_, slot)
 
-    @staticmethod
-    def _check_vocabulary(kind: str, type_: str) -> None:
-        """Reject relation types the kind's class vocabulary doesn't declare."""
-        vocabulary = il.KINDS[kind].relation_types
+    def _check_vocabulary(self, src: Component, type_: str) -> None:
+        """Reject relation types the row's class vocabulary doesn't declare."""
+        vocabulary = self._catalog.vocabulary(src.kind, src.key)
         if type_ not in vocabulary:
             raise ConfigError(
-                f"Components of kind '{kind}' declare no '{type_}' relations "
+                f"Components of kind '{src.kind}' ('{src.key}') declare no '{type_}' relations "
                 f"(allowed: {sorted(vocabulary) or 'none'})"
             )
 
-    @staticmethod
-    def _resolve_dst(session: Session, src: Component, type_: str, slot: str, dst_id: UUID) -> Component:
+    def _resolve_dst(self, session: Session, src: Component, type_: str, slot: str, dst_id: UUID) -> Component:
         """Resolve a relation destination, enforcing existence, same-org, and the vocabulary's shape."""
         dst = session.get(Component, dst_id)
         if dst is None or dst.org_id != src.org_id:
             raise NotFoundError(f"Component {dst_id} not found (relation '{type_}'{f'/{slot}' if slot else ''})")
-        definition = il.KINDS[src.kind].relation_types[type_]
+        definition = self._catalog.vocabulary(src.kind, src.key)[type_]
         if dst.kind not in definition.kinds:
             raise ConfigError(
                 f"Relation '{type_}' on kind '{src.kind}' may not point at a '{dst.kind}' "

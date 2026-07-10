@@ -56,21 +56,21 @@ class Hook(Component):
             def fire(self, context: HookContext) -> None:
                 post_message(self.channel, context.metadata)
 
-    Trigger-style hooks act on their ``targets`` through the operator-injected
-    ``context.trigger`` capability.
+    The base hook is only an observer. Hooks that *act on* other components
+    (``TriggerHook``) extend the vocabulary with the ``target`` verb and the
+    ``targets`` field — each class's definition advertises exactly what it
+    acts on.
     """
 
     icon: ClassVar[str] = "carbon:lightning"
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
         "watch": RelationDefinition(kinds=["source", "asset", "job"], field="watches"),
-        "target": RelationDefinition(kinds=["source", "asset", "job"], field="targets"),
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
     }
-    internal_fields: ClassVar[frozenset[str]] = frozenset({"watches", "targets"})
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"watches"})
     state_model: ClassVar[type[BaseModel] | None] = HookState
 
     watches: list[Source | Asset | Job] = Field(default_factory=list)
-    targets: list[Source | Asset | Job] = Field(default_factory=list)
     events: list[str] = Field(
         default_factory=lambda: ["run_failed"],
         description="Run outcomes this hook reacts to (run_completed, run_failed)",
