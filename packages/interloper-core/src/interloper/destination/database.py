@@ -37,7 +37,7 @@ class DatabaseDestination(PartitionedDestination):
     implement a small set of abstract hooks for the actual database operations.
 
     The target table name and schema are derived from the asset at call time
-    (``asset.id`` -> table, ``asset.dataset`` -> schema) and passed as
+    (``asset.table`` -> table, ``asset.dataset`` -> schema) and passed as
     parameters to every hook.  The destination instance itself holds **no** table
     identity and can be safely shared across multiple assets.
 
@@ -106,7 +106,7 @@ class DatabaseDestination(PartitionedDestination):
         """Return row counts grouped by the asset's partition column."""
         assert context.asset.partitioning is not None
         return self._count_by_partition(
-            type(context.asset).key,
+            context.asset.table,
             context.asset.dataset or None,
             context.asset.partitioning.column,
         )
@@ -152,7 +152,7 @@ class DatabaseDestination(PartitionedDestination):
         inserting; with ``APPEND``, rows are inserted without any prior
         deletion.
         """
-        table = type(context.asset).key
+        table = context.asset.table
         schema = context.asset.dataset or None
 
         if is_empty(data):
@@ -199,7 +199,7 @@ class DatabaseDestination(PartitionedDestination):
         Returns:
             The scope's rows, materialized into the read representation.
         """
-        table = type(context.asset).key
+        table = context.asset.table
         schema = context.asset.dataset or None
         if partition is None:
             return self._from_rows(self._select_all(table, schema))

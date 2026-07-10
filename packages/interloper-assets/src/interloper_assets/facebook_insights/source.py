@@ -20,3 +20,7 @@ class FacebookInsights(il.Source):
         value_key="id",
         description="Facebook Page to retrieve insights for",
     )
+
+    def asset_table(self, asset: il.Asset) -> str:
+        """Suffix tables with the page_id so instances materialize side by side."""
+        return f"{asset.key}__{self.page_id}"

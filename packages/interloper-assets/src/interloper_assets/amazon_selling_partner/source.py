@@ -41,3 +41,7 @@ class AmazonSellingPartner(il.Source):
         ],
         description="Amazon marketplace",
     )
+
+    def asset_table(self, asset: il.Asset) -> str:
+        """Suffix tables with the marketplace so instances materialize side by side."""
+        return f"{asset.key}__{self.marketplace}"

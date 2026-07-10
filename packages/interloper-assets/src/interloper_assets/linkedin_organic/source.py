@@ -22,3 +22,7 @@ class LinkedinOrganic(il.Source):
         value_key="id",
         description="LinkedIn Organization page ID",
     )
+
+    def asset_table(self, asset: il.Asset) -> str:
+        """Suffix tables with the organization_id so instances materialize side by side."""
+        return f"{asset.key}__{self.organization_id}"

@@ -106,7 +106,7 @@ class Destination(Component):
         value; each value is the number of rows in that partition.
 
         Args:
-            context: Destination context (uses ``asset.id``, ``asset.dataset``,
+            context: Destination context (uses ``asset.table``, ``asset.dataset``,
                 and ``asset.partitioning``).
 
         Returns:

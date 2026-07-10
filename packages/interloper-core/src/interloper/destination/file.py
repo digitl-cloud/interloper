@@ -15,7 +15,7 @@ from interloper.destination.decorator import destination
 class FileDestination(Destination):
     """Destination that reads and writes pickle files on the local filesystem.
 
-    Data is stored under ``{base_path}/{dataset}/{asset_key}/data.pkl``.
+    Data is stored under ``{base_path}/{dataset}/{table}/data.pkl``.
     """
 
     base_path: str = ""
@@ -26,8 +26,8 @@ class FileDestination(Destination):
         Returns:
             The resolved path to the data file.
         """
-        dataset = context.asset.dataset or type(context.asset).key
-        return Path(self.base_path) / dataset / type(context.asset).key / "data.pkl"
+        dataset = context.asset.dataset or context.asset.table
+        return Path(self.base_path) / dataset / context.asset.table / "data.pkl"
 
     def read(self, context: IOContext) -> Any:
         """Unpickle data from a file.
@@ -74,8 +74,8 @@ class FileDestination(Destination):
         """
         assert context.asset.partitioning is not None
         column = context.asset.partitioning.column
-        dataset = context.asset.dataset or type(context.asset).key
-        base_path = Path(self.base_path) / dataset / type(context.asset).key
+        dataset = context.asset.dataset or context.asset.table
+        base_path = Path(self.base_path) / dataset / context.asset.table
 
         counts: dict[str, int] = {}
         if not base_path.exists():

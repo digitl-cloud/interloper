@@ -287,6 +287,10 @@ class FacebookAds(il.Source):
         description="Facebook Ads account ID",
     )
 
+    def asset_table(self, asset: il.Asset) -> str:
+        """Suffix tables with the account_id so instances materialize side by side."""
+        return f"{asset.key}__{self.account_id}"
+
     @il.asset(
         schema=schemas.CampaignsStats,
         partitioning=il.TimePartitionConfig(column="date_start"),

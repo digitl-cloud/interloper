@@ -96,6 +96,7 @@ class ComponentMixin(StoreBase):
             session.add(db_component)
             session.flush()
             if kind == "source":
+                self._check_source_collision(session, db_component)
                 self._ensure_children(session, db_component, children)
             elif children is not None:
                 raise ConfigError(f"Components of kind '{kind}' have no children")
@@ -171,6 +172,7 @@ class ComponentMixin(StoreBase):
             if config is not None:
                 self._apply_config(db_component, config, encrypted)
             if db_component.kind == "source":
+                self._check_source_collision(session, db_component)
                 self._ensure_children(session, db_component, children)
             elif children is not None:
                 raise ConfigError(f"Components of kind '{db_component.kind}' have no children")
@@ -355,6 +357,53 @@ class ComponentMixin(StoreBase):
                 )
             raw = self._encrypt(raw)
         return raw, should_encrypt
+
+    def _check_source_collision(self, session: Session, db_source: Component) -> None:
+        """Reject a source instance whose materialization target collides with a sibling.
+
+        Two instances of the same source class write to the same physical
+        ``dataset.table`` set unless they differ in ``dataset`` or in what
+        the class's ``asset_table`` derives from their config — such an
+        instance would silently overwrite the sibling's data on every run.
+
+        Targets are computed by instantiating the class from each config, so
+        the check is exact under any ``asset_table`` override. An instance
+        whose config can't construct the class yet is skipped — it can't run
+        either, and the check re-fires on every update.
+
+        Raises:
+            ConfigError: If a same-key sibling in the org targets the same tables.
+        """
+        source_cls = resolve_source_cls(self._catalog, db_source.key)
+        if source_cls is None:
+            return  # drifted key: nothing to derive a target from
+
+        def targets(config: dict[str, Any] | None) -> set[tuple[str, str]] | None:
+            try:
+                source = source_cls(**(config or {}))
+            except Exception:  # noqa: BLE001 — incomplete/stale config: nothing to compare
+                return None
+            return {(asset.dataset, asset.table) for asset in source.assets}
+
+        mine = targets(db_source.config)
+        if not mine:
+            return
+        siblings = session.exec(
+            select(Component).where(
+                Component.org_id == db_source.org_id,
+                Component.kind == "source",
+                Component.key == db_source.key,
+                Component.id != db_source.id,
+            )
+        ).all()
+        for sibling in siblings:
+            overlap = mine & (targets(sibling.config) or set())
+            if overlap:
+                dataset, table = sorted(overlap)[0]
+                raise ConfigError(
+                    f"Source '{db_source.key}' already has an instance materializing to '{dataset}.{table}'. "
+                    f"Configure a distinct discriminator (or dataset) so the two don't overwrite each other's data."
+                )
 
     def _ensure_children(self, session: Session, db_source: Component, child_keys: list[str] | None) -> None:
         """Sync a source's child asset rows to match the desired set.

@@ -17,8 +17,8 @@ from interloper.representation import Representation
 class CSVDestination(PartitionedDestination):
     """Destination that reads and writes CSV files on the local filesystem.
 
-    Data is stored under ``{base_path}/{dataset}/{asset_key}/data.csv``
-    (or ``{base_path}/{asset_key}/data.csv`` when no dataset is set).
+    Data is stored under ``{base_path}/{dataset}/{table}/data.csv``
+    (or ``{base_path}/{table}/data.csv`` when no dataset is set).
     Partitioned assets add a ``{column}={id}`` subdirectory; the partition
     dispatch (including window splitting) comes from
     :class:`PartitionedDestination`.
@@ -35,7 +35,7 @@ class CSVDestination(PartitionedDestination):
 
     def _asset_path(self, context: IOContext) -> Path:
         """Return the base directory for an asset."""
-        return Path(self.base_path) / (context.asset.dataset or "") / type(context.asset).key
+        return Path(self.base_path) / (context.asset.dataset or "") / context.asset.table
 
     def _scope_path(self, context: IOContext, partition: Partition | None) -> Path:
         """Return the data file path for a scope.
