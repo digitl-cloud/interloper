@@ -15,6 +15,7 @@ from interloper_db.models import (
 )
 from interloper_db.provision import create_all, downgrade, ensure_database, upgrade
 from interloper_db.store import Store
+from interloper_db.store.components import stamp_component_state
 
 __all__ = [
     "AssetExecution",
@@ -36,4 +37,5 @@ __all__ = [
     "upgrade",
     "get_engine",
     "init_engine",
+    "stamp_component_state",
 ]

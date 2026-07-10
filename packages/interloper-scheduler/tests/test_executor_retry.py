@@ -19,6 +19,8 @@ from interloper_scheduler.executor import RunExecutor
 class _FakeStore:
     """Returns canned asset_executions per run_id."""
 
+    engine = None  # the fake Session ignores it
+
     def __init__(self, executions: dict[UUID, list[dict[str, str]]]) -> None:
         self._executions = executions
 
@@ -43,7 +45,6 @@ class _FakeSession:
 
 
 def _patch_session(monkeypatch: pytest.MonkeyPatch, runs: dict[UUID, Any]) -> None:
-    monkeypatch.setattr(executor_module, "get_engine", lambda: None)
     monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(runs))
 
 

@@ -10,14 +10,11 @@ from uuid import UUID
 
 import interloper as il
 from interloper.runner import ExecutionStatus, Runner
-from interloper_db import Store, get_engine
+from interloper_db import Store
 from interloper_db.models import ComponentRelation, Run
 from sqlmodel import Session, col, select
 
 logger = logging.getLogger(__name__)
-
-
-# TODO: cache source and asset hydrations
 
 
 class RunExecutor:
@@ -32,11 +29,7 @@ class RunExecutor:
         store: Store | None = None,
         runner: Runner | None = None,
     ) -> None:
-        if store is None:
-            from interloper.catalog import Catalog
-
-            store = Store.from_settings(catalog=Catalog.from_settings())
-        self._store = store
+        self._store = store or Store.from_settings()
         self._runner = runner or il.AsyncRunner()
 
     def execute(self, run_id: UUID) -> bool:
@@ -54,7 +47,7 @@ class RunExecutor:
         try:
             logger.info("Starting run %s", run_id)
 
-            with Session(get_engine()) as session:
+            with Session(self._store.engine) as session:
                 db_run = session.get(Run, run_id)
                 if not db_run or not db_run.component_id:
                     logger.info("Run %s not found, skipping", run_id)
@@ -106,9 +99,7 @@ class RunExecutor:
                 logger.exception("Failed to mark run %s as failed", run_id)
             return False
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+    # -- Helpers ---------------------------------------------------------------
 
     @staticmethod
     def _mark_running(session: Session, db_run: Run) -> None:
@@ -129,7 +120,7 @@ class RunExecutor:
         """
         statuses: dict[str, str] = {}
         parent_id: UUID | None = retry_of
-        with Session(get_engine()) as session:
+        with Session(self._store.engine) as session:
             while parent_id:
                 for row in self._store.list_asset_executions(parent_id):
                     # Closest ancestor wins: only record a key the first time we see it.
@@ -151,7 +142,7 @@ class RunExecutor:
         """
         visited = {UUID(asset.id) for asset in assets}
         frontier = list(visited)
-        with Session(get_engine()) as session:
+        with Session(self._store.engine) as session:
             while frontier:
                 dependencies = session.exec(
                     select(ComponentRelation).where(

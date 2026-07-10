@@ -131,6 +131,7 @@ def run_services(
 
             queue_controller = QueueController(
                 launcher=launcher,
+                store=store,
                 poll_interval=settings.worker.poll_interval,
             )
 

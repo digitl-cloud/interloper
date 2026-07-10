@@ -521,6 +521,25 @@ def load_component(session: Session, component_id: UUID, *, kind: str | None = N
     return db_component
 
 
+def stamp_component_state(db_component: Component, **fields: Any) -> None:
+    """Merge machine-owned state fields onto a component row (spec untouched).
+
+    Datetimes are written in the canonical timezone-aware ISO form (so
+    lexicographic comparison in SQL stays chronological); the merged payload
+    is validated against the kind's ``state_model`` — shape only, stored
+    strings are never rewritten. The caller owns the session and commit.
+    """
+    import datetime as dt
+
+    state = dict(db_component.state or {})
+    for key, value in fields.items():
+        state[key] = value.isoformat() if isinstance(value, dt.datetime) else value
+    model = il.KINDS[db_component.kind].state_model
+    if model is not None:
+        model.model_validate(state)
+    db_component.state = state
+
+
 def _add_relation(session: Session, src: Component, dst: Component, type_: str, slot: str = "") -> ComponentRelation:
     """Add one relation, stamping the denormalized org/kind triple from the rows.
 

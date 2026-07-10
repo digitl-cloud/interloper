@@ -8,7 +8,8 @@ The reaper is a single background thread that periodically checks every
 - ``SUCCEEDED`` → weird (container said it succeeded but didn't update
   the DB) — mark as failed with a descriptive error
 - ``FAILED`` → mark as failed immediately with the launcher's error
-- ``NOT_FOUND`` → container is gone without a trace — mark as failed
+- ``NOT_FOUND`` → the launcher can't see it (gone, or not visible yet)
+  — leave it to the ``timeout`` fallback below
 
 A ``timeout`` fallback catches runs the launcher can't see (e.g. when
 the launcher itself doesn't implement ``describe_run``, or the
@@ -24,14 +25,14 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-from threading import Event
 from typing import TYPE_CHECKING
 
 import interloper as il
-from interloper_db import Store, get_engine
+from interloper_db import Store
 from interloper_db.models import Run
 from sqlmodel import Session, select
 
+from interloper_scheduler.controller import Controller
 from interloper_scheduler.launcher import RunStatus
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Reaper:
+class Reaper(Controller):
     """Periodically reconciles dispatched runs with the launcher's truth.
 
     Designed to run in a background thread alongside the
@@ -70,34 +71,16 @@ class Reaper:
                 is reaped regardless of what the launcher says.
             poll_interval: Seconds between reaper scans.
         """
+        super().__init__(poll_interval=poll_interval)
         self._store = store
         self._launcher = launcher
         self._timeout = timeout
-        self._poll_interval = poll_interval
-        self._stop_event = Event()
 
-    def start(self) -> None:
-        """Run the reaper loop until stopped."""
-        logger.info(
-            "Starting reaper (poll=%ds, timeout=%ds)",
-            self._poll_interval,
-            self._timeout,
-        )
-
-        while not self._stop_event.is_set():
-            try:
-                reaped = self._reap()
-                if reaped:
-                    logger.info("Reaped %d dispatched run(s)", reaped)
-            except Exception:
-                logger.exception("Reaper error")
-
-            if self._stop_event.wait(self._poll_interval):
-                break
-
-    def stop(self) -> None:
-        """Signal the loop to stop."""
-        self._stop_event.set()
+    def _tick(self) -> None:
+        """Scan once and log when anything was reaped."""
+        reaped = self._reap()
+        if reaped:
+            logger.info("Reaped %d dispatched run(s)", reaped)
 
     def _reap(self) -> int:
         """Scan dispatched runs and reap any that have terminated.
@@ -108,7 +91,7 @@ class Reaper:
         now = dt.datetime.now(dt.timezone.utc)
         timeout_cutoff = now - dt.timedelta(seconds=self._timeout)
 
-        with Session(get_engine()) as session:
+        with Session(self._store.engine) as session:
             dispatched_runs = list(session.exec(select(Run).where(Run.status == "dispatched")).all())
 
         reaped = 0
@@ -151,8 +134,12 @@ class Reaper:
                 pass
 
         # 2. Timeout fallback — for launchers without introspection,
-        # NOT_FOUND runs, or anything else.
-        if run.created_at and run.created_at < timeout_cutoff:
+        # NOT_FOUND runs, or anything else. Naive timestamps (SQLite test
+        # databases drop the offset) are treated as UTC.
+        created_at = run.created_at
+        if created_at is not None and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=dt.timezone.utc)
+        if created_at and created_at < timeout_cutoff:
             self._fail_run(run, f"Run timed out after {self._timeout}s (still 'dispatched')")
             return True
 

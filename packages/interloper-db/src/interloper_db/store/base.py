@@ -30,6 +30,15 @@ class StoreBase:
     _encrypt: Any
     _decrypt: Any
 
+    @property
+    def engine(self) -> Engine:
+        """The engine this store operates on.
+
+        Exposed so co-located machinery (the scheduler's claim/sweep SQL)
+        runs against the same engine as the store, not an ambient global.
+        """
+        return self._engine
+
     def _session(self) -> Session:
         """Open a session on the store's engine.
 

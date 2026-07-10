@@ -16,24 +16,25 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import os
 from datetime import datetime, timezone
-from threading import Event
 from typing import cast
 
 from croniter import croniter
-from interloper_db import Store, get_engine
+from interloper.errors import ConfigError
+from interloper_db import Store, stamp_component_state
 from interloper_db.models import Backfill, Component, Run
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
+from interloper_scheduler.controller import Controller
+
 logger = logging.getLogger(__name__)
 
 
-class CronController:
+class CronController(Controller):
     """Evaluates cron jobs and creates queued runs.
 
-    Runs in a loop:
+    Each tick:
     1. ``SELECT FOR UPDATE SKIP LOCKED`` (lock due job rows)
     2. update ``state.next_run_at`` (calculate next)
     3. ``INSERT run`` with ``status='queued'`` (create run)
@@ -43,60 +44,34 @@ class CronController:
     def __init__(
         self,
         store: Store | None = None,
-        reconcile_interval: int | None = None,
+        reconcile_interval: int = 10,
         max_execution_delay: int | None = None,
         batch_size: int = 50,
     ) -> None:
         """Initialize the cron controller.
 
         Args:
-            store: The Store for creating backfills. Creates a default if not provided.
+            store: The Store for creating backfills. Defaults to the
+                settings-configured one.
             reconcile_interval: Seconds between cron evaluation cycles.
             max_execution_delay: Max seconds a scheduled job can be late.
+                Defaults to the reconcile interval.
             batch_size: Number of jobs to process per cycle.
+
+        Raises:
+            ConfigError: If the max execution delay undercuts the
+                reconcile interval.
         """
-        if store is None:
-            from interloper.catalog import Catalog
-
-            store = Store.from_settings(catalog=Catalog.from_settings())
-        self._store = store
+        super().__init__(poll_interval=reconcile_interval)
+        self._store = store or Store.from_settings()
         self._batch_size = batch_size
-        self._reconcile_interval = reconcile_interval or int(os.getenv("JOB_RECONCILE_INTERVAL", "10"))
-        self._max_execution_delay = max_execution_delay or int(
-            os.getenv("MAX_JOB_EXECUTION_DELAY", str(self._reconcile_interval))
-        )
-        if self._max_execution_delay < self._reconcile_interval:
-            from interloper.errors import ConfigError
+        self._max_execution_delay = max_execution_delay if max_execution_delay is not None else reconcile_interval
+        if self._max_execution_delay < reconcile_interval:
+            raise ConfigError("cron.max_execution_delay must be >= cron.reconcile_interval")
 
-            raise ConfigError("MAX_JOB_EXECUTION_DELAY must be >= JOB_RECONCILE_INTERVAL")
-        self._stop_event = Event()
-
-    def start(self) -> None:
-        """Run the cron evaluation loop until stopped."""
-        logger.info("Starting cron controller...")
-
-        try:
-            while not self._stop_event.is_set():
-                logger.info("Evaluating cron jobs...")
-                try:
-                    self._process_jobs()
-                except Exception as e:
-                    logger.error("Failed to process jobs: %s", e)
-
-                if self._stop_event.wait(self._reconcile_interval):
-                    break
-        except KeyboardInterrupt:
-            logger.info("Shutting down cron controller...")
-
-    def stop(self) -> None:
-        """Signal the loop to stop."""
-        self._stop_event.set()
-
-    def _process_jobs(self) -> None:
+    def _tick(self) -> None:
         """Process a batch of due jobs in a single transaction."""
-        session = Session(get_engine())
-
-        try:
+        with Session(self._store.engine) as session:
             now = datetime.now(timezone.utc)
 
             next_run_at = Component.state["next_run_at"].as_string()  # ty: ignore[not-subscriptable]
@@ -145,7 +120,11 @@ class CronController:
 
                 self._set_state(session, job, next_run_at=next_run)
 
-                # Create runs
+                # Create runs. The backfill is built inline rather than via
+                # Store.create_backfill: it must commit atomically with the
+                # job's state advance (else a crash between the two would
+                # re-create it next tick), and cron top-ups queue every
+                # partition immediately instead of concurrency-gating.
                 if config.get("partitioned") and config.get("backfill_days"):
                     end_date = now.date() - dt.timedelta(days=1)
                     start_date = end_date - dt.timedelta(days=config["backfill_days"] - 1)
@@ -186,13 +165,6 @@ class CronController:
             session.commit()
             logger.info("Processed %d job(s)", len(jobs))
 
-        except Exception as e:
-            logger.exception("Error processing jobs: %s", e)
-            session.rollback()
-            raise
-        finally:
-            session.close()
-
     @staticmethod
     def _state_datetime(job: Component, key: str) -> datetime | None:
         """Parse a UTC ISO-8601 timestamp from a job's state."""
@@ -204,18 +176,8 @@ class CronController:
 
     @staticmethod
     def _set_state(session: Session, job: Component, **timestamps: datetime) -> None:
-        """Merge timestamps into the job's machine-owned state (spec untouched).
-
-        The merged payload is validated against the kind's ``state_model``
-        (shape only — the stored ISO strings are never rewritten).
-        """
-        import interloper as il
-
-        state = {**(job.state or {}), **{key: value.isoformat() for key, value in timestamps.items()}}
-        model = il.KINDS[job.kind].state_model
-        if model is not None:
-            model.model_validate(state)
-        job.state = state
+        """Merge timestamps into the job's machine-owned state (spec untouched)."""
+        stamp_component_state(job, **timestamps)
         session.add(job)
         session.flush()
 

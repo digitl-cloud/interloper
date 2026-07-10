@@ -86,7 +86,7 @@ def _terminal_run(store: Store, component_id: UUID, *, status: str = "success") 
 def _sweep(store: Store) -> HookController:
     controller = HookController(store=store, poll_interval=999)
     controller._watermark = _PAST
-    controller._process()
+    controller._tick()
     return controller
 
 
@@ -126,7 +126,7 @@ class TestHookEvaluation:
 
         controller = _sweep(store)
         controller._watermark = _PAST
-        controller._process()  # second sweep over the same window
+        controller._tick()  # second sweep over the same window
 
         with Session(engine_module.get_engine()) as session:
             assert len(session.exec(select(Run).where(Run.status == "queued")).all()) == 1

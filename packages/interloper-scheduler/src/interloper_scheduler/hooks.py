@@ -18,14 +18,15 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import uuid
-from threading import Event
 from uuid import UUID
 
 import interloper as il
-from interloper_db import Store, get_engine
+from interloper_db import Store, stamp_component_state
 from interloper_db.models import Component, ComponentRelation, Run
 from interloper_db.models import Event as EventRow
 from sqlmodel import Session, col, select
+
+from interloper_scheduler.controller import Controller
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,9 @@ _CLAIM_NAMESPACE = uuid.UUID("f6c1a9de-7b6e-4dbb-9f43-1a2b3c4d5e6f")
 #: just before a cycle's cutoff is still seen by the next cycle.
 _OVERLAP = dt.timedelta(seconds=30)
 
+#: Terminal run status → the hook event type it produces.
 _TERMINAL_EVENT_TYPES = {"success": "run_completed", "failed": "run_failed"}
+_TERMINAL_STATUSES = frozenset(_TERMINAL_EVENT_TYPES)
 
 
 def _claim_id(hook_id: UUID, run_id: UUID) -> str:
@@ -48,10 +51,10 @@ def _claim_id(hook_id: UUID, run_id: UUID) -> str:
     return str(uuid.uuid5(_CLAIM_NAMESPACE, f"hook:{hook_id}:{run_id}"))
 
 
-class HookController:
+class HookController(Controller):
     """Evaluates hooks against terminal runs.
 
-    Runs in a loop:
+    Each tick:
     1. sweep runs that reached a terminal status since the last watermark
        (minus an overlap window)
     2. match each run against enabled hooks watching its target component
@@ -65,52 +68,28 @@ class HookController:
 
         Args:
             store: The Store for hydration, run creation, and events.
-                Creates a default if not provided.
+                Defaults to the settings-configured one.
             poll_interval: Seconds between sweep cycles.
         """
-        if store is None:
-            from interloper.catalog import Catalog
+        super().__init__(poll_interval=poll_interval)
+        self._store = store or Store.from_settings()
+        # The watermark starts at the first tick, so runs that ended while
+        # the scheduler was down are not replayed.
+        self._watermark: dt.datetime | None = None
 
-            store = Store.from_settings(catalog=Catalog.from_settings())
-        self._store = store
-        self._poll_interval = poll_interval
-        self._stop_event = Event()
-        self._watermark = dt.datetime.now(dt.timezone.utc)
+    # -- Internals -------------------------------------------------------------
 
-    def start(self) -> None:
-        """Run the evaluation loop until stopped."""
-        logger.info("Starting hook controller...")
-        self._watermark = dt.datetime.now(dt.timezone.utc)
-
-        try:
-            while not self._stop_event.is_set():
-                try:
-                    self._process()
-                except Exception as e:
-                    logger.exception("Failed to evaluate hooks: %s", e)
-
-                if self._stop_event.wait(self._poll_interval):
-                    break
-        except KeyboardInterrupt:
-            logger.info("Shutting down hook controller...")
-
-    def stop(self) -> None:
-        """Signal the loop to stop."""
-        self._stop_event.set()
-
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
-
-    def _process(self) -> None:
+    def _tick(self) -> None:
         """Sweep one watermark window of terminal runs."""
         now = dt.datetime.now(dt.timezone.utc)
+        if self._watermark is None:
+            self._watermark = now
         since = self._watermark - _OVERLAP
 
-        with Session(get_engine()) as session:
+        with Session(self._store.engine) as session:
             runs = session.exec(
                 select(Run)
-                .where(col(Run.status).in_(tuple(_TERMINAL_EVENT_TYPES)))
+                .where(col(Run.status).in_(_TERMINAL_STATUSES))
                 .where(col(Run.completed_at) > since)
                 .order_by(col(Run.completed_at))
             ).all()
@@ -122,7 +101,7 @@ class HookController:
 
     def _evaluate(self, session: Session, run: Run) -> None:
         """Fire every unclaimed, matching hook for one terminal run."""
-        if run.component_id is None or run.status not in _TERMINAL_EVENT_TYPES:
+        if run.component_id is None or run.status not in _TERMINAL_STATUSES:
             return
         event_type = _TERMINAL_EVENT_TYPES[run.status]
 
@@ -202,15 +181,11 @@ class HookController:
             run_id=run.id,
         )
 
-        state = {
-            **(hook_row.state or {}),
-            "last_fired_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "last_run_id": str(run.id),
-        }
-        model = il.KINDS[hook_row.kind].state_model
-        if model is not None:
-            model.model_validate(state)
-        hook_row.state = state
+        stamp_component_state(
+            hook_row,
+            last_fired_at=dt.datetime.now(dt.timezone.utc),
+            last_run_id=str(run.id),
+        )
         session.add(hook_row)
         session.commit()
 

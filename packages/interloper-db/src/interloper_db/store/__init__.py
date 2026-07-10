@@ -79,7 +79,7 @@ class Store(AuthMixin, ComponentMixin, RunMixin, DriftMixin):
         self._hydrator = Hydrator(catalog, decrypt=decrypt)
 
     @classmethod
-    def from_settings(cls, catalog: Catalog) -> Store:
+    def from_settings(cls, catalog: Catalog | None = None) -> Store:
         """Build a Store with connection and encryption wired from runtime settings.
 
         The engine is the process engine, initialized from
@@ -95,13 +95,15 @@ class Store(AuthMixin, ComponentMixin, RunMixin, DriftMixin):
         connection and crypto wiring stay consistent across entry points.
 
         Args:
-            catalog: Catalog instance. Required for hydration.
+            catalog: Catalog for hydration. Defaults to the
+                settings-configured catalog.
 
         Returns:
             A configured Store.
         """
         from interloper.settings import AppSettings
 
+        catalog = catalog if catalog is not None else Catalog.from_settings()
         engine = engine_from_settings()
         key = AppSettings.get().secrets.encryption_key
         if not key:
