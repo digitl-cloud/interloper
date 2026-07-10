@@ -19,9 +19,7 @@ if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
 
 
-# ------------------------------------------------------------------
-# Specs
-# ------------------------------------------------------------------
+# -- Specs ---------------------------------------------------------------------
 class DAGSpec(BaseModel):
     """Serializable representation of a DAG.
 
@@ -56,9 +54,7 @@ class DAGSpec(BaseModel):
         return DAG(*reconstructed)  # ty: ignore[invalid-argument-type]
 
 
-# ------------------------------------------------------------------
-# DAG
-# ------------------------------------------------------------------
+# -- DAG -----------------------------------------------------------------------
 class DAG:
     """Directed acyclic graph of assets.
 
@@ -138,9 +134,7 @@ class DAG:
                 self.predecessors[asset.id].append(upstream_id)
                 self.successors[upstream_id].append(asset.id)
 
-    # ------------------------------------------------------------------
-    # Validation
-    # ------------------------------------------------------------------
+    # -- Validation ------------------------------------------------------------
 
     def _validate(self) -> None:
         """Validate the DAG structure."""
@@ -230,9 +224,7 @@ class DAG:
                         f"cannot be a dependency of non-partitioned asset '{asset.key}'"
                     )
 
-    # ------------------------------------------------------------------
-    # Traversal
-    # ------------------------------------------------------------------
+    # -- Traversal -------------------------------------------------------------
 
     def topological_generations(self) -> list[list[Asset]]:
         """Return assets grouped by parallelizable generations.
@@ -298,9 +290,7 @@ class DAG:
             raise AssetNotFoundError(f"Asset '{asset_id}' not found in DAG")
         return self.successors.get(asset_id, [])
 
-    # ------------------------------------------------------------------
-    # Materialization
-    # ------------------------------------------------------------------
+    # -- Materialization -------------------------------------------------------
 
     def materialize(
         self,
@@ -336,9 +326,7 @@ class DAG:
 
         return await AsyncRunner().run(dag=self, partition_or_window=partition_or_window)
 
-    # ------------------------------------------------------------------
-    # Serialization
-    # ------------------------------------------------------------------
+    # -- Serialization ---------------------------------------------------------
 
     def to_spec(self) -> DAGSpec:
         """Serialize this DAG to a reconstructible spec.
@@ -433,9 +421,7 @@ class DAG:
         items = component.targets if isinstance(component, Job) else [component]
         return cls(*items)  # ty: ignore[invalid-argument-type]
 
-    # ------------------------------------------------------------------
-    # Subgraph
-    # ------------------------------------------------------------------
+    # -- Subgraph --------------------------------------------------------------
 
     def mini_dag(self, asset_id: str) -> DAG:
         """Create a mini-DAG with the target asset and its immediate parents.

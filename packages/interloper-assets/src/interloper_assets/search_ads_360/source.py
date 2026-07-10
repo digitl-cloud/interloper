@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.search_ads_360.connection import SearchAds360Connection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

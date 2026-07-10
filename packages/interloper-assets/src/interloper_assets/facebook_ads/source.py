@@ -54,9 +54,7 @@ _RATE_LIMIT_CODES = (17, 80004)
 INSIGHTS_TIMEOUT = dt.timedelta(hours=1)
 
 
-# ------------------------------------------------------------------
-# HELPERS — flattening
-# ------------------------------------------------------------------
+# -- HELPERS — flattening ------------------------------------------------------
 def _sanitize(name: str) -> str:
     """Lower-case a column name and collapse non-alphanumeric runs to ``_``."""
     return re.sub(r"[^0-9a-zA-Z]+", "_", str(name)).strip("_").lower()
@@ -114,9 +112,7 @@ class FacebookActionsNormalizer(DataFrameNormalizer):
         return super().normalize(df)
 
 
-# ------------------------------------------------------------------
-# HELPERS — SDK calls
-# ------------------------------------------------------------------
+# -- HELPERS — SDK calls -------------------------------------------------------
 def _account(connection: FacebookAdsConnection, account_id: str) -> Any:
     from facebook_business.adobjects.adaccount import AdAccount
 
@@ -274,9 +270,7 @@ def _time_range(date: dt.date) -> dict[str, str]:
     return {"since": date.isoformat(), "until": date.isoformat()}
 
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 @il.source(
     resources={"connection": FacebookAdsConnection},
     tags=["Advertising"],

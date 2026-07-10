@@ -28,9 +28,7 @@ _RECORD = dict[str, Any]
 _REPORT_METRICS = constants.CONVERSION_METRICS + constants.CORE_METRICS + constants.ADDITIONAL_METRICS
 
 
-# ------------------------------------------------------------------
-# NORMALIZERS
-# ------------------------------------------------------------------
+# -- NORMALIZERS ---------------------------------------------------------------
 class SnapchatStatsNormalizer(DataFrameNormalizer):
     """Reshape Snapchat stats rows into a flat frame.
 
@@ -61,9 +59,7 @@ class SnapchatStatsNormalizer(DataFrameNormalizer):
 _ENTITY_NORMALIZER = DataFrameNormalizer(flatten_max_level=3, drop_na_columns=True)
 
 
-# ------------------------------------------------------------------
-# HELPERS — HTTP / pagination
-# ------------------------------------------------------------------
+# -- HELPERS — HTTP / pagination -----------------------------------------------
 async def _get_pages(connection: SnapchatAdsConnection, path: str, params: dict | None = None) -> list[_RECORD]:
     """GET a Snapchat endpoint and follow ``paging.next_link``, returning each page's JSON.
 
@@ -114,9 +110,7 @@ def _with_date(rows: list[_RECORD], date: dt.date) -> list[_RECORD]:
     return [{**row, "date": date} for row in rows]
 
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 @il.source(
     resources={"connection": SnapchatAdsConnection},
     tags=["Advertising"],

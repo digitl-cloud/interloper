@@ -25,9 +25,7 @@ if TYPE_CHECKING:
     from interloper.resource.base import Resource
 
 
-# ------------------------------------------------------------------
-# Registry
-# ------------------------------------------------------------------
+# -- Registry ------------------------------------------------------------------
 _KINDS_ENTRY_POINT = "interloper.kinds"
 
 
@@ -49,9 +47,7 @@ def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
 KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)
 
 
-# ------------------------------------------------------------------
-# Relations
-# ------------------------------------------------------------------
+# -- Relations -----------------------------------------------------------------
 class RelationSlot(BaseModel):
     """A declared slot on a slotted relation type.
 
@@ -89,9 +85,7 @@ class RelationDefinition(BaseModel):
     slots: dict[str, RelationSlot] = Field(default_factory=dict)
 
 
-# ------------------------------------------------------------------
-# Definitions
-# ------------------------------------------------------------------
+# -- Definitions ---------------------------------------------------------------
 class ComponentDefinition(BaseModel):
     """Read-only view of a Component class's metadata.
 
@@ -114,9 +108,7 @@ class ComponentDefinition(BaseModel):
     relations: dict[str, RelationDefinition] = Field(default_factory=dict)
 
 
-# ------------------------------------------------------------------
-# Component
-# ------------------------------------------------------------------
+# -- Component -----------------------------------------------------------------
 class Component(Serializable):
     """Fundamental building block: identifiable, composable, serializable.
 
@@ -141,9 +133,7 @@ class Component(Serializable):
     id: str = Field(default="")
     resources: dict[str, Any] = Field(default_factory=dict)
 
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
+    # -- Construction ----------------------------------------------------------
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-derive ``kind`` and infer resource references.
 
@@ -260,9 +250,7 @@ class Component(Serializable):
         if not self.id:
             self.id = str(uuid.uuid4())
 
-    # ------------------------------------------------------------------
-    # Resources
-    # ------------------------------------------------------------------
+    # -- Resources -------------------------------------------------------------
     def trickle_resources(self, target: Component) -> None:
         """Fill a child component's empty resource slots from this component's resources.
 
@@ -292,9 +280,7 @@ class Component(Serializable):
                         target.resources[name] = sr
                         break
 
-    # ------------------------------------------------------------------
-    # Identity
-    # ------------------------------------------------------------------
+    # -- Identity --------------------------------------------------------------
     def __str__(self) -> str:
         """Human-readable representation: ``Name (key: k, id: i)``.
 
@@ -338,9 +324,7 @@ class Component(Serializable):
                 )
         return anchor
 
-    # ------------------------------------------------------------------
-    # Serialization & resolution
-    # ------------------------------------------------------------------
+    # -- Serialization & resolution --------------------------------------------
     def to_spec(self) -> Spec:
         """Serialize this instance to a reconstructible spec, carrying its id.
 
@@ -378,9 +362,7 @@ class Component(Serializable):
             raise CatalogKeyError(f"Unknown catalog key '{key}'")
         return cls._resolve_import(definition.path, ref=key)
 
-    # ------------------------------------------------------------------
-    # Definition
-    # ------------------------------------------------------------------
+    # -- Definition ------------------------------------------------------------
     @classmethod
     def definition(cls) -> ComponentDefinition:
         """Produce a structured definition of this component class.

@@ -52,9 +52,7 @@ class DatabaseDestination(PartitionedDestination):
     write_disposition: ClassVar[WriteDisposition] = WriteDisposition.REPLACE
     read_representation: ClassVar[str] = "rows"
 
-    # ------------------------------------------------------------------
-    # Transaction hook
-    # ------------------------------------------------------------------
+    # -- Transaction hook ------------------------------------------------------
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
@@ -65,9 +63,7 @@ class DatabaseDestination(PartitionedDestination):
         """
         yield
 
-    # ------------------------------------------------------------------
-    # Abstract database operations
-    # ------------------------------------------------------------------
+    # -- Abstract database operations ------------------------------------------
 
     @abstractmethod
     def _insert(self, table: str, schema: str | None, rows: list[dict[str, Any]]) -> None:
@@ -95,9 +91,7 @@ class DatabaseDestination(PartitionedDestination):
     ) -> list[dict[str, Any]]:
         """Select rows matching a single partition value."""
 
-    # ------------------------------------------------------------------
-    # Introspection
-    # ------------------------------------------------------------------
+    # -- Introspection ---------------------------------------------------------
 
     @abstractmethod
     def _count_by_partition(
@@ -117,9 +111,7 @@ class DatabaseDestination(PartitionedDestination):
             context.asset.partitioning.column,
         )
 
-    # ------------------------------------------------------------------
-    # Data conversion
-    # ------------------------------------------------------------------
+    # -- Data conversion -------------------------------------------------------
 
     def _from_rows(self, rows: list[dict[str, Any]]) -> Any:
         """Materialize database rows into the configured read representation.
@@ -129,9 +121,7 @@ class DatabaseDestination(PartitionedDestination):
         """
         return REPRESENTATIONS[self.read_representation].from_records(rows)
 
-    # ------------------------------------------------------------------
-    # Destination interface
-    # ------------------------------------------------------------------
+    # -- Destination interface -------------------------------------------------
 
     def _insert_data(self, table: str, schema: str | None, data: Any, context: IOContext) -> None:
         """Insert data in its native format.

@@ -265,9 +265,7 @@ class KubernetesLauncher(Launcher):
                         parts.append(f"message={term.message}")
         return " ".join(parts)
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+    # -- Helpers ---------------------------------------------------------------
 
     def _build_env(self) -> list[client.V1EnvVar]:
         """Build environment variables for the container."""

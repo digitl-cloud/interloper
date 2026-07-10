@@ -110,9 +110,7 @@ class AsyncRunner(Runner):
             except Exception:  # noqa: BLE001, S110
                 pass
 
-    # ------------------------------------------------------------------
-    # Scheduling primitives
-    # ------------------------------------------------------------------
+    # -- Scheduling primitives -------------------------------------------------
 
     @property
     def _capacity(self) -> int:
@@ -133,9 +131,7 @@ class AsyncRunner(Runner):
 
         return asyncio.create_task(_guarded())
 
-    # ------------------------------------------------------------------
-    # Asset execution
-    # ------------------------------------------------------------------
+    # -- Asset execution -------------------------------------------------------
 
     async def _execute_asset(
         self,

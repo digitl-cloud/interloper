@@ -4,9 +4,7 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.linkedin_ads.connection import LinkedinAdsConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

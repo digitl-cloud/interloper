@@ -240,9 +240,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
             EventBus.unsubscribe(stderr_handler)
 
 
-# ------------------------------------------------------------------
-# Internals
-# ------------------------------------------------------------------
+# -- Internals -----------------------------------------------------------------
 
 
 def _dag_from_paths(paths: list[str]) -> DAG:

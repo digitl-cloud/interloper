@@ -58,9 +58,7 @@ COMPONENT_LOAD_OPTIONS = [
 class ComponentMixin(StoreBase):
     """Store methods for component CRUD, relations, and hydration."""
 
-    # ------------------------------------------------------------------
-    # CRUD
-    # ------------------------------------------------------------------
+    # -- CRUD ------------------------------------------------------------------
 
     def create_component(
         self,
@@ -197,9 +195,7 @@ class ComponentMixin(StoreBase):
             session.delete(db_component)
             session.commit()
 
-    # ------------------------------------------------------------------
-    # Relations
-    # ------------------------------------------------------------------
+    # -- Relations -------------------------------------------------------------
 
     def list_relations(self, org_id: UUID, *, type: str | None = None) -> list[ComponentRelation]:
         """List an organisation's component relations, optionally by type."""
@@ -240,9 +236,7 @@ class ComponentMixin(StoreBase):
                 session.delete(relation)
             session.commit()
 
-    # ------------------------------------------------------------------
-    # Hydration & status
-    # ------------------------------------------------------------------
+    # -- Hydration & status ----------------------------------------------------
 
     def load(self, component_id: UUID) -> il.Component:
         """Hydrate a framework component of any kind from its row.
@@ -328,9 +322,7 @@ class ComponentMixin(StoreBase):
             return self._hydrator.decode_data(db_component)
         return dict(db_component.config or {})
 
-    # ------------------------------------------------------------------
-    # Kind semantics
-    # ------------------------------------------------------------------
+    # -- Kind semantics --------------------------------------------------------
 
     def _apply_config(self, db_component: Component, config: dict[str, Any] | None, encrypted: bool | None) -> None:
         """Write the config payload onto the row, encrypting secret kinds."""
@@ -500,9 +492,7 @@ class ComponentMixin(StoreBase):
                 )
 
 
-# ----------------------------------------------------------------------
-# Session-level helpers (shared with tests and internal callers)
-# ----------------------------------------------------------------------
+# -- Session-level helpers (shared with tests and internal callers) ------------
 
 
 def load_component(session: Session, component_id: UUID, *, kind: str | None = None) -> Component:

@@ -134,9 +134,7 @@ class Source(Component):
         description="When an asset has multiple destinations, downstream assets use this to know where to read from",
     )
 
-    # ------------------------------------------------------------------
-    # Construction & resolution
-    # ------------------------------------------------------------------
+    # -- Construction & resolution ---------------------------------------------
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-discover assets and infer requires at source definition time.
@@ -230,9 +228,7 @@ class Source(Component):
         for asset in self.assets:
             asset._source = self
 
-    # ------------------------------------------------------------------
-    # Serialization
-    # ------------------------------------------------------------------
+    # -- Serialization ---------------------------------------------------------
 
     def to_spec(self) -> Spec:
         """Serialize to a spec with ``assets`` as a key → init override map.
@@ -270,9 +266,7 @@ class Source(Component):
 
         return Spec(path=self.path(), id=self.id, init=init or None)
 
-    # ------------------------------------------------------------------
-    # Assets
-    # ------------------------------------------------------------------
+    # -- Assets ----------------------------------------------------------------
 
     @classmethod
     def _collect_asset_types(cls) -> None:
@@ -482,9 +476,7 @@ class Source(Component):
                 if sibling is not None and sibling is not asset:
                     asset.dependencies[param_name] = sibling.id
 
-    # ------------------------------------------------------------------
-    # Definition
-    # ------------------------------------------------------------------
+    # -- Definition ------------------------------------------------------------
 
     @classmethod
     def definition(cls) -> SourceDefinition:
@@ -515,9 +507,7 @@ class Source(Component):
             assets=[asset_cls.definition().model_copy(update={"source_key": cls.key}) for asset_cls in cls.asset_types],
         )
 
-    # ------------------------------------------------------------------
-    # Reconfiguration
-    # ------------------------------------------------------------------
+    # -- Reconfiguration -------------------------------------------------------
 
     def __call__(
         self,

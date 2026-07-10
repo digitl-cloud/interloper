@@ -210,9 +210,7 @@ class AppSettings(BaseSettings):
 
     _active: ClassVar[AppSettings | None] = None
 
-    # ------------------------------------------------------------------
-    # Sources
-    # ------------------------------------------------------------------
+    # -- Sources ---------------------------------------------------------------
 
     @classmethod
     def settings_customise_sources(
@@ -240,9 +238,7 @@ class AppSettings(BaseSettings):
         """
         return cls()
 
-    # ------------------------------------------------------------------
-    # Active instance
-    # ------------------------------------------------------------------
+    # -- Active instance -------------------------------------------------------
 
     @classmethod
     def get(cls) -> AppSettings:

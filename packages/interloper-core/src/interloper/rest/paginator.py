@@ -20,9 +20,7 @@ from typing import Any
 
 import httpx
 
-# ------------------------------------------------------------------
-# Data selection
-# ------------------------------------------------------------------
+# -- Data selection ------------------------------------------------------------
 
 
 #: How a page's records are pulled from a response: a dotted JSON path
@@ -67,9 +65,7 @@ def select(response: httpx.Response, selector: DataSelector) -> Any:
     return selector(response)
 
 
-# ------------------------------------------------------------------
-# Request helpers
-# ------------------------------------------------------------------
+# -- Request helpers -----------------------------------------------------------
 
 
 def _with_param(request: httpx.Request, key: str, value: Any) -> None:
@@ -86,9 +82,7 @@ def _clone_with_param(request: httpx.Request, key: str, value: Any) -> httpx.Req
     return httpx.Request(request.method, request.url.copy_set_param(key, str(value)), headers=request.headers)
 
 
-# ------------------------------------------------------------------
-# Paginator protocols
-# ------------------------------------------------------------------
+# -- Paginator protocols -------------------------------------------------------
 
 
 class BasePaginator(ABC):
@@ -130,9 +124,7 @@ class RangePaginator(BasePaginator):
         """Requests for every page after the first, or ``None`` if the total is unknown."""
 
 
-# ------------------------------------------------------------------
-# Paginators
-# ------------------------------------------------------------------
+# -- Paginators ----------------------------------------------------------------
 
 
 class SinglePagePaginator(BasePaginator):

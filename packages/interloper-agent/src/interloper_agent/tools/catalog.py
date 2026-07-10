@@ -233,9 +233,7 @@ def list_destinations(tool_context: ToolContext) -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# -- Helpers -------------------------------------------------------------------
 
 
 def _extract_type(field_info: dict[str, Any]) -> str:

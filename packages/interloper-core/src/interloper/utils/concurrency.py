@@ -12,9 +12,7 @@ from typing import Any, TypeVar
 _T = TypeVar("_T")
 
 
-# ------------------------------------------------------------------
-# Sync bridge
-# ------------------------------------------------------------------
+# -- Sync bridge ---------------------------------------------------------------
 
 
 # The background event loop backing ``run()``. Started lazily on first use and
@@ -99,9 +97,7 @@ def run(coro: Coroutine[Any, Any, _T]) -> _T:
         raise
 
 
-# ------------------------------------------------------------------
-# Async helpers
-# ------------------------------------------------------------------
+# -- Async helpers -------------------------------------------------------------
 
 
 async def bounded_gather(coros: Iterable[Coroutine[Any, Any, _T]], *, limit: int) -> list[_T]:

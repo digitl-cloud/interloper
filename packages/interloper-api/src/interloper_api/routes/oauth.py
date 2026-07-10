@@ -37,9 +37,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/oauth", tags=["oauth"])
 
 
-# ---------------------------------------------------------------------------
-# App credentials (environment)
-# ---------------------------------------------------------------------------
+# -- App credentials (environment) ---------------------------------------------
 
 
 class _ProviderConfig:
@@ -61,9 +59,7 @@ def _load_providers() -> dict[str, _ProviderConfig]:
     return {key: _ProviderConfig(key) for key in PROVIDERS.keys()}
 
 
-# ---------------------------------------------------------------------------
-# Generic token exchange
-# ---------------------------------------------------------------------------
+# -- Generic token exchange ----------------------------------------------------
 
 
 async def _exchange(
@@ -112,9 +108,7 @@ async def _exchange(
     return resp.json()
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
+# -- Routes --------------------------------------------------------------------
 
 
 class TokenExchangeRequest(BaseModel):

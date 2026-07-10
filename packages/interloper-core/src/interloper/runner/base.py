@@ -44,9 +44,7 @@ class Runner(Serializable):
 
     _state: RunState | None = PrivateAttr(default=None)
 
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
+    # -- Construction ----------------------------------------------------------
 
     @classmethod
     def from_settings(cls, settings: RunnerSettings) -> Self:
@@ -73,9 +71,7 @@ class Runner(Serializable):
             raise ConfigError(f"Runner '{settings.type}' does not resolve to a {cls.__name__}")
         return runner_cls(**settings.config)
 
-    # ------------------------------------------------------------------
-    # State
-    # ------------------------------------------------------------------
+    # -- State -----------------------------------------------------------------
 
     @property
     def state(self) -> RunState:
@@ -88,9 +84,7 @@ class Runner(Serializable):
             raise RunnerError("State not initialized")
         return self._state
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    # -- Public API ------------------------------------------------------------
 
     async def run(
         self,
@@ -148,9 +142,7 @@ class Runner(Serializable):
     ) -> RunResult:
         """Walk the DAG and return the result (implemented by subclasses)."""
 
-    # ------------------------------------------------------------------
-    # Hooks
-    # ------------------------------------------------------------------
+    # -- Hooks -----------------------------------------------------------------
 
     def _on_start(self) -> None:
         """Lifecycle hook called before a run begins (e.g. create pools)."""
@@ -158,9 +150,7 @@ class Runner(Serializable):
     def _on_end(self) -> None:
         """Lifecycle hook called after a run ends (e.g. shutdown pools)."""
 
-    # ------------------------------------------------------------------
-    # Shared helpers
-    # ------------------------------------------------------------------
+    # -- Shared helpers --------------------------------------------------------
 
     def _init_run(
         self,

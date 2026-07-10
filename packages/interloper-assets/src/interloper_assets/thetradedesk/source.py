@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.thetradedesk.connection import TheTradeDeskConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

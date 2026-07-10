@@ -19,9 +19,7 @@ from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 from interloper.serializable import Spec
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# -- Fixtures ------------------------------------------------------------------
 
 
 class FakeResource(il.Resource):
@@ -88,9 +86,7 @@ class FakePartitionWindow(PartitionWindow):
         yield FakePartition(self.start)  # pragma: no cover - not exercised
 
 
-# ---------------------------------------------------------------------------
-# Identity and class metadata
-# ---------------------------------------------------------------------------
+# -- Identity and class metadata -----------------------------------------------
 
 
 class TestIdentity:
@@ -146,9 +142,7 @@ class TestIdentity:
             FakeAsset().data()
 
 
-# ---------------------------------------------------------------------------
-# Definition metadata
-# ---------------------------------------------------------------------------
+# -- Definition metadata -------------------------------------------------------
 
 
 class TestDefinition:
@@ -219,9 +213,7 @@ class TestDefinition:
         assert defn.partitioning == {"column": "day", "allow_window": False}
 
 
-# ---------------------------------------------------------------------------
-# Resource type inference and runtime resolution
-# ---------------------------------------------------------------------------
+# -- Resource type inference and runtime resolution ----------------------------
 
 
 class TestResources:
@@ -288,9 +280,7 @@ class TestResources:
             asset._resolve_resource("config")
 
 
-# ---------------------------------------------------------------------------
-# Destination resolution and validation
-# ---------------------------------------------------------------------------
+# -- Destination resolution and validation -------------------------------------
 
 
 class TestDestinations:
@@ -342,9 +332,7 @@ class TestDestinations:
             FakeAssetTypedDest()._validate_destination(FakeOtherDestination())
 
 
-# ---------------------------------------------------------------------------
-# Partitioning validation
-# ---------------------------------------------------------------------------
+# -- Partitioning validation ---------------------------------------------------
 
 
 class FakeAssetPartitioned(il.Asset):
@@ -380,9 +368,7 @@ class TestPartitioning:
         FakeAssetPartitionedWithWindow()._validate_partitioning(window)
 
 
-# ---------------------------------------------------------------------------
-# __call__ reconfiguration
-# ---------------------------------------------------------------------------
+# -- __call__ reconfiguration --------------------------------------------------
 
 
 class TestReconfiguration:
@@ -430,9 +416,7 @@ class TestReconfiguration:
         assert reconfigured.materializable is False
 
 
-# ---------------------------------------------------------------------------
-# Serialization round-trip
-# ---------------------------------------------------------------------------
+# -- Serialization round-trip --------------------------------------------------
 
 
 class TestSerialization:
@@ -497,9 +481,7 @@ class TestSerialization:
         assert isinstance(restored.resources["config"], FakeResource)
 
 
-# ---------------------------------------------------------------------------
-# Destination write — empty-result handling
-# ---------------------------------------------------------------------------
+# -- Destination write — empty-result handling ---------------------------------
 
 
 async def _capture_log_events(coro: Any) -> list[Event]:
@@ -557,9 +539,7 @@ class TestDestinationWrite:
         assert not [e for e in logs if "produced no data" in (e.metadata.get("message") or "")]
 
 
-# ---------------------------------------------------------------------------
-# Conform (schema enforcement decoupled from normalizer)
-# ---------------------------------------------------------------------------
+# -- Conform (schema enforcement decoupled from normalizer) --------------------
 
 
 class ConformSchema(il.Schema):

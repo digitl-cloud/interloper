@@ -33,9 +33,7 @@ router = APIRouter()
 
 APP_NAME = "interloper_agent"
 
-# ---------------------------------------------------------------------------
-# Lazy runner singleton
-# ---------------------------------------------------------------------------
+# -- Lazy runner singleton -----------------------------------------------------
 
 _runner: Runner | None = None
 _session_service: InMemorySessionService | None = None
@@ -79,9 +77,7 @@ def _get_runner(store: Store, catalog: Catalog) -> Runner:
     return _runner
 
 
-# ---------------------------------------------------------------------------
-# Request / response models
-# ---------------------------------------------------------------------------
+# -- Request / response models -------------------------------------------------
 
 
 class ChatRequest(BaseModel):
@@ -113,9 +109,7 @@ def _session_to_response(session: Any) -> SessionResponse:
     )
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
+# -- Endpoints -----------------------------------------------------------------
 
 
 @router.post("/sessions")

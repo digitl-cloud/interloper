@@ -67,9 +67,7 @@ class EventBus:
         self._start_worker()
         atexit.register(EventBus.shutdown)
 
-    # ------------------------------------------------------------------
-    # Public static API
-    # ------------------------------------------------------------------
+    # -- Public static API -----------------------------------------------------
 
     @staticmethod
     def emit(event_type: EventType, *, metadata: dict[str, Any] | None = None) -> None:
@@ -159,9 +157,7 @@ class EventBus:
                 pass
             inst._worker.join(timeout=2.0)
 
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
+    # -- Internals -------------------------------------------------------------
 
     def _enqueue(self, event: Event) -> None:
         """Place an event on the internal queue for worker dispatch."""

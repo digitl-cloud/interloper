@@ -45,9 +45,7 @@ logger = logging.getLogger(__name__)
 _ENTRY_POINT = "interloper.components"
 
 
-# ------------------------------------------------------------------
-# Discovery
-# ------------------------------------------------------------------
+# -- Discovery -----------------------------------------------------------------
 
 
 def _declared_classes() -> tuple[type[Component], ...]:
@@ -129,9 +127,7 @@ class Catalog(BaseModel):
 
     components: dict[str, ComponentDefinition] = Field(default_factory=dict)
 
-    # ------------------------------------------------------------------
-    # Lookup & export
-    # ------------------------------------------------------------------
+    # -- Lookup & export -------------------------------------------------------
 
     def get(self, key: str, default: Any = None) -> ComponentDefinition | None:
         """Look up a component definition by key.
@@ -165,9 +161,7 @@ class Catalog(BaseModel):
         """
         return {k: v.model_dump(mode="json") for k, v in self.components.items()}
 
-    # ------------------------------------------------------------------
-    # Constructors
-    # ------------------------------------------------------------------
+    # -- Constructors ----------------------------------------------------------
 
     @classmethod
     def from_paths(cls, paths: list[str]) -> Catalog:

@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.amazon_selling_partner.connection import AmazonSellingPartnerConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

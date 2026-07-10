@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.search_console.connection import SearchConsoleConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

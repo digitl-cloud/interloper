@@ -109,9 +109,7 @@ class SyncRunner(Runner):
             except Exception:  # noqa: BLE001, S110
                 pass
 
-    # ------------------------------------------------------------------
-    # Abstract interface
-    # ------------------------------------------------------------------
+    # -- Abstract interface ----------------------------------------------------
 
     @property
     @abstractmethod
@@ -126,9 +124,7 @@ class SyncRunner(Runner):
     ) -> Future[Any]:
         """Submit an asset for execution and return a Future."""
 
-    # ------------------------------------------------------------------
-    # Shared execution helpers
-    # ------------------------------------------------------------------
+    # -- Shared execution helpers ----------------------------------------------
 
     def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
         """Process a completed future and update state."""

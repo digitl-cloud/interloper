@@ -23,9 +23,7 @@ _JOB_POLL_INTERVAL = 120.0  # seconds between polls
 _JOB_POLL_TIMEOUT = 900.0  # 15 minutes
 
 
-# ------------------------------------------------------------------
-# HELPERS — pagination
-# ------------------------------------------------------------------
+# -- HELPERS — pagination ------------------------------------------------------
 async def _paginated(connection: ImpactConnection, path: str, params: dict, key: str) -> list[_RECORD]:
     """Page through an Impact list endpoint (``@numpages``) and collect *key* records.
 
@@ -50,9 +48,7 @@ def _date_range(date: dt.date) -> dict[str, str]:
     }
 
 
-# ------------------------------------------------------------------
-# HELPERS — synchronous list endpoints
-# ------------------------------------------------------------------
+# -- HELPERS — synchronous list endpoints --------------------------------------
 async def _get_actions(connection: ImpactConnection, program_id: str, date: dt.date) -> list[_RECORD]:
     return await _paginated(connection, "/Actions", {"CampaignId": program_id, **_date_range(date)}, key="Actions")
 
@@ -69,9 +65,7 @@ async def _get_action_inquiries(connection: ImpactConnection, program_id: str, d
     )
 
 
-# ------------------------------------------------------------------
-# HELPERS — async exports (report + clicks) via the Jobs API
-# ------------------------------------------------------------------
+# -- HELPERS — async exports (report + clicks) via the Jobs API ----------------
 async def _wait_for_job(connection: ImpactConnection, job_id: str) -> None:
     """Poll a queued Impact job until it completes, raising on failure/timeout.
 
@@ -142,9 +136,7 @@ async def _clicks_export(connection: ImpactConnection, program_id: str, date: dt
     return await _download_job(connection, job_id, key="Clicks")
 
 
-# ------------------------------------------------------------------
-# HELPERS — framing
-# ------------------------------------------------------------------
+# -- HELPERS — framing ---------------------------------------------------------
 def _to_df(records: list[_RECORD], date: dt.date) -> pd.DataFrame:
     """Build a DataFrame and stamp the partition date.
 
@@ -156,9 +148,7 @@ def _to_df(records: list[_RECORD], date: dt.date) -> pd.DataFrame:
     return df
 
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 @il.source(
     resources={"connection": ImpactConnection},
     tags=["Affiliate"],

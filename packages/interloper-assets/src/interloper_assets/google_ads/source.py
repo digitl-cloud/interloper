@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.google_ads.connection import GoogleAdsConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

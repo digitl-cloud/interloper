@@ -13,9 +13,7 @@ from interloper_assets.amazon_ads import constants, schemas
 from interloper_assets.amazon_ads.connection import AmazonAdsConnection
 
 
-# ------------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------------
+# -- HELPERS -------------------------------------------------------------------
 def request_report(
     connection: AmazonAdsConnection,
     profile_id: str,
@@ -158,9 +156,7 @@ def request_and_download_report(
     return report
 
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 @il.source(
     tags=["Advertising"],
     icon="icon:amazon",

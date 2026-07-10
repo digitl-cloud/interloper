@@ -60,9 +60,7 @@ class Normalizer(Serializable):
     replace_empty_dicts: bool = False
     replace_empty_strings: bool = False
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    # -- Public API ------------------------------------------------------------
 
     def normalize(self, data: Any) -> list[dict[str, Any]]:
         """Normalize *data* to ``list[dict]`` with configured transformations.
@@ -118,9 +116,7 @@ class Normalizer(Serializable):
             name = re.sub(r"([a-z])(\d)", r"\1_\2", name)
         return name
 
-    # ------------------------------------------------------------------
-    # Type coercion
-    # ------------------------------------------------------------------
+    # -- Type coercion ---------------------------------------------------------
 
     def _coerce(self, data: Any) -> list[dict[str, Any]]:
         """Coerce arbitrary data to ``list[dict]`` (raises ``NormalizerError`` when unsupported).
@@ -130,9 +126,7 @@ class Normalizer(Serializable):
         """
         return coerce_to_records(data)
 
-    # ------------------------------------------------------------------
-    # Transformations
-    # ------------------------------------------------------------------
+    # -- Transformations -------------------------------------------------------
 
     def _flatten_dict(
         self,

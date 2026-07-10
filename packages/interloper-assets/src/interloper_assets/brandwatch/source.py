@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.brandwatch.connection import BrandwatchConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

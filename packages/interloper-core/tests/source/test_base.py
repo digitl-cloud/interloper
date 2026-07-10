@@ -15,9 +15,7 @@ from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.serializable import Spec
 from interloper.source.base import SourceDefinition
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# -- Fixtures ------------------------------------------------------------------
 
 
 class FakeResource(il.Resource):
@@ -65,9 +63,7 @@ class FakeSourceWithAssets(il.Source):
             return None
 
 
-# ---------------------------------------------------------------------------
-# Identity and class metadata
-# ---------------------------------------------------------------------------
+# -- Identity and class metadata -----------------------------------------------
 
 
 class TestIdentity:
@@ -98,9 +94,7 @@ class TestIdentity:
         assert FakeSource.asset_types == []
 
 
-# ---------------------------------------------------------------------------
-# Definition metadata
-# ---------------------------------------------------------------------------
+# -- Definition metadata -------------------------------------------------------
 
 
 class TestDefinition:
@@ -130,9 +124,7 @@ class TestDefinition:
             assert asset_defn.source_key == FakeSourceWithAssets.key
 
 
-# ---------------------------------------------------------------------------
-# Asset collection, lookup, and requires inference
-# ---------------------------------------------------------------------------
+# -- Asset collection, lookup, and requires inference --------------------------
 
 
 class TestAssets:
@@ -209,9 +201,7 @@ class TestAssets:
         assert "fake_a" not in second_cls.requires
 
 
-# ---------------------------------------------------------------------------
-# Trickle-down resolution
-# ---------------------------------------------------------------------------
+# -- Trickle-down resolution ---------------------------------------------------
 
 
 class TestResolution:
@@ -304,9 +294,7 @@ class TestResolution:
         assert second.dependencies["fake_first"] == first.id
 
 
-# ---------------------------------------------------------------------------
-# __call__ reconfiguration
-# ---------------------------------------------------------------------------
+# -- __call__ reconfiguration --------------------------------------------------
 
 
 class TestReconfiguration:
@@ -369,9 +357,7 @@ class TestReconfiguration:
         assert reconfigured.materialization_strategy == MaterializationStrategy.STRICT
 
 
-# ---------------------------------------------------------------------------
-# Serialization round-trip
-# ---------------------------------------------------------------------------
+# -- Serialization round-trip --------------------------------------------------
 
 
 class TestSerialization:

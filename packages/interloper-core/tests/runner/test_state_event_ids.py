@@ -42,9 +42,7 @@ def _state(run_id: str, asset_id: str) -> tuple[RunState, il.Asset]:
     return RunState(il.DAG(asset), metadata={"run_id": run_id}), asset
 
 
-# ---------------------------------------------------------------------------
-# The pure derivation
-# ---------------------------------------------------------------------------
+# -- The pure derivation -------------------------------------------------------
 
 
 def test_asset_event_id_is_deterministic() -> None:
@@ -57,9 +55,7 @@ def test_asset_event_id_is_deterministic() -> None:
     assert base != _asset_event_id("run-1", "asset-1", EventType.ASSET_COMPLETED)
 
 
-# ---------------------------------------------------------------------------
-# RunState stamps the deterministic id on what it emits
-# ---------------------------------------------------------------------------
+# -- RunState stamps the deterministic id on what it emits ---------------------
 
 
 def test_mark_asset_terminal_stamps_deterministic_id() -> None:

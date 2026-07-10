@@ -24,9 +24,7 @@ PERCENTAGE_COLUMNS = [
 ]
 
 
-# ------------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------------
+# -- HELPERS -------------------------------------------------------------------
 def _build_report_time(
     reporting_service: Any,
     date: dt.date,
@@ -161,9 +159,7 @@ def _ad_performance_report(connection: BingAdsConnection, account_id: str, date:
     return _download_report(connection, account_id, request)
 
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 @il.source(
     resources={"connection": BingAdsConnection},
     tags=["Advertising"],

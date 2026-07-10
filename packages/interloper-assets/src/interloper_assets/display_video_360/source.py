@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.display_video_360.connection import DisplayVideo360Connection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

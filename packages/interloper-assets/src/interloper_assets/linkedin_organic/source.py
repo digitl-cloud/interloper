@@ -4,9 +4,7 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

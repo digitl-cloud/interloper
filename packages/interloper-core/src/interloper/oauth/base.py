@@ -28,9 +28,7 @@ from typing import Any, Literal
 
 from interloper.registry import Registry
 
-# ------------------------------------------------------------------
-# Provider spec
-# ------------------------------------------------------------------
+# -- Provider spec -------------------------------------------------------------
 
 
 # Logical token-exchange parameters.  ``OAuthProvider.token_params`` maps
@@ -96,9 +94,7 @@ class OAuthProvider:
             object.__setattr__(self, "label", self.key.title())
 
 
-# ------------------------------------------------------------------
-# Registry
-# ------------------------------------------------------------------
+# -- Registry ------------------------------------------------------------------
 
 
 def _adopt_provider(_name: str, loaded: Any) -> tuple[str, OAuthProvider]:

@@ -86,9 +86,7 @@ class DockerRunner(SyncRunner):
         super().model_post_init(context)
         self._docker = docker.from_env()
 
-    # ------------------------------------------------------------------
-    # Scheduling primitives
-    # ------------------------------------------------------------------
+    # -- Scheduling primitives -------------------------------------------------
 
     @property
     def _capacity(self) -> int:
@@ -220,9 +218,7 @@ class DockerRunner(SyncRunner):
             except Exception:  # noqa: BLE001, S110
                 pass
 
-    # ------------------------------------------------------------------
-    # Container polling
-    # ------------------------------------------------------------------
+    # -- Container polling -----------------------------------------------------
 
     def _poll_container(self, container: Container) -> None:
         """Block until the container exits; raise on failure.
@@ -236,9 +232,7 @@ class DockerRunner(SyncRunner):
             cid = (container.id or "unknown")[:12]
             raise RunnerError(f"Container {cid} exited with code {status_code}")
 
-    # ------------------------------------------------------------------
-    # Command and environment builders
-    # ------------------------------------------------------------------
+    # -- Command and environment builders --------------------------------------
 
     def _build_command(
         self,
@@ -291,9 +285,7 @@ class DockerRunner(SyncRunner):
         """Build the name for the container."""
         return f"interloper_run_{self.state.run_id[:8]}_{asset.id[:8]}"
 
-    # ------------------------------------------------------------------
-    # Real-time event streaming (stderr)
-    # ------------------------------------------------------------------
+    # -- Real-time event streaming (stderr) ------------------------------------
 
     def _start_log_streaming(self, container: Container, *, target_asset_id: str) -> None:
         """Stream events from the container's stderr to the host EventBus.

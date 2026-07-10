@@ -9,9 +9,7 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.awin.connection import AwinConnection
 from interloper_assets.awin.schemas import PublishersStats, Transactions
 
-# ------------------------------------------------------------------
-# NORMALIZER
-# ------------------------------------------------------------------
+# -- NORMALIZER ----------------------------------------------------------------
 
 # camelCase money object -> (amount key, currency key) — both snake-case onto the schema.
 _MONEY_FIELDS = {
@@ -54,9 +52,7 @@ class AwinTransactionsNormalizer(DataFrameNormalizer):
         return super().normalize(data)
 
 
-# ------------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------------
+# -- HELPERS -------------------------------------------------------------------
 
 
 async def get_advertiser_transactions(
@@ -98,9 +94,7 @@ async def get_advertiser_reports_by_publisher(
     return response.json()
 
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

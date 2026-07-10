@@ -12,9 +12,7 @@ from interloper_assets.criteo.schemas import AdsStats, CampaignsStats
 logger = logging.getLogger(__name__)
 
 
-# ------------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------------
+# -- HELPERS -------------------------------------------------------------------
 async def _statistics_report(
     connection: CriteoConnection,
     advertiser_id: str,
@@ -41,9 +39,7 @@ async def _statistics_report(
     return response.json()["Rows"]
 
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 @il.source(
     resources={"connection": CriteoConnection},
     tags=["Advertising"],

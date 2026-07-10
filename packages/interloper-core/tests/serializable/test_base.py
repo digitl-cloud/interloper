@@ -12,9 +12,7 @@ from interloper.normalizer import Normalizer
 from interloper.serializable import Serializable, Spec, dump_spec_value
 from interloper.source.base import Source
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# -- Fixtures ------------------------------------------------------------------
 
 
 class FakeSerializable(Serializable):
@@ -29,9 +27,7 @@ class FakeOtherSerializable(Serializable):
     value: str = ""
 
 
-# ---------------------------------------------------------------------------
-# The Spec envelope
-# ---------------------------------------------------------------------------
+# -- The Spec envelope ---------------------------------------------------------
 
 
 class TestSpecEnvelope:
@@ -122,9 +118,7 @@ class TestStrictInit:
             FakeSerializable(nope=1)  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
 
 
-# ---------------------------------------------------------------------------
-# build_class
-# ---------------------------------------------------------------------------
+# -- build_class ---------------------------------------------------------------
 
 
 @il.source(normalizer=Normalizer(snake_case_digits=True), dataset="custom_ds")
@@ -168,9 +162,7 @@ class TestBuildClass:
         assert src.normalizer is override
 
 
-# ---------------------------------------------------------------------------
-# dump_spec_value
-# ---------------------------------------------------------------------------
+# -- dump_spec_value -----------------------------------------------------------
 
 
 class TestDumpSpecValue:

@@ -274,9 +274,7 @@ def run_services(
     logger.info("Shutdown complete.")
 
 
-# ------------------------------------------------------------------
-# Internals
-# ------------------------------------------------------------------
+# -- Internals -----------------------------------------------------------------
 
 
 def _kill_process_group(process: subprocess.Popen[bytes], sig: int) -> None:

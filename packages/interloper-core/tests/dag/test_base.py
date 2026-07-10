@@ -23,9 +23,7 @@ from interloper.partitioning.base import PartitionConfig
 from interloper.runner.results import ExecutionStatus
 from interloper.serializable import Spec
 
-# ---------------------------------------------------------------------------
-# Minimal asset/source fixtures used by small-topology tests
-# ---------------------------------------------------------------------------
+# -- Minimal asset/source fixtures used by small-topology tests ----------------
 
 
 class FakeAsset(il.Asset):
@@ -71,14 +69,12 @@ class FakeSource(il.Source):
             return None
 
 
-# ---------------------------------------------------------------------------
-# Larger topology fixtures (mirroring the patterns from the previous framework)
-#
+# -- Larger topology fixtures --------------------------------------------------
+# (mirroring the patterns from the previous framework)
 # The source classes below must live at module level so that ``import_from_path``
 # can resolve the ``"module.Source:asset"`` paths used during serialization
 # round-trips.  Inline class definitions inside fixtures break that import
 # because inner classes don't exist as module attributes.
-# ---------------------------------------------------------------------------
 
 
 _PART = PartitionConfig(column="date")
@@ -253,9 +249,7 @@ def double_source_dag() -> il.DAG:
     return il.DAG(FakeSourceOne(), FakeSourceTwo())
 
 
-# ---------------------------------------------------------------------------
-# Construction
-# ---------------------------------------------------------------------------
+# -- Construction --------------------------------------------------------------
 
 
 class TestConstruction:
@@ -318,9 +312,7 @@ class TestConstruction:
             DAG(a, b)
 
 
-# ---------------------------------------------------------------------------
-# Graph structure
-# ---------------------------------------------------------------------------
+# -- Graph structure -----------------------------------------------------------
 
 
 class TestGraph:
@@ -395,9 +387,7 @@ class TestGraph:
         assert dag.predecessors[asset.id] == []
 
 
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
+# -- Validation ----------------------------------------------------------------
 
 
 class TestValidation:
@@ -432,9 +422,7 @@ class TestValidation:
         assert len(dag_mixed.assets) == 4
 
 
-# ---------------------------------------------------------------------------
-# Traversal
-# ---------------------------------------------------------------------------
+# -- Traversal -----------------------------------------------------------------
 
 
 class TestTraversal:
@@ -535,9 +523,7 @@ class TestTraversal:
             dag.get_successors("nonexistent")
 
 
-# ---------------------------------------------------------------------------
-# Mini DAG subgraph
-# ---------------------------------------------------------------------------
+# -- Mini DAG subgraph ---------------------------------------------------------
 
 
 class TestMiniDag:
@@ -588,9 +574,7 @@ class TestMiniDag:
                 assert asset.materializable is False
 
 
-# ---------------------------------------------------------------------------
-# Serialization round-trip
-# ---------------------------------------------------------------------------
+# -- Serialization round-trip --------------------------------------------------
 
 
 class TestSerialization:

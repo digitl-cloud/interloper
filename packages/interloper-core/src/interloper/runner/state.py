@@ -72,9 +72,7 @@ class RunState:
 
         self._initialize_assets()
 
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
+    # -- Properties ------------------------------------------------------------
 
     @property
     def run_id(self) -> str:
@@ -118,9 +116,7 @@ class RunState:
         """List of assets that failed."""
         return self._assets_with_status(ExecutionStatus.FAILED)
 
-    # ------------------------------------------------------------------
-    # Run lifecycle
-    # ------------------------------------------------------------------
+    # -- Run lifecycle ---------------------------------------------------------
 
     def start_run(self, partition_or_window: Partition | PartitionWindow | None) -> None:
         """Record the run start time and emit RUN_STARTED + ASSET_QUEUED events."""
@@ -186,9 +182,7 @@ class RunState:
         """
         return all(info.is_terminal for info in self.asset_executions.values())
 
-    # ------------------------------------------------------------------
-    # Asset state transitions
-    # ------------------------------------------------------------------
+    # -- Asset state transitions -----------------------------------------------
 
     def mark_asset_running(self, asset: Asset, *, emit: bool = True) -> None:
         """Transition an asset to RUNNING.
@@ -288,9 +282,7 @@ class RunState:
                     },
                 )
 
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
+    # -- Internals -------------------------------------------------------------
 
     def _initialize_assets(self) -> None:
         """Initialize all assets as QUEUED, then promote root assets to READY."""

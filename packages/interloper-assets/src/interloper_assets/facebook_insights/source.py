@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.facebook_insights.connection import FacebookInsightsConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

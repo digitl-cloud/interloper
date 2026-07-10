@@ -41,9 +41,7 @@ class Event:
             label = f"LOG.{m['level']}"
         return f"{ts}  {label:<30}  {asset_key}  {message}"
 
-    # ------------------------------------------------------------------
-    # Serialization
-    # ------------------------------------------------------------------
+    # -- Serialization ---------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a flat dict with ``event_id``, ``type``, ``timestamp``, and metadata.

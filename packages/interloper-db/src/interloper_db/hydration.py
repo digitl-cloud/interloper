@@ -109,9 +109,7 @@ class Hydrator:
                 ) from e
         return json.loads(raw)
 
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
+    # -- Internals -------------------------------------------------------------
 
     def _build_init(self, session: Session, db_component: Component) -> dict[str, Any]:
         """Build the init payload for a component row.

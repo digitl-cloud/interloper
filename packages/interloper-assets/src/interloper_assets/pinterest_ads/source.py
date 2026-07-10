@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.pinterest_ads.connection import PinterestAdsConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

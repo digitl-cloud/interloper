@@ -18,9 +18,7 @@ from interloper.component.base import (
 )
 from interloper.serializable import Spec
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# -- Fixtures ------------------------------------------------------------------
 
 
 class Mode(str, Enum):
@@ -74,9 +72,7 @@ class FakeConcreteKind(FakeKind):
     """A concrete class of the fake kind (inherits kind ``fake_kind``)."""
 
 
-# ---------------------------------------------------------------------------
-# Identity and class metadata
-# ---------------------------------------------------------------------------
+# -- Identity and class metadata -----------------------------------------------
 
 
 class TestIdentity:
@@ -178,9 +174,7 @@ class TestKinds:
             _adopt_kind("bogus", object)
 
 
-# ---------------------------------------------------------------------------
-# Definition metadata
-# ---------------------------------------------------------------------------
+# -- Definition metadata -------------------------------------------------------
 
 
 class TestDefinition:
@@ -228,9 +222,7 @@ class TestDefinition:
         assert relations["wires"].slotted is True
 
 
-# ---------------------------------------------------------------------------
-# Resource slot inference and trickle-down
-# ---------------------------------------------------------------------------
+# -- Resource slot inference and trickle-down ----------------------------------
 
 
 class FakeConsumer(Component):
@@ -339,9 +331,7 @@ class TestResources:
         assert restored.resources["resource"].text == "abc"
 
 
-# ---------------------------------------------------------------------------
-# Serialization: to_spec, from_spec, reconstruct, round-trip, discriminator
-# ---------------------------------------------------------------------------
+# -- Serialization: to_spec, from_spec, reconstruct, round-trip, discriminator ----
 
 
 class TestSerialization:

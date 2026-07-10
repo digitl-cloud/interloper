@@ -69,9 +69,7 @@ class BigQueryDestination(DatabaseDestination):
             location=self.location,
         )
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+    # -- Helpers ---------------------------------------------------------------
 
     def _resolve_dataset(self, schema: str | None) -> str:
         """Return the BigQuery dataset to use.
@@ -207,9 +205,7 @@ class BigQueryDestination(DatabaseDestination):
             except Conflict:
                 pass  # Created by a concurrent asset — already exists
 
-    # ------------------------------------------------------------------
-    # DatabaseDestination hooks
-    # ------------------------------------------------------------------
+    # -- DatabaseDestination hooks ---------------------------------------------
 
     def _insert_data(self, table: str, schema: str | None, data: Any, context: IOContext) -> None:
         """Insert data into BigQuery, schema-driven when a schema is available.
@@ -417,9 +413,7 @@ class BigQueryDestination(DatabaseDestination):
         rows = self.client.query(query, job_config=job_config).result()
         return [dict(row) for row in rows]
 
-    # ------------------------------------------------------------------
-    # Introspection
-    # ------------------------------------------------------------------
+    # -- Introspection ---------------------------------------------------------
 
     def _count_by_partition(
         self,
@@ -449,18 +443,14 @@ class BigQueryDestination(DatabaseDestination):
         rows = self.client.query(query).result()
         return {row["partition_value"]: row["cnt"] for row in rows}
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
+    # -- Lifecycle -------------------------------------------------------------
 
     def dispose(self) -> None:
         if self.client:
             self.client.close()
 
 
-# ---------------------------------------------------------------------------
-# Utility functions
-# ---------------------------------------------------------------------------
+# -- Utility functions ---------------------------------------------------------
 
 
 def _schema_to_bq_fields(schema: type[Schema]) -> list[bigquery.SchemaField]:

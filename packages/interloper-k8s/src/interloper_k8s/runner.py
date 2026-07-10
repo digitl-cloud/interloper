@@ -74,9 +74,7 @@ class KubernetesRunner(SyncRunner):
     _log_threads: dict[str, threading.Thread] = PrivateAttr(default_factory=dict)
     _stop_log_streaming: threading.Event = PrivateAttr(default_factory=threading.Event)
 
-    # ------------------------------------------------------------------
-    # Scheduling primitives
-    # ------------------------------------------------------------------
+    # -- Scheduling primitives -------------------------------------------------
 
     @property
     def _capacity(self) -> int:
@@ -270,9 +268,7 @@ class KubernetesRunner(SyncRunner):
             else:
                 self.state.mark_asset_completed(asset, emit=True)
 
-    # ------------------------------------------------------------------
-    # Job polling
-    # ------------------------------------------------------------------
+    # -- Job polling -----------------------------------------------------------
 
     def _poll_job(self, job_name: str) -> None:
         """Block until the Job completes or fails; raise on failure.
@@ -300,9 +296,7 @@ class KubernetesRunner(SyncRunner):
 
         raise RunnerError(f"Job {job_name} stopped (runner shutting down)")
 
-    # ------------------------------------------------------------------
-    # Job helpers
-    # ------------------------------------------------------------------
+    # -- Job helpers -----------------------------------------------------------
 
     def _build_command(
         self,

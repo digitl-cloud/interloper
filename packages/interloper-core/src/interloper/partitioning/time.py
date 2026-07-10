@@ -8,9 +8,7 @@ from dataclasses import dataclass
 
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 
-# ------------------------------------------------------------------
-# Date helpers
-# ------------------------------------------------------------------
+# -- Date helpers --------------------------------------------------------------
 
 
 def coerce_to_date(value: object) -> dt.date:
@@ -64,9 +62,7 @@ def date_range(start_date: dt.date, end_date: dt.date, reversed: bool = False) -
             start_date += dt.timedelta(days=1)
 
 
-# ------------------------------------------------------------------
-# Time partitions
-# ------------------------------------------------------------------
+# -- Time partitions -----------------------------------------------------------
 
 
 @dataclass(frozen=True)

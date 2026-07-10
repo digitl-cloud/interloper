@@ -21,9 +21,7 @@ def _flatten(pages: list[list[dict]]) -> list[dict]:
     return [row for page in pages for row in page]
 
 
-# ---------------------------------------------------------------------------
-# Page-number
-# ---------------------------------------------------------------------------
+# -- Page-number ---------------------------------------------------------------
 
 
 def _page_number_handler(total_pages: int) -> Any:
@@ -87,9 +85,7 @@ class TestPageNumberAsync:
         assert peak > 1  # pages 2..6 fetched concurrently
 
 
-# ---------------------------------------------------------------------------
-# Offset
-# ---------------------------------------------------------------------------
+# -- Offset --------------------------------------------------------------------
 
 
 class TestOffsetAsync:
@@ -106,9 +102,7 @@ class TestOffsetAsync:
         assert [r["o"] for r in _flatten(pages)] == [0, 4, 8]
 
 
-# ---------------------------------------------------------------------------
-# Cursor / link (sequential)
-# ---------------------------------------------------------------------------
+# -- Cursor / link (sequential) ------------------------------------------------
 
 
 class TestJSONLinkAsync:
@@ -139,9 +133,7 @@ class TestHeaderLinkAsync:
         assert [r["n"] for r in _flatten(pages)] == [0, 1, 2]
 
 
-# ---------------------------------------------------------------------------
-# Single page + selectors
-# ---------------------------------------------------------------------------
+# -- Single page + selectors ---------------------------------------------------
 
 
 class TestSinglePageAndSelectors:

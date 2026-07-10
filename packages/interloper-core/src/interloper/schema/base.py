@@ -100,9 +100,7 @@ class Schema(Serializable):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    # ------------------------------------------------------------------
-    # Introspection
-    # ------------------------------------------------------------------
+    # -- Introspection ---------------------------------------------------------
 
     @classmethod
     def field_specs(cls) -> list[FieldSpec]:
@@ -150,9 +148,7 @@ class Schema(Serializable):
                 del schema["required"]
         return schema
 
-    # ------------------------------------------------------------------
-    # Data operations
-    # ------------------------------------------------------------------
+    # -- Data operations -------------------------------------------------------
 
     @classmethod
     def infer(
@@ -283,9 +279,7 @@ class Schema(Serializable):
             result.append(instance.model_dump(include=schema_fields))
         return result
 
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
+    # -- Internals -------------------------------------------------------------
 
     @classmethod
     def _data_fields(cls) -> set[str]:

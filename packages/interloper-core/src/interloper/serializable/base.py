@@ -52,9 +52,7 @@ def dump_spec_value(value: Any) -> Any:
     return to_jsonable_python(value)
 
 
-# ------------------------------------------------------------------
-# Specs
-# ------------------------------------------------------------------
+# -- Specs ---------------------------------------------------------------------
 _ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
@@ -183,9 +181,7 @@ class Spec(BaseModel):
         return cls(**kwargs)
 
 
-# ------------------------------------------------------------------
-# Serializable
-# ------------------------------------------------------------------
+# -- Serializable --------------------------------------------------------------
 class Serializable(BaseModel):
     """A class-identified, serializable configuration object.
 
@@ -204,9 +200,7 @@ class Serializable(BaseModel):
     name: ClassVar[str] = ""
     internal_fields: ClassVar[frozenset[str]] = frozenset()
 
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
+    # -- Construction ----------------------------------------------------------
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-derive ``key`` as the snake_cased class name unless declared."""
         super().__init_subclass__(**kwargs)
@@ -340,9 +334,7 @@ class Serializable(BaseModel):
 
         return cast("type[Self]", result_cls)
 
-    # ------------------------------------------------------------------
-    # Identity
-    # ------------------------------------------------------------------
+    # -- Identity --------------------------------------------------------------
     @classmethod
     def has_own_field(cls, field: str) -> bool:
         """Check if this class declares a non-None default for a field.
@@ -378,9 +370,7 @@ class Serializable(BaseModel):
         """
         return type(self).classpath()
 
-    # ------------------------------------------------------------------
-    # Serialization & resolution
-    # ------------------------------------------------------------------
+    # -- Serialization & resolution --------------------------------------------
     def to_spec(self) -> Spec:
         """Serialize this instance to a reconstructible spec.
 
@@ -466,9 +456,7 @@ class Serializable(BaseModel):
         """
         return cls.from_spec(Spec.from_file(path), catalog)
 
-    # ------------------------------------------------------------------
-    # Definition
-    # ------------------------------------------------------------------
+    # -- Definition ------------------------------------------------------------
     @classmethod
     def config_schema(cls) -> dict[str, Any]:
         """JSON Schema of the class's user-configurable fields.

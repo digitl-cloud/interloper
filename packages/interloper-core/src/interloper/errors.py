@@ -16,9 +16,7 @@ class InterloperError(Exception):
     """Base exception for all Interloper framework errors."""
 
 
-# ------------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------------
+# -- Configuration -------------------------------------------------------------
 
 
 class ConfigError(InterloperError, ValueError):
@@ -33,9 +31,7 @@ class SpecError(ConfigError):
     """
 
 
-# ------------------------------------------------------------------
-# DAG
-# ------------------------------------------------------------------
+# -- DAG -----------------------------------------------------------------------
 
 
 class DAGError(InterloperError, ValueError):
@@ -54,9 +50,7 @@ class AssetNotFoundError(DAGError, KeyError):
     """An asset key was not found in the DAG."""
 
 
-# ------------------------------------------------------------------
-# Asset
-# ------------------------------------------------------------------
+# -- Asset ---------------------------------------------------------------------
 
 
 class AssetError(InterloperError, ValueError):
@@ -67,27 +61,21 @@ class DependencyContractError(AssetError):
     """A wired dependency does not match the declared requires contract."""
 
 
-# ------------------------------------------------------------------
-# Source
-# ------------------------------------------------------------------
+# -- Source --------------------------------------------------------------------
 
 
 class SourceError(InterloperError, ValueError):
     """An error in source definition or instantiation."""
 
 
-# ------------------------------------------------------------------
-# Partitioning
-# ------------------------------------------------------------------
+# -- Partitioning --------------------------------------------------------------
 
 
 class PartitionError(InterloperError, ValueError):
     """An error related to partitioning configuration or constraints."""
 
 
-# ------------------------------------------------------------------
-# Schema / Normalizer
-# ------------------------------------------------------------------
+# -- Schema / Normalizer -------------------------------------------------------
 
 
 class SchemaError(InterloperError, ValueError):
@@ -106,36 +94,28 @@ class DataNotFoundError(DestinationError):
     """No data was found in the destination backend for the requested key."""
 
 
-# ------------------------------------------------------------------
-# Events
-# ------------------------------------------------------------------
+# -- Events --------------------------------------------------------------------
 
 
 class EventError(InterloperError, ValueError):
     """An error in event deserialization or processing."""
 
 
-# ------------------------------------------------------------------
-# Runner
-# ------------------------------------------------------------------
+# -- Runner --------------------------------------------------------------------
 
 
 class RunnerError(InterloperError, RuntimeError):
     """An error in runner orchestration or scheduling."""
 
 
-# ------------------------------------------------------------------
-# REST / Authentication
-# ------------------------------------------------------------------
+# -- REST / Authentication -----------------------------------------------------
 
 
 class AuthenticationError(InterloperError, ValueError):
     """An authentication or token error in the REST client."""
 
 
-# ------------------------------------------------------------------
-# Lookup / Not Found
-# ------------------------------------------------------------------
+# -- Lookup / Not Found --------------------------------------------------------
 
 
 class NotFoundError(InterloperError, KeyError):
@@ -145,9 +125,7 @@ class NotFoundError(InterloperError, KeyError):
     """
 
 
-# ------------------------------------------------------------------
-# Hydration / Catalog
-# ------------------------------------------------------------------
+# -- Hydration / Catalog -------------------------------------------------------
 
 
 class HydrationError(InterloperError):

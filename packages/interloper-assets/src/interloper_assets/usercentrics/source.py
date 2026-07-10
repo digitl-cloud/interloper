@@ -3,9 +3,7 @@ import interloper as il
 
 from interloper_assets.usercentrics.connection import UsercentricsConnection
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 
 
 @il.source(

@@ -110,9 +110,7 @@ def test_exchange_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> No
     assert resp.status_code == 401
 
 
-# ---------------------------------------------------------------------------
-# Generic exchange request shaping
-# ---------------------------------------------------------------------------
+# -- Generic exchange request shaping ------------------------------------------
 
 
 def _capture_client(captured: list[httpx.Request]) -> httpx.AsyncClient:

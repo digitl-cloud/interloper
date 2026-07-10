@@ -23,9 +23,7 @@ from interloper_assets.tiktok_ads.schemas import (
 logger = logging.getLogger(__name__)
 
 
-# ------------------------------------------------------------------
-# NORMALIZERS
-# ------------------------------------------------------------------
+# -- NORMALIZERS ---------------------------------------------------------------
 class TiktokStatsNormalizer(DataFrameNormalizer):
     """Flatten TikTok integrated-report rows into a flat frame.
 
@@ -60,9 +58,7 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
 _ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 
 
-# ------------------------------------------------------------------
-# HELPERS — HTTP / pagination
-# ------------------------------------------------------------------
+# -- HELPERS — HTTP / pagination -----------------------------------------------
 def _select_list(response: Any) -> list[dict[str, Any]]:
     """Pull ``data.list`` out of a TikTok response, raising on a non-zero API code."""
     body = response.json()
@@ -119,9 +115,7 @@ def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]
     return [{**row, "date": date} for row in rows]
 
 
-# ------------------------------------------------------------------
-# SOURCE
-# ------------------------------------------------------------------
+# -- SOURCE --------------------------------------------------------------------
 @il.source(
     resources={"connection": TiktokAdsConnection},
     tags=["Advertising"],
