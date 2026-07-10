@@ -67,3 +67,21 @@ class TestKindContract:
 
         with pytest.raises(ConfigError, match="kind 'fake_unregistered_kind'"):
             _definitions_from([FakeUnregisteredKind])
+
+
+class TestVocabulary:
+    """catalog.vocabulary: class definition first, anchor as drift fallback."""
+
+    def test_class_definition_is_authoritative(self):
+        catalog = Catalog.discover()
+        assert "target" in catalog.vocabulary("hook", "trigger_hook")
+        assert "target" not in catalog.vocabulary("hook", "webhook_hook")
+
+    def test_unresolved_key_falls_back_to_the_anchor(self):
+        catalog = Catalog(components={})
+        assert set(catalog.vocabulary("hook", "gone_hook")) == {"watch", "resource"}
+
+    def test_kind_mismatch_falls_back_to_the_anchor(self):
+        catalog = Catalog.discover()
+        # 'cron_job' resolves, but as a job — a hook row with that key is drift.
+        assert set(catalog.vocabulary("hook", "cron_job")) == {"watch", "resource"}

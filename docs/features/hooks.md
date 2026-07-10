@@ -80,6 +80,11 @@ The context carries the event's identity plus the capabilities the scheduler inj
 | `metadata` | Event details (e.g. the run's status). |
 | `trigger` | Capability to queue a run for a component id — how `TriggerHook` acts without any persistence dependency. |
 
+A subclass may extend the relation vocabulary — this is how `TriggerHook` adds the `target`
+verb. Declarations are **extend-only**: they merge over the anchor's vocabulary (redeclaring
+a type replaces its definition; nothing is ever removed), so each class's definition
+advertises exactly the relations it acts on.
+
 Like any component kind, custom hook classes become catalog components by declaring them
 under the entry-point group — see [Catalog](catalog.md).
 

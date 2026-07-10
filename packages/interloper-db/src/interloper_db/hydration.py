@@ -13,9 +13,10 @@ happens at the call site via ``spec.reconstruct()``::
 
 One builder covers every kind: a component's init is its ``config`` (or its
 decrypted ``data`` for secret-bearing kinds) plus whatever its outgoing
-relations and children contribute. The relation types are constrained per
-kind at the schema level, so the walk needs no kind dispatch — an asset
-simply has no ``target`` relations, a destination no ``dependency`` ones.
+relations and children contribute. Relations are mapped through the row's
+own vocabulary (the catalog class's definition, anchor as drift fallback),
+so the walk needs no kind dispatch — an asset simply has no ``target``
+relations, a destination no ``dependency`` ones.
 
 The Store wraps this pattern in thin ``load_*`` convenience methods, but
 any caller can use the hydrator directly to assemble a spec (for example,
@@ -130,7 +131,7 @@ class Hydrator:
         else:
             init = dict(db_component.config or {})
 
-        vocabulary = KINDS[db_component.kind].relation_types
+        vocabulary = self._catalog.vocabulary(db_component.kind, db_component.key)
         for type_, rels in self._relations_by_type(session, db_component.id).items():
             definition = vocabulary.get(type_)
             if definition is None:

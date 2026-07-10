@@ -37,11 +37,23 @@ class TestDefinition:
         assert il.KINDS["hook"].sensitive is False
 
     def test_vocabulary(self):
+        # The anchor is only an observer; TriggerHook extends it with `target`.
         relations = il.KINDS["hook"].relation_types
         assert relations["watch"].field == "watches"
         assert relations["watch"].kinds == ["source", "asset", "job"]
-        assert relations["target"].field == "targets"
         assert relations["resource"].slotted is True
+        assert "target" not in relations
+
+    def test_trigger_hook_extends_the_vocabulary(self):
+        relations = il.TriggerHook.relation_definitions()
+        assert relations["target"].field == "targets"
+        assert relations["target"].kinds == ["source", "asset", "job"]
+        assert relations["watch"].field == "watches"  # inherited, not replaced
+
+    def test_webhook_hook_has_no_targets(self):
+        assert "target" not in il.WebhookHook.relation_definitions()
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            il.WebhookHook(url="https://x.test", targets=[])  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
 
     def test_state_model(self):
         assert il.KINDS["hook"].state_model is il.HookState

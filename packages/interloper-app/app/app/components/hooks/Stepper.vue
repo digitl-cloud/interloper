@@ -100,16 +100,20 @@ watch(selectedType, (newKey, oldKey) => {
 })
 
 // ── Stepper ─────────────────────────────────────────────────────
+// Only hook classes whose definition declares the `target` relation
+// (trigger-style hooks) act on other components — the step follows.
+const hasTargets = computed(() => !!selectedDefinition.value?.relations?.target)
+
 const steps = computed<StepperItem[]>(() => {
     const items: StepperItem[] = []
     if (!isEditing.value) {
         items.push({ title: 'Type', icon: 'i-lucide-shapes', slot: 'type' as const })
     }
-    items.push(
-        { title: 'Watches', icon: 'i-lucide-eye', slot: 'watches' as const },
-        { title: 'Targets', icon: 'i-lucide-crosshair', slot: 'targets' as const },
-        { title: 'Details', icon: 'i-lucide-settings-2', slot: 'details' as const },
-    )
+    items.push({ title: 'Watches', icon: 'i-lucide-eye', slot: 'watches' as const })
+    if (hasTargets.value) {
+        items.push({ title: 'Targets', icon: 'i-lucide-crosshair', slot: 'targets' as const })
+    }
+    items.push({ title: 'Details', icon: 'i-lucide-settings-2', slot: 'details' as const })
     return items
 })
 
@@ -123,10 +127,11 @@ const recapRows = computed(() => {
         .map(id => componentsStore.byId(id)?.name)
         .filter(Boolean)
         .join(', ')
-    return [
-        { icon: 'i-lucide-eye', label: 'Watches', value: names(watchIds.value) || 'None' },
-        { icon: 'i-lucide-crosshair', label: 'Targets', value: names(targetIds.value) || 'None' },
-    ]
+    const rows = [{ icon: 'i-lucide-eye', label: 'Watches', value: names(watchIds.value) || 'None' }]
+    if (hasTargets.value) {
+        rows.push({ icon: 'i-lucide-crosshair', label: 'Targets', value: names(targetIds.value) || 'None' })
+    }
+    return rows
 })
 
 // ── Validation ──────────────────────────────────────────────────
@@ -158,7 +163,7 @@ async function submit() {
             },
             relations: {
                 watch: watchIds.value.map(id => ({ dst_id: id })),
-                target: targetIds.value.map(id => ({ dst_id: id })),
+                ...(hasTargets.value ? { target: targetIds.value.map(id => ({ dst_id: id })) } : {}),
             },
         }
 
