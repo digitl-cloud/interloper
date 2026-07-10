@@ -209,11 +209,29 @@ const resourceContext = computed<Record<string, Record<string, unknown>>>(() => 
     return ctx
 })
 
+// ── Derived source name ──────────────────────────────────────────
+
+/** Label of the discriminator field's selected option, reported by the SchemaForm. */
+const discriminatorLabel = ref<string | null>(null)
+
+/** Default name: the source type's label plus the instance discriminator. */
+const derivedName = computed(() => {
+    const base = sourceDefn.value?.name ?? ''
+    return discriminatorLabel.value ? `${base} ${discriminatorLabel.value}` : base
+})
+
+// The name follows the derived default until the user edits it: a manual edit
+// makes sourceName diverge from the previous derived value, which stops the
+// following (editing it back to the derived value resumes it).
+watch(derivedName, (val, old) => {
+    if (!sourceName.value || sourceName.value === old) sourceName.value = val
+})
+
 // ── Auto-advance on source selection ────────────────────────────
 
 watch(selectedSourceKey, (key) => {
     if (key && sourceDefn.value && !isEditMode.value) {
-        sourceName.value = `My ${sourceDefn.value.name} Source`
+        sourceName.value = derivedName.value
         selectedAssetKeys.value = sourceDefn.value.assets.map(a => a.key)
         resourceSelections.value = {}
         configData.value = {}
@@ -401,6 +419,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                 <SchemaForm v-if="sourceDefn?.config_schema"
                             v-model:data="configData"
                             v-model:is-valid="configValid"
+                            v-model:discriminator-label="discriminatorLabel"
                             :schema="sourceDefn.config_schema"
                             :component-key="sourceDefn.key"
                             :resource-context="resourceContext"
