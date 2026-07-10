@@ -17,7 +17,7 @@ from interloper.resource import Resource
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
 from interloper.serializable import IgnoredDescriptor, Spec, dump_spec_value
 from interloper.utils.imports import get_object_path
-from interloper.utils.text import to_label
+from interloper.utils.text import to_label, validate_key
 
 
 class AssetRef(IgnoredDescriptor):
@@ -388,10 +388,31 @@ class Source(Component):
                 return defn
         raise KeyError(f"Source '{cls.key}' has no asset with key '{key}'")
 
+    def asset_table(self, asset: Asset) -> str:
+        """Physical table name for one of this source's assets.
+
+        Override to give each instance of the source its own tables — e.g.
+        suffix the asset key with the account id the instance is configured
+        for, so two accounts materialize side by side in one dataset instead
+        of overwriting each other's data::
+
+            def asset_table(self, asset: il.Asset) -> str:
+                return f"{asset.key}__{self.account_id}"
+
+        Keep the ``{asset.key}__{suffix}`` shape so a source's tables stay
+        wildcard-queryable per asset. The return value is coerced to a valid
+        identifier by :attr:`Asset.table`.
+
+        Returns:
+            The physical table name for the asset (defaults to the asset key).
+        """
+        return asset.key
+
     def _resolve(self) -> None:
         """Apply source-level defaults to assets that don't define their own."""
         if not self.dataset:
             self.dataset = self.key
+        validate_key(self.dataset)
 
         siblings: dict[str, Asset] = {type(a).key: a for a in self.assets}
 
@@ -399,6 +420,7 @@ class Source(Component):
             asset._source = self
             if not asset.dataset:
                 asset.dataset = self.dataset
+            validate_key(asset.table)
             if not asset.default_destination_key and self.default_destination_key:
                 asset.default_destination_key = self.default_destination_key
             if not asset.destinations and self.destinations:
@@ -529,6 +551,11 @@ class Source(Component):
         if destinations is not None:
             copy.destinations = destinations if isinstance(destinations, list) else [destinations]
         if dataset is not None:
+            # Assets resolved their dataset at construction: re-point those that
+            # inherited the source's, preserving per-asset overrides.
+            for a in copy.assets:
+                if a.dataset == copy.dataset:
+                    a.dataset = dataset
             copy.dataset = dataset
         if default_destination_key is not None:
             copy.default_destination_key = default_destination_key

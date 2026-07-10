@@ -13,7 +13,7 @@ from interloper.partitioning.base import Partition, PartitionConfig
 
 @destination(name="Memory")
 class MemoryDestination(PartitionedDestination):
-    """Destination that stores data in a class-level dict keyed by ``{dataset}/{key}/{partition}``.
+    """Destination that stores data in a class-level dict keyed by ``{dataset}/{table}/{partition}``.
 
     All instances share a single ``_storage`` dict so data written by one
     asset is visible to others.  The partition dispatch (including window
@@ -47,7 +47,7 @@ class MemoryDestination(PartitionedDestination):
         Returns:
             The constructed storage key string.
         """
-        return self._build_key(type(context.asset).key, context.asset.dataset, context.asset.partitioning, partition)
+        return self._build_key(context.asset.table, context.asset.dataset, context.asset.partitioning, partition)
 
     def _build_key(
         self,
@@ -75,7 +75,7 @@ class MemoryDestination(PartitionedDestination):
         """Return row counts grouped by partition from in-memory storage."""
         assert context.asset.partitioning is not None
         column = context.asset.partitioning.column
-        prefix = self._build_key(type(context.asset).key, context.asset.dataset, None, None)
+        prefix = self._build_key(context.asset.table, context.asset.dataset, None, None)
         partition_prefix = f"{prefix}/{column}="
 
         counts: dict[str, int] = {}

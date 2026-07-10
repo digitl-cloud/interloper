@@ -134,6 +134,10 @@ class TiktokAds(il.Source):
 
     # --- Time-series reports (TiktokStatsNormalizer from the source) ---
 
+    def asset_table(self, asset: il.Asset) -> str:
+        """Suffix tables with the advertiser_id so instances materialize side by side."""
+        return f"{asset.key}__{self.advertiser_id}"
+
     @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
     async def ads_stats(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
         """Ad-level performance with basic metrics including spend, clicks, and conversions."""

@@ -182,6 +182,10 @@ class AmazonAds(il.Source):
         value_key="profile_id",
     )
 
+    def asset_table(self, asset: il.Asset) -> str:
+        """Suffix tables with the profile_id so instances materialize side by side."""
+        return f"{asset.key}__{self.profile_id}"
+
     @il.asset(schema=schemas.Profiles, tags=["Entity"])
     def profiles(self, connection: AmazonAdsConnection) -> list[dict[str, Any]]:
         """Advertising profiles associated with the account."""

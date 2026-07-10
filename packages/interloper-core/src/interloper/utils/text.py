@@ -16,6 +16,8 @@ _LABEL_BOUNDARY = re.compile(r"([a-z])([A-Z])")
 _SNAKE_NON_ALNUM = re.compile(r"[^a-zA-Z0-9]+")
 _SNAKE_COLLAPSE = re.compile(r"_+")
 
+_IDENTIFIER_INVALID = re.compile(r"[^a-z0-9_]+")
+
 
 def validate_key(key: str) -> None:
     """Validate that *key* starts with a letter and contains only letters, numbers, and underscores.
@@ -26,6 +28,24 @@ def validate_key(key: str) -> None:
     if not _KEY_RE.match(key):
         msg = f"Key '{key}' is invalid. Must start with a letter and contain only letters, numbers, and underscores."
         raise ValueError(msg)
+
+
+def to_identifier(text: str) -> str:
+    """Coerce text into a lowercase identifier (letters, digits, underscores).
+
+    Unlike :func:`to_snake_case`, existing underscores are preserved verbatim
+    (including ``__`` runs used as name separators) — only invalid characters
+    are replaced.
+
+    Args:
+        text: The text to coerce.
+
+    Returns:
+        The coerced text.
+    """
+    if not text:
+        return ""
+    return _IDENTIFIER_INVALID.sub("_", text.lower()).strip("_")
 
 
 def to_slug_case(text: str) -> str:

@@ -26,7 +26,7 @@ from interloper.utils import concurrency
 from interloper.utils.concurrency import invoke
 from interloper.utils.data import is_empty
 from interloper.utils.imports import get_object_path
-from interloper.utils.text import to_label
+from interloper.utils.text import to_identifier, to_label
 
 if TYPE_CHECKING:
     from interloper.dag import DAG
@@ -202,6 +202,17 @@ class Asset(Component):
         if self._source is not None:
             return f"{self._source.key}.{self.key}"
         return self.key
+
+    @property
+    def table(self) -> str:
+        """The physical table (or leaf) name this asset materializes to.
+
+        Derived, never stored: the owning source composes it (see
+        :meth:`~interloper.source.base.Source.asset_table`) and the result is
+        coerced to a valid identifier. Standalone assets use their class key.
+        """
+        raw = self._source.asset_table(self) if self._source is not None else type(self).key
+        return to_identifier(raw)
 
     @classmethod
     def classpath(cls) -> str:

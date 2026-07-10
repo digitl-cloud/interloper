@@ -148,6 +148,62 @@ class TestCrud:
             store.get_component(dest.id, kind="asset")
 
 
+class AliasedSource(il.Source):
+    """Source class whose instances are discriminated by ``account_id``."""
+
+    account_id: str = ""
+
+    class AliasedRows(il.Asset):
+        """Asset whose table name carries the instance discriminator."""
+
+    def asset_table(self, asset: il.Asset) -> str:
+        """Suffix tables with the account id when one is configured."""
+        return f"{asset.key}__{self.account_id}" if self.account_id else asset.key
+
+
+class TestSourceCollisionGuard:
+    """A second source instance may not target the same physical tables."""
+
+    @pytest.fixture
+    def guard_store(self, component_db: Engine) -> Store:
+        from interloper_assets.demo.source import DemoSource
+
+        return Store(catalog=il.Catalog.from_assets([DemoSource, AliasedSource]))
+
+    def test_same_alias_rejected(self, guard_store: Store):
+        guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "1"})
+        with pytest.raises(ConfigError, match="materializing to"):
+            guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "1"})
+
+    def test_distinct_alias_allowed(self, guard_store: Store):
+        guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "1"})
+        second = guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "2"})
+        assert second.id is not None
+
+    def test_alias_compared_after_sanitization(self, guard_store: Store):
+        guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "act-1"})
+        with pytest.raises(ConfigError, match="materializing to"):
+            guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "ACT_1"})
+
+    def test_unaliased_source_needs_distinct_dataset(self, guard_store: Store):
+        guard_store.create_component(_ORG, kind="source", key="demo_source")
+        with pytest.raises(ConfigError, match="materializing to"):
+            guard_store.create_component(_ORG, kind="source", key="demo_source")
+        second = guard_store.create_component(_ORG, kind="source", key="demo_source", config={"dataset": "other"})
+        assert second.id is not None
+
+    def test_update_into_collision_rejected(self, guard_store: Store):
+        guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "1"})
+        second = guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "2"})
+        with pytest.raises(ConfigError, match="materializing to"):
+            guard_store.update_component(second.id, config={"account_id": "1"})
+
+    def test_other_org_does_not_collide(self, guard_store: Store):
+        guard_store.create_component(_ORG, kind="source", key="aliased_source", config={"account_id": "1"})
+        other = guard_store.create_component(uuid4(), kind="source", key="aliased_source", config={"account_id": "1"})
+        assert other.id is not None
+
+
 class TestRelationKindEnforcement:
     """Relation writes are checked against the vocabulary's allowed kinds."""
 

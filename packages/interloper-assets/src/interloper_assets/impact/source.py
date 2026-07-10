@@ -165,6 +165,10 @@ class Impact(il.Source):
         description="Impact program (campaign) ID",
     )
 
+    def asset_table(self, asset: il.Asset) -> str:
+        """Suffix tables with the program_id so instances materialize side by side."""
+        return f"{asset.key}__{self.program_id}"
+
     @il.asset(
         schema=schemas.Actions,
         partitioning=il.TimePartitionConfig(column="date"),

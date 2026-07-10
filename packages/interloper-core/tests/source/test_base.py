@@ -63,6 +63,18 @@ class FakeSourceWithAssets(il.Source):
             return None
 
 
+class FakeAliasedSource(il.Source):
+    """Source whose asset tables carry the instance's account id."""
+
+    account_id: str = ""
+
+    class FakeAliased(il.Asset):
+        """Asset whose table name carries the source instance discriminator."""
+
+    def asset_table(self, asset: il.Asset) -> str:
+        return f"{asset.key}__{self.account_id}" if self.account_id else asset.key
+
+
 # -- Identity and class metadata -----------------------------------------------
 
 
@@ -92,6 +104,59 @@ class TestIdentity:
 
     def test_asset_types_default_empty_list(self):
         assert FakeSource.asset_types == []
+
+    def test_invalid_dataset_raises_at_init(self):
+        # ``validate_key`` raises a ValueError, so pydantic wraps it at init time.
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="invalid"):
+            FakeSource(dataset="bad dataset!")
+
+
+# -- Per-instance table names ----------------------------------------------------
+
+
+class TestAssetTable:
+    def test_table_defaults_to_asset_key(self):
+        source = FakeSourceWithAssets()
+        assert [a.table for a in source.assets] == ["fake_first", "fake_second"]
+
+    def test_asset_table_override_suffixes_table(self):
+        source = FakeAliasedSource(account_id="123")
+        (asset,) = source.assets
+        assert source.asset_table(asset) == "fake_aliased__123"
+        assert asset.table == "fake_aliased__123"
+        # The logical identity is untouched — only the physical name varies.
+        assert type(asset).key == "fake_aliased"
+        assert asset.dataset == "fake_aliased_source"
+
+    def test_asset_table_is_sanitized(self):
+        source = FakeAliasedSource(account_id="act_123-DE")
+        (asset,) = source.assets
+        assert asset.table == "fake_aliased__act_123_de"
+
+    def test_default_asset_table_is_the_asset_key(self):
+        source = FakeAliasedSource()
+        (asset,) = source.assets
+        assert asset.table == "fake_aliased"
+
+    def test_table_survives_spec_round_trip(self):
+        source = FakeAliasedSource(account_id="123")
+        restored = FakeAliasedSource.from_spec(source.to_spec())
+        assert [a.table for a in restored.assets] == ["fake_aliased__123"]
+
+    def test_invalid_asset_table_raises_at_init(self):
+        # The composed name is validated during ``_resolve``; ``validate_key``
+        # raises a ValueError, so pydantic wraps it at init time.
+        from pydantic import ValidationError
+
+        class FakeBadTableSource(FakeAliasedSource):
+            def asset_table(self, asset: il.Asset) -> str:
+                """Return a name that sanitizes to an invalid identifier."""
+                return f"123_{asset.key}"
+
+        with pytest.raises(ValidationError, match="invalid"):
+            FakeBadTableSource()
 
 
 # -- Definition metadata -------------------------------------------------------
@@ -306,6 +371,16 @@ class TestReconfiguration:
 
     def test_override_dataset(self):
         assert FakeSourceWithAssets()(dataset="override").dataset == "override"
+
+    def test_override_dataset_repropagates_to_assets(self):
+        reconfigured = FakeSourceWithAssets()(dataset="override")
+        assert all(a.dataset == "override" for a in reconfigured.assets)
+
+    def test_override_dataset_preserves_per_asset_overrides(self):
+        source = FakeSourceWithAssets()
+        source.assets[0].dataset = "pinned"
+        reconfigured = source(dataset="override")
+        assert [a.dataset for a in reconfigured.assets] == ["pinned", "override"]
 
     def test_override_destination(self):
         new_dest = FakeDestination()
