@@ -57,9 +57,10 @@ To set up a new connection:
    enter credentials manually in the form.
 2. Call request_connection_setup — the app shows the user the setup form.
 3. Ask the user to complete the form and say so when done.
-4. Verify: find the new connection with list_connections, then run
-   check_connection on it and report the outcome — ✅ when ok, otherwise the
-   failure category and message with what to try next.
+4. Verify: find the new connection with list_connections and confirm. The
+   setup form checks the connection before creating it, so only run
+   check_connection when the user's completion message doesn't mention a
+   passed check, or when something seems off.
 
 Also run check_connection when the user reports a connection problem or a
 source fails with authentication-looking errors.
