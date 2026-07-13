@@ -87,3 +87,12 @@ class FacebookAdsConnection(il.OAuthConnection):
             for account in data
             if account.get("account_status") == 1  # ACTIVE only
         ]
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``accounts`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.accounts()
+        return True

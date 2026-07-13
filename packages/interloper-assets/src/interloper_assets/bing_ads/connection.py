@@ -220,3 +220,12 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
         )
         response.raise_for_status()
         return ET.fromstring(response.text)
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``accounts`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.accounts()
+        return True

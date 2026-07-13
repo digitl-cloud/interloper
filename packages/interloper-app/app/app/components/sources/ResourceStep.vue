@@ -203,6 +203,13 @@ defineExpose({ formData })
                                 v-model:is-valid="formValid"
                                 :schema="schema"
                                 :resource-context="resourceContext" />
+
+                    <template v-if="definition.checkable">
+                        <USeparator />
+                        <ResourcesConnectionCheck :component-key="definition.key"
+                                                  :config="formData"
+                                                  manual />
+                    </template>
                 </div>
             </template>
 

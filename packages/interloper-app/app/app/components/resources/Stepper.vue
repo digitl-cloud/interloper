@@ -1,9 +1,11 @@
 <script setup lang="ts">
 /**
- * Two-step form for creating and editing resources (connections, configs).
+ * Stepped form for creating and editing resources (connections, configs).
  *
  * Step 1: Type selection (create mode only)
  * Step 2: Details (name + schema form)
+ * Step 3: Test (checkable connections only) — runs the live connection
+ *         check; failures warn but never block creation.
  *
  * Container-agnostic: the parent wraps this in a UDrawer, modal, or
  * any other container. Navigation state is exposed via defineExpose.
@@ -32,8 +34,6 @@ const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const toast = useToast()
 
-const { activeStep, hasPrev, hasNext, reset: resetStepper, next: nextStep, prev: prevStep } = useStepperFlow(2)
-
 const selectedType = ref('')
 const resourceName = ref('')
 const formData = ref<Record<string, unknown>>({})
@@ -44,10 +44,18 @@ const loadingEdit = ref(false)
 /** Whether we're in edit mode. */
 const isEditing = computed(() => !!props.resource)
 
-const steps: StepperItem[] = [
+/** The selected type's catalog definition. */
+const selectedDefinition = computed(() => props.definitions.find(d => d.key === selectedType.value))
+
+/** Whether the selected type supports a live connection check. */
+const checkable = computed(() => !!selectedDefinition.value?.checkable)
+
+const steps = computed<StepperItem[]>(() => [
     { slot: 'type' as const, title: 'Type', icon: 'i-lucide-plug' },
     { slot: 'details' as const, title: 'Details', icon: 'i-lucide-settings-2' },
-]
+    ...(checkable.value ? [{ slot: 'test' as const, title: 'Test', icon: 'i-lucide-radio-tower' }] : []),
+])
+const { activeStep, hasPrev, hasNext, reset: resetStepper, next: nextStep, prev: prevStep } = useStepperFlow(() => steps.value.length)
 const displaySteps = useCheckedSteps(steps, activeStep)
 
 /** Label for the schema section separator. */
@@ -107,14 +115,11 @@ watch(selectedType, (newKey, oldKey) => {
 /** Resolve display name from selected type key. */
 const selectedTypeName = computed(() => {
     if (!selectedType.value) return ''
-    return props.definitions.find(d => d.key === selectedType.value)?.name ?? selectedType.value
+    return selectedDefinition.value?.name ?? selectedType.value
 })
 
 /** First catalog tag of the selected type (summary-card caption). */
-const selectedTypeTag = computed(() => {
-    const defn = props.definitions.find(d => d.key === selectedType.value) as (ComponentDefinition & { tags?: string[] }) | undefined
-    return defn?.tags?.[0] ?? kindLabel.value
-})
+const selectedTypeTag = computed(() => selectedDefinition.value?.tags?.[0] ?? kindLabel.value)
 
 /** Can proceed to next step? */
 const canNext = computed(() => !!selectedType.value)
@@ -126,7 +131,9 @@ const canSubmit = computed(() => !!resourceName.value.trim() && (formValid.value
 
 const canProceed = computed(() => {
     if (isEditing.value) return canSubmit.value
-    if (hasNext.value) return canNext.value
+    if (activeStep.value === 0) return canNext.value
+    // Details and test steps both need a complete form; the test outcome
+    // itself never gates creation.
     return canSubmit.value
 })
 
@@ -224,6 +231,17 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
                      class="text-sm text-muted italic">
                     No configuration required for this type.
                 </div>
+            </div>
+        </template>
+
+        <template #test>
+            <div class="flex flex-col gap-6">
+                <TypeSummaryCard :icon="componentIcon(selectedType)"
+                                 :title="selectedTypeName"
+                                 :caption="selectedTypeTag" />
+
+                <ResourcesConnectionCheck :component-key="selectedType"
+                                          :config="formData" />
             </div>
         </template>
     </UStepper>

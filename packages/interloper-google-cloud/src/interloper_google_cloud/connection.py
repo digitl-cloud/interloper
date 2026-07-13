@@ -117,3 +117,12 @@ class GoogleCloudConnection(Connection):
         async with httpx.AsyncClient(timeout=30) as client:
             access_token = await _get_access_token(client, key_info)
             return await _list_projects(client, access_token)
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``projects`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.projects()
+        return True
