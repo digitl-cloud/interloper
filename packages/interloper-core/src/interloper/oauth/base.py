@@ -111,13 +111,74 @@ def _adopt_provider(_name: str, loaded: Any) -> tuple[str, OAuthProvider]:
 PROVIDERS: Registry[OAuthProvider] = Registry("interloper.oauth_providers", adopt=_adopt_provider)
 
 
+# -- In-house app credentials (environment) -------------------------------------
+
+#: Credential field → env var suffix. The trio a provider needs for sign-in.
+_ENV_FIELDS: dict[str, str] = {
+    "client_id": "CLIENT_ID",
+    "client_secret": "CLIENT_SECRET",
+    "redirect_uri": "REDIRECT_URI",
+}
+
+
+def provider_env_name(key: str, suffix: str) -> str:
+    """The environment variable carrying one in-house credential for provider ``key``.
+
+    Single owner of the ``INTERLOPER_<PROVIDER>_<SUFFIX>`` naming convention —
+    every consumer (token exchange, connection credential injection,
+    availability checks) builds names through here.
+
+    Returns:
+        The environment variable name.
+    """
+    return f"INTERLOPER_{key.upper()}_{suffix.upper()}"
+
+
+def provider_env_names(key: str) -> dict[str, str]:
+    """The environment variable carrying each credential field for provider ``key``.
+
+    Returns:
+        ``{field: env_name}`` for the ``client_id`` / ``client_secret`` /
+        ``redirect_uri`` trio.
+    """
+    return {field: provider_env_name(key, suffix) for field, suffix in _ENV_FIELDS.items()}
+
+
+@dataclass(frozen=True)
+class OAuthAppCredentials:
+    """The in-house OAuth app credential trio for one provider.
+
+    Resolved from the environment complete-or-nothing: :meth:`from_env`
+    never yields a partial set, so consumers cannot observe a
+    half-configured provider.
+    """
+
+    client_id: str
+    client_secret: str
+    redirect_uri: str
+
+    @classmethod
+    def from_env(cls, key: str) -> OAuthAppCredentials | None:
+        """Resolve the trio for provider ``key`` from the environment.
+
+        Returns:
+            The credentials, or ``None`` unless all three variables are set
+            and non-empty.
+        """
+        names = provider_env_names(key)
+        client_id = os.environ.get(names["client_id"])
+        client_secret = os.environ.get(names["client_secret"])
+        redirect_uri = os.environ.get(names["redirect_uri"])
+        if not (client_id and client_secret and redirect_uri):
+            return None
+        return cls(client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri)
+
+
 def is_provider_configured(key: str) -> bool:
     """Whether the in-house OAuth app credentials for ``key`` are set in the environment.
 
     Returns:
-        True only when ``INTERLOPER_<KEY>_CLIENT_ID``, ``INTERLOPER_<KEY>_CLIENT_SECRET``,
-        and ``INTERLOPER_<KEY>_REDIRECT_URI`` are all set — the provider is usable for sign-in.
+        True only when the full credential trio is set — the provider is
+        usable for sign-in.
     """
-    prefix = key.upper()
-    suffixes = ("CLIENT_ID", "CLIENT_SECRET", "REDIRECT_URI")
-    return all(os.environ.get(f"INTERLOPER_{prefix}_{suffix}") for suffix in suffixes)
+    return OAuthAppCredentials.from_env(key) is not None

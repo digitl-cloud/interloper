@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from interloper.oauth import PROVIDERS, OAuthProvider, is_provider_configured
+from interloper.oauth import PROVIDERS, OAuthAppCredentials, OAuthProvider, provider_env_names
 from interloper_db import Profile
 from pydantic import BaseModel
 
@@ -37,26 +37,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/oauth", tags=["oauth"])
 
 
-# -- App credentials (environment) ---------------------------------------------
+def log_provider_status() -> None:
+    """Log which OAuth providers are usable, warning on partial credential trios.
 
-
-class _ProviderConfig:
-    """In-house OAuth credentials resolved from environment variables."""
-
-    def __init__(self, key: str, *, env_prefix: str | None = None) -> None:
-        prefix = (env_prefix or key).upper()
-        self.key = key
-        self.client_id = os.environ.get(f"INTERLOPER_{prefix}_CLIENT_ID", "")
-        self.client_secret = os.environ.get(f"INTERLOPER_{prefix}_CLIENT_SECRET", "")
-        self.redirect_uri = os.environ.get(f"INTERLOPER_{prefix}_REDIRECT_URI", "")
-
-    @property
-    def configured(self) -> bool:
-        return is_provider_configured(self.key)
-
-
-def _load_providers() -> dict[str, _ProviderConfig]:
-    return {key: _ProviderConfig(key) for key in PROVIDERS.keys()}
+    Called at app startup: a provider with only some of its three env vars set
+    is invisible everywhere else (it simply isn't offered), so this warning is
+    the one place a typo'd or forgotten variable surfaces.
+    """
+    active = []
+    for key in PROVIDERS.keys():
+        names = provider_env_names(key)
+        missing = [n for n in names.values() if not os.environ.get(n)]
+        if not missing:
+            active.append(key)
+        elif len(missing) < len(names):
+            logger.warning("OAuth provider '%s' is partially configured — missing %s", key, ", ".join(sorted(missing)))
+    logger.info("OAuth sign-in providers: %s", ", ".join(sorted(active)) if active else "none configured")
 
 
 # -- Generic token exchange ----------------------------------------------------
@@ -65,7 +61,7 @@ def _load_providers() -> dict[str, _ProviderConfig]:
 async def _exchange(
     client: httpx.AsyncClient,
     spec: OAuthProvider,
-    cfg: _ProviderConfig,
+    cfg: OAuthAppCredentials,
     code: str,
 ) -> dict[str, Any]:
     """Exchange an authorization code for tokens, driven by the provider spec.
@@ -136,18 +132,17 @@ def list_providers() -> list[ProviderInfo]:
     ``REDIRECT_URI`` environment variables set are included.  Metadata
     (auth_url, label, icon) comes from the provider registry.
     """
-    specs = dict(PROVIDERS.items())
     return [
         ProviderInfo(
-            key=cfg.key,
-            client_id=cfg.client_id,
-            redirect_uri=cfg.redirect_uri,
-            auth_url=specs[cfg.key].auth_url,
-            label=specs[cfg.key].label,
-            icon=specs[cfg.key].icon,
+            key=key,
+            client_id=creds.client_id,
+            redirect_uri=creds.redirect_uri,
+            auth_url=spec.auth_url,
+            label=spec.label,
+            icon=spec.icon,
         )
-        for cfg in _load_providers().values()
-        if cfg.configured
+        for key, spec in PROVIDERS.items()
+        if (creds := OAuthAppCredentials.from_env(key)) is not None
     ]
 
 
@@ -167,8 +162,8 @@ async def exchange_token(
     if spec is None:
         raise HTTPException(status_code=400, detail=f"Unknown OAuth provider: {provider}")
 
-    cfg = _ProviderConfig(provider)
-    if not cfg.configured:
+    cfg = OAuthAppCredentials.from_env(provider)
+    if cfg is None:
         raise HTTPException(status_code=400, detail=f"OAuth provider {provider} is not configured")
 
     try:

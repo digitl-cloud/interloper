@@ -122,4 +122,6 @@ def create_app(
 
     app.include_router(api)
 
+    oauth.log_provider_status()
+
     return app
