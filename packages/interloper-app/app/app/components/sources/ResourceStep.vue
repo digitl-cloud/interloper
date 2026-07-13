@@ -40,6 +40,8 @@ const drawerOpen = ref(false)
 const newName = ref(props.definition.name ?? '')
 const formData = ref<Record<string, any>>({})
 const formValid = ref(false)
+/** Whether the schema form is in manual credential entry (vs OAuth sign-in). */
+const manualCreds = ref(true)
 const creating = ref(false)
 const loadingInstances = ref(false)
 
@@ -201,10 +203,11 @@ defineExpose({ formData })
                     <SchemaForm v-if="schema"
                                 v-model:data="formData"
                                 v-model:is-valid="formValid"
+                                v-model:manual-mode="manualCreds"
                                 :schema="schema"
                                 :resource-context="resourceContext" />
 
-                    <ResourcesConnectionCheck v-if="definition.checkable"
+                    <ResourcesConnectionCheck v-if="definition.checkable && manualCreds"
                                               :component-key="definition.key"
                                               :config="formData"
                                               manual />

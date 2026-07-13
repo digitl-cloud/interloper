@@ -82,6 +82,8 @@ const props = defineProps<{
 
 const data = defineModel<Record<string, any>>('data', { default: () => ({}) })
 const isValid = defineModel<boolean>('isValid', { default: false })
+/** Whether credentials are entered by hand — false while the OAuth sign-in tab is active. */
+const manualMode = defineModel<boolean>('manualMode', { default: true })
 
 const catalogStore = useCatalogStore()
 
@@ -101,6 +103,11 @@ const oauthAvailable = computed(() => {
     if (!oauthMeta.value) return false
     return catalogStore.isOAuthProviderAvailable(oauthMeta.value.provider)
 })
+
+// Keep the manual-mode model in sync: forms without OAuth are always manual.
+watch([oauthAvailable, activeTab], ([available, tab]) => {
+    manualMode.value = !available || tab === 'manual'
+}, { immediate: true })
 
 /** Provider display label. */
 const oauthLabel = computed(() => {

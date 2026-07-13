@@ -49,6 +49,9 @@ const selectedDefinition = computed(() => props.definitions.find(d => d.key === 
 /** Whether the selected type supports a live connection check. */
 const checkable = computed(() => !!selectedDefinition.value?.checkable)
 
+/** Whether the schema form is in manual credential entry (vs OAuth sign-in). */
+const manualCreds = ref(true)
+
 const steps: StepperItem[] = [
     { slot: 'type' as const, title: 'Type', icon: 'i-lucide-plug' },
     { slot: 'details' as const, title: 'Details', icon: 'i-lucide-settings-2' },
@@ -221,6 +224,7 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
                      class="space-y-1">
                     <SchemaForm v-model:data="formData"
                                 v-model:is-valid="formValid"
+                                v-model:manual-mode="manualCreds"
                                 :schema="selectedSchema" />
                 </div>
                 <div v-else
@@ -228,7 +232,7 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
                     No configuration required for this type.
                 </div>
 
-                <ResourcesConnectionCheck v-if="checkable"
+                <ResourcesConnectionCheck v-if="checkable && manualCreds"
                                           :component-key="selectedType"
                                           :config="formData"
                                           manual />
@@ -256,6 +260,7 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
              class="space-y-1">
             <SchemaForm v-model:data="formData"
                         v-model:is-valid="formValid"
+                        v-model:manual-mode="manualCreds"
                         :schema="selectedSchema" />
         </div>
         <div v-else
@@ -263,7 +268,7 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
             No configuration required for this type.
         </div>
 
-        <ResourcesConnectionCheck v-if="checkable"
+        <ResourcesConnectionCheck v-if="checkable && manualCreds"
                                   :component-key="selectedType"
                                   :config="formData"
                                   manual />
