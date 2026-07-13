@@ -40,10 +40,14 @@ _model = resolve_model()
 catalog_agent = Agent(
     name="CatalogAgent",
     model=_model,
-    description="Discovers sources, inspects asset schemas, searches fields across the catalog, and compares schemas.",
+    description=(
+        "Discovers the organisation's configured sources and the catalog of available source types, "
+        "inspects asset schemas, searches fields across the catalog, and compares schemas."
+    ),
     instruction=CATALOG_INSTRUCTION,
     tools=[
         catalog.list_sources,
+        catalog.list_available_sources,
         catalog.get_source_detail,
         catalog.get_asset_schema,
         catalog.search_fields,

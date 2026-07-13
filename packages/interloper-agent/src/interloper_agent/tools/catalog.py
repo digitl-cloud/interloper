@@ -10,50 +10,82 @@ from interloper_agent.context import get_catalog, get_org_id, get_store, seriali
 
 
 def list_sources(tool_context: ToolContext) -> dict[str, Any]:
-    """List all sources registered in the organisation.
+    """List the sources configured in the user's organisation.
 
-    Returns each source with its key, name, asset count, and creation date.
-    Also indicates which catalog sources have configured DB instances.
+    This answers "what sources do we/I have?" — it returns only configured
+    instances, each with its key, instance name, asset count, and creation
+    date, enriched with catalog metadata (display name, icon). For the
+    catalog of source types that *could* be connected, use
+    ``list_available_sources`` instead.
     """
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
         catalog = get_catalog()
 
-        db_sources = store.list_components(org_id, kinds=["source"])
-        db_by_key: dict[str, Any] = {}
-        for s in db_sources:
+        sources = store.list_components(org_id, kinds=["source"])
+        results = []
+        for s in sources:
             entry = serialize(s)
             entry["asset_count"] = len(s.children)
-            db_by_key[s.key] = entry
+            defn = catalog.get(s.key)
+            if defn is not None:
+                entry["catalog"] = {
+                    "name": defn.get("name", s.key),
+                    "description": defn.get("description"),
+                    "icon": defn.get("icon"),
+                    "tags": defn.get("tags", []),
+                }
+            results.append(entry)
 
-        # Enrich with catalog metadata
+        return {"status": "success", "count": len(results), "sources": results}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def list_available_sources(tool_context: ToolContext) -> dict[str, Any]:
+    """List the source types available in the catalog.
+
+    This answers "what sources does Interloper support / could we add?" — it
+    returns every source type in the catalog, whether configured or not, with
+    how many instances the organisation has configured. For the sources the
+    organisation actually has, use ``list_sources`` instead.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        catalog = get_catalog()
+
+        configured_counts: dict[str, int] = {}
+        for s in store.list_components(org_id, kinds=["source"]):
+            configured_counts[s.key] = configured_counts.get(s.key, 0) + 1
+
         results = []
         for key, defn in catalog.items():
             if defn.get("kind") != "source":
                 continue
-            item: dict[str, Any] = {
+            count = configured_counts.get(key, 0)
+            results.append({
                 "key": key,
                 "name": defn.get("name", key),
                 "description": defn.get("description"),
                 "icon": defn.get("icon"),
-                "catalog_asset_count": len(defn.get("assets", [])),
+                "asset_count": len(defn.get("assets", [])),
                 "tags": defn.get("tags", []),
-            }
-            if key in db_by_key:
-                item["configured"] = True
-                item["instance"] = db_by_key[key]
-            else:
-                item["configured"] = False
-            results.append(item)
+                "configured": count > 0,
+                "configured_count": count,
+            })
 
-        return {"status": "success", "sources": results}
+        return {"status": "success", "count": len(results), "sources": results}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
 
 def get_source_detail(source_key: str, tool_context: ToolContext) -> dict[str, Any]:
     """Get full catalog detail for a source type.
+
+    This is the catalog definition (the source *type*), not an org-configured
+    instance — use ``list_sources`` to see what the organisation has configured.
 
     Args:
         source_key: The source key (e.g. 'facebook_ads').
@@ -73,6 +105,9 @@ def get_source_detail(source_key: str, tool_context: ToolContext) -> dict[str, A
 
 def get_asset_schema(source_key: str, asset_key: str, tool_context: ToolContext) -> dict[str, Any]:
     """Get the JSON schema for a specific asset within a source.
+
+    Schemas come from the catalog: they are a property of the source type,
+    shared by every configured instance of that source.
 
     Args:
         source_key: The source key (e.g. 'facebook_ads').
@@ -121,7 +156,9 @@ def get_asset_schema(source_key: str, asset_key: str, tool_context: ToolContext)
 
 
 def search_fields(query: str, tool_context: ToolContext) -> dict[str, Any]:
-    """Search for fields across all asset schemas matching a query string.
+    """Search for fields across all asset schemas in the catalog matching a query string.
+
+    Searches every source type's schemas, configured or not.
 
     Args:
         query: Substring to search for in field names and descriptions (case-insensitive).
