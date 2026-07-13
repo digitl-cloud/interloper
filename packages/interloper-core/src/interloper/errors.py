@@ -68,6 +68,17 @@ class SourceError(InterloperError, ValueError):
     """An error in source definition or instantiation."""
 
 
+# -- Connection ----------------------------------------------------------------
+
+
+class ConnectionCheckError(InterloperError):
+    """A connection check failed with a curated, user-facing message.
+
+    Raised from ``Connection.check()`` implementations when the failure
+    deserves a better message than the generic HTTP-error categorisation.
+    """
+
+
 # -- Partitioning --------------------------------------------------------------
 
 

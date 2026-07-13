@@ -108,3 +108,12 @@ class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
             }
             for p in profiles
         ]
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``profiles`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.profiles()
+        return True

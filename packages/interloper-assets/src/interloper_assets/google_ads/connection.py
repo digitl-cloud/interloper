@@ -136,3 +136,12 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
                     )
 
         return results
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``customers`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.customers()
+        return True

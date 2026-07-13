@@ -42,3 +42,12 @@ class CriteoConnection(il.RefreshTokenOAuthConnection):
             {"id": a["id"], "name": a.get("attributes", {}).get("advertiserName") or a["id"]} for a in advertisers
         ]
         return sorted(results, key=lambda a: a["name"].lower())
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``advertisers`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.advertisers()
+        return True

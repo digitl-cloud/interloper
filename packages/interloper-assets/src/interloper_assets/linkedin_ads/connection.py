@@ -63,3 +63,12 @@ class LinkedinAdsConnection(il.RefreshTokenOAuthConnection):
             async for page in pages
             for account in page
         ]
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``accounts`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.accounts()
+        return True

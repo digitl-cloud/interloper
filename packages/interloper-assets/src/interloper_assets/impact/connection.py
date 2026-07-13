@@ -34,3 +34,12 @@ class ImpactConnection(il.Connection):
         paginator = il.PageNumberPaginator(page_param="Page", total_path="@numpages")
         pages = self.client.paginate("/Campaigns", paginator, data_selector=lambda r: r.json().get("Campaigns") or [])
         return [{"Id": c["Id"], "Name": c.get("Name", c["Id"])} async for page in pages for c in page]
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``programs`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.programs()
+        return True

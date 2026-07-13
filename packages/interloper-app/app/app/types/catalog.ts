@@ -34,6 +34,8 @@ export interface ComponentDefinition {
     /** Relation vocabulary: type → allowed dst kinds, keys and slots. */
     relations: Record<string, RelationDefinition>
     provider?: string
+    /** Whether the type implements a live connection check (resources only). */
+    checkable?: boolean
 }
 
 export interface AssetDefinition extends ComponentDefinition {

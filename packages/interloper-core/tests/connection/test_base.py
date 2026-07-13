@@ -8,6 +8,7 @@ from pydantic_settings import SettingsConfigDict
 from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuthConnection
 from interloper.oauth import OAuthConfig
 from interloper.resource import InputField, SecretField
+from interloper.utils.concurrency import invoke
 
 
 class TestConnection:
@@ -137,3 +138,44 @@ class TestRefreshTokenOAuthConnection:
 
         # A per-connection override always wins over the in-house env credentials.
         assert (conn.client_id, conn.client_secret) == ("my-id", "my-secret")
+
+
+class TestConnectionCheck:
+    def test_base_check_not_implemented(self):
+        class Plain(Connection):
+            host: str = "localhost"
+
+        assert Plain.checkable() is False
+        assert Plain.definition().checkable is False
+        with pytest.raises(NotImplementedError):
+            Plain().check()
+
+    def test_sync_check_override(self):
+        class Checked(Connection):
+            api_key: str = "k"
+
+            def check(self) -> bool:
+                return self.api_key == "k"
+
+        assert Checked.checkable() is True
+        assert Checked.definition().checkable is True
+        assert Checked().check() is True
+
+    async def test_async_check_override(self):
+        class Checked(Connection):
+            async def check(self) -> bool:
+                return True
+
+        assert Checked.checkable() is True
+        assert await invoke(Checked().check) is True
+
+    def test_oauth_connection_definition_carries_checkable(self):
+        # The x-oauth enrichment chain must not lose the checkable flag.
+        class Checked(RefreshTokenOAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("amazon")
+            model_config = SettingsConfigDict(env_prefix="amazon_conn_check_")
+
+            def check(self) -> bool:
+                return True
+
+        assert Checked.definition().checkable is True

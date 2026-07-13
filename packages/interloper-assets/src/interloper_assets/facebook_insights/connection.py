@@ -63,3 +63,12 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
             params = None
 
         return pages
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``pages`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.pages()
+        return True

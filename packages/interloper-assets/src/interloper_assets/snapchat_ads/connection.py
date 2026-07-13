@@ -66,3 +66,12 @@ class SnapchatAdsConnection(il.RefreshTokenOAuthConnection):
                 accounts.append({"id": acct["id"], "name": acct.get("name", acct["id"])})
 
         return accounts
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``ad_accounts`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.ad_accounts()
+        return True

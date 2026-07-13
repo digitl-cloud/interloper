@@ -6,18 +6,16 @@ import os
 from typing import Any, ClassVar
 
 from pydantic import model_validator
-from pydantic_settings import BaseSettings
 
 from interloper.oauth import OAuthConfig, provider_env_name
 from interloper.resource import InputField, Resource, ResourceDefinition, SecretField
 
 
-class Connection(BaseSettings, Resource):
+class Connection(Resource):
     """A resource for database/service connection credentials.
 
-    Extends both ``Resource`` and ``BaseSettings``, so connection values
-    can be loaded from environment variables, .env files, or passed
-    directly::
+    Like every ``Resource``, connection values can be loaded from
+    environment variables, .env files, or passed directly::
 
         class MyConnection(Connection):
             host: str = "localhost"
@@ -35,6 +33,43 @@ class Connection(BaseSettings, Resource):
 
     kind: ClassVar[str] = "connection"
     tags: ClassVar[list[str]] = []
+
+    def check(self) -> bool:
+        """Verify this connection with a lightweight authenticated call.
+
+        Override in a subclass (sync or ``async``) to make the cheapest call
+        that proves the credentials work — often a one-line delegation to an
+        existing ``@fetch_field_provider`` method. Like fetch providers, it
+        may run inside the API process, so it must use lightweight HTTP
+        (``httpx``), never a heavy provider SDK.
+
+        Returns ``True`` when the connection works, ``False`` when it
+        provably doesn't. Exceptions are also failures: ``httpx`` errors are
+        categorised by the caller (401/403 → bad credentials, timeouts →
+        network); raise :class:`~interloper.errors.ConnectionCheckError` to
+        surface a curated message instead.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def checkable(cls) -> bool:
+        """Whether this connection class implements :meth:`check`.
+
+        Returns:
+            True when the class overrides the base hook.
+        """
+        return cls.check is not Connection.check
+
+    @classmethod
+    def definition(cls) -> ResourceDefinition:
+        """Advertise :meth:`check` support so UIs can offer a test step.
+
+        Returns:
+            The resource definition with ``checkable`` set.
+        """
+        definition = super().definition()
+        definition.checkable = cls.checkable()
+        return definition
 
 
 class OAuthConnection(Connection):

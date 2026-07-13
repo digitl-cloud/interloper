@@ -89,3 +89,12 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
                 organizations.append({"id": org_id, "name": name})
 
         return organizations
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``organizations`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.organizations()
+        return True

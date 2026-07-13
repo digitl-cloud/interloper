@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from pydantic_settings import BaseSettings
+
 from interloper.component import Component, ComponentDefinition
 from interloper.utils.text import to_label
 
@@ -16,14 +18,19 @@ class ResourceDefinition(ComponentDefinition):
     """
 
     provider: str | None = None
+    checkable: bool = False
 
 
-class Resource(Component):
+class Resource(BaseSettings, Component):
     """Base for injectable dependencies resolved and injected into asset functions.
 
-    Subclass to define a custom resource::
+    Extends ``BaseSettings``, so resource values can be loaded from
+    environment variables, .env files, or passed directly. Subclass to
+    define a custom resource::
 
         class MyCache(Resource):
+            model_config = SettingsConfigDict(env_prefix="my_cache_")
+
             host: str = "localhost"
             port: int = 6379
 

@@ -34,7 +34,9 @@ def handle_error(error: Exception, context: str) -> None:
     raise HTTPException(status_code=500, detail=f"Failed {context}.")
 
 
-# Import and register the resolver after helpers are defined.
+# Import and register the sub-routers after helpers are defined.
+from interloper_api.routes.external.check import sub_router as check_router  # noqa: E402
 from interloper_api.routes.external.resolve import sub_router as resolve_router  # noqa: E402
 
 router.include_router(resolve_router)
+router.include_router(check_router)
