@@ -1,4 +1,4 @@
-"""Interloper Agent — multi-agent system for asset discovery, lineage, and operations."""
+"""Interloper Agent — multi-agent system for asset discovery, lineage, and scheduling."""
 
 from __future__ import annotations
 
@@ -8,14 +8,13 @@ from google.adk.agents import Agent
 from interloper.settings import AppSettings
 
 from interloper_agent.prompts import (
-    ACTION_INSTRUCTION,
     ANALYTICS_INSTRUCTION,
     CATALOG_INSTRUCTION,
     LINEAGE_INSTRUCTION,
-    OPERATIONS_INSTRUCTION,
     ROOT_INSTRUCTION,
+    SCHEDULING_INSTRUCTION,
 )
-from interloper_agent.tools import actions, analytics, catalog, lineage, operations
+from interloper_agent.tools import analytics, catalog, lineage, scheduling
 
 if TYPE_CHECKING:
     from google.adk.models import BaseLlm
@@ -67,18 +66,25 @@ lineage_agent = Agent(
     ],
 )
 
-operations_agent = Agent(
-    name="OperationsAgent",
+scheduling_agent = Agent(
+    name="SchedulingAgent",
     model=_model,
-    description="Monitors run health, recent failures, job schedules, and backfill progress.",
-    instruction=OPERATIONS_INSTRUCTION,
+    description=(
+        "Monitors run health, recent failures, job schedules, and backfill progress; "
+        "triggers runs, starts backfills, and toggles jobs or assets on/off."
+    ),
+    instruction=SCHEDULING_INSTRUCTION,
     tools=[
-        operations.list_recent_runs,
-        operations.get_run_detail,
-        operations.list_failures,
-        operations.get_job_health,
-        operations.list_jobs,
-        operations.list_backfills,
+        scheduling.list_jobs,
+        scheduling.get_job_health,
+        scheduling.toggle_job,
+        scheduling.list_recent_runs,
+        scheduling.get_run_detail,
+        scheduling.list_failures,
+        scheduling.trigger_run,
+        scheduling.list_backfills,
+        scheduling.trigger_backfill,
+        scheduling.toggle_asset,
     ],
 )
 
@@ -94,23 +100,10 @@ analytics_agent = Agent(
     ],
 )
 
-action_agent = Agent(
-    name="ActionAgent",
-    model=_model,
-    description="Triggers runs, starts backfills, and toggles jobs or assets on/off.",
-    instruction=ACTION_INSTRUCTION,
-    tools=[
-        actions.trigger_run,
-        actions.trigger_backfill,
-        actions.toggle_job,
-        actions.toggle_asset,
-    ],
-)
-
 root_agent = Agent(
     name="InterloperAgent",
     model=_model,
     instruction=ROOT_INSTRUCTION,
     description="Main Interloper assistant that routes queries to specialized sub-agents.",
-    sub_agents=[catalog_agent, lineage_agent, operations_agent, analytics_agent, action_agent],
+    sub_agents=[catalog_agent, lineage_agent, scheduling_agent, analytics_agent],
 )
