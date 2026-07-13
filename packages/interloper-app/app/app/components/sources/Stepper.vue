@@ -214,11 +214,8 @@ const resourceContext = computed<Record<string, Record<string, unknown>>>(() => 
 /** Label of the discriminator field's selected option, reported by the SchemaForm. */
 const discriminatorLabel = ref<string | null>(null)
 
-/** Default name: the source type's label plus the instance discriminator. */
-const derivedName = computed(() => {
-    const base = sourceDefn.value?.name ?? ''
-    return discriminatorLabel.value ? `${base} ${discriminatorLabel.value}` : base
-})
+/** Default name: the instance discriminator (the type label until one is picked). */
+const derivedName = computed(() => discriminatorLabel.value ?? sourceDefn.value?.name ?? '')
 
 // The name follows the derived default until the user edits it: a manual edit
 // makes sourceName diverge from the previous derived value, which stops the

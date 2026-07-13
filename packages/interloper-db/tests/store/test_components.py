@@ -219,7 +219,7 @@ class TestDerivedNames:
         row = name_store.create_component(
             _ORG, kind="source", key="discriminated_source", config={"account_id": "1"}
         )
-        assert row.name == "Discriminated Source 1"
+        assert row.name == "1"
 
     def test_explicit_name_wins(self, name_store: Store):
         row = name_store.create_component(
@@ -232,7 +232,7 @@ class TestDerivedNames:
             _ORG, kind="source", key="discriminated_source", config={"account_id": "1"}
         )
         updated = name_store.update_component(row.id, config={"account_id": "2"})
-        assert updated.name == "Discriminated Source 2"
+        assert updated.name == "2"
 
     def test_customized_name_untouched_by_config_change(self, name_store: Store):
         row = name_store.create_component(

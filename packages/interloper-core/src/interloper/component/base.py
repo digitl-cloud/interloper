@@ -315,19 +315,20 @@ class Component(Serializable):
         return str(value) if value else None
 
     def instance_name(self) -> str:
-        """Display name for this instance: the class label plus the discriminator.
+        """Display name for this instance: its discriminator value.
+
+        The class label is the fallback when no discriminator is declared or
+        set — the type is already visible alongside the name everywhere the
+        name is shown, so it isn't repeated in it.
 
         A derived *default*, not an identity: the persistence layer uses it to
         seed a blank component name, and users may override it freely. It never
         feeds physical naming.
 
         Returns:
-            E.g. ``"Facebook Ads act_123"``, or just ``"Facebook Ads"`` without
-            a discriminator.
+            E.g. ``"act_123"``, or ``"Facebook Ads"`` without a discriminator.
         """
-        base = type(self).name or to_label(type(self).__name__)
-        discriminator = self.discriminator
-        return f"{base} {discriminator}" if discriminator else base
+        return self.discriminator or type(self).name or to_label(type(self).__name__)
 
     # -- Resources -------------------------------------------------------------
     def trickle_resources(self, target: Component) -> None:
