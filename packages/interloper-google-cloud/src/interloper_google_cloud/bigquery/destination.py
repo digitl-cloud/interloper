@@ -45,6 +45,7 @@ class BigQueryDestination(DatabaseDestination):
         label_key="name",
         value_key="project_id",
         description="Google Cloud project ID",
+        discriminator=True,
     )
     location: str = SelectField(
         description="BigQuery dataset location",

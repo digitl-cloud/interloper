@@ -16,4 +16,4 @@ class SearchAds360(il.Source):
     """Search Ads 360 advertising platform integration."""
 
     manager_customer_id: str = il.InputField(description="SA360 manager account customer ID")
-    customer_client_id: str = il.InputField(description="SA360 customer client ID to report on")
+    customer_client_id: str = il.InputField(description="SA360 customer client ID to report on", discriminator=True)
