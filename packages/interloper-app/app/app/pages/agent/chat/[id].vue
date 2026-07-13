@@ -21,8 +21,8 @@ function onSubmit(e: Event) {
 }
 
 /** Report a completed connection setup back into the chat so the agent continues. */
-function onConnectionCreated(name: string) {
-    send(`I completed the setup — connection "${name}" is created.`)
+function onConnectionCreated(name: string, verified: boolean) {
+    send(`I completed the setup — connection "${name}" is created${verified ? ' and the connection check passed' : ''}.`)
 }
 
 onMounted(async () => {
