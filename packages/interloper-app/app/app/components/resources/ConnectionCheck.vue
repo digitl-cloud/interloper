@@ -4,7 +4,13 @@
  * the outcome. Auto-runs on mount; with `manual`, renders a "Test connection"
  * button instead. A failed check is informative, never blocking — the parent
  * decides what to do with the emitted result.
+ *
+ * Static (per-field) validation errors are not rendered here: they are
+ * emitted as `field-errors` for the parent to surface under the form's
+ * fields (via `SchemaForm.setErrors`), the Nuxt UI form-validation way.
  */
+import type { FormError } from '@nuxt/ui'
+
 interface CheckFieldError {
     field: string
     message: string
@@ -31,6 +37,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     result: [ok: boolean]
+    fieldErrors: [errors: FormError[]]
 }>()
 
 const { apiFetch } = useApi()
@@ -38,16 +45,10 @@ const { apiFetch } = useApi()
 const checking = ref(false)
 const result = ref<CheckResult | null>(null)
 
-const failureHint: Record<string, string> = {
-    config: 'Fix the highlighted fields and try again.',
-    auth: 'Check the credentials, or run the sign-in again.',
-    network: 'The provider may be down — try again in a moment.',
-    error: 'Retry, or create the connection anyway and investigate later.',
-}
-
 async function run() {
     checking.value = true
     result.value = null
+    emit('fieldErrors', [])
     try {
         result.value = await apiFetch<CheckResult>('/components/check', {
             method: 'POST',
@@ -65,7 +66,10 @@ async function run() {
     }
     finally {
         checking.value = false
-        if (result.value) emit('result', result.value.ok)
+        if (result.value) {
+            emit('result', result.value.ok)
+            emit('fieldErrors', result.value.errors.map(e => ({ name: e.field, message: e.message })))
+        }
     }
 }
 
@@ -73,9 +77,13 @@ onMounted(() => {
     if (!props.manual) run()
 })
 
-// A manual result goes stale as soon as the user edits the config.
+// A manual result goes stale as soon as the user edits the config — clear
+// both the outcome and any field errors it placed on the form.
 watch(() => props.config, () => {
-    if (props.manual && !checking.value) result.value = null
+    if (props.manual && !checking.value && result.value) {
+        result.value = null
+        emit('fieldErrors', [])
+    }
 }, { deep: true })
 
 defineExpose({ run, checking, result })
@@ -106,35 +114,13 @@ defineExpose({ run, checking, result })
                     title="Connection verified"
                     :description="result.live ? 'The provider accepted the credentials.' : 'The configuration is valid.'" />
 
-            <template v-else-if="result">
-                <UAlert color="error"
-                        variant="subtle"
-                        icon="i-lucide-circle-x"
-                        title="Connection check failed"
-                        :description="result.message ?? 'The connection check failed.'">
-                    <template v-if="result.errors.length"
-                              #description>
-                        <div class="flex flex-col gap-1">
-                            <span>{{ result.message ?? 'The configuration is invalid.' }}</span>
-                            <ul class="list-disc list-inside">
-                                <li v-for="err in result.errors"
-                                    :key="err.field">
-                                    <span class="font-medium">{{ err.field }}</span>: {{ err.message }}
-                                </li>
-                            </ul>
-                        </div>
-                    </template>
-                </UAlert>
-                <div class="flex items-center justify-between">
-                    <span class="text-sm text-muted">{{ failureHint[result.category ?? 'error'] }}</span>
-                    <UButton v-if="!manual"
-                             size="xs"
-                             variant="ghost"
-                             icon="i-lucide-refresh-cw"
-                             label="Retry"
-                             @click="run" />
-                </div>
-            </template>
+            <!-- Config failures surface under the form fields, not as a card. -->
+            <UAlert v-else-if="result && result.category !== 'config'"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-circle-x"
+                    title="Connection check failed"
+                    :description="result.message ?? 'The connection check failed.'" />
         </template>
     </div>
 </template>

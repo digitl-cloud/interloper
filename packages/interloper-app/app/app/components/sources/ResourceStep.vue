@@ -7,6 +7,7 @@
  *
  * Fetches its own matching instances on mount — no parent pre-fetch needed.
  */
+import type { FormError } from '@nuxt/ui'
 import type { ComponentDefinition } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 
@@ -42,6 +43,13 @@ const formData = ref<Record<string, any>>({})
 const formValid = ref(false)
 /** Whether the schema form is in manual credential entry (vs OAuth sign-in). */
 const manualCreds = ref(true)
+
+const schemaForm = useTemplateRef('schemaForm')
+
+/** Surface the check's static-validation errors under the form fields. */
+function applyCheckErrors(errors: FormError[]) {
+    schemaForm.value?.setErrors(errors)
+}
 const creating = ref(false)
 const loadingInstances = ref(false)
 
@@ -201,6 +209,7 @@ defineExpose({ formData })
                     <USeparator v-if="schema" />
 
                     <SchemaForm v-if="schema"
+                                ref="schemaForm"
                                 v-model:data="formData"
                                 v-model:is-valid="formValid"
                                 v-model:manual-mode="manualCreds"
@@ -210,7 +219,8 @@ defineExpose({ formData })
                     <ResourcesConnectionCheck v-if="definition.checkable && manualCreds"
                                               :component-key="definition.key"
                                               :config="formData"
-                                              manual />
+                                              manual
+                                              @field-errors="applyCheckErrors" />
                 </div>
             </template>
 

@@ -9,7 +9,7 @@
  * Container-agnostic: the parent wraps this in a UDrawer, modal, or
  * any other container. Navigation state is exposed via defineExpose.
  */
-import type { StepperItem } from '@nuxt/ui'
+import type { FormError, StepperItem } from '@nuxt/ui'
 import type { ComponentDefinition } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 
@@ -51,6 +51,13 @@ const checkable = computed(() => !!selectedDefinition.value?.checkable)
 
 /** Whether the schema form is in manual credential entry (vs OAuth sign-in). */
 const manualCreds = ref(true)
+
+const schemaForm = useTemplateRef('schemaForm')
+
+/** Surface the check's static-validation errors under the form fields. */
+function applyCheckErrors(errors: FormError[]) {
+    schemaForm.value?.setErrors(errors)
+}
 
 const steps: StepperItem[] = [
     { slot: 'type' as const, title: 'Type', icon: 'i-lucide-plug' },
@@ -222,7 +229,8 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
 
                 <div v-if="selectedSchema"
                      class="space-y-1">
-                    <SchemaForm v-model:data="formData"
+                    <SchemaForm ref="schemaForm"
+                                v-model:data="formData"
                                 v-model:is-valid="formValid"
                                 v-model:manual-mode="manualCreds"
                                 :schema="selectedSchema" />
@@ -235,7 +243,8 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
                 <ResourcesConnectionCheck v-if="checkable && manualCreds"
                                           :component-key="selectedType"
                                           :config="formData"
-                                          manual />
+                                          manual
+                                          @field-errors="applyCheckErrors" />
             </div>
         </template>
     </UStepper>
@@ -258,7 +267,8 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
 
         <div v-if="selectedSchema"
              class="space-y-1">
-            <SchemaForm v-model:data="formData"
+            <SchemaForm ref="schemaForm"
+                        v-model:data="formData"
                         v-model:is-valid="formValid"
                         v-model:manual-mode="manualCreds"
                         :schema="selectedSchema" />
@@ -271,6 +281,7 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
         <ResourcesConnectionCheck v-if="checkable && manualCreds"
                                   :component-key="selectedType"
                                   :config="formData"
-                                  manual />
+                                  manual
+                                  @field-errors="applyCheckErrors" />
     </div>
 </template>
