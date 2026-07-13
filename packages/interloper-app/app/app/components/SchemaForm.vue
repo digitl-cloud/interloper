@@ -17,7 +17,7 @@
  * When no x-widget is specified, the widget is inferred from the JSON Schema type.
  */
 
-import type { TabsItem } from '@nuxt/ui'
+import type { FormError, TabsItem } from '@nuxt/ui'
 
 interface FetchMeta {
     /** `<slot>.<method>` resolved via `/components/resolve`. */
@@ -480,10 +480,21 @@ watch(
     },
     { deep: true, immediate: true },
 )
+
+const form = useTemplateRef('form')
+
+/** Surface externally-produced errors (e.g. a connection check) under the matching fields. */
+function setErrors(errors: FormError[]) {
+    form.value?.setErrors(errors)
+}
+
+defineExpose({ setErrors })
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
+    <UForm ref="form"
+           :state="data"
+           class="flex flex-col gap-4">
         <!-- OAuth tabs toggle -->
         <UTabs v-if="oauthAvailable"
                v-model="activeTab"
@@ -496,6 +507,7 @@ watch(
         <!-- Form fields -->
         <UFormField v-for="field in visibleFields"
                     :key="field.key"
+                    :name="field.key"
                     :label="field.label"
                     :description="field.description"
                     :required="field.required">
@@ -589,5 +601,5 @@ watch(
                          :connected="oauthFilled"
                          @success="handleOAuthSuccess" />
         </UFormField>
-    </div>
+    </UForm>
 </template>
