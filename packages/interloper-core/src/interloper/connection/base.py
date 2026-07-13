@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
-from interloper.oauth import OAuthConfig
+from interloper.oauth import OAuthConfig, provider_env_name
 from interloper.resource import InputField, Resource, ResourceDefinition, SecretField
 
 
@@ -94,7 +94,7 @@ class OAuthConnection(Connection):
         """
         if not isinstance(cls.oauth, OAuthConfig):
             return None
-        return os.environ.get(f"INTERLOPER_{cls.oauth.provider.upper()}_{suffix}")
+        return os.environ.get(provider_env_name(cls.oauth.provider, suffix))
 
     @staticmethod
     def resolve_field(data: dict[str, Any], field: str, value: str | None) -> None:

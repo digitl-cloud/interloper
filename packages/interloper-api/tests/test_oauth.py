@@ -17,7 +17,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.oauth import PROVIDERS
+from interloper.oauth import PROVIDERS, OAuthAppCredentials
 
 from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import oauth as oauth_module
@@ -46,24 +46,36 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def test_provider_config_reads_bare_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_credentials_read_from_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
     _configure(monkeypatch, "amazon", client_id="id", client_secret="secret", redirect_uri="uri")
 
-    cfg = oauth_module._ProviderConfig("amazon")
+    creds = OAuthAppCredentials.from_env("amazon")
 
-    assert (cfg.client_id, cfg.client_secret, cfg.redirect_uri) == ("id", "secret", "uri")
-    assert cfg.configured is True
+    assert creds == OAuthAppCredentials(client_id="id", client_secret="secret", redirect_uri="uri")
 
 
-def test_load_providers_marks_only_fully_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_partially_configured_provider_resolves_to_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     _configure(monkeypatch, "amazon", client_id="id", client_secret="secret", redirect_uri="uri")
     _configure(monkeypatch, "criteo", client_id="id-only")  # incomplete -> not configured
 
-    providers = oauth_module._load_providers()
+    assert OAuthAppCredentials.from_env("amazon") is not None
+    assert OAuthAppCredentials.from_env("criteo") is None
+    assert OAuthAppCredentials.from_env("tiktok") is None
 
-    assert providers["amazon"].configured is True
-    assert providers["criteo"].configured is False
-    assert providers["tiktok"].configured is False
+
+def test_startup_status_warns_on_partial_trio(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _configure(monkeypatch, "amazon", client_id="id", client_secret="secret", redirect_uri="uri")
+    _configure(monkeypatch, "criteo", client_id="id-only")
+
+    with caplog.at_level("INFO", logger=oauth_module.logger.name):
+        oauth_module.log_provider_status()
+
+    warnings = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "criteo" in warnings[0] and "INTERLOPER_CRITEO_CLIENT_SECRET" in warnings[0]
+    assert any("amazon" in r.message for r in caplog.records if r.levelname == "INFO")
 
 
 def test_list_providers_returns_configured_only_with_registry_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,9 +133,11 @@ def _capture_client(captured: list[httpx.Request]) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
-def _cfg(monkeypatch: pytest.MonkeyPatch, provider: str) -> oauth_module._ProviderConfig:
+def _cfg(monkeypatch: pytest.MonkeyPatch, provider: str) -> OAuthAppCredentials:
     _configure(monkeypatch, provider, client_id="cid", client_secret="cs", redirect_uri="https://r")
-    return oauth_module._ProviderConfig(provider)
+    creds = OAuthAppCredentials.from_env(provider)
+    assert creds is not None
+    return creds
 
 
 async def test_exchange_post_json(monkeypatch: pytest.MonkeyPatch) -> None:
