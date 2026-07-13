@@ -1,8 +1,8 @@
 """Generic FetchField resolver.
 
-Replaces the hand-written per-provider ``/external/<provider>/<x>`` routes
-for fields declared with ``FetchField(provider="<slot>.<method>")``. One
-endpoint resolves any such field by:
+One endpoint resolves the options of any field declared with
+``FetchField(provider="<slot>.<method>")`` — there are no hand-written
+per-provider routes. It works by:
 
 1. Looking up the component definition in the catalog (authoritative — the
    provider reference comes from the server's schema, never the client).
@@ -16,8 +16,10 @@ way may be invoked, so the browser cannot call arbitrary attributes.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.catalog.base import Catalog
 from interloper.resource.fields import is_fetch_field_provider
@@ -27,9 +29,27 @@ from interloper_db import Profile
 from pydantic import BaseModel
 
 from interloper_api.dependencies import get_catalog, require_viewer
-from interloper_api.routes.external import handle_error
+
+logger = logging.getLogger(__name__)
 
 sub_router = APIRouter()
+
+
+def handle_error(error: Exception, context: str) -> None:
+    """Map external API errors to appropriate HTTP responses."""
+    logger.error("Error %s: %s", context, error)
+
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        if status in (401, 403):
+            raise HTTPException(status_code=status, detail=f"Authorization failed while {context}.")
+        if status == 404:
+            raise HTTPException(status_code=404, detail=f"Resource not found while {context}.")
+
+    if isinstance(error, HTTPException):
+        raise error
+
+    raise HTTPException(status_code=500, detail=f"Failed {context}.")
 
 
 class ResolveRequest(BaseModel):
