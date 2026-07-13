@@ -83,56 +83,58 @@ defineExpose({ run, checking, result })
 
 <template>
     <div class="flex flex-col gap-3">
-        <UAlert v-if="checking"
+        <!-- Manual mode: a persistent trigger — re-running replaces Retry. -->
+        <UButton v-if="manual"
+                 block
+                 variant="outline"
+                 icon="i-lucide-radio-tower"
+                 label="Test connection"
+                 :loading="checking"
+                 @click="run" />
+        <UAlert v-else-if="checking"
                 color="info"
                 variant="subtle"
                 icon="i-lucide-loader-circle"
                 title="Testing connection"
                 description="Making a lightweight call to the provider..." />
 
-        <UAlert v-else-if="result?.ok"
-                color="success"
-                variant="subtle"
-                icon="i-lucide-circle-check"
-                title="Connection verified"
-                :description="result.live ? 'The provider accepted the credentials.' : 'The configuration is valid.'" />
-
-        <template v-else-if="result">
-            <UAlert color="error"
+        <template v-if="!checking">
+            <UAlert v-if="result?.ok"
+                    color="success"
                     variant="subtle"
-                    icon="i-lucide-circle-x"
-                    title="Connection check failed"
-                    :description="result.message ?? 'The connection check failed.'">
-                <template v-if="result.errors.length"
-                          #description>
-                    <div class="flex flex-col gap-1">
-                        <span>{{ result.message ?? 'The configuration is invalid.' }}</span>
-                        <ul class="list-disc list-inside">
-                            <li v-for="err in result.errors"
-                                :key="err.field">
-                                <span class="font-medium">{{ err.field }}</span>: {{ err.message }}
-                            </li>
-                        </ul>
-                    </div>
-                </template>
-            </UAlert>
-            <div class="flex items-center justify-between">
-                <span class="text-sm text-muted">{{ failureHint[result.category ?? 'error'] }}</span>
-                <UButton size="xs"
-                         variant="ghost"
-                         icon="i-lucide-refresh-cw"
-                         label="Retry"
-                         @click="run" />
-            </div>
-        </template>
+                    icon="i-lucide-circle-check"
+                    title="Connection verified"
+                    :description="result.live ? 'The provider accepted the credentials.' : 'The configuration is valid.'" />
 
-        <div v-else-if="manual"
-             class="flex justify-start">
-            <UButton size="xs"
-                     variant="outline"
-                     icon="i-lucide-radio-tower"
-                     label="Test connection"
-                     @click="run" />
-        </div>
+            <template v-else-if="result">
+                <UAlert color="error"
+                        variant="subtle"
+                        icon="i-lucide-circle-x"
+                        title="Connection check failed"
+                        :description="result.message ?? 'The connection check failed.'">
+                    <template v-if="result.errors.length"
+                              #description>
+                        <div class="flex flex-col gap-1">
+                            <span>{{ result.message ?? 'The configuration is invalid.' }}</span>
+                            <ul class="list-disc list-inside">
+                                <li v-for="err in result.errors"
+                                    :key="err.field">
+                                    <span class="font-medium">{{ err.field }}</span>: {{ err.message }}
+                                </li>
+                            </ul>
+                        </div>
+                    </template>
+                </UAlert>
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-muted">{{ failureHint[result.category ?? 'error'] }}</span>
+                    <UButton v-if="!manual"
+                             size="xs"
+                             variant="ghost"
+                             icon="i-lucide-refresh-cw"
+                             label="Retry"
+                             @click="run" />
+                </div>
+            </template>
+        </template>
     </div>
 </template>

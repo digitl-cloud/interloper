@@ -228,12 +228,10 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
                     No configuration required for this type.
                 </div>
 
-                <template v-if="checkable">
-                    <USeparator />
-                    <ResourcesConnectionCheck :component-key="selectedType"
-                                              :config="formData"
-                                              manual />
-                </template>
+                <ResourcesConnectionCheck v-if="checkable"
+                                          :component-key="selectedType"
+                                          :config="formData"
+                                          manual />
             </div>
         </template>
     </UStepper>
@@ -265,11 +263,9 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
             No configuration required for this type.
         </div>
 
-        <template v-if="checkable">
-            <USeparator />
-            <ResourcesConnectionCheck :component-key="selectedType"
-                                      :config="formData"
-                                      manual />
-        </template>
+        <ResourcesConnectionCheck v-if="checkable"
+                                  :component-key="selectedType"
+                                  :config="formData"
+                                  manual />
     </div>
 </template>

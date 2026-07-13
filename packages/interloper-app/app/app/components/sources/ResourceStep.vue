@@ -204,12 +204,10 @@ defineExpose({ formData })
                                 :schema="schema"
                                 :resource-context="resourceContext" />
 
-                    <template v-if="definition.checkable">
-                        <USeparator />
-                        <ResourcesConnectionCheck :component-key="definition.key"
-                                                  :config="formData"
-                                                  manual />
-                    </template>
+                    <ResourcesConnectionCheck v-if="definition.checkable"
+                                              :component-key="definition.key"
+                                              :config="formData"
+                                              manual />
                 </div>
             </template>
 
