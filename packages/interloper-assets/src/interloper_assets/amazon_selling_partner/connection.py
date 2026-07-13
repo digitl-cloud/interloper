@@ -44,6 +44,7 @@ class AmazonSellingPartnerConnection(il.Connection):
             {"label": "Far East", "value": "FE"},
         ],
         description="API region",
+        discriminator=True,
     )
     client_id: str = il.InputField(title="Client ID", description="LWA client ID")
     client_secret: str = il.SecretField(title="Client Secret", description="LWA client secret")

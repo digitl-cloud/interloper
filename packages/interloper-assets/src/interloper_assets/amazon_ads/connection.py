@@ -46,6 +46,7 @@ class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
             {"label": "Far East", "value": "FE"},
         ],
         description="API region",
+        discriminator=True,
     )
 
     @cached_property

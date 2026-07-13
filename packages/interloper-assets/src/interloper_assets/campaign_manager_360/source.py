@@ -16,4 +16,4 @@ class CampaignManager360(il.Source):
     """Campaign Manager 360 advertising platform integration."""
 
     profile_id: str = il.InputField(description="CM360 user profile ID")
-    account_id: str = il.InputField(description="CM360 account ID")
+    account_id: str = il.InputField(description="CM360 account ID", discriminator=True)

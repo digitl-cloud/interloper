@@ -17,7 +17,7 @@ class ImpactConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="impact_")
 
-    account_sid: str = il.InputField(title="Account SID", description="Impact account SID")
+    account_sid: str = il.InputField(title="Account SID", description="Impact account SID", discriminator=True)
     auth_token: str = il.SecretField(description="Impact auth token")
 
     @cached_property
