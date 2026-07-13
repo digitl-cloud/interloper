@@ -16,7 +16,8 @@
       "Bash(git log:*)",
       "Bash(git show:*)",
       "Bash(git branch:*)",
-      "Bash(git stash list)"
+      "Bash(git stash list)",
+      "Bash(git push --force-with-lease:*)"
     ]
   }
 }
