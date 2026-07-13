@@ -20,7 +20,7 @@
 import type { TabsItem } from '@nuxt/ui'
 
 interface FetchMeta {
-    /** `<slot>.<method>` resolved via `/external/resolve`. */
+    /** `<slot>.<method>` resolved via `/components/resolve`. */
     provider: string
     label_key: string
     value_key: string
@@ -54,7 +54,7 @@ const props = defineProps<{
     /**
      * Catalog key of the component this schema belongs to (e.g. the source key).
      * Required for provider-backed `x-fetch` fields, which resolve via
-     * `/external/resolve` using this key.
+     * `/components/resolve` using this key.
      */
     componentKey?: string
     /** Fields to exclude from the form (e.g. 'id'). */
@@ -246,7 +246,7 @@ async function fetchOptions(fieldKey: string, meta: FetchMeta) {
 
     updateFetchState(fieldKey, { loading: true, error: null })
     try {
-        const result = await apiFetch<Record<string, unknown>[]>('/external/resolve', {
+        const result = await apiFetch<Record<string, unknown>[]>('/components/resolve', {
             method: 'POST',
             body: { component_key: props.componentKey, field: fieldKey, deps },
         })

@@ -18,7 +18,6 @@ from interloper_api.routes import (
     auth,
     backfills,
     components,
-    external,
     oauth,
     organisations,
     runs,
@@ -97,7 +96,6 @@ def create_app(
     api.include_router(runs.router, prefix="/runs", tags=["runs"])
     api.include_router(backfills.router, prefix="/backfills", tags=["backfills"])
     api.include_router(oauth.router, tags=["oauth"])
-    api.include_router(external.router, prefix="/external", tags=["external"])
     api.include_router(ws.router, tags=["ws"])
 
     agent_available = False

@@ -292,7 +292,7 @@ def FetchField(
 
     The dependency is the provider's own slot (the ``<slot>`` part): the
     frontend waits for that resource to be selected, then resolves via
-    ``/external/resolve``. It is implicit in ``provider``, so there is no
+    ``/components/resolve``. It is implicit in ``provider``, so there is no
     separate ``depends_on``.
 
     Args:

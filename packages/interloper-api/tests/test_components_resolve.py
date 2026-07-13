@@ -1,4 +1,4 @@
-"""Tests for ``interloper_api.routes.external.resolve`` (generic FetchField resolver)."""
+"""Tests for ``interloper_api.routes.components.resolve`` (generic FetchField resolver)."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from interloper_assets.facebook_ads import connection as fb_connection
 from interloper_assets.facebook_ads.source import FacebookAds
 
 from interloper_api.dependencies import get_catalog, require_viewer
-from interloper_api.routes import external as external_module
+from interloper_api.routes import components as components_module
 
 
 def _client(catalog: il.Catalog) -> TestClient:
     app = FastAPI()
-    app.include_router(external_module.router, prefix="/external")
+    app.include_router(components_module.router, prefix="/components")
     app.dependency_overrides[require_viewer] = lambda: None
     app.dependency_overrides[get_catalog] = lambda: catalog
     return TestClient(app)
@@ -62,7 +62,7 @@ class TestResolve:
         mock_graph(handler)
 
         resp = _client(catalog).post(
-            "/external/resolve",
+            "/components/resolve",
             json={
                 "component_key": "facebook_ads",
                 "field": "account_id",
@@ -78,14 +78,14 @@ class TestResolve:
 
     def test_unknown_component_404(self, catalog: il.Catalog):
         resp = _client(catalog).post(
-            "/external/resolve",
+            "/components/resolve",
             json={"component_key": "nope", "field": "account_id", "deps": {}},
         )
         assert resp.status_code == 404
 
     def test_non_provider_field_400(self, catalog: il.Catalog):
         resp = _client(catalog).post(
-            "/external/resolve",
+            "/components/resolve",
             json={"component_key": "facebook_ads", "field": "dataset", "deps": {}},
         )
         assert resp.status_code == 400
