@@ -9,9 +9,13 @@ tools return identity and metadata only, never credential values.
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from google.adk.tools.tool_context import ToolContext
+from interloper.connection.base import Connection
+from interloper.connection.check import check_connection_config
 from interloper.oauth import is_provider_configured
+from interloper.utils.imports import import_from_path
 
 from interloper_agent.context import get_catalog, get_org_id, get_store, serialize
 
@@ -67,6 +71,51 @@ def list_connections(tool_context: ToolContext) -> dict[str, Any]:
             for c in store.list_components(org_id, kinds=["connection"])
         ]
         return {"status": "success", "count": len(connections), "connections": connections}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+async def check_connection(connection_id: str, tool_context: ToolContext) -> dict[str, Any]:
+    """Run a health check on an existing connection.
+
+    Validates the stored config and, when the connection type supports it,
+    makes a lightweight authenticated call to the provider to prove the
+    credentials work. Use this to verify a connection after the user sets it
+    up, or when data collection fails with authentication-looking errors.
+
+    Args:
+        connection_id: UUID of the connection, from list_connections.
+
+    Returns ``ok`` plus, on failure, a ``category`` ('config', 'auth',
+    'network', 'error') and message. ``live`` is false when the type
+    implements no check and only static validation ran.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        catalog = get_catalog()
+
+        component = store.get_component(UUID(connection_id), kind="connection")
+        if component.org_id != org_id:
+            return {"status": "error", "error": f"Connection '{connection_id}' not found"}
+        defn = catalog.get(component.key)
+        if defn is None:
+            return {"status": "error", "error": f"Connection type '{component.key}' is not in the catalog"}
+
+        connection_cls = import_from_path(defn["path"])
+        if not issubclass(connection_cls, Connection):
+            return {"status": "error", "error": f"'{component.key}' is not a connection type"}
+
+        result = await check_connection_config(connection_cls, store.decode_config(component), key=component.key)
+        return {
+            "status": "success",
+            "connection": {"id": connection_id, "name": component.name, "key": component.key},
+            "ok": result.ok,
+            "live": result.live,
+            "category": result.category,
+            "message": result.message,
+            "field_errors": [{"field": e.field, "message": e.message} for e in result.errors],
+        }
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
