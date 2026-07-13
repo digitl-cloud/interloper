@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from interloper.oauth import PROVIDERS, OAuthProvider
+from interloper.oauth import PROVIDERS, OAuthProvider, is_provider_configured
 from interloper_db import Profile
 from pydantic import BaseModel
 
@@ -52,7 +52,7 @@ class _ProviderConfig:
 
     @property
     def configured(self) -> bool:
-        return bool(self.client_id and self.client_secret and self.redirect_uri)
+        return is_provider_configured(self.key)
 
 
 def _load_providers() -> dict[str, _ProviderConfig]:

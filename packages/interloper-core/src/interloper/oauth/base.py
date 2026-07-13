@@ -23,6 +23,7 @@ dependence, no explicit registration calls.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -108,3 +109,15 @@ def _adopt_provider(_name: str, loaded: Any) -> tuple[str, OAuthProvider]:
 
 
 PROVIDERS: Registry[OAuthProvider] = Registry("interloper.oauth_providers", adopt=_adopt_provider)
+
+
+def is_provider_configured(key: str) -> bool:
+    """Whether the in-house OAuth app credentials for ``key`` are set in the environment.
+
+    Returns:
+        True only when ``INTERLOPER_<KEY>_CLIENT_ID``, ``INTERLOPER_<KEY>_CLIENT_SECRET``,
+        and ``INTERLOPER_<KEY>_REDIRECT_URI`` are all set — the provider is usable for sign-in.
+    """
+    prefix = key.upper()
+    suffixes = ("CLIENT_ID", "CLIENT_SECRET", "REDIRECT_URI")
+    return all(os.environ.get(f"INTERLOPER_{prefix}_{suffix}") for suffix in suffixes)
