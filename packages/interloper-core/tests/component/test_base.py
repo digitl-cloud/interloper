@@ -144,12 +144,13 @@ class TestDiscriminator:
                 a: str = il.InputField(default="", discriminator=True)
                 b: str = il.InputField(default="", discriminator=True)
 
-    def test_instance_name_appends_discriminator(self):
+    def test_instance_name_is_the_discriminator(self):
         class FakeShop(Component):
             shop_id: str = il.InputField(default="", discriminator=True)
 
+        # Falls back to the class label until a discriminator value is set.
         assert FakeShop().instance_name() == "Fake Shop"
-        assert FakeShop(shop_id="99").instance_name() == "Fake Shop 99"
+        assert FakeShop(shop_id="99").instance_name() == "99"
 
 
 class TestAnchor:
