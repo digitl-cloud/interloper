@@ -38,10 +38,18 @@ export interface AgentEvent {
     timestamp?: number
 }
 
+/** Inline connection-setup request emitted by the agent's request_connection_setup tool. */
+export interface ConnectionSetupRequest {
+    connectionKey: string
+    name?: string
+}
+
 /** Simplified chat message for UI rendering. */
 export interface ChatMessage {
     id: string
     role: 'user' | 'assistant'
     text: string
     loading?: boolean
+    /** When set, the message renders the inline connection setup card. */
+    connectionSetup?: ConnectionSetupRequest
 }

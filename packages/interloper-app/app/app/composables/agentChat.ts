@@ -1,4 +1,4 @@
-import type { AgentEvent, ChatMessage } from '~/types/agent'
+import type { AgentEvent, ChatMessage, ConnectionSetupRequest } from '~/types/agent'
 
 /**
  * Composable for managing an agent chat session with SSE streaming.
@@ -20,13 +20,19 @@ export function useAgentChat(sessionId: Ref<string>) {
 
             const restored: ChatMessage[] = []
             for (const event of session.events) {
+                const setup = _extractConnectionSetup(event)
+                if (setup) {
+                    restored.push({ id: event.id || crypto.randomUUID(), role: 'assistant', text: '', connectionSetup: setup })
+                    continue
+                }
+
                 const text = _extractText(event)
                 if (!text) continue
 
                 const role = event.author === 'user' ? 'user' as const : 'assistant' as const
                 // Merge consecutive assistant messages from the same invocation
                 const last = restored[restored.length - 1]
-                if (role === 'assistant' && last?.role === 'assistant') {
+                if (role === 'assistant' && last?.role === 'assistant' && !last.connectionSetup) {
                     last.text += text
                 }
                 else {
@@ -99,6 +105,10 @@ export function useAgentChat(sessionId: Ref<string>) {
 
                     try {
                         const event: AgentEvent = JSON.parse(json)
+                        const setup = _extractConnectionSetup(event)
+                        if (setup) {
+                            messages.value.push({ id: crypto.randomUUID(), role: 'assistant', text: '', connectionSetup: setup })
+                        }
                         const eventText = _extractText(event)
                         if (eventText && event.author !== 'user') {
                             const msg = messages.value.find(m => m.id === assistantId)
@@ -140,4 +150,21 @@ function _extractText(event: any): string {
         .filter((p: any) => p.text)
         .map((p: any) => p.text)
         .join('')
+}
+
+/**
+ * Extract a connection-setup request from an ADK event.
+ *
+ * Keys on the tool's function *response* (not the call), so a card only
+ * renders for requests the tool validated against the catalog.
+ */
+function _extractConnectionSetup(event: any): ConnectionSetupRequest | null {
+    for (const part of event?.content?.parts ?? []) {
+        const fr = part.functionResponse
+        if (fr?.name !== 'request_connection_setup') continue
+        const response = fr.response
+        if (response?.status !== 'success' || !response.connection_key) continue
+        return { connectionKey: response.connection_key, name: response.name ?? undefined }
+    }
+    return null
 }

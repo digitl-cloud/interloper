@@ -10,11 +10,12 @@ from interloper.settings import AppSettings
 from interloper_agent.prompts import (
     ANALYTICS_INSTRUCTION,
     CATALOG_INSTRUCTION,
+    CONNECTION_INSTRUCTION,
     LINEAGE_INSTRUCTION,
     ROOT_INSTRUCTION,
     SCHEDULING_INSTRUCTION,
 )
-from interloper_agent.tools import analytics, catalog, lineage, scheduling
+from interloper_agent.tools import analytics, catalog, connections, lineage, scheduling
 
 if TYPE_CHECKING:
     from google.adk.models import BaseLlm
@@ -104,10 +105,25 @@ analytics_agent = Agent(
     ],
 )
 
+connection_agent = Agent(
+    name="ConnectionAgent",
+    model=_model,
+    description=(
+        "Lists configured connections and sets up new ones by presenting the app's secure "
+        "setup form (OAuth sign-in or manual credentials) — never collects credentials in chat."
+    ),
+    instruction=CONNECTION_INSTRUCTION,
+    tools=[
+        connections.list_connection_types,
+        connections.list_connections,
+        connections.request_connection_setup,
+    ],
+)
+
 root_agent = Agent(
     name="InterloperAgent",
     model=_model,
     instruction=ROOT_INSTRUCTION,
     description="Main Interloper assistant that routes queries to specialized sub-agents.",
-    sub_agents=[catalog_agent, lineage_agent, scheduling_agent, analytics_agent],
+    sub_agents=[catalog_agent, lineage_agent, scheduling_agent, analytics_agent, connection_agent],
 )

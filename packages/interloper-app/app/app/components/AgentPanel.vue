@@ -17,13 +17,19 @@ const { messages, streaming, error, send } = useAgentChat(sessionId)
  * `submitted` status' thinking indicator covers.
  */
 const displayMessages = computed(() => messages.value
-    .filter(m => m.text || m.role === 'user')
+    .filter(m => m.text || m.role === 'user' || m.connectionSetup)
     .map(m => ({
         id: m.id,
         role: m.role,
         text: m.text,
         parts: [{ type: 'text' as const, text: m.text }],
+        connectionSetup: m.connectionSetup,
     })))
+
+/** Report a completed connection setup back into the chat so the agent continues. */
+function onConnectionCreated(name: string) {
+    send(`I completed the setup — connection "${name}" is created.`)
+}
 
 const status = computed(() => {
     if (!streaming.value) return 'ready' as const
@@ -106,12 +112,15 @@ const SUGGESTIONS = [
                                :status="status"
                                compact
                                should-auto-scroll
-                               :assistant="{ icon: 'i-lucide-sparkles', ui: { content: 'text-[13.5px]', leadingIcon: 'text-primary' } }"
+                               :assistant="{ icon: 'i-lucide-sparkles', ui: { body: 'flex-1', content: 'text-[13.5px]', leadingIcon: 'text-primary' } }"
                                :user="{ ui: { content: 'text-[13.5px]' } }"
                                :auto-scroll="{ size: 'xs', color: 'neutral', variant: 'outline' }"
                                class="pb-2">
                     <template #content="{ message }">
-                        <MDC v-if="message.role === 'assistant'"
+                        <AgentConnectCard v-if="(message as any).connectionSetup"
+                                          :request="(message as any).connectionSetup"
+                                          @created="onConnectionCreated" />
+                        <MDC v-else-if="message.role === 'assistant'"
                              :value="message.text"
                              :cache-key="message.id"
                              class="*:first:mt-0 *:last:mb-0 [&_code]:text-[12px]" />

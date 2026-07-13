@@ -20,6 +20,11 @@ function onSubmit(e: Event) {
     input.value = ''
 }
 
+/** Report a completed connection setup back into the chat so the agent continues. */
+function onConnectionCreated(name: string) {
+    send(`I completed the setup — connection "${name}" is created.`)
+}
+
 onMounted(async () => {
     await loadHistory()
     const initialQuery = route.query.q as string | undefined
@@ -57,10 +62,14 @@ onMounted(async () => {
                                   :parts="[{ type: 'text', text: message.text }]"
                                   :variant="message.role === 'user' ? 'soft' : 'naked'"
                                   :side="message.role === 'user' ? 'right' : 'left'"
-                                  :icon="message.role === 'assistant' ? 'i-lucide-sparkles' : undefined">
+                                  :icon="message.role === 'assistant' ? 'i-lucide-sparkles' : undefined"
+                                  :ui="message.role === 'assistant' ? { body: 'flex-1' } : undefined">
                         <template #content>
-                            <!-- Render markdown for assistant, plain text for user -->
-                            <MDC v-if="message.role === 'assistant'"
+                            <!-- Render the connect card, markdown for assistant, plain text for user -->
+                            <AgentConnectCard v-if="message.connectionSetup"
+                                              :request="message.connectionSetup"
+                                              @created="onConnectionCreated" />
+                            <MDC v-else-if="message.role === 'assistant'"
                                  :value="message.text"
                                  :cache-key="message.id"
                                  class="*:first:mt-0 *:last:mb-0" />
