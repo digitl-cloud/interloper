@@ -8,16 +8,25 @@ tools return identity and metadata only, never credential values.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 from uuid import UUID
 
+import httpx
 from google.adk.tools.tool_context import ToolContext
 from interloper.connection.base import Connection
-from interloper.connection.check import check_connection_config
+from interloper.errors import ComponentDriftError, ConnectionCheckError, HydrationError
 from interloper.oauth import is_provider_configured
-from interloper.utils.imports import import_from_path
+from interloper.utils.concurrency import invoke
+from pydantic import ValidationError
 
 from interloper_agent.context import get_catalog, get_org_id, get_store, serialize
+
+logger = logging.getLogger(__name__)
+
+#: Upper bound on a live connection check — the agent must never hang on a dead host.
+_CHECK_TIMEOUT = 15.0
 
 
 def list_connection_types(tool_context: ToolContext) -> dict[str, Any]:
@@ -75,47 +84,89 @@ def list_connections(tool_context: ToolContext) -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
+def _categorise(exc: Exception) -> tuple[str, str]:
+    """Map a ``check()`` failure to an LLM-safe ``(category, message)`` pair.
+
+    Written against the categorisation contract documented on
+    ``Connection.check()``. Raw provider errors may carry URLs with tokens,
+    and this tool's output enters the model context — only curated messages
+    leave here; details are logged server-side.
+
+    Returns:
+        The ``(category, message)`` pair.
+    """
+    if isinstance(exc, ConnectionCheckError):
+        return "error", str(exc)
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code in (401, 403):
+            return "auth", "The provider rejected the credentials."
+        return "error", f"The provider responded with HTTP {exc.response.status_code}."
+    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+        return "network", "The provider did not respond in time."
+    if isinstance(exc, httpx.TransportError):
+        return "network", "The provider could not be reached."
+    return "error", "The connection check failed unexpectedly."
+
+
 async def check_connection(connection_id: str, tool_context: ToolContext) -> dict[str, Any]:
     """Run a health check on an existing connection.
 
-    Validates the stored config and, when the connection type supports it,
-    makes a lightweight authenticated call to the provider to prove the
-    credentials work. Use this to verify a connection after the user sets it
-    up, or when data collection fails with authentication-looking errors.
+    Hydrates the stored connection (which validates its config against the
+    current catalog and environment) and, when the type supports it, makes a
+    lightweight authenticated call to the provider to prove the credentials
+    work. Use this to verify a connection after the user sets it up, or when
+    data collection fails with authentication-looking errors.
 
     Args:
         connection_id: UUID of the connection, from list_connections.
 
     Returns ``ok`` plus, on failure, a ``category`` ('config', 'auth',
     'network', 'error') and message. ``live`` is false when the type
-    implements no check and only static validation ran.
+    implements no check and only hydration was verified.
     """
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        catalog = get_catalog()
 
         component = store.get_component(UUID(connection_id), kind="connection")
         if component.org_id != org_id:
             return {"status": "error", "error": f"Connection '{connection_id}' not found"}
-        defn = catalog.get(component.key)
-        if defn is None:
-            return {"status": "error", "error": f"Connection type '{component.key}' is not in the catalog"}
+        info = {"id": connection_id, "name": component.name, "key": component.key}
 
-        connection_cls = import_from_path(defn["path"])
-        if not issubclass(connection_cls, Connection):
-            return {"status": "error", "error": f"'{component.key}' is not a connection type"}
+        try:
+            conn = store.load(component.id)
+        except ComponentDriftError as e:
+            return {"status": "success", "connection": info, "ok": False, "live": False,
+                    "category": "config", "message": str(e)}
+        except HydrationError as e:
+            logger.error("Connection '%s' (%s) failed to hydrate: %s", component.name, component.key, e)
+            # Never forward the wrapped message: pydantic errors embed input
+            # values, which for connections may be secrets — name fields only.
+            if isinstance(e.__cause__, ValidationError):
+                fields = ", ".join(
+                    ".".join(str(loc) for loc in err["loc"]) or "(root)" for err in e.__cause__.errors()
+                )
+                message = f"The stored config is no longer valid for this connection type (invalid fields: {fields})."
+            else:
+                message = "The stored connection could not be reconstructed."
+            return {"status": "success", "connection": info, "ok": False, "live": False,
+                    "category": "config", "message": message}
 
-        result = await check_connection_config(connection_cls, store.decode_config(component), key=component.key)
-        return {
-            "status": "success",
-            "connection": {"id": connection_id, "name": component.name, "key": component.key},
-            "ok": result.ok,
-            "live": result.live,
-            "category": result.category,
-            "message": result.message,
-            "field_errors": [{"field": e.field, "message": e.message} for e in result.errors],
-        }
+        if not isinstance(conn, Connection) or not conn.checkable():
+            return {"status": "success", "connection": info, "ok": True, "live": False,
+                    "message": "This connection type implements no live check; the stored config hydrates."}
+
+        try:
+            ok = bool(await asyncio.wait_for(invoke(conn.check), timeout=_CHECK_TIMEOUT))
+        except Exception as e:  # noqa: BLE001 — any hook failure is a categorised result, never a raise
+            logger.error("Connection check failed for '%s' (%s): %s", component.name, component.key, e)
+            category, message = _categorise(e)
+            return {"status": "success", "connection": info, "ok": False, "live": True,
+                    "category": category, "message": message}
+        if not ok:
+            return {"status": "success", "connection": info, "ok": False, "live": True,
+                    "category": "error", "message": "The connection check failed."}
+        return {"status": "success", "connection": info, "ok": True, "live": True}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
