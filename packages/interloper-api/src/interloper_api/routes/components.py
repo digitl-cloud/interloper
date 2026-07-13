@@ -14,6 +14,7 @@ come from the catalog (``/catalog``), not from this router.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -23,11 +24,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from interloper.catalog.base import Catalog
 from interloper.component import KINDS
 from interloper.connection.base import Connection
-from interloper.connection.check import check_connection_config
 from interloper.errors import (
     CatalogKeyError,
     ComponentDriftError,
     ConfigError,
+    ConnectionCheckError,
     DataNotFoundError,
     NotFoundError,
 )
@@ -35,7 +36,7 @@ from interloper.resource.fields import is_fetch_field_provider
 from interloper.utils.concurrency import invoke
 from interloper.utils.imports import import_from_path
 from interloper_db import Component, ComponentStatus, Profile, Store
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from interloper_api.dependencies import (
     get_catalog,
@@ -480,6 +481,10 @@ async def resolve_fetch_field(
 # -- Connection check ----------------------------------------------------------
 
 
+#: Upper bound on a live check — the wizard must never hang on a dead host.
+CHECK_TIMEOUT = 15.0
+
+
 class FieldError(BaseModel):
     """One static-validation error, addressed to a config field."""
 
@@ -510,6 +515,33 @@ class CheckResponse(BaseModel):
     errors: list[FieldError] = Field(default_factory=list)
 
 
+def _check_failure(exc: Exception, key: str) -> CheckResponse:
+    """Map a live-check exception to its response.
+
+    Full details are logged server-side only — provider errors may carry
+    URLs with tokens.
+
+    Returns:
+        The categorised failure response.
+    """
+    logger.error("Connection check failed for '%s': %s", key, exc)
+
+    if isinstance(exc, ConnectionCheckError):
+        return CheckResponse(ok=False, live=True, category="error", message=str(exc))
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status in (401, 403):
+            return CheckResponse(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
+        return CheckResponse(
+            ok=False, live=True, category="error", message=f"The provider responded with HTTP {status}."
+        )
+    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+        return CheckResponse(ok=False, live=True, category="network", message="The provider did not respond in time.")
+    if isinstance(exc, httpx.TransportError):
+        return CheckResponse(ok=False, live=True, category="network", message="The provider could not be reached.")
+    return CheckResponse(ok=False, live=True, category="error", message="The connection check failed unexpectedly.")
+
+
 @router.post("/check")
 async def check_connection(
     body: CheckRequest,
@@ -533,11 +565,24 @@ async def check_connection(
     connection_cls = import_from_path(defn.path)
     assert issubclass(connection_cls, Connection)  # guaranteed by the kind check above
 
-    result = await check_connection_config(connection_cls, body.config, key=body.component_key)
-    return CheckResponse(
-        ok=result.ok,
-        live=result.live,
-        message=result.message,
-        category=result.category,
-        errors=[FieldError(field=e.field, message=e.message) for e in result.errors],
-    )
+    # Only pass through fields the connection actually declares — the form may
+    # carry extra markers (e.g. an internal id) that the model would reject.
+    config = {k: v for k, v in body.config.items() if k in connection_cls.model_fields}
+    try:
+        conn = connection_cls(**config)
+    except ValidationError as exc:
+        errors = [FieldError(field=".".join(str(loc) for loc in e["loc"]), message=e["msg"]) for e in exc.errors()]
+        return CheckResponse(
+            ok=False, live=False, category="config", message="The configuration is invalid.", errors=errors
+        )
+
+    if not connection_cls.checkable():
+        return CheckResponse(ok=True, live=False)
+
+    try:
+        ok = bool(await asyncio.wait_for(invoke(conn.check), timeout=CHECK_TIMEOUT))
+    except Exception as exc:
+        return _check_failure(exc, body.component_key)
+    if not ok:
+        return CheckResponse(ok=False, live=True, category="error", message="The connection check failed.")
+    return CheckResponse(ok=True, live=True)
