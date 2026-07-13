@@ -1,11 +1,10 @@
 <script setup lang="ts">
 /**
- * Stepped form for creating and editing resources (connections, configs).
+ * Two-step form for creating and editing resources (connections, configs).
  *
  * Step 1: Type selection (create mode only)
- * Step 2: Details (name + schema form)
- * Step 3: Test (checkable connections only) — runs the live connection
- *         check; failures warn but never block creation.
+ * Step 2: Details (name + schema form; checkable connections get a
+ *         "Test connection" button — failures warn but never block saving)
  *
  * Container-agnostic: the parent wraps this in a UDrawer, modal, or
  * any other container. Navigation state is exposed via defineExpose.
@@ -50,12 +49,11 @@ const selectedDefinition = computed(() => props.definitions.find(d => d.key === 
 /** Whether the selected type supports a live connection check. */
 const checkable = computed(() => !!selectedDefinition.value?.checkable)
 
-const steps = computed<StepperItem[]>(() => [
+const steps: StepperItem[] = [
     { slot: 'type' as const, title: 'Type', icon: 'i-lucide-plug' },
     { slot: 'details' as const, title: 'Details', icon: 'i-lucide-settings-2' },
-    ...(checkable.value ? [{ slot: 'test' as const, title: 'Test', icon: 'i-lucide-radio-tower' }] : []),
-])
-const { activeStep, hasPrev, hasNext, reset: resetStepper, next: nextStep, prev: prevStep } = useStepperFlow(() => steps.value.length)
+]
+const { activeStep, hasPrev, hasNext, reset: resetStepper, next: nextStep, prev: prevStep } = useStepperFlow(2)
 const displaySteps = useCheckedSteps(steps, activeStep)
 
 /** Label for the schema section separator. */
@@ -131,9 +129,7 @@ const canSubmit = computed(() => !!resourceName.value.trim() && (formValid.value
 
 const canProceed = computed(() => {
     if (isEditing.value) return canSubmit.value
-    if (activeStep.value === 0) return canNext.value
-    // Details and test steps both need a complete form; the test outcome
-    // itself never gates creation.
+    if (hasNext.value) return canNext.value
     return canSubmit.value
 })
 
@@ -231,17 +227,13 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
                      class="text-sm text-muted italic">
                     No configuration required for this type.
                 </div>
-            </div>
-        </template>
 
-        <template #test>
-            <div class="flex flex-col gap-6">
-                <TypeSummaryCard :icon="componentIcon(selectedType)"
-                                 :title="selectedTypeName"
-                                 :caption="selectedTypeTag" />
-
-                <ResourcesConnectionCheck :component-key="selectedType"
-                                          :config="formData" />
+                <template v-if="checkable">
+                    <USeparator />
+                    <ResourcesConnectionCheck :component-key="selectedType"
+                                              :config="formData"
+                                              manual />
+                </template>
             </div>
         </template>
     </UStepper>
@@ -272,5 +264,12 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
              class="text-sm text-muted italic">
             No configuration required for this type.
         </div>
+
+        <template v-if="checkable">
+            <USeparator />
+            <ResourcesConnectionCheck :component-key="selectedType"
+                                      :config="formData"
+                                      manual />
+        </template>
     </div>
 </template>
