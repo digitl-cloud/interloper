@@ -117,6 +117,7 @@ connection_agent = Agent(
         connections.list_connection_types,
         connections.list_connections,
         connections.request_connection_setup,
+        connections.check_connection,
     ],
 )
 
