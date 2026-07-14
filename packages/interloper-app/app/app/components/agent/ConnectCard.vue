@@ -135,10 +135,10 @@ async function submit() {
 </script>
 
 <template>
-    <div class="border border-default rounded-[14px] p-5 my-2 w-full min-w-72 max-w-md">
+    <div class="border border-default rounded-[13px] p-4 my-2 w-full min-w-72 max-w-md">
         <!-- Unknown type: the catalog may not carry this key anymore -->
         <div v-if="!defn"
-             class="flex items-center gap-2 text-sm text-muted">
+             class="flex items-center gap-2 text-[13px] text-muted">
             <UIcon name="i-lucide-circle-alert"
                    class="size-4 shrink-0" />
             Connection type "{{ request.connectionKey }}" is not in the catalog.
@@ -146,25 +146,32 @@ async function submit() {
 
         <!-- Created: locked summary -->
         <div v-else-if="createdName"
-             class="flex items-center gap-3">
-            <UIcon :name="componentIcon(request.connectionKey)"
-                   class="size-6 shrink-0" />
-            <div class="flex-1 text-sm">
-                <span class="font-semibold">{{ createdName }}</span>
+             class="flex items-center gap-2.5">
+            <div class="size-8 shrink-0 rounded-[9px] border border-default bg-(--ui-bg-band) flex items-center justify-center">
+                <UIcon :name="componentIcon(request.connectionKey)"
+                       class="size-4.5" />
+            </div>
+            <div class="flex-1 min-w-0 text-[13px]">
+                <span class="font-semibold text-highlighted">{{ createdName }}</span>
                 <span class="text-muted"> — {{ defn.name }} connection created</span>
             </div>
             <UIcon name="i-lucide-check-circle-2"
-                   class="size-5 text-success shrink-0" />
+                   class="size-4 text-success shrink-0" />
         </div>
 
         <!-- Setup form -->
         <div v-else
-             class="flex flex-col gap-4">
-            <div class="flex items-center gap-3">
-                <UIcon :name="componentIcon(request.connectionKey)"
-                       class="size-6 shrink-0" />
-                <div class="text-sm font-semibold">
-                    Set up {{ defn.name }} connection
+             class="flex flex-col gap-3">
+            <div class="flex items-center gap-2.5">
+                <div class="size-8 shrink-0 rounded-[9px] border border-default bg-(--ui-bg-band) flex items-center justify-center">
+                    <UIcon :name="componentIcon(request.connectionKey)"
+                           class="size-4.5" />
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-[13px] font-semibold text-highlighted truncate">{{ defn.name }}</div>
+                    <div class="font-mono text-[10px] uppercase tracking-[0.05em] text-dimmed truncate">
+                        New connection
+                    </div>
                 </div>
             </div>
 
