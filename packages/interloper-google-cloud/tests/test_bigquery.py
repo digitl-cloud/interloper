@@ -21,7 +21,6 @@ from interloper_google_cloud.bigquery.destination import (
     _merge_field_descriptions,
     _partition_param,
     _py_to_bq_type,
-    _replace_non_finite,
     _schema_to_bq_fields,
     _time_partitioning,
 )
@@ -145,40 +144,6 @@ class TestBqToPyType:
     def test_bool_before_int(self):
         """bool is a subclass of int -- ensure bool wins."""
         assert _bq_to_py_type(True) == "BOOL"
-
-
-# -- _replace_non_finite -------------------------------------------------------
-
-
-class TestReplaceNonFinite:
-    """Non-finite floats are mapped to None so BigQuery gets valid JSON."""
-
-    def test_nan_becomes_none(self):
-        assert _replace_non_finite(float("nan")) is None
-
-    def test_inf_becomes_none(self):
-        assert _replace_non_finite(float("inf")) is None
-        assert _replace_non_finite(float("-inf")) is None
-
-    def test_finite_float_unchanged(self):
-        assert _replace_non_finite(3.14) == 3.14
-        assert _replace_non_finite(0.0) == 0.0
-
-    def test_non_float_unchanged(self):
-        assert _replace_non_finite(42) == 42
-        assert _replace_non_finite("text") == "text"
-        assert _replace_non_finite(None) is None
-        assert _replace_non_finite(True) is True
-
-    def test_nested_dict(self):
-        assert _replace_non_finite({"a": float("nan"), "b": 1.5}) == {"a": None, "b": 1.5}
-
-    def test_nested_list(self):
-        assert _replace_non_finite([float("nan"), 1.0, float("inf")]) == [None, 1.0, None]
-
-    def test_deeply_nested(self):
-        result = _replace_non_finite({"rows": [{"cost": float("nan")}, {"cost": 2.0}]})
-        assert result == {"rows": [{"cost": None}, {"cost": 2.0}]}
 
 
 # -- _insert -------------------------------------------------------------------

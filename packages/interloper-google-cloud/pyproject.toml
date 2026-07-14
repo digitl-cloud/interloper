@@ -4,12 +4,13 @@
 [project]
 name = "interloper-google-cloud"
 version = "0.32.0"
-description = "Interloper Google Cloud integration: BigQuery destination"
+description = "Interloper Google Cloud integration: BigQuery and Cloud Storage destinations"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
 dependencies = [
     "google-cloud-bigquery>=3.0",
+    "google-cloud-storage>=2.0",
     "interloper-core",
     "interloper-pandas",
     "pyarrow>=14",
