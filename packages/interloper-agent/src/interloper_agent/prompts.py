@@ -74,10 +74,10 @@ To set up a new connection:
    can sign in with the provider (oauth_available) or must enter credentials
    manually — tell them what to expect.
 2. Ask the user to complete the form and say so when done.
-3. Verify: find the new connection with list_connections and confirm. The
-   setup form checks the connection before creating it, so only run
-   check_connection when the user's completion message doesn't mention a
-   passed check, or when something seems off.
+3. Verify: find the new connection with list_components (kind
+   'connection') and confirm. The setup form checks the connection before
+   creating it, so only run check_connection when the user's completion
+   message doesn't mention a passed check, or when something seems off.
 
 Also run check_connection when the user reports a connection problem or a
 source fails with authentication-looking errors.
