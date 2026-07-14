@@ -318,16 +318,16 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
 
+                <WizardRecap v-if="recapRows.length"
+                             :rows="recapRows" />
+
+                <USeparator label="Configuration" />
+
                 <UFormField label="Destination name">
                     <UInput v-model="destName"
                             placeholder="Destination name"
                             class="w-full" />
                 </UFormField>
-
-                <WizardRecap v-if="recapRows.length"
-                             :rows="recapRows" />
-
-                <USeparator label="Configuration" />
 
                 <SchemaForm v-if="destDefn?.config_schema"
                             v-model:data="configData"

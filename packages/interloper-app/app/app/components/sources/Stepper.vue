@@ -313,7 +313,7 @@ async function submit() {
                 const childId = assetKey ? childIdByKey.get(assetKey) : undefined
                 if (!childId || !paramName || !upstreamId) return
                 // Tolerate re-submits of an already-wired dependency on edit.
-                await componentsStore.addRelation(childId, { type: 'dependency', dst_id: upstreamId, slot: paramName }).catch(() => {})
+                await componentsStore.addRelation(childId, { type: 'dependency', dst_id: upstreamId, slot: paramName }).catch(() => { })
             }),
         )
 
@@ -403,15 +403,15 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
 
+                <WizardRecap :rows="recapRows" />
+
+                <USeparator label="Configuration" />
+
                 <UFormField label="Source name">
                     <UInput v-model="sourceName"
                             placeholder="Source name"
                             class="w-full" />
                 </UFormField>
-
-                <WizardRecap :rows="recapRows" />
-
-                <USeparator label="Configuration" />
 
                 <SchemaForm v-if="sourceDefn?.config_schema"
                             v-model:data="configData"

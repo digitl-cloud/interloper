@@ -230,6 +230,11 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <!-- Details -->
         <template #details>
             <div class="flex flex-col gap-6">
+                <WizardRecap v-if="recapRows.length"
+                             :rows="recapRows" />
+
+                <USeparator label="Configuration" />
+
                 <UFormField label="Job name"
                             required>
                     <UInput v-model="name"
@@ -243,8 +248,13 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                 class="w-full" />
                 </UFormField>
 
-                <WizardRecap v-if="recapRows.length"
-                             :rows="recapRows" />
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium">Enabled</p>
+                        <p class="text-xs text-muted">Job will run on the configured schedule.</p>
+                    </div>
+                    <USwitch v-model="enabled" />
+                </div>
 
                 <USeparator label="Schedule" />
 
@@ -266,6 +276,8 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                              @click="cron = preset.value" />
                 </div>
 
+                <USeparator label="Backfill" />
+
                 <template v-if="partitioned">
                     <div class="flex items-center gap-2 text-sm text-muted">
                         <UIcon name="i-lucide-calendar-days"
@@ -284,15 +296,6 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                     </UFormField>
                 </template>
 
-                <USeparator label="Options" />
-
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium">Enabled</p>
-                        <p class="text-xs text-muted">Job will run on the configured schedule.</p>
-                    </div>
-                    <USwitch v-model="enabled" />
-                </div>
             </div>
         </template>
     </UStepper>

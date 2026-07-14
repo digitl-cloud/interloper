@@ -230,7 +230,8 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <template #targets>
             <div class="flex flex-col gap-4">
                 <p class="text-sm text-muted">
-                    Components a trigger-style hook runs when it fires. Optional — leave empty for hooks that only notify.
+                    Components a trigger-style hook runs when it fires. Optional — leave empty for hooks that only
+                    notify.
                 </p>
                 <HooksComponentSelect v-model="targetIds"
                                       :components="targetCandidates"
@@ -241,6 +242,8 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <!-- Details -->
         <template #details>
             <div class="flex flex-col gap-6">
+                <WizardRecap :rows="recapRows" />
+
                 <UFormField label="Hook name"
                             required>
                     <UInput v-model="name"
@@ -258,8 +261,6 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                  placeholder="Select events..."
                                  class="w-full" />
                 </UFormField>
-
-                <WizardRecap :rows="recapRows" />
 
                 <template v-if="hasExtraFields">
                     <USeparator label="Configuration" />
