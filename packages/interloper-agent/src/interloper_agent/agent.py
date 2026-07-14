@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from google.adk.agents import Agent
@@ -20,7 +22,22 @@ from interloper_agent.prompts import (
 from interloper_agent.tools import analytics, catalog, collection, lineage, scheduling
 
 if TYPE_CHECKING:
+    from google.adk.agents.readonly_context import ReadonlyContext
     from google.adk.models import BaseLlm
+
+
+def with_current_time(instruction: str) -> Callable[[ReadonlyContext], str]:
+    """Turn a static instruction into a provider that appends the current UTC time.
+
+    The model has no reliable notion of "now", so without this the relative
+    timestamps the presentation rules ask for drift to its training data.
+    """
+
+    def provider(_: ReadonlyContext) -> str:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        return f"{instruction}\nCurrent date and time: {now:%Y-%m-%d %H:%M} UTC. Compute relative timestamps from it."
+
+    return provider
 
 
 def resolve_model(name: str | None = None) -> str | BaseLlm:
@@ -74,7 +91,7 @@ catalog_consultant = Agent(
         "(available sources and connections, asset schemas, fields, comparisons) and get a concise, "
         "grounded answer back as a tool result."
     ),
-    instruction=CATALOG_CONSULT_INSTRUCTION,
+    instruction=with_current_time(CATALOG_CONSULT_INSTRUCTION),
     tools=_catalog_tools(),
 )
 
@@ -86,7 +103,7 @@ collection_agent = Agent(
         "destinations, checks connection health, and sets up new connections by presenting the app's "
         "secure setup form (OAuth sign-in or manual credentials) — never collects credentials in chat."
     ),
-    instruction=COLLECTION_INSTRUCTION,
+    instruction=with_current_time(COLLECTION_INSTRUCTION),
     tools=[
         collection.list_components,
         collection.request_connection_setup,
@@ -99,7 +116,7 @@ lineage_agent = Agent(
     name="LineageAgent",
     model=_model,
     description="Analyzes asset dependencies — upstream/downstream traversal, impact analysis, and cross-source edges.",
-    instruction=LINEAGE_INSTRUCTION,
+    instruction=with_current_time(LINEAGE_INSTRUCTION),
     tools=[
         lineage.get_upstream,
         lineage.get_downstream,
@@ -116,7 +133,7 @@ scheduling_agent = Agent(
         "Monitors run health, recent failures, job schedules, and backfill progress; "
         "triggers runs, starts backfills, and toggles jobs or assets on/off."
     ),
-    instruction=SCHEDULING_INSTRUCTION,
+    instruction=with_current_time(SCHEDULING_INSTRUCTION),
     tools=[
         scheduling.list_jobs,
         scheduling.get_job_health,
@@ -135,7 +152,7 @@ analytics_agent = Agent(
     name="AnalyticsAgent",
     model=_model,
     description="Provides run statistics, partition coverage analysis, and data freshness checks.",
-    instruction=ANALYTICS_INSTRUCTION,
+    instruction=with_current_time(ANALYTICS_INSTRUCTION),
     tools=[
         analytics.run_history_summary,
         analytics.partition_coverage,
@@ -146,7 +163,7 @@ analytics_agent = Agent(
 root_agent = Agent(
     name="InterloperAgent",
     model=_model,
-    instruction=ROOT_INSTRUCTION,
+    instruction=with_current_time(ROOT_INSTRUCTION),
     description="Main Interloper assistant that routes queries to specialized sub-agents.",
     sub_agents=[catalog_agent, collection_agent, lineage_agent, scheduling_agent, analytics_agent],
 )
