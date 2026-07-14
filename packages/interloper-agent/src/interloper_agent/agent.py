@@ -19,7 +19,7 @@ from interloper_agent.prompts import (
     ROOT_INSTRUCTION,
     SCHEDULING_INSTRUCTION,
 )
-from interloper_agent.tools import analytics, catalog, collection, lineage, scheduling
+from interloper_agent.tools import analytics, catalog, collection, interaction, lineage, scheduling
 
 if TYPE_CHECKING:
     from google.adk.agents.readonly_context import ReadonlyContext
@@ -111,6 +111,7 @@ collection_agent = Agent(
         collection.check_connection,
         collection.resolve_source_field_options,
         collection.create_source,
+        interaction.request_user_selection,
         AgentTool(agent=catalog_consultant),
     ],
 )

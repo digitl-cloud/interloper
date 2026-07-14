@@ -1,4 +1,4 @@
-import type { AgentEvent, ChatMessage, ConnectionSetupRequest } from '~/types/agent'
+import type { AgentEvent, ChatMessage, ConnectionSetupRequest, SelectionRequest } from '~/types/agent'
 
 /**
  * Composable for managing an agent chat session with SSE streaming.
@@ -25,6 +25,11 @@ export function useAgentChat(sessionId: Ref<string>) {
                     restored.push({ id: event.id || crypto.randomUUID(), role: 'assistant', text: '', connectionSetup: setup })
                     continue
                 }
+                const selection = _extractSelection(event)
+                if (selection) {
+                    restored.push({ id: event.id || crypto.randomUUID(), role: 'assistant', text: '', selection })
+                    continue
+                }
 
                 const text = _extractText(event)
                 if (!text) continue
@@ -32,7 +37,7 @@ export function useAgentChat(sessionId: Ref<string>) {
                 const role = event.author === 'user' ? 'user' as const : 'assistant' as const
                 // Merge consecutive assistant messages from the same invocation
                 const last = restored[restored.length - 1]
-                if (role === 'assistant' && last?.role === 'assistant' && !last.connectionSetup) {
+                if (role === 'assistant' && last?.role === 'assistant' && !last.connectionSetup && !last.selection) {
                     last.text += text
                 }
                 else {
@@ -109,6 +114,10 @@ export function useAgentChat(sessionId: Ref<string>) {
                         if (setup) {
                             messages.value.push({ id: crypto.randomUUID(), role: 'assistant', text: '', connectionSetup: setup })
                         }
+                        const selection = _extractSelection(event)
+                        if (selection) {
+                            messages.value.push({ id: crypto.randomUUID(), role: 'assistant', text: '', selection })
+                        }
                         const eventText = _extractText(event)
                         if (eventText && event.author !== 'user') {
                             const msg = messages.value.find(m => m.id === assistantId)
@@ -165,6 +174,23 @@ function _extractConnectionSetup(event: any): ConnectionSetupRequest | null {
         const response = fr.response
         if (response?.status !== 'success' || !response.connection_key) continue
         return { connectionKey: response.connection_key, name: response.name ?? undefined }
+    }
+    return null
+}
+
+/**
+ * Extract a selection request from an ADK event.
+ *
+ * Keys on the request_user_selection tool's function response, so a card
+ * only renders for requests the tool validated.
+ */
+function _extractSelection(event: any): SelectionRequest | null {
+    for (const part of event?.content?.parts ?? []) {
+        const fr = part.functionResponse
+        if (fr?.name !== 'request_user_selection') continue
+        const response = fr.response
+        if (response?.status !== 'success' || !response.options?.length) continue
+        return { prompt: response.prompt ?? '', options: response.options, multi: !!response.multi }
     }
     return null
 }
