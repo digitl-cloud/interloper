@@ -112,7 +112,12 @@ extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 [tool.pytest.ini_options]
 markers = ["integration", "functional"]
 addopts = ["--import-mode=importlib", "-m not functional"]
-filterwarnings = ["ignore::FutureWarning:google.api_core"]
+filterwarnings = [
+    "ignore::FutureWarning:google.api_core",
+    # google-adk's own config classes subclass their deprecated BaseAgentConfig,
+    # warning at import — upstream noise (still present in 2.4.0), not our usage.
+    "ignore:BaseAgentConfig is deprecated:DeprecationWarning",
+]
 asyncio_mode = "auto"
 
 # ###############
