@@ -7,10 +7,10 @@ import { jobTargetIds } from '~/types/component'
 
 /**
  * Graph model builders — one per surface. Each returns the same normalised
- * {@link GraphModel} so a single <GraphCanvas> can render the catalog page,
+ * {@link GraphModel} so a single <GraphCanvas> can render the collection page,
  * a job's subgraph, or a run's live subgraph.
  *
- * Only {@link useCatalogGraph} is mounted today; {@link useJobGraph} and
+ * Only {@link useCollectionGraph} is mounted today; {@link useJobGraph} and
  * {@link useRunGraph} are the seams for the (future) job and run pages.
  */
 
@@ -32,13 +32,13 @@ function standaloneAssets(componentsStore: ReturnType<typeof useComponentsStore>
     return componentsStore.byKind('asset').filter(a => a.parent_id === null)
 }
 
-interface CatalogGraphOptions {
+interface CollectionGraphOptions {
     /** Restrict to these source ids (undefined = every source). */
     sourceIds?: MaybeRefOrGetter<string[] | undefined>
 }
 
-/** Catalog-wide graph: every source, its assets, standalone assets, all deps. */
-export function useCatalogGraph(options: CatalogGraphOptions = {}) {
+/** Collection-wide graph: every source, its assets, standalone assets, all deps. */
+export function useCollectionGraph(options: CollectionGraphOptions = {}) {
     const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
     const { assetStatus, sourceStatus } = useNodeStatus()
