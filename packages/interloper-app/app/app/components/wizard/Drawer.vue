@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Shared chrome for the create/edit wizards: right drawer at the design
- * width, close button, and the StepperNav footer wired to the stepper
+ * width, close button, and the WizardStepperNav footer wired to the stepper
  * exposed by the body slot (pages keep `ref="stepperRef"` on their stepper
  * and pass it back via the `stepper` prop).
  */
@@ -49,7 +49,7 @@ withDefaults(defineProps<{
             <slot />
         </template>
         <template #footer>
-            <StepperNav v-if="stepper"
+            <WizardStepperNav v-if="stepper"
                         :last-step="stepper.isLastStep"
                         :can-proceed="stepper.canProceed"
                         :has-prev="stepper.hasPrev"

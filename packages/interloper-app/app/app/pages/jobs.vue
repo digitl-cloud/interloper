@@ -202,7 +202,7 @@ async function handleDelete(ids: string[]) {
                          @updated="handleSaved" />
         </WizardDrawer>
 
-        <RunModal v-if="runModalJob"
+        <ExecutionsRunModal v-if="runModalJob"
                   v-model:open="runModalOpen"
                   :target="runModalJob" />
     </div>

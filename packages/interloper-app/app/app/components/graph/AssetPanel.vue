@@ -607,7 +607,7 @@ const dependencyRows = computed(() => {
             </UCollapsible>
         </div>
 
-        <RunModal v-model:open="runModalOpen"
+        <ExecutionsRunModal v-model:open="runModalOpen"
                   :target="asset"
                   :partitioned="isPartitioned" />
     </div>

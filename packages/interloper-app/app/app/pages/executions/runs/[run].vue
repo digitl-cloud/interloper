@@ -124,7 +124,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <OrgGate :org-id="run?.org_id"
+    <OrganizationGate :org-id="run?.org_id"
              :error="fetchError"
              back-to="/executions?tab=runs"
              resource-label="run">
@@ -236,5 +236,5 @@ onUnmounted(() => {
             </SplitterPanel>
         </SplitterGroup>
         </div>
-    </OrgGate>
+    </OrganizationGate>
 </template>

@@ -1,5 +1,11 @@
 export default defineNuxtConfig({
     compatibilityDate: '2025-07-15',
+    components: [
+        // Generic, domain-free primitives keep their short names (DataTable,
+        // EmptyState, …) instead of gaining a `Ui` path prefix.
+        { path: '~/components/ui', pathPrefix: false },
+        '~/components',
+    ],
     css: [
         '~/assets/css/main.css',
         '@vue-flow/core/dist/style.css',

@@ -17,7 +17,7 @@ export const useOrganisationStore = defineStore('organisation', () => {
     // The active org lives in the shared session cookie, so a switch in one
     // tab silently changes what every other tab's API calls return. Broadcast
     // switches so other tabs re-sync their state; org-scoped stores and
-    // OrgGate react from there.
+    // OrganizationGate react from there.
     const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('interloper-org') : null
     channel?.addEventListener('message', async (event: MessageEvent) => {
         const orgId: unknown = event.data?.orgId

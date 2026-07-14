@@ -197,7 +197,7 @@ async function handleDelete(ids: string[]) {
                             @updated="handleSaved" />
         </WizardDrawer>
 
-        <RunModal v-if="runModalSource"
+        <ExecutionsRunModal v-if="runModalSource"
                   v-model:open="runModalOpen"
                   :target="runModalSource"
                   partitioned />
