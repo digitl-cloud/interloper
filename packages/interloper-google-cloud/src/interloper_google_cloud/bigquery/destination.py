@@ -5,7 +5,6 @@ from __future__ import annotations
 import datetime
 import inspect
 import json
-import math
 import warnings
 from collections.abc import Sequence
 from decimal import Decimal
@@ -26,6 +25,7 @@ from interloper.resource.fields import FetchField, InputField, SelectField
 from interloper.schema import FieldSpec, Schema
 
 from interloper_google_cloud.connection import GoogleCloudConnection
+from interloper_google_cloud.serialization import json_default, replace_non_finite
 
 
 @destination(
@@ -315,7 +315,7 @@ class BigQueryDestination(DatabaseDestination):
         )
         if bq_schema is not None:
             job_config.schema = bq_schema
-        safe_rows = [_replace_non_finite(json.loads(json.dumps(row, default=_json_default))) for row in rows]
+        safe_rows = [replace_non_finite(json.loads(json.dumps(row, default=json_default))) for row in rows]
 
         job = self.client.load_table_from_json(safe_rows, ref, job_config=job_config)
         job.result()
@@ -689,33 +689,6 @@ def _infer_bq_schema(rows: list[dict[str, Any]]) -> list[bigquery.SchemaField]:
             bq_type = "STRING"
         fields.append(bigquery.SchemaField(key, bq_type, mode="NULLABLE"))
     return fields
-
-
-def _replace_non_finite(obj: Any) -> Any:
-    """Recursively replace non-finite floats (``NaN``, ``Infinity``) with ``None``.
-
-    pandas represents missing numeric values as ``float('nan')``. Python's
-    ``json.dumps`` (used by ``load_table_from_json``) serialises these to the
-    bare tokens ``NaN`` / ``Infinity``, which are invalid JSON — BigQuery's load
-    parser rejects them with "Parser terminated before end of string". BigQuery
-    has no NaN concept on the load path, so map non-finite floats to SQL ``NULL``.
-    """
-    if isinstance(obj, float):
-        return obj if math.isfinite(obj) else None
-    if isinstance(obj, dict):
-        return {k: _replace_non_finite(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_replace_non_finite(v) for v in obj]
-    return obj
-
-
-def _json_default(o: Any) -> Any:
-    """JSON serializer for types not handled by the default encoder."""
-    if isinstance(o, (datetime.date, datetime.datetime)):
-        return o.isoformat()
-    if isinstance(o, Decimal):
-        return str(o)
-    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
 
 
 def _py_to_bq_type(value: Any) -> str:
