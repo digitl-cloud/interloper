@@ -1,7 +1,8 @@
-"""Asset tools — schema inspection, field search, and schema comparison.
+"""Catalog tools — the component definitions the platform ships.
 
-Asset schemas live in the catalog: a schema is a property of the source
-definition, shared by every instance in an org's collection.
+Generic over component kinds, mirroring the framework's component
+architecture: one lister and one getter for any kind, plus the
+asset-schema operations that are irreducibly kind-specific.
 """
 
 from __future__ import annotations
@@ -9,8 +10,105 @@ from __future__ import annotations
 from typing import Any
 
 from google.adk.tools.tool_context import ToolContext
+from interloper.oauth import is_provider_configured
 
-from interloper_agent.context import get_catalog
+from interloper_agent.context import get_catalog, get_org_id, get_store
+
+
+def list_definitions(kind: str | None = None, tool_context: ToolContext | None = None) -> dict[str, Any]:
+    """List the component definitions available in the catalog.
+
+    This answers "what does Interloper support / what could we add?" — the
+    org's collection itself is the Collection specialist's domain.
+
+    Source entries note how many instances the org's collection holds
+    (``in_collection`` / ``collection_count``); connection entries note
+    whether OAuth sign-in is supported (``oauth``) and usable in this
+    deployment (``oauth_available``) vs manual credential entry.
+
+    Args:
+        kind: Component kind to list — e.g. 'source', 'connection',
+            'destination'. Omit for per-kind counts only; call again with a
+            kind for the entries.
+    """
+    try:
+        catalog = get_catalog()
+        counts: dict[str, int] = {}
+        for defn in catalog.values():
+            counts[defn.get("kind", "?")] = counts.get(defn.get("kind", "?"), 0) + 1
+
+        if kind is None:
+            return {
+                "status": "success",
+                "definition_counts": counts,
+                "message": "Call again with a kind for the entries.",
+            }
+        if kind not in counts:
+            return {
+                "status": "error",
+                "error": f"No '{kind}' definitions in the catalog",
+                "valid_kinds": sorted(counts),
+            }
+
+        collection_counts: dict[str, int] = {}
+        if kind == "source":
+            org_id = get_org_id(tool_context)
+            for s in get_store().list_components(org_id, kinds=["source"]):
+                collection_counts[s.key] = collection_counts.get(s.key, 0) + 1
+
+        results = []
+        for key, defn in catalog.items():
+            if defn.get("kind") != kind:
+                continue
+            entry: dict[str, Any] = {
+                "key": key,
+                "name": defn.get("name", key),
+                "description": defn.get("description"),
+                "icon": defn.get("icon"),
+                "tags": defn.get("tags", []),
+            }
+            if kind == "source":
+                count = collection_counts.get(key, 0)
+                entry["asset_count"] = len(defn.get("assets", []))
+                entry["in_collection"] = count > 0
+                entry["collection_count"] = count
+            elif kind == "connection":
+                schema = defn.get("config_schema") or {}
+                oauth = schema.get("x-oauth")
+                entry["provider"] = defn.get("provider")
+                entry["required_fields"] = schema.get("required", [])
+                entry["oauth"] = oauth is not None
+                entry["oauth_available"] = is_provider_configured(oauth["provider"]) if oauth else False
+            results.append(entry)
+
+        return {"status": "success", "kind": kind, "count": len(results), "definitions": results}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def get_definition(key: str, tool_context: ToolContext) -> dict[str, Any]:
+    """Get a component definition's full catalog detail.
+
+    For a source this includes the config schema, resource slots,
+    destination types, and all its assets with their schemas. This is the
+    catalog definition (the component *type*), not an instance from the
+    org's collection.
+
+    Args:
+        key: The definition's catalog key (e.g. 'facebook_ads',
+            'facebook_ads_connection').
+    """
+    try:
+        catalog = get_catalog()
+        defn = catalog.get(key)
+        if defn is None:
+            return {"status": "error", "error": f"Definition '{key}' not found in catalog"}
+        return {"status": "success", "definition": defn}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# -- Asset schemas (kind-specific by nature) -------------------------------------
 
 
 def get_asset_schema(source_key: str, asset_key: str, tool_context: ToolContext) -> dict[str, Any]:

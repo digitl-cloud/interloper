@@ -44,12 +44,11 @@ _model = resolve_model()
 def _catalog_tools() -> list:
     """The catalog toolset, shared by the routing agent and the consultant instance."""
     return [
-        catalog.sources.list_sources,
-        catalog.sources.get_source_detail,
-        catalog.connections.list_connections,
-        catalog.assets.get_asset_schema,
-        catalog.assets.search_fields,
-        catalog.assets.compare_schemas,
+        catalog.list_definitions,
+        catalog.get_definition,
+        catalog.get_asset_schema,
+        catalog.search_fields,
+        catalog.compare_schemas,
     ]
 
 
@@ -89,11 +88,9 @@ collection_agent = Agent(
     ),
     instruction=COLLECTION_INSTRUCTION,
     tools=[
-        collection.sources.list_sources,
-        collection.connections.list_connections,
-        collection.destinations.list_destinations,
-        collection.connections.request_connection_setup,
-        collection.connections.check_connection,
+        collection.list_components,
+        collection.request_connection_setup,
+        collection.check_connection,
         AgentTool(agent=catalog_consultant),
     ],
 )
