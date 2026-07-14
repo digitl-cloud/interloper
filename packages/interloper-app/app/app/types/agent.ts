@@ -57,6 +57,12 @@ export interface SelectionRequest {
     multi: boolean
 }
 
+/** Inline confirmation summary emitted by the agent's request_confirmation tool. */
+export interface ConfirmationRequest {
+    title: string
+    items: { label: string, value: string }[]
+}
+
 /** Simplified chat message for UI rendering. */
 export interface ChatMessage {
     id: string
@@ -67,4 +73,6 @@ export interface ChatMessage {
     connectionSetup?: ConnectionSetupRequest
     /** When set, the message renders the inline selection card. */
     selection?: SelectionRequest
+    /** When set, the message renders the inline confirmation summary card. */
+    confirmation?: ConfirmationRequest
 }

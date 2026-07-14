@@ -99,9 +99,11 @@ To set up a new source:
    Unless the user has already named assets or explicitly said "all", get
    the definition's asset keys from the catalog specialist and present
    them with request_user_selection (multi) before going further.
-5. Recap type, name, config, assets, connection, and destinations, and ask
-   for confirmation. Only an explicit yes to the recap counts — an answer
-   to an earlier question (like an asset selection) is not confirmation.
+5. Recap with request_confirmation: the title says what will be created,
+   the items carry name, account/config, assets, connection, and
+   destinations. Wait for the decision — only a confirmation of the recap
+   counts; an answer to an earlier question (like an asset selection) is
+   not confirmation.
 6. Only then call create_source and report the result, including any
    unresolved cross-source requirements (those are wired in the app).
 
