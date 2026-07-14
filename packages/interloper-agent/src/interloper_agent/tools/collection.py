@@ -323,6 +323,92 @@ async def resolve_source_field_options(
         return {"status": "error", "error": str(e)}
 
 
+def _normalized_asset_keys(
+    defn: dict[str, Any], source_key: str, asset_keys: list[str] | None
+) -> tuple[list[str] | None, dict[str, Any] | None]:
+    """Normalize an asset selection: empty means default-all, unknown keys error.
+
+    Models pass ``[]`` meaning "default" — and a zero-asset source is useless.
+
+    Returns:
+        ``(asset_keys, None)`` or ``(None, error_response)``.
+    """
+    if not asset_keys:
+        return None, None
+    valid = {a.get("key") for a in defn.get("assets", [])}
+    unknown = sorted(set(asset_keys) - valid)
+    if unknown:
+        return None, {
+            "status": "error",
+            "error": f"Unknown asset keys for '{source_key}': {', '.join(unknown)}",
+            "valid_asset_keys": sorted(valid),
+        }
+    return asset_keys, None
+
+
+def _source_relations(
+    store: Any,
+    org_id: UUID,
+    defn: dict[str, Any],
+    source_key: str,
+    connection_id: str | None,
+    destination_ids: list[str] | None,
+) -> tuple[dict[str, list[tuple[UUID, str]]] | None, dict[str, Any] | None]:
+    """Bind the connection into the definition's resource slot, plus destinations.
+
+    Returns:
+        ``(relations, None)`` or ``(None, error_response)``.
+    """
+    slots = (((defn.get("relations") or {}).get("resource") or {}).get("slots")) or {}
+    connection = None
+    if connection_id is not None:
+        connection = store.get_component(UUID(connection_id), kind="connection")
+        if connection.org_id != org_id:
+            return None, {"status": "error", "error": f"Connection '{connection_id}' not found"}
+    resource_bindings: list[tuple[UUID, str]] = []
+    for slot_name, spec in slots.items():
+        expected = spec.get("key")
+        if connection is not None and (not expected or connection.key == expected):
+            resource_bindings.append((connection.id, slot_name))
+            connection = None
+        elif spec.get("required"):
+            return None, {
+                "status": "error",
+                "error": (
+                    f"'{source_key}' requires a '{expected or 'connection'}' in slot '{slot_name}' — "
+                    "pick one from the collection or set one up first"
+                ),
+            }
+    if connection is not None:
+        return None, {
+            "status": "error",
+            "error": f"Connection '{connection.key}' does not fit any slot of '{source_key}'",
+        }
+
+    destination_bindings: list[tuple[UUID, str]] = []
+    for dest_id in destination_ids or []:
+        dest = store.get_component(UUID(dest_id), kind="destination")
+        if dest.org_id != org_id:
+            return None, {"status": "error", "error": f"Destination '{dest_id}' not found"}
+        destination_bindings.append((dest.id, ""))
+
+    return {"resource": resource_bindings, "destination": destination_bindings}, None
+
+
+def _unresolved_requirements(defn: dict[str, Any], row: Any) -> list[str]:
+    """Cross-source requirements of the enabled assets — reported, not auto-wired.
+
+    Returns:
+        One ``"asset: params"`` line per affected asset.
+    """
+    enabled = {a.key for a in row.children}
+    return sorted(
+        f"{a['key']}: {', '.join(sorted({**a.get('requires', {}), **a.get('optional_requires', {})}))}"
+        for a in defn.get("assets", [])
+        if a.get("key") in enabled and (a.get("requires") or a.get("optional_requires"))
+    )
+
+
 def create_source(
     source_key: str,
     name: str,
@@ -356,52 +442,13 @@ def create_source(
         if defn is None or defn.get("kind") != "source":
             return {"status": "error", "error": f"Source '{source_key}' not found in catalog"}
 
-        # Models pass [] meaning "default" — and a zero-asset source is useless.
-        if not asset_keys:
-            asset_keys = None
-        else:
-            valid = {a.get("key") for a in defn.get("assets", [])}
-            unknown = sorted(set(asset_keys) - valid)
-            if unknown:
-                return {
-                    "status": "error",
-                    "error": f"Unknown asset keys for '{source_key}': {', '.join(unknown)}",
-                    "valid_asset_keys": sorted(valid),
-                }
-
-        # Bind the connection into the definition's matching resource slot.
-        slots = (((defn.get("relations") or {}).get("resource") or {}).get("slots")) or {}
-        connection = None
-        if connection_id is not None:
-            connection = store.get_component(UUID(connection_id), kind="connection")
-            if connection.org_id != org_id:
-                return {"status": "error", "error": f"Connection '{connection_id}' not found"}
-        resource_bindings: list[tuple[UUID, str]] = []
-        for slot_name, spec in slots.items():
-            expected = spec.get("key")
-            if connection is not None and (not expected or connection.key == expected):
-                resource_bindings.append((connection.id, slot_name))
-                connection = None
-            elif spec.get("required"):
-                return {
-                    "status": "error",
-                    "error": (
-                        f"'{source_key}' requires a '{expected or 'connection'}' in slot '{slot_name}' — "
-                        "pick one from the collection or set one up first"
-                    ),
-                }
-        if connection is not None:
-            return {
-                "status": "error",
-                "error": f"Connection '{connection.key}' does not fit any slot of '{source_key}'",
-            }
-
-        destination_bindings: list[tuple[UUID, str]] = []
-        for dest_id in destination_ids or []:
-            dest = store.get_component(UUID(dest_id), kind="destination")
-            if dest.org_id != org_id:
-                return {"status": "error", "error": f"Destination '{dest_id}' not found"}
-            destination_bindings.append((dest.id, ""))
+        asset_keys, error = _normalized_asset_keys(defn, source_key, asset_keys)
+        if error:
+            return error
+        relations, error = _source_relations(store, org_id, defn, source_key, connection_id, destination_ids)
+        if error:
+            return error
+        assert relations is not None
 
         try:
             row = store.create_component(
@@ -411,19 +458,10 @@ def create_source(
                 name=name,
                 config=config,
                 children=asset_keys,
-                relations={"resource": resource_bindings, "destination": destination_bindings},
+                relations=relations,
             )
         except (ConfigError, CatalogKeyError) as e:
             return {"status": "error", "error": str(e)}
-
-        # Cross-source requirements are not auto-wired: report them so the
-        # agent can point the user at the app for dependency resolution.
-        enabled = {a.key for a in row.children}
-        unresolved = sorted(
-            f"{a['key']}: {', '.join(sorted({**a.get('requires', {}), **a.get('optional_requires', {})}))}"
-            for a in defn.get("assets", [])
-            if a.get("key") in enabled and (a.get("requires") or a.get("optional_requires"))
-        )
 
         return {
             "status": "success",
@@ -433,10 +471,184 @@ def create_source(
                 "key": row.key,
                 "name": row.name,
                 "asset_count": len(row.children),
-                "connection_bound": bool(resource_bindings),
-                "destination_count": len(destination_bindings),
+                "connection_bound": bool(relations["resource"]),
+                "destination_count": len(relations["destination"]),
             },
+            "unresolved_requirements": _unresolved_requirements(defn, row),
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def create_sources(
+    source_key: str,
+    instances: list[dict[str, str]],
+    connection_id: str | None = None,
+    asset_keys: list[str] | None = None,
+    shared_config: dict[str, Any] | None = None,
+    field: str | None = None,
+    destination_ids: list[str] | None = None,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Create several sources of one definition — one per account/profile value.
+
+    Use this when the user sets up multiple accounts of the same source type
+    at once: every instance shares the connection, asset selection, and any
+    shared config; its ``value`` fills the definition's account field and its
+    ``name`` becomes the source's display name (use the option labels from
+    the account selection).
+
+    Recap the choices and get the user's explicit confirmation BEFORE calling
+    this. Instances that fail (e.g. an account that already has a source)
+    are reported individually; the others are still created.
+
+    Args:
+        source_key: The source definition's catalog key (e.g. 'facebook_ads').
+        instances: One entry per source, each ``{"name": ..., "value": ...}``.
+        connection_id: UUID of the connection every source binds.
+        asset_keys: Child asset keys to enable on every source; omit for all.
+        shared_config: Config values common to all instances (e.g. dataset).
+        field: The config field receiving each value. Omit it — never guess
+            field names: the definition's fetchable field is picked
+            automatically.
+        destination_ids: Destination UUIDs to attach to every source.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        catalog = get_catalog()
+
+        defn = catalog.get(source_key)
+        if defn is None or defn.get("kind") != "source":
+            return {"status": "error", "error": f"Source '{source_key}' not found in catalog"}
+        cleaned = [
+            {"name": str(i.get("name") or i.get("value")), "value": str(i.get("value"))}
+            for i in instances
+            if isinstance(i, dict) and i.get("value") is not None
+        ]
+        if not cleaned:
+            return {"status": "error", "error": "instances must carry at least one {name, value} entry"}
+
+        properties = (defn.get("config_schema") or {}).get("properties", {})
+        if field is None:
+            fetchable = sorted(k for k, p in properties.items() if p.get("x-fetch"))
+            discriminators = sorted(k for k, p in properties.items() if p.get("x-discriminator"))
+            candidates = fetchable or discriminators
+            if len(candidates) != 1:
+                return {
+                    "status": "error",
+                    "error": f"'{source_key}' has no single account field — pass one explicitly",
+                    "candidate_fields": candidates,
+                }
+            field = candidates[0]
+        elif field not in properties:
+            return {"status": "error", "error": f"Unknown config field '{field}' for '{source_key}'"}
+
+        asset_keys, error = _normalized_asset_keys(defn, source_key, asset_keys)
+        if error:
+            return error
+        relations, error = _source_relations(store, org_id, defn, source_key, connection_id, destination_ids)
+        if error:
+            return error
+        assert relations is not None
+
+        created, failed = [], []
+        unresolved: list[str] = []
+        for instance in cleaned:
+            try:
+                row = store.create_component(
+                    org_id,
+                    kind="source",
+                    key=source_key,
+                    name=instance["name"],
+                    config={**(shared_config or {}), field: instance["value"]},
+                    children=asset_keys,
+                    relations=relations,
+                )
+            except (ConfigError, CatalogKeyError) as e:
+                failed.append({"name": instance["name"], "value": instance["value"], "error": str(e)})
+                continue
+            created.append({"id": serialize(row.id), "name": row.name, "value": instance["value"]})
+            unresolved = _unresolved_requirements(defn, row)
+
+        return {
+            "status": "success" if created else "error",
+            "message": f"{len(created)} source(s) created" + (f", {len(failed)} failed" if failed else ""),
+            "field": field,
+            "created": created,
+            "failed": failed,
             "unresolved_requirements": unresolved,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# -- Job operations (kind-specific by nature) --------------------------------------
+
+
+def create_job(
+    name: str,
+    cron: str,
+    target_source_ids: list[str],
+    partitioned: bool = False,
+    backfill_days: int | None = None,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Create a cron job that runs the given sources on a schedule.
+
+    Use this after creating sources to put them on a cadence — one job can
+    target several sources (e.g. every account of a source type). Recap the
+    name, the schedule in words, and the targets, and get the user's
+    explicit confirmation BEFORE calling this.
+
+    Args:
+        name: Display name for the job (e.g. 'Facebook Ads daily').
+        cron: Standard cron expression (e.g. '0 6 * * *' for daily at 06:00 UTC).
+        target_source_ids: UUIDs of the sources the job materializes.
+        partitioned: Whether runs are date-partitioned.
+        backfill_days: For partitioned jobs, how many days each run covers.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+
+        targets: list[tuple[UUID, str]] = []
+        for source_id in target_source_ids:
+            source = store.get_component(UUID(source_id), kind="source")
+            if source.org_id != org_id:
+                return {"status": "error", "error": f"Source '{source_id}' not found"}
+            targets.append((source.id, ""))
+        if not targets:
+            return {"status": "error", "error": "target_source_ids must name at least one source"}
+
+        try:
+            row = store.create_component(
+                org_id,
+                kind="job",
+                key="cron_job",
+                name=name,
+                config={
+                    "cron": cron,
+                    "enabled": True,
+                    "tags": [],
+                    "partitioned": partitioned,
+                    "backfill_days": backfill_days if partitioned else None,
+                },
+                relations={"target": targets},
+            )
+        except (ConfigError, CatalogKeyError) as e:
+            return {"status": "error", "error": str(e)}
+
+        return {
+            "status": "success",
+            "message": f"Job '{name}' created",
+            "job": {
+                "id": serialize(row.id),
+                "name": row.name,
+                "cron": cron,
+                "enabled": True,
+                "target_count": len(targets),
+            },
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
