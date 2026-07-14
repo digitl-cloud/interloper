@@ -43,7 +43,10 @@ def request_confirmation(
             return {"status": "error", "error": "items must carry at least one {label, value} entry"}
         return {
             "status": "success",
-            "message": "Confirmation presented to the user. Wait for their decision before continuing.",
+            "message": (
+                "Confirmation presented to the user. STOP: make no further tool "
+                "calls this turn — act only after their next message decides."
+            ),
             "title": title,
             "items": cleaned,
         }
