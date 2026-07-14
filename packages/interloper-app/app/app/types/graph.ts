@@ -4,10 +4,10 @@ import type { ExecutionStatus } from './asset_execution'
 
 /**
  * Canonical node status states shared across every graph surface
- * (catalog graph page, job page, run page). Decoration (colour, dot)
+ * (collection graph page, job page, run page). Decoration (colour, dot)
  * is derived from this single union so all surfaces agree.
  *
- * `idle | attention | paused` are catalog-level states; the remainder
+ * `idle | attention | paused` are collection-level states; the remainder
  * mirror {@link ExecutionStatus} for the live run-page graph.
  */
 export type GraphNodeState =
@@ -39,7 +39,7 @@ export type ExpandMode = 'list' | 'graph' | 'nodes'
 /** Which dimension the canvas decorates nodes by. */
 export type ViewMode = 'topology' | 'status'
 
-/** Source health filter for the catalog graph (derived states only). */
+/** Source health filter for the collection graph (derived states only). */
 export type StatusFilter = 'all' | 'healthy' | 'attention' | 'paused'
 
 /** A directed asset→asset dependency, normalised away from the store shape. */
@@ -64,7 +64,7 @@ export interface GraphAssetEntry {
 
 /**
  * Normalised, store-independent graph model consumed by <GraphCanvas>.
- * Each surface (catalog / job / run) produces this same shape from its
+ * Each surface (collection / job / run) produces this same shape from its
  * own data, which is what lets one renderer serve all three.
  */
 export interface GraphModel {

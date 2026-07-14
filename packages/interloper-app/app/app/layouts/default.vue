@@ -40,10 +40,10 @@ const items = computed<NavigationMenuItem[]>(() => {
             active: route.path === '/graph',
         },
         {
-            label: 'Catalog',
+            label: 'Collection',
             icon: 'i-lucide-library',
-            to: '/catalog',
-            active: route.path === '/catalog',
+            to: '/collection',
+            active: route.path === '/collection',
         },
         {
             label: 'Entities',

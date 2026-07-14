@@ -8,7 +8,7 @@ import type { ComponentRecord } from '~/types/component'
 
 /**
  * Presentational graph renderer. Consumes a normalised {@link GraphModel}
- * and knows nothing about stores — every surface (catalog/job/run) feeds it
+ * and knows nothing about stores — every surface (collection/job/run) feeds it
  * the same shape. Interactions are emitted; the host wires them.
  */
 const props = withDefaults(defineProps<{
@@ -26,11 +26,11 @@ const props = withDefaults(defineProps<{
     showNewSourceButton?: boolean
     /** Asset id whose detail panel is open — the only node that gets the selection highlight. */
     selectedId?: string | null
-    /** Top-level layout flow: 'TB' (catalog default) or 'LR' (run pipeline). */
+    /** Top-level layout flow: 'TB' (collection default) or 'LR' (run pipeline). */
     direction?: 'TB' | 'LR'
     /** Zoom out to fit the whole graph instead of snapping to 100% after layout. */
     fitToContent?: boolean
-    /** Render assets as small status nodes (run graph) instead of catalog cards. */
+    /** Render assets as small status nodes (run graph) instead of full cards. */
     compact?: boolean
 }>(), {
     editable: false,

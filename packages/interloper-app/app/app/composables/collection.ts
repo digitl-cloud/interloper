@@ -8,7 +8,7 @@ import type { SourceDriftStatus } from '~/composables/drift'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-export interface CatalogRow {
+export interface CollectionRow {
     id: string
     sourceId: string
     assetId: string
@@ -31,9 +31,9 @@ export interface CatalogRow {
     destinationCreatedAt: string | null
 }
 
-// ─── Catalog Rows ────────────────────────────────────────────────────
+// ─── Collection Rows ─────────────────────────────────────────────────
 
-interface UseCatalogRowsOptions {
+interface UseCollectionRowsOptions {
     sources: Ref<ComponentRecord[]>
     dependencies: Ref<Relation[]>
     destinations: Ref<ComponentRecord[]>
@@ -42,7 +42,7 @@ interface UseCatalogRowsOptions {
     getWarnings: (assetId: string, assetKey: string) => AssetWarning[]
 }
 
-export function useCatalogRows(options: UseCatalogRowsOptions) {
+export function useCollectionRows(options: UseCollectionRowsOptions) {
     const catalogStore = useCatalogStore()
     const { sourceDrift } = useDrift()
 
@@ -153,8 +153,8 @@ export function useCatalogRows(options: UseCatalogRowsOptions) {
         return map
     })
 
-    const data = computed<CatalogRow[]>(() => {
-        const rows: CatalogRow[] = []
+    const data = computed<CollectionRow[]>(() => {
+        const rows: CollectionRow[] = []
         for (const source of options.sources.value) {
             const destInfos = relationIds(source, 'destination').map((destId) => {
                 const dest = options.destinations.value.find(d => d.id === destId)

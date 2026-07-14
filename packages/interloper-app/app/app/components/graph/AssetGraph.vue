@@ -4,7 +4,7 @@ import { qualifiedKey } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 
 /**
- * Catalog adapter: binds the store-backed catalog model + dependency-editing
+ * Collection adapter: binds the store-backed collection model + dependency-editing
  * rules to the presentational <GraphCanvas>. Keeps the original props/emits
  * so the graph page is unaffected.
  */
@@ -41,9 +41,9 @@ const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const { loading, dependencies: assetDependencies } = storeToRefs(componentsStore)
 
-const { model } = useCatalogGraph({ sourceIds: () => props.sourceIds })
+const { model } = useCollectionGraph({ sourceIds: () => props.sourceIds })
 
-// ── Maps for connection validation/creation (catalog editing only) ──
+// ── Maps for connection validation/creation (collection editing only) ──
 const sources = computed(() => model.value.sources.map(e => e.source))
 
 const assetToSource = computed(() => {

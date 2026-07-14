@@ -2,7 +2,7 @@
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import { getGroupedRowModel } from '@tanstack/vue-table'
 import type { GroupingOptions } from '@tanstack/vue-table'
-import type { CatalogRow } from '~/composables/catalog'
+import type { CollectionRow } from '~/composables/collection'
 
 const componentsStore = useComponentsStore()
 const runsStore = useRunsStore()
@@ -15,7 +15,7 @@ const jobs = computed(() => componentsStore.byKind('job'))
 const { runs } = storeToRefs(runsStore)
 const { getWarnings, filterByCategory } = useAssetWarnings()
 const { statusBadge } = useDrift()
-const { data, sourceInfoById, assetCount } = useCatalogRows({
+const { data, sourceInfoById, assetCount } = useCollectionRows({
     sources,
     dependencies,
     destinations,
@@ -45,7 +45,7 @@ const statusIcon: Record<string, string> = {
     canceled: 'i-lucide-ban',
 }
 
-const columns: TableColumn<CatalogRow>[] = [
+const columns: TableColumn<CollectionRow>[] = [
     { id: 'title', header: 'Name' },
     { id: 'source_id', accessorKey: 'sourceId' },
     { id: 'asset_id', accessorKey: 'assetId' },
@@ -222,7 +222,7 @@ function onRowClick(row: any) {
     <div class="w-full flex flex-col gap-4">
         <div class="flex items-center gap-3">
             <UInput v-model="globalFilter"
-                    placeholder="Search catalog..."
+                    placeholder="Search collection..."
                     icon="i-lucide-search"
                     class="max-w-sm" />
             <UButton variant="ghost"

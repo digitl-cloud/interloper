@@ -161,7 +161,7 @@ async function saveConfig() {
     try {
         await componentsStore.update(props.asset.id, { config: { ...configData.value } })
         // The asset lives in its source's `children` — refresh the parent so
-        // the graph/catalog views reflect the new config.
+        // the graph/collection views reflect the new config.
         if (props.asset.parent_id) await componentsStore.fetchOne(props.asset.parent_id)
         toast.add({ title: 'Asset config saved', color: 'success' })
     }

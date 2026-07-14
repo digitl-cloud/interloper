@@ -38,11 +38,11 @@ export function statusRingClass(state: GraphNodeState): string {
 }
 
 /**
- * Derives {@link NodeStatus} for catalog graph nodes from data that
+ * Derives {@link NodeStatus} for collection graph nodes from data that
  * actually exists today: configuration warnings ({@link useAssetWarnings})
  * and job enablement ({@link useSchedule}).
  *
- * The catalog page has no per-asset *run* status loaded, so live states
+ * The collection page has no per-asset *run* status loaded, so live states
  * (running/success/failed) are intentionally absent here — those are
  * supplied by the run-page model from asset executions instead.
  */

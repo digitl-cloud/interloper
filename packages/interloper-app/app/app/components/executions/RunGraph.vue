@@ -4,7 +4,7 @@ import type { GraphModel } from '~/types/graph'
 
 /**
  * Run dependency graph: the run's assets laid out as a left-to-right DAG,
- * coloured by live execution status. Reuses the catalog <GraphCanvas> via the
+ * coloured by live execution status. Reuses the shared <GraphCanvas> via the
  * run model seam; read-only (no dependency editing). Clicking a node selects
  * that asset, which the page mirrors to the events filter.
  */
