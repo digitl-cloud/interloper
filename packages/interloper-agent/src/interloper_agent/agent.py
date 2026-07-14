@@ -76,7 +76,7 @@ catalog_agent = Agent(
         "The catalog of component definitions the platform ships: which sources and connections are "
         "available to add, asset schemas, field search, and schema comparison."
     ),
-    instruction=CATALOG_INSTRUCTION,
+    instruction=with_current_time(CATALOG_INSTRUCTION),
     tools=_catalog_tools(),
 )
 
