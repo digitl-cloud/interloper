@@ -166,7 +166,7 @@ defineExpose({ title })
                              @collected="handleCreated" />
             </template>
             <template #footer>
-                <StepperNav v-if="createStepperRef"
+                <WizardStepperNav v-if="createStepperRef"
                             :can-proceed="createStepperRef.canProceed"
                             :has-prev="createStepperRef.hasPrev"
                             :submitting="createStepperRef.submitting"

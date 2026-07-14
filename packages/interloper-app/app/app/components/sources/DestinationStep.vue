@@ -155,7 +155,7 @@ function destLabel(key: string) {
                                       @created="handleCreated" />
             </template>
             <template #footer>
-                <StepperNav v-if="destStepperRef"
+                <WizardStepperNav v-if="destStepperRef"
                             :can-proceed="destStepperRef.canProceed"
                             :has-prev="destStepperRef.hasPrev"
                             :submitting="destStepperRef.submitting"

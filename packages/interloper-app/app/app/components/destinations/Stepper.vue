@@ -287,7 +287,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <!-- Step: Destination type (create only) -->
         <template v-if="!isEditMode"
                   #destination>
-            <TypeSelect v-model="selectedDestKey"
+            <WizardTypeSelect v-model="selectedDestKey"
                         :definitions="availableDefinitions" />
         </template>
 
@@ -296,7 +296,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                   :key="rs.slotName"
                   #[`resource-${rs.slotName}`]>
             <div class="flex flex-col gap-6">
-                <TypeSummaryCard v-if="summaryCard"
+                <WizardTypeSummaryCard v-if="summaryCard"
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
 
@@ -314,7 +314,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <template v-if="hasConfig"
                   #config>
             <div class="flex flex-col gap-6">
-                <TypeSummaryCard v-if="summaryCard"
+                <WizardTypeSummaryCard v-if="summaryCard"
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
 

@@ -89,7 +89,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
 </script>
 
 <template>
-    <OrgGate :org-id="backfill?.org_id"
+    <OrganizationGate :org-id="backfill?.org_id"
              :error="fetchError"
              back-to="/executions?tab=backfills"
              resource-label="backfill">
@@ -141,5 +141,5 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
                 class="flex-1"
                 @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
         </div>
-    </OrgGate>
+    </OrganizationGate>
 </template>

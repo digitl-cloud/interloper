@@ -210,7 +210,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
               class="w-full">
         <!-- Type (create mode only) -->
         <template #type>
-            <TypeSelect v-model="selectedType"
+            <WizardTypeSelect v-model="selectedType"
                         :definitions="definitions" />
         </template>
 

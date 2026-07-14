@@ -360,14 +360,14 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <!-- Step: Source type (create only) -->
         <template v-if="!isEditMode"
                   #source>
-            <TypeSelect v-model="selectedSourceKey"
+            <WizardTypeSelect v-model="selectedSourceKey"
                         :definitions="catalogStore.sourceDefinitions" />
         </template>
 
         <!-- Step: Assets -->
         <template #assets>
             <div class="flex flex-col gap-6">
-                <TypeSummaryCard v-if="summaryCard"
+                <WizardTypeSummaryCard v-if="summaryCard"
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
                 <SourcesAssetSelect v-if="sourceDefn"
@@ -383,7 +383,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                   :key="rs.slotName"
                   #[`resource-${rs.slotName}`]>
             <div class="flex flex-col gap-6">
-                <TypeSummaryCard v-if="summaryCard"
+                <WizardTypeSummaryCard v-if="summaryCard"
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
                 <SourcesResourceStep v-if="rs.definition"
@@ -399,7 +399,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <!-- Step: Config -->
         <template #config>
             <div class="flex flex-col gap-6">
-                <TypeSummaryCard v-if="summaryCard"
+                <WizardTypeSummaryCard v-if="summaryCard"
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
 
@@ -427,7 +427,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <!-- Step: Destination -->
         <template #destination>
             <div class="flex flex-col gap-6">
-                <TypeSummaryCard v-if="summaryCard"
+                <WizardTypeSummaryCard v-if="summaryCard"
                                  v-bind="summaryCard"
                                  @change="activeStep = 0" />
                 <SourcesDestinationStep v-model:selected-ids="selectedDestinationIds"

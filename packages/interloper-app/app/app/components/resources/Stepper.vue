@@ -206,13 +206,13 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
               disabled
               class="w-full">
         <template #type>
-            <TypeSelect v-model="selectedType"
+            <WizardTypeSelect v-model="selectedType"
                         :definitions="definitions" />
         </template>
 
         <template #details>
             <div class="flex flex-col gap-6">
-                <TypeSummaryCard :icon="componentIcon(selectedType)"
+                <WizardTypeSummaryCard :icon="componentIcon(selectedType)"
                                  :title="selectedTypeName"
                                  :caption="selectedTypeTag"
                                  changeable
@@ -252,7 +252,7 @@ defineExpose({ canProceed, hasPrev: computed(() => !isEditing.value && hasPrev.v
     <!-- Edit mode: details form only -->
     <div v-else
          class="flex flex-col gap-6">
-        <TypeSummaryCard :icon="componentIcon(selectedType)"
+        <WizardTypeSummaryCard :icon="componentIcon(selectedType)"
                          :title="selectedTypeName"
                          :caption="selectedTypeTag" />
 
