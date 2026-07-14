@@ -85,8 +85,8 @@ async function handleDelete(ids: string[]) {
         await componentsStore.remove(ids)
         toast.add({ title: `${ids.length} destination${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
-    catch {
-        toast.add({ title: 'Failed to delete destination', color: 'error' })
+    catch (e) {
+        toast.add(inUseToast(e, 'Destination') ?? { title: 'Failed to delete destination', color: 'error' })
     }
 }
 

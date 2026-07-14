@@ -136,6 +136,20 @@ class NotFoundError(InterloperError, KeyError):
     """
 
 
+class InUseError(InterloperError):
+    """A record cannot be deleted because other records still reference it.
+
+    Raised by the store layer; API routes catch it and return HTTP 409.
+    ``referrers`` carries the referencing records as ``{id, kind, key, name}``
+    mappings so callers can build structured error payloads.
+    """
+
+    def __init__(self, message: str, referrers: list[dict[str, str | None]] | None = None) -> None:
+        """Initialize with a user-facing message and the referencing records."""
+        super().__init__(message)
+        self.referrers = referrers or []
+
+
 # -- Hydration / Catalog -------------------------------------------------------
 
 

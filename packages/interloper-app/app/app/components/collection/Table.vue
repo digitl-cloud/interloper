@@ -86,8 +86,8 @@ async function deleteSource(sourceId: string) {
         await componentsStore.remove(sourceId)
         toast.add({ title: `Source "${info?.name ?? 'Source'}" deleted`, color: 'success' })
     }
-    catch {
-        toast.add({ title: 'Failed to delete source', color: 'error' })
+    catch (e) {
+        toast.add(inUseToast(e, 'Source') ?? { title: 'Failed to delete source', color: 'error' })
     }
 }
 

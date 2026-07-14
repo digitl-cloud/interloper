@@ -46,8 +46,8 @@ async function handleCleanup() {
         await componentsStore.fetchAll(['source'])
         toast.add({ title: 'Catalog drift cleaned up', color: 'success' })
     }
-    catch {
-        toast.add({ title: 'Failed to clean up drift', color: 'error' })
+    catch (e) {
+        toast.add(inUseToast(e, 'Source') ?? { title: 'Failed to clean up drift', color: 'error' })
     }
     finally {
         cleaningUp.value = false

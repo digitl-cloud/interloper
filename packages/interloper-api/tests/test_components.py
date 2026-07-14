@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from uuid import uuid4
+
 import httpx
 import interloper as il
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.errors import InUseError
 from interloper_assets.facebook_ads import connection as fb_connection
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.source import FacebookAds
 
-from interloper_api.dependencies import get_catalog, require_viewer
+from interloper_api.dependencies import get_catalog, get_current_user, get_store, require_viewer
 from interloper_api.routes import components as components_module
 
 CONNECTION_CONFIG = {"access_token": "TOK", "app_id": "A", "app_secret": "S", "_id": "x"}
@@ -165,3 +169,33 @@ class TestCheck:
             "/components/check", json={"component_key": "facebook_ads", "config": {}}
         )
         assert resp.status_code == 404
+
+
+class TestDelete:
+    """DELETE /components/{id} maps store errors to HTTP statuses."""
+
+    def test_in_use_maps_to_409_with_referrers(self):
+        org_id = uuid4()
+        referrers: list[dict[str, str | None]] = [
+            {"id": str(uuid4()), "kind": "source", "key": "facebook_ads", "name": "FB"}
+        ]
+
+        class FakeStore:
+            def get_component(self, component_id):
+                return SimpleNamespace(id=component_id, org_id=org_id)
+
+            def get_user_role(self, user_id, org_id):
+                return "admin"
+
+            def delete_component(self, component_id):
+                raise InUseError("Cannot delete connection 'C': in use by FB", referrers=referrers)
+
+        app = FastAPI()
+        app.include_router(components_module.router, prefix="/components")
+        app.dependency_overrides[get_store] = lambda: FakeStore()
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+
+        resp = TestClient(app).delete(f"/components/{uuid4()}")
+
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["used_by"] == referrers

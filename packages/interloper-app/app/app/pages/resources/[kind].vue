@@ -67,8 +67,8 @@ async function handleDelete(ids: string[]) {
         await componentsStore.remove(ids)
         toast.add({ title: `${ids.length} resource(s) deleted`, color: 'success' })
     }
-    catch {
-        toast.add({ title: 'Failed to delete resource', description: 'It may be in use by a source or destination.', color: 'error' })
+    catch (e) {
+        toast.add(inUseToast(e, pageTitle.value.slice(0, -1)) ?? { title: 'Failed to delete resource', color: 'error' })
     }
 }
 
