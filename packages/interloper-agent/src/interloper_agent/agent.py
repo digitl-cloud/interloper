@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from google.adk.agents import Agent
+from google.adk.tools.agent_tool import AgentTool
 from interloper.settings import AppSettings
 
 from interloper_agent.prompts import (
     ANALYTICS_INSTRUCTION,
+    CATALOG_CONSULT_INSTRUCTION,
     CATALOG_INSTRUCTION,
     COLLECTION_INSTRUCTION,
     LINEAGE_INSTRUCTION,
@@ -38,6 +40,19 @@ def resolve_model(name: str | None = None) -> str | BaseLlm:
 
 _model = resolve_model()
 
+
+def _catalog_tools() -> list:
+    """The catalog toolset, shared by the routing agent and the consultant instance."""
+    return [
+        catalog.sources.list_sources,
+        catalog.sources.get_source_detail,
+        catalog.connections.list_connections,
+        catalog.assets.get_asset_schema,
+        catalog.assets.search_fields,
+        catalog.assets.compare_schemas,
+    ]
+
+
 catalog_agent = Agent(
     name="CatalogAgent",
     model=_model,
@@ -46,14 +61,22 @@ catalog_agent = Agent(
         "available to add, asset schemas, field search, and schema comparison."
     ),
     instruction=CATALOG_INSTRUCTION,
-    tools=[
-        catalog.sources.list_sources,
-        catalog.sources.get_source_detail,
-        catalog.connections.list_connections,
-        catalog.assets.get_asset_schema,
-        catalog.assets.search_fields,
-        catalog.assets.compare_schemas,
-    ],
+    tools=_catalog_tools(),
+)
+
+# A second instance (an ADK agent can only have one parent): the catalog
+# specialist as a consultable tool — the caller keeps the conversation and
+# receives the specialist's answer as a tool result, unlike a transfer.
+catalog_consultant = Agent(
+    name="consult_catalog",
+    model=_model,
+    description=(
+        "Consult the catalog specialist: ask a question about the catalog of component definitions "
+        "(available sources and connections, asset schemas, fields, comparisons) and get a concise, "
+        "grounded answer back as a tool result."
+    ),
+    instruction=CATALOG_CONSULT_INSTRUCTION,
+    tools=_catalog_tools(),
 )
 
 collection_agent = Agent(
@@ -71,6 +94,7 @@ collection_agent = Agent(
         collection.destinations.list_destinations,
         collection.connections.request_connection_setup,
         collection.connections.check_connection,
+        AgentTool(agent=catalog_consultant),
     ],
 )
 
