@@ -15,7 +15,7 @@ from interloper_agent.prompts import (
     ROOT_INSTRUCTION,
     SCHEDULING_INSTRUCTION,
 )
-from interloper_agent.tools import analytics, assets, connections, destinations, lineage, scheduling, sources
+from interloper_agent.tools import analytics, catalog, collection, lineage, scheduling
 
 if TYPE_CHECKING:
     from google.adk.models import BaseLlm
@@ -47,13 +47,13 @@ catalog_agent = Agent(
     ),
     instruction=CATALOG_INSTRUCTION,
     tools=[
-        sources.list_sources,
-        sources.list_catalog_sources,
-        sources.get_source_detail,
-        assets.get_asset_schema,
-        assets.search_fields,
-        assets.compare_schemas,
-        destinations.list_destinations,
+        collection.sources.list_sources,
+        catalog.sources.list_catalog_sources,
+        catalog.sources.get_source_detail,
+        catalog.assets.get_asset_schema,
+        catalog.assets.search_fields,
+        catalog.assets.compare_schemas,
+        collection.destinations.list_destinations,
     ],
 )
 
@@ -115,10 +115,10 @@ connection_agent = Agent(
     ),
     instruction=CONNECTION_INSTRUCTION,
     tools=[
-        connections.list_catalog_connections,
-        connections.list_connections,
-        connections.request_connection_setup,
-        connections.check_connection,
+        catalog.connections.list_catalog_connections,
+        collection.connections.list_connections,
+        collection.connections.request_connection_setup,
+        collection.connections.check_connection,
     ],
 )
 

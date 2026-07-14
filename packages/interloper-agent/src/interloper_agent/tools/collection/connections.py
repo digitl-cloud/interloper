@@ -1,4 +1,4 @@
-"""Connection tools — discovery and setup orchestration.
+"""Connection tools over the org's collection — listing, setup, and health checks.
 
 Credentials never transit the model: ``request_connection_setup`` only
 signals the app to present a secure setup form (OAuth sign-in or manual
@@ -17,7 +17,6 @@ import httpx
 from google.adk.tools.tool_context import ToolContext
 from interloper.connection.base import Connection
 from interloper.errors import ComponentDriftError, ConnectionCheckError, HydrationError
-from interloper.oauth import is_provider_configured
 from interloper.utils.concurrency import invoke
 from pydantic import ValidationError
 
@@ -27,38 +26,6 @@ logger = logging.getLogger(__name__)
 
 #: Upper bound on a live connection check — the agent must never hang on a dead host.
 _CHECK_TIMEOUT = 15.0
-
-
-def list_catalog_connections(tool_context: ToolContext) -> dict[str, Any]:
-    """List the connection definitions available in the catalog.
-
-    Use this to pick the right definition before requesting setup. Each
-    entry notes its required config fields and whether OAuth sign-in is
-    supported by the definition (``oauth``) and usable in this deployment
-    (``oauth_available``) — when OAuth is not available, the user will have
-    to enter credentials manually in the setup form. For the connections the
-    organisation actually has, use ``list_connections`` instead.
-    """
-    try:
-        catalog = get_catalog()
-        results = []
-        for key, defn in catalog.items():
-            if defn.get("kind") != "connection":
-                continue
-            schema = defn.get("config_schema") or {}
-            oauth = schema.get("x-oauth")
-            results.append({
-                "key": key,
-                "name": defn.get("name", key),
-                "description": defn.get("description"),
-                "provider": defn.get("provider"),
-                "required_fields": schema.get("required", []),
-                "oauth": oauth is not None,
-                "oauth_available": is_provider_configured(oauth["provider"]) if oauth else False,
-            })
-        return {"status": "success", "count": len(results), "connections": results}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
 
 
 def list_connections(tool_context: ToolContext) -> dict[str, Any]:
