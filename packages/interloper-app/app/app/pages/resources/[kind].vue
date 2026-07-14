@@ -6,7 +6,6 @@ import type { ComponentRecord } from '~/types/component'
 definePageMeta({ title: 'Resources' })
 
 const UIcon = resolveComponent('UIcon')
-const UBadge = resolveComponent('UBadge')
 
 const route = useRoute()
 const catalogStore = useCatalogStore()
@@ -48,13 +47,10 @@ const columns: TableColumn<ComponentRecord>[] = [
     {
         accessorKey: 'key',
         header: 'Type',
-        cell: ({ row }) => h(UBadge, {
-            color: 'neutral',
-            variant: 'subtle',
-        }, () => h('span', { class: 'flex items-center gap-1.5' }, [
+        cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
             h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
             typeName(row.original.key),
-        ])),
+        ]),
     },
     { accessorKey: 'encrypted', header: 'Encrypted' },
     {

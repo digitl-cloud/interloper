@@ -7,7 +7,7 @@ import { resourceMap } from '~/types/component'
 definePageMeta({ title: 'Destinations' })
 
 const UIcon = resolveComponent('UIcon')
-const UBadge = resolveComponent('UBadge')
+const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
@@ -54,13 +54,10 @@ const columns: TableColumn<ComponentRecord>[] = [
     {
         accessorKey: 'type',
         header: 'Type',
-        cell: ({ row }) => h(UBadge, {
-            color: 'neutral',
-            variant: 'subtle',
-        }, () => h('span', { class: 'flex items-center gap-1.5' }, [
+        cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
             h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
             typeName(row.original.key),
-        ])),
+        ]),
     },
     {
         accessorKey: 'resources',
@@ -70,13 +67,10 @@ const columns: TableColumn<ComponentRecord>[] = [
             if (!connId) return h('span', { class: 'text-muted' }, '—')
             const resource = componentsStore.byId(connId)
             if (!resource) return h('span', { class: 'text-muted' }, '—')
-            const icon = componentIcon(resource.key, 'i-lucide-key-round')
-            return h(UBadge, { color: 'neutral', variant: 'subtle' }, () =>
-                h('span', { class: 'flex items-center gap-1.5' }, [
-                    h(UIcon, { name: icon, class: 'size-3.5 shrink-0' }),
-                    resource.name,
-                ]),
-            )
+            return h(EntityBadge, {
+                icon: componentIcon(resource.key, 'i-lucide-key-round'),
+                label: resource.name ?? resource.key,
+            })
         },
     },
     {

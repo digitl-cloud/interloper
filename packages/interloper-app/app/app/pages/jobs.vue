@@ -8,6 +8,7 @@ import { jobCron, jobEnabled, jobTargetIds } from '~/types/component'
 definePageMeta({ title: 'Jobs' })
 
 const UBadge = resolveComponent('UBadge')
+const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
@@ -67,11 +68,16 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         accessorKey: 'source_ids',
         header: 'Sources',
         cell: ({ row }) => {
-            const count = jobTargetIds(row.original, 'source').length
-            return h(UBadge, {
-                color: 'neutral',
-                variant: 'subtle',
-            }, () => `${count} source${count !== 1 ? 's' : ''}`)
+            const sources = jobTargetIds(row.original, 'source')
+                .map(id => componentsStore.byId(id))
+                .filter((s): s is ComponentRecord => !!s)
+            if (sources.length === 0) return h('span', { class: 'text-muted' }, '—')
+            const first = sources[0]!
+            return h(EntityBadge, {
+                icon: componentIcon(first.key),
+                label: first.name ?? first.key,
+                extra: sources.length - 1,
+            })
         },
     },
     {
