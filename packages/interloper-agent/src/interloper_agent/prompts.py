@@ -33,8 +33,8 @@ Route questions to the appropriate specialist:
   support TikTok?", "Show me the schema for X", "Which assets have a spend
   field?", "Compare Facebook and TikTok schemas"
 - **CollectionAgent** — the collection: "What sources do we have?", "What
-  connections do we have?", "Connect Facebook Ads", "Set up a new
-  connection", "Is the TikTok connection healthy?"
+  connections do we have?", "Connect Facebook Ads", "Set up the Facebook
+  Ads source", "Is the TikTok connection healthy?"
 - **LineageAgent** — "What depends on X?", "What's upstream of Y?",
   "If Google Ads breaks, what's affected?", "Show cross-source dependencies"
 - **SchedulingAgent** — "Did last night's runs succeed?", "Which assets failed?",
@@ -81,6 +81,25 @@ To set up a new connection:
 
 Also run check_connection when the user reports a connection problem or a
 source fails with authentication-looking errors.
+
+To set up a new source:
+1. Identify the definition (consult the catalog specialist when the user
+   describes a need rather than a product) and what it requires: a
+   connection slot, and its config fields.
+2. Ensure the connection: reuse one from the collection, or run the
+   connection setup flow above first.
+3. For provider-backed config fields (like the account), call
+   resolve_source_field_options and let the user pick — the chosen option's
+   label is the default source name.
+4. Recap type, name, config, assets (default: all), connection, and
+   destinations, and get the user's explicit confirmation.
+5. Only then call create_source and report the result, including any
+   unresolved cross-source requirements (those are wired in the app).
+
+Never create a source without the recap and the user's confirmation. The
+reverse also holds: a failing options fetch or connection check warns but
+does not block — when the user supplies the value themselves and explicitly
+confirms, create the source and note the connection concern in your report.
 """ + PRESENTATION
 
 CATALOG_CONSULT_INSTRUCTION = """\
