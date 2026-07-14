@@ -76,7 +76,7 @@ catalog_agent = Agent(
         "The catalog of component definitions the platform ships: which sources and connections are "
         "available to add, asset schemas, field search, and schema comparison."
     ),
-    instruction=CATALOG_INSTRUCTION,
+    instruction=with_current_time(CATALOG_INSTRUCTION),
     tools=_catalog_tools(),
 )
 
@@ -100,14 +100,17 @@ collection_agent = Agent(
     model=_model,
     description=(
         "The organisation's collection of component instances: lists their sources, connections, and "
-        "destinations, checks connection health, and sets up new connections by presenting the app's "
-        "secure setup form (OAuth sign-in or manual credentials) — never collects credentials in chat."
+        "destinations, checks connection health, sets up new connections via the app's secure form "
+        "(never collecting credentials in chat), and creates sources conversationally — resolving "
+        "provider-backed options like the account to use through an existing connection."
     ),
     instruction=with_current_time(COLLECTION_INSTRUCTION),
     tools=[
         collection.list_components,
         collection.request_connection_setup,
         collection.check_connection,
+        collection.resolve_source_field_options,
+        collection.create_source,
         AgentTool(agent=catalog_consultant),
     ],
 )
