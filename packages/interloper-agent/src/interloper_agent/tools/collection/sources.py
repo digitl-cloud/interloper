@@ -15,8 +15,8 @@ def list_sources(tool_context: ToolContext) -> dict[str, Any]:
     This answers "what sources do we/I have?" — it returns only the source
     instances persisted for the org, each with its key, instance name, asset
     count, and creation date, enriched with catalog metadata (display name,
-    icon). For the catalog of source definitions that *could* be added, use
-    ``list_catalog_sources`` instead.
+    icon). The catalog of source definitions that *could* be added is the
+    Catalog specialist's domain.
     """
     try:
         org_id = get_org_id(tool_context)

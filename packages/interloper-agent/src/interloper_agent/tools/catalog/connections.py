@@ -10,15 +10,15 @@ from interloper.oauth import is_provider_configured
 from interloper_agent.context import get_catalog
 
 
-def list_catalog_connections(tool_context: ToolContext) -> dict[str, Any]:
+def list_connections(tool_context: ToolContext) -> dict[str, Any]:
     """List the connection definitions available in the catalog.
 
-    Use this to pick the right definition before requesting setup. Each
-    entry notes its required config fields and whether OAuth sign-in is
+    Each entry notes its required config fields and whether OAuth sign-in is
     supported by the definition (``oauth``) and usable in this deployment
-    (``oauth_available``) — when OAuth is not available, the user will have
-    to enter credentials manually in the setup form. For the connections the
-    organisation actually has, use ``list_connections`` instead.
+    (``oauth_available``) — when OAuth is not available, credentials must be
+    entered manually in the setup form. Setting connections up (and the
+    connections the organisation actually has) is the Collection
+    specialist's domain.
     """
     try:
         catalog = get_catalog()

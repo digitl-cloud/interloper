@@ -10,7 +10,7 @@ from interloper.settings import AppSettings
 from interloper_agent.prompts import (
     ANALYTICS_INSTRUCTION,
     CATALOG_INSTRUCTION,
-    CONNECTION_INSTRUCTION,
+    COLLECTION_INSTRUCTION,
     LINEAGE_INSTRUCTION,
     ROOT_INSTRUCTION,
     SCHEDULING_INSTRUCTION,
@@ -42,18 +42,35 @@ catalog_agent = Agent(
     name="CatalogAgent",
     model=_model,
     description=(
-        "Discovers the catalog of available source definitions and the organisation's collection of sources "
-        "and destinations, inspects asset schemas, searches fields across the catalog, and compares schemas."
+        "The catalog of component definitions the platform ships: which sources and connections are "
+        "available to add, asset schemas, field search, and schema comparison."
     ),
     instruction=CATALOG_INSTRUCTION,
     tools=[
-        collection.sources.list_sources,
-        catalog.sources.list_catalog_sources,
+        catalog.sources.list_sources,
         catalog.sources.get_source_detail,
+        catalog.connections.list_connections,
         catalog.assets.get_asset_schema,
         catalog.assets.search_fields,
         catalog.assets.compare_schemas,
+    ],
+)
+
+collection_agent = Agent(
+    name="CollectionAgent",
+    model=_model,
+    description=(
+        "The organisation's collection of component instances: lists their sources, connections, and "
+        "destinations, checks connection health, and sets up new connections by presenting the app's "
+        "secure setup form (OAuth sign-in or manual credentials) — never collects credentials in chat."
+    ),
+    instruction=COLLECTION_INSTRUCTION,
+    tools=[
+        collection.sources.list_sources,
+        collection.connections.list_connections,
         collection.destinations.list_destinations,
+        collection.connections.request_connection_setup,
+        collection.connections.check_connection,
     ],
 )
 
@@ -105,27 +122,10 @@ analytics_agent = Agent(
     ],
 )
 
-connection_agent = Agent(
-    name="ConnectionAgent",
-    model=_model,
-    description=(
-        "Lists the organisation's collection of connections, checks their health, and sets up new ones by "
-        "presenting the app's secure setup form (OAuth sign-in or manual credentials) — never collects "
-        "credentials in chat."
-    ),
-    instruction=CONNECTION_INSTRUCTION,
-    tools=[
-        catalog.connections.list_catalog_connections,
-        collection.connections.list_connections,
-        collection.connections.request_connection_setup,
-        collection.connections.check_connection,
-    ],
-)
-
 root_agent = Agent(
     name="InterloperAgent",
     model=_model,
     instruction=ROOT_INSTRUCTION,
     description="Main Interloper assistant that routes queries to specialized sub-agents.",
-    sub_agents=[catalog_agent, lineage_agent, scheduling_agent, analytics_agent, connection_agent],
+    sub_agents=[catalog_agent, collection_agent, lineage_agent, scheduling_agent, analytics_agent],
 )
