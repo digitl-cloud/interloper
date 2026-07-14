@@ -44,6 +44,19 @@ export interface ConnectionSetupRequest {
     name?: string
 }
 
+/** One choice within a selection request. */
+export interface SelectionOption {
+    label: string
+    value: string
+}
+
+/** Inline selection request emitted by the agent's request_user_selection tool. */
+export interface SelectionRequest {
+    prompt: string
+    options: SelectionOption[]
+    multi: boolean
+}
+
 /** Simplified chat message for UI rendering. */
 export interface ChatMessage {
     id: string
@@ -52,4 +65,6 @@ export interface ChatMessage {
     loading?: boolean
     /** When set, the message renders the inline connection setup card. */
     connectionSetup?: ConnectionSetupRequest
+    /** When set, the message renders the inline selection card. */
+    selection?: SelectionRequest
 }

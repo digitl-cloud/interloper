@@ -232,22 +232,24 @@ async def check_connection(connection_id: str, tool_context: ToolContext) -> dic
 
 async def resolve_source_field_options(
     source_key: str,
-    field: str,
     connection_id: str,
+    field: str | None = None,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """List the live options for a provider-backed source config field.
+    """List the live options for a source's provider-backed config field.
 
     Fields marked fetchable in the source definition get their options from
-    the provider through a connection in the org's collection — e.g.
-    ``facebook_ads.account_id`` lists the ad accounts the connection can
-    access. Options are not secret: present them for the user to choose
-    from; the chosen option's label makes a good default source name.
+    the provider through a connection in the org's collection — e.g. the ad
+    accounts the connection can access. Options are not secret: present them
+    for the user to choose from; the chosen option's label makes a good
+    default source name.
 
     Args:
         source_key: The source definition's catalog key (e.g. 'facebook_ads').
-        field: The config field to resolve (must be provider-backed).
         connection_id: UUID of a connection from the org's collection.
+        field: The config field to resolve. Omit it — never guess field
+            names: most definitions have exactly one fetchable field and it
+            is picked automatically (the response names it).
     """
     try:
         org_id = get_org_id(tool_context)
@@ -258,9 +260,17 @@ async def resolve_source_field_options(
         if defn is None or defn.get("kind") != "source":
             return {"status": "error", "error": f"Source '{source_key}' not found in catalog"}
         properties = (defn.get("config_schema") or {}).get("properties", {})
+        fetchable = sorted(k for k, p in properties.items() if p.get("x-fetch"))
+        if field is None:
+            if len(fetchable) != 1:
+                return {
+                    "status": "error",
+                    "error": f"'{source_key}' has {len(fetchable)} fetchable fields — pass one explicitly",
+                    "fetchable_fields": fetchable,
+                }
+            field = fetchable[0]
         fetch = (properties.get(field) or {}).get("x-fetch")
         if not fetch:
-            fetchable = sorted(k for k, p in properties.items() if p.get("x-fetch"))
             return {
                 "status": "error",
                 "error": f"Field '{field}' on '{source_key}' is not provider-backed",
@@ -345,6 +355,19 @@ def create_source(
         defn = catalog.get(source_key)
         if defn is None or defn.get("kind") != "source":
             return {"status": "error", "error": f"Source '{source_key}' not found in catalog"}
+
+        # Models pass [] meaning "default" — and a zero-asset source is useless.
+        if not asset_keys:
+            asset_keys = None
+        else:
+            valid = {a.get("key") for a in defn.get("assets", [])}
+            unknown = sorted(set(asset_keys) - valid)
+            if unknown:
+                return {
+                    "status": "error",
+                    "error": f"Unknown asset keys for '{source_key}': {', '.join(unknown)}",
+                    "valid_asset_keys": sorted(valid),
+                }
 
         # Bind the connection into the definition's matching resource slot.
         slots = (((defn.get("relations") or {}).get("resource") or {}).get("slots")) or {}

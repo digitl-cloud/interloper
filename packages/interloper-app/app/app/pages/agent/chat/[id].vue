@@ -25,6 +25,11 @@ function onConnectionCreated(name: string, verified: boolean) {
     send(`I completed the setup — connection "${name}" is created${verified ? ' and the connection check passed' : ''}.`)
 }
 
+/** Report a confirmed selection back into the chat so the agent continues. */
+function onSelection(labels: string[], values: string[]) {
+    send(`I selected: ${labels.map((label, i) => `${label} (${values[i]})`).join(', ')}`)
+}
+
 onMounted(async () => {
     await loadHistory()
     const initialQuery = route.query.q as string | undefined
@@ -69,6 +74,9 @@ onMounted(async () => {
                             <AgentConnectCard v-if="message.connectionSetup"
                                               :request="message.connectionSetup"
                                               @created="onConnectionCreated" />
+                            <AgentSelectCard v-else-if="message.selection"
+                                             :request="message.selection"
+                                             @selected="onSelection" />
                             <MDC v-else-if="message.role === 'assistant'"
                                  :value="message.text"
                                  :cache-key="message.id"

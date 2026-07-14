@@ -17,18 +17,24 @@ const { messages, streaming, error, send } = useAgentChat(sessionId)
  * `submitted` status' thinking indicator covers.
  */
 const displayMessages = computed(() => messages.value
-    .filter(m => m.text || m.role === 'user' || m.connectionSetup)
+    .filter(m => m.text || m.role === 'user' || m.connectionSetup || m.selection)
     .map(m => ({
         id: m.id,
         role: m.role,
         text: m.text,
         parts: [{ type: 'text' as const, text: m.text }],
         connectionSetup: m.connectionSetup,
+        selection: m.selection,
     })))
 
 /** Report a completed connection setup back into the chat so the agent continues. */
 function onConnectionCreated(name: string, verified: boolean) {
     send(`I completed the setup — connection "${name}" is created${verified ? ' and the connection check passed' : ''}.`)
+}
+
+/** Report a confirmed selection back into the chat so the agent continues. */
+function onSelection(labels: string[], values: string[]) {
+    send(`I selected: ${labels.map((label, i) => `${label} (${values[i]})`).join(', ')}`)
 }
 
 const status = computed(() => {
@@ -120,6 +126,9 @@ const SUGGESTIONS = [
                         <AgentConnectCard v-if="(message as any).connectionSetup"
                                           :request="(message as any).connectionSetup"
                                           @created="onConnectionCreated" />
+                        <AgentSelectCard v-else-if="(message as any).selection"
+                                         :request="(message as any).selection"
+                                         @selected="onSelection" />
                         <MDC v-else-if="message.role === 'assistant'"
                              :value="message.text"
                              :cache-key="message.id"

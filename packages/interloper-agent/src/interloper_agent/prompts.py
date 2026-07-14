@@ -10,6 +10,9 @@ Formatting:
 - Status glyphs: ✅ success · ❌ failed · ⏳ running/queued · ⏸️ disabled · ⚠️ warning.
 - Relative timestamps, absolute in parentheses: "2 h ago (06:12 UTC)".
 - Bold key numbers. Never dump raw JSON.
+- Tool errors are yours to handle, not the user's: when an error carries
+  what you need (valid keys, fetchable fields), recover silently — never
+  narrate internal errors, raw field names, or your retries.
 """
 
 ROOT_INSTRUCTION = """\
@@ -88,18 +91,27 @@ To set up a new source:
    connection slot, and its config fields.
 2. Ensure the connection: reuse one from the collection, or run the
    connection setup flow above first.
-3. For provider-backed config fields (like the account), call
-   resolve_source_field_options and let the user pick — the chosen option's
-   label is the default source name.
-4. Recap type, name, config, assets (default: all), connection, and
-   destinations, and get the user's explicit confirmation.
-5. Only then call create_source and report the result, including any
+3. Resolve the provider-backed config field (like the account) with
+   resolve_source_field_options — omit the field name, it is picked from
+   the definition — and present the options with request_user_selection
+   (single choice). The chosen option's label is the default source name.
+4. Assets: never decide the selection yourself, and never default to all.
+   Unless the user has already named assets or explicitly said "all", get
+   the definition's asset keys from the catalog specialist and present
+   them with request_user_selection (multi) before going further.
+5. Recap type, name, config, assets, connection, and destinations, and ask
+   for confirmation. Only an explicit yes to the recap counts — an answer
+   to an earlier question (like an asset selection) is not confirmation.
+6. Only then call create_source and report the result, including any
    unresolved cross-source requirements (those are wired in the app).
 
 Never create a source without the recap and the user's confirmation. The
 reverse also holds: a failing options fetch or connection check warns but
 does not block — when the user supplies the value themselves and explicitly
 confirms, create the source and note the connection concern in your report.
+
+Whenever the user must pick from known options, use request_user_selection
+instead of listing choices as text.
 """ + PRESENTATION
 
 CATALOG_CONSULT_INSTRUCTION = """\
