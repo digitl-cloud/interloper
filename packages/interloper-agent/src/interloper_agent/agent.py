@@ -138,7 +138,8 @@ scheduling_agent = Agent(
     model=_model,
     description=(
         "Monitors run health, recent failures, job schedules, and backfill progress; "
-        "triggers runs, starts backfills, and toggles jobs or assets on/off."
+        "triggers runs, starts backfills, toggles jobs or assets on/off, and creates "
+        "cron jobs over the collection's sources."
     ),
     instruction=with_current_time(SCHEDULING_INSTRUCTION),
     tools=[
@@ -152,6 +153,9 @@ scheduling_agent = Agent(
         scheduling.list_backfills,
         scheduling.trigger_backfill,
         scheduling.toggle_asset,
+        collection.list_components,
+        collection.create_job,
+        interaction.request_confirmation,
     ],
 )
 
