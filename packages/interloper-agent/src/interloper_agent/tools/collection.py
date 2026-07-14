@@ -96,6 +96,7 @@ def list_components(kind: str | None = None, tool_context: ToolContext | None = 
 def request_connection_setup(
     connection_key: str,
     name: str | None = None,
+    force_new: bool = False,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Present a secure connection setup form to the user in the app.
@@ -105,6 +106,11 @@ def request_connection_setup(
     credential entry otherwise) and the credentials go directly to the API.
     Never ask the user to share credentials in the chat instead.
 
+    When the collection already holds connections of this definition, the
+    form is NOT presented: the response lists them so you can ask the user
+    whether to reuse one — call again with ``force_new`` only when they
+    want another account connected.
+
     The response notes whether the user can sign in with the provider
     (``oauth_available``) or must enter credentials manually; an unknown key
     fails with the list of valid connection keys.
@@ -113,6 +119,7 @@ def request_connection_setup(
         connection_key: Catalog key of the connection definition — usually
             ``<source_key>_connection`` (e.g. 'facebook_ads_connection').
         name: Optional display name to prefill in the form.
+        force_new: Present the form even though fitting connections exist.
     """
     try:
         catalog = get_catalog()
@@ -124,6 +131,25 @@ def request_connection_setup(
                 "error": f"Connection definition '{connection_key}' not found in catalog",
                 "valid_keys": valid,
             }
+
+        if not force_new:
+            org_id = get_org_id(tool_context)
+            existing = [
+                {"id": serialize(c.id), "name": c.name}
+                for c in get_store().list_components(org_id, kinds=["connection"])
+                if c.key == connection_key
+            ]
+            if existing:
+                return {
+                    "status": "exists",
+                    "message": (
+                        "The collection already holds connections of this definition — no form was "
+                        "presented. Ask the user whether to reuse one; call again with force_new "
+                        "only if they want another account connected."
+                    ),
+                    "existing": existing,
+                }
+
         oauth = (defn.get("config_schema") or {}).get("x-oauth")
         return {
             "status": "success",
