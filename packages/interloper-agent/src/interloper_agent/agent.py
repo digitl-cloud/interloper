@@ -15,7 +15,7 @@ from interloper_agent.prompts import (
     ROOT_INSTRUCTION,
     SCHEDULING_INSTRUCTION,
 )
-from interloper_agent.tools import analytics, catalog, connections, lineage, scheduling
+from interloper_agent.tools import analytics, assets, connections, destinations, lineage, scheduling, sources
 
 if TYPE_CHECKING:
     from google.adk.models import BaseLlm
@@ -42,18 +42,18 @@ catalog_agent = Agent(
     name="CatalogAgent",
     model=_model,
     description=(
-        "Discovers the organisation's configured sources and the catalog of available source types, "
-        "inspects asset schemas, searches fields across the catalog, and compares schemas."
+        "Discovers the catalog of available source definitions and the organisation's collection of sources "
+        "and destinations, inspects asset schemas, searches fields across the catalog, and compares schemas."
     ),
     instruction=CATALOG_INSTRUCTION,
     tools=[
-        catalog.list_sources,
-        catalog.list_available_sources,
-        catalog.get_source_detail,
-        catalog.get_asset_schema,
-        catalog.search_fields,
-        catalog.compare_schemas,
-        catalog.list_destinations,
+        sources.list_sources,
+        sources.list_catalog_sources,
+        sources.get_source_detail,
+        assets.get_asset_schema,
+        assets.search_fields,
+        assets.compare_schemas,
+        destinations.list_destinations,
     ],
 )
 
@@ -109,12 +109,13 @@ connection_agent = Agent(
     name="ConnectionAgent",
     model=_model,
     description=(
-        "Lists configured connections and sets up new ones by presenting the app's secure "
-        "setup form (OAuth sign-in or manual credentials) — never collects credentials in chat."
+        "Lists the organisation's collection of connections, checks their health, and sets up new ones by "
+        "presenting the app's secure setup form (OAuth sign-in or manual credentials) — never collects "
+        "credentials in chat."
     ),
     instruction=CONNECTION_INSTRUCTION,
     tools=[
-        connections.list_connection_types,
+        connections.list_catalog_connections,
         connections.list_connections,
         connections.request_connection_setup,
         connections.check_connection,

@@ -29,14 +29,15 @@ logger = logging.getLogger(__name__)
 _CHECK_TIMEOUT = 15.0
 
 
-def list_connection_types(tool_context: ToolContext) -> dict[str, Any]:
-    """List the connection types available in the catalog.
+def list_catalog_connections(tool_context: ToolContext) -> dict[str, Any]:
+    """List the connection definitions available in the catalog.
 
-    Use this to pick the right type before requesting setup. Each entry
-    notes its required config fields and whether OAuth sign-in is supported
-    by the type (``oauth``) and usable in this deployment
+    Use this to pick the right definition before requesting setup. Each
+    entry notes its required config fields and whether OAuth sign-in is
+    supported by the definition (``oauth``) and usable in this deployment
     (``oauth_available``) — when OAuth is not available, the user will have
-    to enter credentials manually in the setup form.
+    to enter credentials manually in the setup form. For the connections the
+    organisation actually has, use ``list_connections`` instead.
     """
     try:
         catalog = get_catalog()
@@ -55,15 +56,16 @@ def list_connection_types(tool_context: ToolContext) -> dict[str, Any]:
                 "oauth": oauth is not None,
                 "oauth_available": is_provider_configured(oauth["provider"]) if oauth else False,
             })
-        return {"status": "success", "count": len(results), "connection_types": results}
+        return {"status": "success", "count": len(results), "connections": results}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
 
 def list_connections(tool_context: ToolContext) -> dict[str, Any]:
-    """List the connections configured in the organisation.
+    """List the connections in the organisation's collection.
 
-    Returns identity and metadata only — never credential values.
+    Returns identity and metadata only — never credential values. For the
+    catalog of connection definitions, use ``list_catalog_connections``.
     """
     try:
         org_id = get_org_id(tool_context)
@@ -184,8 +186,8 @@ def request_connection_setup(
     the user to share credentials in the chat instead.
 
     Args:
-        connection_key: Catalog key of the connection type
-            (e.g. 'facebook_ads_connection'), from list_connection_types.
+        connection_key: Catalog key of the connection definition
+            (e.g. 'facebook_ads_connection'), from list_catalog_connections.
         name: Optional display name to prefill in the form.
     """
     try:
