@@ -2,10 +2,10 @@
 /**
  * Inline confirmation summary card rendered in the agent chat.
  *
- * Triggered by the agent's `request_confirmation` tool: renders the recap
- * items as a WizardRecap summary with Confirm / Cancel actions. The parent
- * reports the decision back into the chat as the user's message so the
- * agent proceeds (or stops) with it.
+ * Triggered by the agent's `request_confirmation` tool: the wizard's
+ * WizardRecap summary, compacted for the agent panel, with Confirm /
+ * Cancel actions. The parent reports the decision back into the chat as
+ * the user's message so the agent proceeds (or stops) with it.
  */
 import type { ConfirmationRequest } from '~/types/agent'
 
@@ -42,34 +42,30 @@ function decide(confirmed: boolean) {
 </script>
 
 <template>
-    <div class="border border-default rounded-[14px] p-5 my-2 w-full min-w-72 max-w-md">
-        <div class="flex flex-col gap-4">
-            <div class="text-sm font-semibold">
-                {{ request.title }}
-            </div>
+    <div class="border border-default rounded-[13px] p-4 my-2 w-full min-w-72 max-w-md flex flex-col gap-3">
+        <span class="text-[13px] font-semibold text-highlighted">{{ request.title }}</span>
 
-            <WizardRecap :rows="rows" />
+        <WizardRecap :rows="rows" />
 
-            <!-- Decided: locked outcome -->
-            <div v-if="decision !== null"
-                 class="flex items-center gap-2 text-sm">
-                <UIcon :name="decision ? 'i-lucide-check-circle-2' : 'i-lucide-circle-x'"
-                       class="size-4 shrink-0"
-                       :class="decision ? 'text-success' : 'text-muted'" />
-                <span class="text-muted">{{ decision ? 'Confirmed' : 'Cancelled' }}</span>
-            </div>
+        <!-- Decided: locked outcome -->
+        <div v-if="decision !== null"
+             class="flex items-center gap-2 text-[13px]">
+            <UIcon :name="decision ? 'i-lucide-check-circle-2' : 'i-lucide-circle-x'"
+                   class="size-4 shrink-0"
+                   :class="decision ? 'text-success' : 'text-muted'" />
+            <span class="text-muted">{{ decision ? 'Confirmed' : 'Cancelled' }}</span>
+        </div>
 
-            <div v-else
-                 class="flex gap-2">
-                <UButton label="Cancel"
-                         color="neutral"
-                         variant="outline"
-                         class="flex-1 justify-center"
-                         @click="decide(false)" />
-                <UButton label="Confirm"
-                         class="flex-1 justify-center"
-                         @click="decide(true)" />
-            </div>
+        <div v-else
+             class="flex gap-2">
+            <UButton label="Cancel"
+                     color="neutral"
+                     variant="outline"
+                     class="flex-1 justify-center"
+                     @click="decide(false)" />
+            <UButton label="Confirm"
+                     class="flex-1 justify-center"
+                     @click="decide(true)" />
         </div>
     </div>
 </template>
