@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import ConfigError, NotFoundError
+from interloper.errors import ConfigError, InUseError, NotFoundError
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
@@ -124,12 +124,12 @@ class TestCrud:
         with pytest.raises(ValueError):
             store.delete_component(child_id)
 
-    def test_delete_cascades_relations(self, store: Store):
+    def test_delete_cascades_outbound_relations(self, store: Store):
         job = store.create_component(_ORG, kind="job", key="cron_job", name="J")
         asset = store.create_component(_ORG, kind="asset", key="a")
         store.add_relation(job.id, type="target", dst_id=asset.id)
 
-        store.delete_component(asset.id)
+        store.delete_component(job.id)
         assert store.list_relations(_ORG) == []
 
     def test_list_filters_org_and_kinds(self, store: Store):
@@ -146,6 +146,68 @@ class TestCrud:
         assert store.get_component(dest.id, kind="destination").id == dest.id
         with pytest.raises(NotFoundError):
             store.get_component(dest.id, kind="asset")
+
+
+class TestDeleteInUseGuard:
+    """A relation destination cannot be deleted while external referrers exist."""
+
+    def _connection(self, store: Store) -> Component:
+        return store.create_component(_ORG, kind="connection", key="conn", name="Conn", config={}, encrypted=False)
+
+    def test_bound_connection_blocks_delete_and_names_referrer(self, store: Store):
+        conn = self._connection(store)
+        asset = store.create_component(_ORG, kind="asset", key="a", name="A", relations={"resource": [(conn.id, "c")]})
+
+        with pytest.raises(InUseError) as excinfo:
+            store.delete_component(conn.id)
+        assert excinfo.value.referrers == [{"id": str(asset.id), "kind": "asset", "key": "a", "name": "A"}]
+        assert "in use by A" in str(excinfo.value)
+
+    def test_delete_succeeds_after_unbinding(self, store: Store):
+        conn = self._connection(store)
+        asset = store.create_component(_ORG, kind="asset", key="a", relations={"resource": [(conn.id, "c")]})
+
+        store.remove_relation(asset.id, type="resource", dst_id=conn.id)
+        store.delete_component(conn.id)
+        with pytest.raises(NotFoundError):
+            store.get_component(conn.id)
+
+    def test_job_target_blocks_component_delete(self, store: Store):
+        asset = store.create_component(_ORG, kind="asset", key="a")
+        job = store.create_component(_ORG, kind="job", key="cron_job", name="J", relations={"target": [(asset.id, "")]})
+
+        with pytest.raises(InUseError) as excinfo:
+            store.delete_component(asset.id)
+        assert [r["id"] for r in excinfo.value.referrers] == [str(job.id)]
+
+    def test_referrer_through_child_reports_parent(self, store: Store, component_db: Engine):
+        conn = self._connection(store)
+        parent = store.create_component(_ORG, kind="job", key="cron_job", name="P")  # parentable stand-in
+        with Session(component_db) as session:
+            child = Component(org_id=_ORG, kind="asset", key="a", parent_id=parent.id)
+            session.add(child)
+            session.commit()
+            child_id = child.id
+        store.add_relation(child_id, type="resource", dst_id=conn.id, slot="c")
+
+        with pytest.raises(InUseError) as excinfo:
+            store.delete_component(conn.id)
+        assert [r["id"] for r in excinfo.value.referrers] == [str(parent.id)]
+
+    def test_intra_subtree_relations_do_not_block(self, store: Store, component_db: Engine):
+        parent = store.create_component(_ORG, kind="job", key="cron_job", name="P")  # parentable stand-in
+        with Session(component_db) as session:
+            a = Component(org_id=_ORG, kind="asset", key="a", parent_id=parent.id)
+            b = Component(org_id=_ORG, kind="asset", key="b", parent_id=parent.id)
+            session.add(a)
+            session.add(b)
+            session.commit()
+            a_id, b_id = a.id, b.id
+        store.add_relation(b_id, type="dependency", dst_id=a_id, slot="a")
+
+        store.delete_component(parent.id)
+        with pytest.raises(NotFoundError):
+            store.get_component(parent.id)
 
 
 class DiscriminatedSource(il.Source):

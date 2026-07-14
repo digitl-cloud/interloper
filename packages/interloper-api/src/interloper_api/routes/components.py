@@ -30,6 +30,7 @@ from interloper.errors import (
     ConfigError,
     ConnectionCheckError,
     DataNotFoundError,
+    InUseError,
     NotFoundError,
 )
 from interloper.resource.fields import is_fetch_field_provider
@@ -307,12 +308,14 @@ def delete_component(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Delete a component. Children and relations cascade."""
+    """Delete a component. Refused (409) while other components are bound to it."""
     load_authorized(store.get_component, component_id, user, store, label="Component", minimum="editor")
     try:
         store.delete_component(component_id)
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except InUseError as e:
+        raise HTTPException(status_code=409, detail={"message": str(e), "used_by": e.referrers})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"status": "deleted"}

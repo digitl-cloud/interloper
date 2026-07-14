@@ -31,6 +31,7 @@ from interloper.errors import (
     ComponentDriftError,
     ConfigError,
     HydrationError,
+    InUseError,
     NotFoundError,
 )
 from sqlalchemy.orm import selectinload
@@ -186,10 +187,13 @@ class ComponentMixin(StoreBase):
             return load_component(session, component_id)
 
     def delete_component(self, component_id: UUID) -> None:
-        """Delete a component. Children and relations cascade via FK.
+        """Delete a component. Children and out-bound relations cascade via FK.
 
         Raises:
             NotFoundError: If the component is not found.
+            InUseError: If other components hold relations into this one or
+                its children (a bound connection, a job's target) — those
+                must be unbound or deleted first.
             ValueError: If the component is source-owned (delete or update
                 the parent source instead).
         """
@@ -199,8 +203,45 @@ class ComponentMixin(StoreBase):
                 raise NotFoundError(f"Component {component_id} not found")
             if db_component.parent_id is not None:
                 raise ValueError("Cannot delete a source-owned asset directly. Delete or update the source instead.")
+            if referrers := self._external_referrers(session, db_component):
+                names = ", ".join(str(r["name"] or r["key"]) for r in referrers)
+                raise InUseError(
+                    f"Cannot delete {db_component.kind} '{db_component.name or db_component.key}': "
+                    f"in use by {names}",
+                    referrers=referrers,
+                )
             session.delete(db_component)
             session.commit()
+
+    def _external_referrers(self, session: Session, db_component: Component) -> list[dict[str, str | None]]:
+        """Components outside a component's subtree that hold relations into it.
+
+        Deleting a relation destination would cascade the binding row and leave
+        the referrer silently broken at its next run, so deletion is refused
+        while such referrers exist. Relations internal to the subtree (a
+        source's own asset dependencies) don't count, and a referrer that is a
+        source-owned asset is reported as its parent source — the unit the
+        user can act on.
+        """
+        subtree_ids = {db_component.id} | {child.id for child in db_component.children}
+        rows = session.exec(
+            select(ComponentRelation).where(
+                col(ComponentRelation.dst_id).in_(subtree_ids),
+                col(ComponentRelation.src_id).not_in(subtree_ids),
+            )
+        ).all()
+        referrers: dict[UUID, Component] = {}
+        for relation in rows:
+            src = session.get(Component, relation.src_id)
+            if src is None:
+                continue
+            if src.parent_id is not None and src.parent_id not in subtree_ids:
+                src = session.get(Component, src.parent_id) or src
+            referrers[src.id] = src
+        return [
+            {"id": str(c.id), "kind": c.kind, "key": c.key, "name": c.name}
+            for c in sorted(referrers.values(), key=lambda c: ((c.name or c.key).lower(), str(c.id)))
+        ]
 
     # -- Relations -------------------------------------------------------------
 

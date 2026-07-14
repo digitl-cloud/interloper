@@ -89,8 +89,12 @@ export const useComponentsStore = defineStore('components', () => {
 
     async function remove(ids: string | string[]) {
         const list = Array.isArray(ids) ? ids : [ids]
-        await Promise.all(list.map(id => apiFetch(`/components/${id}`, { method: 'DELETE' })))
-        list.forEach(_remove)
+        const results = await Promise.allSettled(list.map(id => apiFetch(`/components/${id}`, { method: 'DELETE' })))
+        list.forEach((id, i) => {
+            if (results[i]!.status === 'fulfilled') _remove(id)
+        })
+        const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+        if (failed) throw failed.reason
     }
 
     /** Fetch relations, optionally narrowed to a type (replaces that type only). */
