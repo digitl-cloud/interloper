@@ -2,6 +2,143 @@
 
 <!-- version list -->
 
+## v0.33.0 (2026-07-14)
+
+### Bug Fixes
+
+- **agent**: Asset selection card, no field guessing, no error bleed
+  ([`1eb0df9`](https://github.com/digitl-cloud/interloper/commit/1eb0df9707607c70775071da8ce07498ae79e42f))
+
+- **agent**: Contain google-adk's BaseAgentConfig deprecation at the import site
+  ([`995dc72`](https://github.com/digitl-cloud/interloper/commit/995dc72316d237527b864d2a94145b65c5214dbf))
+
+- **agent**: Inject the current time into agent instructions
+  ([`26f5537`](https://github.com/digitl-cloud/interloper/commit/26f5537794ff01aa5b19cb45f7dded5d287a4d30))
+
+- **agent**: Never auto-attach a destination — ask, don't reuse silently
+  ([`cd58c6d`](https://github.com/digitl-cloud/interloper/commit/cd58c6d27abc5e6b5ea4c816125155320b664e3b))
+
+- **agent**: Scope source listing to the organisation
+  ([`ef55226`](https://github.com/digitl-cloud/interloper/commit/ef5522636483a8c5f0d5d8b7b01b2e108b15a4a0))
+
+- **app**: Hide the test button while the OAuth sign-in tab is active
+  ([`fe853bd`](https://github.com/digitl-cloud/interloper/commit/fe853bd71500848e9d50ce8dceb8b64e32c0e553))
+
+### Chores
+
+- Allow force-with-lease pushes in agent sessions
+  ([`ba39ffe`](https://github.com/digitl-cloud/interloper/commit/ba39ffe860fce77524f676448c7df2245a4636e5))
+
+- **test**: Silence google-adk's self-inflicted BaseAgentConfig warning
+  ([`82c6dbf`](https://github.com/digitl-cloud/interloper/commit/82c6dbf1f62b58b00c5f6b07148b9bbf6f792e65))
+
+### Features
+
+- Connection validation with a wizard test step
+  ([`288de15`](https://github.com/digitl-cloud/interloper/commit/288de159e141e8cfd7b777917e640f95b11aca9a))
+
+- Discriminator markers for remaining multi-instance components
+  ([`f93e47c`](https://github.com/digitl-cloud/interloper/commit/f93e47c7f3bf3abb1e7a41b0d06460f24ebacb62))
+
+- Instance names derive from the discriminator alone
+  ([`3d33b4d`](https://github.com/digitl-cloud/interloper/commit/3d33b4d86d08ce418b491538fe62284727f07c70))
+
+- Refuse deleting components that are still in use
+  ([`63b317f`](https://github.com/digitl-cloud/interloper/commit/63b317f6c0bb47b84902b0992547b7603d7263ec))
+
+- **agent**: Bulk multi-account sources and the job that schedules them
+  ([`3a42e93`](https://github.com/digitl-cloud/interloper/commit/3a42e93c2d24955344e2218cf5e92dbb3fffca1c))
+
+- **agent**: Collection agent consults the catalog specialist as a tool
+  ([`0330824`](https://github.com/digitl-cloud/interloper/commit/033082495fdc22edee672391ad9c9e1b5bbdc054))
+
+- **agent**: Confirmation summary card for creations
+  ([`12d15dd`](https://github.com/digitl-cloud/interloper/commit/12d15dd62296ec8541d057ba9872c8571202c7bf))
+
+- **agent**: Connection setup through the chat
+  ([`8f0a73f`](https://github.com/digitl-cloud/interloper/commit/8f0a73fd4d37fed4b7e694f8fe11f355f4f88a29))
+
+- **agent**: Conversational source setup
+  ([`db35a78`](https://github.com/digitl-cloud/interloper/commit/db35a78d0342025a62137296b08fbc065c55f93c))
+
+- **agent**: One source-setup flow — the account selection decides plurality
+  ([`7a6fa91`](https://github.com/digitl-cloud/interloper/commit/7a6fa91169d39bee54fc5065187a6aa3df828cc3))
+
+- **agent**: Scheduling agent creates jobs too
+  ([`b5d5272`](https://github.com/digitl-cloud/interloper/commit/b5d527292dc344acefebd2826cb449b71b489770))
+
+- **agent**: Shared presentation rules for all sub-agents
+  ([`d642b82`](https://github.com/digitl-cloud/interloper/commit/d642b82142958539c26b92d49c221ca78a4f3c21))
+
+- **agent**: The agent validates connections with the check hook
+  ([`9fa3f8f`](https://github.com/digitl-cloud/interloper/commit/9fa3f8f75ad59fdbb368c31adebe98bc088e7dd5))
+
+- **app**: Connect card gates creation on the candidate check
+  ([`8e10ca5`](https://github.com/digitl-cloud/interloper/commit/8e10ca5d1aa4c8d4a4e50369c23e86d3c4a2079d))
+
+- **google-cloud**: Google Cloud Storage destination
+  ([`db5e78c`](https://github.com/digitl-cloud/interloper/commit/db5e78c5bb22d9f5dad78a702cfe2f20c38b05ee))
+
+### Refactoring
+
+- **agent**: Agents split by space, tool names drop the prefixes
+  ([`07dc4a2`](https://github.com/digitl-cloud/interloper/commit/07dc4a29921631e239210de615df10a08cd681ea))
+
+- **agent**: Compact COLLECTION_INSTRUCTION, same behavior
+  ([`a83004c`](https://github.com/digitl-cloud/interloper/commit/a83004c5325d346bfe9abdb792686eb7593d9516))
+
+- **agent**: Compact the remaining agent instructions, same behavior
+  ([`571e0ea`](https://github.com/digitl-cloud/interloper/commit/571e0ea6bf03a56ed8cb49b735938ec0cf704471))
+
+- **agent**: Connection check hydrates through the store
+  ([`53e4912`](https://github.com/digitl-cloud/interloper/commit/53e491244bf5a057ed4e70796142f1652361b0a4))
+
+- **agent**: Generic component tools in flat catalog/collection modules
+  ([`427937d`](https://github.com/digitl-cloud/interloper/commit/427937d2b1f6de1ddad5f99774129361467b36f9))
+
+- **agent**: Merge actions and operations tools into scheduling
+  ([`a247e7a`](https://github.com/digitl-cloud/interloper/commit/a247e7aa63a61fc72dcec926b242b19556474913))
+
+- **agent**: Tools organized into catalog and collection subpackages
+  ([`b31671e`](https://github.com/digitl-cloud/interloper/commit/b31671ec0b203283e697b63d98303eb65d8ac72d))
+
+- **agent**: Tools split by component kind, catalog/collection taxonomy
+  ([`aff8da9`](https://github.com/digitl-cloud/interloper/commit/aff8da9a658e53c7d39cca433a97e73da8a646a9))
+
+- **api**: Fold resolve and check into routes/components.py
+  ([`59a251b`](https://github.com/digitl-cloud/interloper/commit/59a251b33a0c068fedc311a3d26cd826ff4d09ac))
+
+- **api**: Serve resolve and check under /components
+  ([`922b955`](https://github.com/digitl-cloud/interloper/commit/922b95534ab833b43f33ab56c36124032dc3051c))
+
+- **app**: Agent cards adopt the wizard's design language, compacted
+  ([`81b0741`](https://github.com/digitl-cloud/interloper/commit/81b0741b39de316538bed32447818cf8911d4ba9))
+
+- **app**: Consolidate table column badges
+  ([`8f54787`](https://github.com/digitl-cloud/interloper/commit/8f5478736fc02ca59de2a8335b93b63ed1cd307f))
+
+- **app**: Full-width test button directly under the credentials
+  ([`5945a21`](https://github.com/digitl-cloud/interloper/commit/5945a21016f2e605e28d2c5ac6e8524fe9818e5f))
+
+- **app**: Namespace root components
+  ([`46f2f54`](https://github.com/digitl-cloud/interloper/commit/46f2f54a810ad668e9bd231e8507e6951447872d))
+
+- **app**: Regorganize stepper details step sections
+  ([`21a4a32`](https://github.com/digitl-cloud/interloper/commit/21a4a32132ef4b72c7586159b298aa96a490b8e8))
+
+- **app**: Rename the catalog page to collection
+  ([`97f3696`](https://github.com/digitl-cloud/interloper/commit/97f369628f0b2cc341f28dce8a2c9d1c123f7398))
+
+- **app**: Surface config errors via Nuxt UI form validation
+  ([`9787f54`](https://github.com/digitl-cloud/interloper/commit/9787f545547e816a015bfa1fe34157c87c1113af))
+
+- **app**: Test connection via a button on the details step
+  ([`7e9cfbf`](https://github.com/digitl-cloud/interloper/commit/7e9cfbf0088195c1341966c04da865ef0dabe407))
+
+- **oauth**: One owner for the provider env convention
+  ([`5e0d47b`](https://github.com/digitl-cloud/interloper/commit/5e0d47b4508ebc405aa6824cbe17ba173735fbf3))
+
+
 ## v0.32.0 (2026-07-10)
 
 ### Bug Fixes
