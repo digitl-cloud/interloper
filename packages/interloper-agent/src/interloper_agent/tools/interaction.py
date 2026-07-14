@@ -15,6 +15,42 @@ from google.adk.tools.tool_context import ToolContext
 _MAX_CHOICES = 50
 
 
+def request_confirmation(
+    title: str,
+    items: list[dict[str, str]],
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Present a confirmation summary card to the user in the app.
+
+    Use this for the recap before a creation or any other action that needs
+    the user's sign-off: the app renders the items as a summary with
+    Confirm / Cancel buttons and reports the decision back as the user's
+    next message. Wait for it — proceed only on confirmation.
+
+    Args:
+        title: What is about to happen (e.g. "Create the Facebook Ads
+            source 'FB Main'?").
+        items: The choices being confirmed, each ``{"label": ..., "value": ...}``
+            (e.g. Account, Assets, Connection, Destinations).
+    """
+    try:
+        cleaned = [
+            {"label": str(i.get("label")), "value": str(i.get("value") or "—")}
+            for i in items
+            if isinstance(i, dict) and i.get("label")
+        ]
+        if not cleaned:
+            return {"status": "error", "error": "items must carry at least one {label, value} entry"}
+        return {
+            "status": "success",
+            "message": "Confirmation presented to the user. Wait for their decision before continuing.",
+            "title": title,
+            "items": cleaned,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 def request_user_selection(
     prompt: str,
     options: list[dict[str, str]],

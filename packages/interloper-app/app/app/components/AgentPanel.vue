@@ -17,7 +17,7 @@ const { messages, streaming, error, send } = useAgentChat(sessionId)
  * `submitted` status' thinking indicator covers.
  */
 const displayMessages = computed(() => messages.value
-    .filter(m => m.text || m.role === 'user' || m.connectionSetup || m.selection)
+    .filter(m => m.text || m.role === 'user' || m.connectionSetup || m.selection || m.confirmation)
     .map(m => ({
         id: m.id,
         role: m.role,
@@ -25,6 +25,7 @@ const displayMessages = computed(() => messages.value
         parts: [{ type: 'text' as const, text: m.text }],
         connectionSetup: m.connectionSetup,
         selection: m.selection,
+        confirmation: m.confirmation,
     })))
 
 /** Report a completed connection setup back into the chat so the agent continues. */
@@ -35,6 +36,11 @@ function onConnectionCreated(name: string, verified: boolean) {
 /** Report a confirmed selection back into the chat so the agent continues. */
 function onSelection(labels: string[], values: string[]) {
     send(`I selected: ${labels.map((label, i) => `${label} (${values[i]})`).join(', ')}`)
+}
+
+/** Report a confirmation decision back into the chat so the agent proceeds or stops. */
+function onDecision(confirmed: boolean) {
+    send(confirmed ? 'Confirmed — go ahead.' : 'Cancel that — do not proceed.')
 }
 
 const status = computed(() => {
@@ -129,6 +135,9 @@ const SUGGESTIONS = [
                         <AgentSelectCard v-else-if="(message as any).selection"
                                          :request="(message as any).selection"
                                          @selected="onSelection" />
+                        <AgentConfirmCard v-else-if="(message as any).confirmation"
+                                          :request="(message as any).confirmation"
+                                          @decided="onDecision" />
                         <MDC v-else-if="message.role === 'assistant'"
                              :value="message.text"
                              :cache-key="message.id"

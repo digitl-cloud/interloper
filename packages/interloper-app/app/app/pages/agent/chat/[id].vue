@@ -30,6 +30,11 @@ function onSelection(labels: string[], values: string[]) {
     send(`I selected: ${labels.map((label, i) => `${label} (${values[i]})`).join(', ')}`)
 }
 
+/** Report a confirmation decision back into the chat so the agent proceeds or stops. */
+function onDecision(confirmed: boolean) {
+    send(confirmed ? 'Confirmed — go ahead.' : 'Cancel that — do not proceed.')
+}
+
 onMounted(async () => {
     await loadHistory()
     const initialQuery = route.query.q as string | undefined
@@ -77,6 +82,9 @@ onMounted(async () => {
                             <AgentSelectCard v-else-if="message.selection"
                                              :request="message.selection"
                                              @selected="onSelection" />
+                            <AgentConfirmCard v-else-if="message.confirmation"
+                                              :request="message.confirmation"
+                                              @decided="onDecision" />
                             <MDC v-else-if="message.role === 'assistant'"
                                  :value="message.text"
                                  :cache-key="message.id"

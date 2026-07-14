@@ -1,4 +1,4 @@
-import type { AgentEvent, ChatMessage, ConnectionSetupRequest, SelectionRequest } from '~/types/agent'
+import type { AgentEvent, ChatMessage, ConfirmationRequest, ConnectionSetupRequest, SelectionRequest } from '~/types/agent'
 
 /**
  * Composable for managing an agent chat session with SSE streaming.
@@ -30,6 +30,11 @@ export function useAgentChat(sessionId: Ref<string>) {
                     restored.push({ id: event.id || crypto.randomUUID(), role: 'assistant', text: '', selection })
                     continue
                 }
+                const confirmation = _extractConfirmation(event)
+                if (confirmation) {
+                    restored.push({ id: event.id || crypto.randomUUID(), role: 'assistant', text: '', confirmation })
+                    continue
+                }
 
                 const text = _extractText(event)
                 if (!text) continue
@@ -37,7 +42,7 @@ export function useAgentChat(sessionId: Ref<string>) {
                 const role = event.author === 'user' ? 'user' as const : 'assistant' as const
                 // Merge consecutive assistant messages from the same invocation
                 const last = restored[restored.length - 1]
-                if (role === 'assistant' && last?.role === 'assistant' && !last.connectionSetup && !last.selection) {
+                if (role === 'assistant' && last?.role === 'assistant' && !last.connectionSetup && !last.selection && !last.confirmation) {
                     last.text += text
                 }
                 else {
@@ -118,6 +123,10 @@ export function useAgentChat(sessionId: Ref<string>) {
                         if (selection) {
                             messages.value.push({ id: crypto.randomUUID(), role: 'assistant', text: '', selection })
                         }
+                        const confirmation = _extractConfirmation(event)
+                        if (confirmation) {
+                            messages.value.push({ id: crypto.randomUUID(), role: 'assistant', text: '', confirmation })
+                        }
                         const eventText = _extractText(event)
                         if (eventText && event.author !== 'user') {
                             const msg = messages.value.find(m => m.id === assistantId)
@@ -191,6 +200,23 @@ function _extractSelection(event: any): SelectionRequest | null {
         const response = fr.response
         if (response?.status !== 'success' || !response.options?.length) continue
         return { prompt: response.prompt ?? '', options: response.options, multi: !!response.multi }
+    }
+    return null
+}
+
+/**
+ * Extract a confirmation summary from an ADK event.
+ *
+ * Keys on the request_confirmation tool's function response, so a card
+ * only renders for requests the tool validated.
+ */
+function _extractConfirmation(event: any): ConfirmationRequest | null {
+    for (const part of event?.content?.parts ?? []) {
+        const fr = part.functionResponse
+        if (fr?.name !== 'request_confirmation') continue
+        const response = fr.response
+        if (response?.status !== 'success' || !response.items?.length) continue
+        return { title: response.title ?? '', items: response.items }
     }
     return null
 }
