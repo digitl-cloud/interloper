@@ -7,6 +7,7 @@ import type { Backfill } from '~/types/backfill'
 const PAGE_SIZE = 20
 
 const UBadge = resolveComponent('UBadge')
+const EntityBadge = resolveComponent('EntityBadge')
 
 const backfillsStore = useBackfillsStore()
 const componentsStore = useComponentsStore()
@@ -46,7 +47,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         header: 'Target',
         cell: ({ row }) => {
             const backfill = row.original as Backfill
-            return h(UBadge, { color: 'neutral', variant: 'subtle' }, () => jobName(backfill))
+            return h(EntityBadge, { label: jobName(backfill) })
         },
     },
     {

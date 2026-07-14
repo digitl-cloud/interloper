@@ -4,6 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type { Run } from '~/types/run'
 
 const UBadge = resolveComponent('UBadge')
+const EntityBadge = resolveComponent('EntityBadge')
 
 const runsStore = useRunsStore()
 const componentsStore = useComponentsStore()
@@ -41,7 +42,7 @@ const columns: TableColumn<Run>[] = [
         header: 'Target',
         cell: ({ row }) => {
             const run = row.original as Run
-            return h(UBadge, { color: 'neutral', variant: 'subtle' }, () => targetName(run))
+            return h(EntityBadge, { label: targetName(run) })
         },
     },
     {

@@ -6,7 +6,9 @@ import { hookEnabled, hookEvents, relationIds } from '~/types/component'
 
 definePageMeta({ title: 'Hooks' })
 
+const UIcon = resolveComponent('UIcon')
 const UBadge = resolveComponent('UBadge')
+const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
@@ -36,6 +38,10 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         accessorKey: 'key',
         header: 'Type',
         accessorFn: (row: ComponentRecord) => catalogStore.catalog[row.key]?.name ?? row.key,
+        cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
+            h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
+            catalogStore.catalog[row.original.key]?.name ?? row.original.key,
+        ]),
     },
     {
         accessorKey: 'events',
@@ -52,11 +58,16 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         accessorKey: 'watches',
         header: 'Watches',
         cell: ({ row }) => {
-            const count = relationIds(row.original, 'watch').length
-            return h(UBadge, {
-                color: 'neutral',
-                variant: 'subtle',
-            }, () => `${count} watched`)
+            const watched = relationIds(row.original, 'watch')
+                .map(id => componentsStore.byId(id))
+                .filter((w): w is ComponentRecord => !!w)
+            if (watched.length === 0) return h('span', { class: 'text-muted' }, '—')
+            const first = watched[0]!
+            return h(EntityBadge, {
+                icon: componentIcon(first.key),
+                label: first.name ?? first.key,
+                extra: watched.length - 1,
+            })
         },
     },
     {

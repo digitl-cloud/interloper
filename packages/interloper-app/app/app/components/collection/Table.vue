@@ -265,10 +265,10 @@ function onRowClick(row: any) {
                     <UIcon :name="sourceInfoById.get(row.original.sourceId)?.icon ?? 'i-lucide-database'"
                            class="size-5 shrink-0" />
                     <span class="font-semibold">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
-                    <UBadge color="neutral"
-                            variant="subtle">
+                    <span class="text-muted text-xs">
                         {{ sourceInfoById.get(row.original.sourceId)?.assetCount ?? 0 }}
-                    </UBadge>
+                        {{ (sourceInfoById.get(row.original.sourceId)?.assetCount ?? 0) === 1 ? 'asset' : 'assets' }}
+                    </span>
                     <UBadge v-if="sourceDriftBadge(row.original.sourceId)"
                             :color="sourceDriftBadge(row.original.sourceId)!.color"
                             :icon="sourceDriftBadge(row.original.sourceId)!.icon"
@@ -396,14 +396,10 @@ function onRowClick(row: any) {
                      class="flex items-center justify-center gap-1.5 flex-wrap">
                     <span v-if="row.original.destinations.length === 0 && filterByCategory(row.depth === 0 ? (sourceInfoById.get(row.original.sourceId)?.warnings ?? []) : row.original.warnings, 'destination').length === 0"
                           class="text-dimmed">&mdash;</span>
-                    <UBadge v-else-if="row.original.destinations.length === 1"
-                            :icon="row.original.destinations[0]!.icon"
-                            color="neutral"
-                            variant="subtle">
-                        {{ row.original.destinations[0]!.name }}
-                    </UBadge>
-                    <span v-else-if="row.original.destinations.length > 1"
-                          class="text-muted">{{ row.original.destinations.length }}</span>
+                    <EntityBadge v-else-if="row.original.destinations.length > 0"
+                                 :icon="row.original.destinations[0]!.icon"
+                                 :label="row.original.destinations[0]!.name"
+                                 :extra="row.original.destinations.length - 1" />
                     <UTooltip v-if="filterByCategory(row.depth === 0 ? (sourceInfoById.get(row.original.sourceId)?.warnings ?? []) : row.original.warnings, 'destination').length > 0"
                               :delay-duration="0"
                               :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
@@ -439,14 +435,10 @@ function onRowClick(row: any) {
                      class="flex items-center justify-center gap-1.5">
                     <span v-if="row.original.jobs.length === 0 && filterByCategory(row.depth === 0 ? (sourceInfoById.get(row.original.sourceId)?.warnings ?? []) : row.original.warnings, 'job').length === 0"
                           class="text-dimmed">&mdash;</span>
-                    <UBadge v-else-if="row.original.jobs.length === 1"
-                            icon="i-lucide-clock"
-                            color="neutral"
-                            variant="subtle">
-                        {{ row.original.jobs[0]!.name }}
-                    </UBadge>
-                    <span v-else-if="row.original.jobs.length > 1"
-                          class="text-muted">{{ row.original.jobs.length }}</span>
+                    <EntityBadge v-else-if="row.original.jobs.length > 0"
+                                 icon="i-lucide-clock"
+                                 :label="row.original.jobs[0]!.name"
+                                 :extra="row.original.jobs.length - 1" />
                     <UTooltip v-if="filterByCategory(row.depth === 0 ? (sourceInfoById.get(row.original.sourceId)?.warnings ?? []) : row.original.warnings, 'job').length > 0"
                               :delay-duration="0"
                               :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
@@ -497,12 +489,9 @@ function onRowClick(row: any) {
                 <template v-if="row.getIsGrouped()">
                     <span v-if="!row.original.connectionName"
                           class="text-dimmed">&mdash;</span>
-                    <UBadge v-else
-                            :icon="row.original.connectionIcon ?? 'i-lucide-plug'"
-                            color="neutral"
-                            variant="subtle">
-                        {{ row.original.connectionName }}
-                    </UBadge>
+                    <EntityBadge v-else
+                                 :icon="row.original.connectionIcon ?? 'i-lucide-plug'"
+                                 :label="row.original.connectionName" />
                 </template>
                 <template v-else>
                     <span class="text-dimmed">&mdash;</span>

@@ -8,6 +8,7 @@ definePageMeta({ title: 'Sources' })
 
 const UIcon = resolveComponent('UIcon')
 const UBadge = resolveComponent('UBadge')
+const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
@@ -98,21 +99,16 @@ const columns: TableColumn<ComponentRecord>[] = [
     {
         accessorKey: 'type',
         header: 'Type',
-        cell: ({ row }) => h(UBadge, {
-            color: 'neutral',
-            variant: 'subtle',
-        }, () => h('span', { class: 'flex items-center gap-1.5' }, [
+        cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
             h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
             typeName(row.original.key),
-        ])),
+        ]),
     },
     {
         accessorKey: 'assets',
         header: 'Assets',
-        cell: ({ row }) => h(UBadge, {
-            color: 'neutral',
-            variant: 'subtle',
-        }, () => `${row.original.children.length} asset${row.original.children.length !== 1 ? 's' : ''}`),
+        cell: ({ row }) => h('span', { class: 'text-muted' },
+            `${row.original.children.length} asset${row.original.children.length !== 1 ? 's' : ''}`),
     },
     {
         accessorKey: 'destinations',
@@ -123,17 +119,11 @@ const columns: TableColumn<ComponentRecord>[] = [
                 .filter((d): d is ComponentRecord => !!d)
             if (dests.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = dests[0]!
-            const defn = catalogStore.catalog[first.key]
-            const icon = componentIcon(first.key)
-            const label = first.name ?? defn?.name ?? first.key
-            return h(UBadge, {
-                color: 'neutral',
-                variant: 'subtle',
-            }, () => h('span', { class: 'flex items-center gap-1.5' }, [
-                h(UIcon, { name: icon, class: 'size-4 shrink-0' }),
-                label,
-                dests.length > 1 ? ` +${dests.length - 1}` : '',
-            ]))
+            return h(EntityBadge, {
+                icon: componentIcon(first.key),
+                label: first.name ?? catalogStore.catalog[first.key]?.name ?? first.key,
+                extra: dests.length - 1,
+            })
         },
     },
     {

@@ -7,6 +7,7 @@ import { LazyExecutionsErrorDetailModal } from '#components'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
+const EntityBadge = resolveComponent('EntityBadge')
 
 const props = defineProps<{
     events: RunEvent[]
@@ -75,7 +76,7 @@ const columns: TableColumn<RunEvent>[] = [
             const displayName = event.asset_id ? assetDisplayName.value.get(event.asset_id) : null
             const label = displayName ?? event.asset_key
             if (!label) return h('span', { class: 'text-muted' }, '—')
-            return h(UBadge, { color: 'neutral', variant: 'subtle' }, () => label)
+            return h(EntityBadge, { label })
         },
     },
     {
