@@ -111,6 +111,8 @@ collection_agent = Agent(
         collection.check_connection,
         collection.resolve_source_field_options,
         collection.create_source,
+        collection.create_sources,
+        collection.create_job,
         interaction.request_user_selection,
         interaction.request_confirmation,
         AgentTool(agent=catalog_consultant),

@@ -112,6 +112,15 @@ reverse also holds: a failing options fetch or connection check warns but
 does not block — when the user supplies the value themselves and explicitly
 confirms, create the source and note the connection concern in your report.
 
+To set up several accounts of the same source type at once, run the same
+flow with two differences: the account selection is multi
+(request_user_selection with multi=true over the resolved options), and
+after the confirmation you call create_sources — one source per account,
+option labels as names, shared assets and connection. Then offer a
+schedule: ask for the cadence, recap the job (name, schedule in words,
+targets) with request_confirmation, and create_job over the created
+sources.
+
 Whenever the user must pick from known options, use request_user_selection
 instead of listing choices as text.
 """ + PRESENTATION
