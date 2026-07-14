@@ -17,6 +17,7 @@ import httpx
 from google.adk.tools.tool_context import ToolContext
 from interloper.connection.base import Connection
 from interloper.errors import ComponentDriftError, ConnectionCheckError, HydrationError
+from interloper.oauth import is_provider_configured
 from interloper.utils.concurrency import invoke
 from pydantic import ValidationError
 
@@ -31,8 +32,7 @@ _CHECK_TIMEOUT = 15.0
 def list_connections(tool_context: ToolContext) -> dict[str, Any]:
     """List the connections in the organisation's collection.
 
-    Returns identity and metadata only — never credential values. For the
-    catalog of connection definitions, use ``list_catalog_connections``.
+    Returns identity and metadata only — never credential values.
     """
     try:
         org_id = get_org_id(tool_context)
@@ -152,16 +152,26 @@ def request_connection_setup(
     entry otherwise) and the credentials go directly to the API. Never ask
     the user to share credentials in the chat instead.
 
+    The response notes whether the user can sign in with the provider
+    (``oauth_available``) or must enter credentials manually; an unknown key
+    fails with the list of valid connection keys.
+
     Args:
-        connection_key: Catalog key of the connection definition
-            (e.g. 'facebook_ads_connection'), from list_catalog_connections.
+        connection_key: Catalog key of the connection definition — usually
+            ``<source_key>_connection`` (e.g. 'facebook_ads_connection').
         name: Optional display name to prefill in the form.
     """
     try:
         catalog = get_catalog()
         defn = catalog.get(connection_key)
         if defn is None or defn.get("kind") != "connection":
-            return {"status": "error", "error": f"Connection type '{connection_key}' not found in catalog"}
+            valid = sorted(k for k, d in catalog.items() if d.get("kind") == "connection")
+            return {
+                "status": "error",
+                "error": f"Connection definition '{connection_key}' not found in catalog",
+                "valid_keys": valid,
+            }
+        oauth = (defn.get("config_schema") or {}).get("x-oauth")
         return {
             "status": "success",
             "message": (
@@ -170,6 +180,8 @@ def request_connection_setup(
             ),
             "connection_key": connection_key,
             "name": name,
+            "oauth": oauth is not None,
+            "oauth_available": is_provider_configured(oauth["provider"]) if oauth else False,
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}

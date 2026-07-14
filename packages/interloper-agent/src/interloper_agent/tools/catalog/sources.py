@@ -9,13 +9,14 @@ from google.adk.tools.tool_context import ToolContext
 from interloper_agent.context import get_catalog, get_org_id, get_store
 
 
-def list_catalog_sources(tool_context: ToolContext) -> dict[str, Any]:
+def list_sources(tool_context: ToolContext) -> dict[str, Any]:
     """List the source definitions available in the catalog.
 
     This answers "what sources does Interloper support / could we add?" — it
     returns every source definition in the catalog, whether or not it is in
-    the org's collection, with how many instances the collection holds. For
-    the sources the organisation actually has, use ``list_sources`` instead.
+    the org's collection, with how many instances the collection holds. The
+    collection itself (the sources the organisation actually has) is the
+    Collection specialist's domain.
     """
     try:
         org_id = get_org_id(tool_context)
@@ -51,7 +52,7 @@ def get_source_detail(source_key: str, tool_context: ToolContext) -> dict[str, A
     """Get full catalog detail for a source definition.
 
     This is the catalog definition (the source *type*), not an instance from
-    the org's collection — use ``list_sources`` for what the organisation has.
+    the org's collection.
 
     Args:
         source_key: The source key (e.g. 'facebook_ads').
