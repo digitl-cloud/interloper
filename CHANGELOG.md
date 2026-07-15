@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v0.34.0 (2026-07-15)
+
+### Bug Fixes
+
+- **app**: Align agent panel header and composer with the app chrome
+  ([`91e490b`](https://github.com/digitl-cloud/interloper/commit/91e490bd7accec2e7caaf1fdbd09d0fa70a55ee7))
+
+- **core**: Detect IPv6-only listeners in the dev-up port fail-fast
+  ([`2de136f`](https://github.com/digitl-cloud/interloper/commit/2de136f5dba4e5f5ec351c525866c6d88737203d))
+
+### Features
+
+- **assets**: Add Amazon Selling Partner source
+  ([`1c5bc93`](https://github.com/digitl-cloud/interloper/commit/1c5bc93fad635aeb8f793fcc6e2886fa90e3b557))
+
+### Refactoring
+
+- **app**: Drop encrypted column from resources table
+  ([`8a10625`](https://github.com/digitl-cloud/interloper/commit/8a106257e8868f18ca4bdbcd8cb3d7b690fcc1a9))
+
+
 ## v0.33.0 (2026-07-14)
 
 ### Bug Fixes
