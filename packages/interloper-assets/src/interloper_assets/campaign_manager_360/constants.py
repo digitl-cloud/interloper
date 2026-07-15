@@ -1,3 +1,11 @@
+API_SERVICE = "dfareporting"
+API_VERSION = "v5"
+
+SCOPES = [
+    "https://www.googleapis.com/auth/dfareporting",
+    "https://www.googleapis.com/auth/dfatrafficking",
+]
+
 CAMPAIGN_DIMENSIONS = [
     "date",
     "campaignStartDate",
