@@ -93,6 +93,74 @@ def list_components(kind: str | None = None, tool_context: ToolContext | None = 
 # -- Connection operations (kind-specific by nature) ------------------------------
 
 
+def create_connections(
+    connection_key: str,
+    instances: list[dict[str, Any]],
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Create connections directly from credential values the user already gave.
+
+    REACT-ONLY. The secure form (request_connection_setup) is the only path
+    you ever propose or ask for — never invite the user to paste credentials.
+    Use this solely when the user has *already* put the credential values in
+    the conversation unprompted: they are in context regardless, so create
+    what they asked for instead of dead-ending on a form. Recap and get
+    explicit confirmation first, and never repeat a credential value back —
+    not in the recap, not in your reply (identity and location only).
+
+    Each config is validated against the connection definition and stored
+    encrypted. Instances that fail are reported individually; the rest are
+    created. Verify the results with check_connection afterwards.
+
+    Args:
+        connection_key: Catalog key of the connection definition
+            (e.g. 'amazon_selling_partner_connection').
+        instances: One entry per connection, each ``{"name": ...,
+            "config": {<field>: <value>, ...}}`` — config carries the
+            definition's fields (shared ones like client_id/client_secret
+            repeated per instance, plus the per-instance secret).
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        catalog = get_catalog()
+
+        defn = catalog.get(connection_key)
+        if defn is None or defn.get("kind") != "connection":
+            valid = sorted(k for k, d in catalog.items() if d.get("kind") == "connection")
+            return {
+                "status": "error",
+                "error": f"Connection definition '{connection_key}' not found in catalog",
+                "valid_keys": valid,
+            }
+        cleaned: list[tuple[str, dict[str, Any]]] = [
+            (str(i["name"]), i["config"])
+            for i in instances
+            if isinstance(i, dict) and i.get("name") and isinstance(i.get("config"), dict)
+        ]
+        if not cleaned:
+            return {"status": "error", "error": "instances must carry at least one {name, config} entry"}
+
+        created, failed = [], []
+        for name, config in cleaned:
+            try:
+                row = store.create_component(org_id, kind="connection", key=connection_key, name=name, config=config)
+            except (ConfigError, CatalogKeyError) as e:
+                # str(e) may name required fields but never echoes values.
+                failed.append({"name": name, "error": str(e)})
+                continue
+            created.append({"id": serialize(row.id), "name": row.name})
+
+        return {
+            "status": "success" if created else "error",
+            "message": f"{len(created)} connection(s) created" + (f", {len(failed)} failed" if failed else ""),
+            "created": created,
+            "failed": failed,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 def request_connection_setup(
     connection_key: str,
     name: str | None = None,

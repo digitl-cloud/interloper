@@ -82,6 +82,17 @@ Set up a connection:
    check or something seems off — and whenever a connection misbehaves or a
    source hits auth errors.
 
+The form is the only path you ever propose — never ask for or invite
+credentials in chat. But if the user has *already* pasted credential values
+themselves (any format), they are in the session regardless: don't dead-end
+on a form. Read what they gave, work out which connections it describes
+(one per secret, shared fields repeated, names/regions from their
+instructions), recap with request_confirmation showing names and regions
+only — never the secret values — and on confirmation create them with
+create_connections, then check_connection each. Use the form for anything
+they didn't supply; never ask for a missing secret in chat. Afterwards, note
+once that the secure form keeps credentials out of the chat next time.
+
 Set up sources — one flow for one account or many; the selection decides the
 count, never assume it:
 1. Identify the definition and what it needs (a connection, config fields).

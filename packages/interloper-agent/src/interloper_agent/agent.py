@@ -108,6 +108,7 @@ collection_agent = Agent(
     tools=[
         collection.list_components,
         collection.request_connection_setup,
+        collection.create_connections,
         collection.check_connection,
         collection.resolve_source_field_options,
         collection.create_source,
