@@ -1,3 +1,4 @@
+import asyncio
 import json
 from functools import cached_property
 from typing import Any
@@ -37,3 +38,36 @@ class DisplayVideo360Connection(il.Connection):
             constants.DISPLAY_VIDEO_API_VERSION,
             credentials=credentials,
         )
+
+    def _list_partners(self) -> list[dict[str, Any]]:
+        """Page through the partners accessible to the service account."""
+        partners: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            response = self.client.partners().list(pageToken=page_token).execute()
+            partners.extend(response.get("partners") or [])
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+        return partners
+
+    @il.fetch_field_provider
+    async def partners(self) -> list[dict[str, str]]:
+        """Fetch the DV360 partners the service account has access to."""
+        partners = await asyncio.to_thread(self._list_partners)
+        return [
+            {
+                "partner_id": str(p["partnerId"]),
+                "name": f"{p.get('displayName', p['partnerId'])} ({p['partnerId']})",
+            }
+            for p in partners
+        ]
+
+    async def check(self) -> bool:
+        """Prove the credentials work by running the ``partners`` lookup.
+
+        Returns:
+            True — any credential failure raises out of the lookup.
+        """
+        await self.partners()
+        return True
