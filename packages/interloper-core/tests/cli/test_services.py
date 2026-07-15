@@ -18,6 +18,15 @@ def test_port_in_use_detects_listener() -> None:
         assert _port_in_use(port) is True
 
 
+def test_port_in_use_detects_ipv6_only_listener() -> None:
+    """A listener bound only to ``::1`` (how Nuxt dev binds on macOS) is detected."""
+    with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as server:
+        server.bind(("::1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+        assert _port_in_use(port) is True
+
+
 def test_port_in_use_free_port() -> None:
     """A free port reports not in use."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:

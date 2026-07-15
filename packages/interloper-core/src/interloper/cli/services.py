@@ -294,12 +294,22 @@ def _kill_process_group(process: subprocess.Popen[bytes], sig: int) -> None:
 def _port_in_use(port: int) -> bool:
     """Check whether something is already listening on localhost:``port``.
 
+    Probes both loopback stacks: Nuxt dev binds only ``::1`` on macOS, so an
+    IPv4-only probe misses it — and Nuxt's own port check doesn't, sending it
+    to its silent fall-back-to-3000 path instead of our fail-fast.
+
     Returns:
-        True if a connection to the port succeeds.
+        True if a connection to the port succeeds on either loopback.
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.5)
-        return sock.connect_ex(("127.0.0.1", port)) == 0
+    for family, addr in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.5)
+                if sock.connect_ex((addr, port)) == 0:
+                    return True
+        except OSError:
+            continue
+    return False
 
 
 def _mount_spa(app: Any, directory: Any) -> None:
