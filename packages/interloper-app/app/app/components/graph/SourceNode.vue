@@ -129,7 +129,8 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => [
                 const { blocking, detaching } = componentsStore.deleteImpact(props.source.id)
                 const confirmed = await confirm({
                     title: 'Delete source',
-                    description: `This will permanently delete "${props.source.name}" and all its assets. This action cannot be undone.`,
+                    description: 'This will permanently delete {subject} and all its assets. This action cannot be undone.',
+                    subject: { name: props.source.name ?? props.source.key, icon: componentIcon(props.source.key) },
                     blocking,
                     detaching,
                 })
