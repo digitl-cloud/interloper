@@ -129,13 +129,6 @@ const items = computed<NavigationMenuItem[]>(() => {
                     </NuxtLink>
                 </template>
 
-                <template #right>
-                    <UButton v-if="userStore.agentAvailable"
-                             icon="i-lucide-sparkles"
-                             label="Agent"
-                             size="md"
-                             @click="agentOpen = !agentOpen" />
-                </template>
             </UDashboardNavbar>
 
             <div class="flex flex-1 min-h-0 overflow-hidden">
@@ -211,6 +204,16 @@ const items = computed<NavigationMenuItem[]>(() => {
                     </template>
                 </UModal>
             </div>
+
+            <!-- Floating agent launcher. Positioned inside the dashboard group so it
+                 slides left with the layout when the panel opens, instead of hiding
+                 under the panel. -->
+            <UButton v-if="userStore.agentAvailable"
+                     icon="i-lucide-sparkles"
+                     size="xl"
+                     aria-label="Toggle agent panel"
+                     class="absolute bottom-6 right-6 z-30 rounded-full shadow-lg"
+                     @click="agentOpen = !agentOpen" />
         </UDashboardGroup>
 
         <AgentPanel v-if="userStore.agentAvailable" />

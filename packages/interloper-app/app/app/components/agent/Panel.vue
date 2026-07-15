@@ -75,9 +75,9 @@ function submit(text: string) {
 }
 
 const SUGGESTIONS = [
-    'Setup a new source',
-    'Setup a new connection',
     'What failed in the last 24 hours?',
+    'Summarize my pipeline health',
+    'Which sources are stale?',
 ]
 </script>
 
@@ -110,7 +110,9 @@ const SUGGESTIONS = [
                      @click="open = false" />
         </div>
 
-        <!-- Messages -->
+        <!-- Messages. The relative wrapper (not the scroll container itself) anchors
+             the floating scroll-to-bottom button to the visible area. -->
+        <div class="relative flex-1 min-h-0 flex flex-col">
         <div class="flex-1 min-h-0 overflow-y-auto p-[18px]">
             <div v-if="sessionError"
                  class="flex flex-col items-center gap-2 py-10 text-center">
@@ -126,7 +128,8 @@ const SUGGESTIONS = [
                                should-auto-scroll
                                :assistant="{ icon: 'i-lucide-sparkles', ui: { body: 'flex-1', content: 'text-[13.5px]', leadingIcon: 'text-primary' } }"
                                :user="{ ui: { content: 'text-[13.5px]' } }"
-                               :auto-scroll="{ size: 'xs', color: 'neutral', variant: 'outline' }"
+                               :auto-scroll="{ size: 'md', color: 'neutral', variant: 'outline' }"
+                               :ui="{ viewport: 'top-auto bottom-3' }"
                                class="pb-2">
                     <template #content="{ message }">
                         <AgentConnectCard v-if="(message as any).connectionSetup"
@@ -138,14 +141,10 @@ const SUGGESTIONS = [
                         <AgentConfirmCard v-else-if="(message as any).confirmation"
                                           :request="(message as any).confirmation"
                                           @decided="onDecision" />
-                        <MDC v-else-if="message.role === 'assistant'"
+                        <MDC v-else
                              :value="message.text"
                              :cache-key="message.id"
-                             class="*:first:mt-0 *:last:mb-0 [&_code]:text-[12px]" />
-                        <p v-else
-                           class="whitespace-pre-wrap">
-                            {{ message.text }}
-                        </p>
+                             :class="['*:first:mt-0 *:last:mb-0 [&_code]:text-[12px]', message.role === 'user' ? '[&_p]:whitespace-pre-wrap' : '']" />
                     </template>
                 </UChatMessages>
 
@@ -173,6 +172,7 @@ const SUGGESTIONS = [
                     </button>
                 </div>
             </template>
+        </div>
         </div>
 
         <!-- Composer -->
