@@ -15,11 +15,12 @@ const props = defineProps<{
     /** When true, suppresses the built-in actions column and row menus. */
     noActions?: boolean
     /**
-     * Referrers still bound to the given ids (e.g. `componentsStore.usedBy`).
-     * When it returns any, the delete confirmation lists them and disables
-     * the destructive button — the backend guard stays the authority.
+     * Impact preview for deleting the given ids (e.g.
+     * `componentsStore.deleteImpact`). `blocking` referrers disable the
+     * destructive button; `detaching` ones are listed as a heads-up — the
+     * backend guard stays the authority.
      */
-    usedBy?: (ids: string[]) => UsedByRef[]
+    deleteImpact?: (ids: string[]) => { blocking: UsedByRef[], detaching: UsedByRef[] }
 }>()
 
 const emit = defineEmits<{
@@ -51,11 +52,12 @@ function selectedIds(): string[] {
     return tableRef.value?.tableApi?.getFilteredSelectedRowModel().rows.map((row: any) => row.original.id) ?? []
 }
 
-const bulkReferrers = computed<UsedByRef[]>(() =>
-    showDeleteModal.value ? props.usedBy?.(selectedIds()) ?? [] : [],
+const NO_IMPACT = { blocking: [], detaching: [] }
+const bulkImpact = computed(() =>
+    showDeleteModal.value ? props.deleteImpact?.(selectedIds()) ?? NO_IMPACT : NO_IMPACT,
 )
-const oneReferrers = computed<UsedByRef[]>(() =>
-    deleteOneItem.value ? props.usedBy?.([deleteOneItem.value.id]) ?? [] : [],
+const oneImpact = computed(() =>
+    deleteOneItem.value ? props.deleteImpact?.([deleteOneItem.value.id]) ?? NO_IMPACT : NO_IMPACT,
 )
 
 function confirmBulkDelete() {
@@ -170,20 +172,26 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
 
                     <template #body>
                         <div class="space-y-4">
-                            <template v-if="bulkReferrers.length">
+                            <template v-if="bulkImpact.blocking.length">
                                 <p>Still in use — rebind or delete these first:</p>
-                                <UsedByTable :referrers="bulkReferrers" />
+                                <UsedByTable :referrers="bulkImpact.blocking" />
                             </template>
-                            <p v-else>
-                                This will permanently delete {{ selectedCount }} {{ selectedCount === 1 ? 'item' :
-                                    'items' }}. This action cannot be undone.
-                            </p>
+                            <template v-else>
+                                <p>
+                                    This will permanently delete {{ selectedCount }} {{ selectedCount === 1 ? 'item' :
+                                        'items' }}. This action cannot be undone.
+                                </p>
+                                <template v-if="bulkImpact.detaching.length">
+                                    <p>It will also be removed from:</p>
+                                    <UsedByTable :referrers="bulkImpact.detaching" />
+                                </template>
+                            </template>
                             <div class="flex justify-end gap-2">
                                 <UButton label="Cancel"
                                          @click="showDeleteModal = false" />
                                 <UButton color="error"
                                          label="Delete"
-                                         :disabled="bulkReferrers.length > 0"
+                                         :disabled="bulkImpact.blocking.length > 0"
                                          @click="confirmBulkDelete" />
                             </div>
                         </div>
@@ -235,19 +243,25 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
             <template #default />
             <template #body>
                 <div class="space-y-4">
-                    <template v-if="oneReferrers.length">
+                    <template v-if="oneImpact.blocking.length">
                         <p>Still in use — rebind or delete these first:</p>
-                        <UsedByTable :referrers="oneReferrers" />
+                        <UsedByTable :referrers="oneImpact.blocking" />
                     </template>
-                    <p v-else>
-                        This will permanently delete this item. This action cannot be undone.
-                    </p>
+                    <template v-else>
+                        <p>
+                            This will permanently delete this item. This action cannot be undone.
+                        </p>
+                        <template v-if="oneImpact.detaching.length">
+                            <p>It will also be removed from:</p>
+                            <UsedByTable :referrers="oneImpact.detaching" />
+                        </template>
+                    </template>
                     <div class="flex justify-end gap-2">
                         <UButton label="Cancel"
                                  @click="showDeleteOneModal = false" />
                         <UButton color="error"
                                  label="Delete"
-                                 :disabled="oneReferrers.length > 0"
+                                 :disabled="oneImpact.blocking.length > 0"
                                  @click="confirmDeleteOne" />
                     </div>
                 </div>

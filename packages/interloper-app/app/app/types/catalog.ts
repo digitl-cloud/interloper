@@ -18,6 +18,12 @@ export interface RelationDefinition {
      * `source_key.asset_key`; `required` flag meaningful).
      */
     slots: Record<string, RelationSlot>
+    /**
+     * What deleting the relation's destination does to the referrer:
+     * `block` refuses the deletion, `detach` cascades the relation away
+     * (job targets, hook watches). Optional slots detach regardless.
+     */
+    on_delete: 'block' | 'detach'
 }
 
 export interface ComponentDefinition {

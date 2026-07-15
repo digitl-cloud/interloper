@@ -10,7 +10,7 @@ class — the single per-kind authority every kind-level question reads from.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field
 from typing_extensions import Self
@@ -75,6 +75,14 @@ class RelationDefinition(BaseModel):
     unslotted ones ``list[...]``. ``inline`` declares what the field carries:
     embedded component instances (the default), or bare instance ids resolved
     at execution time (``inline=False``, e.g. asset dependencies).
+
+    ``on_delete`` declares what deleting the relation's *destination* does to
+    the referrer: ``"block"`` (the default) refuses the deletion while the
+    relation exists — right for consumption relations, whose loss breaks the
+    referrer at its next run; ``"detach"`` lets the relation cascade away —
+    right for orchestration pointers (a job's ``target``, a hook's ``watch``)
+    that merely shrink the referrer's scope. Optional slots
+    (``RelationSlot.required=False``) detach regardless of this default.
     """
 
     kinds: list[str]
@@ -83,6 +91,7 @@ class RelationDefinition(BaseModel):
     inline: bool = True
     keys: list[str] = Field(default_factory=list)
     slots: dict[str, RelationSlot] = Field(default_factory=dict)
+    on_delete: Literal["block", "detach"] = "block"
 
 
 # -- Definitions ---------------------------------------------------------------

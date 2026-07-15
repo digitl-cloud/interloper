@@ -189,11 +189,16 @@ class ComponentMixin(StoreBase):
     def delete_component(self, component_id: UUID) -> None:
         """Delete a component. Children and out-bound relations cascade via FK.
 
+        In-bound relations follow their declared ``on_delete`` semantics:
+        consumption relations (a bound connection, a required dependency)
+        block the deletion; orchestration pointers (a job's ``target``, a
+        hook's ``watch``, optional dependency slots) detach — the relation
+        row cascades away and the referrer keeps working with reduced scope.
+
         Raises:
             NotFoundError: If the component is not found.
-            InUseError: If other components hold relations into this one or
-                its children (a bound connection, a job's target) — those
-                must be unbound or deleted first.
+            InUseError: If other components hold blocking relations into this
+                one or its children — those must be unbound or deleted first.
             ValueError: If the component is source-owned (delete or update
                 the parent source instead).
         """
@@ -203,7 +208,7 @@ class ComponentMixin(StoreBase):
                 raise NotFoundError(f"Component {component_id} not found")
             if db_component.parent_id is not None:
                 raise ValueError("Cannot delete a source-owned asset directly. Delete or update the source instead.")
-            if referrers := self._external_referrers(session, db_component):
+            if referrers := self._blocking_referrers(session, db_component):
                 names = ", ".join(str(r["name"] or r["key"]) for r in referrers)
                 raise InUseError(
                     f"Cannot delete {db_component.kind} '{db_component.name or db_component.key}': "
@@ -213,14 +218,16 @@ class ComponentMixin(StoreBase):
             session.delete(db_component)
             session.commit()
 
-    def _external_referrers(self, session: Session, db_component: Component) -> list[dict[str, str | None]]:
-        """Components outside a component's subtree that hold relations into it.
+    def _blocking_referrers(self, session: Session, db_component: Component) -> list[dict[str, str | None]]:
+        """Components outside a component's subtree whose relations into it block deletion.
 
-        Deleting a relation destination would cascade the binding row and leave
-        the referrer silently broken at its next run, so deletion is refused
-        while such referrers exist. Relations internal to the subtree (a
-        source's own asset dependencies) don't count, and a referrer that is a
-        source-owned asset is reported as its parent source — the unit the
+        Deleting a relation destination cascades the binding row, which would
+        leave a *consuming* referrer silently broken at its next run — those
+        relations refuse the deletion. Relations whose vocabulary declares
+        ``on_delete="detach"`` (and optional slots) are skipped: cascading
+        them is the intended outcome. Relations internal to the subtree (a
+        source's own asset dependencies) don't count, and a referrer that is
+        a source-owned asset is reported as its parent source — the unit the
         user can act on.
         """
         subtree_ids = {db_component.id} | {child.id for child in db_component.children}
@@ -233,7 +240,7 @@ class ComponentMixin(StoreBase):
         referrers: dict[UUID, Component] = {}
         for relation in rows:
             src = session.get(Component, relation.src_id)
-            if src is None:
+            if src is None or self._relation_detaches(session, src, relation):
                 continue
             if src.parent_id is not None and src.parent_id not in subtree_ids:
                 src = session.get(Component, src.parent_id) or src
@@ -242,6 +249,39 @@ class ComponentMixin(StoreBase):
             {"id": str(c.id), "kind": c.kind, "key": c.key, "name": c.name}
             for c in sorted(referrers.values(), key=lambda c: ((c.name or c.key).lower(), str(c.id)))
         ]
+
+    def _relation_detaches(self, session: Session, db_src: Component, relation: ComponentRelation) -> bool:
+        """Whether a relation detaches (rather than blocks) when its destination is deleted.
+
+        Consults the referrer's own vocabulary: a type declared
+        ``on_delete="detach"`` detaches, as does a slot the referrer declares
+        optional (``RelationSlot.required=False`` — an ``optional_requires``
+        dependency). Anything unresolvable — unknown type, drifted key,
+        undeclared slot — blocks, keeping the guard fail-closed.
+        """
+        definition = self._relation_vocabulary(session, db_src).get(relation.type)
+        if definition is None:
+            return False
+        if definition.on_delete == "detach":
+            return True
+        slot = definition.slots.get(relation.slot)
+        return slot is not None and not slot.required
+
+    def _relation_vocabulary(self, session: Session, db_src: Component) -> dict[str, il.RelationDefinition]:
+        """A referrer row's relation vocabulary, slots included.
+
+        Source-owned assets are not top-level catalog entries: their concrete
+        definition (which carries the dependency slots' ``required`` flags)
+        comes from the parent source's definition. Everything else resolves
+        through the catalog with the kind's anchor as drift fallback.
+        """
+        if db_src.kind == "asset" and db_src.parent_id is not None:
+            parent = session.get(Component, db_src.parent_id)
+            parent_definition = self._catalog.get(parent.key) if parent else None
+            for asset_definition in getattr(parent_definition, "assets", []):
+                if asset_definition.key == db_src.key:
+                    return asset_definition.relations
+        return self._catalog.vocabulary(db_src.kind, db_src.key)
 
     # -- Relations -------------------------------------------------------------
 

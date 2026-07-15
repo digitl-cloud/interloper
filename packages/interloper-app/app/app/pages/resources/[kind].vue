@@ -109,7 +109,7 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
             <DataTable :columns="columns"
                        :data="resources"
                        :loading="componentsStore.loading"
-                       :used-by="componentsStore.usedBy"
+                       :delete-impact="componentsStore.deleteImpact"
                        :search-placeholder="`Search ${pageTitle.toLowerCase()}...`"
                        @delete="handleDelete"
                        @edit="handleEdit">

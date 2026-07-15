@@ -64,7 +64,9 @@ class Hook(Component):
 
     icon: ClassVar[str] = "carbon:lightning"
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "watch": RelationDefinition(kinds=["source", "asset", "job"], field="watches"),
+        # A watch is observation, not consumption: a hook with fewer (or no)
+        # watches goes dormant rather than breaking, so it detaches.
+        "watch": RelationDefinition(kinds=["source", "asset", "job"], field="watches", on_delete="detach"),
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
     }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"watches"})
