@@ -28,10 +28,9 @@ const emit = defineEmits<{
     edit: [item: TData]
 }>()
 
+const { confirm } = useConfirm()
+
 const globalFilter = ref('')
-const showDeleteModal = ref(false)
-const showDeleteOneModal = ref(false)
-const deleteOneItem = ref<TData | null>(null)
 const tableRef = useTemplateRef<{ tableApi: any }>('table')
 
 const pagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
@@ -53,25 +52,20 @@ function selectedIds(): string[] {
 }
 
 const NO_IMPACT = { blocking: [], detaching: [] }
-const bulkImpact = computed(() =>
-    showDeleteModal.value ? props.deleteImpact?.(selectedIds()) ?? NO_IMPACT : NO_IMPACT,
-)
-const oneImpact = computed(() =>
-    deleteOneItem.value ? props.deleteImpact?.([deleteOneItem.value.id]) ?? NO_IMPACT : NO_IMPACT,
-)
 
-function confirmBulkDelete() {
-    emit('delete', selectedIds())
-    tableRef.value?.tableApi?.toggleAllRowsSelected(false)
-    showDeleteModal.value = false
+/** Confirm (via the shared modal) and, when accepted, emit the delete. */
+async function requestDelete(ids: string[], description: string) {
+    const { blocking, detaching } = props.deleteImpact?.(ids) ?? NO_IMPACT
+    const confirmed = await confirm({ title: 'Confirm Deletion', description, blocking, detaching })
+    if (confirmed) emit('delete', ids)
+    return confirmed
 }
 
-function confirmDeleteOne() {
-    if (deleteOneItem.value) {
-        emit('delete', [deleteOneItem.value.id])
-    }
-    deleteOneItem.value = null
-    showDeleteOneModal.value = false
+async function requestBulkDelete() {
+    const ids = selectedIds()
+    const noun = ids.length === 1 ? 'item' : 'items'
+    const confirmed = await requestDelete(ids, `This will permanently delete ${ids.length} ${noun}. This action cannot be undone.`)
+    if (confirmed) tableRef.value?.tableApi?.toggleAllRowsSelected(false)
 }
 
 // ── Row action menus ──
@@ -92,10 +86,7 @@ function buildRowActions(item: TData): DropdownMenuItem[][] {
                 label: 'Delete',
                 icon: 'i-lucide-trash-2',
                 color: 'error' as const,
-                onSelect: () => {
-                    deleteOneItem.value = item
-                    showDeleteOneModal.value = true
-                },
+                onSelect: () => requestDelete([item.id], 'This will permanently delete this item. This action cannot be undone.'),
             },
         ],
     ]
@@ -163,40 +154,11 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
             <div class="ml-auto flex items-center gap-2">
                 <slot name="toolbar" />
 
-                <UModal v-if="selectedCount > 0"
-                        v-model:open="showDeleteModal"
-                        title="Confirm Deletion">
-                    <UButton color="error"
-                             icon="i-lucide-trash-2"
-                             :label="`Delete (${selectedCount})`" />
-
-                    <template #body>
-                        <div class="space-y-4">
-                            <template v-if="bulkImpact.blocking.length">
-                                <p>Still in use — rebind or delete these first:</p>
-                                <UsedByTable :referrers="bulkImpact.blocking" />
-                            </template>
-                            <template v-else>
-                                <p>
-                                    This will permanently delete {{ selectedCount }} {{ selectedCount === 1 ? 'item' :
-                                        'items' }}. This action cannot be undone.
-                                </p>
-                                <template v-if="bulkImpact.detaching.length">
-                                    <p>It will also be removed from:</p>
-                                    <UsedByTable :referrers="bulkImpact.detaching" />
-                                </template>
-                            </template>
-                            <div class="flex justify-end gap-2">
-                                <UButton label="Cancel"
-                                         @click="showDeleteModal = false" />
-                                <UButton color="error"
-                                         label="Delete"
-                                         :disabled="bulkImpact.blocking.length > 0"
-                                         @click="confirmBulkDelete" />
-                            </div>
-                        </div>
-                    </template>
-                </UModal>
+                <UButton v-if="selectedCount > 0"
+                         color="error"
+                         icon="i-lucide-trash-2"
+                         :label="`Delete (${selectedCount})`"
+                         @click="requestBulkDelete" />
             </div>
         </div>
 
@@ -236,37 +198,6 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
                        :content="{ reference: ctxMenuVirtual, side: 'bottom', align: 'start', sideOffset: 4 }">
             <div class="hidden" />
         </UDropdownMenu>
-
-        <!-- Single-item delete confirmation -->
-        <UModal v-model:open="showDeleteOneModal"
-                title="Confirm Deletion">
-            <template #default />
-            <template #body>
-                <div class="space-y-4">
-                    <template v-if="oneImpact.blocking.length">
-                        <p>Still in use — rebind or delete these first:</p>
-                        <UsedByTable :referrers="oneImpact.blocking" />
-                    </template>
-                    <template v-else>
-                        <p>
-                            This will permanently delete this item. This action cannot be undone.
-                        </p>
-                        <template v-if="oneImpact.detaching.length">
-                            <p>It will also be removed from:</p>
-                            <UsedByTable :referrers="oneImpact.detaching" />
-                        </template>
-                    </template>
-                    <div class="flex justify-end gap-2">
-                        <UButton label="Cancel"
-                                 @click="showDeleteOneModal = false" />
-                        <UButton color="error"
-                                 label="Delete"
-                                 :disabled="oneImpact.blocking.length > 0"
-                                 @click="confirmDeleteOne" />
-                    </div>
-                </div>
-            </template>
-        </UModal>
 
         <TableFooter v-if="!showEmpty"
                      :page="pagination.pageIndex + 1"

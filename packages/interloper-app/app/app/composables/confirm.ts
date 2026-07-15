@@ -1,4 +1,5 @@
 import { LazyConfirmModal } from '#components'
+import type { UsedByRef } from '~/utils/apiErrors'
 
 interface ConfirmOptions {
     title?: string
@@ -7,6 +8,10 @@ interface ConfirmOptions {
     cancelLabel?: string
     confirmColor?: 'error' | 'primary' | 'neutral'
     icon?: string
+    /** Referrers that block the action — listed, confirm disabled. */
+    blocking?: UsedByRef[]
+    /** Referrers the target will be detached from — listed as a heads-up. */
+    detaching?: UsedByRef[]
 }
 
 export function useConfirm() {

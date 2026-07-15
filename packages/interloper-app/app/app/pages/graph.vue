@@ -79,12 +79,9 @@ function onCloseAnimationEnd() {
 }
 
 async function onDeleteSource(sourceId: string) {
+    // Confirmation (and the in-use guard preview) happens in SourceNode before
+    // this fires; the backend 409 remains the authority for races.
     const source = componentsStore.byId(sourceId)
-    const { blocking } = componentsStore.deleteImpact(sourceId)
-    if (blocking.length) {
-        toast.add(inUseToastPayload('Source', blocking))
-        return
-    }
     try {
         await componentsStore.remove(sourceId)
         toast.add({ title: `Source "${source?.name ?? 'Source'}" deleted`, color: 'success' })
