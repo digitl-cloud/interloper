@@ -8,6 +8,8 @@ interface ConfirmOptions {
     cancelLabel?: string
     confirmColor?: 'error' | 'primary' | 'neutral'
     icon?: string
+    /** Entity the action targets, rendered as a badge at ``{subject}`` in the description. */
+    subject?: { name: string, icon?: string }
     /** Referrers that block the action — listed, confirm disabled. */
     blocking?: UsedByRef[]
     /** Referrers the target will be detached from — listed as a heads-up. */

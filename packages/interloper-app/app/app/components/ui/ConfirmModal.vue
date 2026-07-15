@@ -3,11 +3,14 @@ import type { UsedByRef } from '~/utils/apiErrors'
 
 const props = withDefaults(defineProps<{
     title?: string
+    /** Body text. A ``{subject}`` token is replaced by a badge of ``subject``. */
     description?: string
     confirmLabel?: string
     cancelLabel?: string
     confirmColor?: 'error' | 'primary' | 'neutral'
     icon?: string
+    /** The entity the action targets, rendered as an inline badge at ``{subject}``. */
+    subject?: { name: string, icon?: string }
     /** Referrers that block the action — listed, and the confirm button disabled. */
     blocking?: UsedByRef[]
     /** Referrers the target will be detached from — listed as a heads-up. */
@@ -19,6 +22,7 @@ const props = withDefaults(defineProps<{
     cancelLabel: 'Cancel',
     confirmColor: 'error',
     icon: 'i-lucide-triangle-alert',
+    subject: undefined,
     blocking: () => [],
     detaching: () => [],
 })
@@ -26,6 +30,12 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     close: [confirmed: boolean]
 }>()
+
+// Text segments around the {subject} token; the badge slots between them.
+// Without a subject (or token), this is just the whole description, no badge.
+const descriptionParts = computed(() =>
+    props.subject ? props.description.split('{subject}') : [props.description],
+)
 </script>
 
 <template>
@@ -44,7 +54,13 @@ const emit = defineEmits<{
                         <UsedByTable :referrers="props.blocking" />
                     </template>
                     <template v-else>
-                        <p>{{ props.description }}</p>
+                        <p>
+                            <template v-for="(part, i) in descriptionParts"
+                                      :key="i">{{ part }}<EntityBadge v-if="props.subject && i < descriptionParts.length - 1"
+                                            :label="props.subject.name"
+                                            :icon="props.subject.icon"
+                                            class="mx-0.5 align-middle" /></template>
+                        </p>
                         <template v-if="props.detaching.length">
                             <p>It will also be removed from:</p>
                             <UsedByTable :referrers="props.detaching" />

@@ -77,7 +77,8 @@ async function deleteSource(sourceId: string) {
     const { blocking, detaching } = componentsStore.deleteImpact(sourceId)
     const confirmed = await confirm({
         title: 'Delete source?',
-        description: `This will permanently delete "${info?.name ?? 'this source'}" and all its assets.`,
+        description: 'This will permanently delete {subject} and all its assets.',
+        subject: { name: info?.name ?? 'this source', icon: info?.icon },
         confirmLabel: 'Delete',
         confirmColor: 'error',
         icon: 'i-lucide-triangle-alert',
