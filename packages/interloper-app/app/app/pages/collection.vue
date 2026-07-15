@@ -63,13 +63,13 @@ function onCloseAnimationEnd() {
 // Fired in setup so `loading` flags are set before the first render
 // (gates the empty placeholder without a flash).
 componentsStore.fetchAll()
-componentsStore.fetchRelations('dependency')
+componentsStore.fetchRelations()
 runsStore.fetch()
 if (!catalogStore.loaded) catalogStore.fetchCatalog()
 
 function handleSaved() {
     componentsStore.fetchAll()
-    componentsStore.fetchRelations('dependency')
+    componentsStore.fetchRelations()
     drawerOpen.value = false
 }
 

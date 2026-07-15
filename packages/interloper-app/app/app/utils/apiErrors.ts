@@ -21,16 +21,20 @@ export function usedByNames(refs: UsedByRef[]): string {
     return refs.map(r => r.name ?? r.key).join(', ')
 }
 
+/** Toast payload naming an entity's referrers (pre-flight checks and 409 handling share the copy). */
+export function inUseToastPayload(entity: string, refs: UsedByRef[]): { title: string, description: string, color: 'error' } {
+    return {
+        title: `${entity} is in use`,
+        description: `Used by: ${usedByNames(refs)}. Rebind or delete those first.`,
+        color: 'error',
+    }
+}
+
 /**
  * Toast payload for a 409 in-use delete failure, or `null` for any other
  * error (callers fall back to their generic failure toast).
  */
 export function inUseToast(e: unknown, entity: string): { title: string, description: string, color: 'error' } | null {
     const usedBy = usedByFromError(e)
-    if (!usedBy) return null
-    return {
-        title: `${entity} is in use`,
-        description: `Used by: ${usedByNames(usedBy)}. Rebind or delete those first.`,
-        color: 'error',
-    }
+    return usedBy ? inUseToastPayload(entity, usedBy) : null
 }
