@@ -38,8 +38,11 @@ const {
     openEdit: handleEdit,
 } = useWizardDrawer<ComponentRecord>()
 
-// Re-fetch when kind changes
-watch(kind, () => componentsStore.fetchAll([kind.value]), { immediate: true })
+// Everything once — the delete preview needs referrer records and relations
+// of every kind — then a per-kind refresh when switching resource kinds.
+componentsStore.fetchAll()
+componentsStore.fetchRelations()
+watch(kind, () => componentsStore.fetchAll([kind.value]))
 
 const columns: TableColumn<ComponentRecord>[] = [
     { accessorKey: 'select' as any, header: '' },
@@ -106,6 +109,7 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
             <DataTable :columns="columns"
                        :data="resources"
                        :loading="componentsStore.loading"
+                       :used-by="componentsStore.usedBy"
                        :search-placeholder="`Search ${pageTitle.toLowerCase()}...`"
                        @delete="handleDelete"
                        @edit="handleEdit">

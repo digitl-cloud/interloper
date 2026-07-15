@@ -27,7 +27,8 @@ const {
 } = useWizardDrawer<ComponentRecord>()
 
 // Resource kinds too — the Connection column resolves resource names by id.
-componentsStore.fetchAll(['destination', ...catalogStore.resourceKinds])
+componentsStore.fetchAll()
+componentsStore.fetchRelations()
 
 function typeIcon(key: string): string {
     return componentIcon(key, 'i-lucide-hard-drive')
@@ -102,6 +103,7 @@ function handleSaved() {
             <DataTable :columns="columns"
                        :data="destinations"
                        :loading="componentsStore.loading"
+                       :used-by="componentsStore.usedBy"
                        search-placeholder="Search destinations..."
                        @delete="handleDelete"
                        @edit="handleEdit">

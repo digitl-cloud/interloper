@@ -27,7 +27,8 @@ const {
 const runModalOpen = ref(false)
 const runModalJob = ref<ComponentRecord | null>(null)
 
-componentsStore.fetchAll(['job', 'source'])
+componentsStore.fetchAll()
+componentsStore.fetchRelations()
 
 function cronLabel(cron: string): string {
     try {
@@ -129,6 +130,7 @@ async function handleDelete(ids: string[]) {
                        :data="jobs"
                        :loading="componentsStore.loading"
                        :row-actions="rowActions"
+                       :used-by="componentsStore.usedBy"
                        search-placeholder="Search jobs..."
                        @delete="handleDelete"
                        @edit="handleEdit">

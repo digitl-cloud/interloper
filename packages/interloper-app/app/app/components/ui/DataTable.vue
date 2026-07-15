@@ -1,6 +1,7 @@
 <script setup lang="ts" generic="TData extends { id: string }, TValue">
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/vue-table'
+import type { UsedByRef } from '~/utils/apiErrors'
 
 const PAGE_SIZE = 20
 
@@ -13,6 +14,12 @@ const props = defineProps<{
     rowActions?: (item: TData) => DropdownMenuItem[][]
     /** When true, suppresses the built-in actions column and row menus. */
     noActions?: boolean
+    /**
+     * Referrers still bound to the given ids (e.g. `componentsStore.usedBy`).
+     * When it returns any, the delete confirmation lists them and disables
+     * the destructive button — the backend guard stays the authority.
+     */
+    usedBy?: (ids: string[]) => UsedByRef[]
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +50,13 @@ const totalCount = computed<number>(() =>
 function selectedIds(): string[] {
     return tableRef.value?.tableApi?.getFilteredSelectedRowModel().rows.map((row: any) => row.original.id) ?? []
 }
+
+const bulkReferrers = computed<UsedByRef[]>(() =>
+    showDeleteModal.value ? props.usedBy?.(selectedIds()) ?? [] : [],
+)
+const oneReferrers = computed<UsedByRef[]>(() =>
+    deleteOneItem.value ? props.usedBy?.([deleteOneItem.value.id]) ?? [] : [],
+)
 
 function confirmBulkDelete() {
     emit('delete', selectedIds())
@@ -156,7 +170,11 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
 
                     <template #body>
                         <div class="space-y-4">
-                            <p>
+                            <p v-if="bulkReferrers.length">
+                                Still in use by: <span class="font-medium">{{ usedByNames(bulkReferrers) }}</span>.
+                                Rebind or delete those first.
+                            </p>
+                            <p v-else>
                                 This will permanently delete {{ selectedCount }} {{ selectedCount === 1 ? 'item' :
                                     'items' }}. This action cannot be undone.
                             </p>
@@ -165,6 +183,7 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
                                          @click="showDeleteModal = false" />
                                 <UButton color="error"
                                          label="Delete"
+                                         :disabled="bulkReferrers.length > 0"
                                          @click="confirmBulkDelete" />
                             </div>
                         </div>
@@ -216,7 +235,11 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
             <template #default />
             <template #body>
                 <div class="space-y-4">
-                    <p>
+                    <p v-if="oneReferrers.length">
+                        Still in use by: <span class="font-medium">{{ usedByNames(oneReferrers) }}</span>.
+                        Rebind or delete those first.
+                    </p>
+                    <p v-else>
                         This will permanently delete this item. This action cannot be undone.
                     </p>
                     <div class="flex justify-end gap-2">
@@ -224,6 +247,7 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
                                  @click="showDeleteOneModal = false" />
                         <UButton color="error"
                                  label="Delete"
+                                 :disabled="oneReferrers.length > 0"
                                  @click="confirmDeleteOne" />
                     </div>
                 </div>

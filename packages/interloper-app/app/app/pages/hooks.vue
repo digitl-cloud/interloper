@@ -25,7 +25,8 @@ const {
     openEdit: handleEdit,
 } = useWizardDrawer<ComponentRecord>()
 
-componentsStore.fetchAll(['hook', 'source', 'asset', 'job'])
+componentsStore.fetchAll()
+componentsStore.fetchRelations()
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     { accessorKey: 'select' as any, header: '' },
@@ -108,6 +109,7 @@ async function handleDelete(ids: string[]) {
             <DataTable :columns="columns"
                        :data="hooks"
                        :loading="componentsStore.loading"
+                       :used-by="componentsStore.usedBy"
                        search-placeholder="Search hooks..."
                        @delete="handleDelete"
                        @edit="handleEdit">

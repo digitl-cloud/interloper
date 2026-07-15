@@ -143,6 +143,27 @@ export const useComponentsStore = defineStore('components', () => {
         return components.value.find(c => c.id === id)
     }
 
+    /**
+     * Components outside `ids` (and their children) that hold relations into
+     * them — the client-side mirror of the API's delete guard, used to preview
+     * "used by" before a delete is attempted. Referrers that are source-owned
+     * assets resolve to their parent source, the unit the user can act on.
+     */
+    function usedBy(ids: string | string[]): ComponentRecord[] {
+        const subtree = new Set(Array.isArray(ids) ? ids : [ids])
+        for (const id of [...subtree]) {
+            for (const child of byId(id)?.children ?? []) subtree.add(child.id)
+        }
+        const referrers = new Map<string, ComponentRecord>()
+        for (const r of relations.value) {
+            if (!subtree.has(r.dst_id) || subtree.has(r.src_id)) continue
+            let src = byId(r.src_id)
+            if (src?.parent_id && !subtree.has(src.parent_id)) src = byId(src.parent_id) ?? src
+            if (src && !subtree.has(src.id)) referrers.set(src.id, src)
+        }
+        return [...referrers.values()]
+    }
+
     function search(query: string, kind?: string): ComponentRecord[] {
         const base = kind ? byKind(kind) : components.value
         if (!query) return base
@@ -224,6 +245,7 @@ export const useComponentsStore = defineStore('components', () => {
         fetchPartitionRowCounts,
         byKind,
         byId,
+        usedBy,
         search,
         _upsert,
         _remove,

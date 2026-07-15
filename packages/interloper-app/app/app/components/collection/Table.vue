@@ -74,6 +74,11 @@ const emit = defineEmits<{
 
 async function deleteSource(sourceId: string) {
     const info = sourceInfoById.value.get(sourceId)
+    const referrers = componentsStore.usedBy(sourceId)
+    if (referrers.length) {
+        toast.add(inUseToastPayload('Source', referrers))
+        return
+    }
     const confirmed = await confirm({
         title: 'Delete source?',
         description: `This will permanently delete "${info?.name ?? 'this source'}" and all its assets.`,

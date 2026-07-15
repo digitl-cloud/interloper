@@ -32,7 +32,8 @@ const {
     openEdit: handleEdit,
 } = useWizardDrawer<ComponentRecord>()
 
-componentsStore.fetchAll(['source', 'destination'])
+componentsStore.fetchAll()
+componentsStore.fetchRelations()
 
 // ── Run now ─────────────────────────────────────────────────────
 
@@ -158,6 +159,7 @@ async function handleDelete(ids: string[]) {
                        :data="sources"
                        :loading="componentsStore.loading"
                        :row-actions="rowActions"
+                       :used-by="componentsStore.usedBy"
                        search-placeholder="Search sources..."
                        @delete="handleDelete"
                        @edit="handleEdit">

@@ -37,7 +37,7 @@ const statusCounts = computed<Record<StatusFilter, number>>(() => {
 onMounted(() => {
     if (!componentsStore.loading) {
         componentsStore.fetchAll()
-        componentsStore.fetchRelations('dependency')
+        componentsStore.fetchRelations()
     }
 })
 
@@ -48,7 +48,7 @@ function onEditSource(sourceId: string) {
 
 function handleSaved() {
     componentsStore.fetchAll()
-    componentsStore.fetchRelations('dependency')
+    componentsStore.fetchRelations()
     sourceDrawerOpen.value = false
 }
 
@@ -80,6 +80,11 @@ function onCloseAnimationEnd() {
 
 async function onDeleteSource(sourceId: string) {
     const source = componentsStore.byId(sourceId)
+    const referrers = componentsStore.usedBy(sourceId)
+    if (referrers.length) {
+        toast.add(inUseToastPayload('Source', referrers))
+        return
+    }
     try {
         await componentsStore.remove(sourceId)
         toast.add({ title: `Source "${source?.name ?? 'Source'}" deleted`, color: 'success' })
