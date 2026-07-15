@@ -130,7 +130,7 @@ async function handleDelete(ids: string[]) {
                        :data="jobs"
                        :loading="componentsStore.loading"
                        :row-actions="rowActions"
-                       :used-by="componentsStore.usedBy"
+                       :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search jobs..."
                        @delete="handleDelete"
                        @edit="handleEdit">

@@ -80,9 +80,9 @@ function onCloseAnimationEnd() {
 
 async function onDeleteSource(sourceId: string) {
     const source = componentsStore.byId(sourceId)
-    const referrers = componentsStore.usedBy(sourceId)
-    if (referrers.length) {
-        toast.add(inUseToastPayload('Source', referrers))
+    const { blocking } = componentsStore.deleteImpact(sourceId)
+    if (blocking.length) {
+        toast.add(inUseToastPayload('Source', blocking))
         return
     }
     try {

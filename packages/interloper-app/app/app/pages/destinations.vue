@@ -103,7 +103,7 @@ function handleSaved() {
             <DataTable :columns="columns"
                        :data="destinations"
                        :loading="componentsStore.loading"
-                       :used-by="componentsStore.usedBy"
+                       :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search destinations..."
                        @delete="handleDelete"
                        @edit="handleEdit">

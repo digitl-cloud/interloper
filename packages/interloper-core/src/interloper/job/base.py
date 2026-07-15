@@ -43,7 +43,9 @@ class Job(Component):
     icon: ClassVar[str] = "carbon:event-schedule"
     runnable: ClassVar[bool] = True
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "target": RelationDefinition(kinds=["source", "asset"], field="targets"),
+        # A target is an orchestration pointer, not an input: deleting it just
+        # shrinks the job's scope, so it detaches rather than blocking.
+        "target": RelationDefinition(kinds=["source", "asset"], field="targets", on_delete="detach"),
         "destination": RelationDefinition(kinds=["destination"], field="destinations"),
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
     }

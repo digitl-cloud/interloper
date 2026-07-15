@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
 from uuid import uuid4
 
 import interloper as il
@@ -172,13 +173,33 @@ class TestDeleteInUseGuard:
         with pytest.raises(NotFoundError):
             store.get_component(conn.id)
 
-    def test_job_target_blocks_component_delete(self, store: Store):
+    def test_job_target_detaches(self, store: Store):
         asset = store.create_component(_ORG, kind="asset", key="a")
         job = store.create_component(_ORG, kind="job", key="cron_job", name="J", relations={"target": [(asset.id, "")]})
 
-        with pytest.raises(InUseError) as excinfo:
-            store.delete_component(asset.id)
-        assert [r["id"] for r in excinfo.value.referrers] == [str(job.id)]
+        store.delete_component(asset.id)
+        assert store.get_component(job.id).id == job.id
+        assert store.list_relations(_ORG) == []
+
+    def test_hook_watch_detaches(self, store: Store):
+        asset = store.create_component(_ORG, kind="asset", key="a")
+        hook = store.create_component(_ORG, kind="hook", key="webhook", name="H", relations={"watch": [(asset.id, "")]})
+
+        store.delete_component(asset.id)
+        assert store.get_component(hook.id).id == hook.id
+        assert store.list_relations(_ORG) == []
+
+    def test_blocking_relation_wins_over_detaching(self, store: Store):
+        conn = self._connection(store)
+        asset = store.create_component(_ORG, kind="asset", key="a", name="A", relations={"resource": [(conn.id, "c")]})
+        store.create_component(_ORG, kind="job", key="cron_job", relations={"target": [(asset.id, "")]})
+
+        # The asset both consumes the connection (blocks its deletion) and is
+        # a job target (detachable) — deleting the asset succeeds, deleting
+        # the connection does not.
+        with pytest.raises(InUseError):
+            store.delete_component(conn.id)
+        store.delete_component(asset.id)
 
     def test_referrer_through_child_reports_parent(self, store: Store, component_db: Engine):
         conn = self._connection(store)
@@ -208,6 +229,50 @@ class TestDeleteInUseGuard:
         store.delete_component(parent.id)
         with pytest.raises(NotFoundError):
             store.get_component(parent.id)
+
+
+class GuardUpstream(il.Asset):
+    """Upstream asset for the delete-guard dependency tests."""
+
+
+class GuardRequired(il.Asset):
+    """Asset with a required dependency on ``guard_upstream``."""
+
+    requires: ClassVar[dict[str, str]] = {"up": "guard_upstream"}
+
+
+class GuardOptional(il.Asset):
+    """Asset with an optional dependency on ``guard_upstream``."""
+
+    optional_requires: ClassVar[dict[str, str]] = {"up": "guard_upstream"}
+
+
+class TestDependencyDeleteSemantics:
+    """Required dependency slots block deletion; optional slots detach."""
+
+    @pytest.fixture
+    def dep_store(self, component_db: Engine) -> Store:
+        return Store(catalog=il.Catalog.from_assets([GuardUpstream, GuardRequired, GuardOptional]))
+
+    def test_required_dependency_blocks(self, dep_store: Store):
+        up = dep_store.create_component(_ORG, kind="asset", key="guard_upstream", name="Up")
+        down = dep_store.create_component(
+            _ORG, kind="asset", key="guard_required", relations={"dependency": [(up.id, "up")]}
+        )
+
+        with pytest.raises(InUseError) as excinfo:
+            dep_store.delete_component(up.id)
+        assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
+
+    def test_optional_dependency_detaches(self, dep_store: Store):
+        up = dep_store.create_component(_ORG, kind="asset", key="guard_upstream", name="Up")
+        down = dep_store.create_component(
+            _ORG, kind="asset", key="guard_optional", relations={"dependency": [(up.id, "up")]}
+        )
+
+        dep_store.delete_component(up.id)
+        assert dep_store.get_component(down.id).id == down.id
+        assert dep_store.list_relations(_ORG) == []
 
 
 class DiscriminatedSource(il.Source):

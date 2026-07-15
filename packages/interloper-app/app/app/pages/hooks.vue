@@ -109,7 +109,7 @@ async function handleDelete(ids: string[]) {
             <DataTable :columns="columns"
                        :data="hooks"
                        :loading="componentsStore.loading"
-                       :used-by="componentsStore.usedBy"
+                       :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search hooks..."
                        @delete="handleDelete"
                        @edit="handleEdit">

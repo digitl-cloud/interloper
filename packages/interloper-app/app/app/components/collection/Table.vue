@@ -74,14 +74,15 @@ const emit = defineEmits<{
 
 async function deleteSource(sourceId: string) {
     const info = sourceInfoById.value.get(sourceId)
-    const referrers = componentsStore.usedBy(sourceId)
-    if (referrers.length) {
-        toast.add(inUseToastPayload('Source', referrers))
+    const { blocking, detaching } = componentsStore.deleteImpact(sourceId)
+    if (blocking.length) {
+        toast.add(inUseToastPayload('Source', blocking))
         return
     }
+    const detachNote = detaching.length ? ` It will also be removed from: ${usedByNames(detaching)}.` : ''
     const confirmed = await confirm({
         title: 'Delete source?',
-        description: `This will permanently delete "${info?.name ?? 'this source'}" and all its assets.`,
+        description: `This will permanently delete "${info?.name ?? 'this source'}" and all its assets.${detachNote}`,
         confirmLabel: 'Delete',
         confirmColor: 'error',
         icon: 'i-lucide-triangle-alert',

@@ -144,24 +144,53 @@ export const useComponentsStore = defineStore('components', () => {
     }
 
     /**
-     * Components outside `ids` (and their children) that hold relations into
-     * them — the client-side mirror of the API's delete guard, used to preview
-     * "used by" before a delete is attempted. Referrers that are source-owned
-     * assets resolve to their parent source, the unit the user can act on.
+     * Whether a relation detaches (rather than blocks) when its destination
+     * is deleted — the referrer's vocabulary decides: `on_delete: 'detach'`
+     * types (job targets, hook watches) and optional slots detach; anything
+     * unresolvable blocks, matching the backend guard's fail-closed default.
      */
-    function usedBy(ids: string | string[]): ComponentRecord[] {
+    function _relationDetaches(src: ComponentRecord | undefined, r: Relation): boolean {
+        if (!src) return false
+        const catalogStore = useCatalogStore()
+        let vocabulary = catalogStore.catalog[src.key]?.relations
+        if (src.kind === 'asset' && src.parent_id) {
+            const parent = byId(src.parent_id)
+            const assetDefn = parent && catalogStore.getSourceDefinition(parent.key)?.assets?.find(a => a.key === src.key)
+            if (assetDefn) vocabulary = assetDefn.relations
+        }
+        const defn = vocabulary?.[r.type]
+        if (!defn) return false
+        if (defn.on_delete === 'detach') return true
+        const slot = defn.slots?.[r.slot]
+        return !!slot && !slot.required
+    }
+
+    /**
+     * What deleting `ids` does to the components bound to them — the
+     * client-side mirror of the API's delete guard, used to preview the
+     * impact before a delete is attempted. `blocking` referrers make the
+     * backend refuse with 409; `detaching` ones just lose the relation.
+     * Referrers that are source-owned assets resolve to their parent source,
+     * the unit the user can act on; a referrer that blocks through any
+     * relation is only reported as blocking.
+     */
+    function deleteImpact(ids: string | string[]): { blocking: ComponentRecord[], detaching: ComponentRecord[] } {
         const subtree = new Set(Array.isArray(ids) ? ids : [ids])
         for (const id of [...subtree]) {
             for (const child of byId(id)?.children ?? []) subtree.add(child.id)
         }
-        const referrers = new Map<string, ComponentRecord>()
+        const blocking = new Map<string, ComponentRecord>()
+        const detaching = new Map<string, ComponentRecord>()
         for (const r of relations.value) {
             if (!subtree.has(r.dst_id) || subtree.has(r.src_id)) continue
             let src = byId(r.src_id)
+            const detaches = _relationDetaches(src, r)
             if (src?.parent_id && !subtree.has(src.parent_id)) src = byId(src.parent_id) ?? src
-            if (src && !subtree.has(src.id)) referrers.set(src.id, src)
+            if (!src || subtree.has(src.id)) continue
+            ;(detaches ? detaching : blocking).set(src.id, src)
         }
-        return [...referrers.values()]
+        for (const id of blocking.keys()) detaching.delete(id)
+        return { blocking: [...blocking.values()], detaching: [...detaching.values()] }
     }
 
     function search(query: string, kind?: string): ComponentRecord[] {
@@ -245,7 +274,7 @@ export const useComponentsStore = defineStore('components', () => {
         fetchPartitionRowCounts,
         byKind,
         byId,
-        usedBy,
+        deleteImpact,
         search,
         _upsert,
         _remove,
