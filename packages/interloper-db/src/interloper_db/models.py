@@ -183,9 +183,13 @@ class Component(SQLModel, table=True):
         back_populates="children",
         sa_relationship_kwargs={"remote_side": "Component.id"},
     )
+    # Deletion is owned by the DB (parent_id is ON DELETE CASCADE). "all" —
+    # not True — because True still nulls parent_id on children that happen
+    # to be loaded in the deleting session, detaching them from the cascade
+    # and leaving orphaned asset rows.
     children: list["Component"] = Relationship(
         back_populates="parent",
-        sa_relationship_kwargs={"passive_deletes": True},
+        sa_relationship_kwargs={"passive_deletes": "all"},
     )
     out_relations: list["ComponentRelation"] = Relationship(
         sa_relationship_kwargs={

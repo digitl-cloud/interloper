@@ -230,7 +230,11 @@ class ComponentMixin(StoreBase):
         a source-owned asset is reported as its parent source — the unit the
         user can act on.
         """
-        subtree_ids = {db_component.id} | {child.id for child in db_component.children}
+        # Child ids via a bare SELECT, not the ORM relationship: loading the
+        # children into the session that is about to delete their parent
+        # invites the unit of work to manage them.
+        child_ids = session.exec(select(Component.id).where(Component.parent_id == db_component.id)).all()
+        subtree_ids = {db_component.id} | set(child_ids)
         rows = session.exec(
             select(ComponentRelation).where(
                 col(ComponentRelation.dst_id).in_(subtree_ids),

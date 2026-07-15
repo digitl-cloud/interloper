@@ -125,6 +125,20 @@ class TestCrud:
         with pytest.raises(ValueError):
             store.delete_component(child_id)
 
+    def test_delete_source_removes_child_rows(self, component_db: Engine):
+        from interloper_assets.demo.source import DemoSource
+
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = store.create_component(_ORG, kind="source", key="demo_source")
+        assert source.children
+
+        store.delete_component(source.id)
+
+        # The DB cascade must delete the children — a regression here leaves
+        # them behind as orphaned parentless asset rows instead.
+        with Session(component_db) as session:
+            assert session.exec(select(Component).where(Component.kind == "asset")).all() == []
+
     def test_delete_cascades_outbound_relations(self, store: Store):
         job = store.create_component(_ORG, kind="job", key="cron_job", name="J")
         asset = store.create_component(_ORG, kind="asset", key="a")
