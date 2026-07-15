@@ -92,7 +92,7 @@ const SUGGESTIONS = [
                                 @dblclick="resetWidth" />
 
         <!-- Header -->
-        <div class="flex items-center gap-3 px-[18px] py-3.5 border-b border-default shrink-0">
+        <div class="flex items-center gap-3 px-[18px] h-(--ui-header-height) border-b border-default shrink-0">
             <div class="size-8 rounded-[9px] bg-primary text-inverted flex items-center justify-center">
                 <UIcon name="i-lucide-sparkles"
                        class="size-4" />
@@ -181,7 +181,7 @@ const SUGGESTIONS = [
                          variant="outline"
                          placeholder="Ask about your workspace…"
                          :disabled="streaming || sessionError"
-                         :ui="{ base: 'px-1.5' }"
+                         :ui="{ base: 'px-1.5 text-[13.5px]/5', body: 'items-center' }"
                          @submit="onSubmit">
                 <UChatPromptSubmit :status="status"
                                    size="sm" />
