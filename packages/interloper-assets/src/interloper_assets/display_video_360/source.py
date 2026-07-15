@@ -59,13 +59,13 @@ def _report_body(title: str, date: dt.date, dimensions: list[str], metrics: list
     }
 
 
-def _wait_for_report(service: Any, query_id: str, report_id: str) -> dict:
+def _wait_for_report(dbm_client: Any, query_id: str, report_id: str) -> dict:
     """Poll a report until it reaches a terminal state; return its final payload."""
     deadline = time.monotonic() + _REPORT_TIMEOUT
     interval = float(constants.MIN_RETRY_INTERVAL)
     while True:
         logger.info(f"Waiting for report {report_id} (query {query_id})...")
-        report = service.queries().reports().get(queryId=query_id, reportId=report_id).execute()
+        report = dbm_client.queries().reports().get(queryId=query_id, reportId=report_id).execute()
         state = report["metadata"]["status"]["state"]
 
         if state == "DONE":
@@ -109,14 +109,14 @@ def _get_report(
     filters: list[dict],
 ) -> list[_Record]:
     """Create, run, download, and parse a report query, deleting it after."""
-    service = connection.reporting_client
-    query_id = service.queries().create(body=_report_body(title, date, dimensions, metrics, filters)).execute()[
+    dbm_client = connection.dbm_client
+    query_id = dbm_client.queries().create(body=_report_body(title, date, dimensions, metrics, filters)).execute()[
         "queryId"
     ]
     logger.info(f"Query id: {query_id} ({title})")
     try:
-        report_id = service.queries().run(queryId=query_id, synchronous=False).execute()["key"]["reportId"]
-        report = _wait_for_report(service, query_id, report_id)
+        report_id = dbm_client.queries().run(queryId=query_id, synchronous=False).execute()["key"]["reportId"]
+        report = _wait_for_report(dbm_client, query_id, report_id)
         url = report["metadata"]["googleCloudStoragePath"]
         response = httpx.get(url, timeout=None)
         response.raise_for_status()
@@ -124,18 +124,18 @@ def _get_report(
     finally:
         # One-shot queries; clean up best-effort so they don't pile up.
         try:
-            service.queries().delete(queryId=query_id).execute()
+            dbm_client.queries().delete(queryId=query_id).execute()
         except Exception as exc:
             logger.warning(f"Failed to delete query {query_id}: {exc}")
 
 
 # -- HELPERS — entities (Display & Video API) ------------------------------------
-def _list_audiences(service: Any, scope: dict[str, str]) -> list[_Record]:
+def _list_audiences(dv_client: Any, scope: dict[str, str]) -> list[_Record]:
     """Page through the first-party/partner audiences of a partner or advertiser."""
     audiences: list[_Record] = []
     page_token: str | None = None
     while True:
-        response = service.firstPartyAndPartnerAudiences().list(**scope, pageToken=page_token).execute()
+        response = dv_client.firstPartyAndPartnerAudiences().list(**scope, pageToken=page_token).execute()
         audiences.extend(response.get("firstPartyAndPartnerAudiences") or [])
         page_token = response.get("nextPageToken")
         if not page_token:
@@ -249,7 +249,7 @@ class DisplayVideo360(il.Source):
     @il.asset(schema=schemas.Audiences, tags=["Entity"])
     def audiences(self, connection: DisplayVideo360Connection) -> list[_Record]:
         """First-party and partner audiences of the configured partner or advertiser."""
-        return _list_audiences(connection.client, self._audience_scope)
+        return _list_audiences(connection.dv_client, self._audience_scope)
 
     @il.asset(schema=schemas.CustomAudiences, tags=["Entity"])
     def custom_audiences(self, connection: DisplayVideo360Connection) -> list[_Record]:
@@ -257,7 +257,7 @@ class DisplayVideo360(il.Source):
         if not self.audience_id:
             raise ValueError("The custom_audiences asset requires the source's audience_id to be set")
         audience = (
-            connection.client.firstPartyAndPartnerAudiences()
+            connection.dv_client.firstPartyAndPartnerAudiences()
             .get(**self._audience_scope, firstPartyAndPartnerAudienceId=self.audience_id)
             .execute()
         )

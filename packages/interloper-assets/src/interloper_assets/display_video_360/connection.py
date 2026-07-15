@@ -23,36 +23,36 @@ class DisplayVideo360Connection(il.Connection):
     service_account_key: str = il.JsonField(description="Google service account key JSON")
 
     @cached_property
-    def client(self) -> Any:
-        """Build and return the DV360 API service client."""
+    def dv_client(self) -> Any:
+        """Build and return the Display & Video API client (entities)."""
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
 
         credentials = service_account.Credentials.from_service_account_info(
             json.loads(self.service_account_key),
-            scopes=constants.DISPLAY_VIDEO_SCOPES,
+            scopes=constants.DV_SCOPES,
         )
 
         return build(
-            constants.DISPLAY_VIDEO_API_SERVICE,
-            constants.DISPLAY_VIDEO_API_VERSION,
+            constants.DV_API_SERVICE,
+            constants.DV_API_VERSION,
             credentials=credentials,
         )
 
     @cached_property
-    def reporting_client(self) -> Any:
-        """Build and return the Bid Manager (DV360 reporting) API service client."""
+    def dbm_client(self) -> Any:
+        """Build and return the Bid Manager API client (DV360 reporting)."""
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
 
         credentials = service_account.Credentials.from_service_account_info(
             json.loads(self.service_account_key),
-            scopes=constants.REPORTING_SCOPES,
+            scopes=constants.DBM_SCOPES,
         )
 
         return build(
-            constants.REPORTING_API_SERVICE,
-            constants.REPORTING_API_VERSION,
+            constants.DBM_API_SERVICE,
+            constants.DBM_API_VERSION,
             credentials=credentials,
         )
 
@@ -61,7 +61,7 @@ class DisplayVideo360Connection(il.Connection):
         partners: list[dict[str, Any]] = []
         page_token: str | None = None
         while True:
-            response = self.client.partners().list(pageToken=page_token).execute()
+            response = self.dv_client.partners().list(pageToken=page_token).execute()
             partners.extend(response.get("partners") or [])
             page_token = response.get("nextPageToken")
             if not page_token:
