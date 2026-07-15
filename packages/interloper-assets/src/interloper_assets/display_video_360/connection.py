@@ -39,6 +39,23 @@ class DisplayVideo360Connection(il.Connection):
             credentials=credentials,
         )
 
+    @cached_property
+    def reporting_client(self) -> Any:
+        """Build and return the Bid Manager (DV360 reporting) API service client."""
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(self.service_account_key),
+            scopes=constants.REPORTING_SCOPES,
+        )
+
+        return build(
+            constants.REPORTING_API_SERVICE,
+            constants.REPORTING_API_VERSION,
+            credentials=credentials,
+        )
+
     def _list_partners(self) -> list[dict[str, Any]]:
         """Page through the partners accessible to the service account."""
         partners: list[dict[str, Any]] = []

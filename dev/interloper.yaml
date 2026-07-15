@@ -22,7 +22,6 @@ catalog:
   - interloper_assets.demo.source.DemoSource
   - interloper_assets.demo.source.demo_asset
   - interloper_assets.display_video_360.source.DisplayVideo360
-  - interloper_assets.double_click_bid_manager.source.DoubleClickBidManager
   - interloper_assets.facebook_ads.source.FacebookAds
   - interloper_assets.facebook_insights.source.FacebookInsights
   - interloper_assets.google_ads.source.GoogleAds

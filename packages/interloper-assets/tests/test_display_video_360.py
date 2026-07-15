@@ -18,9 +18,22 @@ from interloper.representation import Representation
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.display_video_360 import schemas
-from interloper_assets.display_video_360.source import DisplayVideo360
+from interloper_assets.display_video_360.source import (
+    DisplayVideo360,
+    DisplayVideo360Normalizer,
+    _parse_report_csv,
+)
 
 _ASSET_KEY = "partners"
+
+_REPORT_CSV = (
+    "Date,Advertiser ID,Active View: Viewable Impressions,Active View: % Viewable Impressions,Impressions\n"
+    "2026/07/10,9,90,85.5,100\n"
+    "2026/07/10,9,180,72.1,200\n"
+    ",,270,,300\n"
+    "\n"
+    "Report Time:,2026/07/11\n"
+)
 
 _PARTNER = {
     "name": "partners/123",
@@ -59,6 +72,49 @@ class TestAudienceScope:
             asset.data(connection=object())
 
 
+class TestReports:
+    """Bid Manager report filters, CSV parsing, and header normalization."""
+
+    def test_filters_partner_only(self):
+        assert _source()._report_filters == [{"type": "FILTER_PARTNER", "value": "123"}]
+
+    def test_filters_narrowed_by_advertiser(self):
+        assert _source(advertiser_id="9")._report_filters == [
+            {"type": "FILTER_PARTNER", "value": "123"},
+            {"type": "FILTER_ADVERTISER", "value": "9"},
+        ]
+
+    def test_parse_report_csv_drops_footer(self):
+        rows = _parse_report_csv(_REPORT_CSV)
+        assert len(rows) == 2
+        assert rows[0]["Impressions"] == 100
+        assert rows[1]["Impressions"] == 200
+
+    def test_parse_report_csv_no_data_marker(self):
+        assert _parse_report_csv("Date,Impressions\nNo data returned by the reporting service.,\n") == []
+
+    def test_percent_headers_do_not_collide(self):
+        normalizer = DisplayVideo360Normalizer(snake_case_digits=True, flatten_max_level=2)
+        assert normalizer.column_name("Active View: % Viewable Impressions") == (
+            "active_view_pct_viewable_impressions"
+        )
+        assert normalizer.column_name("Active View: Viewable Impressions") == "active_view_viewable_impressions"
+        assert normalizer.column_name("CM360 Placement ID") == "cm_360_placement_id"
+        assert normalizer.column_name("YouTube Revenue (eCPV) (Adv Currency)") == (
+            "you_tube_revenue_e_cpv_adv_currency"
+        )
+
+    def test_parsed_report_conforms_to_schema(self):
+        rows = _parse_report_csv(_REPORT_CSV)
+        normalized = _source().normalizer.normalize(rows)
+        conformer = Representation.of(normalized).conformer
+        df = conformer.reconcile(normalized, schemas.LineItemsStats)
+        conformer.validate(df, schemas.LineItemsStats)  # must not raise
+        record = df.to_dict("records")[0]
+        assert record["active_view_pct_viewable_impressions"] == "85.5"
+        assert record["impressions"] == 100
+
+
 class TestNormalizerMapping:
     """A realistic partner payload flattens exactly onto the Partners schema."""
 
@@ -80,15 +136,15 @@ class TestNormalizerMapping:
 
     def test_all_assets_inherit_the_normalizer(self):
         src = _source()
-        assert len(src.assets) == 3
+        assert len(src.assets) == 5
         for asset in src.assets:
-            assert isinstance(asset.normalizer, DataFrameNormalizer), type(asset).key
+            assert isinstance(asset.normalizer, DisplayVideo360Normalizer), type(asset).key
 
 
 class TestSpecRoundtrip:
-    """The host→child spec round-trip must preserve the normalizer config."""
+    """The host→child spec round-trip must preserve the normalizer subclass."""
 
-    def test_child_asset_keeps_dataframe_normalizer(self):
+    def test_child_asset_keeps_custom_normalizer(self):
         src = _source()
         asset = next(a for a in src.assets if type(a).key == _ASSET_KEY)
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
@@ -96,6 +152,10 @@ class TestSpecRoundtrip:
         child_asset = next(a for a in child_dag.assets if type(a).key == _ASSET_KEY)
 
         normalizer = child_asset.normalizer
-        assert isinstance(normalizer, DataFrameNormalizer)
+        assert isinstance(normalizer, DisplayVideo360Normalizer)
         assert normalizer.snake_case_digits is True
         assert normalizer.flatten_max_level == 2
+        # The % -> pct behavior must survive in the child pod.
+        assert normalizer.column_name("Active View: % Viewable Impressions") == (
+            "active_view_pct_viewable_impressions"
+        )

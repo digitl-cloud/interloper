@@ -10,7 +10,6 @@ from interloper_assets.campaign_performance_analysis.source import CampaignPerfo
 from interloper_assets.criteo.source import Criteo, CriteoConnection
 from interloper_assets.demo.source import DemoSource, demo_asset
 from interloper_assets.display_video_360.source import DisplayVideo360, DisplayVideo360Connection
-from interloper_assets.double_click_bid_manager.source import DoubleClickBidManager, DoubleClickBidManagerConnection
 from interloper_assets.facebook_ads.source import FacebookAds, FacebookAdsConnection
 from interloper_assets.facebook_insights.source import FacebookInsights, FacebookInsightsConnection
 from interloper_assets.google_ads.source import GoogleAds, GoogleAdsConnection
@@ -52,8 +51,6 @@ __all__ = [
     "demo_asset",
     "DisplayVideo360",
     "DisplayVideo360Connection",
-    "DoubleClickBidManager",
-    "DoubleClickBidManagerConnection",
     "FacebookAds",
     "FacebookAdsConnection",
     "FacebookInsights",
