@@ -42,7 +42,7 @@ function decide(confirmed: boolean) {
 </script>
 
 <template>
-    <div class="border border-default rounded-[13px] p-4 my-2 w-full min-w-72 max-w-md flex flex-col gap-3">
+    <div class="border border-default rounded-[13px] p-4 my-2 w-full min-w-80 max-w-md flex flex-col gap-3">
         <span class="text-[13px] font-semibold text-highlighted">{{ request.title }}</span>
 
         <WizardRecap :rows="rows" />
