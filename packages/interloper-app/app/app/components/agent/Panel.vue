@@ -180,6 +180,7 @@ const SUGGESTIONS = [
             <UChatPrompt v-model="input"
                          variant="outline"
                          placeholder="Ask about your workspace…"
+                         :maxrows="6"
                          :disabled="streaming || sessionError"
                          :ui="{ base: 'px-1.5 text-[13.5px]/5', body: 'items-center' }"
                          @submit="onSubmit">
