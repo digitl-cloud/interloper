@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.36.0 (2026-07-15)
+
+### Features
+
+- **app**: Agent panel UX polish
+  ([`ae673d0`](https://github.com/digitl-cloud/interloper/commit/ae673d078f3bae66d951fcacb727115ee0a74278))
+
+
 ## v0.35.0 (2026-07-15)
 
 ### Bug Fixes
