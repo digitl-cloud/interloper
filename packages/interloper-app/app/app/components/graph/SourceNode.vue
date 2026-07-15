@@ -91,6 +91,7 @@ const isCompatible = computed(() => isValidTarget.value || isValidSource.value)
 const shouldFade = computed(() => !container.value && isDragging.value && !isCompatible.value)
 
 const { confirm } = useConfirm()
+const componentsStore = useComponentsStore()
 const { getWarnings } = useAssetWarnings()
 const { getBadgeForSource } = useDestinationBadge()
 const { getSourceSchedule } = useSchedule()
@@ -125,9 +126,12 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => [
             icon: 'i-lucide-trash',
             color: 'error' as const,
             onSelect: async () => {
+                const { blocking, detaching } = componentsStore.deleteImpact(props.source.id)
                 const confirmed = await confirm({
                     title: 'Delete source',
                     description: `This will permanently delete "${props.source.name}" and all its assets. This action cannot be undone.`,
+                    blocking,
+                    detaching,
                 })
                 if (confirmed) emit('delete', props.source.id)
             },

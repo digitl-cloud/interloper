@@ -75,17 +75,14 @@ const emit = defineEmits<{
 async function deleteSource(sourceId: string) {
     const info = sourceInfoById.value.get(sourceId)
     const { blocking, detaching } = componentsStore.deleteImpact(sourceId)
-    if (blocking.length) {
-        toast.add(inUseToastPayload('Source', blocking))
-        return
-    }
-    const detachNote = detaching.length ? ` It will also be removed from: ${usedByNames(detaching)}.` : ''
     const confirmed = await confirm({
         title: 'Delete source?',
-        description: `This will permanently delete "${info?.name ?? 'this source'}" and all its assets.${detachNote}`,
+        description: `This will permanently delete "${info?.name ?? 'this source'}" and all its assets.`,
         confirmLabel: 'Delete',
         confirmColor: 'error',
         icon: 'i-lucide-triangle-alert',
+        blocking,
+        detaching,
     })
     if (!confirmed) return
     try {
