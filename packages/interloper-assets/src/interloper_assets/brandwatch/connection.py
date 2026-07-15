@@ -9,30 +9,19 @@ from interloper_assets.brandwatch import constants
 @il.connection(
     name="Brandwatch",
     icon="fluent:connector-24-filled",
-    tags=["Social"],
+    tags=["Social Media"],
 )
 class BrandwatchConnection(il.Connection):
-    """Brandwatch (Falcon.io) API connection with API key auth."""
+    """Brandwatch (Falcon.io) Measure API connection with API-key auth."""
 
     model_config = SettingsConfigDict(env_prefix="brandwatch_")
 
-    api_key: str = il.SecretField(title="API Key", description="Brandwatch API key")
-    channel_id: str = il.InputField(
-        title="Channel ID",
-        description="Channel ID to fetch insights for",
-        discriminator=True,
-    )
-    network: str = il.SelectField(
-        options=[
-            {"label": "Facebook", "value": "facebook"},
-            {"label": "Instagram", "value": "instagram"},
-            {"label": "LinkedIn", "value": "linkedin"},
-            {"label": "Twitter", "value": "twitter"},
-            {"label": "YouTube", "value": "youtube"},
-        ],
-        description="Social network to fetch insights for",
-    )
+    api_key: str = il.SecretField(title="API Key", description="Brandwatch (Falcon.io) Measure API key")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
-        return il.AsyncRESTClient(constants.BASE_URL, params={"param_key": self.api_key})
+        # Falcon.io authenticates the Measure API with the key as a query
+        # parameter applied to every request. NOTE: the parameter name
+        # (`param_key`) is carried over unverified from the reference connector
+        # and may need to be `apikey` — confirm against a live key.
+        return il.AsyncRESTClient(constants.BASE_URL, params={"param_key": self.api_key}, timeout=60)
