@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-app"
-version = "0.34.0"
+version = "0.35.0"
 description = "Interloper web UI (Nuxt SPA, bundled as static assets)"
 readme = { text = "", content-type = "text/plain" }
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]

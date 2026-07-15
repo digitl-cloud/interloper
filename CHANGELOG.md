@@ -2,6 +2,59 @@
 
 <!-- version list -->
 
+## v0.35.0 (2026-07-15)
+
+### Bug Fixes
+
+- **app**: Cap the agent composer at six rows
+  ([`b13dd79`](https://github.com/digitl-cloud/interloper/commit/b13dd7911ab73e3638c5053f2c59d50669d86dd3))
+
+- **db**: Stop the ORM orphaning child assets on source deletion
+  ([`47d6410`](https://github.com/digitl-cloud/interloper/commit/47d6410540629c94c3a38fec2e5c5336750e744e))
+
+### Chores
+
+- **app**: Update the agent's default suggested prompts
+  ([`55caed8`](https://github.com/digitl-cloud/interloper/commit/55caed80772150f8965a78c43cb99b56f4d6ea8a))
+
+### Features
+
+- Relation-aware deletion semantics via on_delete vocabulary
+  ([`8877b15`](https://github.com/digitl-cloud/interloper/commit/8877b155e04c9ce71dc21c868b0a33de2394b675))
+
+- **agent**: React-only bulk connection creation from volunteered credentials
+  ([`d9720f4`](https://github.com/digitl-cloud/interloper/commit/d9720f41c1dfd71be78f3c56b6d362482ebf243b))
+
+- **app**: Badge the subject entity in delete confirmations
+  ([`e073f96`](https://github.com/digitl-cloud/interloper/commit/e073f96eb7d356bc3e316d5582ce6538e70c7891))
+
+- **app**: Preview "used by" in delete confirmations
+  ([`f1f7e80`](https://github.com/digitl-cloud/interloper/commit/f1f7e80ed08e52031cb7360416da8dedd4003423))
+
+- **app**: Render delete-dialog referrers as a compact table
+  ([`8b297e0`](https://github.com/digitl-cloud/interloper/commit/8b297e0d2f99a4a23381af315ef7b0e1bfc6399d))
+
+- **app**: Unify delete confirmations on the shared ConfirmModal
+  ([`4166cc9`](https://github.com/digitl-cloud/interloper/commit/4166cc9c362f106379698bd552c097e0614541ef))
+
+- **assets**: Add Brandwatch source
+  ([`16d71ca`](https://github.com/digitl-cloud/interloper/commit/16d71ca92d74e7dc42d5c9e18c3a03d7fc282e7f))
+
+- **assets**: Add Campaign Manager 360 source
+  ([`05b3fef`](https://github.com/digitl-cloud/interloper/commit/05b3fefeca2b0a775fcfb760aa5be3fd68f23627))
+
+- **assets**: Add Display & Video 360 source
+  ([`64ac1b5`](https://github.com/digitl-cloud/interloper/commit/64ac1b5330185354990cca698f92a1d0e89b592c))
+
+- **assets**: Fold Bid Manager reports into the DV360 source
+  ([`488c5e8`](https://github.com/digitl-cloud/interloper/commit/488c5e8e4f21f2bc44e539722a28b30e166bc962))
+
+### Refactoring
+
+- **assets**: Name the DV360 clients by their API
+  ([`1f997df`](https://github.com/digitl-cloud/interloper/commit/1f997dfd4bc13e9bde27e5d6b5f5b6cc04c64c86))
+
+
 ## v0.34.0 (2026-07-15)
 
 ### Bug Fixes
