@@ -52,7 +52,6 @@ const columns: TableColumn<ComponentRecord>[] = [
             typeName(row.original.key),
         ]),
     },
-    { accessorKey: 'encrypted', header: 'Encrypted' },
     {
         accessorKey: 'created_at',
         header: 'Created',
