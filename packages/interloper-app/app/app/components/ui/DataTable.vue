@@ -170,10 +170,10 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
 
                     <template #body>
                         <div class="space-y-4">
-                            <p v-if="bulkReferrers.length">
-                                Still in use by: <span class="font-medium">{{ usedByNames(bulkReferrers) }}</span>.
-                                Rebind or delete those first.
-                            </p>
+                            <template v-if="bulkReferrers.length">
+                                <p>Still in use — rebind or delete these first:</p>
+                                <UsedByTable :referrers="bulkReferrers" />
+                            </template>
                             <p v-else>
                                 This will permanently delete {{ selectedCount }} {{ selectedCount === 1 ? 'item' :
                                     'items' }}. This action cannot be undone.
@@ -235,10 +235,10 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
             <template #default />
             <template #body>
                 <div class="space-y-4">
-                    <p v-if="oneReferrers.length">
-                        Still in use by: <span class="font-medium">{{ usedByNames(oneReferrers) }}</span>.
-                        Rebind or delete those first.
-                    </p>
+                    <template v-if="oneReferrers.length">
+                        <p>Still in use — rebind or delete these first:</p>
+                        <UsedByTable :referrers="oneReferrers" />
+                    </template>
                     <p v-else>
                         This will permanently delete this item. This action cannot be undone.
                     </p>
