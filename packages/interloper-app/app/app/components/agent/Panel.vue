@@ -75,9 +75,9 @@ function submit(text: string) {
 }
 
 const SUGGESTIONS = [
+    'Setup a new source',
+    'Setup a new connection',
     'What failed in the last 24 hours?',
-    'Summarize my pipeline health',
-    'Which sources are stale?',
 ]
 </script>
 

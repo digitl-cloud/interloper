@@ -6,10 +6,9 @@ const prompt = ref('')
 const creating = ref(false)
 
 const suggestions = [
-    { label: 'What sources are configured?', icon: 'i-lucide-plug' },
-    { label: 'Show me recent job failures', icon: 'i-lucide-alert-circle' },
-    { label: 'Help me create a new asset', icon: 'i-lucide-file-plus' },
-    { label: 'Explain my DAG dependencies', icon: 'i-lucide-workflow' },
+    { label: 'Setup a new source', icon: 'i-lucide-plug' },
+    { label: 'Setup a new connection', icon: 'i-lucide-key-round' },
+    { label: 'What failed in the last 24 hours?', icon: 'i-lucide-alert-circle' },
 ]
 
 async function onSubmit(e: Event) {
