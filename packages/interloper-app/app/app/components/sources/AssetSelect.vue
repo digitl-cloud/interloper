@@ -113,6 +113,19 @@ watch([() => props.allSources, selectedKeys], () => {
     }
 }, { immediate: true, deep: true })
 
+// ── Tag filter ──────────────────────────────────────────────────────
+
+const tagFilter = ref('all')
+
+const tagTabs = computed(() => [
+    { label: 'All', value: 'all' },
+    ...[...new Set(props.sourceDefn.assets.flatMap(a => a.tags))].map(tag => ({ label: tag, value: tag })),
+])
+
+const filteredAssets = computed(() => tagFilter.value === 'all'
+    ? props.sourceDefn.assets
+    : props.sourceDefn.assets.filter(a => a.tags.includes(tagFilter.value)))
+
 // ── Selection ───────────────────────────────────────────────────────
 
 function toggle(key: string) {
@@ -130,13 +143,17 @@ function toggle(key: string) {
     }
 }
 
+/** Select/deselect operate on the visible (filtered) assets only. */
 function selectAll() {
-    selectedKeys.value = props.sourceDefn.assets.map(a => a.key)
+    selectedKeys.value = [...new Set([...selectedKeys.value, ...filteredAssets.value.map(a => a.key)])]
 }
 
 function deselectAll() {
-    selectedKeys.value = []
-    resolvedDeps.value = {}
+    const visible = new Set(filteredAssets.value.map(a => a.key))
+    selectedKeys.value = selectedKeys.value.filter(k => !visible.has(k))
+    resolvedDeps.value = Object.fromEntries(
+        Object.entries(resolvedDeps.value).filter(([k]) => !visible.has(k.split('→')[0]!)),
+    )
 }
 
 function depSelectionKey(assetKey: string, paramName: string): string {
@@ -146,6 +163,13 @@ function depSelectionKey(assetKey: string, paramName: string): string {
 
 <template>
     <div class="flex flex-col gap-3">
+        <UTabs v-if="tagTabs.length > 2"
+               v-model="tagFilter"
+               :items="tagTabs"
+               :content="false"
+               size="sm"
+               class="w-fit" />
+
         <div class="flex items-center justify-between">
             <span class="text-sm text-muted">
                 {{ selectedKeys.length }} of {{ sourceDefn.assets.length }} assets selected
@@ -163,7 +187,7 @@ function depSelectionKey(assetKey: string, paramName: string): string {
         </div>
 
         <div class="flex flex-col gap-2.5">
-            <SelectionCard v-for="asset in sourceDefn.assets"
+            <SelectionCard v-for="asset in filteredAssets"
                            :key="asset.key"
                            as="div"
                            :selected="selectedKeys.includes(asset.key)"
