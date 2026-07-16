@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.41.0 (2026-07-16)
+
+### Bug Fixes
+
+- **core**: Make lazy Registry loading thread-safe
+  ([`f82118a`](https://github.com/digitl-cloud/interloper/commit/f82118abae341e1e2b188ecffd407da314b9527f))
+
+### Features
+
+- **app**: Split the events table asset column into source and asset
+  ([`984dc88`](https://github.com/digitl-cloud/interloper/commit/984dc882ce83c544ad43170f4d98d0dda1729a50))
+
+### Testing
+
+- **core**: Add missing __init__.py to oauth and connection test dirs
+  ([`d1e838b`](https://github.com/digitl-cloud/interloper/commit/d1e838b9f2d3981491bab54024f869effb11de90))
+
+
 ## v0.40.0 (2026-07-16)
 
 ### Features
