@@ -100,6 +100,23 @@ class TestFieldSpecs:
     def test_declaration_order_preserved_with_shadowing_names(self):
         assert [s.name for s in ShadowingSchema.field_specs()] == ["id", "cost", "name", "day"]
 
+    def test_model_fields_in_declaration_order(self):
+        assert list(ShadowingSchema.model_fields) == ["id", "cost", "name", "day"]
+
+    def test_subclass_keeps_parent_order_and_appends(self):
+        class Extended(ShadowingSchema):
+            extra: str | None = Field(...)
+
+        assert [s.name for s in Extended.field_specs()] == ["id", "cost", "name", "day", "extra"]
+
+    def test_inferred_schema_keeps_key_order_with_shadowing_name(self):
+        inferred = Schema.infer([{"a": 1, "name": "x", "b": 2}])
+        assert [s.name for s in inferred.field_specs()] == ["a", "name", "b"]
+
+    def test_reconciled_rows_in_declaration_order(self):
+        rows = ShadowingSchema.reconcile([{"name": "x", "id": 1, "cost": 2.0, "day": "mon"}])
+        assert list(rows[0]) == ["id", "cost", "name", "day"]
+
     def test_inferred_schema_has_specs(self):
         inferred = Schema.infer([{"a": 1, "b": "x"}, {"a": None, "b": "y"}])
         specs = {s.name: s for s in inferred.field_specs()}

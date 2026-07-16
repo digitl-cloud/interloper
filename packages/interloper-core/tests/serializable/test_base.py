@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import pytest
@@ -25,6 +26,17 @@ class FakeOtherSerializable(Serializable):
     """Second class, used to exercise type-mismatch scenarios."""
 
     value: str = ""
+
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message=r'Field name "name" in "ShadowingSerializable" shadows an attribute')
+
+    class ShadowingSerializable(Serializable):
+        """Declares a ``name`` data field that shadows the parent ClassVar."""
+
+        alpha: str | None = None
+        name: str | None = None
+        beta: str | None = None
 
 
 # -- The Spec envelope ---------------------------------------------------------
@@ -108,6 +120,32 @@ class TestSubclassScopedConstruction:
         instance = FakeSerializable.from_spec_file(file)
         assert isinstance(instance, FakeSerializable)
         assert instance.text == "abc"
+
+
+class TestFieldOrdering:
+    """A field shadowing a parent ClassVar keeps its declaration position."""
+
+    def test_model_fields_keep_declaration_order(self):
+        assert list(ShadowingSerializable.model_fields) == ["alpha", "name", "beta"]
+
+    def test_dump_order_matches_declaration(self):
+        assert list(ShadowingSerializable(name="x").model_dump()) == ["alpha", "name", "beta"]
+
+    def test_subclass_appends_new_fields_after_inherited(self):
+        class Extended(ShadowingSerializable):
+            gamma: str | None = None
+
+        assert list(Extended.model_fields) == ["alpha", "name", "beta", "gamma"]
+
+    def test_classvars_untouched_by_shadowing_field(self):
+        assert ShadowingSerializable.key == "shadowing_serializable"
+        assert ShadowingSerializable(name="x").name == "x"
+
+    def test_spec_roundtrip_with_shadowing_field(self):
+        rebuilt = ShadowingSerializable.from_spec(ShadowingSerializable(name="x").to_spec())
+        assert type(rebuilt) is ShadowingSerializable
+        assert rebuilt.name == "x"
+        assert type(rebuilt).key == "shadowing_serializable"
 
 
 class TestStrictInit:
