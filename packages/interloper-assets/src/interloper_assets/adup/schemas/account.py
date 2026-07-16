@@ -5,6 +5,9 @@ from pydantic import Field
 
 
 class Account(Schema):
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     username: str | None = Field(default=None, description="The username of the account")
     label: str | None = Field(default=None, description="The label of the account")
     type: str | None = Field(default=None, description="The type of the account")
@@ -14,6 +17,4 @@ class Account(Schema):
     id: int | None = Field(default=None, description="The advertiser account ID")
     advertiser_url: str | None = Field(default=None, description="The advertiser's URL")
     channel_id: int | None = Field(default=None, description="The channel ID")
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+

@@ -7,6 +7,9 @@ from pydantic import Field
 class Advertisers(Schema):
     """Tiktok advertiser entities"""
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     address: str | None = Field(default=None, description="Physical address of the advertiser")
     advertiser_id: str | None = Field(default=None, description="Unique identifier for the advertiser")
     balance: float | None = Field(default=None, description="Account balance of the advertiser")
@@ -26,6 +29,4 @@ class Advertisers(Schema):
     role: str | None = Field(default=None, description="Role of the advertiser in the system")
     status: str | None = Field(default=None, description="Current status of the advertiser")
     timezone: str | None = Field(default=None, description="Timezone used by the advertiser")
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+

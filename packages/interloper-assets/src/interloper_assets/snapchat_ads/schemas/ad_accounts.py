@@ -7,6 +7,9 @@ from pydantic import Field
 class AdAccounts(Schema):
     """The Ad Accounts entity provides detailed information about each advertising account, including identifiers, timestamps, names, types, statuses, and various financial and organizational details."""
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     id: str | None = Field(default=None, description="Unique identifier for the ad account.")
     updated_at: dt.datetime | None = Field(default=None, description="Timestamp of when the ad account was last updated.")
     created_at: dt.datetime | None = Field(default=None, description="Timestamp of when the ad account was created.")
@@ -24,6 +27,4 @@ class AdAccounts(Schema):
     lifetime_spend_cap_micro: int | None = Field(default=None, description="Lifetime spend cap for the ad account in micro-units of the currency.")
     agency_representing_client: bool | None = Field(default=None, description="Indicates whether an agency is representing the client.")
     client_paying_invoices: bool | None = Field(default=None, description="Indicates whether the client is paying the invoices.")
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+

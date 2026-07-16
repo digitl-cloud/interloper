@@ -7,6 +7,9 @@ from pydantic import Field
 class CustomAudiences(Schema):
     """Remarketing lists (custom audiences) of an advertiser."""
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     id: str | None = Field(default=None, description="Unique identifier for the audience")
     account_id: str | None = Field(default=None, description="Identifier for the account associated with the audience")
     advertiser_id: str | None = Field(
@@ -40,6 +43,4 @@ class CustomAudiences(Schema):
     list_population_rule_list_population_clauses: str | None = Field(
         default=None, description="Clauses for the list population rule"
     )
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+
