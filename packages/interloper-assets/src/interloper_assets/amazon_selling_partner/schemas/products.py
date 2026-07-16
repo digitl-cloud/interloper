@@ -10,6 +10,9 @@ class Products(Schema):
     Sourced from the Data Kiosk vendor analytics ``sourcingView`` group-by keys.
     """
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     asin: str | None = Field(default=None, description="Amazon Standard Identification Number for the product.")
     parent_asin: str | None = Field(
         default=None,
@@ -24,6 +27,4 @@ class Products(Schema):
         default=None,
         description="13-digit International Standard Book Number. Only applicable to products that are books.",
     )
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+

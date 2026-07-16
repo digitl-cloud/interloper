@@ -7,6 +7,9 @@ from pydantic import Field
 class Campaigns(Schema):
     """The Campaigns entity provides insights into the attributes of campaigns. It includes key dimensions such as campaign ID, name, objective, status, start and end times, lifetime spend cap, buy model, delivery status, and creation state."""
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     id: str | None = Field(default=None, description="The ID of the campaign")
     updated_at: str | None = Field(default=None, description="The last updated timestamp of the campaign")
     created_at: str | None = Field(default=None, description="The creation timestamp of the campaign")
@@ -21,6 +24,4 @@ class Campaigns(Schema):
     delivery_status: str | None = Field(default=None, description="The delivery status of the campaign")
     creation_state: str | None = Field(default=None, description="The creation state of the campaign")
     experiment_id: str | None = Field(default=None, description="The ID of the associated experiment")
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+

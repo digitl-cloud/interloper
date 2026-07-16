@@ -7,6 +7,9 @@ from pydantic import Field
 class AdSquads(Schema):
     """The Ad Squads entity provides insights into the attributes of ads squads in a campaign. It includes key metrics such as ad squad ID, status, placement, bid strategy, budget, targeting details (demographics, interests, geos), scheduling configurations, and delivery constraints."""
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     id: str | None = Field(default=None, description="The ID of the ad squad")
     updated_at: str | None = Field(default=None, description="The last updated timestamp of the ad squad")
     created_at: str | None = Field(default=None, description="The creation timestamp of the ad squad")
@@ -66,6 +69,4 @@ class AdSquads(Schema):
     ad_scheduling_config_friday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config Friday hour of day")
     targeting_app_install_states: str | None = Field(default=None, description="Targeting app install states")
     ad_scheduling_config_sunday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config sunday hour of day")
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+

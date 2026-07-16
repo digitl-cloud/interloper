@@ -7,6 +7,9 @@ from pydantic import Field
 class Partners(Schema):
     """DV360 partners and their configuration."""
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     name: str | None = Field(default=None, description="The name of the partner")
     partner_id: str | None = Field(default=None, description="The ID of the partner")
     update_time: str | None = Field(default=None, description="The last update time of the partner")
@@ -26,6 +29,4 @@ class Partners(Schema):
     data_access_config_sdf_config_admin_email: str | None = Field(
         default=None, description="Admin email for SDF config"
     )
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+

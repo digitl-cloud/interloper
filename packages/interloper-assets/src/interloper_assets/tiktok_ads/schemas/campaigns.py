@@ -7,6 +7,9 @@ from pydantic import Field
 class Campaigns(Schema):
     """Tiktok campaign entities"""
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     modify_time: dt.datetime | None = Field(default=None, description="Last modification timestamp of the campaign")
     special_industries: str | None = Field(default=None, description="Indicates if the campaign belongs to special industries")
     campaign_id: str | None = Field(default=None, description="Unique identifier for the campaign")
@@ -29,6 +32,4 @@ class Campaigns(Schema):
     secondary_status: str | None = Field(default=None, description="Secondary status of the campaign")
     budget_optimize_on: str | None = Field(default=None, description="Indicates how the budget is optimized")
     rf_campaign_type: str | None = Field(default=None, description="Type of Reach and Frequency campaign")
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+

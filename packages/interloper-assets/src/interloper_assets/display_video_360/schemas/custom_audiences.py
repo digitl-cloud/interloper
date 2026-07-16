@@ -7,6 +7,9 @@ from pydantic import Field
 class CustomAudiences(Schema):
     """Detail of a single first-party/partner audience, including per-surface audience sizes."""
 
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
     name: str | None = Field(default=None, description="The name of the custom audience.")
     first_party_and_partner_audience_id: str | None = Field(
         default=None, description="The unique identifier for the first and partner audience."
@@ -39,6 +42,4 @@ class CustomAudiences(Schema):
         default=None, description="The size of the audience for display campaigns on desktop."
     )
     description: str | None = Field(default=None, description="A description of the custom audience.")
-    date: dt.date | None = Field(
-        default=None, description="The day the snapshot was taken (stamped from the partition)."
-    )
+
