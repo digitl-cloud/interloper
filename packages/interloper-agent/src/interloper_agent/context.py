@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import datetime
 from typing import Any
 from uuid import UUID
 
 from google.adk.tools.tool_context import ToolContext
 from interloper.catalog.base import Catalog
 from interloper_db import Store, init_engine
+from interloper_db.toolkit import ToolkitContext, serialize
+
+__all__ = ["init", "set_store", "set_catalog", "get_store", "get_catalog", "get_org_id", "toolkit_ctx", "serialize"]
 
 _store: Store | None = None
 _catalog: Catalog | None = None
@@ -78,29 +80,10 @@ def get_org_id(tool_context: ToolContext | None) -> UUID:
     return UUID(str(raw))
 
 
-def serialize(obj: Any) -> Any:
-    """Convert a SQLModel instance (or collection) to a JSON-safe dict.
-
-    Recursively handles UUIDs, datetimes, dates, lists, and nested models.
+def toolkit_ctx(tool_context: ToolContext | None) -> ToolkitContext:
+    """Build the shared-toolkit context from the agent's globals and ADK state.
 
     Args:
-        obj: A SQLModel row, dict, list, or primitive.
+        tool_context: Injected by ADK; carries the session's ``org_id``.
     """
-    if obj is None:
-        return None
-    if isinstance(obj, (str, int, float, bool)):
-        return obj
-    if isinstance(obj, UUID):
-        return str(obj)
-    if isinstance(obj, datetime.datetime):
-        return obj.isoformat()
-    if isinstance(obj, datetime.date):
-        return obj.isoformat()
-    if isinstance(obj, dict):
-        return {k: serialize(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [serialize(item) for item in obj]
-    # SQLModel / Pydantic BaseModel
-    if hasattr(obj, "model_dump"):
-        return serialize(obj.model_dump())
-    return str(obj)
+    return ToolkitContext(store=get_store(), catalog=get_catalog(), org_id=get_org_id(tool_context))
