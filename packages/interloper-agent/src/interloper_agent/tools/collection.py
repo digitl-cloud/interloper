@@ -19,15 +19,15 @@ from uuid import UUID
 
 import httpx
 from google.adk.tools.tool_context import ToolContext
-from interloper.component import KINDS
 from interloper.connection.base import Connection
 from interloper.errors import CatalogKeyError, ComponentDriftError, ConfigError, ConnectionCheckError, HydrationError
 from interloper.oauth import is_provider_configured
 from interloper.resource.fields import is_fetch_field_provider
 from interloper.utils.concurrency import invoke
+from interloper_db.toolkit import collection as toolkit_collection
 from pydantic import ValidationError
 
-from interloper_agent.context import get_catalog, get_org_id, get_store, serialize
+from interloper_agent.context import get_catalog, get_org_id, get_store, serialize, toolkit_ctx
 
 logger = logging.getLogger(__name__)
 
@@ -40,54 +40,13 @@ _MAX_OPTIONS = 50
 
 
 def list_components(kind: str | None = None, tool_context: ToolContext | None = None) -> dict[str, Any]:
-    """List the components in the organisation's collection.
+    # Thin ADK wrapper: the implementation (and LLM-facing docstring, adopted
+    # below) lives in the shared read-only toolkit so the MCP server exposes
+    # the same logic.
+    return toolkit_collection.list_components(toolkit_ctx(tool_context), kind)
 
-    This answers "what do we have?" — what *could* be added (the catalog of
-    definitions) is the Catalog specialist's domain. Sensitive kinds
-    (connections, configs, resources) always return identity and metadata
-    only — never credential or config values.
 
-    Args:
-        kind: Component kind to list — e.g. 'source', 'connection',
-            'destination'. Omit for per-kind counts only; call again with a
-            kind for the entries.
-    """
-    try:
-        org_id = get_org_id(tool_context)
-        store = get_store()
-        catalog = get_catalog()
-
-        if kind is None:
-            counts: dict[str, int] = {}
-            for c in store.list_components(org_id):
-                counts[c.kind] = counts.get(c.kind, 0) + 1
-            return {
-                "status": "success",
-                "component_counts": counts,
-                "message": "Call again with a kind for the entries.",
-            }
-        if kind not in KINDS:
-            return {"status": "error", "error": f"Unknown kind '{kind}'", "valid_kinds": sorted(KINDS.keys())}
-
-        results = []
-        for c in store.list_components(org_id, kinds=[kind]):
-            entry: dict[str, Any] = {
-                "id": serialize(c.id),
-                "key": c.key,
-                "name": c.name,
-                "type_name": (catalog.get(c.key) or {}).get("name", c.key),
-                "created_at": serialize(c.created_at),
-            }
-            # Fail closed: a sensitive kind's config is (or wraps) credentials.
-            if not KINDS[kind].sensitive:
-                entry["config"] = serialize(c.config)
-            if kind == "source":
-                entry["asset_count"] = len(c.children)
-            results.append(entry)
-
-        return {"status": "success", "kind": kind, "count": len(results), "components": results}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+list_components.__doc__ = toolkit_collection.list_components.__doc__
 
 
 # -- Connection operations (kind-specific by nature) ------------------------------
