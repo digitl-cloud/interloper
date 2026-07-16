@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.39.0 (2026-07-16)
+
+### Bug Fixes
+
+- **app**: Pass the partition date when running a job from the UI
+  ([`92040a9`](https://github.com/digitl-cloud/interloper/commit/92040a9ac8e0d3b514bb15b1d9eec035ca8dceea))
+
+### Features
+
+- **app**: Tag filter tabs on the wizard asset list
+  ([`728f332`](https://github.com/digitl-cloud/interloper/commit/728f332569c8d83fe3d310f94b24204dd497071d))
+
+
 ## v0.38.0 (2026-07-16)
 
 ### Bug Fixes
