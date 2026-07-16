@@ -111,7 +111,7 @@ const parsed = computed<Parsed[]>(() => {
 })
 
 function parseExecution(record: AssetExecution): Parsed {
-    const displayName = record.asset_id ? assetDisplayName.value.get(record.asset_id) : undefined
+    const displayName = record.asset_id ? assetDisplayName.value.get(record.asset_id)?.label : undefined
     return {
         id: record.asset_id,
         name: displayName ?? record.asset_key,
