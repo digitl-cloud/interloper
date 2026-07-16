@@ -229,7 +229,7 @@ watch(derivedName, (val, old) => {
 watch(selectedSourceKey, (key) => {
     if (key && sourceDefn.value && !isEditMode.value) {
         sourceName.value = derivedName.value
-        selectedAssetKeys.value = sourceDefn.value.assets.map(a => a.key)
+        selectedAssetKeys.value = []
         resourceSelections.value = {}
         configData.value = {}
         nextStep()

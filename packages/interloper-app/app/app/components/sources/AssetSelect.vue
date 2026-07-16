@@ -178,14 +178,24 @@ function depSelectionKey(assetKey: string, paramName: string): string {
                         <span class="text-sm font-medium">{{ asset.name || asset.key }}</span>
                         <span v-if="asset.description"
                               class="text-xs text-muted truncate">{{ asset.description }}</span>
+                        <div v-if="asset.tags.length"
+                             class="flex flex-wrap gap-1 mt-1.5">
+                            <UBadge v-for="tag in asset.tags"
+                                    :key="tag"
+                                    :color="tagColor(tag)"
+                                    variant="subtle"
+                                    size="sm">
+                                {{ tag }}
+                            </UBadge>
+                        </div>
                     </div>
                     <div class="ml-auto flex items-center gap-2">
-                        <UBadge v-if="asset.partitioning"
-                                color="neutral"
-                                variant="subtle"
-                                size="sm">
-                            Partitioned
-                        </UBadge>
+                        <UTooltip v-if="asset.partitioning"
+                                  text="This asset is partitioned"
+                                  :delay-duration="0">
+                            <UIcon name="i-lucide-layers"
+                                   class="size-4 text-muted shrink-0" />
+                        </UTooltip>
                         <UBadge v-if="depsByAsset.get(asset.key)?.length"
                                 color="info"
                                 variant="subtle"
