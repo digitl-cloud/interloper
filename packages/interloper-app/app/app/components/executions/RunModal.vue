@@ -13,11 +13,15 @@ import { jobPartitioned } from '~/types/component'
 
 const open = defineModel<boolean>('open', { default: false })
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     target: ComponentRecord
     /** Whether the target takes a partition date. Defaults to the job's config for jobs. */
     partitioned?: boolean
-}>()
+}>(), {
+    // Vue casts an absent Boolean prop to false; default it to undefined so the
+    // ?? fallback to the job's config below can actually kick in.
+    partitioned: undefined,
+})
 
 const runsStore = useRunsStore()
 const backfillsStore = useBackfillsStore()
