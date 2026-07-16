@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.40.0 (2026-07-16)
+
+### Features
+
+- **runner**: Fail partition-less runs of partitioned assets at preflight
+  ([`ea1a4e0`](https://github.com/digitl-cloud/interloper/commit/ea1a4e0f2c655c475942ca5977df7f8630560bcd))
+
+
 ## v0.39.0 (2026-07-16)
 
 ### Bug Fixes
