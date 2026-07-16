@@ -207,6 +207,37 @@ class Serializable(BaseModel):
         if "key" not in cls.__dict__:
             cls.key = to_snake_case(cls.__name__)
 
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Restore declaration order for fields that shadow a parent ClassVar.
+
+        Pydantic merges annotations across the MRO with dict-update
+        semantics, so a subclass field whose name is also *annotated* on a
+        parent — e.g. a schema column named ``name``, which every
+        Serializable declares as a ClassVar — is hoisted to the parent's
+        annotation slot, landing first in ``model_fields`` regardless of
+        where the subclass declares it. Rebuild the order from each class's
+        own annotations, counting only occurrences that are actual fields
+        on that class, so a ClassVar annotation no longer pins a position.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+        fields = cls.__pydantic_fields__
+        order: dict[str, None] = {}
+        for klass in reversed(cls.__mro__):
+            klass_fields = getattr(klass, "__pydantic_fields__", {})
+            for field_name in klass.__dict__.get("__annotations__", {}):
+                if field_name in fields and field_name in klass_fields:
+                    order.setdefault(field_name, None)
+        reordered = {field_name: fields[field_name] for field_name in order}
+        reordered.update({field_name: info for field_name, info in fields.items() if field_name not in reordered})
+        if list(reordered) == list(fields):
+            return
+        cls.__pydantic_fields__ = reordered
+        # With unresolved forward refs the core schema is built lazily and
+        # picks up the reordered dict; rebuilding now would fail resolution.
+        if cls.__pydantic_fields_complete__:
+            cls.model_rebuild(force=True)
+
     def __init__(self, /, **data: Any) -> None:
         """Validate kwargs strictly against the model's fields.
 

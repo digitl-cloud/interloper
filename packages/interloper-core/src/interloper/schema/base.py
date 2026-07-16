@@ -108,20 +108,18 @@ class Schema(Serializable):
 
         Fields declared by :class:`Schema` itself (framework plumbing, if
         any) are excluded — only the subclass's data columns count.  Fields
-        are returned in the subclass's declaration order: pydantic positions
-        a field that shadows a parent attribute at the *parent's* annotation
-        slot, so ``model_fields`` order alone would scramble the author's
-        column order.
+        come out in declaration order: :class:`Serializable` normalizes
+        ``model_fields`` so a column shadowing a parent ClassVar (``name``,
+        ``key``) is not hoisted out of place.
 
         Returns:
             One :class:`FieldSpec` per declared data field, in declaration order.
         """
         data_fields = cls._data_fields()
-        names = [n for n in cls.model_fields if n in data_fields]
-        own_order = [n for n in cls.__dict__.get("__annotations__", {}) if n in data_fields]
-        ordered = own_order + [n for n in names if n not in own_order]
         return [
-            _field_spec(name, cls.model_fields[name].annotation, cls.model_fields[name].description) for name in ordered
+            _field_spec(name, info.annotation, info.description)
+            for name, info in cls.model_fields.items()
+            if name in data_fields
         ]
 
     @classmethod
@@ -129,9 +127,8 @@ class Schema(Serializable):
         """JSON Schema for this schema's data fields only.
 
         Like :meth:`pydantic.BaseModel.model_json_schema` but restricted to
-        the subclass's data columns, and orders ``properties`` by declaration
-        order (see :meth:`field_specs`) so the column order matches the
-        author's intent rather than pydantic's parent-first layout.
+        the subclass's data columns, in declaration order (see
+        :meth:`field_specs`).
 
         Returns:
             A JSON Schema dict whose ``properties`` are the data columns.
