@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v0.38.0 (2026-07-16)
+
+### Bug Fixes
+
+- Keep declared field order when a field shadows a Serializable ClassVar
+  ([`c617cd6`](https://github.com/digitl-cloud/interloper/commit/c617cd6b665375740c732cf5f94648af058d5341))
+
+### Documentation
+
+- Entity assets are now time-partitioned on a stamped date
+  ([`cb4fd81`](https://github.com/digitl-cloud/interloper/commit/cb4fd8130aa755e359eb36ae36c70904403a4f7a))
+
+### Features
+
+- **app**: Polish the source wizard asset list
+  ([`6d08ab1`](https://github.com/digitl-cloud/interloper/commit/6d08ab134ef31e25157205375f0cc95e9f5988cc))
+
+- **assets**: Time-partition every entity asset
+  ([`03813aa`](https://github.com/digitl-cloud/interloper/commit/03813aafe57c49d0df9fe3f0a82f9452f573f364))
+
+### Refactoring
+
+- **assets**: Declare the stamped date first on entity schemas
+  ([`bb87ec8`](https://github.com/digitl-cloud/interloper/commit/bb87ec8796599edccf3859eb0cd868b3b4f64883))
+
+
 ## v0.37.0 (2026-07-16)
 
 ### Features
