@@ -7,6 +7,7 @@ const catalogStore = useCatalogStore()
 const userStore = useUserStore()
 const { open: commandPaletteOpen, groups: commandPaletteGroups } = useCommandPalette()
 const { open: agentOpen, width: agentWidth, dragging: agentDragging } = useAgentPanel()
+const appVersion = useRuntimeConfig().public.version
 
 /** Design page header rendered by the layout, declared via definePageMeta({ pageHeader }). */
 interface PageHeaderMeta {
@@ -162,6 +163,10 @@ const items = computed<NavigationMenuItem[]>(() => {
                         <div class="flex flex-col gap-1 w-full">
                             <NavOrganisation :collapsed="collapsed" />
                             <NavUser :collapsed="collapsed" />
+                            <span v-if="!collapsed && appVersion"
+                                  class="px-2.5 text-[10px] text-dimmed">
+                                v{{ appVersion }}
+                            </span>
                         </div>
                     </template>
                 </UDashboardSidebar>
