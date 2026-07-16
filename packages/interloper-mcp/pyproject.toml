@@ -1,0 +1,40 @@
+# ###############
+# PROJECT / UV
+# ###############
+[project]
+name = "interloper-mcp"
+version = "0.41.0"
+description = "Interloper MCP server — read-only platform access for AI agents"
+readme = "README.md"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "interloper-core",
+    "interloper-db",
+    "mcp>=1.28,<2",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[project.scripts]
+interloper-mcp = "interloper_mcp.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11.5,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+interloper-core = { workspace = true }
+interloper-db = { workspace = true }
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "F811"]
