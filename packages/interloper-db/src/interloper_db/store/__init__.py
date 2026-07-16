@@ -23,6 +23,7 @@ and hydration for any kind, with the semantics a kind genuinely owns
 (encryption, child-asset sync, target drift checks) applied by ``kind``.
 
 - ``AuthMixin`` — profiles, sessions, organisations, memberships
+- ``TokenMixin`` — personal access tokens (programmatic/MCP access)
 - ``ComponentMixin`` — component CRUD, relations, hydration (all kinds)
 - ``RunMixin`` — runs, events, backfills
 - ``DriftMixin`` — catalog-resolution status for stored keys
@@ -42,11 +43,12 @@ from interloper_db.store.auth import AuthMixin
 from interloper_db.store.components import ComponentMixin
 from interloper_db.store.drift import DriftMixin
 from interloper_db.store.runs import RunMixin
+from interloper_db.store.tokens import TokenMixin
 
 logger = logging.getLogger(__name__)
 
 
-class Store(AuthMixin, ComponentMixin, RunMixin, DriftMixin):
+class Store(AuthMixin, TokenMixin, ComponentMixin, RunMixin, DriftMixin):
     """Framework-level persistence layer.
 
     Bridges catalog definitions and database rows to hydrate and persist
