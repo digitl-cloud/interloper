@@ -190,8 +190,22 @@ class Runner(Serializable):
         """Run preflight validations before execution begins.
 
         Raises:
-            PartitionError: If any partitioned asset does not support windowed execution.
+            PartitionError: If partitioned assets are run without a partition,
+                or a windowed run includes assets that do not support windows.
         """
+        if partition_or_window is None:
+            partitioned = sorted(
+                type(asset).key
+                for asset in dag.assets
+                if asset.materializable and asset.partitioning is not None
+            )
+            if partitioned:
+                raise PartitionError(
+                    "This run requires a partition or partition window. "
+                    f"Partitioned assets: {partitioned}."
+                )
+            return
+
         if not isinstance(partition_or_window, PartitionWindow):
             return
 
