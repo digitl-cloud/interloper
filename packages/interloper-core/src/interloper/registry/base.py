@@ -9,6 +9,7 @@ who consumes it.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from importlib.metadata import entry_points
 from typing import Any, Generic, TypeVar
@@ -42,6 +43,7 @@ class Registry(Generic[T]):
         self._adopt = adopt
         self._entries: dict[str, T] = {}
         self._loaded = group is None
+        self._load_lock = threading.RLock()
 
     def register(self, name: str, obj: T) -> None:
         """Register *obj* under *name* (first-wins, idempotent)."""
@@ -67,7 +69,14 @@ class Registry(Generic[T]):
         """
         obj = self.get(name)
         if obj is None:
-            raise KeyError(f"'{name}' is not registered (available: {', '.join(self.keys())})")
+            available = ", ".join(self.keys())
+            where = f" in entry-point group '{self._group}'" if self._group else ""
+            hint = (
+                f" (available: {available})"
+                if available
+                else " (no entries discovered — is the package declaring it installed?)"
+            )
+            raise KeyError(f"'{name}' is not registered{where}{hint}")
         return obj
 
     def keys(self) -> tuple[str, ...]:
@@ -106,11 +115,22 @@ class Registry(Generic[T]):
         return self.get(name) is not None
 
     def _load(self) -> None:
-        """Populate from the entry-point group (once)."""
+        """Populate from the entry-point group (once, thread-safely).
+
+        First lookups can race from worker threads (e.g. several assets
+        conforming concurrently), so loading is serialized and ``_loaded``
+        flips only after every entry registered — a concurrent reader either
+        loads itself or waits, never observing a partially-populated registry.
+        A failed load leaves ``_loaded`` unset so the next lookup retries
+        instead of latching the registry empty.
+        """
         if self._loaded or self._group is None:
             return
-        self._loaded = True
-        for entry_point in entry_points(group=self._group):
-            loaded = entry_point.load()
-            name, obj = self._adopt(entry_point.name, loaded) if self._adopt else (entry_point.name, loaded)
-            self.register(name, obj)
+        with self._load_lock:
+            if self._loaded:
+                return
+            for entry_point in entry_points(group=self._group):
+                loaded = entry_point.load()
+                name, obj = self._adopt(entry_point.name, loaded) if self._adopt else (entry_point.name, loaded)
+                self.register(name, obj)
+            self._loaded = True
