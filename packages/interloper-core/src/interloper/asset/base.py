@@ -100,6 +100,7 @@ class Asset(Component):
     schema: ClassVar[type[Schema] | None] = None
     partitioning: ClassVar[PartitionConfig | None] = None
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
+        # TODO: `"resource": RelationDefinition(kinds=["resources"]...` ?
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
         "destination": RelationDefinition(kinds=["destination"], field="destinations"),
         "dependency": RelationDefinition(kinds=["asset"], field="dependencies", slotted=True, inline=False),

@@ -183,12 +183,16 @@ class AmazonAds(il.Source):
         discriminator=True,
     )
 
-    @il.asset(schema=schemas.Profiles, tags=["Entity"])
-    def profiles(self, connection: AmazonAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(
+        schema=schemas.Profiles,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def profiles(self, context: il.ExecutionContext, connection: AmazonAdsConnection) -> list[dict[str, Any]]:
         """Advertising profiles associated with the account."""
         response = connection.client.get("/v2/profiles")
         response.raise_for_status()
-        return response.json()
+        return [{**row, "date": context.partition_date} for row in response.json()]
 
     # --- Sponsored Products ---
 

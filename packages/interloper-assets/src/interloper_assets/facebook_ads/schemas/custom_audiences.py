@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -11,3 +13,6 @@ class CustomAudiences(Schema):
     description: str | None = Field(default=None, description="The description of the custom audience")
     id: str | None = Field(default=None, description="The ID of the custom audience")
     name: str | None = Field(default=None, description="The name of the custom audience")
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )

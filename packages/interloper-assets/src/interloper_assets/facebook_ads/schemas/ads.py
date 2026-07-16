@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -34,3 +36,6 @@ class Ads(Schema):
     status: str | None = Field(default=None, description="Ad status as set by the advertiser (mirrors configured_status in most cases).")
     tracking_specs: str | None = Field(default=None, description="JSON array of tracking specification objects defining what events to track for this ad.")
     updated_time: str | None = Field(default=None, description="ISO 8601 timestamp when the ad was last updated.")
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )

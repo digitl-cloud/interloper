@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -21,4 +23,7 @@ class Products(Schema):
     isbn_13: str | None = Field(
         default=None,
         description="13-digit International Standard Book Number. Only applicable to products that are books.",
+    )
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
     )

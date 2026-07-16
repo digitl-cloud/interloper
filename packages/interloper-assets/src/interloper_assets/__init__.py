@@ -1,6 +1,7 @@
 from interloper_assets.adservice.source import Adservice, AdserviceConnection
 from interloper_assets.adup.source import Adup, AdupConnection
-from interloper_assets.amazon_ads.source import AmazonAds, AmazonAdsConnection
+from interloper_assets.amazon_ads.connection import AmazonAdsAPILocation, AmazonAdsConnection
+from interloper_assets.amazon_ads.source import AmazonAds
 from interloper_assets.amazon_selling_partner.source import AmazonSellingPartner, AmazonSellingPartnerConnection
 from interloper_assets.awin.source import Awin, AwinConnection
 from interloper_assets.bing_ads.source import BingAds, BingAdsConnection
@@ -34,6 +35,7 @@ __all__ = [
     "AdupConnection",
     "AmazonAds",
     "AmazonAdsConnection",
+    "AmazonAdsAPILocation",
     "AmazonSellingPartner",
     "AmazonSellingPartnerConnection",
     "Awin",

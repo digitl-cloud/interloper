@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -23,4 +25,7 @@ class Partners(Schema):
     )
     data_access_config_sdf_config_admin_email: str | None = Field(
         default=None, description="Admin email for SDF config"
+    )
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
     )

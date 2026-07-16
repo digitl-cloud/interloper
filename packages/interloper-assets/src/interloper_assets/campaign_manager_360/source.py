@@ -249,8 +249,14 @@ class CampaignManager360(il.Source):
         # The REACH report has no date dimension; stamp the partition day.
         return [{**row, "date": context.partition_date} for row in rows]
 
-    @il.asset(schema=schemas.CustomAudiences, tags=["Entity"])
-    def custom_audiences(self, connection: CampaignManager360Connection) -> list[_Record]:
+    @il.asset(
+        schema=schemas.CustomAudiences,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def custom_audiences(
+        self, context: il.ExecutionContext, connection: CampaignManager360Connection
+    ) -> list[_Record]:
         """Remarketing lists (custom audiences) of the configured advertiser."""
         if not self.advertiser_id:
             raise ValueError("The custom_audiences asset requires the source's advertiser_id to be set")
@@ -260,4 +266,4 @@ class CampaignManager360(il.Source):
             # Clauses are a nested list; JSON-encode them onto the string column.
             if isinstance(rule, dict) and isinstance(rule.get("listPopulationClauses"), list):
                 rule["listPopulationClauses"] = json.dumps(rule["listPopulationClauses"])
-        return items
+        return [{**item, "date": context.partition_date} for item in items]
