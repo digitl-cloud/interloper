@@ -146,6 +146,8 @@ COPY packages/interloper-app/app/package.json packages/interloper-app/app/pnpm-l
 COPY packages/interloper-app/app/patches/ patches/
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY packages/interloper-app/app/ ./
+# One level up from the app dir: nuxt.config reads the workspace version from it.
+COPY packages/interloper-app/pyproject.toml /pyproject.toml
 RUN pnpm exec nuxt prepare && NUXT_PRESET=static pnpm build
 
 

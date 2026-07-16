@@ -1,3 +1,14 @@
+import { readFileSync } from 'node:fs'
+
+// The enclosing python package carries the single PSR-bumped workspace
+// version; absent (standalone SPA builds), the version label simply hides.
+let appVersion = ''
+try {
+    appVersion = readFileSync(new URL('../pyproject.toml', import.meta.url), 'utf8')
+        .match(/^version = "([^"]+)"/m)?.[1] ?? ''
+}
+catch { /* noop */ }
+
 export default defineNuxtConfig({
     compatibilityDate: '2025-07-15',
     components: [
@@ -61,6 +72,7 @@ export default defineNuxtConfig({
     runtimeConfig: {
         public: {
             devApiPort: process.env.INTERLOPER_API_PORT || '',
+            version: appVersion,
         },
     },
     ssr: false,
