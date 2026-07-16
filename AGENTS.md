@@ -94,7 +94,7 @@ Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS` (flavor extras co
 
 Assets in `interloper-assets` are named for **what the asset is**, decided by its actual row grain (not the upstream/vendor report name). Three categories:
 
-- **Entity** — one row per object (a dimension snapshot, e.g. an ad or campaign and its attributes). Name is a **bare plural noun**, `tags=["Entity"]`, unpartitioned. Examples: `ads`, `campaigns`, `advertisers`, `custom_audiences`.
+- **Entity** — one row per object (a dimension snapshot, e.g. an ad or campaign and its attributes). Name is a **bare plural noun**, `tags=["Entity"]`, time-partitioned on a stamped `date` column (`partitioning=il.TimePartitionConfig(column="date")`, rows stamped with `context.partition_date`, schema carries `date: dt.date | None`). Examples: `ads`, `campaigns`, `advertisers`, `custom_audiences`.
 - **Report** — metrics aggregated over a date/dimension grain. Name is **`<base>_stats`**, with any `_by_<dim>` breakdown *after* `stats`; `tags=["Report"]`, time-partitioned. Examples: `ads_stats`, `ads_stats_by_country`, `page_stats`, `performance_stats`.
 - **Event / fact** — one row per event/record (per-row identifiers like `order_id`/`event_date`, no aggregation). Name is a **bare plural noun**, `tags=["Report"]`, time-partitioned. Examples: `orders`, `transactions`, `conversions`, `clicks`, `actions`.
 
