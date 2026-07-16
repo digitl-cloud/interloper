@@ -233,6 +233,10 @@ async def _run_query(connection: AmazonSellingPartnerConnection, query: str) -> 
     # normalizer to no flattening. Data Kiosk assets already return flat
     # snake_case rows, so this is a no-op for them.
     normalizer=DataFrameNormalizer(flatten_max_level=3, snake_case_digits=True),
+    # Reports carry ISO date strings; RECONCILE casts them to the schemas'
+    # date fields — validation alone would pass the strings through to a
+    # DATE-typed BigQuery parquet load, which rejects them.
+    materialization_strategy=il.MaterializationStrategy.RECONCILE,
 )
 class AmazonSellingPartner(il.Source):
     """Amazon Selling Partner integration for vendor and seller reporting."""
