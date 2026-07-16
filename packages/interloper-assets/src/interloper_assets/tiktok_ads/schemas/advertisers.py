@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -24,3 +26,6 @@ class Advertisers(Schema):
     role: str | None = Field(default=None, description="Role of the advertiser in the system")
     status: str | None = Field(default=None, description="Current status of the advertiser")
     timezone: str | None = Field(default=None, description="Timezone used by the advertiser")
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )

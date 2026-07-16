@@ -176,14 +176,25 @@ class SnapchatAds(il.Source):
 
     # --- Entity assets (flattening normalizer) ---
 
-    @il.asset(schema=AdAccount, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
-    async def ad_account(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(
+        schema=AdAccount,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def ad_account(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """A single ad account with its attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
-        return await _entity_records(connection, path, "adaccounts", "adaccount")
+        rows = await _entity_records(connection, path, "adaccounts", "adaccount")
+        return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=AdAccounts, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
-    async def ad_accounts(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(
+        schema=AdAccounts,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def ad_accounts(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """All ad accounts in the organization owning this account."""
         account_path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
         accounts = await _entity_records(connection, account_path, "adaccounts", "adaccount")
@@ -191,22 +202,41 @@ class SnapchatAds(il.Source):
         if organization_id is None:
             return []
         path = f"/{constants.API_VERSION}/organizations/{organization_id}/adaccounts"
-        return await _entity_records(connection, path, "adaccounts", "adaccount")
+        rows = await _entity_records(connection, path, "adaccounts", "adaccount")
+        return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=Ads, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
-    async def ads(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(
+        schema=Ads,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def ads(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """All ads in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/ads"
-        return await _entity_records(connection, path, "ads", "ad")
+        rows = await _entity_records(connection, path, "ads", "ad")
+        return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=AdSquads, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
-    async def ad_squads(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(
+        schema=AdSquads,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def ad_squads(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """All ad squads in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/adsquads"
-        return await _entity_records(connection, path, "adsquads", "adsquad")
+        rows = await _entity_records(connection, path, "adsquads", "adsquad")
+        return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=Campaigns, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
-    async def campaigns(self, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    @il.asset(
+        schema=Campaigns,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def campaigns(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
         """All campaigns in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/campaigns"
-        return await _entity_records(connection, path, "campaigns", "campaign")
+        rows = await _entity_records(connection, path, "campaigns", "campaign")
+        return _with_date(rows, context.partition_date)

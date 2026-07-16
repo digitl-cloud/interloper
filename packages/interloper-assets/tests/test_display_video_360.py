@@ -69,7 +69,7 @@ class TestAudienceScope:
         src = _source()
         asset = next(a for a in src.assets if type(a).key == "custom_audiences")
         with pytest.raises(ValueError, match="audience_id"):
-            asset.data(connection=object())
+            asset.data(context=object(), connection=object())
 
 
 class TestReports:
@@ -124,8 +124,9 @@ class TestNormalizerMapping:
         assert isinstance(normalizer, DataFrameNormalizer)
         normalized = normalizer.normalize([_PARTNER])
 
+        # `date` is stamped by the asset (partition column), not present in the raw payload.
         fields = set(schemas.Partners.model_fields)
-        assert set(normalized.columns) == fields
+        assert set(normalized.columns) == fields - {"date"}
 
         conformer = Representation.of(normalized).conformer
         df = conformer.reconcile(normalized, schemas.Partners)

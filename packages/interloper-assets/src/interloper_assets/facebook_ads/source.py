@@ -394,9 +394,12 @@ class FacebookAds(il.Source):
 
     @il.asset(
         schema=schemas.CustomAudiences,
+        partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def custom_audiences(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def custom_audiences(
+        self, context: il.ExecutionContext, connection: FacebookAdsConnection
+    ) -> list[dict[str, Any]]:
         """Custom audiences with approximate size bounds for the account."""
         rows = _get_custom_audiences(
             connection,
@@ -404,20 +407,22 @@ class FacebookAds(il.Source):
             fields=constants.CUSTOM_AUDIENCES_FIELDS,
             params={},
         )
-        return rows
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=schemas.Ads,
+        partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def ads(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def ads(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Ad entities including creative, status, and configuration."""
-        return _get_ads(connection, self.account_id)
+        return [{**row, "date": context.partition_date} for row in _get_ads(connection, self.account_id)]
 
     @il.asset(
         schema=schemas.Campaigns,
+        partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def campaigns(self, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
+    def campaigns(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict[str, Any]]:
         """Campaign entities including objective, budget, and status configuration."""
-        return _get_campaigns(connection, self.account_id)
+        return [{**row, "date": context.partition_date} for row in _get_campaigns(connection, self.account_id)]

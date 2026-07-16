@@ -44,14 +44,15 @@ class Adup(il.Source):
     """Adup advertising platform integration."""
 
     @il.asset(
+        partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
         schema=Account,
     )
-    async def account(self, connection: AdupConnection) -> list[dict[str, Any]]:
+    async def account(self, context: il.ExecutionContext, connection: AdupConnection) -> list[dict[str, Any]]:
         """Advertiser account information."""
         response = await connection.client.get("/advertisers/me")
         response.raise_for_status()
-        return [response.json()]
+        return [{**response.json(), "date": context.partition_date}]
 
     @il.asset(
         partitioning=il.TimePartitionConfig(column="date", allow_window=True),

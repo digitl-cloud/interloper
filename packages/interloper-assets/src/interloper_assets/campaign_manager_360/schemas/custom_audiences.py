@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -37,4 +39,7 @@ class CustomAudiences(Schema):
     )
     list_population_rule_list_population_clauses: str | None = Field(
         default=None, description="Clauses for the list population rule"
+    )
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
     )

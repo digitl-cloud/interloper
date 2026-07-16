@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -20,3 +22,6 @@ class Ads(Schema):
     delivery_status: str | None = Field(default=None, description="The delivery status of the ad")
     review_status_reasons: str | None = Field(default=None, description="The reasons for the review status of the ad")
     container_chain_ids: str | None = Field(default=None, description="The container chain IDs of the ad")
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )

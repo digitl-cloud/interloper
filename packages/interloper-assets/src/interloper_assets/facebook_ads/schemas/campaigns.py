@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -40,3 +42,6 @@ class Campaigns(Schema):
     stop_time: str | None = Field(default=None, description="ISO 8601 scheduled stop time. NULL if the campaign has no end date.")
     topline_id: str | None = Field(default=None, description="Topline/IO number for managed accounts. NULL for self-serve accounts.")
     updated_time: str | None = Field(default=None, description="ISO 8601 timestamp when the campaign was last updated.")
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )

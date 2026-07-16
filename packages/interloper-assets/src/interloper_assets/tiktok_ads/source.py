@@ -210,18 +210,37 @@ class TiktokAds(il.Source):
 
     # --- Entity assets (_ENTITY_NORMALIZER) ---
 
-    @il.asset(schema=Ads, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
-    async def ads(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(
+        schema=Ads,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def ads(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
         """All ads in the advertiser account with their attributes."""
-        return await _paginate(connection, "/ad/get/", {"advertiser_id": self.advertiser_id})
+        rows = await _paginate(connection, "/ad/get/", {"advertiser_id": self.advertiser_id})
+        return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=Campaigns, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
-    async def campaigns(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(
+        schema=Campaigns,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def campaigns(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
         """All campaigns in the advertiser account with their attributes."""
-        return await _paginate(connection, "/campaign/get/", {"advertiser_id": self.advertiser_id})
+        rows = await _paginate(connection, "/campaign/get/", {"advertiser_id": self.advertiser_id})
+        return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=Advertisers, tags=["Entity"], normalizer=_ENTITY_NORMALIZER)
-    async def advertisers(self, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    @il.asset(
+        schema=Advertisers,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def advertisers(
+        self, context: il.ExecutionContext, connection: TiktokAdsConnection
+    ) -> list[dict[str, Any]]:
         """The advertiser account with its attributes."""
         response = await connection.client.get(
             "/advertiser/info/",
@@ -234,4 +253,4 @@ class TiktokAds(il.Source):
         body = response.json()
         if body.get("code") != 0:
             raise RuntimeError(f"TikTok API error {body.get('code')}: {body.get('message')}")
-        return body["data"]["list"]
+        return _with_date(body["data"]["list"], context.partition_date)

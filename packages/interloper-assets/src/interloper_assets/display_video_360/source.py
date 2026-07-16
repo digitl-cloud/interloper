@@ -235,8 +235,12 @@ class DisplayVideo360(il.Source):
 
     # --- Entities (Display & Video API) ---
 
-    @il.asset(schema=schemas.Partners, tags=["Entity"])
-    def partners(self, connection: DisplayVideo360Connection) -> list[_Record]:
+    @il.asset(
+        schema=schemas.Partners,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def partners(self, context: il.ExecutionContext, connection: DisplayVideo360Connection) -> list[_Record]:
         """DV360 partners and their configuration."""
         items = connection._list_partners()
         for item in items:
@@ -244,15 +248,26 @@ class DisplayVideo360(il.Source):
             # Enabled exchanges are a nested list; JSON-encode onto the string column.
             if isinstance(exchange_config, dict) and isinstance(exchange_config.get("enabledExchanges"), list):
                 exchange_config["enabledExchanges"] = json.dumps(exchange_config["enabledExchanges"])
-        return items
+        return [{**item, "date": context.partition_date} for item in items]
 
-    @il.asset(schema=schemas.Audiences, tags=["Entity"])
-    def audiences(self, connection: DisplayVideo360Connection) -> list[_Record]:
+    @il.asset(
+        schema=schemas.Audiences,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def audiences(self, context: il.ExecutionContext, connection: DisplayVideo360Connection) -> list[_Record]:
         """First-party and partner audiences of the configured partner or advertiser."""
-        return _list_audiences(connection.dv_client, self._audience_scope)
+        rows = _list_audiences(connection.dv_client, self._audience_scope)
+        return [{**row, "date": context.partition_date} for row in rows]
 
-    @il.asset(schema=schemas.CustomAudiences, tags=["Entity"])
-    def custom_audiences(self, connection: DisplayVideo360Connection) -> list[_Record]:
+    @il.asset(
+        schema=schemas.CustomAudiences,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def custom_audiences(
+        self, context: il.ExecutionContext, connection: DisplayVideo360Connection
+    ) -> list[_Record]:
         """Detail of the configured audience, including per-surface audience sizes."""
         if not self.audience_id:
             raise ValueError("The custom_audiences asset requires the source's audience_id to be set")
@@ -261,4 +276,4 @@ class DisplayVideo360(il.Source):
             .get(**self._audience_scope, firstPartyAndPartnerAudienceId=self.audience_id)
             .execute()
         )
-        return [audience]
+        return [{**audience, "date": context.partition_date}]

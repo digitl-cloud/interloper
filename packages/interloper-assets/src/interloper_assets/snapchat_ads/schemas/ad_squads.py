@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -64,3 +66,6 @@ class AdSquads(Schema):
     ad_scheduling_config_friday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config Friday hour of day")
     targeting_app_install_states: str | None = Field(default=None, description="Targeting app install states")
     ad_scheduling_config_sunday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config sunday hour of day")
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )

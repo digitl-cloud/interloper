@@ -152,9 +152,7 @@ async def _wait_for_query(connection: AmazonSellingPartnerConnection, query_id: 
     while True:
         logger.info(f"Waiting for query {query_id}...")
         try:
-            response = await connection.client.get(
-                f"/dataKiosk/{constants.DATAKIOSK_API_VERSION}/queries/{query_id}"
-            )
+            response = await connection.client.get(f"/dataKiosk/{constants.DATAKIOSK_API_VERSION}/queries/{query_id}")
             response.raise_for_status()
             payload = response.json()
             status = payload["processingStatus"]
@@ -216,9 +214,7 @@ async def _run_query(connection: AmazonSellingPartnerConnection, query: str) -> 
         # DONE with no document => the query produced no rows.
         return []
 
-    response = await connection.client.get(
-        f"/dataKiosk/{constants.DATAKIOSK_API_VERSION}/documents/{document_id}"
-    )
+    response = await connection.client.get(f"/dataKiosk/{constants.DATAKIOSK_API_VERSION}/documents/{document_id}")
     response.raise_for_status()
     document = await _download_json(response.json()["documentUrl"])
     return _extract_metrics(document)
@@ -403,25 +399,33 @@ class AmazonSellingPartner(il.Source):
         )
         return document.get("netPureProductMarginByAsin", []) if document else []
 
-    @il.asset(schema=schemas.VendorForecastingRetailStats, tags=["Report"])
-    async def vendor_forecasting_retail_stats(
-        self, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
-        """Latest forward-looking demand forecast per ASIN (retail, snapshot)."""
-        document = await _get_report(
-            connection,
-            report_type="GET_VENDOR_FORECASTING_REPORT",
-            marketplace=self.marketplace,
-            options={"sellingProgram": "RETAIL"},
-        )
-        return document.get("forecastByAsin", []) if document else []
+    # TODO: disabled for now. Review whether this should be partitioned.
+    # @il.asset(
+    #     schema=schemas.VendorForecastingRetailStats,
+    #     tags=["Report"],
+    # )
+    # async def vendor_forecasting_retail_stats(self, connection: AmazonSellingPartnerConnection) -> list[_Record]:
+    #     """Latest forward-looking demand forecast per ASIN (retail, snapshot)."""
+    #     document = await _get_report(
+    #         connection,
+    #         report_type="GET_VENDOR_FORECASTING_REPORT",
+    #         marketplace=self.marketplace,
+    #         options={"sellingProgram": "RETAIL"},
+    #     )
+    #     return document.get("forecastByAsin", []) if document else []
 
     # --- Vendor Analytics — Data Kiosk (GraphQL) ---
 
-    @il.asset(schema=schemas.Products, tags=["Entity"])
-    async def products(self, connection: AmazonSellingPartnerConnection) -> list[_Record]:
+    @il.asset(
+        schema=schemas.Products,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    async def products(
+        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
+    ) -> list[_Record]:
         """Product identifier lookup (ASIN, parent ASIN, EAN, UPC, ISBN)."""
-        date = dt.date.today() - dt.timedelta(days=1)
+        date = context.partition_date
         query = f"""{{
           {constants.DATAKIOSK_SCHEMA} {{
             sourcingView(aggregateBy: DAY, startDate: "{date:%Y-%m-%d}", endDate: "{date:%Y-%m-%d}") {{
@@ -433,15 +437,18 @@ class AmazonSellingPartner(il.Source):
         }}"""
         metrics = await _run_query(connection, query)
         return [
-            _scalars(
-                {
-                    "asin": _nested(m, "groupByKey", "asin"),
-                    "parent_asin": _nested(m, "groupByKey", "parentAsin"),
-                    "ean": _nested(m, "groupByKey", "ean"),
-                    "upc": _nested(m, "groupByKey", "upc"),
-                    "isbn_13": _nested(m, "groupByKey", "isbn13"),
-                }
-            )
+            {
+                **_scalars(
+                    {
+                        "asin": _nested(m, "groupByKey", "asin"),
+                        "parent_asin": _nested(m, "groupByKey", "parentAsin"),
+                        "ean": _nested(m, "groupByKey", "ean"),
+                        "upc": _nested(m, "groupByKey", "upc"),
+                        "isbn_13": _nested(m, "groupByKey", "isbn13"),
+                    }
+                ),
+                "date": date,
+            }
             for m in metrics
         ]
 

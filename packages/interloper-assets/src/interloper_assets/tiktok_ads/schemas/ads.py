@@ -63,3 +63,6 @@ class Ads(Schema):
     video_id: str | None = Field(default=None, description="Identifier for the video used in the ad")
     viewability_postbid_partner: str | None = Field(default=None, description="Viewability post-bid partner for the ad")
     viewability_vast_url: str | None = Field(default=None, description="URL for VAST viewability tracking")
+    date: dt.date | None = Field(
+        default=None, description="The day the snapshot was taken (stamped from the partition)."
+    )
