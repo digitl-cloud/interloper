@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 from typing import Any
 
 import pytest
 
 import interloper as il
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, PartitionError
 from interloper.events import Event
+from interloper.partitioning.time import TimePartition, TimePartitionConfig
 from interloper.runner.async_runner import AsyncRunner
 from interloper.runner.base import RUNNERS
+from interloper.runner.results import ExecutionStatus
 from interloper.runner.serial import SerialRunner
 from interloper.settings import RunnerSettings
 
@@ -123,3 +126,55 @@ class TestOnEventScoping:
         run_ids = {e.metadata.get("run_id") for e in events}
         assert len(run_ids) == 1
         assert None not in run_ids
+
+
+class TestPreflightValidation:
+    """DAG-wide partition validation, raised before any asset executes."""
+
+    async def test_partitioned_assets_require_a_partition(self):
+        il.MemoryDestination.clear()
+        calls: list[str] = []
+
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def daily() -> list[dict[str, Any]]:
+            calls.append("daily")
+            return [{"date": "2026-01-01"}]
+
+        @il.asset()
+        def static() -> list[dict[str, Any]]:
+            calls.append("static")
+            return [{"x": 1}]
+
+        dag = il.DAG(
+            daily(id="daily", destinations=[il.MemoryDestination()]),
+            static(id="static", destinations=[il.MemoryDestination()]),
+        )
+        with pytest.raises(PartitionError, match=r"requires a partition.*daily"):
+            await AsyncRunner().run(dag)
+
+        # The run fails as a whole: not even the non-partitioned asset ran.
+        assert calls == []
+
+    async def test_partition_satisfies_the_preflight(self):
+        il.MemoryDestination.clear()
+
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def daily() -> list[dict[str, Any]]:
+            return [{"date": "2026-01-01"}]
+
+        dag = il.DAG(daily(id="daily", destinations=[il.MemoryDestination()]))
+        result = await AsyncRunner().run(dag, TimePartition(dt.date(2026, 1, 1)))
+
+        assert result.status is ExecutionStatus.COMPLETED
+
+    def test_non_materializable_partitioned_assets_are_exempt(self):
+        # Upstream dependencies are hydrated read-only (materializable=False);
+        # they must not force a partition onto an otherwise unpartitioned run.
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def upstream() -> list[dict[str, Any]]:
+            return [{"date": "2026-01-01"}]
+
+        asset = upstream(id="upstream", destinations=[il.MemoryDestination()])
+        asset.materializable = False
+
+        AsyncRunner()._preflight_validation(il.DAG(asset), None)
