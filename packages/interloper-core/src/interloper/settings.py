@@ -144,6 +144,26 @@ class AgentSettings(BaseSettings):
     model: str = "gemini-2.5-flash"
 
 
+class McpSettings(BaseSettings):
+    """MCP server settings (interloper-mcp).
+
+    ``external_url`` is the public base URL of the hosted server (e.g.
+    ``https://mcp.interloper.app``); it feeds the OAuth protected-resource
+    metadata so clients can discover the auth requirements. ``token`` and
+    ``org_id`` only apply to the stdio transport, which authenticates once
+    at startup: a personal access token, or — for local development only —
+    a direct organisation scope without a token.
+    """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}MCP_")
+
+    host: str = "0.0.0.0"
+    port: int = 3001
+    external_url: str = ""
+    token: str = ""
+    org_id: str = ""
+
+
 class LauncherSettings(BaseSettings):
     """Launcher settings (type + launcher-specific config)."""
 
@@ -202,6 +222,7 @@ class AppSettings(BaseSettings):
     cron: CronSettings = Field(default_factory=CronSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
+    mcp: McpSettings = Field(default_factory=McpSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     reaper: ReaperSettings = Field(default_factory=ReaperSettings)
     launcher: LauncherSettings = Field(default_factory=LauncherSettings)

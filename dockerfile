@@ -60,6 +60,7 @@ COPY packages/interloper-k8s/pyproject.toml         packages/interloper-k8s/pypr
 COPY packages/interloper-google-cloud/pyproject.toml packages/interloper-google-cloud/pyproject.toml
 COPY packages/interloper-agent/pyproject.toml       packages/interloper-agent/pyproject.toml
 COPY packages/interloper-pandas/pyproject.toml      packages/interloper-pandas/pyproject.toml
+COPY packages/interloper-mcp/pyproject.toml         packages/interloper-mcp/pyproject.toml
 
 
 # ── Python runtime base ───────────────────────────────────────

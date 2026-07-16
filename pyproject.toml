@@ -18,6 +18,7 @@ dependencies = [
     "interloper-docker",
     "interloper-google-cloud",
     "interloper-k8s",
+    "interloper-mcp",
     "interloper-pandas",
     "interloper-scheduler",
 ]
@@ -50,6 +51,7 @@ interloper-scheduler = { workspace = true }
 interloper-google-cloud = { workspace = true }
 interloper-agent = { workspace = true }
 interloper-app = { workspace = true }
+interloper-mcp = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]
@@ -167,6 +169,7 @@ version_toml = [
     "packages/interloper-api/pyproject.toml:project.version",
     "packages/interloper-agent/pyproject.toml:project.version",
     "packages/interloper-app/pyproject.toml:project.version",
+    "packages/interloper-mcp/pyproject.toml:project.version",
 ]
 # Keep the Helm chart in lockstep with the Python version. `version` (chart
 # SemVer) and `appVersion` (the image tag the chart deploys) both track the
