@@ -69,12 +69,22 @@ const columns: TableColumn<RunEvent>[] = [
         cell: ({ row }) => h('span', { class: 'font-mono text-xs text-muted' }, formatTimestamp(row.getValue<string>('timestamp'))),
     },
     {
+        id: 'source',
+        header: 'Source',
+        cell: ({ row }) => {
+            const event = row.original as RunEvent
+            const names = event.asset_id ? assetDisplayName.value.get(event.asset_id) : null
+            if (!names) return h('span', { class: 'text-muted' }, '—')
+            return h(EntityBadge, { icon: names.sourceIcon, label: names.sourceName })
+        },
+    },
+    {
         accessorKey: 'asset_key',
         header: 'Asset',
         cell: ({ row }) => {
             const event = row.original as RunEvent
-            const displayName = event.asset_id ? assetDisplayName.value.get(event.asset_id) : null
-            const label = displayName ?? event.asset_key
+            const names = event.asset_id ? assetDisplayName.value.get(event.asset_id) : null
+            const label = names?.assetName ?? event.asset_key
             if (!label) return h('span', { class: 'text-muted' }, '—')
             return h(EntityBadge, { label })
         },
