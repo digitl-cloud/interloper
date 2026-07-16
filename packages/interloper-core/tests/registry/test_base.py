@@ -1,5 +1,7 @@
 """Tests for ``interloper.registry.base``."""
 
+import threading
+import time
 from unittest import mock
 
 import pytest
@@ -78,3 +80,72 @@ class TestEntryPoints:
             pytest.raises(TypeError, match="bad entry: alpha"),
         ):
             registry.get("alpha")
+
+    def test_failed_load_retries_on_next_lookup(self):
+        # A transient load failure must not latch the registry empty forever.
+        registry: Registry[str] = Registry("test.group")
+        with (
+            mock.patch("interloper.registry.base.entry_points", side_effect=RuntimeError("boom")),
+            pytest.raises(RuntimeError, match="boom"),
+        ):
+            registry.get("alpha")
+        with mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "A")]):
+            assert registry.get("alpha") == "A"
+
+
+class TestThreadSafety:
+    def test_concurrent_first_lookups_never_see_a_partial_registry(self):
+        # Regression: a reader arriving while another thread was mid-load used
+        # to observe an empty registry (KeyError "'rows' is not registered
+        # (available: )") because _loaded flipped before the entries landed.
+        registry: Registry[str] = Registry("test.group")
+
+        entry = mock.Mock()
+        entry.name = "alpha"
+        entry.load.side_effect = lambda: time.sleep(0.05) or "A"
+
+        results: dict[str, object] = {}
+
+        def lookup(tid: str) -> None:
+            try:
+                results[tid] = registry["alpha"]
+            except KeyError as e:
+                results[tid] = e
+
+        with mock.patch("interloper.registry.base.entry_points", return_value=[entry]):
+            first = threading.Thread(target=lookup, args=("first",))
+            second = threading.Thread(target=lookup, args=("second",))
+            first.start()
+            time.sleep(0.01)  # let the first thread enter the load
+            second.start()
+            first.join()
+            second.join()
+
+        assert results == {"first": "A", "second": "A"}
+
+
+class TestErrorMessage:
+    def test_unknown_name_lists_available(self):
+        registry: Registry[str] = Registry()
+        registry.register("alpha", "A")
+        with pytest.raises(KeyError, match=r"'missing' is not registered \(available: alpha\)"):
+            registry["missing"]
+
+    def test_unknown_name_names_the_entry_point_group(self):
+        registry: Registry[str] = Registry("test.group")
+        entry = mock.Mock()
+        entry.name = "alpha"
+        entry.load.return_value = "A"
+        with (
+            mock.patch("interloper.registry.base.entry_points", return_value=[entry]),
+            pytest.raises(KeyError, match=r"'missing' is not registered in entry-point group 'test.group'"),
+        ):
+            registry["missing"]
+
+    def test_empty_group_hints_at_missing_package(self):
+        registry: Registry[str] = Registry("test.group")
+        with (
+            mock.patch("interloper.registry.base.entry_points", return_value=[]),
+            pytest.raises(KeyError, match=r"no entries discovered — is the package declaring it installed\?"),
+        ):
+            registry["rows"]
