@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.37.0 (2026-07-16)
+
+### Features
+
+- **assets**: Add The Trade Desk source
+  ([`d72d968`](https://github.com/digitl-cloud/interloper/commit/d72d968d5629f6b7f8105d2d65f7fbd455d78307))
+
+
 ## v0.36.0 (2026-07-15)
 
 ### Features
