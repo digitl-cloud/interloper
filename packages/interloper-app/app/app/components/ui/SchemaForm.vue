@@ -563,9 +563,10 @@ defineExpose({ setErrors })
             <template v-if="field.info"
                       #hint>
                 <UTooltip :text="field.info"
+                          :delay-duration="0"
                           :ui="{ content: 'max-w-72 h-auto py-2', text: 'whitespace-normal' }">
                     <UIcon name="i-lucide-info"
-                           class="size-4 text-dimmed" />
+                           class="size-4 text-dimmed transition-colors hover:text-highlighted" />
                 </UTooltip>
             </template>
 
