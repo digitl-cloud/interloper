@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any
 from uuid import UUID
 
-from interloper_toolkit.context import ToolkitContext, serialize
+from interloper_toolkit.context import ToolkitContext
+from interloper_toolkit.models import (
+    FreshnessReport,
+    JobFreshness,
+    PartitionCoverage,
+    RunHistorySummary,
+    ToolError,
+)
 
 
 def run_history_summary(
     ctx: ToolkitContext,
     component_id: str | None = None,
     days: int = 7,
-) -> dict[str, Any]:
+) -> RunHistorySummary | ToolError:
     """Summarize run statistics over a period.
 
     Args:
@@ -42,17 +48,16 @@ def run_history_summary(
                 durations.append((r.completed_at - r.started_at).total_seconds())
 
         success = by_status.get("success", 0)
-        return {
-            "status": "success",
-            "period_days": days,
-            "component_id": component_id,
-            "total_runs": total,
-            "by_status": by_status,
-            "success_rate": round(success / total, 2) if total > 0 else None,
-            "avg_duration_seconds": round(sum(durations) / len(durations), 1) if durations else None,
-        }
+        return RunHistorySummary(
+            period_days=days,
+            component_id=component_id,
+            total_runs=total,
+            by_status=by_status,
+            success_rate=round(success / total, 2) if total > 0 else None,
+            avg_duration_seconds=round(sum(durations) / len(durations), 1) if durations else None,
+        )
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))
 
 
 def partition_coverage(
@@ -60,7 +65,7 @@ def partition_coverage(
     component_id: str,
     start_date: str,
     end_date: str,
-) -> dict[str, Any]:
+) -> PartitionCoverage | ToolError:
     """Check partition coverage for a job over a date range.
 
     Args:
@@ -94,22 +99,21 @@ def partition_coverage(
         missing = sorted(set(expected) - covered)
         coverage_pct = round(len(covered) / len(expected) * 100, 1) if expected else 100.0
 
-        return {
-            "status": "success",
-            "component_id": component_id,
-            "start_date": start_date,
-            "end_date": end_date,
-            "total_days": len(expected),
-            "covered_days": len(covered),
-            "missing_days": len(missing),
-            "coverage_percent": coverage_pct,
-            "missing_dates": [d.isoformat() for d in missing],
-        }
+        return PartitionCoverage(
+            component_id=component_id,
+            start_date=start_date,
+            end_date=end_date,
+            total_days=len(expected),
+            covered_days=len(covered),
+            missing_days=len(missing),
+            coverage_percent=coverage_pct,
+            missing_dates=[d.isoformat() for d in missing],
+        )
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))
 
 
-def freshness_check(ctx: ToolkitContext) -> dict[str, Any]:
+def freshness_check(ctx: ToolkitContext) -> FreshnessReport | ToolError:
     """Check data freshness for all jobs.
 
     Returns the last successful run timestamp for each job and flags
@@ -132,19 +136,18 @@ def freshness_check(ctx: ToolkitContext) -> dict[str, Any]:
                 delta = now - last_success.completed_at
                 hours_since = round(delta.total_seconds() / 3600, 1)
 
-            results.append({
-                "job": serialize(job),
-                "last_success_at": serialize(last_success.completed_at) if last_success else None,
-                "hours_since_success": hours_since,
-                "stale": hours_since is None or hours_since > 24,
-            })
+            results.append(JobFreshness(
+                job=job,
+                last_success_at=last_success.completed_at if last_success else None,
+                hours_since_success=hours_since,
+                stale=hours_since is None or hours_since > 24,
+            ))
 
-        stale_count = sum(1 for r in results if r["stale"])
-        return {
-            "status": "success",
-            "total_jobs": len(results),
-            "stale_count": stale_count,
-            "jobs": results,
-        }
+        stale_count = sum(1 for r in results if r.stale)
+        return FreshnessReport(
+            total_jobs=len(results),
+            stale_count=stale_count,
+            jobs=results,
+        )
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))

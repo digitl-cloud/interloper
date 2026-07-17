@@ -19,7 +19,7 @@ def run_history_summary(
     days: int = 7,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    return toolkit_analytics.run_history_summary(toolkit_ctx(tool_context), component_id, days)
+    return toolkit_analytics.run_history_summary(toolkit_ctx(tool_context), component_id, days).model_dump(mode="json")
 
 
 def partition_coverage(
@@ -28,11 +28,12 @@ def partition_coverage(
     end_date: str,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    return toolkit_analytics.partition_coverage(toolkit_ctx(tool_context), component_id, start_date, end_date)
+    result = toolkit_analytics.partition_coverage(toolkit_ctx(tool_context), component_id, start_date, end_date)
+    return result.model_dump(mode="json")
 
 
 def freshness_check(tool_context: ToolContext) -> dict[str, Any]:
-    return toolkit_analytics.freshness_check(toolkit_ctx(tool_context))
+    return toolkit_analytics.freshness_check(toolkit_ctx(tool_context)).model_dump(mode="json")
 
 
 run_history_summary.__doc__ = toolkit_analytics.run_history_summary.__doc__

@@ -20,11 +20,11 @@ from interloper_agent.context import get_org_id, get_store, serialize, toolkit_c
 
 
 def list_jobs(tool_context: ToolContext) -> dict[str, Any]:
-    return toolkit_scheduling.list_jobs(toolkit_ctx(tool_context))
+    return toolkit_scheduling.list_jobs(toolkit_ctx(tool_context)).model_dump(mode="json")
 
 
 def get_job_health(component_id: str, tool_context: ToolContext) -> dict[str, Any]:
-    return toolkit_scheduling.get_job_health(toolkit_ctx(tool_context), component_id)
+    return toolkit_scheduling.get_job_health(toolkit_ctx(tool_context), component_id).model_dump(mode="json")
 
 
 def toggle_job(
@@ -62,15 +62,16 @@ def list_recent_runs(
     limit: int = 20,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    return toolkit_scheduling.list_recent_runs(toolkit_ctx(tool_context), component_id, status, limit)
+    result = toolkit_scheduling.list_recent_runs(toolkit_ctx(tool_context), component_id, status, limit)
+    return result.model_dump(mode="json")
 
 
 def get_run_detail(run_id: str, tool_context: ToolContext) -> dict[str, Any]:
-    return toolkit_scheduling.get_run_detail(toolkit_ctx(tool_context), run_id)
+    return toolkit_scheduling.get_run_detail(toolkit_ctx(tool_context), run_id).model_dump(mode="json")
 
 
 def list_failures(limit: int = 20, tool_context: ToolContext | None = None) -> dict[str, Any]:
-    return toolkit_scheduling.list_failures(toolkit_ctx(tool_context), limit)
+    return toolkit_scheduling.list_failures(toolkit_ctx(tool_context), limit).model_dump(mode="json")
 
 
 def trigger_run(
@@ -102,7 +103,7 @@ def trigger_run(
 
 
 def list_backfills(active_only: bool = True, tool_context: ToolContext | None = None) -> dict[str, Any]:
-    return toolkit_scheduling.list_backfills(toolkit_ctx(tool_context), active_only)
+    return toolkit_scheduling.list_backfills(toolkit_ctx(tool_context), active_only).model_dump(mode="json")
 
 
 def trigger_backfill(

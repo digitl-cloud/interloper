@@ -21,9 +21,11 @@ from interloper_mcp.server import create_mcp_server
 
 
 def _result_dict(result: CallToolResult) -> dict[str, Any]:
-    if result.structuredContent is not None:
-        return result.structuredContent
-    return json.loads(result.content[0].text)  # ty: ignore[unresolved-attribute]
+    payload = result.structuredContent
+    if payload is None:
+        payload = json.loads(result.content[0].text)  # ty: ignore[unresolved-attribute]
+    # Union-typed returns are wrapped in a "result" envelope by FastMCP.
+    return payload["result"] if set(payload) == {"result"} else payload
 
 
 def _server(store: Store, catalog: il.Catalog, seeded: dict) -> Any:
@@ -67,3 +69,14 @@ async def test_tool_errors_are_structured_not_raised(store: Store, catalog: il.C
 
     assert result["status"] == "error"
     assert "error" in result
+
+
+async def test_tools_declare_output_schemas(store: Store, catalog: il.Catalog, seeded: dict):
+    async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
+        tools = (await client.list_tools()).tools
+
+    missing = [t.name for t in tools if not t.outputSchema]
+    assert missing == []
+    # Spot-check a computed shape made it into the schema.
+    job_health = next(t for t in tools if t.name == "get_job_health")
+    assert "JobHealthStats" in str(job_health.outputSchema)
