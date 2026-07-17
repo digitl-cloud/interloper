@@ -10,7 +10,7 @@ from typing import Any
 
 from interloper.component import KINDS
 
-from interloper_db.toolkit.context import ToolkitContext, serialize
+from interloper_toolkit.context import ToolkitContext, serialize
 
 
 def list_components(ctx: ToolkitContext, kind: str | None = None) -> dict[str, Any]:

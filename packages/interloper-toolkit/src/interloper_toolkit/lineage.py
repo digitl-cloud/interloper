@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Any
 from uuid import UUID
 
-from interloper_db.toolkit.context import ToolkitContext
+from interloper_toolkit.context import ToolkitContext
 
 
 def get_upstream(ctx: ToolkitContext, asset_id: str) -> dict[str, Any]:

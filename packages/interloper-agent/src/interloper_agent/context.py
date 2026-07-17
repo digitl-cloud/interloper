@@ -8,7 +8,7 @@ from uuid import UUID
 from google.adk.tools.tool_context import ToolContext
 from interloper.catalog.base import Catalog
 from interloper_db import Store, init_engine
-from interloper_db.toolkit import ToolkitContext, serialize
+from interloper_toolkit import ToolkitContext, serialize
 
 __all__ = ["init", "set_store", "set_catalog", "get_store", "get_catalog", "get_org_id", "toolkit_ctx", "serialize"]
 

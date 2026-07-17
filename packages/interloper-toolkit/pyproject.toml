@@ -2,18 +2,15 @@
 # PROJECT / UV
 # ###############
 [project]
-name = "interloper-agent"
+name = "interloper-toolkit"
 version = "0.41.0"
-description = "Interloper AI agent powered by Google ADK"
+description = "Interloper shared read-only tool functions for AI surfaces (agent, MCP)"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
 dependencies = [
     "interloper-core",
     "interloper-db",
-    "interloper-assets",
-    "interloper-toolkit",
-    "google-adk[extensions]>=1.0.0",
 ]
 
 [build-system]
@@ -23,8 +20,6 @@ build-backend = "uv_build"
 [tool.uv.sources]
 interloper-core = { workspace = true }
 interloper-db = { workspace = true }
-interloper-assets = { workspace = true }
-interloper-toolkit = { workspace = true }
 
 # ###############
 # RUFF

@@ -25,6 +25,7 @@ members = [
     "interloper-mcp",
     "interloper-pandas",
     "interloper-scheduler",
+    "interloper-toolkit",
     "interloper-workspace",
 ]
 
@@ -2143,6 +2144,7 @@ dependencies = [
     { name = "interloper-assets" },
     { name = "interloper-core" },
     { name = "interloper-db" },
+    { name = "interloper-toolkit" },
 ]
 
 [package.metadata]
@@ -2151,6 +2153,7 @@ requires-dist = [
     { name = "interloper-assets", editable = "packages/interloper-assets" },
     { name = "interloper-core", editable = "packages/interloper-core" },
     { name = "interloper-db", editable = "packages/interloper-db" },
+    { name = "interloper-toolkit", editable = "packages/interloper-toolkit" },
 ]
 
 [[package]]
@@ -2367,6 +2370,7 @@ source = { editable = "packages/interloper-mcp" }
 dependencies = [
     { name = "interloper-core" },
     { name = "interloper-db" },
+    { name = "interloper-toolkit" },
     { name = "mcp" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -2375,6 +2379,7 @@ dependencies = [
 requires-dist = [
     { name = "interloper-core", editable = "packages/interloper-core" },
     { name = "interloper-db", editable = "packages/interloper-db" },
+    { name = "interloper-toolkit", editable = "packages/interloper-toolkit" },
     { name = "mcp", specifier = ">=1.28,<2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
@@ -2423,6 +2428,21 @@ requires-dist = [
 provides-extras = ["docker", "k8s"]
 
 [[package]]
+name = "interloper-toolkit"
+version = "0.41.0"
+source = { editable = "packages/interloper-toolkit" }
+dependencies = [
+    { name = "interloper-core" },
+    { name = "interloper-db" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "interloper-db", editable = "packages/interloper-db" },
+]
+
+[[package]]
 name = "interloper-workspace"
 version = "0.41.0"
 source = { virtual = "." }
@@ -2439,6 +2459,7 @@ dependencies = [
     { name = "interloper-mcp" },
     { name = "interloper-pandas" },
     { name = "interloper-scheduler" },
+    { name = "interloper-toolkit" },
 ]
 
 [package.dev-dependencies]
@@ -2468,6 +2489,7 @@ requires-dist = [
     { name = "interloper-mcp", editable = "packages/interloper-mcp" },
     { name = "interloper-pandas", editable = "packages/interloper-pandas" },
     { name = "interloper-scheduler", editable = "packages/interloper-scheduler" },
+    { name = "interloper-toolkit", editable = "packages/interloper-toolkit" },
 ]
 
 [package.metadata.requires-dev]

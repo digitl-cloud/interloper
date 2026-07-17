@@ -1,7 +1,7 @@
 """Lineage tools — thin ADK wrappers over the shared read-only toolkit.
 
 The implementations (and the LLM-facing docstrings, adopted below) live in
-``interloper_db.toolkit.lineage`` so the MCP server exposes the same logic.
+``interloper_toolkit.lineage`` so the MCP server exposes the same logic.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from google.adk.tools.tool_context import ToolContext
-from interloper_db.toolkit import lineage as toolkit_lineage
+from interloper_toolkit import lineage as toolkit_lineage
 
 from interloper_agent.context import toolkit_ctx
 
