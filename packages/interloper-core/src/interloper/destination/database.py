@@ -11,6 +11,7 @@ from typing import Any, ClassVar
 
 from interloper.destination.context import IOContext
 from interloper.destination.partitioned import PartitionedDestination
+from interloper.normalizer import MaterializationStrategy
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.representation import REPRESENTATIONS, Representation
 from interloper.utils.data import is_empty
@@ -51,6 +52,7 @@ class DatabaseDestination(PartitionedDestination):
     # appear in the destination's config schema (the UI form) or its specs.
     write_disposition: ClassVar[WriteDisposition] = WriteDisposition.REPLACE
     read_representation: ClassVar[str] = "rows"
+    materialization_strategy: ClassVar[MaterializationStrategy] = MaterializationStrategy.AUTO
 
     # -- Transaction hook ------------------------------------------------------
 
@@ -158,6 +160,8 @@ class DatabaseDestination(PartitionedDestination):
         if is_empty(data):
             return
 
+        data = self._apply_materialization_strategy(data, context)
+
         if context.partition_or_window is not None and context.asset.partitioning is not None:
             col = context.asset.partitioning.column
             columns = Representation.of(data).columns(data)
@@ -192,6 +196,29 @@ class DatabaseDestination(PartitionedDestination):
                     self._delete_partition(table, schema, col, context.partition_or_window.id)
 
             self._insert_data(table, schema, data, context)
+
+    def _apply_materialization_strategy(self, data: Any, context: IOContext) -> Any:
+        """Enforce this backend's write-time schema strategy.
+
+        A backend declares how strictly its physical types demand
+        schema-shaped data: ``AUTO`` trusts the conformed data as-is,
+        ``STRICT`` validates it against the effective schema (failing
+        loudly), and ``RECONCILE`` aligns columns and coerces values — for
+        backends whose typed load path rejects representations that lax
+        validation lets through (e.g. ISO date strings against a DATE
+        column). No-op when no effective schema was resolved.
+
+        Returns:
+            The data to write, coerced under ``RECONCILE``.
+        """
+        strategy = self.materialization_strategy
+        if strategy is MaterializationStrategy.AUTO or context.schema is None:
+            return data
+        conformer = Representation.of(data).conformer
+        if strategy is MaterializationStrategy.RECONCILE:
+            return conformer.reconcile(data, context.schema)
+        conformer.validate(data, context.schema, strict=True)
+        return data
 
     def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
         """Load one scope from the database table.

@@ -632,3 +632,15 @@ class TestDefinition:
             "label_key": "name",
             "value_key": "project_id",
         }
+
+
+class TestMaterializationStrategy:
+    """BigQuery's parquet load path requires schema-typed data."""
+
+    def test_bigquery_reconciles_on_write(self):
+        # Regression pin: the DataFrame write path is a typed parquet load, so
+        # lax-validated values (ISO date strings against DATE) must be coerced
+        # at the write boundary — the trait must stay RECONCILE.
+        from interloper_google_cloud.bigquery.destination import BigQueryDestination
+
+        assert BigQueryDestination.materialization_strategy is il.MaterializationStrategy.RECONCILE
