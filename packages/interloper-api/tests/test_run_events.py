@@ -91,25 +91,25 @@ def store() -> FakeStore:
 
 
 def test_returns_total_count_header(store: FakeStore) -> None:
-    resp = _client(store).get(f"/{_RUN_ID}/events")
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events")
     assert resp.status_code == 200
     assert resp.headers["X-Total-Count"] == "777"
 
 
 def test_forwards_limit_and_offset(store: FakeStore) -> None:
-    resp = _client(store).get(f"/{_RUN_ID}/events?limit=100&offset=200")
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?limit=100&offset=200")
     assert resp.status_code == 200
     assert store.list_calls[-1] == (_RUN_ID, 100, 200, None, None)
 
 
 def test_limit_is_clamped_to_max_page_size(store: FakeStore) -> None:
-    _client(store).get(f"/{_RUN_ID}/events?limit=1000000")
+    _client(store).get(f"/runs/{_RUN_ID}/events?limit=1000000")
     assert store.list_calls[-1][1] == MAX_EVENTS_PAGE_SIZE
 
 
 def test_forwards_asset_filter_to_list_and_count(store: FakeStore) -> None:
     asset_id = uuid4()
-    resp = _client(store).get(f"/{_RUN_ID}/events?asset_id={asset_id}")
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?asset_id={asset_id}")
     assert resp.status_code == 200
     # A single asset_id arrives as a one-element list.
     assert store.list_calls[-1] == (_RUN_ID, 100, 0, [asset_id], None)
@@ -119,7 +119,7 @@ def test_forwards_asset_filter_to_list_and_count(store: FakeStore) -> None:
 
 def test_forwards_multiple_asset_filters(store: FakeStore) -> None:
     a, b = uuid4(), uuid4()
-    resp = _client(store).get(f"/{_RUN_ID}/events?asset_id={a}&asset_id={b}")
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?asset_id={a}&asset_id={b}")
     assert resp.status_code == 200
     # Repeated asset_id params filter the listing to the whole set (e.g. one status).
     assert store.list_calls[-1] == (_RUN_ID, 100, 0, [a, b], None)
@@ -127,7 +127,7 @@ def test_forwards_multiple_asset_filters(store: FakeStore) -> None:
 
 
 def test_forwards_event_type_filter_to_list_and_count(store: FakeStore) -> None:
-    resp = _client(store).get(f"/{_RUN_ID}/events?event_type=log&event_type=asset_failed")
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?event_type=log&event_type=asset_failed")
     assert resp.status_code == 200
     # Repeated event_type params filter to that set (e.g. a "Logs"/"Errors" tab).
     assert store.list_calls[-1] == (_RUN_ID, 100, 0, None, ["log", "asset_failed"])
@@ -135,12 +135,12 @@ def test_forwards_event_type_filter_to_list_and_count(store: FakeStore) -> None:
 
 
 def test_invalid_asset_filter_is_rejected(store: FakeStore) -> None:
-    resp = _client(store).get(f"/{_RUN_ID}/events?asset_id=not-a-uuid")
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?asset_id=not-a-uuid")
     assert resp.status_code == 422
 
 
 def test_limit_and_offset_are_clamped_to_lower_bounds(store: FakeStore) -> None:
-    _client(store).get(f"/{_RUN_ID}/events?limit=0&offset=-5")
+    _client(store).get(f"/runs/{_RUN_ID}/events?limit=0&offset=-5")
     _, limit, offset, _, _ = store.list_calls[-1]
     assert limit == 1
     assert offset == 0
@@ -148,7 +148,7 @@ def test_limit_and_offset_are_clamped_to_lower_bounds(store: FakeStore) -> None:
 
 def test_tail_page_reaches_terminal_events(store: FakeStore) -> None:
     # Paging to the final offset returns the outcome events that sort last.
-    resp = _client(store).get(f"/{_RUN_ID}/events?limit=100&offset=700")
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?limit=100&offset=700")
     body = resp.json()
     assert len(body) == 77
     assert all(e["event_type"] == "asset_completed" for e in body)

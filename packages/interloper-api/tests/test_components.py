@@ -29,7 +29,7 @@ class UncheckableConnection(il.Connection):
 
 def _client(catalog: il.Catalog) -> TestClient:
     app = FastAPI()
-    app.include_router(components_module.router, prefix="/components")
+    app.include_router(components_module.router)
     app.dependency_overrides[require_viewer] = lambda: None
     app.dependency_overrides[get_catalog] = lambda: catalog
     return TestClient(app)
@@ -191,7 +191,7 @@ class TestDelete:
                 raise InUseError("Cannot delete connection 'C': in use by FB", referrers=referrers)
 
         app = FastAPI()
-        app.include_router(components_module.router, prefix="/components")
+        app.include_router(components_module.router)
         app.dependency_overrides[get_store] = lambda: FakeStore()
         app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
 

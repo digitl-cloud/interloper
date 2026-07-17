@@ -20,7 +20,7 @@ from interloper_api.dependencies import (
     require_viewer,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/backfills", tags=["backfills"])
 
 
 class BackfillCreateRequest(BaseModel):

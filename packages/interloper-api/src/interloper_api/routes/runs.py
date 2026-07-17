@@ -22,7 +22,7 @@ from interloper_api.dependencies import (
     require_viewer,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/runs", tags=["runs"])
 
 #: Hard cap on the number of events returned in a single page, regardless of
 #: the requested ``limit``. Keeps a pathological ``?limit=1000000`` from loading

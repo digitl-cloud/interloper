@@ -9,7 +9,7 @@ from interloper.catalog.base import Catalog
 
 from interloper_api.dependencies import get_catalog
 
-router = APIRouter()
+router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 
 @router.get("/")
