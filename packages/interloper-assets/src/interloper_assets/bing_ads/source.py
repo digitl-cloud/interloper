@@ -170,7 +170,7 @@ class BingAds(il.Source):
     """Bing Ads (Microsoft Advertising) platform integration."""
 
     account_id: str = il.FetchField(
-        title="Account ID",
+        label="Account ID",
         description="Bing Ads account",
         provider="connection.accounts",
         label_key="name",

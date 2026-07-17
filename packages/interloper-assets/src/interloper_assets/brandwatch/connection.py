@@ -16,7 +16,7 @@ class BrandwatchConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="brandwatch_")
 
-    api_key: str = il.SecretField(title="API Key", description="Brandwatch (Falcon.io) Measure API key")
+    api_key: str = il.SecretField(label="API Key", description="Brandwatch (Falcon.io) Measure API key")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:

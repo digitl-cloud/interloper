@@ -157,7 +157,7 @@ class TheTradeDesk(il.Source):
     """The Trade Desk programmatic advertising platform integration."""
 
     partner_id: str = il.FetchField(
-        title="Partner ID",
+        label="Partner ID",
         description="The Trade Desk partner",
         provider="connection.partners",
         label_key="name",

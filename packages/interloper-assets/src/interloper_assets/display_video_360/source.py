@@ -159,7 +159,7 @@ class DisplayVideo360(il.Source):
     """Display & Video 360 advertising platform integration."""
 
     partner_id: str = il.FetchField(
-        title="Partner ID",
+        label="Partner ID",
         description="DV360 partner",
         provider="connection.partners",
         label_key="name",
@@ -168,7 +168,7 @@ class DisplayVideo360(il.Source):
     )
     advertiser_id: str = il.InputField(
         default="",
-        title="Advertiser ID",
+        label="Advertiser ID",
         description=(
             "DV360 advertiser ID — narrows report assets to one advertiser and "
             "scopes audience assets by advertiser instead of partner"
@@ -176,7 +176,7 @@ class DisplayVideo360(il.Source):
     )
     audience_id: str = il.InputField(
         default="",
-        title="Audience ID",
+        label="Audience ID",
         description="Audience ID (only required for the custom_audiences asset)",
     )
 
