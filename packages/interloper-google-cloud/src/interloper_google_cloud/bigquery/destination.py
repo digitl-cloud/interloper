@@ -19,6 +19,7 @@ from google.oauth2 import service_account
 from interloper.destination import IOContext, destination
 from interloper.destination.database import DatabaseDestination
 from interloper.errors import ConfigError, DataNotFoundError
+from interloper.normalizer import MaterializationStrategy
 from interloper.partitioning import PartitionConfig, TimePartitionConfig
 from interloper.representation import Representation
 from interloper.resource.fields import FetchField, InputField, SelectField
@@ -34,6 +35,10 @@ from interloper_google_cloud.serialization import json_default, replace_non_fini
     icon="icon:bigquery",
     tags=["Cloud"],
     read_representation="dataframe",
+    # The DataFrame write path is a typed parquet load: values that pass lax
+    # schema validation but don't match the physical column type (e.g. ISO
+    # date strings against DATE) fail the load, so coerce at the boundary.
+    materialization_strategy=MaterializationStrategy.RECONCILE,
 )
 class BigQueryDestination(DatabaseDestination):
     """BigQuery destination."""

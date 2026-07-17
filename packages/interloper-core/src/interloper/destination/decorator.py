@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
 from interloper.destination.base import Destination
+from interloper.normalizer import MaterializationStrategy
 from interloper.resource import Resource
 
 # Bounded TypeVar so that classes already extending Destination preserve their
@@ -28,6 +29,7 @@ def destination(
     name: str = ...,
     icon: str = ...,
     read_representation: str = ...,
+    materialization_strategy: MaterializationStrategy = ...,
 ) -> Callable[[type[DestinationT]], type[DestinationT]]: ...
 def destination(
     cls: type | None = None,
@@ -39,6 +41,7 @@ def destination(
     name: str | None = None,
     icon: str | None = None,
     read_representation: str | None = None,
+    materialization_strategy: MaterializationStrategy | None = None,
 ) -> type[Destination] | Callable[[type], type[Destination]]:
     """Create a Destination subclass from a decorated class.
 
@@ -70,6 +73,8 @@ def destination(
         classvars["resource_types"] = resources
     if read_representation is not None:
         classvars["read_representation"] = read_representation
+    if materialization_strategy is not None:
+        classvars["materialization_strategy"] = materialization_strategy
     if tags is not None:
         classvars["tags"] = tags
     if key is not None:
