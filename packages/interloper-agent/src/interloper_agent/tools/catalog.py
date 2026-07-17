@@ -15,19 +15,19 @@ from interloper_agent.context import toolkit_ctx
 
 
 def list_definitions(kind: str | None = None, tool_context: ToolContext | None = None) -> dict[str, Any]:
-    return toolkit_catalog.list_definitions(toolkit_ctx(tool_context), kind)
+    return toolkit_catalog.list_definitions(toolkit_ctx(tool_context), kind).model_dump(mode="json")
 
 
 def get_definition(key: str, tool_context: ToolContext) -> dict[str, Any]:
-    return toolkit_catalog.get_definition(toolkit_ctx(tool_context), key)
+    return toolkit_catalog.get_definition(toolkit_ctx(tool_context), key).model_dump(mode="json")
 
 
 def get_asset_schema(source_key: str, asset_key: str, tool_context: ToolContext) -> dict[str, Any]:
-    return toolkit_catalog.get_asset_schema(toolkit_ctx(tool_context), source_key, asset_key)
+    return toolkit_catalog.get_asset_schema(toolkit_ctx(tool_context), source_key, asset_key).model_dump(mode="json")
 
 
 def search_fields(query: str, tool_context: ToolContext) -> dict[str, Any]:
-    return toolkit_catalog.search_fields(toolkit_ctx(tool_context), query)
+    return toolkit_catalog.search_fields(toolkit_ctx(tool_context), query).model_dump(mode="json")
 
 
 def compare_schemas(
@@ -39,7 +39,7 @@ def compare_schemas(
 ) -> dict[str, Any]:
     return toolkit_catalog.compare_schemas(
         toolkit_ctx(tool_context), source_key_a, asset_key_a, source_key_b, asset_key_b
-    )
+    ).model_dump(mode="json")
 
 
 list_definitions.__doc__ = toolkit_catalog.list_definitions.__doc__

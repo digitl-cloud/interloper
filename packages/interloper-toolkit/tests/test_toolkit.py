@@ -117,48 +117,48 @@ class TestLineage:
 
         result = lineage.get_full_lineage(ctx, str(ids["c"]), direction="upstream")
 
-        assert result["status"] == "success"
-        assert result["lineage_count"] == 2
-        assert [(item["asset_key"], item["depth"]) for item in result["lineage"]] == [("b", 1), ("a", 2)]
+        assert result.status == "success"
+        assert result.lineage_count == 2
+        assert [(item.asset_key, item.depth) for item in result.lineage] == [("b", 1), ("a", 2)]
 
     def test_impact_analysis_groups_downstream_by_source(self, ctx: ToolkitContext):
         ids = _seed_chain()
 
         result = lineage.impact_analysis(ctx, str(ids["a"]))
 
-        assert result["status"] == "success"
-        assert result["total_affected"] == 2
-        assert {i["asset_key"] for i in result["by_source"]["facebook_ads"]} == {"b", "c"}
+        assert result.status == "success"
+        assert result.total_affected == 2
+        assert {i.asset_key for i in result.by_source["facebook_ads"]} == {"b", "c"}
 
     def test_other_orgs_edges_are_invisible(self, ctx: ToolkitContext):
         ids = _seed_chain(org_id=OTHER_ORG_ID)
 
         result = lineage.get_full_lineage(ctx, str(ids["c"]), direction="upstream")
 
-        assert result["status"] == "success"
-        assert result["lineage_count"] == 0
+        assert result.status == "success"
+        assert result.lineage_count == 0
 
 
 class TestCatalog:
     def test_search_fields_matches_across_sources(self, ctx: ToolkitContext):
         result = catalog_tools.search_fields(ctx, "campaign")
 
-        assert result["status"] == "success"
-        assert result["match_count"] == 2
-        assert {m["qualified_key"] for m in result["matches"]} == {"facebook_ads.ads", "google_ads.campaigns"}
+        assert result.status == "success"
+        assert result.match_count == 2
+        assert {m.qualified_key for m in result.matches} == {"facebook_ads.ads", "google_ads.campaigns"}
 
     def test_compare_schemas_reports_shared_and_unique(self, ctx: ToolkitContext):
         result = catalog_tools.compare_schemas(ctx, "facebook_ads", "ads", "google_ads", "campaigns")
 
-        assert result["status"] == "success"
-        assert result["shared_fields"][0]["field"] == "campaign_id"
-        assert result["only_in_a"] == ["spend"]
-        assert result["only_in_b"] == ["clicks"]
+        assert result.status == "success"
+        assert result.shared_fields[0].field == "campaign_id"
+        assert result.only_in_a == ["spend"]
+        assert result.only_in_b == ["clicks"]
 
     def test_unknown_definition_is_a_structured_error(self, ctx: ToolkitContext):
         result = catalog_tools.get_definition(ctx, "nope")
 
-        assert result["status"] == "error"
+        assert result.status == "error"
 
 
 class TestAnalytics:
@@ -175,9 +175,9 @@ class TestAnalytics:
 
         result = analytics.partition_coverage(ctx, str(job_id), "2026-07-01", "2026-07-03")
 
-        assert result["status"] == "success"
-        assert result["covered_days"] == 2
-        assert result["missing_dates"] == ["2026-07-02"]
+        assert result.status == "success"
+        assert result.covered_days == 2
+        assert result.missing_dates == ["2026-07-02"]
 
 
 class TestScheduling:
@@ -202,6 +202,6 @@ class TestScheduling:
 
         result = scheduling.get_job_health(ctx, str(job_id))
 
-        assert result["status"] == "success"
-        assert result["health"]["success_rate"] == 0.67
-        assert result["health"]["avg_duration_seconds"] == 60.0
+        assert result.status == "success"
+        assert result.health.success_rate == 0.67
+        assert result.health.avg_duration_seconds == 60.0

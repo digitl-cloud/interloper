@@ -43,7 +43,7 @@ def list_components(kind: str | None = None, tool_context: ToolContext | None = 
     # Thin ADK wrapper: the implementation (and LLM-facing docstring, adopted
     # below) lives in the shared read-only toolkit so the MCP server exposes
     # the same logic.
-    return toolkit_collection.list_components(toolkit_ctx(tool_context), kind)
+    return toolkit_collection.list_components(toolkit_ctx(tool_context), kind).model_dump(mode="json")
 
 
 list_components.__doc__ = toolkit_collection.list_components.__doc__

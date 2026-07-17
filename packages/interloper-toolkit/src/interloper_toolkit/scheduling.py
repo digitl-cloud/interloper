@@ -6,15 +6,26 @@ the agent — this module is shared with surfaces that must stay read-only.
 
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
-from interloper_toolkit.context import ToolkitContext, serialize
+from interloper_toolkit.context import ToolkitContext
+from interloper_toolkit.models import (
+    BackfillList,
+    FailureList,
+    JobHealth,
+    JobHealthStats,
+    JobList,
+    RunDetail,
+    RunErrorEvent,
+    RunFailure,
+    RunList,
+    ToolError,
+)
 
 # --- Jobs ---
 
 
-def list_jobs(ctx: ToolkitContext) -> dict[str, Any]:
+def list_jobs(ctx: ToolkitContext) -> JobList | ToolError:
     """List all scheduled jobs in the organisation.
 
     Returns each job with its name, cron expression, enabled status,
@@ -22,12 +33,12 @@ def list_jobs(ctx: ToolkitContext) -> dict[str, Any]:
     """
     try:
         jobs = ctx.store.list_components(ctx.org_id, kinds=["job"])
-        return {"status": "success", "count": len(jobs), "jobs": [serialize(j) for j in jobs]}
+        return JobList(count=len(jobs), jobs=jobs)
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))
 
 
-def get_job_health(ctx: ToolkitContext, component_id: str) -> dict[str, Any]:
+def get_job_health(ctx: ToolkitContext, component_id: str) -> JobHealth | ToolError:
     """Get health summary for a job: metadata, recent success/failure rate.
 
     Args:
@@ -52,19 +63,18 @@ def get_job_health(ctx: ToolkitContext, component_id: str) -> dict[str, Any]:
                 durations.append(delta.total_seconds())
         avg_duration_seconds = sum(durations) / len(durations) if durations else None
 
-        return {
-            "status": "success",
-            "job": serialize(job),
-            "health": {
-                "total_recent_runs": total,
-                "success_count": success,
-                "failed_count": failed,
-                "success_rate": round(success / total, 2) if total > 0 else None,
-                "avg_duration_seconds": round(avg_duration_seconds, 1) if avg_duration_seconds else None,
-            },
-        }
+        return JobHealth(
+            job=job,
+            health=JobHealthStats(
+                total_recent_runs=total,
+                success_count=success,
+                failed_count=failed,
+                success_rate=round(success / total, 2) if total > 0 else None,
+                avg_duration_seconds=round(avg_duration_seconds, 1) if avg_duration_seconds else None,
+            ),
+        )
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))
 
 
 # --- Runs ---
@@ -75,7 +85,7 @@ def list_recent_runs(
     component_id: str | None = None,
     status: str | None = None,
     limit: int = 20,
-) -> dict[str, Any]:
+) -> RunList | ToolError:
     """List recent runs with optional filters.
 
     Args:
@@ -90,12 +100,12 @@ def list_recent_runs(
             status=status,
             limit=limit,
         )
-        return {"status": "success", "count": len(runs), "runs": [serialize(r) for r in runs]}
+        return RunList(count=len(runs), runs=runs)
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))
 
 
-def get_run_detail(ctx: ToolkitContext, run_id: str) -> dict[str, Any]:
+def get_run_detail(ctx: ToolkitContext, run_id: str) -> RunDetail | ToolError:
     """Get full detail for a single run including events and per-asset execution status.
 
     Args:
@@ -109,17 +119,12 @@ def get_run_detail(ctx: ToolkitContext, run_id: str) -> dict[str, Any]:
         events = ctx.store.list_events(run_id=rid)
         asset_execs = ctx.store.list_asset_executions(rid)
 
-        return {
-            "status": "success",
-            "run": serialize(run),
-            "events": [serialize(e) for e in events],
-            "asset_executions": asset_execs,
-        }
+        return RunDetail(run=run, events=events, asset_executions=asset_execs)
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))
 
 
-def list_failures(ctx: ToolkitContext, limit: int = 20) -> dict[str, Any]:
+def list_failures(ctx: ToolkitContext, limit: int = 20) -> FailureList | ToolError:
     """List recent failed runs with their error events.
 
     Args:
@@ -135,24 +140,21 @@ def list_failures(ctx: ToolkitContext, limit: int = 20) -> dict[str, Any]:
             run_id = run.id
             events = ctx.store.list_events(run_id=run_id)
             errors = [
-                {"asset_key": e.asset_key, "error": e.error, "timestamp": serialize(e.timestamp)}
+                RunErrorEvent(asset_key=e.asset_key, error=e.error, timestamp=e.timestamp)
                 for e in events
                 if e.error
             ]
-            results.append({
-                "run": serialize(run),
-                "errors": errors,
-            })
+            results.append(RunFailure(run=run, errors=errors))
 
-        return {"status": "success", "count": len(results), "failures": results}
+        return FailureList(count=len(results), failures=results)
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))
 
 
 # --- Backfills ---
 
 
-def list_backfills(ctx: ToolkitContext, active_only: bool = True) -> dict[str, Any]:
+def list_backfills(ctx: ToolkitContext, active_only: bool = True) -> BackfillList | ToolError:
     """List backfills, optionally filtered to active ones only.
 
     Args:
@@ -165,6 +167,6 @@ def list_backfills(ctx: ToolkitContext, active_only: bool = True) -> dict[str, A
             backfills = ctx.store.list_active_backfills(ctx.org_id)
         else:
             backfills = ctx.store.list_backfills(ctx.org_id)
-        return {"status": "success", "count": len(backfills), "backfills": [serialize(b) for b in backfills]}
+        return BackfillList(count=len(backfills), backfills=backfills)
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return ToolError(error=str(e))

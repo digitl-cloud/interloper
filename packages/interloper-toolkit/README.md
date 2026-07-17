@@ -4,9 +4,13 @@ The read-only tool functions shared by interloper's AI surfaces — the ADK
 chat agent (`interloper-agent`) and the MCP server (`interloper-mcp`).
 
 Every function takes a frozen `ToolkitContext(store, catalog, org_id)` as its
-first argument and returns a JSON-safe `{"status": "success" | "error", ...}`
-dict — LLM-facing structured results, never raising. The docstrings are
-LLM-facing too: both consumers surface them verbatim as tool descriptions.
+first argument and returns `<SuccessModel> | ToolError` — typed pydantic
+results (see `models.py`) discriminated by the literal `status` field, never
+raising. The models are the tool contract: MCP derives per-tool output
+schemas from them, row-projecting models act as an allowlist of what leaves
+the platform, and full-row payloads embed the interloper-db models to keep
+that coupling visible rather than duplicated. The docstrings are LLM-facing:
+both consumers surface them verbatim as tool descriptions.
 
 Modules:
 
