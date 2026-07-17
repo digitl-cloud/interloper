@@ -340,7 +340,10 @@ function resolveProperty(prop: JsonSchemaProperty): JsonSchemaProperty {
     const deref = (p: JsonSchemaProperty): JsonSchemaProperty => {
         if (!p.$ref) return p
         const { $ref, ...siblings } = p
-        return { ...(defs[$ref.split('/').pop() ?? ''] ?? {}), ...siblings }
+        // Drop the definition's own title/description: they describe the
+        // type (e.g. an enum's class name and docstring), not the field.
+        const { title: _title, description: _description, ...target } = defs[$ref.split('/').pop() ?? ''] ?? {}
+        return { ...target, ...siblings }
     }
     let resolved = deref(prop)
     if (resolved.allOf) {

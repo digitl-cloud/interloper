@@ -645,3 +645,11 @@ class TestMaterializationStrategy:
 
         default = BigQueryDestination.model_fields["materialization_strategy"].default
         assert default is il.MaterializationStrategy.RECONCILE
+
+    def test_strategy_keeps_presentation_metadata_through_the_decorator(self):
+        from interloper_google_cloud.bigquery.destination import BigQueryDestination
+
+        prop = BigQueryDestination.config_schema()["properties"]["materialization_strategy"]
+        assert prop["default"] == "reconcile"
+        assert prop["title"] == "Materialization Strategy"
+        assert prop["x-info"]

@@ -267,6 +267,22 @@ class TestMaterializationStrategy:
         assert DecoratedDB(id="db").materialization_strategy is il.MaterializationStrategy.RECONCILE
         assert RecordingDB(id="db").materialization_strategy is il.MaterializationStrategy.AUTO
 
+    def test_decorator_default_override_keeps_field_metadata(self):
+        # Regression: the decorator's default override used to rebuild the
+        # FieldInfo from scratch, dropping title/description/x-info — the UI
+        # then fell back to the enum's class name and docstring.
+        from interloper.destination import destination
+
+        @destination(materialization_strategy=il.MaterializationStrategy.RECONCILE)
+        class DecoratedDB(RecordingDB):
+            pass
+
+        prop = DecoratedDB.config_schema()["properties"]["materialization_strategy"]
+        assert prop["default"] == "reconcile"
+        assert prop["title"] == "Materialization Strategy"
+        assert prop["description"] == "How strictly written data must match the effective schema."
+        assert "'Reconcile' aligns columns" in prop["x-info"]
+
     def test_instance_override_beats_the_class_default(self):
         dest = RecordingDB(id="db", materialization_strategy=il.MaterializationStrategy.RECONCILE)
         dest.write(make_ctx(plain_asset(), schema=DateSchema), [{"name": "a", "day": "2026-07-13"}])

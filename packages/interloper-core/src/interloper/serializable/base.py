@@ -8,12 +8,14 @@ payload. ``to_spec()`` / ``from_spec()`` round-trip between the two.
 
 from __future__ import annotations
 
+import copy
 import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic.fields import FieldInfo
 from typing_extensions import Self
 
 from interloper.utils.imports import get_object_path, import_from_path
@@ -309,8 +311,12 @@ class Serializable(BaseModel):
         if already_subclass:
             result_cls = cast("type[Self]", decorated)
             if fields:
+                # Override only the default, keeping the parent FieldInfo —
+                # a bare (annotation, value) pair would build a fresh
+                # FieldInfo and silently drop the field's title, description
+                # and json_schema_extra (x-widget, x-info, …).
                 field_definitions: dict[str, Any] = {
-                    name: (result_cls.model_fields[name].annotation, value) for name, value in fields.items()
+                    name: (info.annotation, info) for name, info in _override_defaults(result_cls, fields).items()
                 }
                 result_cls = create_model(
                     decorated.__name__,
@@ -336,7 +342,10 @@ class Serializable(BaseModel):
         if classvars:
             namespace.update(classvars)
         if fields:
-            namespace.update(fields)
+            # Merged FieldInfos, not bare values: a bare `field = value` in
+            # the namespace replaces the receiver's FieldInfo wholesale,
+            # dropping title/description/json_schema_extra.
+            namespace.update(_override_defaults(cls, fields))
 
         namespace["__module__"] = decorated.__module__
         namespace["__qualname__"] = decorated.__qualname__
@@ -504,4 +513,19 @@ class Serializable(BaseModel):
         raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
         schema = strip_internal_fields(raw, extra=cls.internal_fields)
         return schema if schema.get("properties") else {}
+
+
+def _override_defaults(owner: type[BaseModel], overrides: dict[str, Any]) -> dict[str, FieldInfo]:
+    """Copy *owner*'s FieldInfos with new defaults, keeping all other metadata.
+
+    Returns:
+        Field name → copied FieldInfo carrying the override as its default.
+    """
+    infos: dict[str, FieldInfo] = {}
+    for name, value in overrides.items():
+        info = copy.deepcopy(owner.model_fields[name])
+        info.default = value
+        info.default_factory = None
+        infos[name] = info
+    return infos
 
