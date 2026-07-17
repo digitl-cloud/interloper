@@ -32,6 +32,9 @@ interface JsonSchemaProperty {
     description?: string
     default?: unknown
     enum?: unknown[]
+    '$ref'?: string
+    'allOf'?: JsonSchemaProperty[]
+    'anyOf'?: JsonSchemaProperty[]
     'x-widget'?: string
     'x-options'?: { label: string, value: string }[]
     'x-options-from'?: string
@@ -46,6 +49,7 @@ interface JsonSchemaProperty {
 interface JsonSchema {
     properties?: Record<string, JsonSchemaProperty>
     required?: string[]
+    '$defs'?: Record<string, JsonSchemaProperty>
     'x-oauth'?: OAuthFieldMeta
 }
 
@@ -321,6 +325,47 @@ watch(
     { deep: true, immediate: true },
 )
 
+// ── Property resolution ($ref / allOf / anyOf) ───────────────────
+
+/**
+ * Inline `$ref` / `allOf` / `anyOf` composition against the schema's `$defs`,
+ * so enum-typed Pydantic fields (which render as refs into `$defs`) behave
+ * like plain properties. Sibling keys (default, description, x-*) win over
+ * the referenced definition's; `anyOf` resolves to its first non-null branch
+ * (Pydantic's encoding of `Optional[...]` fields).
+ */
+function resolveProperty(prop: JsonSchemaProperty): JsonSchemaProperty {
+    const defs = props.schema?.$defs ?? {}
+    const deref = (p: JsonSchemaProperty): JsonSchemaProperty => {
+        if (!p.$ref) return p
+        const { $ref, ...siblings } = p
+        return { ...(defs[$ref.split('/').pop() ?? ''] ?? {}), ...siblings }
+    }
+    let resolved = deref(prop)
+    if (resolved.allOf) {
+        const { allOf, ...siblings } = resolved
+        resolved = { ...allOf.map(deref).reduce((acc, part) => ({ ...acc, ...part }), {}), ...siblings }
+    }
+    if (resolved.anyOf) {
+        const { anyOf, ...siblings } = resolved
+        const branch = anyOf.find(b => b.type !== 'null') ?? anyOf[0] ?? {}
+        resolved = { ...deref(branch), ...siblings }
+    }
+    return resolved
+}
+
+/** Schema properties with refs and compositions inlined. */
+const resolvedProperties = computed<Record<string, JsonSchemaProperty>>(() => {
+    return Object.fromEntries(
+        Object.entries(props.schema?.properties ?? {}).map(([key, prop]) => [key, resolveProperty(prop)]),
+    )
+})
+
+/** Human label for a raw enum value: "reconcile" → "Reconcile". */
+function enumLabel(value: unknown): string {
+    return String(value).replaceAll(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 /** Resolve which widget to render for a given field. */
 function resolveWidget(prop: JsonSchemaProperty): string {
     if (prop['x-widget']) return prop['x-widget']
@@ -339,12 +384,12 @@ function resolveOptions(prop: JsonSchemaProperty): unknown[] | undefined {
     if (prop['x-options-from'] && props.optionsContext) {
         return props.optionsContext[prop['x-options-from']]
     }
-    return prop.enum
+    return prop.enum?.map(value => ({ label: enumLabel(value), value }))
 }
 
 /** Compute field descriptors from the schema. */
 const fields = computed(() => {
-    const properties = props.schema?.properties ?? {}
+    const properties = resolvedProperties.value
     const required = new Set(props.schema?.required ?? [])
     const excluded = new Set(props.exclude ?? ['id'])
 
@@ -385,8 +430,7 @@ const fields = computed(() => {
 const discriminatorLabel = defineModel<string | null>('discriminatorLabel', { default: null })
 
 const discriminatorKey = computed<string | null>(() => {
-    const properties = props.schema?.properties ?? {}
-    return Object.entries(properties).find(([, prop]) => prop['x-discriminator'])?.[0] ?? null
+    return Object.entries(resolvedProperties.value).find(([, prop]) => prop['x-discriminator'])?.[0] ?? null
 })
 
 watch(
@@ -398,7 +442,7 @@ watch(
             discriminatorLabel.value = null
             return
         }
-        const prop = props.schema?.properties?.[key]
+        const prop = resolvedProperties.value[key]
         const options = prop?.['x-fetch'] ? fetchState.value[key]?.options : resolveOptions(prop!)
         const match = (options ?? []).find(
             o => typeof o === 'object' && o !== null && String((o as { value: unknown }).value) === String(value),
@@ -453,8 +497,7 @@ watch(
     () => props.optionsContext,
     (ctx) => {
         if (!ctx) return
-        const properties = props.schema?.properties ?? {}
-        for (const [key, prop] of Object.entries(properties)) {
+        for (const [key, prop] of Object.entries(resolvedProperties.value)) {
             const entity = prop['x-options-from']
             if (!entity) continue
             const options = ctx[entity]

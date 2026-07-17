@@ -105,9 +105,7 @@ class Asset(Component):
         "destination": RelationDefinition(kinds=["destination"], field="destinations"),
         "dependency": RelationDefinition(kinds=["asset"], field="dependencies", slotted=True, inline=False),
     }
-    internal_fields: ClassVar[frozenset[str]] = frozenset(
-        {"destinations", "normalizer", "materialization_strategy", "dependencies"}
-    )
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"destinations", "normalizer", "dependencies"})
     requires: ClassVar[dict[str, str]] = {}
     optional_requires: ClassVar[dict[str, str]] = {}
     tags: ClassVar[list[str]] = []
@@ -120,7 +118,15 @@ class Asset(Component):
     dataset: str = Field(default="")
     default_destination_key: str = Field(default="")
     materializable: bool = Field(default=True)
-    materialization_strategy: MaterializationStrategy = Field(default=MaterializationStrategy.AUTO)
+    materialization_strategy: MaterializationStrategy = Field(
+        default=MaterializationStrategy.AUTO,
+        title="Materialization Strategy",
+        description=(
+            "How this asset's data is checked against its schema: 'auto' "
+            "validates (or infers a schema when none is declared), 'strict' "
+            "fails on any mismatch, 'reconcile' coerces values to the schema."
+        ),
+    )
     normalizer: Normalizer | None = Field(default=None)
     dependencies: dict[str, str] = Field(default_factory=dict)
 

@@ -9,6 +9,8 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any, ClassVar
 
+from pydantic import Field
+
 from interloper.destination.context import IOContext
 from interloper.destination.partitioned import PartitionedDestination
 from interloper.normalizer import MaterializationStrategy
@@ -52,7 +54,19 @@ class DatabaseDestination(PartitionedDestination):
     # appear in the destination's config schema (the UI form) or its specs.
     write_disposition: ClassVar[WriteDisposition] = WriteDisposition.REPLACE
     read_representation: ClassVar[str] = "rows"
-    materialization_strategy: ClassVar[MaterializationStrategy] = MaterializationStrategy.AUTO
+
+    # Instance configuration: backends set a default via the @destination
+    # decorator; users can override it per configured destination in the UI.
+    materialization_strategy: MaterializationStrategy = Field(
+        default=MaterializationStrategy.AUTO,
+        title="Materialization Strategy",
+        description=(
+            "How strictly written data must match the effective schema: "
+            "'auto' trusts the conformed data as-is, 'strict' validates it "
+            "and fails on mismatch, 'reconcile' aligns columns and coerces "
+            "values to the schema before writing."
+        ),
+    )
 
     # -- Transaction hook ------------------------------------------------------
 

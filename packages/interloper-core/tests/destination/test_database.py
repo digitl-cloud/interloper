@@ -230,7 +230,7 @@ class TestMaterializationStrategy:
 
     def test_reconcile_coerces_rows_to_the_effective_schema(self):
         class ReconcilingDB(RecordingDB):
-            materialization_strategy = il.MaterializationStrategy.RECONCILE
+            materialization_strategy: il.MaterializationStrategy = il.MaterializationStrategy.RECONCILE
 
         dest = ReconcilingDB(id="db")
         dest.write(make_ctx(plain_asset(), schema=DateSchema), [{"name": "a", "day": "2026-07-13"}])
@@ -241,7 +241,7 @@ class TestMaterializationStrategy:
         pd = pytest.importorskip("pandas")
 
         class ReconcilingDB(RecordingDB):
-            materialization_strategy = il.MaterializationStrategy.RECONCILE
+            materialization_strategy: il.MaterializationStrategy = il.MaterializationStrategy.RECONCILE
 
         dest = ReconcilingDB(id="db")
         dest.write(make_ctx(plain_asset(), schema=DateSchema), pd.DataFrame([{"name": "a", "day": "2026-07-13"}]))
@@ -250,19 +250,31 @@ class TestMaterializationStrategy:
 
     def test_reconcile_without_schema_is_a_noop(self):
         class ReconcilingDB(RecordingDB):
-            materialization_strategy = il.MaterializationStrategy.RECONCILE
+            materialization_strategy: il.MaterializationStrategy = il.MaterializationStrategy.RECONCILE
 
         dest = ReconcilingDB(id="db")
         rows = [{"name": "a", "day": "2026-07-13"}]
         dest.write(make_ctx(plain_asset()), rows)
         assert dest.calls[-1][1][2] == rows
 
-    def test_decorator_sets_the_trait(self):
+    def test_decorator_sets_the_field_default(self):
         from interloper.destination import destination
 
         @destination(materialization_strategy=il.MaterializationStrategy.RECONCILE)
         class DecoratedDB(RecordingDB):
             pass
 
-        assert DecoratedDB.materialization_strategy is il.MaterializationStrategy.RECONCILE
-        assert RecordingDB.materialization_strategy is il.MaterializationStrategy.AUTO
+        assert DecoratedDB(id="db").materialization_strategy is il.MaterializationStrategy.RECONCILE
+        assert RecordingDB(id="db").materialization_strategy is il.MaterializationStrategy.AUTO
+
+    def test_instance_override_beats_the_class_default(self):
+        dest = RecordingDB(id="db", materialization_strategy=il.MaterializationStrategy.RECONCILE)
+        dest.write(make_ctx(plain_asset(), schema=DateSchema), [{"name": "a", "day": "2026-07-13"}])
+        assert dest.calls[-1][1][2] == [{"name": "a", "day": datetime.date(2026, 7, 13)}]
+
+    def test_strategy_renders_in_the_config_schema(self):
+        schema = RecordingDB.config_schema()
+        prop = schema["properties"]["materialization_strategy"]
+        ref = prop.get("$ref") or prop.get("allOf", [{}])[0].get("$ref", "")
+        enum_def = schema["$defs"][ref.split("/")[-1]]
+        assert set(enum_def["enum"]) == {"auto", "strict", "reconcile"}

@@ -73,8 +73,10 @@ def destination(
         classvars["resource_types"] = resources
     if read_representation is not None:
         classvars["read_representation"] = read_representation
+
+    fields: dict[str, Any] = {}
     if materialization_strategy is not None:
-        classvars["materialization_strategy"] = materialization_strategy
+        fields["materialization_strategy"] = materialization_strategy
     if tags is not None:
         classvars["tags"] = tags
     if key is not None:
@@ -85,9 +87,9 @@ def destination(
         classvars["icon"] = icon
 
     if cls is not None:
-        return Destination.build_class(cls, classvars=classvars)
+        return Destination.build_class(cls, classvars=classvars, fields=fields)
 
     def wrapper(cls: type) -> type[Destination]:
-        return Destination.build_class(cls, classvars=classvars)
+        return Destination.build_class(cls, classvars=classvars, fields=fields)
 
     return wrapper
