@@ -100,14 +100,21 @@ class Source(Component):
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
         "destination": RelationDefinition(kinds=["destination"], field="destinations"),
     }
-    internal_fields: ClassVar[frozenset[str]] = frozenset(
-        {"assets", "destinations", "normalizer", "materialization_strategy", "select"}
-    )
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "destinations", "normalizer", "select"})
 
     # State
     destinations: list[Destination] = Field(default_factory=list)
     normalizer: Normalizer | None = Field(default=None)
-    materialization_strategy: MaterializationStrategy | None = Field(default=None)
+    materialization_strategy: MaterializationStrategy | None = Field(
+        default=None,
+        title="Materialization Strategy",
+        description=(
+            "Default strategy for this source's assets: 'auto' validates "
+            "against the schema, 'strict' fails on any mismatch, 'reconcile' "
+            "coerces values to the schema. Assets declaring their own "
+            "strategy keep it; leave empty to use each asset's default."
+        ),
+    )
     assets: list[Asset] = Field(default_factory=list)
     select: list[str] | None = Field(
         default=None, description="Asset keys to materialize; others stay as read-only dependencies"

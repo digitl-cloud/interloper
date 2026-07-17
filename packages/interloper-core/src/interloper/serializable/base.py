@@ -296,11 +296,15 @@ class Serializable(BaseModel):
         """
         from pydantic import create_model
 
-        for field_name in fields or {}:
-            if field_name not in cls.model_fields:
-                raise TypeError(f"Decorator field '{field_name}' is not a field of {cls.__name__}.")
-
         already_subclass = any(isinstance(b, type) and issubclass(b, cls) for b in decorated.__bases__)
+
+        # A decorated subclass may carry fields the receiving class doesn't
+        # declare (e.g. DatabaseDestination traits behind @destination), so
+        # validate against the class whose definitions the overrides target.
+        target = cast("type[Self]", decorated) if already_subclass else cls
+        for field_name in fields or {}:
+            if field_name not in target.model_fields:
+                raise TypeError(f"Decorator field '{field_name}' is not a field of {target.__name__}.")
 
         if already_subclass:
             result_cls = cast("type[Self]", decorated)
