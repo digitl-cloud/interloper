@@ -89,23 +89,23 @@ def create_app(
         set_smtp_config(smtp_config)
 
     api = APIRouter(prefix="/api")
-    api.include_router(auth.router, tags=["auth"])
-    api.include_router(organisations.router, tags=["organisations"])
-    api.include_router(admin.router, tags=["admin"])
-    api.include_router(catalog_routes.router, prefix="/catalog", tags=["catalog"])
-    api.include_router(components.router, prefix="/components", tags=["components"])
-    api.include_router(runs.router, prefix="/runs", tags=["runs"])
-    api.include_router(backfills.router, prefix="/backfills", tags=["backfills"])
-    api.include_router(oauth.router, tags=["oauth"])
-    api.include_router(tokens.router, tags=["tokens"])
-    api.include_router(ws.router, tags=["ws"])
+    api.include_router(auth.router)
+    api.include_router(organisations.router)
+    api.include_router(admin.router)
+    api.include_router(catalog_routes.router)
+    api.include_router(components.router)
+    api.include_router(runs.router)
+    api.include_router(backfills.router)
+    api.include_router(oauth.router)
+    api.include_router(tokens.router)
+    api.include_router(ws.router)
 
     agent_available = False
     if agent_config is None or agent_config.enabled:
         try:
             from interloper_api.routes import agent as agent_routes
 
-            api.include_router(agent_routes.router, prefix="/agent", tags=["agent"])
+            api.include_router(agent_routes.router)
             agent_available = True
         except ImportError:
             logger.warning(

@@ -29,7 +29,7 @@ from interloper_api.dependencies import get_catalog, get_org_id, get_store, requ
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/agent", tags=["agent"])
 
 APP_NAME = "interloper_agent"
 

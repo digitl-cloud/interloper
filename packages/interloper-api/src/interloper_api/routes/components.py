@@ -51,7 +51,7 @@ from interloper_api.dependencies import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/components", tags=["components"])
 
 
 # -- Request/Response models --------------------------------------------------

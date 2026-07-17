@@ -24,7 +24,7 @@ from fastapi import APIRouter, Cookie, FastAPI, WebSocket, WebSocketDisconnect
 from interloper_api.dependencies import get_store
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(tags=["ws"])
 
 
 class ConnectionManager:
