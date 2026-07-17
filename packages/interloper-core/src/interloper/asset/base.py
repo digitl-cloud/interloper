@@ -21,6 +21,7 @@ from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
 from interloper.representation import Representation
 from interloper.resource import Resource
+from interloper.resource.fields import SelectField
 from interloper.schema import Schema
 from interloper.utils import concurrency
 from interloper.utils.concurrency import invoke
@@ -118,13 +119,14 @@ class Asset(Component):
     dataset: str = Field(default="")
     default_destination_key: str = Field(default="")
     materializable: bool = Field(default=True)
-    materialization_strategy: MaterializationStrategy = Field(
+    materialization_strategy: MaterializationStrategy = SelectField(
         default=MaterializationStrategy.AUTO,
-        title="Materialization Strategy",
-        description=(
-            "How this asset's data is checked against its schema: 'auto' "
-            "validates (or infers a schema when none is declared), 'strict' "
-            "fails on any mismatch, 'reconcile' coerces values to the schema."
+        label="Materialization Strategy",
+        description="How this asset's data is checked against its schema.",
+        info=(
+            "'Auto' validates data against the schema (or infers a schema "
+            "when none is declared), 'Strict' fails on any mismatch, "
+            "'Reconcile' coerces values to the schema."
         ),
     )
     normalizer: Normalizer | None = Field(default=None)

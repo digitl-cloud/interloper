@@ -147,17 +147,30 @@ def strip_internal_fields(schema: dict[str, Any], extra: Iterable[str] = ()) -> 
 def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
     """Pop json_schema_extra from kwargs and inject the widget hint.
 
-    Also lifts the ``discriminator=True`` marker (accepted by every field
-    factory) into ``x-discriminator``: it marks the config field whose value
-    distinguishes instances of a component, driving the derived display name
-    (:meth:`Component.instance_name`) and — for sources — the per-instance
-    asset table names (:meth:`Source.asset_table`).
+    Also lifts the presentation kwargs every field factory accepts:
+
+    - ``label`` becomes the JSON-schema-standard ``title`` (the form label;
+      ``title=`` keeps working as a plain pydantic passthrough).
+    - ``info`` becomes ``x-info`` — long explanatory text the UI renders in
+      an info tooltip next to the label, keeping the inline ``description``
+      short.
+    - ``discriminator=True`` becomes ``x-discriminator``: it marks the config
+      field whose value distinguishes instances of a component, driving the
+      derived display name (:meth:`Component.instance_name`) and — for
+      sources — the per-instance asset table names (:meth:`Source.asset_table`).
 
     Returns:
-        The extra dict with ``x-widget`` (and possibly ``x-discriminator``) set.
+        The extra dict with ``x-widget`` (and possibly ``x-info`` /
+        ``x-discriminator``) set.
     """
     extra = kwargs.pop("json_schema_extra", {})
     extra["x-widget"] = widget
+    label = kwargs.pop("label", None)
+    if label is not None:
+        kwargs["title"] = label
+    info = kwargs.pop("info", None)
+    if info is not None:
+        extra["x-info"] = info
     if kwargs.pop("discriminator", False):
         extra["x-discriminator"] = True
     return extra

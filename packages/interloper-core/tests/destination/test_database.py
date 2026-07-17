@@ -278,3 +278,7 @@ class TestMaterializationStrategy:
         ref = prop.get("$ref") or prop.get("allOf", [{}])[0].get("$ref", "")
         enum_def = schema["$defs"][ref.split("/")[-1]]
         assert set(enum_def["enum"]) == {"auto", "strict", "reconcile"}
+        # Short inline description; the long per-value text lives in the tooltip.
+        assert prop["title"] == "Materialization Strategy"
+        assert prop["description"] == "How strictly written data must match the effective schema."
+        assert "'Reconcile' aligns columns" in prop["x-info"]

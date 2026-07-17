@@ -25,6 +25,42 @@ class TestFetchProvider:
         assert not is_fetch_field_provider(Conn.not_a_provider)
 
 
+class TestPresentationKwargs:
+    """``label`` / ``info`` presentation kwargs accepted by every factory."""
+
+    def test_label_becomes_schema_title(self):
+        class FakeLabeledSource(il.Source):
+            account_id: str = il.InputField(default="", label="Account ID")
+
+        prop = FakeLabeledSource.definition().config_schema["properties"]["account_id"]
+        assert prop["title"] == "Account ID"
+
+    def test_info_becomes_x_info(self):
+        class FakeInfoSource(il.Source):
+            account_id: str = il.InputField(default="", info="Where to find this in the vendor console.")
+
+        prop = FakeInfoSource.definition().config_schema["properties"]["account_id"]
+        assert prop["x-info"] == "Where to find this in the vendor console."
+
+    def test_presentation_kwargs_compose_across_factories(self):
+        class FakeComposedSource(il.Source):
+            region: str = il.SelectField(
+                default="eu",
+                options=[{"label": "EU", "value": "eu"}],
+                label="Region",
+                description="API region.",
+                info="Pick the region the account was created in.",
+                discriminator=True,
+            )
+
+        prop = FakeComposedSource.definition().config_schema["properties"]["region"]
+        assert prop["title"] == "Region"
+        assert prop["description"] == "API region."
+        assert prop["x-info"] == "Pick the region the account was created in."
+        assert prop["x-discriminator"] is True
+        assert prop["x-widget"] == "select"
+
+
 class TestDiscriminatorMarker:
     def test_marker_serialized_as_x_discriminator(self):
         class FakeMarkedSource(il.Source):

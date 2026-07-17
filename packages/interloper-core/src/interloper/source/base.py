@@ -105,14 +105,15 @@ class Source(Component):
     # State
     destinations: list[Destination] = Field(default_factory=list)
     normalizer: Normalizer | None = Field(default=None)
-    materialization_strategy: MaterializationStrategy | None = Field(
+    materialization_strategy: MaterializationStrategy | None = SelectField(
         default=None,
-        title="Materialization Strategy",
-        description=(
-            "Default strategy for this source's assets: 'auto' validates "
-            "against the schema, 'strict' fails on any mismatch, 'reconcile' "
-            "coerces values to the schema. Assets declaring their own "
-            "strategy keep it; leave empty to use each asset's default."
+        label="Materialization Strategy",
+        description="Default strategy for this source's assets.",
+        info=(
+            "'Auto' validates data against the schema, 'Strict' fails on any "
+            "mismatch, 'Reconcile' coerces values to the schema. Assets "
+            "declaring their own strategy keep it; leave empty to use each "
+            "asset's default."
         ),
     )
     assets: list[Asset] = Field(default_factory=list)

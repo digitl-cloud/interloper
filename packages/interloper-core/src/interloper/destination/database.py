@@ -9,13 +9,12 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any, ClassVar
 
-from pydantic import Field
-
 from interloper.destination.context import IOContext
 from interloper.destination.partitioned import PartitionedDestination
 from interloper.normalizer import MaterializationStrategy
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.representation import REPRESENTATIONS, Representation
+from interloper.resource.fields import SelectField
 from interloper.utils.data import is_empty
 
 
@@ -57,13 +56,13 @@ class DatabaseDestination(PartitionedDestination):
 
     # Instance configuration: backends set a default via the @destination
     # decorator; users can override it per configured destination in the UI.
-    materialization_strategy: MaterializationStrategy = Field(
+    materialization_strategy: MaterializationStrategy = SelectField(
         default=MaterializationStrategy.AUTO,
-        title="Materialization Strategy",
-        description=(
-            "How strictly written data must match the effective schema: "
-            "'auto' trusts the conformed data as-is, 'strict' validates it "
-            "and fails on mismatch, 'reconcile' aligns columns and coerces "
+        label="Materialization Strategy",
+        description="How strictly written data must match the effective schema.",
+        info=(
+            "'Auto' trusts the conformed data as-is, 'Strict' validates it "
+            "and fails on mismatch, 'Reconcile' aligns columns and coerces "
             "values to the schema before writing."
         ),
     )

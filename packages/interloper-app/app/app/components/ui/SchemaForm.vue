@@ -40,6 +40,7 @@ interface JsonSchemaProperty {
     'x-options-from'?: string
     'x-fetch'?: FetchMeta
     'x-discriminator'?: boolean
+    'x-info'?: string
     minimum?: number
     maximum?: number
     minLength?: number
@@ -408,6 +409,7 @@ const fields = computed(() => {
             key,
             label: prop.title ?? key,
             description: prop.description,
+            info: prop['x-info'],
             widget: resolveWidget(prop),
             required: required.has(key),
             default: prop.default,
@@ -554,6 +556,16 @@ defineExpose({ setErrors })
                     :label="field.label"
                     :description="field.description"
                     :required="field.required">
+            <!-- Info tooltip next to the label (long explanatory text) -->
+            <template v-if="field.info"
+                      #hint>
+                <UTooltip :text="field.info"
+                          :ui="{ content: 'max-w-72 h-auto py-2', text: 'whitespace-normal' }">
+                    <UIcon name="i-lucide-info"
+                           class="size-4 text-dimmed" />
+                </UTooltip>
+            </template>
+
             <!-- Password with visibility toggle -->
             <UInput v-if="field.widget === 'password'"
                     v-model="data[field.key]"
