@@ -126,7 +126,7 @@ class Brandwatch(il.Source):
     """Brandwatch (Falcon.io) social media analytics integration."""
 
     channel_id: str = il.InputField(
-        title="Channel ID",
+        label="Channel ID",
         description="Falcon.io channel id (a connected social profile)",
         discriminator=True,
     )

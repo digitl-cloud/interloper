@@ -35,7 +35,7 @@ class FacebookAdsConnection(il.OAuthConnection):
     model_config = SettingsConfigDict(env_prefix="facebook_ads_")
 
     access_token: str = il.SecretField(description="Facebook access token")
-    app_id: str = il.InputField(title="App ID", description="Facebook App ID")
+    app_id: str = il.InputField(label="App ID", description="Facebook App ID")
     app_secret: str = il.SecretField(description="Facebook App secret")
 
     @model_validator(mode="before")

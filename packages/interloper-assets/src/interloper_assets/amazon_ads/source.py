@@ -175,7 +175,7 @@ class AmazonAds(il.Source):
     connection: AmazonAdsConnection
 
     profile_id: str = il.FetchField(
-        title="Profile ID",
+        label="Profile ID",
         description="Amazon Ads profile",
         provider="connection.profiles",
         label_key="name",

@@ -168,14 +168,14 @@ class CampaignManager360(il.Source):
     """Campaign Manager 360 advertising platform integration."""
 
     profile_id: str = il.FetchField(
-        title="Profile ID",
+        label="Profile ID",
         description="CM360 user profile",
         provider="connection.profiles",
         label_key="name",
         value_key="profile_id",
     )
     account_id: str = il.FetchField(
-        title="Account ID",
+        label="Account ID",
         description="CM360 account",
         provider="connection.profiles",
         label_key="account_name",
@@ -184,7 +184,7 @@ class CampaignManager360(il.Source):
     )
     advertiser_id: str = il.InputField(
         default="",
-        title="Advertiser ID",
+        label="Advertiser ID",
         description="CM360 advertiser ID (only required for the custom_audiences asset)",
     )
 

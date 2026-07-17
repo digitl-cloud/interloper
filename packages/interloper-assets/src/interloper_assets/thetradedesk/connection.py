@@ -16,7 +16,7 @@ class TheTradeDeskConnection(il.Connection):
 
     model_config = SettingsConfigDict(env_prefix="thetradedesk_")
 
-    api_key: str = il.SecretField(title="API Key", description="The Trade Desk API key")
+    api_key: str = il.SecretField(label="API Key", description="The Trade Desk API key")
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:

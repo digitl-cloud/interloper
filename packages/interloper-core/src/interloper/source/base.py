@@ -136,7 +136,7 @@ class Source(Component):
     # Exposed fields
     dataset: str = InputField(default="", description="Defaults to the source key when left empty")
     default_destination_key: str = SelectField(
-        title="Default Destination",
+        label="Default Destination",
         default="",
         options_from="destinations",
         description="When an asset has multiple destinations, downstream assets use this to know where to read from",
