@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "interloper-core",
     "interloper-db",
+    "interloper-toolkit",
     "mcp>=1.28,<2",
     "uvicorn[standard]>=0.30.0",
 ]
@@ -25,6 +26,7 @@ build-backend = "uv_build"
 [tool.uv.sources]
 interloper-core = { workspace = true }
 interloper-db = { workspace = true }
+interloper-toolkit = { workspace = true }
 
 # ###############
 # RUFF

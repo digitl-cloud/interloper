@@ -1,7 +1,7 @@
 """MCP tool registration — thin wrappers over the shared read-only toolkit.
 
 Every wrapper is one delegation line; the implementations live in
-``interloper_db.toolkit`` (shared with the ADK agent), and their LLM-facing
+``interloper_toolkit`` (shared with the ADK agent), and their LLM-facing
 docstrings are adopted as the tool descriptions. FastMCP derives each tool's
 input schema from the wrapper's signature.
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from interloper_db.toolkit import analytics, catalog, collection, lineage, scheduling
+from interloper_toolkit import analytics, catalog, collection, lineage, scheduling
 from mcp.server.fastmcp import FastMCP
 
 from interloper_mcp.context import get_ctx

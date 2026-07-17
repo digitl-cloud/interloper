@@ -17,7 +17,7 @@ from uuid import UUID
 
 from interloper.catalog.base import Catalog
 from interloper_db import Store
-from interloper_db.toolkit import ToolkitContext
+from interloper_toolkit import ToolkitContext
 from mcp.server.auth.middleware.auth_context import get_access_token
 
 from interloper_mcp.auth import PatAccessToken

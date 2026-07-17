@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from interloper_db.toolkit.context import ToolkitContext, serialize
+from interloper_toolkit.context import ToolkitContext, serialize
 
 # --- Jobs ---
 

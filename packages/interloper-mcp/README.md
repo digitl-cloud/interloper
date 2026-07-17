@@ -66,7 +66,7 @@ The container target would follow the existing dockerfile pattern:
 ```dockerfile
 FROM base AS build-mcp
 COPY packages ./packages
-RUN docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-mcp
+RUN docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-toolkit interloper-mcp
 
 FROM runtime AS mcp
 COPY --from=build-mcp /interloper/.venv /interloper/.venv

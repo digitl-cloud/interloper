@@ -11,7 +11,7 @@ from typing import Any
 
 from interloper.oauth import is_provider_configured
 
-from interloper_db.toolkit.context import ToolkitContext
+from interloper_toolkit.context import ToolkitContext
 
 
 def list_definitions(ctx: ToolkitContext, kind: str | None = None) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-"""Tests for the shared read-only toolkit (``interloper_db.toolkit``).
+"""Tests for the shared read-only toolkit (``interloper_toolkit``).
 
 A real Store over in-memory SQLite plus a hand-built dumped catalog; the
 properties under test are the structured ``status`` contract, org scoping,
@@ -14,15 +14,15 @@ from uuid import uuid4
 
 import interloper as il
 import pytest
+from interloper_db import engine as engine_module
+from interloper_db.models import Backfill, Component, ComponentRelation, Run
+from interloper_db.store import Store
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
-from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Run
-from interloper_db.store import Store
-from interloper_db.toolkit import ToolkitContext, analytics, lineage, scheduling
-from interloper_db.toolkit import catalog as catalog_tools
+from interloper_toolkit import ToolkitContext, analytics, lineage, scheduling
+from interloper_toolkit import catalog as catalog_tools
 
 ORG_ID = uuid4()
 OTHER_ORG_ID = uuid4()

@@ -6,7 +6,7 @@ import datetime
 from typing import Any
 from uuid import UUID
 
-from interloper_db.toolkit.context import ToolkitContext, serialize
+from interloper_toolkit.context import ToolkitContext, serialize
 
 
 def run_history_summary(

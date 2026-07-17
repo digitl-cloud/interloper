@@ -1,6 +1,6 @@
 """Scheduling tools — jobs, runs, and backfills: monitoring and control.
 
-Read-only monitoring is implemented in ``interloper_db.toolkit.scheduling``
+Read-only monitoring is implemented in ``interloper_toolkit.scheduling``
 (shared with the MCP server; docstrings adopted below); the mutating
 operations — toggling, triggering — stay here, agent-only.
 """
@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from google.adk.tools.tool_context import ToolContext
-from interloper_db.toolkit import scheduling as toolkit_scheduling
+from interloper_toolkit import scheduling as toolkit_scheduling
 
 from interloper_agent.context import get_org_id, get_store, serialize, toolkit_ctx
 

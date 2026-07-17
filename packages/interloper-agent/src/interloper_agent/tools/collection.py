@@ -24,7 +24,7 @@ from interloper.errors import CatalogKeyError, ComponentDriftError, ConfigError,
 from interloper.oauth import is_provider_configured
 from interloper.resource.fields import is_fetch_field_provider
 from interloper.utils.concurrency import invoke
-from interloper_db.toolkit import collection as toolkit_collection
+from interloper_toolkit import collection as toolkit_collection
 from pydantic import ValidationError
 
 from interloper_agent.context import get_catalog, get_org_id, get_store, serialize, toolkit_ctx
