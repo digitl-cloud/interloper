@@ -2,6 +2,57 @@
 
 <!-- version list -->
 
+## v0.42.0 (2026-07-17)
+
+### Bug Fixes
+
+- **app**: Instant info tooltip with hover effect
+  ([`ebf204d`](https://github.com/digitl-cloud/interloper/commit/ebf204d92e5e9526af7ae0f35d3f5b8bb0ccb982))
+
+- **core**: Keep field metadata through decorator default overrides
+  ([`f188204`](https://github.com/digitl-cloud/interloper/commit/f18820464bbaf86d8c4364564239976bc9d8db1b))
+
+### Features
+
+- **api**: Personal access token management routes
+  ([`5fb8c1a`](https://github.com/digitl-cloud/interloper/commit/5fb8c1a9ca6474c0a059365b25813be502041488))
+
+- **app**: Show the app version in the sidebar footer
+  ([`e7e45b9`](https://github.com/digitl-cloud/interloper/commit/e7e45b9b29c8e00a8b4c414ca9b3cafa97d2eaa7))
+
+- **core**: Destination-level materialization strategy
+  ([`9d35fde`](https://github.com/digitl-cloud/interloper/commit/9d35fdea0ed51614131f5af00ed94a3b347e8c3c))
+
+- **core**: Label/description/info field presentation with info tooltips
+  ([`a621c8b`](https://github.com/digitl-cloud/interloper/commit/a621c8b5cb84843d46fe4f8c734b072d6d6e91bf))
+
+- **core**: Materialization strategy as user-facing config with enum selects
+  ([`23d5553`](https://github.com/digitl-cloud/interloper/commit/23d5553c8b503eca1555ae8cd488ee4d90392fcb))
+
+- **db**: Personal access tokens and a shared read-only toolkit
+  ([`8af606d`](https://github.com/digitl-cloud/interloper/commit/8af606d0488064a91c66444ec5d1880524a052e9))
+
+- **mcp**: Read-only MCP server package with PAT bearer auth
+  ([`da3b67f`](https://github.com/digitl-cloud/interloper/commit/da3b67f83d231900a65dceb6bb16c45f063c8a4e))
+
+### Refactoring
+
+- **agent**: Delegate read-only tools to the shared toolkit
+  ([`8b5dc29`](https://github.com/digitl-cloud/interloper/commit/8b5dc29d8db322dd388c3995e37a0b90e452ac8e))
+
+- **api**: Let every router own its prefix and tags
+  ([`909be35`](https://github.com/digitl-cloud/interloper/commit/909be350f677596ad6654cdd5b037c3b2e48150d))
+
+- **assets**: Migrate field factories from title= to label=
+  ([`3395432`](https://github.com/digitl-cloud/interloper/commit/3395432f838041e311029eaa71b51da68b634fba))
+
+- **toolkit**: Promote the shared toolkit to its own package
+  ([`c6524d0`](https://github.com/digitl-cloud/interloper/commit/c6524d00ae58891eff04769024fc086c41a003a7))
+
+- **toolkit**: Type the tool surface with pydantic result models
+  ([`e775d2e`](https://github.com/digitl-cloud/interloper/commit/e775d2e0d51080612746ade2a341b93302ce543b))
+
+
 ## v0.41.0 (2026-07-16)
 
 ### Bug Fixes
