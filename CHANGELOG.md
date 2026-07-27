@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.44.0 (2026-07-27)
+
+### Features
+
+- **agent**: Add component editing via update_component tool
+  ([`f4fe18e`](https://github.com/digitl-cloud/interloper/commit/f4fe18ed831ca856c85a8280c588060064371097))
+
+
 ## v0.43.3 (2026-07-27)
 
 
