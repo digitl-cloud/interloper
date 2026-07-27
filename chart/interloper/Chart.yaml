@@ -6,8 +6,8 @@ description: |
   API, and the frontend, with optional Postgres and RBAC for the
   Kubernetes launcher.
 type: application
-version: 0.43.2
-appVersion: "0.43.2"
+version: 0.43.3
+appVersion: "0.43.3"
 home: https://github.com/digitlcloud/interloper
 sources:
   - https://github.com/digitlcloud/interloper
