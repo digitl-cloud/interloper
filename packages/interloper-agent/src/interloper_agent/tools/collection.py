@@ -1,9 +1,9 @@
 """Collection tools — the component instances persisted for the organisation.
 
 Generic over component kinds, mirroring the framework's component
-architecture: one lister for any kind (sensitive kinds project
-identity-only, driven by ``KINDS``), plus the connection and source
-operations that are irreducibly kind-specific. Credentials never transit
+architecture: one lister and one editor for any kind (sensitive kinds
+project identity-only and refuse config edits, driven by ``KINDS``), plus
+the connection and source operations that are irreducibly kind-specific. Credentials never transit
 the model: ``request_connection_setup`` only signals the app to present a
 secure setup form, and the browser submits credentials to the API
 directly; source setup is conversational because its inputs (accounts,
@@ -19,6 +19,7 @@ from uuid import UUID
 
 import httpx
 from google.adk.tools.tool_context import ToolContext
+from interloper import KINDS
 from interloper.connection.base import Connection
 from interloper.errors import CatalogKeyError, ComponentDriftError, ConfigError, ConnectionCheckError, HydrationError
 from interloper.oauth import is_provider_configured
@@ -47,6 +48,100 @@ def list_components(kind: str | None = None, tool_context: ToolContext | None = 
 
 
 list_components.__doc__ = toolkit_collection.list_components.__doc__
+
+
+def update_component(
+    component_id: str,
+    name: str | None = None,
+    config_updates: dict[str, Any] | None = None,
+    asset_keys: list[str] | None = None,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Edit an existing component in the organisation's collection.
+
+    Works on any kind: rename it, change config values, or change which of a
+    source's assets are enabled. Recap exactly what changes (old → new) and
+    get the user's explicit confirmation BEFORE calling this.
+
+    Config updates are partial — only the fields passed change, the rest of
+    the stored config is kept; pass null to reset a field to its default.
+    Connection configs hold credentials and are never edited here: the user
+    changes those in the app (renaming a connection is fine). Rebinding
+    relations (a source's connection, a job's targets) also happens in the
+    app, not through config.
+
+    Args:
+        component_id: UUID of the component, from list_components.
+        name: New display name; omit to keep the current one.
+        config_updates: Config fields to change, merged over the stored
+            config — e.g. ``{"cron": "0 7 * * *"}`` on a job, or
+            ``{"account_id": ...}`` on a source.
+        asset_keys: Sources only — the child asset keys to enable, replacing
+            the current selection exactly. Omit to leave it unchanged.
+    """
+    try:
+        org_id = get_org_id(tool_context)
+        store = get_store()
+
+        component = store.get_component(UUID(component_id))
+        if component.org_id != org_id:
+            return {"status": "error", "error": f"Component '{component_id}' not found"}
+        if name is None and config_updates is None and not asset_keys:
+            return {"status": "error", "error": "Nothing to update — pass name, config_updates, or asset_keys"}
+        if config_updates and KINDS[component.kind].sensitive:
+            return {
+                "status": "error",
+                "error": (
+                    f"The config of a {component.kind} holds credentials and cannot be edited in chat — "
+                    "the user changes it in the app, or sets up a new one via the secure form. "
+                    "Renaming is allowed."
+                ),
+            }
+
+        config = None
+        if config_updates:
+            # Sensitive kinds were refused above, so the plain config column
+            # is the full stored payload.
+            config = dict(component.config or {})
+            for field, value in config_updates.items():
+                if value is None:
+                    config.pop(field, None)
+                else:
+                    config[field] = value
+
+        children = None
+        defn = get_catalog().get(component.key)
+        if asset_keys:
+            if component.kind != "source":
+                return {"status": "error", "error": f"Components of kind '{component.kind}' have no assets"}
+            if defn is None:
+                return {
+                    "status": "error",
+                    "error": f"'{component.key}' is no longer in the catalog — its asset selection cannot change",
+                }
+            children, error = _normalized_asset_keys(defn, component.key, asset_keys)
+            if error:
+                return error
+
+        try:
+            row = store.update_component(component.id, name=name, config=config, children=children)
+        except (ConfigError, CatalogKeyError) as e:
+            return {"status": "error", "error": str(e)}
+
+        result: dict[str, Any] = {
+            "status": "success",
+            "message": f"{component.kind.capitalize()} '{row.name or row.key}' updated",
+            "component": {"id": serialize(row.id), "kind": row.kind, "key": row.key, "name": row.name},
+        }
+        if config_updates:
+            result["changed_fields"] = sorted(config_updates)
+        if children is not None:
+            result["component"]["asset_count"] = len(row.children)
+            if defn is not None:
+                result["unresolved_requirements"] = _unresolved_requirements(defn, row)
+        return result
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 
 # -- Connection operations (kind-specific by nature) ------------------------------
