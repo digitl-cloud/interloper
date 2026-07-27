@@ -101,8 +101,9 @@ collection_agent = Agent(
     description=(
         "The organisation's collection of component instances: lists their sources, connections, and "
         "destinations, checks connection health, sets up new connections via the app's secure form "
-        "(never collecting credentials in chat), and creates sources conversationally — resolving "
-        "provider-backed options like the account to use through an existing connection."
+        "(never collecting credentials in chat), creates sources conversationally — resolving "
+        "provider-backed options like the account to use through an existing connection — and edits "
+        "existing components (rename, config changes, a source's enabled assets)."
     ),
     instruction=with_current_time(COLLECTION_INSTRUCTION),
     tools=[
@@ -113,6 +114,7 @@ collection_agent = Agent(
         collection.resolve_source_field_options,
         collection.create_source,
         collection.create_sources,
+        collection.update_component,
         collection.create_job,
         interaction.request_user_selection,
         interaction.request_confirmation,
@@ -140,7 +142,7 @@ scheduling_agent = Agent(
     description=(
         "Monitors run health, recent failures, job schedules, and backfill progress; "
         "triggers runs, starts backfills, toggles jobs or assets on/off, and creates "
-        "cron jobs over the collection's sources."
+        "or edits cron jobs over the collection's sources."
     ),
     instruction=with_current_time(SCHEDULING_INSTRUCTION),
     tools=[
@@ -156,6 +158,7 @@ scheduling_agent = Agent(
         scheduling.toggle_asset,
         collection.list_components,
         collection.create_job,
+        collection.update_component,
         interaction.request_confirmation,
     ],
 )
