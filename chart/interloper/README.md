@@ -125,6 +125,24 @@ Either `ingress.enabled: true` or `httpRoute.enabled: true`.  The
 HTTPRoute uses `gateway.networking.k8s.io/v1` and requires the Gateway
 API CRDs installed in your cluster.
 
+### Streaming endpoints and proxy timeouts
+
+The API serves long-lived SSE streams (agent chat), so any proxy in
+front of it with a *total response* timeout must allow the longest
+expected turn.  The chart stays cloud-agnostic — configure the timeout
+where your ingress implementation expects it:
+
+- **ingress-nginx** — via `ingress.annotations`:
+  `nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"`.
+- **GKE Gateway API** (`httpRoute`) — deploy a `GCPBackendPolicy`
+  alongside the release, with `spec.default.timeoutSec` and a
+  `targetRef` at the chart's API Service
+  (`<release>-interloper-api`).  GKE's default is 30 s, which cuts
+  streams mid-response.
+- **GKE Ingress** — deploy a `BackendConfig` with `spec.timeoutSec`
+  and bind it via `api.service.annotations`:
+  `cloud.google.com/backend-config: '{"default": "<name>"}'`.
+
 ### RBAC (Kubernetes launcher)
 
 `rbac.create: true` (the default) creates a ServiceAccount + Role +

@@ -96,6 +96,10 @@ metadata:
   name: {{ include "interloper.fullname" . }}-api
   labels:
     {{- include "interloper.componentLabels" (dict "root" . "component" "api") | nindent 4 }}
+  {{- with .Values.api.service.annotations }}
+  annotations:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.api.service.type }}
   ports:

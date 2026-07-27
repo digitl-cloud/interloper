@@ -65,6 +65,10 @@ metadata:
   name: {{ include "interloper.fullname" . }}-frontend
   labels:
     {{- include "interloper.componentLabels" (dict "root" . "component" "frontend") | nindent 4 }}
+  {{- with .Values.frontend.service.annotations }}
+  annotations:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.frontend.service.type }}
   ports:
