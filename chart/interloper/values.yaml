@@ -70,6 +70,11 @@ api:
   service:
     type: ClusterIP
     port: 3000
+    # Annotations on the API Service — the hook for cloud-specific backend
+    # tuning. The agent chat endpoint streams SSE, so proxies with a total
+    # response timeout must be raised above the longest expected turn (see
+    # the README's "Streaming endpoints and proxy timeouts").
+    annotations: {}
   # IPs uvicorn trusts for X-Forwarded-* headers. The API runs behind the
   # chart's ingress/HTTPRoute (TLS terminated upstream), so it must trust the
   # proxy to emit correct https redirects (e.g. the /api/catalog -> /api/catalog/
@@ -101,6 +106,7 @@ frontend:
   service:
     type: ClusterIP
     port: 80
+    annotations: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
