@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.43.0 (2026-07-27)
+
+### Bug Fixes
+
+- **toolkit**: Inline JSON-Schema refs in schemas leaving the toolkit
+  ([`dab956f`](https://github.com/digitl-cloud/interloper/commit/dab956fd794785107466d911a6352f5860c8d2f2))
+
+### Continuous Integration
+
+- Allow toolkit and mcp PR title scopes
+  ([`4742ab5`](https://github.com/digitl-cloud/interloper/commit/4742ab511fce95e816c1e237e8b735eb47616520))
+
+### Features
+
+- **chart**: Service annotations + streaming-timeout docs
+  ([`6fc1cba`](https://github.com/digitl-cloud/interloper/commit/6fc1cba566f32e053744d16243567c5b804c46d1))
+
+
 ## v0.42.0 (2026-07-17)
 
 ### Bug Fixes
