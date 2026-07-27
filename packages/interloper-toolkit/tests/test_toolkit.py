@@ -8,6 +8,7 @@ and the pure logic (lineage traversal, coverage math, schema search).
 from __future__ import annotations
 
 import datetime
+import json
 from collections.abc import Iterator
 from typing import Any
 from uuid import uuid4
@@ -31,6 +32,14 @@ CATALOG_DUMP: dict[str, Any] = {
     "facebook_ads": {
         "kind": "source",
         "name": "Facebook Ads",
+        "config_schema": {
+            "$defs": {
+                "MaterializationStrategy": {"enum": ["auto", "strict", "reconcile"], "type": "string"},
+            },
+            "properties": {
+                "materialization_strategy": {"$ref": "#/$defs/MaterializationStrategy", "default": "auto"},
+            },
+        },
         "assets": [
             {
                 "key": "ads",
@@ -159,6 +168,28 @@ class TestCatalog:
         result = catalog_tools.get_definition(ctx, "nope")
 
         assert result.status == "error"
+
+    def test_get_definition_inlines_schema_refs(self, ctx: ToolkitContext):
+        result = catalog_tools.get_definition(ctx, "facebook_ads")
+
+        assert result.status == "success"
+        strategy = result.definition["config_schema"]["properties"]["materialization_strategy"]
+        assert strategy["enum"] == ["auto", "strict", "reconcile"]
+        assert strategy["default"] == "auto"
+        serialized = json.dumps(result.definition)
+        assert "$ref" not in serialized
+        assert "$defs" not in serialized
+
+    def test_inline_refs_survives_cyclic_definitions(self):
+        schema = {
+            "$defs": {"Node": {"properties": {"next": {"$ref": "#/$defs/Node"}}, "type": "object"}},
+            "properties": {"root": {"$ref": "#/$defs/Node"}},
+        }
+
+        result = catalog_tools._inline_refs(schema)
+
+        assert result["properties"]["root"]["type"] == "object"
+        assert "$ref" not in json.dumps(result)
 
 
 class TestAnalytics:
