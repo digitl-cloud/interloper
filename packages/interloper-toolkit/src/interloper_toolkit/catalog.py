@@ -26,6 +26,29 @@ from interloper_toolkit.models import (
 )
 
 
+def _inline_refs(node: Any, defs: dict[str, Any] | None = None, _stack: frozenset[str] = frozenset()) -> Any:
+    """Resolve local ``#/$defs/*`` references in-place and drop ``$defs``.
+
+    Gemini rejects tool responses containing JSON-Schema ``$ref`` pointers
+    (400 INVALID_ARGUMENT), so every schema leaving the toolkit is inlined:
+    a ``$ref`` is replaced by its definition (ref siblings win on conflict);
+    cyclic or unresolvable refs are dropped, keeping the siblings.
+    """
+    if isinstance(node, list):
+        return [_inline_refs(item, defs, _stack) for item in node]
+    if not isinstance(node, dict):
+        return node
+    if isinstance(node.get("$defs"), dict):
+        defs = {**(defs or {}), **node["$defs"]}
+    ref = node.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        name = ref.rsplit("/", 1)[-1]
+        if defs and name in defs and name not in _stack:
+            siblings = {k: v for k, v in node.items() if k not in ("$ref", "$defs")}
+            return _inline_refs({**defs[name], **siblings}, defs, _stack | {name})
+    return {k: _inline_refs(v, defs, _stack) for k, v in node.items() if k not in ("$defs", "$ref")}
+
+
 def list_definitions(
     ctx: ToolkitContext, kind: str | None = None
 ) -> DefinitionCounts | DefinitionList | ToolError:
@@ -112,7 +135,7 @@ def get_definition(ctx: ToolkitContext, key: str) -> DefinitionDetail | ToolErro
         defn = ctx.catalog.get(key)
         if defn is None:
             return ToolError(error=f"Definition '{key}' not found in catalog")
-        return DefinitionDetail(definition=defn)
+        return DefinitionDetail(definition=_inline_refs(defn))
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -139,6 +162,7 @@ def get_asset_schema(ctx: ToolkitContext, source_key: str, asset_key: str) -> As
 
         for asset_def in defn.get("assets", []):
             if asset_def.get("key") == asset_key or asset_def.get("qualified_key") == f"{source_key}.{asset_key}":
+                asset_def = _inline_refs(asset_def)
                 return AssetSchemaResult(
                     source_key=source_key,
                     asset_key=asset_key,
@@ -275,5 +299,5 @@ def _get_schema_properties(ctx: ToolkitContext, source_key: str, asset_key: str)
             schema = asset_def.get("asset_schema")
             if not schema or "properties" not in schema:
                 return ToolError(error=f"Asset '{source_key}.{asset_key}' has no schema")
-            return schema["properties"]
+            return _inline_refs(schema)["properties"]
     return ToolError(error=f"Asset '{asset_key}' not found in source '{source_key}'")
