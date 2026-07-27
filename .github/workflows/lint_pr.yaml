@@ -30,6 +30,8 @@ jobs:
             docs
             google-cloud
             k8s
+            mcp
             pandas
             scheduler
+            toolkit
           requireScope: false
