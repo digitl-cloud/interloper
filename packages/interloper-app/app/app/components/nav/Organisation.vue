@@ -18,12 +18,10 @@ async function loadUserOrgs() {
     orgsLoaded.value = true
 }
 
+const { switchToOrg } = useOrgSwitch()
+
 async function selectOrg(org: Organisation) {
-    // Pages bespoke to one org's resource (run/backfill details) are
-    // meaningless in the new org — leave for their list page first.
-    const target = route.meta.orgSwitchTarget
-    if (typeof target === 'string') await navigateTo(target)
-    await orgStore.switchOrg(org.id)
+    await switchToOrg(org)
     orgsLoaded.value = false
 }
 

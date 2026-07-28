@@ -135,6 +135,7 @@ const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((se
                         <UCommandPalette v-model:search-term="commandPaletteSearchTerm"
                                          :groups="commandPaletteGroups"
                                          :loading="commandPaletteLoading"
+                                         :fuse="{ fuseOptions: { keys: ['label', 'suffix', 'keywords'] } }"
                                          placeholder="Search..."
                                          close
                                          @update:open="commandPaletteOpen = $event" />
