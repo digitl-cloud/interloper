@@ -70,7 +70,7 @@ async function handleDelete(ids: string[]) {
         toast.add({ title: `${ids.length} resource(s) deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, pageTitle.value.slice(0, -1)) ?? { title: 'Failed to delete resource', color: 'error' })
+        toast.add(inUseToast(e, pageTitle.value.slice(0, -1)) ?? errorToast(e, 'Failed to delete resource'))
     }
 }
 

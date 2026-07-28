@@ -118,7 +118,7 @@ async function handleDelete(ids: string[]) {
         toast.add({ title: `${ids.length} job${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Job') ?? { title: 'Failed to delete job', color: 'error' })
+        toast.add(inUseToast(e, 'Job') ?? errorToast(e, 'Failed to delete job'))
     }
 }
 </script>

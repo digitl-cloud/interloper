@@ -87,7 +87,7 @@ async function onDeleteSource(sourceId: string) {
         toast.add({ title: `Source "${source?.name ?? 'Source'}" deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Source') ?? { title: 'Failed to delete source', color: 'error' })
+        toast.add(inUseToast(e, 'Source') ?? errorToast(e, 'Failed to delete source'))
     }
 }
 
@@ -99,8 +99,8 @@ async function onCreateDependencies(pairs: Array<{ upstreamAssetId: string; down
             ),
         )
     }
-    catch {
-        toast.add({ title: 'Failed to create dependency', color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to create dependency'))
     }
 }
 
@@ -108,8 +108,8 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
     try {
         await componentsStore.removeRelation(payload.downstreamAssetId, 'dependency', payload.upstreamAssetId)
     }
-    catch {
-        toast.add({ title: 'Failed to delete dependency', color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to delete dependency'))
     }
 }
 </script>

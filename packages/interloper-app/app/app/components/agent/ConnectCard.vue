@@ -98,12 +98,12 @@ async function submit() {
             body: { component_key: props.request.connectionKey, config: formData.value },
         })
     }
-    catch (e: any) {
+    catch (e) {
         check = {
             ok: false,
             live: false,
             category: 'error',
-            message: e?.data?.detail ?? 'The connection check could not be run.',
+            message: errorDetail(e) ?? 'The connection check could not be run.',
             errors: [],
         }
     }
@@ -127,8 +127,8 @@ async function submit() {
         toast.add({ title: `Connection "${createdName.value}" created`, color: 'success' })
         emit('created', createdName.value, check.live)
     }
-    catch {
-        toast.add({ title: 'Failed to create connection', color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to create connection'))
         state.value = 'idle'
     }
 }

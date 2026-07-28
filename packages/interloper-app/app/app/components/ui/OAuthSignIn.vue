@@ -44,7 +44,7 @@ async function handleSignIn() {
     catch (error) {
         // Closing the popup is a deliberate cancel, not a failure.
         if (!(error instanceof OAuthCancelledError)) {
-            toast.add({ title: 'Sign-in failed', color: 'error' })
+            toast.add(errorToast(error, 'Sign-in failed'))
         }
     }
     finally {

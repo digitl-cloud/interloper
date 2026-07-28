@@ -67,8 +67,8 @@ async function submitForm() {
         formOpen.value = false
         await loadData()
     }
-    catch (err: any) {
-        toast.add({ title: err?.data?.detail || 'Operation failed', color: 'error' })
+    catch (err) {
+        toast.add(errorToast(err, 'Operation failed'))
     }
     finally {
         submitting.value = false

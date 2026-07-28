@@ -79,8 +79,8 @@ async function removeMember(member: OrgMember) {
         toast.add({ title: `${member.name || member.email} removed`, color: 'success' })
         await loadData()
     }
-    catch (err: any) {
-        toast.add({ title: err?.data?.detail || 'Failed to remove member', color: 'error' })
+    catch (err) {
+        toast.add(errorToast(err, 'Failed to remove member'))
     }
 }
 
@@ -90,8 +90,8 @@ async function cancelInvite(member: OrgMember) {
         toast.add({ title: `Invitation to ${member.email} cancelled`, color: 'success' })
         await loadData()
     }
-    catch (err: any) {
-        toast.add({ title: err?.data?.detail || 'Failed to cancel invitation', color: 'error' })
+    catch (err) {
+        toast.add(errorToast(err, 'Failed to cancel invitation'))
     }
 }
 
@@ -100,8 +100,8 @@ async function resendInvite(member: OrgMember) {
         await apiFetch(`/organisations/invitations/${member.id}/resend`, { method: 'POST' })
         toast.add({ title: `Invitation resent to ${member.email}`, color: 'success' })
     }
-    catch (err: any) {
-        toast.add({ title: err?.data?.detail || 'Failed to resend invitation', color: 'error' })
+    catch (err) {
+        toast.add(errorToast(err, 'Failed to resend invitation'))
     }
 }
 

@@ -326,8 +326,8 @@ async function submit() {
             emit('created')
         }
     }
-    catch {
-        toast.add({ title: `Failed to ${isEditMode.value ? 'update' : 'create'} source`, color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, `Failed to ${isEditMode.value ? 'update' : 'create'} source`))
     }
     finally {
         submitting.value = false
