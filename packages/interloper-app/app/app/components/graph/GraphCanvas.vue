@@ -84,13 +84,15 @@ function toggleGroup(groupId: string) {
 // Layout constants (assets render smaller in compact / run mode)
 const ASSET_W = props.compact ? 200 : 240
 const ASSET_H = props.compact ? 44 : 64
-const STACK_GAP = 14
+// Wide enough that corner badges (hanging ~12px past a card's edge) never
+// touch the neighbouring card or its badges.
+const STACK_GAP = 28
 /** Horizontal gap between dependency ranks inside an expanded container. */
 const INNER_GAP_RANK = 48
 const SRC_PADDING = 16
 const GRP_PADDING = 24
 const SRC_HEADER_H = 68
-const SRC_BODY_TOP = 12
+const SRC_BODY_TOP = 16
 /** Container width: one asset column plus side padding; collapsed cards match. */
 const SRC_W = ASSET_W + SRC_PADDING * 2
 const COLLAPSED_W = SRC_W

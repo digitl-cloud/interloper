@@ -156,7 +156,7 @@ const ringClass = computed(() => {
                  class="absolute -left-2.5 -top-2.5 z-10">
                 <UTooltip :delay-duration="0"
                           :content="{ side: 'top', sideOffset: 6 }">
-                    <div class="flex size-7 items-center justify-center rounded-full border border-muted/50 bg-muted/50">
+                    <div class="flex size-7 items-center justify-center rounded-full border border-[var(--ui-border-accented)] bg-muted">
                         <UIcon name="i-lucide-loader-2"
                                class="size-4 shrink-0 animate-spin text-muted" />
                     </div>
@@ -173,7 +173,9 @@ const ringClass = computed(() => {
                       :content="{ side: 'top', sideOffset: 6 }"
                       class="absolute -right-2.5 -top-2.5 z-10">
                 <div class="flex size-7 items-center justify-center rounded-full border"
-                     :class="driftStatus === 'missing' ? 'border-error/40 bg-error/25' : 'border-warning/40 bg-warning/25'">
+                     :class="driftStatus === 'missing'
+                         ? 'border-[color-mix(in_srgb,var(--ui-error)_40%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-error)_25%,var(--ui-bg))]'
+                         : 'border-[color-mix(in_srgb,var(--ui-warning)_40%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-warning)_25%,var(--ui-bg))]'">
                     <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
                            class="size-4 shrink-0"
                            :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
@@ -189,7 +191,7 @@ const ringClass = computed(() => {
                       :content="{ side: 'top', sideOffset: 6 }"
                       :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
                       class="absolute -right-2.5 -top-2.5 z-10">
-                <div class="flex size-7 items-center justify-center rounded-full border border-warning/40 bg-warning/25">
+                <div class="flex size-7 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-warning)_40%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-warning)_25%,var(--ui-bg))]">
                     <UIcon name="i-lucide-triangle-alert"
                            class="size-4 shrink-0 text-warning" />
                 </div>
@@ -219,7 +221,7 @@ const ringClass = computed(() => {
                  class="absolute -bottom-3 -right-3 z-10">
                 <UTooltip :delay-duration="0"
                           :content="{ side: 'bottom', sideOffset: 6 }">
-                    <div class="relative flex size-8 items-center justify-center rounded-full border border-primary/80 bg-primary/20">
+                    <div class="relative flex size-8 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-primary)_80%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-primary)_20%,var(--ui-bg))]">
                         <UIcon :name="destinationBadge.icon"
                                class="size-4 shrink-0 text-primary" />
                         <span v-if="destinationBadge.isMulti"
