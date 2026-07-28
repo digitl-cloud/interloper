@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.46.0 (2026-07-28)
+
+### Bug Fixes
+
+- **app**: Drop gray node rings, thicken card borders, colorize tag badges
+  ([`39c31a1`](https://github.com/digitl-cloud/interloper/commit/39c31a1b6312d427eaa8931c900fb4b52b4df2ad))
+
+### Features
+
+- **app**: Remove config section from asset info panel
+  ([`728ebb8`](https://github.com/digitl-cloud/interloper/commit/728ebb839f04133f0fa6f6ed3738c53a9c2fd37e))
+
+
 ## v0.45.1 (2026-07-28)
 
 ### Bug Fixes
