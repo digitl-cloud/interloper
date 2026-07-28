@@ -2,6 +2,24 @@ apiVersion: v1
 entries:
   interloper:
   - apiVersion: v2
+    appVersion: 0.45.1
+    created: "2026-07-28T10:39:29.077931289Z"
+    description: 'Interloper — a data platform for building, scheduling, and running
+      data pipelines.  Deploys the scheduler (cron + queue worker + reaper), the API,
+      and the frontend, with optional Postgres and RBAC for the Kubernetes launcher. '
+    digest: 53b81c6c31411d387ed1960c853b57ba8b3b48f6b8398aa8fe048876f7bda082
+    home: https://github.com/digitlcloud/interloper
+    maintainers:
+    - email: guillaume@digitlcloud.com
+      name: Guillaume Onfroy
+    name: interloper
+    sources:
+    - https://github.com/digitlcloud/interloper
+    type: application
+    urls:
+    - https://github.com/digitl-cloud/interloper/releases/download/0.45.1/interloper-0.45.1.tgz
+    version: 0.45.1
+  - apiVersion: v2
     appVersion: 0.45.0
     created: "2026-07-28T09:45:43.264119273Z"
     description: 'Interloper — a data platform for building, scheduling, and running
@@ -955,4 +973,4 @@ entries:
     urls:
     - https://github.com/digitl-cloud/interloper/releases/download/interloper-0.3.1/interloper-0.3.1.tgz
     version: 0.3.1
-generated: "2026-07-28T09:45:43.2668857Z"
+generated: "2026-07-28T10:39:29.078170879Z"
