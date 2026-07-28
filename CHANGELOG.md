@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.45.1 (2026-07-28)
+
+### Bug Fixes
+
+- **app**: Polish graph node status rings and badges
+  ([`1893057`](https://github.com/digitl-cloud/interloper/commit/18930572f96212b95ea921c7a76754fb9b10ad92))
+
+### Performance Improvements
+
+- **agent**: Increase max results count to 100 for resolve_source_field_options tool
+  ([`25e45c3`](https://github.com/digitl-cloud/interloper/commit/25e45c38215875b896bf5b6d013c45703d20275d))
+
+
 ## v0.45.0 (2026-07-28)
 
 ### Features
