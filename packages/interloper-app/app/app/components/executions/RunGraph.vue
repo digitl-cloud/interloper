@@ -45,7 +45,6 @@ function onAssetClick(asset: ComponentRecord) {
 
 <template>
     <GraphCanvas :model="flatModel"
-                 view-mode="status"
                  direction="LR"
                  compact
                  fit-to-content

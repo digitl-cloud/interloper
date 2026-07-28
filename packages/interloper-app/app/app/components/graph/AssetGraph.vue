@@ -11,8 +11,7 @@ import type { ComponentRecord } from '~/types/component'
 const props = withDefaults(defineProps<{
     sourceIds?: string[]
     readonly?: boolean
-    expandMode?: ExpandMode
-    viewMode?: ViewMode
+    groupBy?: GroupBy
     statusFilter?: StatusFilter
     showNewSourceButton?: boolean
     /** Asset id whose panel is open — the only highlighted node. */
@@ -20,8 +19,7 @@ const props = withDefaults(defineProps<{
 }>(), {
     sourceIds: undefined,
     readonly: false,
-    expandMode: 'nodes',
-    viewMode: 'topology',
+    groupBy: 'none',
     statusFilter: 'all',
     showNewSourceButton: true,
     selectedId: null,
@@ -107,8 +105,7 @@ function onConnect(connection: Connection) {
     <GraphCanvas :model="displayModel"
                  :editable="!readonly"
                  :loading="loading"
-                 :expand-mode="expandMode"
-                 :view-mode="viewMode"
+                 :group-by="groupBy"
                  :show-new-source-button="showNewSourceButton"
                  :selected-id="selectedId"
                  :is-valid-connection="isValidConnection"

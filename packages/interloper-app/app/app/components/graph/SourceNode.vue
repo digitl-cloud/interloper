@@ -4,50 +4,29 @@ import type { Connection } from '@vue-flow/core'
 import { Handle, Position, useNodeConnections, useVueFlow, useNodeId } from '@vue-flow/core'
 import type { ComponentRecord } from '~/types/component'
 
-interface MiniGraph {
-    width: number
-    height: number
-    nodes: Array<{ entry: GraphAssetEntry; pos: { x: number; y: number } }>
-    edges: Array<{ from: string; to: string }>
-}
-
 const props = withDefaults(defineProps<{
     source: ComponentRecord
     sourceDefn: SourceDefinition | undefined
-    /** Source is expanded (showing its assets), in any expand mode. */
+    /** Source is expanded (its assets render as nested canvas nodes). */
     open?: boolean
-    /** Active expand mode. */
-    mode?: ExpandMode
-    /** Child asset entries — for the in-card list/graph modes. */
-    children?: GraphAssetEntry[]
-    /** Pre-laid-out mini graph — for the in-card graph mode. */
-    miniGraph?: MiniGraph
-    /** Derived node status (used by the Status view mode; see Phase 3). */
+    /** Derived node status — reflected on the card border. */
     status?: NodeStatus
-    viewMode?: ViewMode
     /** VueFlow selection state — drives the blue selection ring. */
     selected?: boolean
 }>(), {
     open: false,
-    mode: 'nodes',
-    children: () => [],
-    miniGraph: undefined,
     status: undefined,
-    viewMode: 'topology',
     selected: false,
 })
 
 const emit = defineEmits<{
     edit: [sourceId: string]
     delete: [sourceId: string]
-    'asset-click': [asset: ComponentRecord, assetDefn: AssetDefinition | undefined, source: ComponentRecord | null]
 }>()
 
 // container = expanded onto the canvas as child nodes (header-only card);
-// inCard   = expanded inside the card (list / graph);
 // collapsed = not open.
-const container = computed(() => props.open && props.mode === 'nodes')
-const inCard = computed(() => props.open && props.mode !== 'nodes')
+const container = computed(() => props.open)
 const collapsed = computed(() => !props.open)
 
 const isValidConnection = inject<(connection: Connection) => boolean>('isValidConnection')
@@ -94,7 +73,6 @@ const { confirm } = useConfirm()
 const componentsStore = useComponentsStore()
 const { getWarnings } = useAssetWarnings()
 const { getBadgeForSource } = useDestinationBadge()
-const { getSourceSchedule } = useSchedule()
 const { sourceDrift, statusBadge } = useDrift()
 
 const driftStatus = computed(() => sourceDrift(props.source))
@@ -148,22 +126,11 @@ const isMaterializing = computed(() =>
     props.source.children?.some(a => materializingAssetIds?.value?.has(a.id)) ?? false,
 )
 
-const schedule = computed(() => getSourceSchedule(props.source))
-
-/** Collapsed meta suffix: "Paused" when scheduled-but-disabled, else the schedule label. */
-const metaSuffix = computed(() => {
-    const s = schedule.value
-    if (!s) return null
-    return s.paused ? 'Paused' : s.label
-})
-
-function onAssetSelect(entry: GraphAssetEntry) {
-    emit('asset-click', entry.asset, entry.assetDefn, entry.source)
-}
-
 const ringClass = computed(() => {
     if (props.selected) return 'ring-2 ring-primary'
-    if (props.viewMode === 'status' && props.status) return statusRingClass(props.status.state)
+    // Expanded, the card is just a frame — its assets carry their own status.
+    if (props.open) return ''
+    if (props.status) return statusRingClass(props.status.state)
     return ''
 })
 </script>
@@ -174,7 +141,7 @@ const ringClass = computed(() => {
              :class="shouldFade && 'opacity-25'">
             <Handle id="source-target"
                     type="target"
-                    :position="Position.Top"
+                    :position="Position.Left"
                     :connectable-start="false"
                     :connectable-end="false"
                     :is-valid-connection="isValidConnection"
@@ -268,77 +235,46 @@ const ringClass = computed(() => {
                 </UTooltip>
             </div>
 
-            <!-- Main card -->
-            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-[var(--ui-border-accented)] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.55)]"
-                 :class="[collapsed ? 'bg-muted' : 'bg-default', ringClass]">
-                <!-- Collapsed: header + divided meta row -->
-                <template v-if="collapsed">
-                    <div class="flex flex-1 items-center gap-3 px-4">
-                        <div class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-elevated">
-                            <UIcon :name="icon"
-                                   class="size-6 text-muted" />
-                        </div>
-                        <div class="min-w-0 flex-1">
-                            <div class="truncate text-sm font-semibold text-highlighted">{{ source.name }}</div>
-                            <div v-if="sourceDefn"
-                                 class="truncate text-xs text-muted">
-                                {{ sourceDefn.name }}
-                            </div>
-                        </div>
-                        <UIcon name="i-lucide-chevron-right"
-                               class="size-4 shrink-0 text-dimmed" />
+            <!-- Main card: one header row in both states; expanded grows downward
+                 (assets render as nested canvas nodes). -->
+            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-[var(--ui-border-accented)]"
+                 :class="[container ? 'bg-muted' : 'bg-default', ringClass]">
+                <div class="flex h-[68px] shrink-0 items-center gap-3 px-4"
+                     :class="container && 'border-b border-default bg-default'">
+                    <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-elevated">
+                        <UIcon :name="icon"
+                               class="size-5" />
                     </div>
-                    <div class="flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap border-t border-[var(--ui-border-accented)] bg-default px-4 py-2.5 text-xs text-muted">
-                        <UIcon name="i-lucide-box"
-                               class="size-3.5 shrink-0 text-dimmed" />
-                        <span>{{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}</span>
-                        <template v-if="metaSuffix">
-                            <span class="text-dimmed">·</span>
-                            <span :class="schedule?.paused ? 'text-warning' : ''"
-                                  class="truncate">{{ metaSuffix }}</span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="truncate text-sm font-semibold text-highlighted">{{ source.name }}</span>
+                            <span class="size-2 shrink-0 rounded-full"
+                                  :class="statusDotClass(status?.state ?? 'idle')" />
+                        </div>
+                        <div v-if="sourceDefn"
+                             class="truncate text-xs text-muted">
+                            {{ sourceDefn.name }}
+                        </div>
+                    </div>
+                    <UTooltip v-if="isDrift && !collapsed"
+                              :delay-duration="0"
+                              :content="{ side: 'top', sideOffset: 6 }">
+                        <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
+                               class="size-4 shrink-0"
+                               :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
+                        <template #content>
+                            <div class="text-xs">{{ driftBadge?.label }}</div>
                         </template>
-                    </div>
-                </template>
-
-                <!-- Expanded: compact header + optional in-card body -->
-                <template v-else>
-                    <div class="flex h-12 shrink-0 items-center gap-2.5 border-b border-[var(--ui-border-accented)] px-4">
-                        <div class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-elevated">
-                            <UIcon :name="icon"
-                                   class="size-4 text-muted" />
-                        </div>
-                        <span class="min-w-0 flex-1 truncate text-sm font-semibold text-highlighted">{{ source.name }}</span>
-                        <UTooltip v-if="isDrift"
-                                  :delay-duration="0"
-                                  :content="{ side: 'top', sideOffset: 6 }">
-                            <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
-                                   class="size-4 shrink-0"
-                                   :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
-                            <template #content>
-                                <div class="text-xs">{{ driftBadge?.label }}</div>
-                            </template>
-                        </UTooltip>
-                        <span class="shrink-0 text-[11px] text-dimmed">{{ assetCount }} assets</span>
-                        <UIcon name="i-lucide-chevron-down"
-                               class="size-4 shrink-0 text-dimmed" />
-                    </div>
-
-                    <GraphSourceAssetList v-if="inCard && mode === 'list'"
-                                          class="flex-1 min-h-0 overflow-auto"
-                                          :assets="children"
-                                          @select="onAssetSelect" />
-
-                    <div v-else-if="inCard && mode === 'graph' && miniGraph"
-                         class="flex flex-1 min-h-0 items-center justify-center p-4">
-                        <GraphSourceMiniGraph :mini-graph="miniGraph"
-                                              @select="onAssetSelect" />
-                    </div>
-                </template>
+                    </UTooltip>
+                    <span class="shrink-0 text-sm text-muted">{{ assetCount }}</span>
+                    <UIcon :name="collapsed ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+                           class="size-4 shrink-0 text-dimmed" />
+                </div>
             </div>
 
             <Handle id="source-source"
                     type="source"
-                    :position="Position.Bottom"
+                    :position="Position.Right"
                     :connectable-start="!container && !graphReadonly"
                     :connectable-end="!container && !graphReadonly"
                     :is-valid-connection="isValidConnection"

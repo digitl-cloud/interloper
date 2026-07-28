@@ -33,11 +33,8 @@ export function stateFromExecution(status: ExecutionStatus): GraphNodeState {
     return status
 }
 
-/** How a source reveals its assets on the canvas. */
-export type ExpandMode = 'list' | 'graph' | 'nodes'
-
-/** Which dimension the canvas decorates nodes by. */
-export type ViewMode = 'topology' | 'status'
+/** How top-level nodes are grouped on the canvas. */
+export type GroupBy = 'none' | 'type'
 
 /** Source health filter for the collection graph (derived states only). */
 export type StatusFilter = 'all' | 'healthy' | 'attention' | 'paused'

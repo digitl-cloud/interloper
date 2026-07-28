@@ -11,7 +11,6 @@ const props = defineProps<{
     asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
     status?: NodeStatus
-    viewMode?: ViewMode
     /** VueFlow selection state — drives the selection ring. */
     selected?: boolean
 }>()
