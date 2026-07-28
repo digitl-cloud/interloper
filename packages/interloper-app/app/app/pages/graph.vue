@@ -17,7 +17,7 @@ const catalogStore = useCatalogStore()
 const toast = useToast()
 
 // Canvas view controls (toolbar-owned)
-const groupBy = ref<GroupBy>('none')
+const groupBy = ref<GroupBy>('type')
 const statusFilter = ref<StatusFilter>('all')
 
 const { sourceStatus } = useNodeStatus()
@@ -120,8 +120,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                       :counts="statusCounts">
             <template #end>
                 <UButton icon="i-lucide-plus"
-                         label="New Source"
-                         size="sm"
+                         label="New source"
                          @click="onCreateSource" />
             </template>
         </GraphToolbar>

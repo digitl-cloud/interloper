@@ -34,7 +34,7 @@ const props = withDefaults(defineProps<{
     compact?: boolean
 }>(), {
     editable: false,
-    groupBy: 'none',
+    groupBy: 'source',
     loading: false,
     isValidConnection: undefined,
     materializingAssetIds: undefined,
@@ -270,6 +270,8 @@ function getGroupDimensions(groupId: string): { width: number; height: number } 
 function representativeOf(assetId: string): string | null {
     const sourceId = assetToSource.value.get(assetId)
     if (sourceId === undefined) return null
+    // Flat asset view: no containers, every asset speaks for itself.
+    if (props.groupBy === 'asset') return assetId
     if (sourceId === null) return assetId
     const groupId = groupOfSource.value.get(sourceId)
     if (groupId && !isGroupExpanded(groupId)) return groupId
@@ -281,6 +283,7 @@ function representativeOf(assetId: string): string | null {
 function topLevelOf(assetId: string): string | null {
     const sourceId = assetToSource.value.get(assetId)
     if (sourceId === undefined) return null
+    if (props.groupBy === 'asset') return assetId
     if (sourceId === null) return assetId
     return groupOfSource.value.get(sourceId) ?? sourceId
 }
@@ -313,23 +316,29 @@ const topLevelEdges = computed(() => {
 
 /** Layout top-level nodes (groups + ungrouped sources + standalone assets) using DAG layout. */
 const sourceLayout = computed(() => {
-    const layoutNodes = [
-        ...[...groups.value.keys()].map((groupId) => {
-            const dims = getGroupDimensions(groupId)
-            return { id: groupId, width: dims.width, height: dims.height }
-        }),
-        ...sourceEntries.value
-            .filter(entry => !groupOfSource.value.has(entry.source.id))
-            .map((entry) => {
-                const dims = getSourceDimensions(entry.source.id)
-                return { id: entry.source.id, width: dims.width, height: dims.height }
-            }),
-        ...standaloneEntries.value.map(entry => ({
+    const layoutNodes = props.groupBy === 'asset'
+        ? assetEntries.value.map(entry => ({
             id: entry.asset.id,
             width: ASSET_W,
             height: measuredHeights.value.get(entry.asset.id) ?? ASSET_H,
-        })),
-    ]
+        }))
+        : [
+            ...[...groups.value.keys()].map((groupId) => {
+                const dims = getGroupDimensions(groupId)
+                return { id: groupId, width: dims.width, height: dims.height }
+            }),
+            ...sourceEntries.value
+                .filter(entry => !groupOfSource.value.has(entry.source.id))
+                .map((entry) => {
+                    const dims = getSourceDimensions(entry.source.id)
+                    return { id: entry.source.id, width: dims.width, height: dims.height }
+                }),
+            ...standaloneEntries.value.map(entry => ({
+                id: entry.asset.id,
+                width: ASSET_W,
+                height: measuredHeights.value.get(entry.asset.id) ?? ASSET_H,
+            })),
+        ]
 
     return layoutDag(layoutNodes, topLevelEdges.value, {
         // gapX = within-layer, gapY = between-layer. In LR that means the
@@ -446,6 +455,21 @@ function pushSourceNodes(result: Node[], entry: GraphSourceEntry, pos: { x: numb
 const nodes = computed<Node[]>(() => {
     const result: Node[] = []
 
+    // Flat asset view: every asset is a top-level node, no containers.
+    if (props.groupBy === 'asset') {
+        for (const entry of assetEntries.value) {
+            const pos = sourceLayout.value.positions.get(entry.asset.id) ?? { x: 0, y: 0 }
+            result.push({
+                id: entry.asset.id,
+                type: 'asset',
+                position: { x: pos.x, y: pos.y },
+                data: { asset: entry.asset, assetDefn: entry.assetDefn, source: entry.source, status: entry.status },
+                connectable: true,
+            })
+        }
+        return applyFocus(result)
+    }
+
     // Group nodes first — VueFlow requires parents before their children.
     for (const [groupId, members] of groups.value) {
         const pos = sourceLayout.value.positions.get(groupId) ?? { x: 0, y: 0 }
@@ -497,17 +521,22 @@ const nodes = computed<Node[]>(() => {
         })
     }
 
-    // Selection focus. Set opacity explicitly on EVERY node each pass — only
-    // setting it on faded nodes leaves a stale 0.28 that VueFlow never clears,
-    // so nodes would stay dimmed after the selection moves.
+    return applyFocus(result)
+})
+
+/**
+ * Selection focus. Set opacity explicitly on EVERY node each pass — only
+ * setting it on faded nodes leaves a stale 0.28 that VueFlow never clears,
+ * so nodes would stay dimmed after the selection moves.
+ */
+function applyFocus(result: Node[]): Node[] {
     const f = focus.value
     for (const node of result) {
         const faded = f ? !f.nodeIds.has(node.id) : false
         node.style = { opacity: faded ? '0.28' : '1', transition: 'opacity 0.2s ease' }
     }
-
     return result
-})
+}
 
 /** Styled edges: faint gray by default; the selection's incident edges go blue, the rest dim. */
 const edges = computed<Edge[]>(() => {

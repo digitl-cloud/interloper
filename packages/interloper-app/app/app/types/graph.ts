@@ -33,8 +33,12 @@ export function stateFromExecution(status: ExecutionStatus): GraphNodeState {
     return status
 }
 
-/** How top-level nodes are grouped on the canvas. */
-export type GroupBy = 'none' | 'type'
+/**
+ * Which hierarchy level forms the top-level nodes on the canvas:
+ * `type` nests sources under their catalog type, `source` shows sources
+ * (the pre-grouping default), `asset` flattens everything to bare assets.
+ */
+export type GroupBy = 'type' | 'source' | 'asset'
 
 /** Source health filter for the collection graph (derived states only). */
 export type StatusFilter = 'all' | 'healthy' | 'attention' | 'paused'
