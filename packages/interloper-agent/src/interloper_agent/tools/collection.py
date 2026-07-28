@@ -37,7 +37,7 @@ _CHECK_TIMEOUT = 15.0
 
 #: Upper bound on a provider options fetch, and the most options one response carries.
 _RESOLVE_TIMEOUT = 30.0
-_MAX_OPTIONS = 50
+_MAX_OPTIONS = 100
 
 
 def list_components(kind: str | None = None, tool_context: ToolContext | None = None) -> dict[str, Any]:
