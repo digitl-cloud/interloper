@@ -1,3 +1,21 @@
+import type { Organisation } from '~/types/organisation'
+
+/** Switch the active organisation, shared by the nav switcher and the command palette. */
+export function useOrgSwitch() {
+    const route = useRoute()
+    const orgStore = useOrganisationStore()
+
+    async function switchToOrg(org: Organisation) {
+        // Pages bespoke to one org's resource (run/backfill details) are
+        // meaningless in the new org — leave for their list page first.
+        const target = route.meta.orgSwitchTarget
+        if (typeof target === 'string') await navigateTo(target)
+        await orgStore.switchOrg(org.id)
+    }
+
+    return { switchToOrg }
+}
+
 /**
  * Refetch an org-scoped store whenever the active organisation changes.
  *

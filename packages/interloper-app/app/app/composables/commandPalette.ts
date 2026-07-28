@@ -1,11 +1,26 @@
 import type { CommandPaletteGroup, CommandPaletteItem } from '@nuxt/ui'
+import type { Run } from '~/types/run'
+import type { Organisation } from '~/types/organisation'
+import type { AdminOrganisation } from '~/types/admin'
+
+const RUN_STATUS_ICONS: Record<string, string> = {
+    success: 'i-lucide-circle-check',
+    failed: 'i-lucide-circle-x',
+    running: 'i-lucide-loader-circle',
+    dispatched: 'i-lucide-loader-circle',
+    canceled: 'i-lucide-circle-slash',
+}
 
 export function useCommandPalette() {
+    const { apiFetch } = useApi()
     const userStore = useUserStore()
     const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
+    const orgStore = useOrganisationStore()
+    const adminStore = useAdminStore()
     const colorMode = useColorMode()
     const { open: agentOpen } = useAgentPanel()
+    const { switchToOrg } = useOrgSwitch()
     const sections = useNavSections()
     const assetNames = useAssetDisplayName()
     const assetIcons = useAssetIcon()
@@ -14,11 +29,36 @@ export function useCommandPalette() {
     const searchTerm = ref('')
     const loading = computed(() => componentsStore.loading)
 
-    // Refresh entity data on open so search results are current, not a stale snapshot.
+    const recentRuns = ref<Run[]>([])
+    const userOrgs = ref<Organisation[]>([])
+    const adminOrgs = ref<AdminOrganisation[]>([])
+
+    /** component_id → display name, covering source-owned children too (targets can be assets). */
+    const runTargetNames = computed(() => {
+        const map = new Map<string, string>()
+        for (const component of componentsStore.components) {
+            map.set(component.id, component.name ?? component.key)
+            for (const child of component.children) map.set(child.id, child.name ?? child.key)
+        }
+        return map
+    })
+
+    // Refresh data on open so search results are current, not a stale snapshot.
     watch(open, (isOpen) => {
         if (!isOpen) return
         searchTerm.value = ''
         if (!componentsStore.loading) componentsStore.fetchAll()
+        apiFetch<Run[]>('/runs?limit=5').then((runs) => {
+            recentRuns.value = runs
+        }).catch(() => {})
+        orgStore.fetchOrganisations().then((orgs) => {
+            userOrgs.value = orgs
+        }).catch(() => {})
+        if (userStore.isSuperAdmin) {
+            adminStore.listOrganisations().then((orgs) => {
+                adminOrgs.value = orgs
+            }).catch(() => {})
+        }
     })
 
     defineShortcuts({
@@ -65,13 +105,49 @@ export function useCommandPalette() {
         ]
         if (userStore.isSuperAdmin)
             settingsItems.push(toItem({ label: 'Platform admin', icon: 'i-lucide-shield', to: '/admin' }))
+        for (const org of userOrgs.value) {
+            if (org.id === orgStore.organisation?.id) continue
+            settingsItems.push({
+                label: `Switch to ${org.name}`,
+                icon: 'i-lucide-building-2',
+                onSelect: () => {
+                    close()
+                    switchToOrg(org)
+                },
+            })
+        }
+
+        const runItems: CommandPaletteItem[] = recentRuns.value.map(run => ({
+            label: runTargetNames.value.get(run.component_id ?? '') ?? 'Deleted target',
+            suffix: `${statusLabel(run.status)} · ${formatDate(run.created_at)}`,
+            icon: RUN_STATUS_ICONS[run.status] ?? 'i-lucide-circle-dashed',
+            to: `/executions/runs/${run.id}`,
+            onSelect: close,
+        }))
+
+        const searching = Boolean(searchTerm.value.trim())
 
         return [
             { id: 'pages', label: 'Pages', items: sections.value.flatMap(section => section.pages.map(toItem)) },
             // Entity groups only join in once the user types — the empty palette
             // stays a compact quick-nav instead of a dump of the whole collection.
-            ...(searchTerm.value.trim() ? entityGroups(close) : []),
+            ...(searching ? entityGroups(close) : []),
+            ...(runItems.length ? [{ id: 'recent-runs', label: 'Recent runs', items: runItems }] : []),
             { id: 'actions', label: 'Actions', items: actionItems },
+            // Cross-org admin jumps are search-only: super admins may oversee many
+            // orgs, and browsing them belongs on /admin.
+            ...(searching && adminOrgs.value.length
+                ? [{
+                    id: 'admin-organisations',
+                    label: 'Administration',
+                    items: adminOrgs.value.map(org => ({
+                        label: `Admin: ${org.name}`,
+                        icon: 'i-lucide-shield',
+                        to: `/admin/organisations/${org.id}`,
+                        onSelect: close,
+                    })),
+                }]
+                : []),
             { id: 'settings', label: 'Settings', items: settingsItems },
         ]
     })
