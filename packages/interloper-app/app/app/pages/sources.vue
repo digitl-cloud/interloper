@@ -35,6 +35,15 @@ const {
 componentsStore.fetchAll()
 componentsStore.fetchRelations()
 
+// Deep link (command palette): /sources?new=1 opens the create wizard.
+const route = useRoute()
+const router = useRouter()
+watchEffect(() => {
+    if (route.query.new === undefined) return
+    handleCreate()
+    router.replace({ query: { ...route.query, new: undefined } })
+})
+
 // ── Run now ─────────────────────────────────────────────────────
 
 const runsStore = useRunsStore()

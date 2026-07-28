@@ -4,7 +4,12 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 const route = useRoute()
 
 const userStore = useUserStore()
-const { open: commandPaletteOpen, groups: commandPaletteGroups } = useCommandPalette()
+const {
+    open: commandPaletteOpen,
+    searchTerm: commandPaletteSearchTerm,
+    loading: commandPaletteLoading,
+    groups: commandPaletteGroups,
+} = useCommandPalette()
 const { open: agentOpen, width: agentWidth, dragging: agentDragging } = useAgentPanel()
 const appVersion = useRuntimeConfig().public.version
 
@@ -127,7 +132,9 @@ const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((se
                 </UDashboardPanel>
                 <UModal v-model:open="commandPaletteOpen">
                     <template #content>
-                        <UCommandPalette :groups="commandPaletteGroups"
+                        <UCommandPalette v-model:search-term="commandPaletteSearchTerm"
+                                         :groups="commandPaletteGroups"
+                                         :loading="commandPaletteLoading"
                                          placeholder="Search..."
                                          close
                                          @update:open="commandPaletteOpen = $event" />
