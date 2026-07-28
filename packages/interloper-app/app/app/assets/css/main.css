@@ -92,6 +92,8 @@
     --ui-border-accented: var(--color-gray-300);
     --ui-border-inverted: var(--color-gray-950);
     --ui-radius: 0.4rem;
+    /* graph canvas: dependency edges read darker than card borders */
+    --graph-edge: var(--color-gray-500);
 }
 
 /* Design mono section label ("eyebrow"): pair with a text color utility. */
@@ -166,6 +168,7 @@
     --ui-border-accented: var(--color-gray-900);
     --ui-border-inverted: #ffffff;
     --ui-radius: 0.4rem;
+    --graph-edge: var(--color-gray-800);
 
     --vf-node-bg: var(--ui-bg-elevated);
     --vf-node-text: var(--color-gray-400);

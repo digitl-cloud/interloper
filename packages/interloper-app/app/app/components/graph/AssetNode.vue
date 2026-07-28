@@ -8,9 +8,8 @@ import { requiredDependencies } from '~/types/catalog'
 const props = defineProps<{
     asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
-    /** Derived node status (used by the Status view mode). */
+    /** Derived node status — reflected on the card border. */
     status?: NodeStatus
-    viewMode?: ViewMode
     /** VueFlow selection state — drives the blue selection ring. */
     selected?: boolean
 }>()
@@ -41,10 +40,10 @@ const hasDownstream = computed(() => sourceConnections.value.length > 0)
 const hasUpstream = computed(() => targetConnections.value.length > 0)
 const isMaterializing = computed(() => materializingAssetIds?.value?.has(props.asset.id) ?? false)
 
-const icon = computed(() => props.assetDefn ? componentIcon(props.assetDefn.key) : 'i-lucide-box')
-const label = computed(() => props.assetDefn?.name ?? props.asset.key)
-const description = computed(() => props.assetDefn?.description)
+const label = computed(() => props.asset.key)
 const tags = computed(() => props.assetDefn?.tags ?? [])
+/** Meta line under the key: live status info when present; catalog tags render as badges otherwise. */
+const statusLabel = computed(() => props.status?.label ?? null)
 const warnings = computed(() => getWarnings(props.asset.id, props.asset.key))
 const destinationBadge = computed(() => getBadgeForAssetId(props.asset.id))
 
@@ -99,7 +98,7 @@ const showSourceHandle = computed(() => hasDownstream.value || isValidSource.val
 const ringClass = computed(() => {
     if (props.selected) return 'ring-2 ring-primary'
     if (isMissing.value) return 'ring-1 ring-[var(--ui-error)]/60'
-    if (props.viewMode === 'status' && props.status) return statusRingClass(props.status.state)
+    if (props.status) return statusRingClass(props.status.state)
     return ''
 })
 
@@ -138,11 +137,11 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
 
 <template>
     <UContextMenu :items="graphReadonly ? [] : contextMenuItems">
-        <div class="relative w-[220px] transition-opacity duration-200"
+        <div class="relative w-[240px] transition-opacity duration-200"
              :class="shouldFade && 'opacity-25'">
             <Handle v-if="showTargetHandle"
                     type="target"
-                    :position="Position.Top"
+                    :position="Position.Left"
                     :connectable-start="!graphReadonly"
                     :connectable-end="false"
                     :is-valid-connection="isValidConnection"
@@ -154,12 +153,12 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
 
             <!-- Materializing spinner -->
             <div v-if="isMaterializing"
-                 class="absolute -left-3 -top-3 z-10">
+                 class="absolute -left-2 -top-2 z-10">
                 <UTooltip :delay-duration="0"
                           :content="{ side: 'top', sideOffset: 6 }">
-                    <div class="flex size-7 items-center justify-center rounded-full border border-muted/50 bg-muted/50">
+                    <div class="flex size-5 items-center justify-center rounded-full border border-muted/50 bg-muted/50">
                         <UIcon name="i-lucide-loader-2"
-                               class="size-4 shrink-0 animate-spin text-muted" />
+                               class="size-3 shrink-0 animate-spin text-muted" />
                     </div>
                     <template #content>
                         <div class="text-xs">Materializing</div>
@@ -171,10 +170,10 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
             <UTooltip v-if="isMissing"
                       :delay-duration="0"
                       :content="{ side: 'top', sideOffset: 6 }"
-                      class="absolute -right-3 -top-3 z-10">
-                <div class="flex size-7 items-center justify-center rounded-full border border-error/80 bg-error/20">
+                      class="absolute -right-2 -top-2 z-10">
+                <div class="flex size-5 items-center justify-center rounded-full border border-error/80 bg-error/20">
                     <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
-                           class="size-4 shrink-0 text-error" />
+                           class="size-3 shrink-0 text-error" />
                 </div>
                 <template #content>
                     <div class="text-xs">{{ driftBadge?.label }}</div>
@@ -186,10 +185,10 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                       :delay-duration="0"
                       :content="{ side: 'top', sideOffset: 6 }"
                       :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
-                      class="absolute -right-3 -top-3 z-10">
-                <div class="flex size-7 items-center justify-center rounded-full border border-warning/80 bg-warning/20">
+                      class="absolute -right-2 -top-2 z-10">
+                <div class="flex size-5 items-center justify-center rounded-full border border-warning/80 bg-warning/20">
                     <UIcon name="i-lucide-triangle-alert"
-                           class="size-4 shrink-0 text-warning" />
+                           class="size-3 shrink-0 text-warning" />
                 </div>
                 <template #content>
                     <div class="rounded-lg border border-default bg-default shadow-lg overflow-hidden">
@@ -214,14 +213,14 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
 
             <!-- Destination badge — bottom-right corner -->
             <div v-if="destinationBadge"
-                 class="absolute -bottom-3 -right-3 z-10">
+                 class="absolute -bottom-2 -right-2 z-10">
                 <UTooltip :delay-duration="0"
                           :content="{ side: 'bottom', sideOffset: 6 }">
-                    <div class="relative flex size-8 items-center justify-center rounded-full border border-primary/80 bg-primary/20">
+                    <div class="relative flex size-6 items-center justify-center rounded-full border border-primary/25 bg-primary/10">
                         <UIcon :name="destinationBadge.icon"
-                               class="size-4 shrink-0 text-primary" />
+                               class="size-3.5 shrink-0 text-highlighted" />
                         <span v-if="destinationBadge.isMulti"
-                              class="absolute right-0.5 bottom-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-default px-1 text-[9px] font-semibold leading-none text-primary">
+                              class="absolute -right-0.5 -bottom-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-default px-0.5 text-[9px] font-semibold leading-none text-primary">
                             {{ destinationBadge.count }}
                         </span>
                     </div>
@@ -233,32 +232,34 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                 </UTooltip>
             </div>
 
-            <div class="overflow-hidden rounded-xl border border-[var(--ui-border-accented)] bg-muted shadow-[0_10px_30px_-10px_rgba(0,0,0,0.55)]"
+            <div class="rounded-xl border border-default bg-default px-4 py-3"
                  :class="ringClass">
-                <div class="flex items-center gap-2.5 px-3.5 py-3">
-                    <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-elevated">
-                        <UIcon :name="icon"
-                               class="size-5 text-muted" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="truncate text-sm font-semibold text-highlighted">{{ label }}</div>
-                        <div v-if="tags.length"
-                             class="truncate text-xs text-muted">{{ tags.join(' · ') }}</div>
-                    </div>
+                <div class="flex items-center gap-2">
+                    <UIcon name="i-lucide-box"
+                           class="size-4 shrink-0 text-primary" />
+                    <span class="min-w-0 flex-1 truncate font-mono text-[13px] font-semibold text-highlighted">{{ label }}</span>
+                    <span class="size-2 shrink-0 rounded-full"
+                          :class="statusDotClass(status?.state ?? 'idle')" />
                 </div>
-                <div v-if="description"
-                     class="line-clamp-2 border-t border-[var(--ui-border-accented)] bg-default px-3.5 py-2.5 text-xs leading-snug text-muted">
-                    {{ description }}
+                <div v-if="statusLabel || isMissing"
+                     class="mt-0.5 truncate pl-6 text-xs text-muted"
+                     :class="isMissing && 'italic text-dimmed'">
+                    {{ isMissing ? 'No catalog definition' : statusLabel }}
                 </div>
-                <div v-else-if="isMissing"
-                     class="border-t border-[var(--ui-border-accented)] bg-default px-3.5 py-2.5 text-xs italic leading-snug text-dimmed">
-                    No catalog definition
+                <div v-else-if="tags.length"
+                     class="mt-1.5 flex flex-wrap gap-1 pl-6">
+                    <UBadge v-for="tag in tags"
+                            :key="tag"
+                            color="neutral"
+                            variant="subtle"
+                            size="sm"
+                            :label="tag" />
                 </div>
             </div>
 
             <Handle v-if="showSourceHandle"
                     type="source"
-                    :position="Position.Bottom"
+                    :position="Position.Right"
                     :connectable-start="!graphReadonly"
                     :connectable-end="!graphReadonly"
                     :is-valid-connection="isValidConnection"

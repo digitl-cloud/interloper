@@ -1,11 +1,10 @@
 <script setup lang="ts">
 /**
- * Graph canvas toolbar. Status filter, expand-mode and view-mode are all
- * rendered as the same left-aligned segmented control; the `end` slot holds
- * host actions (e.g. New Source), pushed to the right.
+ * Graph canvas toolbar. Status filter pills on the left with the group-by
+ * switch beside them; the `end` slot holds host actions (e.g. New Source),
+ * pushed to the right.
  */
-const expandMode = defineModel<ExpandMode>('expandMode', { default: 'nodes' })
-const viewMode = defineModel<ViewMode>('viewMode', { default: 'topology' })
+const groupBy = defineModel<GroupBy>('groupBy', { default: 'none' })
 const statusFilter = defineModel<StatusFilter>('statusFilter', { default: 'all' })
 
 const props = defineProps<{
@@ -18,17 +17,6 @@ const FILTERS: Array<{ value: StatusFilter; label: string; dot?: GraphNodeState 
     { value: 'healthy', label: 'Healthy', dot: 'idle' },
     { value: 'attention', label: 'Attention', dot: 'attention' },
     { value: 'paused', label: 'Paused', dot: 'paused' },
-]
-
-const EXPAND_OPTIONS = [
-    { value: 'list', label: 'List', icon: 'i-lucide-list' },
-    { value: 'graph', label: 'Graph', icon: 'i-lucide-git-fork' },
-    { value: 'nodes', label: 'Nodes', icon: 'i-lucide-box' },
-]
-
-const VIEW_OPTIONS = [
-    { value: 'topology', label: 'Topology', icon: 'i-lucide-workflow' },
-    { value: 'status', label: 'Status', icon: 'i-lucide-activity' },
 ]
 
 // Hide a filter pill when it has no members (except All), to avoid dead options.
@@ -52,19 +40,11 @@ const filterItems = computed(() => FILTERS
             </template>
         </UTabs>
 
-        <!-- Expand mode -->
-        <UTabs v-model="expandMode"
-               :items="EXPAND_OPTIONS"
-               variant="pill"
-               size="xs"
-               :content="false" />
-
-        <!-- View mode -->
-        <UTabs v-model="viewMode"
-               :items="VIEW_OPTIONS"
-               variant="pill"
-               size="xs"
-               :content="false" />
+        <!-- Group by type toggle -->
+        <USwitch :model-value="groupBy === 'type'"
+                 label="Group by type"
+                 size="xs"
+                 @update:model-value="groupBy = $event ? 'type' : 'none'" />
 
         <div class="ml-auto">
             <slot name="end" />

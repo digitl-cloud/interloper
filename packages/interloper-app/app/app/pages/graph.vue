@@ -17,8 +17,7 @@ const catalogStore = useCatalogStore()
 const toast = useToast()
 
 // Canvas view controls (toolbar-owned)
-const expandMode = ref<ExpandMode>('nodes')
-const viewMode = ref<ViewMode>('topology')
+const groupBy = ref<GroupBy>('none')
 const statusFilter = ref<StatusFilter>('all')
 
 const { sourceStatus } = useNodeStatus()
@@ -116,8 +115,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <GraphToolbar v-model:expand-mode="expandMode"
-                      v-model:view-mode="viewMode"
+        <GraphToolbar v-model:group-by="groupBy"
                       v-model:status-filter="statusFilter"
                       :counts="statusCounts">
             <template #end>
@@ -133,8 +131,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
             <SplitterPanel :default-size="panelVisible ? 70 : 100"
                            :min-size="30"
                            class="flex">
-                <GraphAssetGraph :expand-mode="expandMode"
-                                 :view-mode="viewMode"
+                <GraphAssetGraph :group-by="groupBy"
                                  :status-filter="statusFilter"
                                  :show-new-source-button="false"
                                  :selected-id="panelOpen ? selectedAsset?.id : null"
