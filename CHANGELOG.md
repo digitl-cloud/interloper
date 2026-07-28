@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.47.0 (2026-07-28)
+
+### Bug Fixes
+
+- **app**: Stop clipping card borders in asset panel sections
+  ([`8a97bf7`](https://github.com/digitl-cloud/interloper/commit/8a97bf7a1a6296dbaf9cae1c9c290f1f214d3bca))
+
+### Features
+
+- **app**: Three-way group-by tabs and flat asset view on the graph
+  ([`5b6cffe`](https://github.com/digitl-cloud/interloper/commit/5b6cffec501526360394adc44f6574b6e13f99d1))
+
+
 ## v0.46.0 (2026-07-28)
 
 ### Bug Fixes
