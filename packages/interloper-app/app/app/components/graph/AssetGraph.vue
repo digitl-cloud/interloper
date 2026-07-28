@@ -19,7 +19,7 @@ const props = withDefaults(defineProps<{
 }>(), {
     sourceIds: undefined,
     readonly: false,
-    groupBy: 'none',
+    groupBy: 'type',
     statusFilter: 'all',
     showNewSourceButton: true,
     selectedId: null,

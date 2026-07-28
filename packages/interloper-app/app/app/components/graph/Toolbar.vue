@@ -1,10 +1,16 @@
 <script setup lang="ts">
 /**
  * Graph canvas toolbar. Status filter pills on the left with the group-by
- * switch beside them; the `end` slot holds host actions (e.g. New Source),
+ * tabs beside them; the `end` slot holds host actions (e.g. New Source),
  * pushed to the right.
  */
-const groupBy = defineModel<GroupBy>('groupBy', { default: 'none' })
+const groupBy = defineModel<GroupBy>('groupBy', { default: 'type' })
+
+const GROUP_OPTIONS = [
+    { value: 'type', label: 'Type', icon: 'i-lucide-group' },
+    { value: 'source', label: 'Source', icon: 'i-lucide-plug' },
+    { value: 'asset', label: 'Asset', icon: 'i-lucide-box' },
+]
 const statusFilter = defineModel<StatusFilter>('statusFilter', { default: 'all' })
 
 const props = defineProps<{
@@ -28,6 +34,7 @@ const filterItems = computed(() => FILTERS
 <template>
     <div class="flex shrink-0 items-center gap-2 border-b border-default px-4 py-2">
         <!-- Status filter -->
+        <span class="text-xs text-muted">Status</span>
         <UTabs v-model="statusFilter"
                :items="filterItems"
                variant="pill"
@@ -40,11 +47,13 @@ const filterItems = computed(() => FILTERS
             </template>
         </UTabs>
 
-        <!-- Group by type toggle -->
-        <USwitch :model-value="groupBy === 'type'"
-                 label="Group by type"
-                 size="xs"
-                 @update:model-value="groupBy = $event ? 'type' : 'none'" />
+        <!-- Group by -->
+        <span class="text-xs text-muted">Group by</span>
+        <UTabs v-model="groupBy"
+               :items="GROUP_OPTIONS"
+               variant="pill"
+               size="xs"
+               :content="false" />
 
         <div class="ml-auto">
             <slot name="end" />
