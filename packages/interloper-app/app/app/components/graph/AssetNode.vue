@@ -156,7 +156,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                  class="absolute -left-2 -top-2 z-10">
                 <UTooltip :delay-duration="0"
                           :content="{ side: 'top', sideOffset: 6 }">
-                    <div class="flex size-5 items-center justify-center rounded-full border border-muted/50 bg-muted/50">
+                    <div class="flex size-5 items-center justify-center rounded-full border border-[var(--ui-border-accented)] bg-muted">
                         <UIcon name="i-lucide-loader-2"
                                class="size-3 shrink-0 animate-spin text-muted" />
                     </div>
@@ -171,7 +171,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                       :delay-duration="0"
                       :content="{ side: 'top', sideOffset: 6 }"
                       class="absolute -right-2 -top-2 z-10">
-                <div class="flex size-5 items-center justify-center rounded-full border border-error/80 bg-error/20">
+                <div class="flex size-5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-error)_80%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-error)_20%,var(--ui-bg))]">
                     <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
                            class="size-3 shrink-0 text-error" />
                 </div>
@@ -186,7 +186,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                       :content="{ side: 'top', sideOffset: 6 }"
                       :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
                       class="absolute -right-2 -top-2 z-10">
-                <div class="flex size-5 items-center justify-center rounded-full border border-warning/80 bg-warning/20">
+                <div class="flex size-5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-warning)_80%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-warning)_20%,var(--ui-bg))]">
                     <UIcon name="i-lucide-triangle-alert"
                            class="size-3 shrink-0 text-warning" />
                 </div>
@@ -216,7 +216,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                  class="absolute -bottom-2 -right-2 z-10">
                 <UTooltip :delay-duration="0"
                           :content="{ side: 'bottom', sideOffset: 6 }">
-                    <div class="relative flex size-6 items-center justify-center rounded-full border border-primary/25 bg-primary/10">
+                    <div class="relative flex size-6 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-primary)_25%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-primary)_10%,var(--ui-bg))]">
                         <UIcon :name="destinationBadge.icon"
                                class="size-3.5 shrink-0 text-highlighted" />
                         <span v-if="destinationBadge.isMulti"

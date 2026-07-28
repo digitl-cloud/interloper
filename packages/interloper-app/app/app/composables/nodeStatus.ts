@@ -19,9 +19,9 @@ export function statusDotClass(state: GraphNodeState): string {
     return STATUS_DOT[state]
 }
 
-/** Ring/border tint applied to a node in the Status view mode. */
+/** Ring/border tint per node state. Healthy (idle) is the default look — no ring. */
 const STATUS_RING: Record<GraphNodeState, string> = {
-    idle: 'ring-2 ring-[var(--ui-success)]/40',
+    idle: '',
     attention: 'ring-2 ring-[var(--ui-warning)]/70',
     paused: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
     queued: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
