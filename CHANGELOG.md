@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.44.1 (2026-07-28)
+
+### Bug Fixes
+
+- **app**: Surface backend error detail in failure toasts
+  ([`587893d`](https://github.com/digitl-cloud/interloper/commit/587893d1168545f456e1acd4419aab9ba004bb3b))
+
+- **core**: Default the source materialization strategy to AUTO
+  ([`18ce993`](https://github.com/digitl-cloud/interloper/commit/18ce993b00d31142ff40cb4e5e2be08c35432bc0))
+
+
 ## v0.44.0 (2026-07-27)
 
 ### Features
