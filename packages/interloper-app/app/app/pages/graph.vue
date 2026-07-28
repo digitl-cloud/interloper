@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { ComponentRecord } from '~/types/component'
+import { qualifiedKey } from '~/types/catalog'
 
 definePageMeta({ title: 'Graph', fullBleed: true })
 
@@ -67,6 +68,21 @@ function onAssetClick(asset: ComponentRecord, assetDefn: AssetDefinition | undef
     panelOpen.value = true
     closing.value = false
 }
+
+// Deep link (command palette): /graph?select=<assetId> opens the asset panel
+// once the asset and its source land in the store.
+const route = useRoute()
+const router = useRouter()
+watchEffect(() => {
+    const id = route.query.select
+    if (typeof id !== 'string') return
+    const asset = componentsStore.byId(id)
+    if (!asset?.parent_id) return
+    const source = componentsStore.byId(asset.parent_id)
+    if (!source) return
+    onAssetClick(asset, catalogStore.getAssetDefinition(qualifiedKey(source.key, asset.key)), source)
+    router.replace({ query: { ...route.query, select: undefined } })
+})
 
 function onPanelClose() {
     closing.value = true

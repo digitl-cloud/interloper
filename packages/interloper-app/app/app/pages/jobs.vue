@@ -44,6 +44,19 @@ function openRun(job: ComponentRecord) {
     runModalOpen.value = true
 }
 
+// Deep link (command palette): /jobs?run=<id> opens the run modal for that
+// job as soon as it lands in the store.
+const route = useRoute()
+const router = useRouter()
+watchEffect(() => {
+    const id = route.query.run
+    if (typeof id !== 'string') return
+    const job = componentsStore.byId(id)
+    if (!job || job.kind !== 'job') return
+    openRun(job)
+    router.replace({ query: { ...route.query, run: undefined } })
+})
+
 /** Onboarding cards shown in the empty state. */
 const SETUP_STEPS = [
     { to: '/sources', icon: 'i-lucide-plug', title: 'Step 1 · Connect a source', sub: 'Pull from Google Ads, Meta, Bing & more', link: 'Go to Sources' },
