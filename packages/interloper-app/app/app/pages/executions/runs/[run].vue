@@ -84,8 +84,8 @@ async function onRetry(scope: 'all' | 'failed') {
         toast.add({ title: `Retry queued (${newRunId.slice(0, 8)})`, color: 'success' })
         await navigateTo(`/executions/runs/${newRunId}`)
     }
-    catch {
-        toast.add({ title: 'Failed to queue retry', color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to queue retry'))
     }
     finally {
         retrying.value = false

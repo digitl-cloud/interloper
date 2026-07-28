@@ -61,9 +61,8 @@ async function submit() {
             })
             successCount++
         }
-        catch (err: any) {
-            const detail = err?.data?.detail || 'Failed to send invitation'
-            errors.push(`${invite.email}: ${detail}`)
+        catch (err) {
+            errors.push(`${invite.email}: ${errorDetail(err) ?? 'Failed to send invitation'}`)
         }
     }
 

@@ -91,7 +91,7 @@ async function deleteSource(sourceId: string) {
         toast.add({ title: `Source "${info?.name ?? 'Source'}" deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Source') ?? { title: 'Failed to delete source', color: 'error' })
+        toast.add(inUseToast(e, 'Source') ?? errorToast(e, 'Failed to delete source'))
     }
 }
 

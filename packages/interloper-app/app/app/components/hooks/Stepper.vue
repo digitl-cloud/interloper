@@ -178,8 +178,8 @@ async function submit() {
             emit('created')
         }
     }
-    catch {
-        toast.add({ title: `Failed to ${isEditing.value ? 'update' : 'create'} hook`, color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, `Failed to ${isEditing.value ? 'update' : 'create'} hook`))
     }
     finally {
         submitting.value = false

@@ -47,7 +47,7 @@ async function handleCleanup() {
         toast.add({ title: 'Catalog drift cleaned up', color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Source') ?? { title: 'Failed to clean up drift', color: 'error' })
+        toast.add(inUseToast(e, 'Source') ?? errorToast(e, 'Failed to clean up drift'))
     }
     finally {
         cleaningUp.value = false

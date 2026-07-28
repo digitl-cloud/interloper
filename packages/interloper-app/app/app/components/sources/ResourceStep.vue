@@ -119,8 +119,8 @@ async function handleCreate() {
         emit('created', resource)
         if (!props.silent) toast.add({ title: `${props.definition.name} created`, color: 'success' })
     }
-    catch {
-        toast.add({ title: `Failed to create ${props.definition.name}`, color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, `Failed to create ${props.definition.name}`))
     }
     finally {
         creating.value = false

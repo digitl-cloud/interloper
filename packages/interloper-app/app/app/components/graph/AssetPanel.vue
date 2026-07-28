@@ -64,7 +64,7 @@ async function fetchPartitionCounts() {
             partitionNotMaterialized.value = true
         }
         else {
-            partitionError.value = e?.data?.detail ?? e?.message ?? 'Failed to load partition data'
+            partitionError.value = errorDetail(e) ?? 'Failed to load partition data'
         }
         partitionData.value = []
     }
@@ -165,8 +165,8 @@ async function saveConfig() {
         if (props.asset.parent_id) await componentsStore.fetchOne(props.asset.parent_id)
         toast.add({ title: 'Asset config saved', color: 'success' })
     }
-    catch {
-        toast.add({ title: 'Failed to save asset config', color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to save asset config'))
     }
     finally {
         configSaving.value = false
@@ -252,8 +252,8 @@ async function runNow() {
         const runId = await runsStore.createRun(props.asset.id)
         toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
     }
-    catch {
-        toast.add({ title: 'Failed to queue run', color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to queue run'))
     }
     finally {
         runSubmitting.value = false

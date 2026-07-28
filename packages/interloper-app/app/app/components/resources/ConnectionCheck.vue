@@ -55,12 +55,12 @@ async function run() {
             body: { component_key: props.componentKey, config: props.config },
         })
     }
-    catch (e: any) {
+    catch (e) {
         result.value = {
             ok: false,
             live: false,
             category: 'error',
-            message: e?.data?.detail ?? 'The connection check could not be run.',
+            message: errorDetail(e) ?? 'The connection check could not be run.',
             errors: [],
         }
     }

@@ -271,10 +271,10 @@ async function fetchOptions(fieldKey: string, meta: FetchMeta) {
             })),
         })
     }
-    catch (e: any) {
+    catch (e) {
         updateFetchState(fieldKey, {
             loading: false,
-            error: e?.data?.detail ?? e?.message ?? 'Failed to fetch options',
+            error: errorDetail(e) ?? 'Failed to fetch options',
             options: [],
         })
     }

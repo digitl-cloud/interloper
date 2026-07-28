@@ -155,8 +155,8 @@ async function onSubmit() {
         }
         open.value = false
     }
-    catch {
-        toast.add({ title: `Failed to queue ${isRange.value ? 'backfill' : 'run'}`, color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, `Failed to queue ${isRange.value ? 'backfill' : 'run'}`))
     }
     finally {
         submitting.value = false

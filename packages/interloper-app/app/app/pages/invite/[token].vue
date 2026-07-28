@@ -33,9 +33,9 @@ onMounted(async () => {
         status.value = 'success'
         await navigateTo('/')
     }
-    catch (err: any) {
+    catch (err) {
         status.value = 'error'
-        errorMessage.value = err?.data?.detail || 'Failed to accept invitation'
+        errorMessage.value = errorDetail(err) ?? 'Failed to accept invitation'
     }
 })
 </script>

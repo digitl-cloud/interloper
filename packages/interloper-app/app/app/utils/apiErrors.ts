@@ -38,3 +38,32 @@ export function inUseToast(e: unknown, entity: string): { title: string, descrip
     const usedBy = usedByFromError(e)
     return usedBy ? inUseToastPayload(entity, usedBy) : null
 }
+
+/**
+ * Human-readable message carried by an API error, or `null` when it has none.
+ *
+ * Handles the three FastAPI `detail` shapes — a plain string, a `{message, …}`
+ * object (409 in-use), and a 422 validation list — plus plain `Error`s from
+ * non-HTTP flows (e.g. the OAuth popup) whose `message` is already
+ * user-facing. HTTP errors without a usable `detail` yield `null` rather than
+ * ofetch's unhelpful `[POST] "/api/…": 400` message.
+ */
+export function errorDetail(e: unknown): string | null {
+    const detail = (e as { data?: { detail?: unknown } })?.data?.detail
+    if (typeof detail === 'string' && detail) return detail
+    if (Array.isArray(detail)) {
+        const msgs = detail
+            .map(item => (item as { msg?: unknown })?.msg)
+            .filter((msg): msg is string => typeof msg === 'string')
+        if (msgs.length) return msgs.join('\n')
+    }
+    const message = (detail as { message?: unknown } | null)?.message
+    if (typeof message === 'string' && message) return message
+    if (e instanceof Error && e.message && !('response' in e)) return e.message
+    return null
+}
+
+/** Failure toast payload: `title` as the headline, the error's detail (when any) as the description. */
+export function errorToast(e: unknown, title: string): { title: string, description?: string, color: 'error' } {
+    return { title, description: errorDetail(e) ?? undefined, color: 'error' }
+}

@@ -87,7 +87,7 @@ async function handleDelete(ids: string[]) {
         toast.add({ title: `${ids.length} destination${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Destination') ?? { title: 'Failed to delete destination', color: 'error' })
+        toast.add(inUseToast(e, 'Destination') ?? errorToast(e, 'Failed to delete destination'))
     }
 }
 

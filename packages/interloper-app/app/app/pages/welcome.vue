@@ -22,8 +22,8 @@ async function create() {
         toast.add({ title: 'Organisation created', color: 'success' })
         await navigateTo('/')
     }
-    catch {
-        toast.add({ title: 'Failed to create organisation', color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to create organisation'))
     }
     finally {
         loading.value = false

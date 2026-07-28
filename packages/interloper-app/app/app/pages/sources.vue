@@ -57,8 +57,8 @@ async function runNow(source: ComponentRecord) {
         const runId = await runsStore.createRun(source.id)
         toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
     }
-    catch {
-        toast.add({ title: 'Failed to queue run', color: 'error' })
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to queue run'))
     }
 }
 
@@ -145,7 +145,7 @@ async function handleDelete(ids: string[]) {
         toast.add({ title: `${ids.length} source${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Source') ?? { title: 'Failed to delete source', color: 'error' })
+        toast.add(inUseToast(e, 'Source') ?? errorToast(e, 'Failed to delete source'))
     }
 }
 </script>
