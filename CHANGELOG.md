@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.45.0 (2026-07-28)
+
+### Features
+
+- **app**: Group graph sources by type and redesign graph nodes
+  ([`c5ff050`](https://github.com/digitl-cloud/interloper/commit/c5ff0504c4be9d4af7886e7b1f06dabdee196df8))
+
+
 ## v0.44.1 (2026-07-28)
 
 ### Bug Fixes
