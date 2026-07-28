@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.48.0 (2026-07-28)
+
+### Bug Fixes
+
+- **app**: Remove dead Settings link from the user menu
+  ([`681cc1b`](https://github.com/digitl-cloud/interloper/commit/681cc1baa1626443c545f3ad9cf6d9f6e7b51439))
+
+- **app**: Wire up the command palette shortcut, close-on-select, and full page coverage
+  ([`3fb500e`](https://github.com/digitl-cloud/interloper/commit/3fb500ed31c273ab492c28b3e78623884919da92))
+
+### Features
+
+- **app**: Entity search and actions in the command palette
+  ([`04494c6`](https://github.com/digitl-cloud/interloper/commit/04494c65b271a4b838f84b3b52d56aaba01313b3))
+
+- **app**: Recent runs, keyword aliases, and org switching in the command palette
+  ([`3be2be7`](https://github.com/digitl-cloud/interloper/commit/3be2be701917eb9905b19258c74e1614c6323410))
+
+
 ## v0.47.0 (2026-07-28)
 
 ### Bug Fixes
