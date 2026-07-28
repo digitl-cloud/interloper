@@ -3,7 +3,6 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
 
-const catalogStore = useCatalogStore()
 const userStore = useUserStore()
 const { open: commandPaletteOpen, groups: commandPaletteGroups } = useCommandPalette()
 const { open: agentOpen, width: agentWidth, dragging: agentDragging } = useAgentPanel()
@@ -17,95 +16,21 @@ interface PageHeaderMeta {
 }
 const pageHeader = computed(() => route.meta.pageHeader as PageHeaderMeta | undefined)
 
-/** Icons for resource kinds — fallback to generic box. */
-const RESOURCE_KIND_ICONS: Record<string, string> = {
-    connection: 'i-lucide-key-round',
-    config: 'i-lucide-settings',
-}
+const navSections = useNavSections()
 
-/** Capitalize and pluralize a kind string: "connection" → "Connections". */
-function kindLabel(kind: string): string {
-    return kind.charAt(0).toUpperCase() + kind.slice(1) + 's'
-}
-
-const items = computed<NavigationMenuItem[]>(() => {
-    const nav: NavigationMenuItem[] = [
-        {
-            label: 'Overview',
-            type: 'label',
-        },
-        {
-            label: 'Graph',
-            icon: 'i-lucide-workflow',
-            to: '/graph',
-            active: route.path === '/graph',
-        },
-        {
-            label: 'Collection',
-            icon: 'i-lucide-library',
-            to: '/collection',
-            active: route.path === '/collection',
-        },
-        {
-            label: 'Entities',
-            type: 'label',
-            class: 'mt-2',
-        },
-        {
-            label: 'Sources',
-            icon: 'i-lucide-plug',
-            to: '/sources',
-            active: route.path === '/sources',
-        },
-        {
-            label: 'Destinations',
-            icon: 'i-lucide-database',
-            to: '/destinations',
-            active: route.path === '/destinations',
-        },
-    ]
-
-    // Dynamic resource kinds from catalog
-    if (catalogStore.resourceKinds.length > 0) {
-        for (const kind of catalogStore.resourceKinds) {
-            nav.push({
-                label: kindLabel(kind),
-                icon: RESOURCE_KIND_ICONS[kind] ?? 'i-lucide-box',
-                to: `/resources/${kind}`,
-                active: route.path === `/resources/${kind}`,
-            })
-        }
-    }
-
-    // Scheduling — always visible
-    nav.push(
-        {
-            label: 'Scheduling',
-            type: 'label',
-            class: 'mt-2',
-        },
-        {
-            label: 'Jobs',
-            icon: 'i-lucide-calendar-clock',
-            to: '/jobs',
-            active: route.path === '/jobs',
-        },
-        {
-            label: 'Hooks',
-            icon: 'i-carbon-lightning',
-            to: '/hooks',
-            active: route.path === '/hooks',
-        },
-        {
-            label: 'Executions',
-            icon: 'i-lucide-activity',
-            to: '/executions',
-            active: route.path.startsWith('/executions'),
-        },
-    )
-
-    return nav
-})
+const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((section, index) => [
+    {
+        label: section.label,
+        type: 'label' as const,
+        class: index > 0 ? 'mt-2' : undefined,
+    },
+    ...section.pages.map(page => ({
+        label: page.label,
+        icon: page.icon,
+        to: page.to,
+        active: route.path === page.to || route.path.startsWith(`${page.to}/`),
+    })),
+]))
 </script>
 
 <template>
