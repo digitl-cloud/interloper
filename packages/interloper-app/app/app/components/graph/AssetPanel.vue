@@ -136,43 +136,6 @@ function formatType(type?: string, format?: string): string {
     return type
 }
 
-// ── Config ──────────────────────────────────────────────────────
-
-const configSchema = computed(() => props.assetDefn?.config_schema)
-const hasConfig = computed(() => {
-    const properties = configSchema.value?.properties as Record<string, unknown> | undefined
-    return Object.keys(properties ?? {}).length > 0
-})
-
-const configData = ref<Record<string, any>>({})
-const configValid = ref(true)
-const configSaving = ref(false)
-
-watch(() => props.asset, (asset) => {
-    configData.value = { ...(asset.config ?? {}) }
-}, { immediate: true })
-
-/**
- * Save the whole config object through the components store — the single
- * write path for asset config (any quick-toggle must go through this too).
- */
-async function saveConfig() {
-    configSaving.value = true
-    try {
-        await componentsStore.update(props.asset.id, { config: { ...configData.value } })
-        // The asset lives in its source's `children` — refresh the parent so
-        // the graph/collection views reflect the new config.
-        if (props.asset.parent_id) await componentsStore.fetchOne(props.asset.parent_id)
-        toast.add({ title: 'Asset config saved', color: 'success' })
-    }
-    catch (e) {
-        toast.add(errorToast(e, 'Failed to save asset config'))
-    }
-    finally {
-        configSaving.value = false
-    }
-}
-
 // ── Latest materialization + schedule ───────────────────────────
 const { jobsForSource } = useSchedule()
 
@@ -358,32 +321,6 @@ const dependencyRows = computed(() => {
                                      :title="historyTooltip(run)" />
                             </div>
                         </UCard>
-                    </div>
-                </template>
-            </UCollapsible>
-
-            <!-- Config -->
-            <UCollapsible v-if="hasConfig"
-                          default-open
-                          class="border-b border-default">
-                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Config</span>
-                </button>
-
-                <template #content>
-                    <div class="px-5 pb-4 flex flex-col gap-4">
-                        <SchemaForm v-model:data="configData"
-                                    v-model:is-valid="configValid"
-                                    :schema="configSchema!"
-                                    :component-key="assetDefn!.key" />
-                        <UButton label="Save"
-                                 size="sm"
-                                 class="self-end"
-                                 :loading="configSaving"
-                                 :disabled="!configValid"
-                                 @click="saveConfig" />
                     </div>
                 </template>
             </UCollapsible>
