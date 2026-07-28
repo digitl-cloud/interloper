@@ -295,7 +295,9 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4 flex flex-col gap-2">
+                    <!-- pt-px throughout: card rings render 1px outside the box and the
+                         collapsible content is overflow-hidden, which clips them without it. -->
+                    <div class="px-5 pt-px pb-4 flex flex-col gap-2">
                         <!-- Latest materialization -->
                         <UCard :ui="{ body: 'flex items-center gap-4 !p-4' }">
                             <UIcon :name="materialization.icon"
@@ -335,7 +337,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
+                    <div class="px-5 pt-px pb-4">
                         <p v-if="assetDefn?.description"
                            class="text-sm">
                             {{ assetDefn.description }}
@@ -364,7 +366,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
+                    <div class="px-5 pt-px pb-4">
                         <div class="bg-muted rounded-md p-2 overflow-x-auto">
                             <table class="w-full text-sm">
                                 <thead>
@@ -410,7 +412,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4 flex flex-col gap-1.5">
+                    <div class="px-5 pt-px pb-4 flex flex-col gap-1.5">
                         <div v-for="dep in dependencyRows"
                              :key="dep.param"
                              class="flex items-center gap-2.5 rounded-md bg-muted px-3 py-2">
@@ -447,7 +449,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
+                    <div class="px-5 pt-px pb-4">
                         <div v-if="destinations.length"
                              class="flex flex-col gap-2">
                             <UCard v-for="dest in destinations"
@@ -486,7 +488,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
+                    <div class="px-5 pt-px pb-4">
                         <!-- Loading -->
                         <div v-if="partitionLoading"
                              class="flex items-center justify-center py-6">
@@ -532,7 +534,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4 flex flex-wrap gap-1">
+                    <div class="px-5 pt-px pb-4 flex flex-wrap gap-1">
                         <UBadge v-for="tag in assetDefn.tags"
                                 :key="tag"
                                 variant="subtle"
