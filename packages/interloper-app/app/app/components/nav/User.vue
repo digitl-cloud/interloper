@@ -42,18 +42,11 @@ const items = computed<DropdownMenuItem[][]>(() => {
     }
 
     groups.push(
-        [
-            {
-                label: 'Settings',
-                icon: 'i-lucide-sliders-horizontal',
-                onSelect: () => navigateTo('/settings'),
-            },
-            {
-                label: colorMode.value === 'dark' ? 'Light Mode' : 'Dark Mode',
-                icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
-                onSelect: toggleColorMode,
-            },
-        ],
+        [{
+            label: colorMode.value === 'dark' ? 'Light Mode' : 'Dark Mode',
+            icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
+            onSelect: toggleColorMode,
+        }],
         [{
             label: 'Log out',
             icon: 'i-lucide-log-out',
