@@ -105,15 +105,16 @@ class Source(Component):
     # State
     destinations: list[Destination] = Field(default_factory=list)
     normalizer: Normalizer | None = Field(default=None)
+    # Optional for hydration only (older configs stored null); None behaves
+    # exactly like the AUTO default — neither overrides any asset.
     materialization_strategy: MaterializationStrategy | None = SelectField(
-        default=None,
+        default=MaterializationStrategy.AUTO,
         label="Materialization Strategy",
         description="Default strategy for this source's assets.",
         info=(
             "'Auto' validates data against the schema, 'Strict' fails on any "
             "mismatch, 'Reconcile' coerces values to the schema. Assets "
-            "declaring their own strategy keep it; leave empty to use each "
-            "asset's default."
+            "declaring their own strategy keep it."
         ),
     )
     assets: list[Asset] = Field(default_factory=list)

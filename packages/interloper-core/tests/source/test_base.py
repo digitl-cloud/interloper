@@ -328,6 +328,33 @@ class TestResolution:
         source = FakeTrickleSource(materialization_strategy=MaterializationStrategy.STRICT)
         assert source.assets[0].materialization_strategy == MaterializationStrategy.RECONCILE
 
+    def test_default_strategy_is_auto_and_overrides_nothing(self):
+        # The AUTO default pre-fills the UI select; like the old None default
+        # it must leave every asset's own strategy alone.
+        class FakeTrickleSource(il.Source):
+            class AutoChild(il.Asset):
+                pass
+
+            class ReconcilingChild(il.Asset):
+                materialization_strategy: MaterializationStrategy = MaterializationStrategy.RECONCILE
+
+        source = FakeTrickleSource()
+        assert source.materialization_strategy == MaterializationStrategy.AUTO
+        by_key = {type(a).key: a.materialization_strategy for a in source.assets}
+        assert by_key["auto_child"] == MaterializationStrategy.AUTO
+        assert by_key["reconciling_child"] == MaterializationStrategy.RECONCILE
+
+    def test_legacy_null_strategy_still_hydrates(self):
+        # Older configs stored materialization_strategy: null (the UI wrote
+        # the previous None default); the field stays optional so they load.
+        class FakeTrickleSource(il.Source):
+            class FakeChild(il.Asset):
+                pass
+
+        source = FakeTrickleSource(materialization_strategy=None)
+        assert source.materialization_strategy is None
+        assert source.assets[0].materialization_strategy == MaterializationStrategy.AUTO
+
     def test_trickles_default_destination_key(self):
         class FakeTrickleSource(il.Source):
             class FakeChild(il.Asset):
