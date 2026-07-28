@@ -58,7 +58,7 @@ const ringClass = computed(() => {
              :class="[
                  open
                      ? 'border-2 border-dashed border-[var(--ui-text-dimmed)]/50 bg-transparent'
-                     : 'overflow-hidden border border-[var(--ui-border-accented)] bg-default',
+                     : 'overflow-hidden border-[1.5px] border-[var(--ui-border-accented)] bg-default',
                  ringClass,
              ]">
             <div class="flex h-[68px] shrink-0 items-center gap-3 px-4">

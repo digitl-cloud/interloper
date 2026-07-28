@@ -232,7 +232,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                 </UTooltip>
             </div>
 
-            <div class="rounded-xl border border-default bg-default px-4 py-3"
+            <div class="rounded-xl border-2 border-default bg-default px-4 py-3"
                  :class="ringClass">
                 <div class="flex items-center gap-2">
                     <UIcon name="i-lucide-box"
@@ -250,7 +250,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                      class="mt-1.5 flex flex-wrap gap-1 pl-6">
                     <UBadge v-for="tag in tags"
                             :key="tag"
-                            color="neutral"
+                            :color="tagColor(tag)"
                             variant="subtle"
                             size="sm"
                             :label="tag" />

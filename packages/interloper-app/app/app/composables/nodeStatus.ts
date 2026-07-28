@@ -19,18 +19,22 @@ export function statusDotClass(state: GraphNodeState): string {
     return STATUS_DOT[state]
 }
 
-/** Ring/border tint per node state. Healthy (idle) is the default look — no ring. */
+/**
+ * Ring/border tint per node state. Healthy (idle) and the gray states keep
+ * the default card look — their dot is enough; rings are reserved for states
+ * that demand attention or are live.
+ */
 const STATUS_RING: Record<GraphNodeState, string> = {
     idle: '',
     attention: 'ring-2 ring-[var(--ui-warning)]/70',
-    paused: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
-    queued: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
-    pending: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
+    paused: '',
+    queued: '',
+    pending: '',
     running: 'ring-2 ring-[var(--ui-info)]/70',
     success: 'ring-2 ring-[var(--ui-success)]/60',
     failed: 'ring-2 ring-[var(--ui-error)]/70',
-    skipped: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
-    canceled: 'ring-2 ring-[var(--ui-text-dimmed)]/40',
+    skipped: '',
+    canceled: '',
 }
 
 export function statusRingClass(state: GraphNodeState): string {
