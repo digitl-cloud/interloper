@@ -299,6 +299,8 @@ def update_component(
         raise HTTPException(status_code=400, detail=str(e))
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except InUseError as e:
+        raise HTTPException(status_code=409, detail={"message": str(e), "used_by": e.referrers})
     return _to_response(row, store, include_config=True)
 
 
@@ -353,9 +355,15 @@ def remove_relation(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> None:
-    """Remove a component's relations of one type toward one destination."""
+    """Remove a component's relations of one type toward one destination.
+
+    Refused (400) for required dependency slots — repoint them instead.
+    """
     load_authorized(store.get_component, component_id, user, store, label="Component", minimum="editor")
-    store.remove_relation(component_id, type=type, dst_id=dst_id)
+    try:
+        store.remove_relation(component_id, type=type, dst_id=dst_id)
+    except ConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # -- Partition endpoint ---------------------------------------------------------
