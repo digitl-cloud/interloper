@@ -14,9 +14,10 @@ genuinely owns are applied where the row's ``kind`` demands them:
 
 Relation writes are validated against the row's relation vocabulary — the
 catalog class's definition is authoritative (a concrete class may extend its
-anchor's vocabulary), the kind's anchor is the drift fallback — and stamped
-with the denormalized ``org_id``/``src_kind``/``dst_kind`` triple the
-composite foreign keys verify.
+anchor's vocabulary; source-owned assets resolve through their parent), the
+kind's anchor is the drift fallback — including the declared slots and each
+slot's expected destination identity, and stamped with the denormalized
+``org_id``/``src_kind``/``dst_kind`` triple the composite foreign keys verify.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from interloper.errors import (
     InUseError,
     NotFoundError,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
@@ -235,9 +237,15 @@ class ComponentMixin(StoreBase):
         # invites the unit of work to manage them.
         child_ids = session.exec(select(Component.id).where(Component.parent_id == db_component.id)).all()
         subtree_ids = {db_component.id} | set(child_ids)
+        return self._blocking_referrers_into(session, subtree_ids, subtree_ids)
+
+    def _blocking_referrers_into(
+        self, session: Session, target_ids: set[UUID], subtree_ids: set[UUID]
+    ) -> list[dict[str, str | None]]:
+        """Blocking referrers whose relations point into *target_ids* from outside *subtree_ids*."""
         rows = session.exec(
             select(ComponentRelation).where(
-                col(ComponentRelation.dst_id).in_(subtree_ids),
+                col(ComponentRelation.dst_id).in_(target_ids),
                 col(ComponentRelation.src_id).not_in(subtree_ids),
             )
         ).all()
@@ -300,31 +308,81 @@ class ComponentMixin(StoreBase):
     def add_relation(self, component_id: UUID, *, type: str, dst_id: UUID, slot: str = "") -> ComponentRelation:
         """Add one relation from a component.
 
+        Slotted types upsert per slot: re-binding an already-bound slot
+        repoints it to the new destination, and re-adding an identical
+        relation is a no-op returning the existing row.
+
         Returns:
-            The created relation.
+            The relation (created, repointed, or already present).
 
         Raises:
             NotFoundError: If either endpoint is missing or cross-org.
-            ConfigError: If the kind's vocabulary doesn't declare the type.
+            ConfigError: If the kind's vocabulary doesn't declare the type,
+                the slot, or the destination doesn't match the slot's shape.
         """
         with self._session() as session:
             src = session.get(Component, component_id)
             if not src:
                 raise NotFoundError(f"Component {component_id} not found")
-            self._check_vocabulary(src, type)
-            relation = _add_relation(session, src, self._resolve_dst(session, src, type, slot, dst_id), type, slot)
-            session.commit()
+            definition = self._check_vocabulary(session, src, type)
+            dst = self._resolve_dst(session, src, definition, type, slot, dst_id)
+            statement = select(ComponentRelation).where(
+                ComponentRelation.src_id == src.id,
+                ComponentRelation.type == type,
+                ComponentRelation.slot == slot,
+            )
+            if not definition.slotted:
+                statement = statement.where(ComponentRelation.dst_id == dst.id)
+            existing = session.exec(statement).all()
+            if match := next((relation for relation in existing if relation.dst_id == dst.id), None):
+                return match
+            for relation in existing:
+                session.delete(relation)
+            if existing:
+                session.flush()
+            relation = _add_relation(session, src, dst, type, slot)
+            try:
+                session.commit()
+            except IntegrityError:
+                raise ConfigError(
+                    f"Relation '{type}'{f' slot {slot!r}' if slot else ''} on '{src.key}' "
+                    f"was modified concurrently; retry"
+                )
             return relation
 
     def remove_relation(self, component_id: UUID, *, type: str, dst_id: UUID) -> None:
-        """Remove a component's relations of one type toward one destination."""
+        """Remove a component's relations of one type toward one destination.
+
+        Raises:
+            ConfigError: If a matching edge fills a *required* dependency
+                slot — unbinding it would break the asset at its next run;
+                repoint the slot or remove the dependent asset instead.
+        """
         with self._session() as session:
             statement = select(ComponentRelation).where(
                 ComponentRelation.src_id == component_id,
                 ComponentRelation.type == type,
                 ComponentRelation.dst_id == dst_id,
             )
-            for relation in session.exec(statement).all():
+            relations = session.exec(statement).all()
+            if type == "dependency" and relations:
+                src = session.get(Component, component_id)
+                definition = self._relation_vocabulary(session, src).get(type) if src else None
+                required = sorted(
+                    {
+                        relation.slot
+                        for relation in relations
+                        if definition is not None
+                        and (slot_def := definition.slots.get(relation.slot)) is not None
+                        and slot_def.required
+                    }
+                )
+                if required:
+                    raise ConfigError(
+                        f"Required dependency slot(s) {required} of '{src.key if src else component_id}' "
+                        f"cannot be unbound; repoint them or remove the dependent asset instead"
+                    )
+            for relation in relations:
                 session.delete(relation)
             session.commit()
 
@@ -538,11 +596,13 @@ class ComponentMixin(StoreBase):
         """Sync a source's child asset rows to match the desired set.
 
         When ``child_keys`` is provided, only those assets will exist —
-        missing ones are created, extra ones are removed (their relations,
-        including dependencies pointing at them, cascade). When ``None``,
-        existing rows are kept and newly available catalog assets are added.
-        Existing rows keep their IDs (and therefore their cross-source deps,
-        event references, and per-asset overrides).
+        missing ones are created, extra ones are removed. Removal follows the
+        delete guard's semantics: blocking relations from outside the source
+        (a required cross-source dependency) raise ``InUseError``; detaching
+        ones and intra-source edges cascade. When ``None``, existing rows are
+        kept and newly available catalog assets are added. Existing rows keep
+        their IDs (and therefore their cross-source deps, event references,
+        and per-asset overrides).
         """
         source_cls = resolve_source_cls(self._catalog, db_source.key)
         if source_cls is None:
@@ -561,10 +621,25 @@ class ComponentMixin(StoreBase):
         # (drifted keys included) and tops up new catalog assets.
         target = set(child_keys) if child_keys is not None else set(existing) | all_keys
         to_create = target - set(existing)
+        to_remove = set(existing) - target
 
-        for key in set(existing) - target:
-            session.delete(existing[key])
-        session.flush()
+        if to_remove:
+            # Removing a child cascades its inbound relations — the same loss
+            # the delete guard protects against, so guard here too. Relations
+            # from inside the source's own subtree don't block: reshaping the
+            # child set is exactly what this call is for.
+            subtree_ids = {db_source.id} | {child.id for child in existing.values()}
+            removed_ids = {existing[key].id for key in to_remove}
+            if referrers := self._blocking_referrers_into(session, removed_ids, subtree_ids):
+                names = ", ".join(str(r["name"] or r["key"]) for r in referrers)
+                raise InUseError(
+                    f"Cannot remove asset(s) {sorted(to_remove)} from source "
+                    f"'{db_source.name or db_source.key}': in use by {names}",
+                    referrers=referrers,
+                )
+            for key in to_remove:
+                session.delete(existing[key])
+            session.flush()
 
         children = {key: child for key, child in existing.items() if key in target}
         for key in to_create:
@@ -572,21 +647,35 @@ class ComponentMixin(StoreBase):
             session.add(children[key])
         session.flush()
 
-        if to_create:
-            self._wire_intra_deps(session, source_cls, children, only_for=to_create)
+        self._wire_intra_deps(session, source_cls, children)
 
     @staticmethod
     def _wire_intra_deps(
         session: Session,
         source_cls: type[il.Source],
         children_by_key: dict[str, Component],
-        only_for: set[str],
     ) -> None:
-        """Persist intra-source dependency relations from class metadata."""
+        """Top up missing intra-source dependency relations from class metadata.
+
+        Idempotent over the full child set — assets enabled after their
+        siblings still get the edges *into* them wired. Slots that already
+        hold an edge are never touched, so manual bindings survive.
+        """
         source_key = source_cls.key
+        child_ids = [child.id for child in children_by_key.values()]
+        bound = {
+            (row[0], row[1])
+            for row in session.exec(
+                select(ComponentRelation.src_id, ComponentRelation.slot).where(
+                    col(ComponentRelation.src_id).in_(child_ids),
+                    ComponentRelation.type == "dependency",
+                )
+            ).all()
+        }
         for asset_type in source_cls.asset_types:
             asset_key = asset_type.key
-            if asset_key not in only_for or asset_key not in children_by_key:
+            child = children_by_key.get(asset_key)
+            if child is None:
                 continue
             all_requires = {**asset_type.requires, **asset_type.optional_requires}
             for param_name, required_qualified_key in all_requires.items():
@@ -597,10 +686,11 @@ class ComponentMixin(StoreBase):
                         continue
                 else:
                     qualified_asset = required_qualified_key
-                if qualified_asset in children_by_key:
-                    _add_relation(
-                        session, children_by_key[asset_key], children_by_key[qualified_asset], "dependency", param_name
-                    )
+                if qualified_asset == asset_key or qualified_asset not in children_by_key:
+                    continue
+                if (child.id, param_name) in bound:
+                    continue
+                _add_relation(session, child, children_by_key[qualified_asset], "dependency", param_name)
 
     def _sync_relations(
         self,
@@ -608,33 +698,63 @@ class ComponentMixin(StoreBase):
         src: Component,
         relations: dict[str, list[Binding]] | None,
     ) -> None:
-        """Replace the relation types present in *relations* (empty list clears)."""
+        """Replace the relation types present in *relations* (empty list clears).
+
+        Required dependency slots that are currently bound must stay bound —
+        dropping one would break the asset at its next run. Repointing (same
+        slot, different destination) is allowed.
+        """
         for type_, bindings in (relations or {}).items():
-            self._check_vocabulary(src, type_)
+            definition = self._check_vocabulary(session, src, type_)
             existing = session.exec(
                 select(ComponentRelation).where(ComponentRelation.src_id == src.id, ComponentRelation.type == type_)
             ).all()
+            if type_ == "dependency":
+                kept = {slot for _, slot in bindings}
+                dropped = sorted(
+                    {
+                        relation.slot
+                        for relation in existing
+                        if relation.slot not in kept
+                        and (slot_def := definition.slots.get(relation.slot)) is not None
+                        and slot_def.required
+                    }
+                )
+                if dropped:
+                    raise ConfigError(
+                        f"Required dependency slot(s) {dropped} of '{src.key}' cannot be unbound; "
+                        f"repoint them or remove the dependent asset instead"
+                    )
             for relation in existing:
                 session.delete(relation)
             session.flush()
             for dst_id, slot in bindings:
-                _add_relation(session, src, self._resolve_dst(session, src, type_, slot, dst_id), type_, slot)
+                dst = self._resolve_dst(session, src, definition, type_, slot, dst_id)
+                _add_relation(session, src, dst, type_, slot)
 
-    def _check_vocabulary(self, src: Component, type_: str) -> None:
-        """Reject relation types the row's class vocabulary doesn't declare."""
-        vocabulary = self._catalog.vocabulary(src.kind, src.key)
+    def _check_vocabulary(self, session: Session, src: Component, type_: str) -> il.RelationDefinition:
+        """Reject relation types the row's class vocabulary doesn't declare.
+
+        Returns:
+            The type's relation definition (slots included for owned assets).
+        """
+        vocabulary = self._relation_vocabulary(session, src)
         if type_ not in vocabulary:
             raise ConfigError(
                 f"Components of kind '{src.kind}' ('{src.key}') declare no '{type_}' relations "
                 f"(allowed: {sorted(vocabulary) or 'none'})"
             )
+        return vocabulary[type_]
 
-    def _resolve_dst(self, session: Session, src: Component, type_: str, slot: str, dst_id: UUID) -> Component:
+    def _resolve_dst(
+        self, session: Session, src: Component, definition: il.RelationDefinition, type_: str, slot: str, dst_id: UUID
+    ) -> Component:
         """Resolve a relation destination, enforcing existence, same-org, and the vocabulary's shape."""
         dst = session.get(Component, dst_id)
         if dst is None or dst.org_id != src.org_id:
             raise NotFoundError(f"Component {dst_id} not found (relation '{type_}'{f'/{slot}' if slot else ''})")
-        definition = self._catalog.vocabulary(src.kind, src.key)[type_]
+        if dst.id == src.id:
+            raise ConfigError(f"Relation '{type_}' on '{src.key}' may not point at the component itself")
         if dst.kind not in definition.kinds:
             raise ConfigError(
                 f"Relation '{type_}' on kind '{src.kind}' may not point at a '{dst.kind}' "
@@ -642,7 +762,59 @@ class ComponentMixin(StoreBase):
             )
         if not definition.slotted and slot:
             raise ConfigError(f"Relation '{type_}' on kind '{src.kind}' is not slotted (got slot '{slot}')")
+        # A definition with no declared slots (a kind anchor reached through
+        # the drift fallback) can't vet slot names or targets — skip, fail-open.
+        if definition.slotted and definition.slots:
+            slot_def = definition.slots.get(slot)
+            if slot_def is None:
+                raise ConfigError(
+                    f"Relation '{type_}' on '{src.key}' declares no slot '{slot}' "
+                    f"(declared: {sorted(definition.slots)})"
+                )
+            self._check_slot_target(session, src, type_, slot, slot_def, dst)
         return dst
+
+    def _check_slot_target(
+        self, session: Session, src: Component, type_: str, slot: str, slot_def: il.RelationSlot, dst: Component
+    ) -> None:
+        """Enforce a slot's declared destination identity, when it declares one.
+
+        Dependency slots carry an asset key — bare (a sibling of the same
+        source instance) or qualified ``source_key.asset_key``. A qualified
+        key naming the src's own source still binds within the instance;
+        any other source key accepts that source's assets from any instance.
+        Other slotted types (resources) declare a plain component key.
+        """
+        expected = slot_def.key
+        if not expected:
+            return
+        if type_ != "dependency":
+            if dst.key != expected:
+                raise ConfigError(
+                    f"Relation '{type_}' slot '{slot}' of '{src.key}' expects a '{expected}' "
+                    f"component, got '{dst.key}'"
+                )
+            return
+        expected_source, expected_asset = expected.split(".", 1) if "." in expected else ("", expected)
+        if dst.key != expected_asset:
+            raise ConfigError(
+                f"Dependency slot '{slot}' of '{src.key}' expects asset '{expected}', got '{dst.key}'"
+            )
+        src_parent = session.get(Component, src.parent_id) if src.parent_id else None
+        intra_source = not expected_source or (src_parent is not None and expected_source == src_parent.key)
+        if intra_source:
+            if src.parent_id is not None and dst.parent_id != src.parent_id:
+                raise ConfigError(
+                    f"Dependency slot '{slot}' of '{src.key}' must bind a sibling asset "
+                    f"of the same source instance"
+                )
+        else:
+            dst_parent = session.get(Component, dst.parent_id) if dst.parent_id else None
+            if dst_parent is None or dst_parent.key != expected_source:
+                raise ConfigError(
+                    f"Dependency slot '{slot}' of '{src.key}' expects an asset of source "
+                    f"'{expected_source}', got one of '{dst_parent.key if dst_parent else 'none'}'"
+                )
 
     def _row_status(self, session: Session, db_component: Component) -> ComponentStatus:
         """Row drift status inside an open session (parent fetched on demand)."""
