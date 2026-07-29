@@ -181,3 +181,22 @@ class ComponentDriftError(InterloperError):
     the API layer can treat drift as a recoverable, user-resolvable state
     rather than a hard failure.
     """
+
+
+# -- Formatting ----------------------------------------------------------------
+
+
+def format_exception(exc: BaseException) -> str:
+    """Format an exception as a non-empty, single-line error string.
+
+    ``str(exc)`` alone is empty for message-less exceptions (e.g.
+    ``httpx.ReadTimeout``), which downstream consumers — event rows, run
+    results, the UI — treat as "no error". Always lead with the type name so
+    the error stays identifiable either way.
+
+    Returns:
+        ``"TypeName: message"``, or just ``"TypeName"`` when the message is empty.
+    """
+    message = str(exc)
+    name = type(exc).__name__
+    return f"{name}: {message}" if message else name

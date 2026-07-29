@@ -112,9 +112,11 @@ const columns: TableColumn<RunEvent>[] = [
         header: 'Details',
         cell: ({ row }) => {
             const event = row.original as RunEvent
-            if (event.error) {
+            // Older events may carry a traceback with an empty error string
+            // (message-less exceptions) — the detail modal must stay reachable.
+            if (event.error || event.traceback) {
                 return h('div', { class: 'flex items-center gap-2 max-w-[400px]' }, [
-                    h('span', { class: 'truncate text-sm text-error' }, event.error),
+                    h('span', { class: 'truncate text-sm text-error' }, event.error || event.message || 'Error'),
                     h(UButton, {
                         icon: 'i-lucide-expand',
                         label: 'view',

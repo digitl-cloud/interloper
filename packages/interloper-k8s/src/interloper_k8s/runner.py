@@ -15,7 +15,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, cast
 
 from interloper.asset.base import Asset
-from interloper.errors import RunnerError
+from interloper.errors import RunnerError, format_exception
 from interloper.events import EventBus, EventType
 from interloper.events.event import parse_event_from_log_line
 from interloper.partitioning.base import Partition, PartitionWindow
@@ -176,7 +176,7 @@ class KubernetesRunner(SyncRunner):
         try:
             self._batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
         except Exception as e:
-            self.state.mark_asset_failed(asset, str(e))
+            self.state.mark_asset_failed(asset, format_exception(e))
             done: Future[None] = Future()
             done.set_result(None)
             return done
@@ -242,7 +242,7 @@ class KubernetesRunner(SyncRunner):
         try:
             future.result()
         except Exception as e:
-            self.state.mark_asset_failed(asset, str(e), emit=True)
+            self.state.mark_asset_failed(asset, format_exception(e), emit=True)
             if self.fail_fast or self.reraise:
                 raise RunnerError(f"Asset '{type(asset).key}' failed: {e}") from e
         else:
@@ -264,7 +264,7 @@ class KubernetesRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:  # noqa: BLE001
-                self.state.mark_asset_failed(asset, str(e), emit=True)
+                self.state.mark_asset_failed(asset, format_exception(e), emit=True)
             else:
                 self.state.mark_asset_completed(asset, emit=True)
 

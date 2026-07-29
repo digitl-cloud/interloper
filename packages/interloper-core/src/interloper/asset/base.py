@@ -15,7 +15,7 @@ from interloper.asset.context import ExecutionContext
 from interloper.component import Component, ComponentDefinition, RelationDefinition, RelationSlot
 from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
-from interloper.errors import AssetError, NormalizerError, PartitionError
+from interloper.errors import AssetError, NormalizerError, PartitionError, format_exception
 from interloper.events import EventBus, EventType
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
@@ -414,9 +414,9 @@ class Asset(Component):
                 EventType.ASSET_EXEC_FAILED,
                 metadata={
                     **exec_meta,
-                    "error": str(e),
+                    "error": format_exception(e),
                     "traceback": traceback.format_exc(),
-                    "message": f"Execution of '{type(self).key}' failed: {e}",
+                    "message": f"Execution of '{type(self).key}' failed: {format_exception(e)}",
                 },
             )
             raise
@@ -622,9 +622,9 @@ class Asset(Component):
                     EventType.DEST_WRITE_FAILED,
                     metadata={
                         **dest_meta,
-                        "error": str(e),
+                        "error": format_exception(e),
                         "traceback": traceback.format_exc(),
-                        "message": f"Failed to write '{type(self).key}': {e}",
+                        "message": f"Failed to write '{type(self).key}': {format_exception(e)}",
                     },
                 )
                 raise
@@ -672,12 +672,14 @@ class Asset(Component):
                 EventType.DEST_READ_FAILED,
                 metadata={
                     **dest_meta,
-                    "error": str(e),
+                    "error": format_exception(e),
                     "traceback": traceback.format_exc(),
-                    "message": f"Failed to read '{type(upstream_asset).key}': {e}",
+                    "message": f"Failed to read '{type(upstream_asset).key}': {format_exception(e)}",
                 },
             )
-            raise AssetError(f"Failed to load data from upstream asset '{upstream_asset.key}': {e}") from e
+            raise AssetError(
+                f"Failed to load data from upstream asset '{upstream_asset.key}': {format_exception(e)}"
+            ) from e
 
         return result
 

@@ -9,7 +9,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, wait
 from typing import TYPE_CHECKING, Any
 
 from interloper.asset.base import Asset
-from interloper.errors import RunnerError
+from interloper.errors import RunnerError, format_exception
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
@@ -99,7 +99,7 @@ class SyncRunner(Runner):
 
         except Exception as e:
             self._flush(inflight)
-            result = self._finalize_run(error=str(e))
+            result = self._finalize_run(error=format_exception(e))
             if self.reraise:
                 raise
             return result
@@ -131,7 +131,7 @@ class SyncRunner(Runner):
         try:
             future.result()
         except Exception as e:
-            self.state.mark_asset_failed(asset, str(e), tb=traceback.format_exc())
+            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
             if self.fail_fast or self.reraise:
                 raise
             return
@@ -181,4 +181,4 @@ class SyncRunner(Runner):
             future.result()
             self.state.mark_asset_completed(asset)
         except Exception as e:  # noqa: BLE001
-            self.state.mark_asset_failed(asset, str(e), tb=traceback.format_exc())
+            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())

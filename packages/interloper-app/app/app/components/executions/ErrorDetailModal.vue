@@ -27,7 +27,7 @@ watch(() => props.event.traceback, (tb) => {
             :ui="{ content: 'sm:max-w-4xl' }">
         <template #body>
             <div class="space-y-4">
-                <div>
+                <div v-if="event.error">
                     <h4 class="text-xs font-medium text-muted uppercase mb-1">
                         Error
                     </h4>
