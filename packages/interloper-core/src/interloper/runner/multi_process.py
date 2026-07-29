@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import PrivateAttr
 
 from interloper.asset.base import Asset
-from interloper.errors import RunnerError
+from interloper.errors import RunnerError, format_exception
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.sync_runner import SyncRunner
 
@@ -46,7 +46,7 @@ def _worker(
             )
         )
     except Exception as e:  # noqa: BLE001
-        return (asset_id, False, str(e), traceback.format_exc())
+        return (asset_id, False, format_exception(e), traceback.format_exc())
     return (asset_id, True, None, None)
 
 
@@ -130,7 +130,7 @@ class MultiProcessRunner(SyncRunner):
         try:
             _key, success, error_msg, tb = future.result()
         except Exception as e:
-            self.state.mark_asset_failed(asset, str(e), tb=traceback.format_exc())
+            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
             if self.fail_fast or self.reraise:
                 raise
             return
@@ -147,7 +147,7 @@ class MultiProcessRunner(SyncRunner):
         try:
             _key, success, error_msg, tb = future.result()
         except Exception as e:  # noqa: BLE001
-            self.state.mark_asset_failed(asset, str(e), tb=traceback.format_exc())
+            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
             return
 
         if success:

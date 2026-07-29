@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import PrivateAttr
 
 from interloper.asset.base import Asset
-from interloper.errors import RunnerError
+from interloper.errors import RunnerError, format_exception
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
@@ -100,7 +100,7 @@ class AsyncRunner(Runner):
 
         except Exception as e:
             await self._flush(inflight)
-            result = self._finalize_run(error=str(e))
+            result = self._finalize_run(error=format_exception(e))
             if self.reraise:
                 raise
             return result
@@ -155,7 +155,7 @@ class AsyncRunner(Runner):
             )
             self.state.mark_asset_completed(asset)
         except Exception as e:
-            self.state.mark_asset_failed(asset, str(e), tb=traceback.format_exc())
+            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
             if self.reraise or self.fail_fast:
                 raise
             return None

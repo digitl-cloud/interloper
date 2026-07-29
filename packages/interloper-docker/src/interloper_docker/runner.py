@@ -25,7 +25,7 @@ import docker
 from docker.client import DockerClient
 from docker.models.containers import Container
 from interloper.asset.base import Asset
-from interloper.errors import RunnerError
+from interloper.errors import RunnerError, format_exception
 from interloper.events import EventBus, EventType
 from interloper.events.event import parse_event_from_log_line
 from interloper.partitioning.base import Partition, PartitionWindow
@@ -148,7 +148,7 @@ class DockerRunner(SyncRunner):
             )
         except Exception as e:
             # Container never started — emit from the host
-            self.state.mark_asset_failed(asset, str(e))
+            self.state.mark_asset_failed(asset, format_exception(e))
             done: Future[None] = Future()
             done.set_result(None)
             return done
@@ -180,7 +180,7 @@ class DockerRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:
-                self.state.mark_asset_failed(asset, str(e), emit=True)
+                self.state.mark_asset_failed(asset, format_exception(e), emit=True)
                 if self.fail_fast or self.reraise:
                     raise
             else:
@@ -208,7 +208,7 @@ class DockerRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:  # noqa: BLE001
-                self.state.mark_asset_failed(asset, str(e), emit=True)
+                self.state.mark_asset_failed(asset, format_exception(e), emit=True)
             else:
                 self.state.mark_asset_completed(asset, emit=True)
 
