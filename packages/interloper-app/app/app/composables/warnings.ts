@@ -36,15 +36,12 @@ export function useAssetWarnings() {
         return map
     })
 
-    /**
-     * Qualified key → asset id.
-     * Built from all sources so cross-source lookups work.
-     */
-    const assetIdByQualifiedKey = computed(() => {
-        const map = new Map<string, string>()
+    /** asset id → asset record, across all sources. */
+    const assetById = computed(() => {
+        const map = new Map<string, ComponentRecord>()
         for (const source of sources.value) {
             for (const asset of source.children) {
-                map.set(qualifiedKey(source.key, asset.key), asset.id)
+                map.set(asset.id, asset)
             }
         }
         return map
@@ -103,8 +100,18 @@ export function useAssetWarnings() {
         if (defn) {
             const recorded = upstreamsByAssetId.value.get(assetId) ?? new Set()
             for (const [_param, depQk] of Object.entries(requiredDependencies(defn))) {
-                const upstreamId = assetIdByQualifiedKey.value.get(depQk)
-                if (!upstreamId || !recorded.has(upstreamId)) {
+                // A dep is satisfied by a recorded upstream matching the declared
+                // identity — a sibling of this source instance for intra-source
+                // deps, any instance of the named source for cross-source ones.
+                const { sourceKey: depSourceKey, assetKey: depAssetKey } = parseQualifiedKey(depQk)
+                const intraSource = !depSourceKey || depSourceKey === source?.key
+                const satisfied = [...recorded].some((upstreamId) => {
+                    const upstream = assetById.value.get(upstreamId)
+                    if (!upstream || upstream.key !== depAssetKey) return false
+                    const upstreamSource = sourceByAssetId.value.get(upstreamId)
+                    return intraSource ? upstreamSource?.id === source?.id : upstreamSource?.key === depSourceKey
+                })
+                if (!satisfied) {
                     const depDefn = getAssetDefinition(depQk)
                     const depName = depDefn?.name ?? depQk
                     warnings.push({ category: 'dependency', message: `Missing dependency: ${depName}` })
