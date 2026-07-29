@@ -7,9 +7,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.catalog.base import Catalog
 
-from interloper_api.dependencies import get_catalog
+from interloper_api.dependencies import get_catalog, require_viewer
 
-router = APIRouter(prefix="/catalog", tags=["catalog"])
+router = APIRouter(prefix="/catalog", tags=["catalog"], dependencies=[Depends(require_viewer)])
 
 
 @router.get("/")
