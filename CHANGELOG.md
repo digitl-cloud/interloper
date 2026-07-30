@@ -2,6 +2,45 @@
 
 <!-- version list -->
 
+## v0.49.0 (2026-07-30)
+
+### Bug Fixes
+
+- Surface error details for message-less exceptions
+  ([`606cadb`](https://github.com/digitl-cloud/interloper/commit/606cadb813c10073532369497e79989fd40a16a8))
+
+- **api**: Require viewer auth on catalog routes
+  ([`952b16c`](https://github.com/digitl-cloud/interloper/commit/952b16ce5b1102816498a8ffe2dff4f14d8446a8))
+
+- **app**: Scope asset dependency warnings to the owning source instance
+  ([`df62662`](https://github.com/digitl-cloud/interloper/commit/df626629427b28efc1fc10eb1a2432e4fbe57b52))
+
+### Features
+
+- Reconcile schema-declared assets by default
+  ([`fec06b9`](https://github.com/digitl-cloud/interloper/commit/fec06b9883fab8744e8cb8cc5c29157bb12fc588))
+
+- **app**: Surface asset warnings in the asset panel and refresh its layout
+  ([`58e7345`](https://github.com/digitl-cloud/interloper/commit/58e734580bc304fadbe3a834a33a69656ba09ad3))
+
+- **chart**: App config moves from the config block to root-level values
+  ([`5187cb6`](https://github.com/digitl-cloud/interloper/commit/5187cb696db340e769602afe95f1b69d56135865))
+
+### Refactoring
+
+- **core**: Dispatch reconcile pre-coercions via a type-keyed table
+  ([`e5bc2da`](https://github.com/digitl-cloud/interloper/commit/e5bc2daf33a7b7ce7deaa3e0113893a1e31e3cfd))
+
+- **core**: Reconcile rows via per-field TypeAdapters
+  ([`133c498`](https://github.com/digitl-cloud/interloper/commit/133c4983d997f34961769d6a3af04eec97e25028))
+
+### Breaking Changes
+
+- Assets with a declared schema and the default AUTO strategy now coerce data to the schema instead
+  of validating it. Extra columns are dropped (previously passed through) and coercible type
+  mismatches no longer raise SchemaError. Declare STRICT to keep the old rejecting behavior.
+
+
 ## v0.48.0 (2026-07-28)
 
 ### Bug Fixes
