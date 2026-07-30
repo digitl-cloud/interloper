@@ -195,7 +195,7 @@ class Runner(Serializable):
         """
         if partition_or_window is None:
             partitioned = sorted(
-                type(asset).key
+                asset.key
                 for asset in dag.assets
                 if asset.materializable and asset.partitioning is not None
             )
@@ -210,7 +210,7 @@ class Runner(Serializable):
             return
 
         unsupported = [
-            type(asset).key
+            asset.key
             for asset in dag.assets
             if asset.materializable and asset.partitioning is not None and not asset.partitioning.allow_window
         ]

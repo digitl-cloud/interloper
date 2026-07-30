@@ -55,7 +55,7 @@ class AssetRef(IgnoredDescriptor):
         if instance is None:
             return self.asset_cls
         for asset in instance.assets:
-            if type(asset).key == self.asset_cls.key:
+            if asset.key == self.asset_cls.key:
                 return asset
         raise AttributeError(
             f"Source '{type(instance).__name__}' has no asset with key '{self.asset_cls.key}'"
@@ -229,12 +229,12 @@ class Source(Component):
         """
         from interloper.errors import SourceError
 
-        known = {type(a).key for a in self.assets}
+        known = {a.key for a in self.assets}
         unknown = [k for k in self.select or [] if k not in known]
         if unknown:
-            raise SourceError(f"Source '{type(self).key}' has no asset(s) {unknown}; available: {sorted(known)}")
+            raise SourceError(f"Source '{self.key}' has no asset(s) {unknown}; available: {sorted(known)}")
         selected = set(self.select or [])
-        self.assets = [a if type(a).key in selected else a(materializable=False) for a in self.assets]
+        self.assets = [a if a.key in selected else a(materializable=False) for a in self.assets]
         for asset in self.assets:
             asset._source = self
 
@@ -268,7 +268,7 @@ class Source(Component):
                     if asset_spec.id:
                         # Preserve instance id so dependencies wire up after round-trip
                         asset_init["id"] = asset_spec.id
-                    overrides[type(asset).key] = asset_init
+                    overrides[asset.key] = asset_init
                 if overrides:
                     init["assets"] = overrides
                 continue
@@ -424,7 +424,7 @@ class Source(Component):
             self.dataset = self.key
         validate_key(self.dataset)
 
-        siblings: dict[str, Asset] = {type(a).key: a for a in self.assets}
+        siblings: dict[str, Asset] = {a.key: a for a in self.assets}
 
         for asset in self.assets:
             asset._source = self
@@ -478,7 +478,7 @@ class Source(Component):
         if name.startswith("_"):
             return super().__getattr__(name)  # ty: ignore[unresolved-attribute]
         for asset in self.assets:
-            if type(asset).key == name:
+            if asset.key == name:
                 return asset
         raise AttributeError(f"Source has no asset with key '{name}'")
 
@@ -492,13 +492,12 @@ class Source(Component):
         Pre-existing ``dependencies`` entries (e.g. hydrated from persisted
         relations) are never overwritten.
         """
-        asset_cls = type(asset)
-        for mapping in (asset_cls.requires, asset_cls.optional_requires):
+        for mapping in (asset.requires, asset.optional_requires):
             for param_name, required_qk in mapping.items():
                 if param_name in asset.dependencies:
                     continue
-                expected = AssetIdentity.resolve(required_qk, own_source_key=type(self).key)
-                if expected.source_key != type(self).key:
+                expected = AssetIdentity.resolve(required_qk, own_source_key=self.key)
+                if expected.source_key != self.key:
                     continue
                 sibling = siblings.get(expected.asset_key)
                 if sibling is not None and sibling is not asset:

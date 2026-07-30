@@ -260,7 +260,7 @@ class Asset(Component):
         :meth:`~interloper.source.base.Source.asset_table`) and the result is
         coerced to a valid identifier. Standalone assets use their class key.
         """
-        raw = self._source.asset_table(self) if self._source is not None else type(self).key
+        raw = self._source.asset_table(self) if self._source is not None else self.key
         return to_identifier(raw)
 
     @classmethod
@@ -428,7 +428,7 @@ class Asset(Component):
         self._validate_partitioning(partition_or_window)
 
         context = ExecutionContext(
-            asset_key=type(self).key,
+            asset_key=self.key,
             partition_or_window=partition_or_window,
             partitioning=self.partitioning,
             metadata=metadata,
@@ -441,13 +441,13 @@ class Asset(Component):
         exec_meta = self._event_metadata(metadata or {}, partition_or_window)
         EventBus.emit(
             EventType.ASSET_EXEC_STARTED,
-            metadata={**exec_meta, "message": f"Executing '{type(self).key}'"},
+            metadata={**exec_meta, "message": f"Executing '{self.key}'"},
         )
         try:
             result = await invoke(self.data, **kwargs)
             EventBus.emit(
                 EventType.ASSET_EXEC_COMPLETED,
-                metadata={**exec_meta, "message": f"Executed '{type(self).key}'"},
+                metadata={**exec_meta, "message": f"Executed '{self.key}'"},
             )
         except Exception as e:
             EventBus.emit(
@@ -456,7 +456,7 @@ class Asset(Component):
                     **exec_meta,
                     "error": format_exception(e),
                     "traceback": traceback.format_exc(),
-                    "message": f"Execution of '{type(self).key}' failed: {format_exception(e)}",
+                    "message": f"Execution of '{self.key}' failed: {format_exception(e)}",
                 },
             )
             raise
@@ -575,14 +575,14 @@ class Asset(Component):
         """
         kwargs: dict[str, Any] = {}
         sig = inspect.signature(self.data)
-        optional_names = set(type(self).optional_requires)
+        optional_names = set(self.optional_requires)
 
         for param_name in sig.parameters:
             if param_name in ("self", "source", "kwargs"):
                 continue
             if param_name == "context":
                 kwargs["context"] = context
-            elif param_name in type(self).resource_types:
+            elif param_name in self.resource_types:
                 kwargs[param_name] = self._resolve_resource(param_name)
             else:
                 if param_name not in self.dependencies:
@@ -630,7 +630,7 @@ class Asset(Component):
                     **self._event_metadata(metadata, partition_or_window),
                     "level": "WARNING",
                     "message": (
-                        f"Asset '{type(self).key}' produced no data; skipping write to {len(dests)} destination(s)"
+                        f"Asset '{self.key}' produced no data; skipping write to {len(dests)} destination(s)"
                     ),
                 },
             )
@@ -644,18 +644,18 @@ class Asset(Component):
         )
 
         for dest in dests:
-            dest_key = type(dest).key
+            dest_key = dest.key
             dest_meta = self._event_metadata(metadata, partition_or_window)
             dest_meta["destination_key"] = dest_key
             EventBus.emit(
                 EventType.DEST_WRITE_STARTED,
-                metadata={**dest_meta, "message": f"Writing '{type(self).key}'"},
+                metadata={**dest_meta, "message": f"Writing '{self.key}'"},
             )
             try:
                 await invoke(dest.write, dest_context, result)
                 EventBus.emit(
                     EventType.DEST_WRITE_COMPLETED,
-                    metadata={**dest_meta, "message": f"Wrote '{type(self).key}'"},
+                    metadata={**dest_meta, "message": f"Wrote '{self.key}'"},
                 )
             except Exception as e:
                 EventBus.emit(
@@ -664,7 +664,7 @@ class Asset(Component):
                         **dest_meta,
                         "error": format_exception(e),
                         "traceback": traceback.format_exc(),
-                        "message": f"Failed to write '{type(self).key}': {format_exception(e)}",
+                        "message": f"Failed to write '{self.key}': {format_exception(e)}",
                     },
                 )
                 raise
@@ -699,13 +699,13 @@ class Asset(Component):
         dest_meta = self._event_metadata(metadata, effective_partition)
         EventBus.emit(
             EventType.DEST_READ_STARTED,
-            metadata={**dest_meta, "message": f"Reading '{type(upstream_asset).key}'"},
+            metadata={**dest_meta, "message": f"Reading '{upstream_asset.key}'"},
         )
         try:
             result = await invoke(dest.read, dest_context)
             EventBus.emit(
                 EventType.DEST_READ_COMPLETED,
-                metadata={**dest_meta, "message": f"Read '{type(upstream_asset).key}'"},
+                metadata={**dest_meta, "message": f"Read '{upstream_asset.key}'"},
             )
         except Exception as e:
             EventBus.emit(
@@ -714,7 +714,7 @@ class Asset(Component):
                     **dest_meta,
                     "error": format_exception(e),
                     "traceback": traceback.format_exc(),
-                    "message": f"Failed to read '{type(upstream_asset).key}': {format_exception(e)}",
+                    "message": f"Failed to read '{upstream_asset.key}': {format_exception(e)}",
                 },
             )
             raise AssetError(
@@ -764,7 +764,7 @@ class Asset(Component):
         schema = self.schema
 
         if schema is None and strategy != MaterializationStrategy.AUTO:
-            raise AssetError(f"Asset '{type(self).key}': strategy='{strategy.value}' requires a schema.")
+            raise AssetError(f"Asset '{self.key}': strategy='{strategy.value}' requires a schema.")
 
         conformer = Representation.of(result).conformer
         try:
@@ -776,7 +776,7 @@ class Asset(Component):
                 self._effective_schema = None
                 return result
             raise AssetError(
-                f"Asset '{type(self).key}' declares a schema but returned data that cannot be checked against it: {e}"
+                f"Asset '{self.key}' declares a schema but returned data that cannot be checked against it: {e}"
             ) from e
 
         if schema is None:
@@ -838,7 +838,7 @@ class Asset(Component):
         Raises:
             DestinationError: If the destination type is not in destination_types.
         """
-        allowed = type(self).destination_types
+        allowed = self.destination_types
         if not allowed:
             return
         if not isinstance(dest, tuple(allowed)):
@@ -869,7 +869,7 @@ class Asset(Component):
         Raises:
             AssetError: If the resolved resource does not match the declared type.
         """
-        res_type = type(self).resource_types.get(name)
+        res_type = self.resource_types.get(name)
 
         resolved: Resource | None = None
 
@@ -894,7 +894,7 @@ class Asset(Component):
         # Validate against declared resource type
         if resolved is not None and res_type is not None and not isinstance(resolved, res_type):
             raise AssetError(
-                f"Resource '{name}' on asset '{type(self).key}' expected type "
+                f"Resource '{name}' on asset '{self.key}' expected type "
                 f"'{res_type.__name__}', got '{type(resolved).__name__}'."
             )
 
