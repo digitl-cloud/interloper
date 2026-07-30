@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import types
 import warnings
 from dataclasses import dataclass
@@ -14,6 +16,8 @@ from interloper.errors import SchemaError
 from interloper.serializable import Serializable
 
 warnings.filterwarnings("ignore", message=r'Field name ".*" in ".*" shadows an attribute in parent "Schema"')
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -238,12 +242,15 @@ class Schema(Serializable):
         """Reconcile rows against this schema.
 
         For each row:
-        1. Filter to only the keys defined in the schema (drop extras).
+        1. Filter to only the keys defined in the schema (drop extras — the
+           union of dropped keys is logged as a warning).
         2. For missing keys that have a default, omit them so Pydantic applies
            the default.  For missing *required* keys, supply ``None`` — Pydantic
            will accept it when the field is nullable (e.g. ``str | None``) and
            reject it otherwise, which is the desired behaviour.
-        3. Coerce values to the schema's types using ``model_validate()``.
+        3. Coerce values to the schema's types: scalar ``str`` fields are
+           stringified explicitly (pydantic's lax mode never coerces to
+           ``str``), everything else via ``model_validate()``.
 
         This is more permissive than :meth:`validate` — it actively
         transforms data to match the schema rather than rejecting mismatches.
@@ -262,10 +269,17 @@ class Schema(Serializable):
             return []
 
         schema_fields = cls._data_fields()
+        # Pydantic's lax mode never coerces to ``str`` (an int id stays an
+        # int and fails validation), so scalar ``str`` fields are stringified
+        # up front — mirroring the DataFrame conformer's ``astype("string")``
+        # and its JSON encoding of nested values.
+        str_fields = {s.name for s in cls.field_specs() if s.type is str and not s.repeated and s.fields is None}
 
+        dropped: set[str] = set()
         result: list[dict[str, Any]] = []
         for i, row in enumerate(rows):
-            filtered = {k: row[k] for k in schema_fields if k in row}
+            dropped.update(row.keys() - schema_fields)
+            filtered = {k: _coerce_str_value(row[k]) if k in str_fields else row[k] for k in schema_fields if k in row}
             for k in schema_fields - filtered.keys():
                 if cls.model_fields[k].is_required():
                     filtered[k] = None
@@ -274,6 +288,10 @@ class Schema(Serializable):
             except ValidationError as e:
                 raise SchemaError(f"Reconciliation failed on row {i}: {e}") from e
             result.append(instance.model_dump(include=schema_fields))
+        if dropped:
+            logger.warning(
+                "Reconciliation to schema '%s' dropped fields not in the schema: %s", cls.__name__, sorted(dropped)
+            )
         return result
 
     # -- Internals -------------------------------------------------------------
@@ -287,6 +305,22 @@ class Schema(Serializable):
         columns.
         """
         return {name for name in cls.model_fields if name not in Schema.model_fields}
+
+
+def _coerce_str_value(value: Any) -> Any:
+    """Coerce a value bound for a scalar ``str`` field to a string.
+
+    ``None`` passes through (nullability is pydantic's call), nested
+    ``list``/``dict`` values are JSON-encoded, anything else is stringified.
+
+    Returns:
+        The coerced value.
+    """
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (list, dict)):
+        return json.dumps(value)
+    return str(value)
 
 
 def _resolve_field_type(types_seen: set[type]) -> type:

@@ -7,8 +7,8 @@ class MaterializationStrategy(str, Enum):
     """Controls how data is validated and reconciled during materialization.
 
     Attributes:
-        AUTO: Infer schema if none provided, validate if schema is set.
-            No type coercion or column alignment.
+        AUTO: Infer a schema if none is provided; reconcile against the
+            schema when one is declared.
         STRICT: Schema is required.  Data is validated against the schema
             and materialization fails on any mismatch.
         RECONCILE: Schema is required.  Columns are aligned to match the

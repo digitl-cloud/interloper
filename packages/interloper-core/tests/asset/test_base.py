@@ -633,14 +633,23 @@ class TestAsyncAndSyncData:
 class TestConform:
     """Schema enforcement runs whether or not a normalizer is configured."""
 
-    async def test_schema_validates_without_normalizer(self):
+    async def test_schema_conforms_without_normalizer(self):
         @il.asset(schema=ConformSchema)
         def users() -> list[dict[str, Any]]:
             return [{"user_id": 1, "name": "a"}]
 
         assert await users().run_async() == [{"user_id": 1, "name": "a"}]
 
-    async def test_mismatched_data_fails_fast(self):
+    async def test_auto_with_schema_coerces_types(self):
+        # AUTO reconciles by default: an int id against a str field is cast,
+        # not rejected.
+        @il.asset(schema=ConformSchema)
+        def users() -> list[dict[str, Any]]:
+            return [{"user_id": "1", "name": 42}]
+
+        assert await users().run_async() == [{"user_id": 1, "name": "42"}]
+
+    async def test_uncoercible_data_fails_fast(self):
         from interloper.errors import SchemaError
 
         @il.asset(schema=ConformSchema)
@@ -650,11 +659,23 @@ class TestConform:
         with pytest.raises(SchemaError):
             await users().run_async()
 
-    async def test_dataframe_validated_without_normalizer(self):
+    async def test_dataframe_reconciled_without_normalizer(self):
         pd = pytest.importorskip("pandas")
-        from interloper.errors import SchemaError
 
         @il.asset(schema=StrictConformSchema)
+        def users() -> Any:
+            return pd.DataFrame([{"userId": 1, "Name": "a"}])  # wrong casing -> extras dropped, nullables filled
+
+        result = await users().run_async()
+        assert list(result.columns) == ["user_id", "name"]
+        assert result["user_id"].isna().all()
+
+    async def test_strict_rejects_mismatched_dataframe(self):
+        pd = pytest.importorskip("pandas")
+        from interloper.errors import SchemaError
+        from interloper.normalizer import MaterializationStrategy
+
+        @il.asset(schema=StrictConformSchema, materialization_strategy=MaterializationStrategy.STRICT)
         def users() -> Any:
             return pd.DataFrame([{"userId": 1, "Name": "a"}])  # wrong casing -> required fields missing
 

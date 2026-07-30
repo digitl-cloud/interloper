@@ -112,7 +112,7 @@ The `MaterializationStrategy` controls how schemas are enforced. Set it via the
 
 ### AUTO (default)
 
-If a schema is provided, validates data against it without coercion. If none is provided, a
+If a schema is provided, reconciles data against it (like `RECONCILE`). If none is provided, a
 schema is inferred from the data (best-effort).
 
 ```py
@@ -137,8 +137,9 @@ def my_asset():
 
 ### RECONCILE
 
-Requires a schema. Aligns columns to the schema (drops extras, adds missing as `None`) and
-coerces values to the schema's types.
+Requires a schema. Aligns columns to the schema (drops extras with a logged warning, adds
+missing nullable fields as `None`) and coerces values to the schema's types. Non-nullable
+fields must be present and free of nulls.
 
 ```py
 @il.asset(

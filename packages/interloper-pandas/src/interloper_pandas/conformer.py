@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 from decimal import Decimal
 from typing import Any
 
@@ -12,6 +13,8 @@ from interloper.conformer import Conformer
 from interloper.errors import SchemaError
 from interloper.schema import FieldSpec, Schema
 from pydantic import create_model
+
+logger = logging.getLogger(__name__)
 
 
 class DataFrameConformer(Conformer):
@@ -49,19 +52,29 @@ class DataFrameConformer(Conformer):
             Reconciled DataFrame.
 
         Raises:
-            SchemaError: If a column cannot be cast to its declared type, or
-                a required non-nullable column is missing.
+            SchemaError: If a column cannot be cast to its declared type, a
+                required non-nullable column is missing, or a non-nullable
+                column contains nulls.
         """
         data = _encode_json_str_columns(data, schema)
+        specs = schema.field_specs()
+        dropped = set(data.columns) - {spec.name for spec in specs}
+        if dropped:
+            logger.warning(
+                "Reconciliation to schema '%s' dropped columns not in the schema: %s", schema.__name__, sorted(dropped)
+            )
         columns: dict[str, pd.Series] = {}
-        for spec in schema.field_specs():
+        for spec in specs:
             if spec.name in data.columns:
                 series = data[spec.name]
             elif spec.nullable:
                 series = pd.Series([None] * len(data), index=data.index, dtype=object)
             else:
                 raise SchemaError(f"Reconciliation failed: required column '{spec.name}' is missing.")
-            columns[spec.name] = _cast_series(series, spec)
+            cast = _cast_series(series, spec)
+            if not spec.nullable and cast.isna().any():
+                raise SchemaError(f"Reconciliation failed: non-nullable column '{spec.name}' contains null values.")
+            columns[spec.name] = cast
         return pd.DataFrame(columns, index=data.index)
 
     def infer(self, data: pd.DataFrame) -> type[Schema]:

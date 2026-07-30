@@ -124,9 +124,9 @@ class Asset(Component):
         label="Materialization Strategy",
         description="How this asset's data is checked against its schema.",
         info=(
-            "'Auto' validates data against the schema (or infers a schema "
-            "when none is declared), 'Strict' fails on any mismatch, "
-            "'Reconcile' coerces values to the schema."
+            "'Auto' coerces data to the schema (or infers a schema when "
+            "none is declared), 'Strict' fails on any mismatch, "
+            "'Reconcile' requires a schema and coerces values to it."
         ),
     )
     normalizer: Normalizer | None = Field(default=None)
@@ -702,7 +702,7 @@ class Asset(Component):
     def _conform(self, result: Any) -> Any:
         """Enforce the asset's schema according to the materialization strategy.
 
-        AUTO: validate when a schema is declared, infer one otherwise.
+        AUTO: reconcile when a schema is declared, infer one otherwise.
         STRICT: schema required; reject extra, missing, or mistyped fields.
         RECONCILE: schema required; align columns and coerce values.
 
@@ -744,10 +744,10 @@ class Asset(Component):
             return result
 
         self._effective_schema = schema
-        if strategy == MaterializationStrategy.RECONCILE:
-            return conformer.reconcile(result, schema)
-        conformer.validate(result, schema, strict=strategy == MaterializationStrategy.STRICT)
-        return result
+        if strategy == MaterializationStrategy.STRICT:
+            conformer.validate(result, schema, strict=True)
+            return result
+        return conformer.reconcile(result, schema)
 
     def _infer_schema(self, conformer: Conformer, result: Any) -> type[Schema] | None:
         """Best-effort schema inference for the IO boundary (AUTO, no declared schema).
