@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v0.50.0 (2026-07-30)
+
+### Features
+
+- **api**: Redesign the invitation email
+  ([`733b98d`](https://github.com/digitl-cloud/interloper/commit/733b98d07cc47095ce36b084cccd89a09268934c))
+
+- **app**: Apply Interloper design branding and dashboard layout
+  ([`ae7073b`](https://github.com/digitl-cloud/interloper/commit/ae7073ba847ff177c5ce5d599d20d9e2e3553146))
+
+- **app**: Group collection table rows by source type
+  ([`d942848`](https://github.com/digitl-cloud/interloper/commit/d942848e95b94434b130cef333dfcb813fd86aa5))
+
+
 ## v0.49.1 (2026-07-30)
 
 ### Bug Fixes
