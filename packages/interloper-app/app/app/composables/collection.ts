@@ -274,9 +274,27 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
         return map
     })
 
+    /** Display info for each source type (catalog key) present in the collection. */
+    const typeInfoByKey = computed(() => {
+        const map = new Map<string, { name: string; icon: string; sourceCount: number }>()
+        for (const source of options.sources.value) {
+            const existing = map.get(source.key)
+            if (existing) {
+                existing.sourceCount++
+                continue
+            }
+            map.set(source.key, {
+                name: catalogStore.getSourceDefinition(source.key)?.name ?? source.key,
+                icon: componentIcon(source.key, 'i-lucide-database'),
+                sourceCount: 1,
+            })
+        }
+        return map
+    })
+
     const assetCount = computed(() =>
         options.sources.value.reduce((sum, s) => sum + s.children.length, 0),
     )
 
-    return { data, sourceInfoById, assetCount }
+    return { data, sourceInfoById, typeInfoByKey, assetCount }
 }
