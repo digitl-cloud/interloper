@@ -140,7 +140,7 @@ class MultiProcessRunner(SyncRunner):
         else:
             self.state.mark_asset_failed(asset, error_msg or "Unknown error", tb=tb)
             if self.fail_fast or self.reraise:
-                raise RunnerError(f"Asset '{type(asset).key}' failed: {error_msg}")
+                raise RunnerError(f"Asset '{asset.key}' failed: {error_msg}")
 
     def _handle_flushed(self, future: Future[Any], asset: Asset) -> None:
         """Interpret the worker ``(id, success, error_msg, tb)`` tuple during flush."""

@@ -181,7 +181,7 @@ class DatabaseDestination(PartitionedDestination):
             if columns and col not in columns:
                 warnings.warn(
                     f"Partition column '{col}' not found in data for asset "
-                    f"'{type(context.asset).key}'. Columns present: {sorted(columns)}. "
+                    f"'{context.asset.key}'. Columns present: {sorted(columns)}. "
                     f"Downstream reads by partition will fail.",
                     UserWarning,
                     stacklevel=2,

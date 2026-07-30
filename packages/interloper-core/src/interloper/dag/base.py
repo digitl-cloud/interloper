@@ -125,7 +125,7 @@ class DAG:
 
             for param_name, upstream_id in asset.dependencies.items():
                 if upstream_id not in self.asset_map:
-                    if param_name in type(asset).optional_requires:
+                    if param_name in asset.optional_requires:
                         continue
                     raise DependencyNotFoundError(
                         f"Asset '{asset.key}' dep '{param_name}' points to id '{upstream_id}' which is not in the DAG."
@@ -159,13 +159,12 @@ class DAG:
         for asset in self.assets:
             if not asset.materializable:
                 continue
-            asset_cls = type(asset)
-            own_source_key = type(asset._source).key if asset._source is not None else None
+            own_source_key = asset._source.key if asset._source is not None else None
             for param_name, upstream_id in asset.dependencies.items():
                 if upstream_id not in self.asset_map:
                     continue  # Missing dependencies are caught in _build_graph
 
-                expected_key = asset_cls.requires.get(param_name) or asset_cls.optional_requires.get(param_name)
+                expected_key = asset.requires.get(param_name) or asset.optional_requires.get(param_name)
                 if not expected_key:
                     continue
 
@@ -173,7 +172,7 @@ class DAG:
                 upstream = self.asset_map[upstream_id]
                 if upstream.identity != expected:
                     raise DependencyContractError(
-                        f"Asset '{asset_cls.key}' param '{param_name}' requires "
+                        f"Asset '{asset.key}' param '{param_name}' requires "
                         f"'{expected_key}' but is wired to '{upstream.identity}'."
                     )
 
@@ -364,7 +363,7 @@ class DAG:
                     asset_init = dict(asset_spec.init or {})
                     if asset_spec.id:
                         asset_init["id"] = asset_spec.id
-                    overrides[type(asset).key] = asset_init
+                    overrides[asset.key] = asset_init
                 spec.init["assets"] = overrides
             items.append(spec)
 
@@ -412,7 +411,7 @@ class DAG:
 
         component = Component.from_spec_file(path, catalog)
         if not type(component).runnable:
-            raise DAGError(f"'{type(component).kind}' components are not runnable")
+            raise DAGError(f"'{component.kind}' components are not runnable")
         items = component.targets if isinstance(component, Job) else [component]
         return cls(*items)  # ty: ignore[invalid-argument-type]
 

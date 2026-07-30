@@ -395,7 +395,7 @@ class Serializable(BaseModel):
         Returns:
             Formatted string with class name and key.
         """
-        return f"{type(self).__name__} (key: {type(self).key})"
+        return f"{type(self).__name__} (key: {self.key})"
 
     @classmethod
     def classpath(cls) -> str:

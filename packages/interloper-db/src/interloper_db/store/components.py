@@ -312,11 +312,11 @@ class ComponentMixin(RelationMixin):
         """
         source = cast(il.Source, self.load(parent_id))
         for asset in source.assets:
-            if type(asset).key == key:
+            if asset.key == key:
                 return asset
         raise ComponentDriftError(
             f"Asset '{key}' ({asset_id}) is no longer declared "
-            f"by source '{type(source).key}'; its catalog key has drifted."
+            f"by source '{source.key}'; its catalog key has drifted."
         )
 
     def component_status(self, db_component: Component) -> ComponentStatus:

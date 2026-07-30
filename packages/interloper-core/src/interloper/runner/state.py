@@ -140,7 +140,7 @@ class RunState:
                     EventType.ASSET_QUEUED,
                     {
                         **self._asset_event_metadata(asset),
-                        "message": f"Asset '{type(asset).key}' queued",
+                        "message": f"Asset '{asset.key}' queued",
                     },
                 )
 
@@ -200,7 +200,7 @@ class RunState:
                 EventType.ASSET_STARTED,
                 {
                     **self._asset_event_metadata(asset),
-                    "message": f"Asset '{type(asset).key}' started",
+                    "message": f"Asset '{asset.key}' started",
                 },
             )
 
@@ -219,7 +219,7 @@ class RunState:
                 EventType.ASSET_COMPLETED,
                 {
                     **self._asset_event_metadata(asset),
-                    "message": f"Asset '{type(asset).key}' completed",
+                    "message": f"Asset '{asset.key}' completed",
                 },
             )
 
@@ -237,7 +237,7 @@ class RunState:
                 EventType.ASSET_CANCELED,
                 {
                     **self._asset_event_metadata(asset),
-                    "message": f"Asset '{type(asset).key}' canceled",
+                    "message": f"Asset '{asset.key}' canceled",
                 },
             )
 
@@ -266,7 +266,7 @@ class RunState:
             metadata: dict[str, Any] = {
                 **self._asset_event_metadata(asset),
                 "error": error,
-                "message": f"Asset '{type(asset).key}' failed: {error}",
+                "message": f"Asset '{asset.key}' failed: {error}",
             }
             if tb:
                 metadata["traceback"] = tb
@@ -290,7 +290,7 @@ class RunState:
             status = ExecutionStatus.SKIPPED if not asset.materializable else ExecutionStatus.QUEUED
             self.asset_executions[asset.id] = AssetExecutionInfo(
                 asset_id=asset.id,
-                asset_key=type(asset).key,
+                asset_key=asset.key,
                 status=status,
             )
 
@@ -316,7 +316,7 @@ class RunState:
         meta: dict[str, Any] = {
             **self.metadata,
             "asset_id": asset.id,
-            "asset_key": type(asset).key,
+            "asset_key": asset.key,
             "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
         }
         if asset.source is not None:

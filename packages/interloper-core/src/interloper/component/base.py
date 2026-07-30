@@ -262,17 +262,17 @@ class Component(Serializable):
             ValueError: If a slot is given both as a kwarg and in ``resources``.
         """
         unknown = [
-            name for name in data if name not in type(self).model_fields and name not in type(self).resource_types
+            name for name in data if name not in type(self).model_fields and name not in self.resource_types
         ]
         if unknown:
             raise TypeError(f"{type(self).__name__} got unexpected keyword argument(s): {', '.join(sorted(unknown))}")
-        slot_names = [n for n in data if n in type(self).resource_types and n not in type(self).model_fields]
+        slot_names = [n for n in data if n in self.resource_types and n not in type(self).model_fields]
         if slot_names:
             resources = data.get("resources")
             resources = dict(resources) if isinstance(resources, dict) else {}
             for name in slot_names:
                 value = data.pop(name)
-                expected = type(self).resource_types[name]
+                expected = self.resource_types[name]
                 if not isinstance(value, expected):
                     raise TypeError(
                         f"{type(self).__name__} resource '{name}' must be an instance of "
@@ -325,7 +325,7 @@ class Component(Serializable):
         id, a site URL, …). Drives the derived :meth:`instance_name` and, for
         sources, the per-instance asset table names.
         """
-        field_name = type(self).discriminator_field()
+        field_name = self.discriminator_field()
         if field_name is None:
             return None
         value = getattr(self, field_name)
@@ -362,7 +362,7 @@ class Component(Serializable):
         Args:
             target: The child component whose resource slots to fill.
         """
-        for name, res_type in type(target).resource_types.items():
+        for name, res_type in target.resource_types.items():
             if name in target.resources:
                 continue
             # Match by name first; a same-named resource of the wrong type
@@ -384,7 +384,7 @@ class Component(Serializable):
         Returns:
             Formatted string with class name, key, and id.
         """
-        return f"{type(self).__name__} (key: {type(self).key}, id: {self.id})"
+        return f"{type(self).__name__} (key: {self.key}, id: {self.id})"
 
     @classmethod
     def anchor(cls) -> type[Component]:
