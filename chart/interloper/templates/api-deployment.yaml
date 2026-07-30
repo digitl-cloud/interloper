@@ -43,7 +43,7 @@ spec:
           {{- end }}
           ports:
             - name: http
-              containerPort: {{ .Values.config.server.port | default 3000 }}
+              containerPort: {{ dig "server" "port" 3000 .Values.extraConfig }}
               protocol: TCP
           {{- with .Values.api.extraEnvFrom }}
           envFrom:

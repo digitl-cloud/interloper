@@ -127,6 +127,12 @@ dbInit:
 # =============================================================================
 # Configuration
 # =============================================================================
+#
+# App runtime settings live at the root, one block per feature. The chart
+# renders them into the generated interloper.yaml (and pairs secret-bearing
+# fields with env vars from `secrets`); blocks the chart must act on itself
+# (agent, launcher) also drive image selection. `extraConfig` passes any
+# remaining interloper.yaml sections through verbatim.
 
 # Agent (ADK chat) support. When enabled, the chart deploys the
 # `interloper-api:<tag>-agent` image, which bundles interloper-agent, and
@@ -145,61 +151,55 @@ agent:
   enabled: false
   model: ""  # defaults to gemini-2.5-flash
 
-# The chart generates an interloper.yaml ConfigMap from this block.
-# Any value set here becomes part of the config file mounted into the pods.
-config:
-  server:
-    host: "0.0.0.0"
-    port: 3000
+# How runs are launched (where they execute). The launcher type also selects
+# the scheduler image flavor (kubernetes → "-k8s", docker → "-docker").
+launcher:
+  type: kubernetes
+  config:
+    image: ""  # defaults to scheduler image (set automatically if empty)
+    namespace: ""  # defaults to release namespace
+    # service_account_name: "{{ .Release.Name }}-launcher"  # auto-filled if rbac.create
+    # image_pull_policy: IfNotPresent
+    # resources:
+    #   requests: {cpu: "100m", memory: "256Mi"}
+    #   limits: {memory: "512Mi"}
 
-  cron:
-    reconcile_interval: 10
+# How the DAG runs inside each launched container.
+runner:
+  type: async
+  config: {}
 
-  worker:
-    poll_interval: 5
+# Catalog: list of dotted import paths for sources, assets, destinations.
+catalog: []
+# - interloper_assets.demo.source.DemoSource
+# - interloper_google_cloud.BigQueryDestination
 
-  # Reaper: kills timed-out runs (singleton, paired with cron).
+# SMTP config for sending emails (password via secrets.smtpPassword)
+smtp: {}
+# smtp:
+#   host: smtp.gmail.com
+#   port: 465
+#   user: "no-reply@example.com"
+
+# Auth config (OAuth client ID; the client secret goes in
+# secrets.googleClientSecret). super_admin_emails bootstraps the first
+# platform super-admin(s): listed users are promoted when they log in
+# (promote-only — removing an email never demotes).
+auth: {}
+# auth:
+#   google_client_id: "..."
+#   super_admin_emails:
+#     - you@example.com
+
+# Extra interloper.yaml sections rendered verbatim into the generated
+# ConfigMap — tuning the chart has no opinion on (server, cron, worker,
+# reaper, mcp). Sections owned by a root-level block (agent, launcher,
+# runner, catalog, smtp, auth) are rejected here, as are secret-bearing
+# ones (postgres, secrets): a YAML-provided field beats the env var the
+# chart injects, so allowing them would silently override credentials.
+extraConfig:
   reaper:
-    timeout: 3600
-    poll_interval: 10
-
-  # How runs are launched (where they execute).
-  launcher:
-    type: kubernetes
-    config:
-      image: ""  # defaults to scheduler image (set automatically if empty)
-      namespace: ""  # defaults to release namespace
-      # service_account_name: "{{ .Release.Name }}-launcher"  # auto-filled if rbac.create
-      # image_pull_policy: IfNotPresent
-      # resources:
-      #   requests: {cpu: "100m", memory: "256Mi"}
-      #   limits: {memory: "512Mi"}
-
-  # How the DAG runs inside each launched container.
-  runner:
-    type: async
-    config: {}
-
-  # Catalog: list of dotted import paths for sources, assets, destinations.
-  catalog: []
-  # - interloper_assets.demo.source.DemoSource
-  # - interloper_google_cloud.BigQueryDestination
-
-  # SMTP config for sending emails (password via secrets.smtpPassword)
-  smtp: {}
-  # smtp:
-  #   host: smtp.gmail.com
-  #   port: 465
-  #   user: "no-reply@example.com"
-
-  # Auth config (OAuth client ID). super_admin_emails bootstraps the first
-  # platform super-admin(s): listed users are promoted when they log in
-  # (promote-only — removing an email never demotes).
-  auth: {}
-  # auth:
-  #   google_client_id: "..."
-  #   super_admin_emails:
-  #     - you@example.com
+    timeout: 3600  # generous for long data loads; the app default (600s) reaps too eagerly
 
 # =============================================================================
 # Secrets

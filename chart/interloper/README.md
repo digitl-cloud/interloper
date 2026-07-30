@@ -30,7 +30,7 @@ ghcr.io/digitl-cloud/interloper-frontend:<version>
 ghcr.io/digitl-cloud/interloper-worker:<version>             # kubernetes runner per-asset Job target
 ```
 
-The chart picks the scheduler tag suffix from `config.launcher.type`
+The chart picks the scheduler tag suffix from `launcher.type`
 automatically, and the api `-agent` tag when `agent.enabled=true` — no
 manual mapping. Override `image.registry` (and `image.pullSecrets` for a
 private registry) to pull from elsewhere.
@@ -87,25 +87,39 @@ ingress:
     enabled: true
     secretName: interloper-tls
 
-config:
-  launcher:
-    type: kubernetes
-    # image + namespace + service_account_name are auto-filled from the release
-  runner:
-    type: async
-  catalog:
-    - interloper_assets.demo.source.DemoSource
-    - interloper_google_cloud.BigQueryDestination
+launcher:
+  type: kubernetes
+  # image + namespace + service_account_name are auto-filled from the release
+
+runner:
+  type: async
+
+catalog:
+  - interloper_assets.demo.source.DemoSource
+  - interloper_google_cloud.BigQueryDestination
 ```
 
 ## Configuration
 
-### `config.*` — interloper.yaml
+### App settings — interloper.yaml
 
-Everything under `config` is rendered into a ConfigMap mounted at
-`/etc/interloper/interloper.yaml`.  The chart auto-fills Kubernetes
-launcher defaults (`image`, `namespace`, `service_account_name`) from
-the release context, so you rarely need to set them manually.
+App runtime settings are root-level values, one block per feature:
+`launcher`, `runner`, `catalog`, `smtp`, `auth`, and `agent`.  The chart
+renders them into a ConfigMap mounted at
+`/etc/interloper/interloper.yaml`, auto-filling Kubernetes launcher and
+runner defaults (`image`, `namespace`, `service_account_name`) from the
+release context, so you rarely need to set them manually.
+
+Secret-bearing fields never go through the ConfigMap — they are injected
+as env vars from the chart's Secret (`secrets.*`), pairing with their
+feature block: `auth.google_client_id` + `secrets.googleClientSecret`,
+`smtp.user` + `secrets.smtpPassword`, `externalPostgres` +
+`secrets.postgresPassword`.
+
+Anything else interloper.yaml accepts (server, cron, worker, reaper, mcp
+tuning) goes under `extraConfig`, which is rendered verbatim into the
+generated file.  Chart-managed and secret-bearing sections are rejected
+there — a YAML-provided field would override the injected env vars.
 
 ### `secrets.*`
 
