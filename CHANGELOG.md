@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.49.1 (2026-07-30)
+
+### Bug Fixes
+
+- **db**: Enforce dependency contracts at the relation write path
+  ([`b48fb6f`](https://github.com/digitl-cloud/interloper/commit/b48fb6f54390cd062a4c424cd2b13919f15581f8))
+
+### Refactoring
+
+- **core,db**: Consolidate dependency-key and unbind policy
+  ([`5f2d8e8`](https://github.com/digitl-cloud/interloper/commit/5f2d8e8fa39fa17d0305584b574317a7a0ec2277))
+
+- **core,db**: Read component ClassVars through the instance
+  ([`380ddf6`](https://github.com/digitl-cloud/interloper/commit/380ddf644a58ecac591fedbcc7cce66548e4dfc0))
+
+- **core,db**: Reify AssetIdentity as the dependency-key value type
+  ([`16bfd8a`](https://github.com/digitl-cloud/interloper/commit/16bfd8a804215507f2a9b92bae3e5895a36875e5))
+
+
 ## v0.49.0 (2026-07-30)
 
 ### Bug Fixes
