@@ -9,7 +9,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Union, get_args, get_origin
 
-from pydantic import BaseModel, ConfigDict, ValidationError, create_model
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, create_model
 from typing_extensions import Self
 
 from interloper.errors import SchemaError
@@ -241,16 +241,12 @@ class Schema(Serializable):
     ) -> list[dict[str, Any]]:
         """Reconcile rows against this schema.
 
-        For each row:
-        1. Filter to only the keys defined in the schema (drop extras — the
-           union of dropped keys is logged as a warning).
-        2. For missing keys that have a default, omit them so Pydantic applies
-           the default.  For missing *required* keys, supply ``None`` — Pydantic
-           will accept it when the field is nullable (e.g. ``str | None``) and
-           reject it otherwise, which is the desired behaviour.
-        3. Coerce values to the schema's types: scalar ``str`` fields are
-           stringified explicitly (pydantic's lax mode never coerces to
-           ``str``), everything else via ``model_validate()``.
+        Fields are coerced one by one through per-field ``TypeAdapter``s —
+        the row-wise mirror of the DataFrame conformer's column-wise casts.
+        Extra keys are dropped (their union logged as a warning), missing
+        fields get their default (or ``None``, which pydantic accepts only
+        for nullable fields), and scalar ``str`` fields are stringified
+        up front since pydantic's lax mode never coerces *to* ``str``.
 
         This is more permissive than :meth:`validate` — it actively
         transforms data to match the schema rather than rejecting mismatches.
@@ -262,32 +258,34 @@ class Schema(Serializable):
             A new list of row dicts with columns aligned and types coerced.
 
         Raises:
-            SchemaError: If any row cannot be coerced (e.g. ``"abc"`` → ``int``)
+            SchemaError: If a value cannot be coerced (e.g. ``"abc"`` → ``int``)
                 or a required non-nullable field is missing.
         """
         if not rows:
             return []
 
-        schema_fields = cls._data_fields()
-        # Pydantic's lax mode never coerces to ``str`` (an int id stays an
-        # int and fails validation), so scalar ``str`` fields are stringified
-        # up front — mirroring the DataFrame conformer's ``astype("string")``
-        # and its JSON encoding of nested values.
+        fields = {spec.name: cls.model_fields[spec.name] for spec in cls.field_specs()}
+        adapters = {name: TypeAdapter(field.annotation) for name, field in fields.items()}
         str_fields = {s.name for s in cls.field_specs() if s.type is str and not s.repeated and s.fields is None}
 
         dropped: set[str] = set()
         result: list[dict[str, Any]] = []
         for i, row in enumerate(rows):
-            dropped.update(row.keys() - schema_fields)
-            filtered = {k: _coerce_str_value(row[k]) if k in str_fields else row[k] for k in schema_fields if k in row}
-            for k in schema_fields - filtered.keys():
-                if cls.model_fields[k].is_required():
-                    filtered[k] = None
-            try:
-                instance = cls.model_validate(filtered)
-            except ValidationError as e:
-                raise SchemaError(f"Reconciliation failed on row {i}: {e}") from e
-            result.append(instance.model_dump(include=schema_fields))
+            dropped.update(row.keys() - fields.keys())
+            out: dict[str, Any] = {}
+            for name, adapter in adapters.items():
+                if name not in row and not fields[name].is_required():
+                    out[name] = fields[name].get_default(call_default_factory=True)
+                    continue
+                value = row.get(name)
+                if name in str_fields:
+                    value = _coerce_str_value(value)
+                try:
+                    # dump_python round-trips nested models back to plain dicts.
+                    out[name] = adapter.dump_python(adapter.validate_python(value))
+                except ValidationError as e:
+                    raise SchemaError(f"Reconciliation failed on row {i}: {e}") from e
+            result.append(out)
         if dropped:
             logger.warning(
                 "Reconciliation to schema '%s' dropped fields not in the schema: %s", cls.__name__, sorted(dropped)
