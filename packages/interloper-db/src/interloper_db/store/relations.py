@@ -5,7 +5,7 @@ source-owned asset's definition (dependency slots, ``required`` flags)
 lives on the parent source's definition — with the kind's anchor as the
 drift fallback. Writes enforce the declared shape: relation type, dst
 kind, slot names, and each slot's expected destination identity (resolved
-through :func:`~interloper.asset.base.expected_dependency` for dependency
+through :meth:`~interloper.asset.base.AssetIdentity.resolve` for dependency
 slots). Unbinding follows the vocabulary's ``on_unbind`` semantics: bound
 required slots of a blocking type refuse it. Rows are stamped with the
 denormalized ``org_id``/``src_kind``/``dst_kind`` triple the composite
@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from uuid import UUID
 
 import interloper as il
-from interloper.asset.base import expected_dependency
+from interloper.asset.base import AssetIdentity
 from interloper.errors import ConfigError, NotFoundError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -178,7 +178,7 @@ class RelationMixin(StoreBase):
     ) -> None:
         """Enforce a slot's declared destination identity, when it declares one.
 
-        Dependency slot keys resolve through ``expected_dependency``: an
+        Dependency slot keys resolve through ``AssetIdentity.resolve``: an
         intra-source dep (the declarer's own source) must bind a sibling of
         the same source instance; a cross-source one accepts the named
         source's asset from any instance. Other slotted types (resources)
@@ -195,12 +195,12 @@ class RelationMixin(StoreBase):
             return
         src_parent = session.get(Component, src.parent_id) if src.parent_id else None
         own_source_key = src_parent.key if src_parent else None
-        expected_source, expected_asset = expected_dependency(slot_def.key, own_source_key=own_source_key)
-        if dst.key != expected_asset:
+        expected = AssetIdentity.resolve(slot_def.key, own_source_key=own_source_key)
+        if dst.key != expected.asset_key:
             raise ConfigError(
                 f"Dependency slot '{slot}' of '{src.key}' expects asset '{slot_def.key}', got '{dst.key}'"
             )
-        if expected_source == own_source_key:
+        if expected.source_key == own_source_key:
             if src.parent_id is not None and dst.parent_id != src.parent_id:
                 raise ConfigError(
                     f"Dependency slot '{slot}' of '{src.key}' must bind a sibling asset "
@@ -208,10 +208,10 @@ class RelationMixin(StoreBase):
                 )
         else:
             dst_parent = session.get(Component, dst.parent_id) if dst.parent_id else None
-            if dst_parent is None or dst_parent.key != expected_source:
+            if dst_parent is None or dst_parent.key != expected.source_key:
                 raise ConfigError(
                     f"Dependency slot '{slot}' of '{src.key}' expects an asset of source "
-                    f"'{expected_source}', got one of '{dst_parent.key if dst_parent else 'none'}'"
+                    f"'{expected.source_key}', got one of '{dst_parent.key if dst_parent else 'none'}'"
                 )
 
     def _relation_vocabulary(self, session: Session, db_src: Component) -> dict[str, il.RelationDefinition]:

@@ -9,7 +9,7 @@ from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
 from interloper.asset import Asset
-from interloper.asset.base import AssetDefinition, expected_dependency
+from interloper.asset.base import AssetDefinition, AssetIdentity
 from interloper.component import Component, ComponentDefinition, RelationDefinition
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
@@ -362,7 +362,7 @@ class Source(Component):
                 if param_name in asset_cls.optional_requires:
                     continue
                 if param_name in sibling_keys and param_name != asset_cls.key:
-                    qualified = f"{cls.key}.{param_name}"
+                    qualified = str(AssetIdentity(cls.key, param_name))
                     if param.default is None:
                         inferred_optional[param_name] = qualified
                     else:
@@ -497,10 +497,10 @@ class Source(Component):
             for param_name, required_qk in mapping.items():
                 if param_name in asset.dependencies:
                     continue
-                source_key, asset_key = expected_dependency(required_qk, own_source_key=type(self).key)
-                if source_key != type(self).key:
+                expected = AssetIdentity.resolve(required_qk, own_source_key=type(self).key)
+                if expected.source_key != type(self).key:
                     continue
-                sibling = siblings.get(asset_key)
+                sibling = siblings.get(expected.asset_key)
                 if sibling is not None and sibling is not asset:
                     asset.dependencies[param_name] = sibling.id
 
