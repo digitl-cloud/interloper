@@ -23,7 +23,8 @@ function signInWithGoogle() {
             <UCard>
                 <template #header>
                     <div class="text-center">
-                        <h2 class="text-2xl font-semibold">
+                        <LogoIcon class="h-8 mx-auto text-primary" />
+                        <h2 class="text-2xl font-semibold tracking-[-0.01em] mt-3">
                             Interloper
                         </h2>
                         <p class="text-sm text-muted mt-1">

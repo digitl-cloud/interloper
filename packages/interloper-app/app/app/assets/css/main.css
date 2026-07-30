@@ -3,18 +3,20 @@
 
 /* Custom Colors — palette from the Claude Design project ("Current" variant) */
 :root {
-    /* accent #2D7DF6 */
-    --color-blue-50: #f0f6fe;
-    --color-blue-100: #e1edfe;
+    /* accent: 500 #2D7DF6 · 600 accent-2 (hover) · 50/100 tints (active/hover surfaces) */
+    --color-blue-50: #edf3fe;
+    --color-blue-100: #dceafd;
     --color-blue-200: #c3dbfc;
     --color-blue-300: #94bffa;
     --color-blue-400: #5c9ef8;
     --color-blue-500: #2d7df6;
-    --color-blue-600: #1e63d9;
+    --color-blue-600: #1f6fe0;
     --color-blue-700: #1a4fae;
     --color-blue-800: #184189;
     --color-blue-900: #173867;
     --color-blue-950: #102344;
+    /* dark surfaces: header, terminal blocks */
+    --color-navy: #0b2a42;
     /* neutrals: 50 app bg · 100 sidebar · 200 controls/hover · 300 lines · 950 ink */
     --color-gray-50: #fbfbfc;
     --color-gray-100: #f7f7f8;

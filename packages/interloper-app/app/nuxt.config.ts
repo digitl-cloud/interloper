@@ -11,6 +11,14 @@ catch { /* noop */ }
 
 export default defineNuxtConfig({
     compatibilityDate: '2025-07-15',
+    app: {
+        head: {
+            link: [
+                { rel: 'icon', type: 'image/svg+xml', href: '/icon.svg' },
+                { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico', sizes: 'any' },
+            ],
+        },
+    },
     components: [
         // Generic, domain-free primitives keep their short names (DataTable,
         // EmptyState, …) instead of gaining a `Ui` path prefix.
