@@ -6,6 +6,7 @@ import json
 import logging
 import types
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Union, get_args, get_origin
 
@@ -264,9 +265,14 @@ class Schema(Serializable):
         if not rows:
             return []
 
-        fields = {spec.name: cls.model_fields[spec.name] for spec in cls.field_specs()}
+        specs = cls.field_specs()
+        fields = {spec.name: cls.model_fields[spec.name] for spec in specs}
         adapters = {name: TypeAdapter(field.annotation) for name, field in fields.items()}
-        str_fields = {s.name for s in cls.field_specs() if s.type is str and not s.repeated and s.fields is None}
+        coercers = {
+            spec.name: RECONCILERS[spec.type]
+            for spec in specs
+            if spec.type in RECONCILERS and not spec.repeated and spec.fields is None
+        }
 
         dropped: set[str] = set()
         result: list[dict[str, Any]] = []
@@ -278,8 +284,8 @@ class Schema(Serializable):
                     out[name] = fields[name].get_default(call_default_factory=True)
                     continue
                 value = row.get(name)
-                if name in str_fields:
-                    value = _coerce_str_value(value)
+                if name in coercers:
+                    value = coercers[name](value)
                 try:
                     # dump_python round-trips nested models back to plain dicts.
                     out[name] = adapter.dump_python(adapter.validate_python(value))
@@ -319,6 +325,14 @@ def _coerce_str_value(value: Any) -> Any:
     if isinstance(value, (list, dict)):
         return json.dumps(value)
     return str(value)
+
+
+#: Pre-coercions applied before pydantic validation, keyed by the scalar
+#: spec type. Fills the gaps in pydantic's lax conversion table — which
+#: coerces between scalars in every direction except *to* ``str``.
+RECONCILERS: dict[type, Callable[[Any], Any]] = {
+    str: _coerce_str_value,
+}
 
 
 def _resolve_field_type(types_seen: set[type]) -> type:
