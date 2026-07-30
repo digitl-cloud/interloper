@@ -86,6 +86,26 @@ class TestDataFrameConformerReconcile:
         with pytest.raises(SchemaError, match="cannot cast"):
             DataFrameConformer().reconcile(df, TypedSchema)
 
+    def test_int_values_cast_to_string_field(self):
+        # Vendor APIs and pd.read_csv routinely yield numeric ids for str-typed
+        # fields; reconcile must cast them rather than reject the rows.
+        out = DataFrameConformer().reconcile(pd.DataFrame({"name": [143007073]}), TypedSchema)
+        assert out["name"].tolist() == ["143007073"]
+
+    def test_non_nullable_column_with_nulls_raises(self):
+
+        class Req(Schema):
+            must: int
+
+        with pytest.raises(SchemaError, match="non-nullable column 'must' contains null"):
+            DataFrameConformer().reconcile(pd.DataFrame({"must": [1, None]}), Req)
+
+    def test_dropped_columns_logged(self, caplog):
+        with caplog.at_level("WARNING", logger="interloper_pandas.conformer"):
+            DataFrameConformer().reconcile(pd.DataFrame({"id": [1], "extra": ["drop"]}), TypedSchema)
+        assert "dropped columns" in caplog.text
+        assert "extra" in caplog.text
+
 
 class JsonSchema(Schema):
     """A scalar ``str`` field that receives nested API values."""

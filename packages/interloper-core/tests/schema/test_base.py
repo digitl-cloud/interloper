@@ -125,6 +125,30 @@ class TestFieldSpecs:
         assert specs["b"].type is str
 
 
+class TestReconcile:
+    """Row-wise reconciliation coerces values and aligns fields."""
+
+    def test_int_values_coerced_to_str_fields(self):
+        # Pydantic's lax mode never coerces int -> str; reconcile must, to
+        # match the DataFrame conformer's astype("string").
+        rows = ShadowingSchema.reconcile([{"id": 1, "cost": 2.0, "name": 42, "day": "mon"}])
+        assert rows[0]["name"] == "42"
+
+    def test_nested_values_json_encoded_for_str_fields(self):
+        rows = ShadowingSchema.reconcile([{"id": 1, "cost": 2.0, "name": [{"a": 1}], "day": "mon"}])
+        assert rows[0]["name"] == '[{"a": 1}]'
+
+    def test_none_passes_through_str_coercion(self):
+        rows = ShadowingSchema.reconcile([{"id": 1, "cost": 2.0, "name": None, "day": "mon"}])
+        assert rows[0]["name"] is None
+
+    def test_dropped_fields_logged(self, caplog):
+        with caplog.at_level("WARNING", logger="interloper.schema.base"):
+            ShadowingSchema.reconcile([{"id": 1, "cost": 2.0, "name": "x", "day": "mon", "extra": True}])
+        assert "dropped fields" in caplog.text
+        assert "extra" in caplog.text
+
+
 class TestJsonSchema:
     """JSON Schema generation restricted to data fields."""
 

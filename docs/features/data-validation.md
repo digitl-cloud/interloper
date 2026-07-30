@@ -29,7 +29,7 @@ The `MaterializationStrategy` controls **how strictly** schemas are enforced. Se
 
 | Strategy | Schema required | Behavior |
 |----------|-----------------|----------|
-| `AUTO` | No | Infers a schema if missing; validates if present (no coercion) |
+| `AUTO` | No | Infers a schema if missing; reconciles if present |
 | `STRICT` | Yes | Fails on any mismatch (extras, missing, wrong types) |
 | `RECONCILE` | Yes | Aligns columns and coerces values to the schema's types |
 

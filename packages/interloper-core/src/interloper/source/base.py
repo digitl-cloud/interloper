@@ -112,9 +112,10 @@ class Source(Component):
         label="Materialization Strategy",
         description="Default strategy for this source's assets.",
         info=(
-            "'Auto' validates data against the schema, 'Strict' fails on any "
-            "mismatch, 'Reconcile' coerces values to the schema. Assets "
-            "declaring their own strategy keep it."
+            "'Auto' coerces data to the schema (or infers a schema when "
+            "none is declared), 'Strict' fails on any mismatch, 'Reconcile' "
+            "requires a schema and coerces values to it. Assets declaring "
+            "their own strategy keep it."
         ),
     )
     assets: list[Asset] = Field(default_factory=list)
