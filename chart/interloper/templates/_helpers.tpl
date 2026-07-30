@@ -59,7 +59,7 @@ Secret name — either user-provided existingSecret or chart-generated.
 
 {{/*
 Flavor token for the scheduler image, derived from the runtime launcher
-choice (config.launcher.type). Flavors are tag suffixes on the single
+choice (launcher.type). Flavors are tag suffixes on the single
 interloper-scheduler image, matching the build-time SCHEDULER_EXTRAS that
 produced each variant.
 
@@ -68,7 +68,7 @@ produced each variant.
   docker     → "docker"
 */}}
 {{- define "interloper.schedulerFlavor" -}}
-{{- $type := .Values.config.launcher.type | default "in_process" -}}
+{{- $type := .Values.launcher.type | default "in_process" -}}
 {{- if eq $type "kubernetes" -}}k8s
 {{- else if eq $type "docker" -}}docker
 {{- end -}}
@@ -186,5 +186,11 @@ Contains Postgres connection info + the encryption key secret.
     secretKeyRef:
       name: {{ include "interloper.secretName" . }}
       key: INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET
+      optional: true
+- name: INTERLOPER_SMTP_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "interloper.secretName" . }}
+      key: INTERLOPER_SMTP_PASSWORD
       optional: true
 {{- end -}}

@@ -1,18 +1,43 @@
 {{/*
 Generated interloper.yaml mounted into every pod at /etc/interloper/interloper.yaml.
-The launcher, runner, and agent sections get auto-filled from chart values
-(cluster-aware defaults, the root agent block) when the user hasn't set
-them explicitly.
+Assembled from the root-level feature blocks (agent, launcher, runner,
+catalog, smtp, auth) plus the extraConfig passthrough. Kubernetes launcher
+and runner defaults (image, namespace, service account) are auto-filled
+from the release context.
+
+Chart-managed sections may not appear in extraConfig (their root block is
+the single source of truth), and neither may secret-bearing ones: a field
+provided via YAML beats the env var the chart injects, so extraConfig.postgres
+or extraConfig.secrets would silently override the Secret-fed credentials.
 */}}
-{{- $cfg := deepCopy .Values.config -}}
-{{- if not (hasKey $cfg "agent") -}}
-  {{- $_ := set $cfg "agent" (dict "enabled" .Values.agent.enabled) -}}
-  {{- with .Values.agent.model -}}
-    {{- $_ := set $cfg.agent "model" . -}}
+{{- range $key := list "postgres" "secrets" -}}
+  {{- if hasKey $.Values.extraConfig $key -}}
+    {{- fail (printf "extraConfig.%s is not allowed — it would override the credentials the chart injects via env vars; use postgresql/externalPostgres and `secrets` instead" $key) -}}
   {{- end -}}
 {{- end -}}
-{{- if eq (default "" (dig "launcher" "type" "" $cfg)) "kubernetes" -}}
-  {{- if not (hasKey $cfg "launcher") -}}{{- $_ := set $cfg "launcher" dict -}}{{- end -}}
+{{- range $key := list "agent" "launcher" "runner" "catalog" "smtp" "auth" -}}
+  {{- if hasKey $.Values.extraConfig $key -}}
+    {{- fail (printf "extraConfig.%s is not allowed — this section is chart-managed; set the root-level `%s` value instead" $key $key) -}}
+  {{- end -}}
+{{- end -}}
+{{- $cfg := deepCopy .Values.extraConfig -}}
+{{- $agent := dict "enabled" .Values.agent.enabled -}}
+{{- with .Values.agent.model -}}
+  {{- $_ := set $agent "model" . -}}
+{{- end -}}
+{{- $_ := set $cfg "agent" $agent -}}
+{{- $_ := set $cfg "launcher" (deepCopy .Values.launcher) -}}
+{{- $_ := set $cfg "runner" (deepCopy .Values.runner) -}}
+{{- with .Values.catalog -}}
+  {{- $_ := set $cfg "catalog" . -}}
+{{- end -}}
+{{- with .Values.smtp -}}
+  {{- $_ := set $cfg "smtp" . -}}
+{{- end -}}
+{{- with .Values.auth -}}
+  {{- $_ := set $cfg "auth" . -}}
+{{- end -}}
+{{- if eq (default "" $cfg.launcher.type) "kubernetes" -}}
   {{- if not (hasKey $cfg.launcher "config") -}}{{- $_ := set $cfg.launcher "config" dict -}}{{- end -}}
   {{- if not $cfg.launcher.config.image -}}
     {{- $_ := set $cfg.launcher.config "image" (include "interloper.schedulerImage" .) -}}
@@ -24,8 +49,7 @@ them explicitly.
     {{- $_ := set $cfg.launcher.config "service_account_name" (include "interloper.serviceAccountName" .) -}}
   {{- end -}}
 {{- end -}}
-{{- if has (default "" (dig "runner" "type" "" $cfg)) (list "kubernetes" "k8s") -}}
-  {{- if not (hasKey $cfg "runner") -}}{{- $_ := set $cfg "runner" dict -}}{{- end -}}
+{{- if has (default "" $cfg.runner.type) (list "kubernetes" "k8s") -}}
   {{- if not (hasKey $cfg.runner "config") -}}{{- $_ := set $cfg.runner "config" dict -}}{{- end -}}
   {{- if not $cfg.runner.config.image -}}
     {{- $_ := set $cfg.runner.config "image" (include "interloper.workerImage" .) -}}
