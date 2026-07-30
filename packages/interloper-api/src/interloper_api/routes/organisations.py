@@ -101,6 +101,7 @@ def _send_invitation_email(
             org_name=org_name,
             inviter_name=inviter_name,
             invite_url=invite_url,
+            logo_url=f"{base_url}/logo-email.png",
         )
     except Exception:
         logger.exception("Failed to send invitation email to %s", email)
