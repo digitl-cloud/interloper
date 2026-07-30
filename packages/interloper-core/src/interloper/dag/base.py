@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from interloper.asset.base import Asset
+from interloper.asset.base import Asset, expected_dependency
 from interloper.component import Component
 from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, DependencyNotFoundError
 from interloper.partitioning import Partition, PartitionWindow
@@ -146,9 +146,10 @@ class DAG:
         """Validate that wired dependencies match the requires contract.
 
         For each ``(param_name, upstream_id)`` in ``asset.dependencies``, if
-        ``requires`` or ``optional_requires`` declares an expected key
-        for that param, the upstream must match — either as a qualified
-        key (``source_key.asset_key``) or a bare key.
+        ``requires`` or ``optional_requires`` declares an expected key for
+        that param, the wired upstream's identity must match the declared
+        key's resolution (bare keys expect an asset of the declarer's own
+        source — see :func:`~interloper.asset.base.expected_dependency`).
 
         Raises:
             DependencyContractError: If any wired dep violates its contract.
@@ -159,6 +160,7 @@ class DAG:
             if not asset.materializable:
                 continue
             asset_cls = type(asset)
+            own_source_key = type(asset._source).key if asset._source is not None else None
             for param_name, upstream_id in asset.dependencies.items():
                 if upstream_id not in self.asset_map:
                     continue  # Missing dependencies are caught in _build_graph
@@ -167,19 +169,15 @@ class DAG:
                 if not expected_key:
                     continue
 
+                expected = expected_dependency(expected_key, own_source_key=own_source_key)
                 upstream = self.asset_map[upstream_id]
-                upstream_cls = type(upstream)
                 upstream_source = upstream._source
-                upstream_qk = (
-                    f"{type(upstream_source).key}.{upstream_cls.key}"
-                    if upstream_source is not None
-                    else upstream_cls.key
-                )
-
-                if upstream_qk != expected_key and upstream_cls.key != expected_key:
+                upstream_source_key = type(upstream_source).key if upstream_source is not None else None
+                if (upstream_source_key, type(upstream).key) != expected:
+                    wired = f"{upstream_source_key}.{type(upstream).key}" if upstream_source_key else type(upstream).key
                     raise DependencyContractError(
                         f"Asset '{asset_cls.key}' param '{param_name}' requires "
-                        f"'{expected_key}' but is wired to '{upstream_qk}'."
+                        f"'{expected_key}' but is wired to '{wired}'."
                     )
 
     def _check_circular_dependencies(self) -> None:

@@ -83,6 +83,13 @@ class RelationDefinition(BaseModel):
     right for orchestration pointers (a job's ``target``, a hook's ``watch``)
     that merely shrink the referrer's scope. Optional slots
     (``RelationSlot.required=False``) detach regardless of this default.
+
+    ``on_unbind`` declares what *explicitly* unbinding a bound required slot
+    does: ``"detach"`` (the default) allows it — the escape hatch for
+    deleting the destination afterwards; ``"block"`` refuses it, forcing a
+    repoint or removal of the referrer instead — right for structural
+    relations (asset dependencies) that have no unbound-but-working state.
+    Optional slots always unbind freely.
     """
 
     kinds: list[str]
@@ -92,6 +99,7 @@ class RelationDefinition(BaseModel):
     keys: list[str] = Field(default_factory=list)
     slots: dict[str, RelationSlot] = Field(default_factory=dict)
     on_delete: Literal["block", "detach"] = "block"
+    on_unbind: Literal["block", "detach"] = "detach"
 
 
 # -- Definitions ---------------------------------------------------------------

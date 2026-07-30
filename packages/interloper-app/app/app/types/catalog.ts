@@ -24,6 +24,11 @@ export interface RelationDefinition {
      * (job targets, hook watches). Optional slots detach regardless.
      */
     on_delete: 'block' | 'detach'
+    /**
+     * What explicitly unbinding a bound required slot does: `block` refuses
+     * it (asset dependencies — repoint instead), `detach` allows it.
+     */
+    on_unbind: 'block' | 'detach'
 }
 
 export interface ComponentDefinition {

@@ -78,6 +78,25 @@ class AssetDefinition(ComponentDefinition):
         return self.key
 
 
+def expected_dependency(declared_key: str, *, own_source_key: str | None = None) -> tuple[str | None, str]:
+    """Resolve a declared dependency key to the identity it expects.
+
+    The single reading of the bare/qualified convention above: a bare key is
+    scoped to the declaring asset's own source (``None`` for standalone
+    assets), a qualified key names the source explicitly. Everything that
+    interprets ``requires`` / ``optional_requires`` entries — wiring,
+    contract checks, relation-write validation — must resolve through this.
+
+    Returns:
+        The ``(source_key, asset_key)`` pair the declared key expects;
+        ``source_key`` is ``None`` for a bare key on a standalone asset.
+    """
+    if "." in declared_key:
+        source_key, asset_key = declared_key.split(".", 1)
+        return source_key, asset_key
+    return own_source_key, declared_key
+
+
 class Asset(Component):
     """A data-producing component.
 
@@ -104,7 +123,9 @@ class Asset(Component):
         # TODO: `"resource": RelationDefinition(kinds=["resources"]...` ?
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
         "destination": RelationDefinition(kinds=["destination"], field="destinations"),
-        "dependency": RelationDefinition(kinds=["asset"], field="dependencies", slotted=True, inline=False),
+        "dependency": RelationDefinition(
+            kinds=["asset"], field="dependencies", slotted=True, inline=False, on_unbind="block"
+        ),
     }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"destinations", "normalizer", "dependencies"})
     requires: ClassVar[dict[str, str]] = {}

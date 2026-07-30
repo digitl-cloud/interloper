@@ -24,7 +24,8 @@ and hydration for any kind, with the semantics a kind genuinely owns
 
 - ``AuthMixin`` — profiles, sessions, organisations, memberships
 - ``TokenMixin`` — personal access tokens (programmatic/MCP access)
-- ``ComponentMixin`` — component CRUD, relations, hydration (all kinds)
+- ``ComponentMixin`` — component CRUD, hydration (all kinds); builds on
+  ``RelationMixin``, the vocabulary-validated relation read/write layer
 - ``RunMixin`` — runs, events, backfills
 - ``DriftMixin`` — catalog-resolution status for stored keys
 """
