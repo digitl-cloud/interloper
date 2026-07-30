@@ -42,106 +42,90 @@ const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((se
     <div>
         <UDashboardGroup storage-key="dashboard-data"
                          :style="{ right: agentOpen && userStore.agentAvailable ? `${agentWidth}px` : '0px' }"
-                         :ui="{ base: `fixed top-0 bottom-0 left-0 flex flex-col overflow-hidden ${agentDragging ? '' : 'transition-[right] duration-300'}` }">
-            <UDashboardNavbar>
-                <template #leading>
-                    <UDashboardSidebarCollapse />
-                </template>
-                <template #left>
-                    <NuxtLink to="/"
-                              class="flex items-center gap-2">
-                        <div
-                             class="bg-primary text-primary-foreground flex aspect-square size-6 items-center justify-center rounded-md">
-                            <img src="/favicon.ico"
-                                 alt="Interloper"
-                                 class="size-3.5">
-                        </div>
-                        <span class="font-semibold text-sm">Interloper</span>
-                    </NuxtLink>
+                         :ui="{ base: `fixed top-0 bottom-0 left-0 flex overflow-hidden ${agentDragging ? '' : 'transition-[right] duration-300'}` }">
+            <UDashboardSidebar collapsible
+                               resizable
+                               :ui="{ footer: 'border-t border-default' }">
+                <template #header="{ collapsed }">
+                    <NavLogo v-if="!collapsed" />
+                    <UDashboardSidebarCollapse :class="collapsed ? 'mx-auto' : 'ms-auto'" />
                 </template>
 
-            </UDashboardNavbar>
-
-            <div class="flex flex-1 min-h-0 overflow-hidden">
-                <UDashboardSidebar collapsible
-                                   resizable
-                                   :ui="{ root: 'relative hidden lg:flex flex-col min-h-full min-w-16 w-(--width) shrink-0 border-e border-default', footer: 'border-t border-default' }">
-                    <template #default="{ collapsed }">
-                        <UButton :label="collapsed ? undefined : 'Search...'"
-                                 icon="i-lucide-search"
-                                 color="neutral"
-                                 variant="outline"
-                                 block
-                                 class="mt-2 bg-default text-dimmed"
-                                 :square="collapsed"
-                                 @click="commandPaletteOpen = true">
-                            <template v-if="!collapsed"
-                                      #trailing>
-                                <div class="flex items-center gap-0.5 ms-auto">
-                                    <UKbd value="meta" />
-                                    <UKbd value="K" />
-                                </div>
-                            </template>
-                        </UButton>
-
-                        <UNavigationMenu :collapsed="collapsed"
-                                         :items="items"
-                                         orientation="vertical" />
-                    </template>
-
-                    <template #footer="{ collapsed }">
-                        <div class="flex flex-col gap-1 w-full">
-                            <NavOrganisation :collapsed="collapsed" />
-                            <NavUser :collapsed="collapsed" />
-                            <span v-if="!collapsed && appVersion"
-                                  class="px-2.5 text-[10px] text-dimmed">
-                                v{{ appVersion }}
-                            </span>
-                        </div>
-                    </template>
-                </UDashboardSidebar>
-
-                <UDashboardPanel
-                                 :ui="{ root: 'relative flex flex-col min-w-0 min-h-full lg:not-last:border-e lg:not-last:border-default shrink-0 flex-1', body: '!p-0 !gap-0 overflow-hidden [&>*]:flex-1 [&>*]:flex [&>*]:flex-col [&>*]:min-h-0' }">
-                    <template #body>
-                        <!-- Full-bleed pages (canvas/split views) manage their own frame. -->
-                        <slot v-if="route.meta.fullBleed" />
-                        <div v-else
-                             class="flex-1 min-h-0 w-full overflow-y-auto">
-                            <div class="p-4 w-full"
-                                 :class="pageHeader && 'max-w-[1040px] mx-auto'">
-                                <div v-if="pageHeader"
-                                     class="mb-6">
-                                    <div v-if="pageHeader.eyebrow"
-                                         class="eyebrow text-primary">
-                                        {{ pageHeader.eyebrow }}
-                                    </div>
-                                    <h1 class="text-[28px] font-bold tracking-[-0.022em] leading-tight text-highlighted"
-                                        :class="pageHeader.eyebrow ? 'mt-2.5' : ''">
-                                        {{ pageHeader.title }}
-                                    </h1>
-                                    <p v-if="pageHeader.description"
-                                       class="text-[15px] text-muted leading-relaxed max-w-[660px] mt-2.5">
-                                        {{ pageHeader.description }}
-                                    </p>
-                                </div>
-                                <slot />
+                <template #default="{ collapsed }">
+                    <UButton :label="collapsed ? undefined : 'Search...'"
+                             icon="i-lucide-search"
+                             color="neutral"
+                             variant="outline"
+                             block
+                             class="bg-default text-dimmed"
+                             :square="collapsed"
+                             @click="commandPaletteOpen = true">
+                        <template v-if="!collapsed"
+                                  #trailing>
+                            <div class="flex items-center gap-0.5 ms-auto">
+                                <UKbd value="meta" />
+                                <UKbd value="K" />
                             </div>
+                        </template>
+                    </UButton>
+
+                    <UNavigationMenu :collapsed="collapsed"
+                                     :items="items"
+                                     orientation="vertical" />
+                </template>
+
+                <template #footer="{ collapsed }">
+                    <div class="flex flex-col gap-1 w-full">
+                        <NavOrganisation :collapsed="collapsed" />
+                        <NavUser :collapsed="collapsed" />
+                        <span v-if="!collapsed && appVersion"
+                              class="px-2.5 text-[10px] text-dimmed">
+                            v{{ appVersion }}
+                        </span>
+                    </div>
+                </template>
+            </UDashboardSidebar>
+
+            <UDashboardPanel
+                             :ui="{ body: '!p-0 !gap-0 overflow-hidden [&>*]:flex-1 [&>*]:flex [&>*]:flex-col [&>*]:min-h-0' }">
+                <template #body>
+                    <!-- Full-bleed pages (canvas/split views) manage their own frame. -->
+                    <slot v-if="route.meta.fullBleed" />
+                    <div v-else
+                         class="flex-1 min-h-0 w-full overflow-y-auto">
+                        <div class="p-4 w-full"
+                             :class="pageHeader && 'max-w-[1040px] mx-auto'">
+                            <div v-if="pageHeader"
+                                 class="mb-6">
+                                <div v-if="pageHeader.eyebrow"
+                                     class="eyebrow text-primary">
+                                    {{ pageHeader.eyebrow }}
+                                </div>
+                                <h1 class="text-[28px] font-bold tracking-[-0.022em] leading-tight text-highlighted"
+                                    :class="pageHeader.eyebrow ? 'mt-2.5' : ''">
+                                    {{ pageHeader.title }}
+                                </h1>
+                                <p v-if="pageHeader.description"
+                                   class="text-[15px] text-muted leading-relaxed max-w-[660px] mt-2.5">
+                                    {{ pageHeader.description }}
+                                </p>
+                            </div>
+                            <slot />
                         </div>
-                    </template>
-                </UDashboardPanel>
-                <UModal v-model:open="commandPaletteOpen">
-                    <template #content>
-                        <UCommandPalette v-model:search-term="commandPaletteSearchTerm"
-                                         :groups="commandPaletteGroups"
-                                         :loading="commandPaletteLoading"
-                                         :fuse="{ fuseOptions: { keys: ['label', 'suffix', 'keywords'] } }"
-                                         placeholder="Search..."
-                                         close
-                                         @update:open="commandPaletteOpen = $event" />
-                    </template>
-                </UModal>
-            </div>
+                    </div>
+                </template>
+            </UDashboardPanel>
+            <UModal v-model:open="commandPaletteOpen">
+                <template #content>
+                    <UCommandPalette v-model:search-term="commandPaletteSearchTerm"
+                                     :groups="commandPaletteGroups"
+                                     :loading="commandPaletteLoading"
+                                     :fuse="{ fuseOptions: { keys: ['label', 'suffix', 'keywords'] } }"
+                                     placeholder="Search..."
+                                     close
+                                     @update:open="commandPaletteOpen = $event" />
+                </template>
+            </UModal>
 
             <!-- Floating agent launcher. Positioned inside the dashboard group so it
                  slides left with the layout when the panel opens, instead of hiding

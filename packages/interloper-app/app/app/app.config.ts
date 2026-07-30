@@ -25,7 +25,7 @@ export default defineAppConfig({
         variant: 'outline'
       }
     },
-    // Surface hierarchy from the Claude Design project: white header/cards,
+    // Surface hierarchy from the Claude Design project: white content/cards,
     // sidebar bg-muted (#F7F7F8).
     dashboardSidebar: {
       slots: {
@@ -37,6 +37,14 @@ export default defineAppConfig({
       // menu entries (#3f3f44 text, #86868b icons).
       slots: {
         label: 'text-gray-700 dark:text-gray-800'
+      },
+      variants: {
+        orientation: {
+          vertical: {
+            // Design sidebar items: 8px vertical padding (~36px tall).
+            link: 'py-2'
+          }
+        }
       },
       compoundVariants: [
         // Sidebar active item: accent-tinted pill (a gray pill would be
