@@ -774,3 +774,30 @@ class TestConform:
         await asset.materialize_async()
         assert captured["schema"] is not None
         assert [s.name for s in captured["schema"].field_specs()] == ["user_id"]
+
+
+class TestAssetIdentity:
+    """The canonical reading of bare/qualified dependency keys."""
+
+    def test_bare_key_scopes_to_own_source(self):
+        assert il.AssetIdentity.resolve("a", own_source_key="s") == il.AssetIdentity("s", "a")
+
+    def test_bare_key_on_standalone_declarer_has_no_source(self):
+        assert il.AssetIdentity.resolve("a") == il.AssetIdentity(None, "a")
+
+    def test_qualified_key_names_the_source_explicitly(self):
+        assert il.AssetIdentity.resolve("other.a", own_source_key="s") == il.AssetIdentity("other", "a")
+
+    def test_qualified_key_splits_on_the_first_dot(self):
+        assert il.AssetIdentity.resolve("s.a.b") == il.AssetIdentity("s", "a.b")
+
+    def test_str_renders_the_qualified_form(self):
+        assert str(il.AssetIdentity("s", "a")) == "s.a"
+        assert str(il.AssetIdentity(None, "a")) == "a"
+
+    def test_asset_identity_property(self):
+        @il.asset
+        def standalone() -> str:
+            return ""
+
+        assert standalone().identity == il.AssetIdentity(None, "standalone")

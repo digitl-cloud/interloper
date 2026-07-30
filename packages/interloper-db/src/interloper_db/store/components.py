@@ -23,7 +23,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.asset.base import expected_dependency
+from interloper.asset.base import AssetIdentity
 from interloper.errors import (
     CatalogKeyError,
     ComponentDriftError,
@@ -547,13 +547,13 @@ class ComponentMixin(RelationMixin):
                 continue
             all_requires = {**asset_type.requires, **asset_type.optional_requires}
             for param_name, declared_key in all_requires.items():
-                expected_source, expected_asset = expected_dependency(declared_key, own_source_key=source_key)
+                expected = AssetIdentity.resolve(declared_key, own_source_key=source_key)
                 # Cross-source deps are never auto-wired; nor self-edges.
-                if expected_source != source_key or expected_asset == asset_key:
+                if expected.source_key != source_key or expected.asset_key == asset_key:
                     continue
-                if expected_asset not in children_by_key or (child.id, param_name) in bound:
+                if expected.asset_key not in children_by_key or (child.id, param_name) in bound:
                     continue
-                _add_relation(session, child, children_by_key[expected_asset], "dependency", param_name)
+                _add_relation(session, child, children_by_key[expected.asset_key], "dependency", param_name)
 
     def _row_status(self, session: Session, db_component: Component) -> ComponentStatus:
         """Row drift status inside an open session (parent fetched on demand)."""

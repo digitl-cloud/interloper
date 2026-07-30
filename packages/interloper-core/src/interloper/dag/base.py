@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from interloper.asset.base import Asset, expected_dependency
+from interloper.asset.base import Asset, AssetIdentity
 from interloper.component import Component
 from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, DependencyNotFoundError
 from interloper.partitioning import Partition, PartitionWindow
@@ -149,7 +149,7 @@ class DAG:
         ``requires`` or ``optional_requires`` declares an expected key for
         that param, the wired upstream's identity must match the declared
         key's resolution (bare keys expect an asset of the declarer's own
-        source — see :func:`~interloper.asset.base.expected_dependency`).
+        source — see :meth:`~interloper.asset.base.AssetIdentity.resolve`).
 
         Raises:
             DependencyContractError: If any wired dep violates its contract.
@@ -169,15 +169,12 @@ class DAG:
                 if not expected_key:
                     continue
 
-                expected = expected_dependency(expected_key, own_source_key=own_source_key)
+                expected = AssetIdentity.resolve(expected_key, own_source_key=own_source_key)
                 upstream = self.asset_map[upstream_id]
-                upstream_source = upstream._source
-                upstream_source_key = type(upstream_source).key if upstream_source is not None else None
-                if (upstream_source_key, type(upstream).key) != expected:
-                    wired = f"{upstream_source_key}.{type(upstream).key}" if upstream_source_key else type(upstream).key
+                if upstream.identity != expected:
                     raise DependencyContractError(
                         f"Asset '{asset_cls.key}' param '{param_name}' requires "
-                        f"'{expected_key}' but is wired to '{wired}'."
+                        f"'{expected_key}' but is wired to '{upstream.identity}'."
                     )
 
     def _check_circular_dependencies(self) -> None:

@@ -1,4 +1,4 @@
-from interloper.asset import Asset, AssetDefinition, ExecutionContext, asset
+from interloper.asset import Asset, AssetDefinition, AssetIdentity, ExecutionContext, asset
 from interloper.catalog import Catalog
 from interloper.component import (
     KINDS,
@@ -73,6 +73,7 @@ __all__ = [
     "KINDS",
     "Asset",
     "AssetDefinition",
+    "AssetIdentity",
     "AsyncRESTClient",
     "AsyncRunner",
     "BasePaginator",

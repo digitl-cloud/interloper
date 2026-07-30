@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import traceback
 import warnings
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple
 
 from pydantic import Field, PrivateAttr, field_validator
 from typing_extensions import Self
@@ -37,6 +37,43 @@ _UNSET = object()
 
 
 warnings.filterwarnings("ignore", message='Field name "schema" in "AssetDefinition"')
+
+
+class AssetIdentity(NamedTuple):
+    """The identity of an asset type: its owning source's key and its own.
+
+    ``str()`` renders the qualified-key form (``source_key.asset_key``, bare
+    for standalone assets). :meth:`resolve` is the single reading of declared
+    dependency keys (``requires`` / ``optional_requires`` entries, dependency
+    slot keys) — everything that interprets one must resolve through it.
+    """
+
+    source_key: str | None
+    asset_key: str
+
+    @classmethod
+    def resolve(cls, declared_key: str, *, own_source_key: str | None = None) -> AssetIdentity:
+        """The identity a declared dependency key expects.
+
+        A bare key is scoped to the declaring asset's own source, a
+        qualified key names the source explicitly.
+
+        Returns:
+            The expected identity; ``source_key`` is ``None`` for a bare key
+            declared by a standalone asset.
+        """
+        if "." in declared_key:
+            source_key, asset_key = declared_key.split(".", 1)
+            return cls(source_key, asset_key)
+        return cls(own_source_key, declared_key)
+
+    def __str__(self) -> str:
+        """Format as a key.
+
+        Returns:
+            The qualified-key form; bare when there is no source.
+        """
+        return f"{self.source_key}.{self.asset_key}" if self.source_key else self.asset_key
 
 
 class AssetDefinition(ComponentDefinition):
@@ -73,28 +110,7 @@ class AssetDefinition(ComponentDefinition):
         Falls back to the bare ``key`` if no source key is set
         (e.g. standalone assets not owned by a source).
         """
-        if self.source_key:
-            return f"{self.source_key}.{self.key}"
-        return self.key
-
-
-def expected_dependency(declared_key: str, *, own_source_key: str | None = None) -> tuple[str | None, str]:
-    """Resolve a declared dependency key to the identity it expects.
-
-    The single reading of the bare/qualified convention above: a bare key is
-    scoped to the declaring asset's own source (``None`` for standalone
-    assets), a qualified key names the source explicitly. Everything that
-    interprets ``requires`` / ``optional_requires`` entries — wiring,
-    contract checks, relation-write validation — must resolve through this.
-
-    Returns:
-        The ``(source_key, asset_key)`` pair the declared key expects;
-        ``source_key`` is ``None`` for a bare key on a standalone asset.
-    """
-    if "." in declared_key:
-        source_key, asset_key = declared_key.split(".", 1)
-        return source_key, asset_key
-    return own_source_key, declared_key
+        return str(AssetIdentity(self.source_key or None, self.key))
 
 
 class Asset(Component):
@@ -227,11 +243,14 @@ class Asset(Component):
         return partition_or_window if self.partitioning is not None else None
 
     @property
+    def identity(self) -> AssetIdentity:
+        """The asset's :class:`AssetIdentity` (owning source key + own key)."""
+        return AssetIdentity(self._source.key if self._source is not None else None, self.key)
+
+    @property
     def qualified_key(self) -> str:
         """The fully qualified asset key: ``source_key.asset_key``."""
-        if self._source is not None:
-            return f"{self._source.key}.{self.key}"
-        return self.key
+        return str(self.identity)
 
     @property
     def table(self) -> str:
