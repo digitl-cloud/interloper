@@ -9,7 +9,7 @@ from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
 from interloper.asset import Asset
-from interloper.asset.base import AssetDefinition
+from interloper.asset.base import AssetDefinition, expected_dependency
 from interloper.component import Component, ComponentDefinition, RelationDefinition
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
@@ -497,13 +497,9 @@ class Source(Component):
             for param_name, required_qk in mapping.items():
                 if param_name in asset.dependencies:
                     continue
-                # Only wire intra-source: qualified key must belong to this source
-                if "." in required_qk:
-                    source_key, asset_key = required_qk.split(".", 1)
-                    if source_key != type(self).key:
-                        continue
-                else:
-                    asset_key = required_qk
+                source_key, asset_key = expected_dependency(required_qk, own_source_key=type(self).key)
+                if source_key != type(self).key:
+                    continue
                 sibling = siblings.get(asset_key)
                 if sibling is not None and sibling is not asset:
                     asset.dependencies[param_name] = sibling.id
