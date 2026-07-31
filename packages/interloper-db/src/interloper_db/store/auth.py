@@ -134,6 +134,18 @@ class AuthMixin(StoreBase):
         with self._session() as session:
             return session.get(Profile, user_id)
 
+    def get_profile_by_google_id(self, google_id: str) -> Profile | None:
+        """Get a profile by Google OAuth subject identifier.
+
+        Args:
+            google_id: Google OAuth subject identifier.
+
+        Returns:
+            The Profile or None.
+        """
+        with self._session() as session:
+            return session.exec(select(Profile).where(Profile.google_id == google_id)).first()
+
     # -- Sessions -------------------------------------------------------------
 
     def create_session(self, user_id: UUID, organisation_id: UUID | None = None) -> str:
@@ -500,6 +512,22 @@ class AuthMixin(StoreBase):
                 raise NotFoundError(f"Invitation {invitation_id} not found")
             session.delete(db_invitation)
             session.commit()
+
+    def has_pending_invitation(self, email: str) -> bool:
+        """Check whether a non-expired invitation exists for an email.
+
+        Args:
+            email: Email address, matched case-insensitively.
+
+        Returns:
+            True when at least one pending invitation has not expired.
+        """
+        now = datetime.now(timezone.utc)
+        with self._session() as session:
+            db_invitations = session.exec(
+                select(Invitation).where(func.lower(Invitation.email) == email.lower())
+            ).all()
+            return any(_as_utc(invitation.expires_at) > now for invitation in db_invitations)
 
     def accept_invitation(self, token: str, user_id: UUID) -> Organisation | None:
         """Accept an invitation: add user to org and delete the invitation.

@@ -22,6 +22,25 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
+    """Decide whether a first-time login may create a profile.
+
+    An empty ``signup_allowed_domains`` keeps signup open (the default).
+    Otherwise the email must be on an allowed domain, be a configured
+    super-admin, or hold a pending invitation.
+    """
+    allowed_domains = auth_config.signup_allowed_domains
+    if not allowed_domains:
+        return True
+
+    email = email.lower()
+    if email in auth_config.super_admin_emails:
+        return True
+    if email.rsplit("@", 1)[-1] in allowed_domains:
+        return True
+    return store.has_pending_invitation(email)
+
+
 class OrganisationResponse(BaseModel):
     """Organisation summary for auth responses."""
 
@@ -122,6 +141,11 @@ def google_callback(
 
     if not google_id or not email:
         raise HTTPException(status_code=401, detail="Incomplete user info from Google")
+
+    # Gate signup only: existing profiles always sign in, a first login must
+    # pass the allowlist before a profile is created.
+    if not store.get_profile_by_google_id(google_id) and not _signup_allowed(email, auth_config, store):
+        return RedirectResponse(url="/login?error=signup_not_allowed", status_code=302)
 
     # Upsert profile
     profile = store.upsert_profile(

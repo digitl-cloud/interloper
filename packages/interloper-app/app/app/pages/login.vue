@@ -7,7 +7,11 @@ definePageMeta({
 const route = useRoute()
 const userStore = useUserStore()
 const loading = ref(false)
-const error = ref('')
+
+const errorMessages: Record<string, string> = {
+    signup_not_allowed: 'This Google account is not allowed to sign up. Ask an administrator for an invitation.',
+}
+const error = ref(errorMessages[route.query.error as string] ?? '')
 
 function signInWithGoogle() {
     loading.value = true

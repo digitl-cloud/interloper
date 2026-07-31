@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ import interloper as il
 import pytest
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
+from sqlmodel import Session as SQLSession
 
 from interloper_db import engine as engine_module
 from interloper_db.models import Invitation, Organisation, Profile, UserOrganisation
@@ -69,3 +71,43 @@ class TestAcceptInvitation:
         invitee = store.upsert_profile(google_id="g-invitee", email="new@example.com", name="New")
 
         assert store.accept_invitation("no-such-token", invitee.id) is None
+
+
+class TestGetProfileByGoogleId:
+    def test_returns_matching_profile(self, store: Store):
+        profile = store.upsert_profile(google_id="g-1", email="user@example.com", name="User")
+
+        found = store.get_profile_by_google_id("g-1")
+
+        assert found is not None
+        assert found.id == profile.id
+
+    def test_returns_none_when_absent(self, store: Store):
+        assert store.get_profile_by_google_id("g-missing") is None
+
+
+class TestHasPendingInvitation:
+    def _invite(self, store: Store, email: str) -> Invitation:
+        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        org = store.create_organisation(name="Acme", creator_id=admin.id)
+        return store.create_invitation(org_id=org.id, email=email, role="member", invited_by=admin.id)
+
+    def test_pending_invitation_matches_case_insensitively(self, store: Store):
+        self._invite(store, "New@Example.com")
+
+        assert store.has_pending_invitation("new@example.com")
+
+    def test_no_invitation_returns_false(self, store: Store):
+        assert not store.has_pending_invitation("nobody@example.com")
+
+    def test_expired_invitation_returns_false(self, store: Store, auth_db: Engine):
+        invitation = self._invite(store, "new@example.com")
+
+        with SQLSession(auth_db) as session:
+            db_invitation = session.get(Invitation, invitation.id)
+            assert db_invitation is not None
+            db_invitation.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+            session.add(db_invitation)
+            session.commit()
+
+        assert not store.has_pending_invitation("new@example.com")
