@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { h } from 'vue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { AdminOrganisation } from '~/types/admin'
 
@@ -7,10 +6,6 @@ definePageMeta({
     title: 'Organisations',
     layout: 'admin',
     middleware: 'super-admin',
-    pageHeader: {
-        title: 'Organisations',
-        description: 'Every organisation on the platform, with its membership.',
-    },
 })
 
 const adminStore = useAdminStore()
@@ -78,6 +73,10 @@ async function submitForm() {
     }
 }
 
+function openOrg(org: AdminOrganisation) {
+    navigateTo(`/admin/organisations/${org.id}`)
+}
+
 function rowActions(org: AdminOrganisation): DropdownMenuItem[][] {
     return [
         [
@@ -112,20 +111,6 @@ const columns: TableColumn<AdminOrganisation>[] = [
             ? new Date(row.original.created_at).toLocaleDateString()
             : '—',
     },
-    {
-        id: 'open',
-        header: '',
-        cell: ({ row }) => h(resolveComponent('UButton'), {
-            icon: 'i-lucide-arrow-right',
-            color: 'neutral',
-            variant: 'ghost',
-            size: 'xs',
-            onClick: () => navigateTo(`/admin/organisations/${row.original.id}`),
-        }),
-        size: 50,
-        enableSorting: false,
-        enableGlobalFilter: false,
-    },
 ]
 
 onMounted(loadData)
@@ -138,7 +123,8 @@ onMounted(loadData)
                    :loading="loading"
                    :row-actions="rowActions"
                    no-actions
-                   search-placeholder="Search organisations...">
+                   search-placeholder="Search organisations..."
+                   @edit="openOrg">
             <template #toolbar>
                 <UButton icon="i-lucide-plus"
                          label="New organisation"

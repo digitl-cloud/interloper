@@ -4,7 +4,6 @@ definePageMeta({
     layout: 'admin',
     middleware: 'super-admin',
     pageHeader: {
-        eyebrow: 'Admin portal',
         title: 'Overview',
         description: 'Platform-wide health and activity at a glance.',
     },

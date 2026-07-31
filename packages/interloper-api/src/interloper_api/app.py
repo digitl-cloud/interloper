@@ -12,7 +12,14 @@ from interloper.catalog.base import Catalog
 from interloper.errors import ComponentDriftError, NotFoundError
 from interloper_db import Store
 
-from interloper_api.dependencies import set_auth_config, set_catalog, set_features, set_smtp_config, set_store
+from interloper_api.dependencies import (
+    set_admin_config,
+    set_auth_config,
+    set_catalog,
+    set_features,
+    set_smtp_config,
+    set_store,
+)
 from interloper_api.routes import (
     admin,
     auth,
@@ -35,6 +42,7 @@ def create_app(
     auth_config: Any | None = None,
     smtp_config: Any | None = None,
     agent_config: Any | None = None,
+    app_settings: Any | None = None,
     cors_origins: list[str] | None = None,
     **kwargs: Any,
 ) -> FastAPI:
@@ -47,6 +55,8 @@ def create_app(
         smtp_config: ``SmtpConfig`` instance for sending invitation emails.
         agent_config: ``AgentSettings`` instance; the agent routes mount only
             when it's enabled (or None) and the ``agent`` extra is installed.
+        app_settings: Full ``AppSettings``; when given, a secrets-redacted
+            snapshot is built once for the super-admin ``/admin/config`` view.
         cors_origins: Allowed CORS origins. Only needed in dev mode for direct
             WebSocket connections that bypass the Vite proxy.
         **kwargs: Additional kwargs forwarded to ``FastAPI()``.
@@ -115,6 +125,11 @@ def create_app(
     else:
         logger.info("Agent routes not mounted: disabled via settings.")
     set_features({"agent": agent_available})
+
+    if app_settings:
+        set_admin_config(
+            admin.build_config_snapshot(app_settings, features={"agent": agent_available}, catalog=catalog)
+        )
 
     @api.get("/health")
     def health() -> dict[str, str]:

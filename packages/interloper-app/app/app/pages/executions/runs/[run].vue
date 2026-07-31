@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { BreadcrumbItem } from '@nuxt/ui'
 import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
 import type { ExecutionStatus } from '~/types/asset_execution'
@@ -11,6 +12,11 @@ definePageMeta({ title: 'Run', orgSwitchTarget: '/executions?tab=runs', fullBlee
 
 const route = useRoute()
 const runId = route.params.run!.toString()
+
+const breadcrumbs: BreadcrumbItem[] = [
+    titleCrumb('Runs', '/executions?tab=runs'),
+    { ...entityCrumb(runId, 'i-lucide-activity'), class: 'font-mono' },
+]
 
 const runsStore = useRunsStore()
 const eventsStore = useEventsStore()
@@ -131,12 +137,7 @@ onUnmounted(() => {
         <div class="flex flex-col h-full min-h-0">
             <div class="flex flex-col gap-4 mb-4 shrink-0 px-4 pt-4">
                 <div class="flex items-center gap-3">
-                    <NuxtLink to="/executions?tab=runs"
-                              class="text-sm text-muted hover:text-default">
-                        Runs
-                    </NuxtLink>
-                    <span class="text-sm text-muted">/</span>
-                    <span class="text-sm font-medium font-mono">{{ runId }}</span>
+                    <PageBreadcrumb :items="breadcrumbs" />
                     <UBadge v-if="run"
                             :color="statusColor(run.status)">
                         {{ statusLabel(run.status) }}

@@ -6,11 +6,15 @@ const appVersion = useRuntimeConfig().public.version
 
 /** Design page header rendered by the layout, declared via definePageMeta({ pageHeader }). */
 interface PageHeaderMeta {
-    eyebrow?: string
     title: string
     description?: string
 }
 const pageHeader = computed(() => route.meta.pageHeader as PageHeaderMeta | undefined)
+
+/** Eyebrow-styled page title; breadcrumb pages set titleInBreadcrumb and render it as their first crumb. */
+const pageTitle = computed(() => route.meta.titleInBreadcrumb
+    ? undefined
+    : pageHeader.value?.title ?? (route.meta.title as string | undefined))
 
 const items = computed<NavigationMenuItem[]>(() => [
     {
@@ -30,6 +34,12 @@ const items = computed<NavigationMenuItem[]>(() => [
         icon: 'i-lucide-users',
         to: '/admin/users',
         active: route.path.startsWith('/admin/users'),
+    },
+    {
+        label: 'Config',
+        icon: 'i-lucide-settings-2',
+        to: '/admin/config',
+        active: route.path.startsWith('/admin/config'),
     },
 ])
 </script>
@@ -78,17 +88,10 @@ const items = computed<NavigationMenuItem[]>(() => [
                 <div class="flex-1 min-h-0 w-full overflow-y-auto">
                     <div class="p-4 w-full"
                          :class="pageHeader && 'max-w-[1040px] mx-auto'">
-                        <div v-if="pageHeader"
-                             class="mb-6">
-                            <div v-if="pageHeader.eyebrow"
-                                 class="eyebrow text-primary">
-                                {{ pageHeader.eyebrow }}
-                            </div>
-                            <h1 class="text-[28px] font-bold tracking-[-0.022em] leading-tight text-highlighted"
-                                :class="pageHeader.eyebrow ? 'mt-2.5' : ''">
-                                {{ pageHeader.title }}
-                            </h1>
-                            <p v-if="pageHeader.description"
+                        <div v-if="pageTitle"
+                             class="mb-4">
+                            <PageBreadcrumb :items="[titleCrumb(pageTitle)]" />
+                            <p v-if="pageHeader?.description"
                                class="text-[15px] text-muted leading-relaxed max-w-[660px] mt-2.5">
                                 {{ pageHeader.description }}
                             </p>

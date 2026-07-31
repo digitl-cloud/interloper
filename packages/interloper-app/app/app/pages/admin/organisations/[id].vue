@@ -2,7 +2,7 @@
 import type { BreadcrumbItem } from '@nuxt/ui'
 import type { OrgMember } from '~/types/organisation'
 
-definePageMeta({ title: 'Manage organisation', layout: 'admin', middleware: 'super-admin' })
+definePageMeta({ title: 'Manage organisation', layout: 'admin', middleware: 'super-admin', titleInBreadcrumb: true })
 
 const route = useRoute()
 const orgId = computed(() => route.params.id as string)
@@ -22,8 +22,8 @@ const isMember = computed(() =>
 const inviteEndpoint = computed(() => `/admin/organisations/${orgId.value}/invitations`)
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { label: 'Organisations', icon: 'i-lucide-building-2', to: '/admin/organisations' },
-    { label: orgName.value ?? '…' },
+    titleCrumb('Organisations', '/admin/organisations'),
+    entityCrumb(orgName.value ?? '…', 'i-lucide-building-2'),
 ])
 
 async function loadData() {
@@ -116,8 +116,8 @@ watch(orgId, loadData)
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <div class="px-4 pt-4 pb-2 shrink-0">
-            <UBreadcrumb :items="breadcrumbs" />
+        <div class="pb-4 shrink-0">
+            <PageBreadcrumb :items="breadcrumbs" />
         </div>
         <OrganizationMembersTable :members="rows"
                                   :loading="loading"

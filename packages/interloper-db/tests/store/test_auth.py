@@ -74,7 +74,7 @@ class TestAcceptInvitation:
 
 
 class TestListAllProfiles:
-    def test_lists_profiles_with_membership_counts(self, store: Store):
+    def test_lists_profiles_with_their_organisations(self, store: Store):
         admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
         loner = store.upsert_profile(google_id="g-loner", email="loner@example.com", name="Loner")
         org_a = store.create_organisation(name="Acme", creator_id=admin.id)
@@ -82,10 +82,10 @@ class TestListAllProfiles:
         store.add_org_member(org_a.id, admin.id, "admin")
         store.add_org_member(org_b.id, admin.id, "admin")
 
-        counts = {profile.id: count for profile, count in store.list_all_profiles()}
+        orgs = {profile.id: organisations for profile, organisations in store.list_all_profiles()}
 
-        assert counts[admin.id] == 2
-        assert counts[loner.id] == 0
+        assert sorted(org.name for org in orgs[admin.id]) == ["Acme", "Beta"]
+        assert orgs[loner.id] == []
 
 
 class TestGetProfileByGoogleId:

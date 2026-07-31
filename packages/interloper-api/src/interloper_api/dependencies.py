@@ -17,6 +17,7 @@ _catalog: Catalog | None = None
 _auth_config: Any | None = None
 _smtp_config: Any | None = None
 _features: dict[str, bool] = {}
+_admin_config: Any | None = None
 
 # Role hierarchy: admin > editor > viewer
 _ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
@@ -132,6 +133,25 @@ def get_features() -> dict[str, bool]:
         Feature name → availability; empty if never set.
     """
     return _features
+
+
+def set_admin_config(config: Any) -> None:
+    """Set the redacted instance-config snapshot (built at app creation).
+
+    Args:
+        config: The AdminConfigResponse snapshot.
+    """
+    global _admin_config  # noqa: PLW0603
+    _admin_config = config
+
+
+def get_admin_config() -> Any:
+    """Return the redacted instance-config snapshot.
+
+    Returns:
+        The AdminConfigResponse snapshot, or None if not configured.
+    """
+    return _admin_config
 
 
 # -- Auth dependencies -------------------------------------------------------

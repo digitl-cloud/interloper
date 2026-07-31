@@ -7,19 +7,35 @@ definePageMeta({
     title: 'Users',
     layout: 'admin',
     middleware: 'super-admin',
-    pageHeader: {
-        title: 'Users',
-        description: 'Everyone with a profile on the platform, across all organisations.',
-    },
 })
 
 const UAvatar = resolveComponent('UAvatar')
 const UBadge = resolveComponent('UBadge')
+const EntityBadge = resolveComponent('EntityBadge')
 
 const adminStore = useAdminStore()
 
 const rows = ref<AdminUser[]>([])
 const loading = ref(false)
+
+const ALL_ORGS = 'all'
+const orgFilter = ref(ALL_ORGS)
+
+const orgOptions = computed(() => {
+    const seen = new Map<string, string>()
+    for (const user of rows.value)
+        for (const org of user.organisations) seen.set(org.id, org.name)
+    return [
+        { label: 'All organisations', value: ALL_ORGS },
+        ...[...seen]
+            .map(([id, name]) => ({ label: name, value: id }))
+            .sort((a, b) => a.label.localeCompare(b.label)),
+    ]
+})
+
+const filteredRows = computed(() => orgFilter.value === ALL_ORGS
+    ? rows.value
+    : rows.value.filter(user => user.organisations.some(org => org.id === orgFilter.value)))
 
 async function loadData() {
     loading.value = true
@@ -68,9 +84,16 @@ const columns: TableColumn<AdminUser>[] = [
         header: 'Email',
     },
     {
-        accessorKey: 'organisation_count',
+        id: 'organisations',
         header: 'Organisations',
-        cell: ({ row }) => row.original.organisation_count,
+        accessorFn: row => row.organisations.map(org => org.name).join(', '),
+        cell: ({ row }) => {
+            const orgs = row.original.organisations
+            const first = orgs[0]
+            return first
+                ? h(EntityBadge, { icon: 'i-lucide-building-2', label: first.name, extra: orgs.length - 1 })
+                : h('span', { class: 'text-dimmed' }, '—')
+        },
     },
     {
         accessorKey: 'is_super_admin',
@@ -94,9 +117,17 @@ onMounted(loadData)
 <template>
     <div class="flex flex-col flex-1 min-h-0">
         <DataTable :columns="columns"
-                   :data="rows"
+                   :data="filteredRows"
                    :loading="loading"
                    no-actions
-                   search-placeholder="Search users..." />
+                   search-placeholder="Search users...">
+            <template #toolbar>
+                <USelect v-model="orgFilter"
+                         :items="orgOptions"
+                         value-key="value"
+                         icon="i-lucide-building-2"
+                         class="w-52" />
+            </template>
+        </DataTable>
     </div>
 </template>
