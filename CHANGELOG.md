@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.50.1 (2026-07-31)
+
+### Bug Fixes
+
+- **scheduler**: Match retry skip statuses by asset id, not key
+  ([`547d74b`](https://github.com/digitl-cloud/interloper/commit/547d74b80a06936c3b1238e244ac57b68eb4ae8d))
+
+
 ## v0.50.0 (2026-07-30)
 
 ### Features
