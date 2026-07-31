@@ -51,7 +51,7 @@ class AuthSettings(BaseSettings):
     removing an email never demotes an existing super-admin. The env var takes a
     comma-separated list (``INTERLOPER_AUTH_SUPER_ADMIN_EMAILS=a@x.com,b@x.com``).
 
-    ``signup_allowed_domains`` restricts who can sign up (first login creates a
+    ``allowed_domains`` restricts who can sign up (first login creates a
     profile). Empty (the default) keeps signup open to any Google account. When
     set, a new profile is only created for emails on a listed domain, configured
     super-admins, or emails holding a pending invitation; existing profiles
@@ -66,9 +66,9 @@ class AuthSettings(BaseSettings):
     cookie_secure: bool = True
     session_expiry_days: int = 30
     super_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
-    signup_allowed_domains: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    allowed_domains: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
-    @field_validator("super_admin_emails", "signup_allowed_domains", mode="before")
+    @field_validator("super_admin_emails", "allowed_domains", mode="before")
     @classmethod
     def _parse_comma_list(cls, value: Any) -> list[str]:
         """Accept a comma-separated string (env) or a list (YAML).

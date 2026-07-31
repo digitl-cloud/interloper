@@ -184,7 +184,7 @@ smtp: {}
 # Auth config (OAuth client ID; the client secret goes in
 # secrets.googleClientSecret). super_admin_emails bootstraps the first
 # platform super-admin(s): listed users are promoted when they log in
-# (promote-only — removing an email never demotes). signup_allowed_domains
+# (promote-only — removing an email never demotes). allowed_domains
 # restricts signup to the listed email domains (plus super-admins and
 # invited emails); empty keeps signup open. Existing profiles always
 # keep signing in.
@@ -193,7 +193,7 @@ auth: {}
 #   google_client_id: "..."
 #   super_admin_emails:
 #     - you@example.com
-#   signup_allowed_domains:
+#   allowed_domains:
 #     - example.com
 
 # Extra interloper.yaml sections rendered verbatim into the generated
