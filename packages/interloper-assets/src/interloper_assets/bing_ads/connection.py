@@ -1,4 +1,5 @@
 import os
+import tempfile
 from functools import cached_property
 from typing import Any
 from xml.etree import ElementTree as ET
@@ -132,10 +133,18 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
         return ServiceClient("ReportingService", 13, self.authorization_data(account_id))
 
     def reporting_service_manager(self, account_id: str) -> Any:
-        """Return a ReportingServiceManager for downloading reports."""
+        """Return a ReportingServiceManager for downloading reports.
+
+        A fresh ``working_directory`` per manager: the SDK defaults to a
+        shared ``/tmp`` path it creates with a racy exists-then-makedirs,
+        so concurrent report assets in one pod crash with ``FileExistsError``.
+        """
         from bingads.v13.reporting.reporting_service_manager import ReportingServiceManager
 
-        return ReportingServiceManager(self.authorization_data(account_id))
+        return ReportingServiceManager(
+            self.authorization_data(account_id),
+            working_directory=tempfile.mkdtemp(prefix="bingads-"),
+        )
 
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:
