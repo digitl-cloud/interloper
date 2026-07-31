@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.53.1 (2026-07-31)
+
+### Bug Fixes
+
+- **app**: Stop losing the login error query to trailing-slash redirects
+  ([`f90603c`](https://github.com/digitl-cloud/interloper/commit/f90603c8340c9d0a816749e690f40243965bbd86))
+
+- **assets**: Give each Bing Ads reporting manager its own working directory
+  ([`5b1fb39`](https://github.com/digitl-cloud/interloper/commit/5b1fb39f829037cf0b0de37e14389b8e37d83b5a))
+
+
 ## v0.53.0 (2026-07-31)
 
 ### Refactoring
