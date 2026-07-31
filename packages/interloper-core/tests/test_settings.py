@@ -45,3 +45,19 @@ def test_auth_settings_super_admin_emails_list():
     settings = AuthSettings(super_admin_emails=["Admin@Example.com"])
 
     assert settings.super_admin_emails == ["admin@example.com"]
+
+
+def test_auth_settings_signup_allowed_domains_default():
+    """Signup stays open (empty allowlist) unless configured."""
+    settings = AuthSettings()
+
+    assert settings.signup_allowed_domains == []
+
+
+def test_auth_settings_signup_allowed_domains_env(monkeypatch: pytest.MonkeyPatch):
+    """Comma-separated env list; entries trimmed, lowercased, leading @ stripped."""
+    monkeypatch.setenv("INTERLOPER_AUTH_SIGNUP_ALLOWED_DOMAINS", " Digitlcloud.com ,@example.com,")
+
+    settings = AppSettings()
+
+    assert settings.auth.signup_allowed_domains == ["digitlcloud.com", "example.com"]

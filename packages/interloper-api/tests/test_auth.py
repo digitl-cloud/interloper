@@ -1,9 +1,10 @@
-"""Tests for ``interloper_api.routes.auth`` — super-admin bootstrap on login.
+"""Tests for ``interloper_api.routes.auth`` — login callback policies.
 
 The Google OAuth exchange is faked at the httpx layer; a lightweight fake store
-records the promotion calls. The property under test: a user whose email is in
-``auth_config.super_admin_emails`` is promoted on login, everyone else is not,
-and the promotion is promote-only (an existing super-admin is left alone).
+records the calls. Two properties under test: a user whose email is in
+``auth_config.super_admin_emails`` is promoted on login (promote-only — an
+existing super-admin is left alone), and ``signup_allowed_domains`` gates
+profile creation for first-time logins without touching existing profiles.
 """
 
 from __future__ import annotations
@@ -22,11 +23,21 @@ from interloper_api.routes import auth as auth_module
 class FakeStore:
     """In-memory stand-in implementing only the methods the callback calls."""
 
-    def __init__(self, *, is_super_admin: bool = False) -> None:
+    def __init__(self, *, is_super_admin: bool = False, exists: bool = False, invited: bool = False) -> None:
         self.profile = SimpleNamespace(id=uuid4(), is_super_admin=is_super_admin)
+        self.exists = exists
+        self.invited = invited
         self.promoted: list[UUID] = []
+        self.upserted = False
+
+    def get_profile_by_google_id(self, google_id: str) -> SimpleNamespace | None:
+        return self.profile if self.exists else None
+
+    def has_pending_invitation(self, email: str) -> bool:
+        return self.invited
 
     def upsert_profile(self, **kwargs) -> SimpleNamespace:
+        self.upserted = True
         return self.profile
 
     def set_super_admin(self, user_id: UUID) -> SimpleNamespace:
@@ -38,7 +49,7 @@ class FakeStore:
         return "token"
 
 
-def _auth_config(super_admin_emails: list[str]) -> SimpleNamespace:
+def _auth_config(super_admin_emails: list[str], signup_allowed_domains: list[str]) -> SimpleNamespace:
     return SimpleNamespace(
         google_client_id="client-id",
         google_client_secret="client-secret",
@@ -46,14 +57,21 @@ def _auth_config(super_admin_emails: list[str]) -> SimpleNamespace:
         cookie_secure=False,
         session_expiry_days=1,
         super_admin_emails=super_admin_emails,
+        signup_allowed_domains=signup_allowed_domains,
     )
 
 
-def _client(store: FakeStore, super_admin_emails: list[str]) -> TestClient:
+def _client(
+    store: FakeStore,
+    super_admin_emails: list[str] | None = None,
+    signup_allowed_domains: list[str] | None = None,
+) -> TestClient:
     app = FastAPI()
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_auth_config] = lambda: _auth_config(super_admin_emails)
+    app.dependency_overrides[get_auth_config] = lambda: _auth_config(
+        super_admin_emails or [], signup_allowed_domains or []
+    )
     return TestClient(app, follow_redirects=False)
 
 
@@ -94,3 +112,50 @@ def test_existing_super_admin_is_not_touched() -> None:
     resp = _client(store, ["boss@example.com"]).get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert store.promoted == []
+
+
+def test_signup_blocked_when_domain_not_allowed() -> None:
+    store = FakeStore()
+    client = _client(store, signup_allowed_domains=["digitlcloud.com"])
+    resp = client.get("/auth/google/callback", params={"code": "c"})
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/login?error=signup_not_allowed"
+    assert not store.upserted
+    assert "session_token" not in resp.cookies
+
+
+def test_signup_allowed_for_listed_domain() -> None:
+    store = FakeStore()
+    resp = _client(store, signup_allowed_domains=["example.com"]).get("/auth/google/callback", params={"code": "c"})
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/"
+    assert store.upserted
+
+
+def test_existing_profile_bypasses_allowlist() -> None:
+    store = FakeStore(exists=True)
+    resp = _client(store, signup_allowed_domains=["digitlcloud.com"]).get(
+        "/auth/google/callback", params={"code": "c"}
+    )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/"
+    assert store.upserted
+
+
+def test_invited_email_can_sign_up() -> None:
+    store = FakeStore(invited=True)
+    resp = _client(store, signup_allowed_domains=["digitlcloud.com"]).get(
+        "/auth/google/callback", params={"code": "c"}
+    )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/"
+    assert store.upserted
+
+
+def test_super_admin_email_can_sign_up() -> None:
+    store = FakeStore()
+    client = _client(store, super_admin_emails=["boss@example.com"], signup_allowed_domains=["digitlcloud.com"])
+    resp = client.get("/auth/google/callback", params={"code": "c"})
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/"
+    assert store.promoted == [store.profile.id]
