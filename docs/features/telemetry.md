@@ -1,0 +1,137 @@
+# Telemetry
+
+Interloper exports OpenTelemetry **traces** and **metrics** over OTLP: one trace per run —
+from the scheduler's dispatch through every asset, `data()` call, and destination read/write,
+across process and container boundaries — plus counters and duration histograms for runs,
+assets, and destination I/O.
+
+Telemetry is **off by default** and adds no overhead when disabled: the framework only
+depends on the no-op `opentelemetry-api`; the SDK and exporters ship in the optional
+`otel` extra.
+
+## Quickstart
+
+Install the extra and point the exporter at an OTLP endpoint (any collector, Grafana
+Tempo/Mimir, Jaeger, etc.):
+
+```bash
+pip install 'interloper[otel]'
+
+export INTERLOPER_OTEL_ENABLED=true
+export INTERLOPER_OTEL_ENDPOINT=http://localhost:4317
+
+interloper run my_pipeline.py
+```
+
+For a local look, run a collector that prints what it receives:
+
+```bash
+docker run --rm -p 4317:4317 otel/opentelemetry-collector
+```
+
+## Configuration
+
+Settings live under the `otel` block of `interloper.yaml` or the matching
+`INTERLOPER_OTEL_*` environment variables:
+
+| Setting | Env var | Default | Description |
+|---------|---------|---------|-------------|
+| `enabled` | `INTERLOPER_OTEL_ENABLED` | `false` | Master switch. Telemetry is never activated from `OTEL_*` env vars alone. |
+| `endpoint` | `INTERLOPER_OTEL_ENDPOINT` | — | OTLP endpoint. Empty falls through to the SDK's own `OTEL_EXPORTER_OTLP_ENDPOINT`. |
+| `protocol` | `INTERLOPER_OTEL_PROTOCOL` | `grpc` | `grpc` or `http/protobuf`. |
+| `headers` | `INTERLOPER_OTEL_HEADERS` | — | Exporter auth headers, `key=value,key2=value2`. Treat as a secret. |
+| `service_name` | `INTERLOPER_OTEL_SERVICE_NAME` | `interloper-<role>` | Overrides the per-role default (`interloper-server`, `interloper-run`, `interloper-cli`). |
+| `traces` | `INTERLOPER_OTEL_TRACES` | `true` | Toggle the traces signal. |
+| `metrics` | `INTERLOPER_OTEL_METRICS` | `true` | Toggle the metrics signal. |
+| `sample_ratio` | `INTERLOPER_OTEL_SAMPLE_RATIO` | `1.0` | Head sampling ratio (parent-based). |
+
+Precedence: interloper settings win over the SDK's standard `OTEL_*` environment
+variables; anything you leave unset here (endpoint, headers, resource attributes, …)
+can still be supplied through them. Enabling always requires
+`INTERLOPER_OTEL_ENABLED=true` — if the `otel` extra is missing, a warning is logged
+and the framework runs unchanged.
+
+## Traces
+
+Span tree for a scheduled run:
+
+```
+interloper.run.launch          scheduler (queue controller)
+└── interloper.run             run process / pod
+    └── interloper.asset       per asset (in-process runner)
+        ├── interloper.destination.read    per upstream dependency
+        ├── interloper.asset.execute       the data() call
+        ├── interloper.asset.normalize     normalization + schema conform
+        └── interloper.destination.write   per destination
+```
+
+Spans carry `interloper.*` attributes: `run.id`, `backfill.id`, `asset.key`,
+`asset.qualified_key`, `source.id`, `partition`, `destination.key`, `runner.type`.
+Failures set span status to error; runs that swallow asset failures into a failed
+`RunResult` are marked too.
+
+Trace context crosses every execution boundary automatically:
+
+- **scheduler → run**: the in-process launcher hands its context to the run thread; the
+  Docker/Kubernetes launchers inject `TRACEPARENT` (and forward `INTERLOPER_OTEL_*`)
+  into the launched container.
+- **run → per-asset container**: the Docker/Kubernetes runners do the same for each
+  asset container, whose spans parent under the host's run span.
+- **run metadata**: the run span's context also rides `metadata["traceparent"]` into
+  every event and into `MultiProcessRunner` workers.
+
+When the API is served (`interloper app`), FastAPI request spans plus SQLAlchemy and
+httpx client spans are enabled through the standard contrib instrumentors — REST-based
+sources get egress spans for free.
+
+## Metrics
+
+| Instrument | Type | Attributes |
+|------------|------|------------|
+| `interloper.runs` | counter | `status` |
+| `interloper.run.duration` | histogram (s) | `status` |
+| `interloper.assets` | counter | `status`, `asset_key` |
+| `interloper.asset.duration` | histogram (s) | `status`, `asset_key` |
+| `interloper.destination.io` | counter | `operation`, `status`, `destination_key` |
+| `interloper.runs.launched` | counter | `outcome` |
+
+Metrics are derived from the [event bus](events.md), so they cost nothing on the
+execution hot path. Attributes are deliberately low-cardinality: ids and partitions
+never become metric attributes. In Docker/Kubernetes runs the host process is
+authoritative — child containers export traces but not metrics, and re-emitted events
+are deduplicated by id.
+
+## Library and notebook use
+
+Embedding interloper (scripts, notebooks) never auto-initializes telemetry — that only
+happens through the CLI. Initialize it yourself:
+
+```py
+import interloper as il
+from interloper.settings import TelemetrySettings
+from interloper.telemetry import init_telemetry, shutdown_telemetry
+
+init_telemetry(TelemetrySettings(enabled=True, endpoint="http://localhost:4317"), role="cli")
+
+il.run(il.AsyncRunner().run(dag))
+
+shutdown_telemetry()  # flush before the process exits
+```
+
+## Kubernetes deployment
+
+The Helm chart wires everything from one block (the images must be built with the
+`otel` extra):
+
+```yaml
+otel:
+  enabled: true
+  endpoint: http://otel-collector.observability:4317
+```
+
+The API and scheduler pods get the settings directly; run pods and per-asset pods
+receive them (plus the live trace context) from the launcher — no extra chart config.
+Exporter auth headers are read from the `INTERLOPER_OTEL_HEADERS` key of the release
+secret (`secrets.existingSecret`) or per-deployment `extraEnv`; the same `extraEnv`
+route serves any finer tuning (`INTERLOPER_OTEL_SAMPLE_RATIO`, service names, signal
+toggles).

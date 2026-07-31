@@ -11,6 +11,8 @@ import subprocess
 import threading
 from typing import TYPE_CHECKING, Any
 
+from interloper.telemetry import instrument_fastapi
+
 if TYPE_CHECKING:
     from interloper_db import Store
 
@@ -73,6 +75,7 @@ def run_services(
             settings=settings,
             cors_origins=cors_origins,
         )
+        instrument_fastapi(app)
 
         # In production mode, serve the built SPA as a fallback for non-API routes.
         # The interloper_app package is optional: API-only images (built without it)

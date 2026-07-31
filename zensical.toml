@@ -38,6 +38,7 @@ nav = [
         { "Configuration" = "features/config.md" },
         { "Runners" = "features/runners.md" },
         { "Events" = "features/events.md" },
+        { "Telemetry" = "features/telemetry.md" },
         { "Catalog" = "features/catalog.md" },
         { "CLI & Manifests" = "features/cli.md" },
     ] },

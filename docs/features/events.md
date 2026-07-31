@@ -5,7 +5,9 @@ lifecycle. Events flow through a process-wide `EventBus`.
 
 !!! note
     This page covers the *in-process* event bus. To react to run outcomes in a deployed
-    instance — notify, or trigger downstream pipelines — see [Hooks](hooks.md).
+    instance — notify, or trigger downstream pipelines — see [Hooks](hooks.md). The
+    built-in OpenTelemetry metrics are also derived from this bus — see
+    [Telemetry](telemetry.md).
 
 ## Subscribing to events
 

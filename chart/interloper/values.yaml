@@ -196,6 +196,18 @@ auth: {}
 #   allowed_domains:
 #     - example.com
 
+# OpenTelemetry export (traces + metrics over OTLP). Requires images built
+# with the "otel" extra; the scheduler forwards these settings (and the trace
+# context) into the run pods it launches. Exporter auth headers
+# ("key=value,key2=value2") are read from the INTERLOPER_OTEL_HEADERS key of
+# the release secret (add it via secrets.existingSecret, or per-deployment
+# extraEnv). Finer tuning (sampling, service name, signal toggles) via
+# extraEnv (INTERLOPER_OTEL_*).
+otel:
+  enabled: false
+  endpoint: ""  # e.g. http://otel-collector.observability:4317
+  protocol: grpc  # grpc | http/protobuf
+
 # Extra interloper.yaml sections rendered verbatim into the generated
 # ConfigMap — tuning the chart has no opinion on (server, cron, worker,
 # reaper, mcp). Sections owned by a root-level block (agent, launcher,
