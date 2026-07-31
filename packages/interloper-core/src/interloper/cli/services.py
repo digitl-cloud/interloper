@@ -73,6 +73,7 @@ def run_services(
             auth_config=settings.auth,
             smtp_config=settings.smtp,
             agent_config=settings.agent,
+            app_settings=settings,
             cors_origins=cors_origins,
         )
 

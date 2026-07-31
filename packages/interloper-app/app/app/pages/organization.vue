@@ -4,7 +4,6 @@ import type { OrgMember } from '~/types/organisation'
 definePageMeta({
     title: 'Organization',
     pageHeader: {
-        eyebrow: 'Workspace',
         title: 'Members',
         description: 'Invite your team to your workspace and give everyone the right level of access. '
             + 'Roles control who can build pipelines, who can only read data, and who can manage the workspace.',

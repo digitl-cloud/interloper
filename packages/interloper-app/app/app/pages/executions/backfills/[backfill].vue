@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, BreadcrumbItem } from '@nuxt/ui'
 import type { Run } from '~/types/run'
 import type { Backfill } from '~/types/backfill'
 
 // orgSwitchTarget: this page is bespoke to one org's backfill — switching org
 // from the nav lands on the backfills list instead.
-definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions?tab=backfills' })
+definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions?tab=backfills', titleInBreadcrumb: true })
 
 const UBadge = resolveComponent('UBadge')
 
 const route = useRoute()
 const backfillId = route.params.backfill!.toString()
+
+const breadcrumbs: BreadcrumbItem[] = [
+    titleCrumb('Backfills', '/executions?tab=backfills'),
+    { ...entityCrumb(backfillId.substring(0, 8), 'i-lucide-calendar-range'), class: 'font-mono' },
+]
 
 const { apiFetch } = useApi()
 const backfillsStore = useBackfillsStore()
@@ -95,12 +100,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
              resource-label="backfill">
         <div>
             <div class="flex items-center gap-3 mb-4 shrink-0">
-            <NuxtLink to="/executions?tab=backfills"
-                      class="text-sm text-muted hover:text-default">
-                Backfills
-            </NuxtLink>
-            <span class="text-sm text-muted">/</span>
-            <span class="text-sm font-medium font-mono">{{ backfillId.substring(0, 8) }}</span>
+            <PageBreadcrumb :items="breadcrumbs" />
             <UBadge v-if="backfill"
                     :color="statusColor(backfill.status)"
                     variant="subtle">

@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
 
-from interloper_api.dependencies import get_current_user, get_store
+from interloper_api.dependencies import get_admin_config, get_current_user, get_store
 from interloper_api.routes import admin as admin_module
 
 
@@ -46,7 +46,7 @@ class FakeStore:
                     is_super_admin=False,
                     created_at=datetime.now(timezone.utc),
                 ),
-                2,
+                [self.org],
             )
         ]
 
@@ -143,6 +143,111 @@ def test_non_super_admin_is_forbidden(store: FakeStore) -> None:
     assert resp.status_code == 403
 
 
+def _settings() -> SimpleNamespace:
+    """Fake AppSettings covering every field the snapshot builder reads, secrets included."""
+    return SimpleNamespace(
+        launcher=SimpleNamespace(
+            type="kubernetes",
+            config={
+                "image": "ghcr.io/x:1",
+                "namespace": "prod",
+                "service_account_name": "sa",
+                "ttl_seconds_after_finished": 300,
+                "env": "l-secret",
+                "image_pull_secrets": ["pull-secret"],
+                "runner_config": {"max_workers": 4, "env": "nested-secret"},
+            },
+        ),
+        runner=SimpleNamespace(type="async", config={"max_workers": 8, "env": "r-secret"}),
+        agent=SimpleNamespace(enabled=True, model="gemini-2.5-flash"),
+        auth=SimpleNamespace(
+            signup_allowed_domains=["digitlcloud.com"],
+            super_admin_emails=["boss@example.com"],
+            google_client_id="cid",
+            google_client_secret="oauth-secret",
+            google_redirect_uri="https://app/api/auth/google/callback",
+            session_expiry_days=30,
+            cookie_secure=True,
+        ),
+        cron=SimpleNamespace(enabled=True, reconcile_interval=10, batch_size=50, max_execution_delay=None),
+        worker=SimpleNamespace(enabled=True, poll_interval=5),
+        reaper=SimpleNamespace(enabled=True, timeout=3600, poll_interval=60),
+        smtp=SimpleNamespace(enabled=True, host="smtp.example.com", from_addr="noreply@x", password="smtp-secret"),
+        mcp=SimpleNamespace(external_url="", token="mcp-secret"),
+        secrets=SimpleNamespace(encryption_key="key-material"),
+        postgres=SimpleNamespace(password="pg-secret"),
+        catalog=["interloper_assets.demo.source.DemoSource"],
+    )
+
+
+def test_config_snapshot_redacts_secrets() -> None:
+    snapshot = admin_module.build_config_snapshot(_settings(), features={"agent": True})
+    payload = snapshot.model_dump_json()
+    secrets = (
+        "oauth-secret", "smtp-secret", "pg-secret", "key-material",
+        "l-secret", "nested-secret", "r-secret", "pull-secret",
+    )
+    for secret in secrets:
+        assert secret not in payload
+    assert snapshot.auth.google_oauth_configured is True
+    assert snapshot.data.encryption_configured is True
+    assert snapshot.services.reaper.timeout == 3600
+
+
+def test_config_snapshot_allowlists_launcher_and_runner_config() -> None:
+    snapshot = admin_module.build_config_snapshot(_settings(), features={"agent": True})
+    assert snapshot.deployment.launcher.config == {
+        "image": "ghcr.io/x:1",
+        "namespace": "prod",
+        "service_account_name": "sa",
+        "ttl_seconds_after_finished": 300,
+        "runner_config": {"max_workers": 4},
+    }
+    assert snapshot.deployment.runner.config == {"max_workers": 8}
+    # Explicitly configured keys are excluded from the class defaults.
+    assert snapshot.deployment.launcher.defaults == {"runner_type": "async"}
+    assert snapshot.deployment.runner.defaults == {}
+
+
+def test_config_snapshot_surfaces_class_defaults_for_unset_config() -> None:
+    settings = _settings()
+    settings.runner = SimpleNamespace(type="async", config={})
+    snapshot = admin_module.build_config_snapshot(settings, features={"agent": True})
+    assert snapshot.deployment.runner.defaults == {"max_workers": 4}
+
+
+def test_config_snapshot_reports_hydrated_catalog_by_kind() -> None:
+    catalog = SimpleNamespace(
+        components={
+            "demo": SimpleNamespace(kind="source"),
+            "csv": SimpleNamespace(kind="destination"),
+            "bigquery": SimpleNamespace(kind="destination"),
+        }
+    )
+    snapshot = admin_module.build_config_snapshot(_settings(), features={"agent": True}, catalog=catalog)
+    assert snapshot.data.catalog == {"destination": ["bigquery", "csv"], "source": ["demo"]}
+
+
+def test_non_super_admin_cannot_read_config(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=False).get("/admin/config")
+    assert resp.status_code == 403
+
+
+def test_super_admin_reads_config(store: FakeStore) -> None:
+    client = _client(store, is_super_admin=True)
+    snapshot = admin_module.build_config_snapshot(_settings(), features={"agent": True})
+    client.app.dependency_overrides[get_admin_config] = lambda: snapshot
+    resp = client.get("/admin/config")
+    assert resp.status_code == 200
+    assert resp.json()["deployment"]["launcher"]["type"] == "kubernetes"
+    assert resp.json()["auth"]["signup_allowed_domains"] == ["digitlcloud.com"]
+
+
+def test_config_unavailable_returns_503(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).get("/admin/config")
+    assert resp.status_code == 503
+
+
 def test_non_super_admin_cannot_list_users(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=False).get("/admin/users")
     assert resp.status_code == 403
@@ -153,7 +258,7 @@ def test_super_admin_lists_all_users(store: FakeStore) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body[0]["email"] == "member@acme.test"
-    assert body[0]["organisation_count"] == 2
+    assert [org["name"] for org in body[0]["organisations"]] == ["Acme"]
     assert body[0]["is_super_admin"] is False
 
 

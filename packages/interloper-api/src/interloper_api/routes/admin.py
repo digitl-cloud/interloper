@@ -8,8 +8,10 @@ no access to org-scoped *data* (sources, jobs, runs, …).
 
 from __future__ import annotations
 
+import inspect
 import logging
 from datetime import datetime
+from importlib import metadata
 from typing import Any
 from uuid import UUID
 
@@ -17,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from interloper_db import Organisation, Profile, Store
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_store, require_super_admin
+from interloper_api.dependencies import get_admin_config, get_store, require_super_admin
 from interloper_api.email import send_invite_email
 
 logger = logging.getLogger(__name__)
@@ -39,15 +41,22 @@ class AdminOrganisationResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class AdminUserOrganisation(BaseModel):
+    """Organisation reference on a user row."""
+
+    id: UUID
+    name: str
+
+
 class AdminUserResponse(BaseModel):
-    """Platform user with organisation membership count for the admin surface."""
+    """Platform user with its organisation memberships for the admin surface."""
 
     id: UUID
     email: str
     name: str | None = None
     avatar_url: str | None = None
     is_super_admin: bool = False
-    organisation_count: int
+    organisations: list[AdminUserOrganisation]
     created_at: datetime | None = None
 
 
@@ -102,6 +111,272 @@ class InvitationResponse(BaseModel):
     expires_at: datetime
 
 
+class AdminLauncherConfig(BaseModel):
+    """Launcher type plus the key-allowlisted, non-secret part of its config.
+
+    ``defaults`` carries the launcher class's own constructor defaults for
+    allowlisted keys the config doesn't set — the effective values.
+    """
+
+    type: str
+    config: dict[str, Any]
+    defaults: dict[str, Any]
+
+
+class AdminRunnerConfig(BaseModel):
+    """Runner type plus the key-allowlisted, non-secret part of its config.
+
+    ``defaults`` carries the runner class's own field defaults for
+    allowlisted keys the config doesn't set — the effective values.
+    """
+
+    type: str
+    config: dict[str, Any]
+    defaults: dict[str, Any]
+
+
+class AdminDeploymentConfig(BaseModel):
+    """What this instance is: version, execution stack, optional features."""
+
+    version: str | None = None
+    launcher: AdminLauncherConfig
+    runner: AdminRunnerConfig
+    features: dict[str, bool]
+    agent_model: str | None = None
+
+
+class AdminAuthConfig(BaseModel):
+    """Authentication and signup policy."""
+
+    signup_allowed_domains: list[str]
+    super_admin_emails: list[str]
+    google_oauth_configured: bool
+    google_redirect_uri: str
+    session_expiry_days: int
+    cookie_secure: bool
+
+
+class AdminCronConfig(BaseModel):
+    """Cron controller tuning."""
+
+    enabled: bool
+    reconcile_interval: int
+    batch_size: int
+    max_execution_delay: int | None = None
+
+
+class AdminWorkerConfig(BaseModel):
+    """Queue worker tuning."""
+
+    enabled: bool
+    poll_interval: int
+
+
+class AdminReaperConfig(BaseModel):
+    """Reaper tuning."""
+
+    enabled: bool
+    timeout: int
+    poll_interval: int
+
+
+class AdminSmtpConfig(BaseModel):
+    """SMTP status (credentials reduced to the enabled flag)."""
+
+    enabled: bool
+    host: str
+    from_addr: str
+
+
+class AdminServicesConfig(BaseModel):
+    """Background service roles and their tuning."""
+
+    cron: AdminCronConfig
+    worker: AdminWorkerConfig
+    reaper: AdminReaperConfig
+    smtp: AdminSmtpConfig
+    mcp_external_url: str
+
+
+class AdminDataConfig(BaseModel):
+    """Data-layer status and the computed catalog (kind → component keys)."""
+
+    encryption_configured: bool
+    catalog: dict[str, list[str]]
+
+
+class AdminConfigResponse(BaseModel):
+    """Read-only, secrets-redacted snapshot of the instance configuration."""
+
+    deployment: AdminDeploymentConfig
+    auth: AdminAuthConfig
+    services: AdminServicesConfig
+    data: AdminDataConfig
+
+
+# Non-secret launcher/runner config keys exposed on /admin/config. Anything not
+# listed (env injections, image_pull_secrets, credentials, …) stays server-side.
+_LAUNCHER_CONFIG_KEYS = frozenset(
+    {
+        "image",
+        "namespace",
+        "service_account_name",
+        "image_pull_policy",
+        "ttl_seconds_after_finished",
+        "node_selector",
+        "resources",
+        "volumes",
+        "runner_type",
+    }
+)
+_RUNNER_CONFIG_KEYS = frozenset(
+    {
+        "max_workers",
+        "image",
+        "namespace",
+        "service_account_name",
+        "image_pull_policy",
+        "ttl_seconds_after_finished",
+        "node_selector",
+        "resources",
+    }
+)
+
+
+def _filter_config(config: dict[str, Any] | None, allowed: frozenset[str]) -> dict[str, Any]:
+    """Keep only allowlisted keys of a launcher/runner config dict."""
+    return {key: value for key, value in (config or {}).items() if key in allowed}
+
+
+def _launcher_defaults(launcher_type: str) -> dict[str, Any]:
+    """Allowlisted constructor defaults of the registered launcher class.
+
+    Launcher defaults live in ``__init__`` signatures, invisible to settings —
+    without this, an unset value reads as "missing" when a class default
+    applies. Returns ``{}`` when the launcher package isn't installed here
+    (e.g. an API-only image) — the view then simply shows no defaults.
+    """
+    try:
+        from interloper_scheduler.launcher import LAUNCHERS
+    except ImportError:
+        return {}
+    launcher_cls = LAUNCHERS.get(launcher_type)
+    if launcher_cls is None:
+        return {}
+    return {
+        name: param.default
+        for name, param in inspect.signature(launcher_cls.__init__).parameters.items()
+        if name in _LAUNCHER_CONFIG_KEYS and param.default is not inspect.Parameter.empty and param.default is not None
+    }
+
+
+def _runner_defaults(runner_type: str) -> dict[str, Any]:
+    """Allowlisted field defaults of the registered runner class (pydantic model)."""
+    from interloper.runner.base import RUNNERS
+
+    runner_cls = RUNNERS.get(runner_type)
+    if runner_cls is None:
+        return {}
+    return {
+        name: field.default
+        for name, field in runner_cls.model_fields.items()
+        if name in _RUNNER_CONFIG_KEYS and not field.is_required() and field.default is not None
+    }
+
+
+def _catalog_by_kind(catalog: Any) -> dict[str, list[str]]:
+    """Group the hydrated catalog's component keys by kind, both sorted."""
+    by_kind: dict[str, list[str]] = {}
+    for key, definition in catalog.components.items():
+        by_kind.setdefault(definition.kind, []).append(key)
+    return {kind: sorted(keys) for kind, keys in sorted(by_kind.items())}
+
+
+def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any = None) -> AdminConfigResponse:
+    """Build the redacted instance-config snapshot served by ``GET /admin/config``.
+
+    Every exposed field is hand-picked here (allowlist, not blocklist), so new
+    settings fields default to *not exposed* and secrets only ever surface as
+    "configured" booleans. The catalog is reported from the hydrated ``Catalog``
+    (auto-discovered universe + configured extras), not ``settings.catalog``,
+    which only holds the explicitly configured import paths.
+    """
+    try:
+        version: str | None = metadata.version("interloper-api")
+    except metadata.PackageNotFoundError:
+        version = None
+
+    launcher_config = _filter_config(settings.launcher.config, _LAUNCHER_CONFIG_KEYS)
+    # The launcher forwards a nested runner config into the containers it
+    # launches — that's where the effective run concurrency lives on k8s/docker.
+    nested_runner_config = (settings.launcher.config or {}).get("runner_config")
+    if isinstance(nested_runner_config, dict):
+        launcher_config["runner_config"] = _filter_config(nested_runner_config, _RUNNER_CONFIG_KEYS)
+
+    runner_config = _filter_config(settings.runner.config, _RUNNER_CONFIG_KEYS)
+
+    return AdminConfigResponse(
+        deployment=AdminDeploymentConfig(
+            version=version,
+            launcher=AdminLauncherConfig(
+                type=settings.launcher.type,
+                config=launcher_config,
+                defaults={
+                    key: value
+                    for key, value in _launcher_defaults(settings.launcher.type).items()
+                    if key not in launcher_config
+                },
+            ),
+            runner=AdminRunnerConfig(
+                type=settings.runner.type,
+                config=runner_config,
+                defaults={
+                    key: value
+                    for key, value in _runner_defaults(settings.runner.type).items()
+                    if key not in runner_config
+                },
+            ),
+            features=features,
+            agent_model=settings.agent.model if settings.agent.enabled else None,
+        ),
+        auth=AdminAuthConfig(
+            signup_allowed_domains=settings.auth.signup_allowed_domains,
+            super_admin_emails=settings.auth.super_admin_emails,
+            google_oauth_configured=bool(settings.auth.google_client_id and settings.auth.google_client_secret),
+            google_redirect_uri=settings.auth.google_redirect_uri,
+            session_expiry_days=settings.auth.session_expiry_days,
+            cookie_secure=settings.auth.cookie_secure,
+        ),
+        services=AdminServicesConfig(
+            cron=AdminCronConfig(
+                enabled=settings.cron.enabled,
+                reconcile_interval=settings.cron.reconcile_interval,
+                batch_size=settings.cron.batch_size,
+                max_execution_delay=settings.cron.max_execution_delay,
+            ),
+            worker=AdminWorkerConfig(
+                enabled=settings.worker.enabled,
+                poll_interval=settings.worker.poll_interval,
+            ),
+            reaper=AdminReaperConfig(
+                enabled=settings.reaper.enabled,
+                timeout=settings.reaper.timeout,
+                poll_interval=settings.reaper.poll_interval,
+            ),
+            smtp=AdminSmtpConfig(
+                enabled=settings.smtp.enabled,
+                host=settings.smtp.host,
+                from_addr=settings.smtp.from_addr,
+            ),
+            mcp_external_url=settings.mcp.external_url,
+        ),
+        data=AdminDataConfig(
+            encryption_configured=bool(settings.secrets.encryption_key),
+            catalog=_catalog_by_kind(catalog) if catalog is not None else {},
+        ),
+    )
+
+
 # -- Helpers ------------------------------------------------------------------
 
 
@@ -151,6 +426,20 @@ def _send_invitation_email(
         logger.exception("Failed to send invitation email to %s", email)
 
 
+# -- Instance config -----------------------------------------------------------
+
+
+@router.get("/config")
+def get_instance_config(
+    user: Profile = Depends(require_super_admin),
+    config: Any = Depends(get_admin_config),
+) -> AdminConfigResponse:
+    """Read-only snapshot of the instance configuration (secrets redacted)."""
+    if config is None:
+        raise HTTPException(status_code=503, detail="Instance configuration not available")
+    return config
+
+
 # -- Users --------------------------------------------------------------------
 
 
@@ -159,7 +448,7 @@ def list_all_users(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> list[AdminUserResponse]:
-    """List every user profile with its organisation membership count."""
+    """List every user profile with the organisations it belongs to."""
     return [
         AdminUserResponse(
             id=profile.id,
@@ -167,10 +456,10 @@ def list_all_users(
             name=profile.name,
             avatar_url=profile.avatar_url,
             is_super_admin=profile.is_super_admin,
-            organisation_count=count,
+            organisations=[AdminUserOrganisation(id=org.id, name=org.name) for org in orgs],
             created_at=profile.created_at,
         )
-        for profile, count in store.list_all_profiles()
+        for profile, orgs in store.list_all_profiles()
     ]
 
 

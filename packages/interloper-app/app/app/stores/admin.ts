@@ -1,4 +1,4 @@
-import type { AdminOrganisation, AdminUser } from '~/types/admin'
+import type { AdminConfig, AdminOrganisation, AdminUser } from '~/types/admin'
 
 interface MemberResponse {
     id: string
@@ -19,6 +19,10 @@ interface InvitationResponse {
 /** Cross-organisation management API, restricted to super-admins server-side. */
 export const useAdminStore = defineStore('admin', () => {
     const { apiFetch } = useApi()
+
+    function getConfig() {
+        return apiFetch<AdminConfig>('/admin/config')
+    }
 
     function listUsers() {
         return apiFetch<AdminUser[]>('/admin/users')
@@ -84,6 +88,7 @@ export const useAdminStore = defineStore('admin', () => {
     }
 
     return {
+        getConfig,
         listUsers,
         listOrganisations,
         createOrganisation,
