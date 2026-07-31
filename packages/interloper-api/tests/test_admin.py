@@ -34,9 +34,13 @@ class FakeStore:
         self.added_members: list[tuple[UUID, UUID, str]] = []
         self.already_member = False
         self.deleted_profiles: list[UUID] = []
+        self.deleted_organisations: list[UUID] = []
 
     def delete_profile(self, user_id: UUID) -> None:
         self.deleted_profiles.append(user_id)
+
+    def delete_organisation(self, org_id: UUID) -> None:
+        self.deleted_organisations.append(org_id)
 
     # -- users --
     def list_all_profiles(self):
@@ -266,6 +270,28 @@ def test_create_organisation_does_not_add_creator(store: FakeStore) -> None:
     assert resp.status_code == 201
     assert resp.json()["name"] == "New"
     assert resp.json()["member_count"] == 0
+
+
+def test_delete_organisation_requires_matching_name(store: FakeStore) -> None:
+    client = _client(store, is_super_admin=True)
+    resp = client.request("DELETE", f"/admin/organisations/{store.org.id}", json={"name": "Wrong"})
+    assert resp.status_code == 400
+    assert store.deleted_organisations == []
+
+
+def test_delete_organisation(store: FakeStore) -> None:
+    client = _client(store, is_super_admin=True)
+    resp = client.request("DELETE", f"/admin/organisations/{store.org.id}", json={"name": "Acme"})
+    assert resp.status_code == 200
+    assert store.deleted_organisations == [store.org.id]
+
+
+def test_non_super_admin_cannot_delete_organisation(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=False).request(
+        "DELETE", f"/admin/organisations/{store.org.id}", json={"name": "Acme"}
+    )
+    assert resp.status_code == 403
+    assert store.deleted_organisations == []
 
 
 def test_rename_organisation(store: FakeStore) -> None:
