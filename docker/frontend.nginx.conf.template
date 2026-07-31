@@ -34,9 +34,13 @@ server {
     }
 
     # SPA client-side routing: any unknown path falls back to index.html
-    # so Vue Router can handle it.
+    # so Vue Router can handle it. $uri/index.html (not $uri/) serves
+    # pre-rendered route directories without nginx's trailing-slash 301 —
+    # that redirect turned /login?error=… into /login/?error=…, which the
+    # auth middleware no longer recognised as the login page, losing the
+    # query on its own redirect.
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri/index.html /index.html;
     }
 
     # Long-cache hashed build artifacts; never cache index.html.

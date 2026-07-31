@@ -1,5 +1,11 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-    if (to.path.startsWith('/auth/'))
+    // Proxies may add a trailing slash (nginx directory redirects); canonicalize
+    // so /login/ is /login everywhere, keeping the query intact.
+    const path = to.path.length > 1 ? to.path.replace(/\/+$/, '') : to.path
+    if (path !== to.path)
+        return navigateTo({ path, query: to.query, hash: to.hash }, { replace: true })
+
+    if (path.startsWith('/auth/'))
         return
 
     const userStore = useUserStore()
@@ -11,7 +17,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
 
     // Redirect to home if already authenticated and visiting /login
-    if (to.path === '/login') {
+    if (path === '/login') {
         if (userStore.authenticated)
             return navigateTo('/')
         return
@@ -32,9 +38,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
     // - /admin/*: allow super-admins through (they may belong to no org)
     // - All other routes: redirect to /welcome so user can create one
     if (!organisationStore.organisation) {
-        if (to.path.startsWith('/invite/') || to.path === '/welcome')
+        if (path.startsWith('/invite/') || path === '/welcome')
             return
-        if (to.path.startsWith('/admin') && userStore.isSuperAdmin)
+        if (path.startsWith('/admin') && userStore.isSuperAdmin)
             return
         return navigateTo('/welcome')
     }
