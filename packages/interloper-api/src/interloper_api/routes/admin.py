@@ -39,6 +39,18 @@ class AdminOrganisationResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class AdminUserResponse(BaseModel):
+    """Platform user with organisation membership count for the admin surface."""
+
+    id: UUID
+    email: str
+    name: str | None = None
+    avatar_url: str | None = None
+    is_super_admin: bool = False
+    organisation_count: int
+    created_at: datetime | None = None
+
+
 class CreateOrganisationRequest(BaseModel):
     """Request body for creating an organisation."""
 
@@ -137,6 +149,29 @@ def _send_invitation_email(
         )
     except Exception:
         logger.exception("Failed to send invitation email to %s", email)
+
+
+# -- Users --------------------------------------------------------------------
+
+
+@router.get("/users")
+def list_all_users(
+    user: Profile = Depends(require_super_admin),
+    store: Store = Depends(get_store),
+) -> list[AdminUserResponse]:
+    """List every user profile with its organisation membership count."""
+    return [
+        AdminUserResponse(
+            id=profile.id,
+            email=profile.email,
+            name=profile.name,
+            avatar_url=profile.avatar_url,
+            is_super_admin=profile.is_super_admin,
+            organisation_count=count,
+            created_at=profile.created_at,
+        )
+        for profile, count in store.list_all_profiles()
+    ]
 
 
 # -- Organisations ------------------------------------------------------------
