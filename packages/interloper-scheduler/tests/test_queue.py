@@ -113,4 +113,4 @@ def test_launch_emits_a_span_per_claimed_run(store: Store, span_exporter: Any) -
 
 def test_empty_tick_emits_no_launch_spans(store: Store, span_exporter: Any) -> None:
     QueueController(launcher=_FakeLauncher(), store=store)._tick()
-    assert not span_exporter.get_finished_spans()
+    assert not [s for s in span_exporter.get_finished_spans() if s.name == "interloper.run.launch"]

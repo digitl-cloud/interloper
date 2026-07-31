@@ -193,4 +193,22 @@ Contains Postgres connection info + the encryption key secret.
       name: {{ include "interloper.secretName" . }}
       key: INTERLOPER_SMTP_PASSWORD
       optional: true
+{{- if .Values.otel.enabled }}
+- name: INTERLOPER_OTEL_ENABLED
+  value: "true"
+{{- with .Values.otel.endpoint }}
+- name: INTERLOPER_OTEL_ENDPOINT
+  value: {{ . | quote }}
+{{- end }}
+{{- with .Values.otel.protocol }}
+- name: INTERLOPER_OTEL_PROTOCOL
+  value: {{ . | quote }}
+{{- end }}
+- name: INTERLOPER_OTEL_HEADERS
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "interloper.secretName" . }}
+      key: INTERLOPER_OTEL_HEADERS
+      optional: true
+{{- end }}
 {{- end -}}

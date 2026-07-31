@@ -131,6 +131,8 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
 
         _metrics_handler = _register_metrics_handler()
 
+    _instrument_libraries()
+
     _initialized = True
     logger.info("Telemetry initialized (role=%s, protocol=%s)", role, settings.protocol)
     return True
@@ -156,6 +158,30 @@ def _register_metrics_handler() -> OtelMetricsHandler | None:
     handler = OtelMetricsHandler()
     EventBus.subscribe(handler, event_types=OtelMetricsHandler.EVENT_TYPES)
     return handler
+
+
+def _instrument_libraries(*, enable: bool = True) -> None:
+    """Toggle the contrib instrumentors that ship with the ``otel`` extra.
+
+    Each is optional and global: SQLAlchemy patches engines created after
+    this point (init runs before any Store is built), httpx covers the
+    framework's REST clients and user code alike.
+
+    Args:
+        enable: Instrument when True, uninstrument when False.
+    """
+    try:
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+        SQLAlchemyInstrumentor().instrument() if enable else SQLAlchemyInstrumentor().uninstrument()
+    except ImportError:
+        pass
+    try:
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+        HTTPXClientInstrumentor().instrument() if enable else HTTPXClientInstrumentor().uninstrument()
+    except ImportError:
+        pass
 
 
 def instrument_fastapi(app: Any) -> None:
@@ -192,6 +218,8 @@ def shutdown_telemetry() -> None:
     """Flush and shut down the SDK providers (idempotent)."""
     global _tracer_provider, _meter_provider, _metrics_handler, _initialized
 
+    if _initialized:
+        _instrument_libraries(enable=False)
     if _metrics_handler is not None:
         from interloper.events import EventBus
 

@@ -43,6 +43,9 @@ class TestInitTelemetry:
         shutdown_telemetry()
         assert setup._initialized is False
 
+    def test_instrument_fastapi_is_a_noop_when_uninitialized(self):
+        setup.instrument_fastapi(object())  # must not raise or touch the app
+
 
 class TestExporterConfig:
     def test_parse_headers(self):
