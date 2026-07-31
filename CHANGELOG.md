@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.52.0 (2026-07-31)
+
+### Features
+
+- **app**: Organisation deletion with name confirmation
+  ([`acf94fb`](https://github.com/digitl-cloud/interloper/commit/acf94fb057dd4fb1947378bd81c890e71c3c22f2))
+
+
 ## v0.51.0 (2026-07-31)
 
 ### Features
