@@ -9,12 +9,13 @@ from uuid import uuid4
 
 import interloper as il
 import pytest
+from interloper.errors import NotFoundError
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session as SQLSession
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Invitation, Organisation, Profile, UserOrganisation
+from interloper_db.models import AuthSession, Invitation, Organisation, PersonalAccessToken, Profile, UserOrganisation
 from interloper_db.store import Store
 
 
@@ -34,7 +35,7 @@ def auth_db() -> Iterator[Engine]:
         # Dashless hex to match how SQLAlchemy's Uuid type binds values on SQLite.
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Profile, Organisation, UserOrganisation, Invitation):
+    for model in (Profile, Organisation, UserOrganisation, Invitation, AuthSession, PersonalAccessToken):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield eng
@@ -86,6 +87,34 @@ class TestListAllProfiles:
 
         assert sorted(org.name for org in orgs[admin.id]) == ["Acme", "Beta"]
         assert orgs[loner.id] == []
+
+
+class TestDeleteProfile:
+    def test_deletes_profile_and_everything_anchored_to_it(self, store: Store):
+        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        keeper = store.upsert_profile(google_id="g-keeper", email="keeper@example.com", name="Keeper")
+        org = store.create_organisation(name="Acme", creator_id=admin.id)
+        store.add_org_member(org.id, admin.id, "admin")
+        store.add_org_member(org.id, keeper.id, "viewer")
+        session_token = store.create_session(user_id=admin.id)
+        keeper_token = store.create_session(user_id=keeper.id)
+        store.create_token(user_id=admin.id, organisation_id=org.id, name="laptop")
+        store.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
+
+        store.delete_profile(admin.id)
+
+        assert store.get_profile(admin.id) is None
+        assert store.resolve_session(session_token) is None
+        assert not store.has_pending_invitation("new@example.com")
+        assert store.get_user_role(admin.id, org.id) is None
+        # Other users' data is untouched.
+        assert store.get_profile(keeper.id) is not None
+        assert store.resolve_session(keeper_token) is not None
+        assert store.get_user_role(keeper.id, org.id) == "viewer"
+
+    def test_missing_profile_raises(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.delete_profile(uuid4())
 
 
 class TestGetProfileByGoogleId:

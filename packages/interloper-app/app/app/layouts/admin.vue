@@ -55,10 +55,12 @@ const items = computed<NavigationMenuItem[]>(() => [
             </template>
 
             <template #default="{ collapsed }">
-                <div v-if="!collapsed"
-                     class="eyebrow text-primary px-2.5 pt-1">
-                    Admin portal
-                </div>
+                <UBadge v-if="!collapsed"
+                        color="primary"
+                        variant="subtle"
+                        size="lg"
+                        class="eyebrow w-full justify-center py-2"
+                        label="Admin portal" />
                 <UNavigationMenu :collapsed="collapsed"
                                  :items="items"
                                  orientation="vertical" />
@@ -74,6 +76,7 @@ const items = computed<NavigationMenuItem[]>(() => [
                              class="justify-start"
                              :square="collapsed"
                              @click="navigateTo('/')" />
+                    <NavUser :collapsed="collapsed" />
                     <span v-if="!collapsed && appVersion"
                           class="px-2.5 text-[10px] text-dimmed">
                         v{{ appVersion }}

@@ -11,7 +11,14 @@ from interloper.errors import NotFoundError
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from interloper_db.models import AuthSession, Invitation, Organisation, Profile, UserOrganisation
+from interloper_db.models import (
+    AuthSession,
+    Invitation,
+    Organisation,
+    PersonalAccessToken,
+    Profile,
+    UserOrganisation,
+)
 from interloper_db.store.base import StoreBase
 
 INVITATION_EXPIRY_DAYS = 7
@@ -152,6 +159,39 @@ class AuthMixin(StoreBase):
             for user_id, org in memberships:
                 orgs_by_user.setdefault(user_id, []).append(org)
             return [(profile, orgs_by_user.get(profile.id, [])) for profile in profiles]
+
+    def delete_profile(self, user_id: UUID) -> None:
+        """Delete a profile and everything anchored to it.
+
+        Removes the user's sessions, personal access tokens, organisation
+        memberships, and the invitations they sent, then the profile row.
+
+        Args:
+            user_id: Profile UUID.
+
+        Raises:
+            NotFoundError: If the profile is not found.
+        """
+        with self._session() as session:
+            db_profile = session.get(Profile, user_id)
+            if not db_profile:
+                raise NotFoundError(f"Profile {user_id} not found")
+
+            for db_session in session.exec(select(AuthSession).where(AuthSession.user_id == user_id)).all():
+                session.delete(db_session)
+            for token in session.exec(
+                select(PersonalAccessToken).where(PersonalAccessToken.user_id == user_id)
+            ).all():
+                session.delete(token)
+            for membership in session.exec(
+                select(UserOrganisation).where(UserOrganisation.user_id == user_id)
+            ).all():
+                session.delete(membership)
+            for invitation in session.exec(select(Invitation).where(Invitation.invited_by == user_id)).all():
+                session.delete(invitation)
+
+            session.delete(db_profile)
+            session.commit()
 
     def get_profile_by_google_id(self, google_id: str) -> Profile | None:
         """Get a profile by Google OAuth subject identifier.
