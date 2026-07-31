@@ -33,5 +33,6 @@ jobs:
             mcp
             pandas
             scheduler
+            slack
             toolkit
           requireScope: false
