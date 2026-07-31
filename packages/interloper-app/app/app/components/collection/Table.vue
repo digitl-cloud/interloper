@@ -155,9 +155,6 @@ function onRowContextMenu(e: Event, row: any) {
     ctxMenuOpen.value = true
 }
 
-const SOURCE_PAGE_SIZE = 20
-const sourcePageIndex = ref(0)
-
 const globalFilter = ref('')
 
 const filteredData = computed(() => {
@@ -180,48 +177,10 @@ const filteredData = computed(() => {
     return data.value.filter(d => matchingAssetIds.has(d.assetId))
 })
 
-// Reset to first page when search filter changes
-watch(globalFilter, () => {
-    sourcePageIndex.value = 0
-})
-
-// Source ids ordered type-contiguously, so a source type's sources only ever
-// split across a page boundary rather than interleaving with other types.
-const uniqueSourceIds = computed(() => {
-    const byType = new Map<string, string[]>()
-    const seen = new Set<string>()
-    for (const d of filteredData.value) {
-        if (seen.has(d.sourceId)) continue
-        seen.add(d.sourceId)
-        const list = byType.get(d.sourceKey)
-        if (list) list.push(d.sourceId)
-        else byType.set(d.sourceKey, [d.sourceId])
-    }
-    return [...byType.values()].flat()
-})
-
-
-const paginatedData = computed(() => {
-    const start = sourcePageIndex.value * SOURCE_PAGE_SIZE
-    const pageSourceIds = new Set(uniqueSourceIds.value.slice(start, start + SOURCE_PAGE_SIZE))
-    return filteredData.value.filter(d => pageSourceIds.has(d.sourceId))
-})
-
 // Expanded state keyed by TanStack grouped-row id (`source_type:<key>` /
-// `source_type:<key>>source_id:<id>`). Type rows act as section headers and
-// default to expanded, so sources stay visible; user collapses are respected.
+// `source_type:<key>>source_id:<id>`). Always replace the object — TanStack
+// memoizes the row model on its identity, so in-place mutation goes stale.
 const expanded = ref<Record<string, boolean>>({})
-
-watch(paginatedData, (rows) => {
-    const additions: Record<string, boolean> = {}
-    for (const d of rows) {
-        const id = `source_type:${d.sourceKey}`
-        if (!(id in expanded.value)) additions[id] = true
-    }
-    // New object on purpose: TanStack memoizes the row model on the state
-    // object's identity, so in-place mutation would leave it stale.
-    if (Object.keys(additions).length > 0) expanded.value = { ...expanded.value, ...additions }
-}, { immediate: true })
 
 const allExpanded = ref(false)
 
@@ -230,7 +189,7 @@ function toggleAllExpanded() {
 
     if (allExpanded.value) {
         const next: Record<string, boolean> = {}
-        for (const d of paginatedData.value) {
+        for (const d of filteredData.value) {
             next[`source_type:${d.sourceKey}`] = true
             next[`source_type:${d.sourceKey}>source_id:${d.sourceId}`] = true
         }
@@ -269,7 +228,7 @@ function onRowClick(row: any) {
         </div>
 
         <UTable v-model:expanded="expanded"
-                :data="paginatedData"
+                :data="filteredData"
                 :columns="columns"
                 :loading="loading"
                 :grouping="grouping"
@@ -592,10 +551,7 @@ function onRowClick(row: any) {
             <div class="hidden" />
         </UDropdownMenu>
 
-        <TableFooter :page="sourcePageIndex + 1"
-                     :total="uniqueSourceIds.length"
-                     :page-size="SOURCE_PAGE_SIZE"
-                     @update:page="(p: number) => sourcePageIndex = p - 1">
+        <TableFooter>
             {{ sources.length }} {{ sources.length === 1 ? 'source' : 'sources' }},
             {{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}
         </TableFooter>
