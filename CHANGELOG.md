@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v0.51.0 (2026-07-31)
+
+### Features
+
+- **api**: Gate signup behind an email-domain allowlist
+  ([`3bfe2d4`](https://github.com/digitl-cloud/interloper/commit/3bfe2d465444e3334e58b96d3077874d5eecb09a))
+
+- **app**: Admin config page, unified breadcrumbs, and table polish
+  ([`3f7d893`](https://github.com/digitl-cloud/interloper/commit/3f7d8930767dbf4d7e7e46714f2dce0e43a51012))
+
+- **app**: Collapse type groups by default and drop collection pagination
+  ([`cae9e06`](https://github.com/digitl-cloud/interloper/commit/cae9e0611eafea8a1e6a1f2d49ed155284d98fa6))
+
+- **app**: Give the admin portal its own dashboard and sidebar
+  ([`cacbbd7`](https://github.com/digitl-cloud/interloper/commit/cacbbd7ff949ce8dfd46196a0bd2ddc1240140b2))
+
+- **app**: User deletion from the admin users table
+  ([`546bdff`](https://github.com/digitl-cloud/interloper/commit/546bdff4a6e6c06873a16d395af007ee6b4cad8c))
+
+### Refactoring
+
+- **api**: Pass create_app the full settings only
+  ([`786c19b`](https://github.com/digitl-cloud/interloper/commit/786c19bbdca542ecd41e7b37b08ddd2621e56547))
+
+
 ## v0.50.1 (2026-07-31)
 
 ### Bug Fixes
