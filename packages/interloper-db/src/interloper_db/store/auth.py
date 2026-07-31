@@ -8,15 +8,20 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from interloper.errors import NotFoundError
-from sqlalchemy import func
+from sqlalchemy import delete, func, update
 from sqlmodel import Session, select
 
 from interloper_db.models import (
     AuthSession,
+    Backfill,
+    Component,
+    ComponentRelation,
+    Event,
     Invitation,
     Organisation,
     PersonalAccessToken,
     Profile,
+    Run,
     UserOrganisation,
 )
 from interloper_db.store.base import StoreBase
@@ -366,6 +371,47 @@ class AuthMixin(StoreBase):
                 ).all()
             )
             return [(org, counts.get(org.id, 0)) for org in organisations]
+
+    def delete_organisation(self, org_id: UUID) -> None:
+        """Delete an organisation and everything it owns.
+
+        Removes the org's execution history (events, runs, backfills), its
+        components and their relations, and its tokens, invitations, and
+        memberships. Live sessions and profiles pointing at the org are
+        detached (org reference cleared), not deleted. Bulk statements —
+        ordered children-first — so the cascade never depends on ORM-loaded
+        state. The ``asset_executions`` view follows the events.
+
+        Args:
+            org_id: Organisation UUID.
+
+        Raises:
+            NotFoundError: If the organisation is not found.
+        """
+        with self._session() as session:
+            db_organisation = session.get(Organisation, org_id)
+            if not db_organisation:
+                raise NotFoundError(f"Organisation {org_id} not found")
+
+            # ty misreads SQLModel column comparisons in DML where() as plain bools.
+            statements = (
+                delete(Event).where(Event.org_id == org_id),  # ty: ignore[invalid-argument-type]
+                delete(Run).where(Run.org_id == org_id),  # ty: ignore[invalid-argument-type]
+                delete(Backfill).where(Backfill.org_id == org_id),  # ty: ignore[invalid-argument-type]
+                delete(ComponentRelation).where(ComponentRelation.org_id == org_id),  # ty: ignore[invalid-argument-type]
+                delete(Component).where(Component.org_id == org_id),  # ty: ignore[invalid-argument-type]
+                delete(PersonalAccessToken).where(PersonalAccessToken.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
+                delete(Invitation).where(Invitation.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
+                delete(UserOrganisation).where(UserOrganisation.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
+                update(AuthSession).where(AuthSession.organisation_id == org_id).values(organisation_id=None),  # ty: ignore[invalid-argument-type]
+                update(Profile).where(Profile.last_organisation_id == org_id).values(last_organisation_id=None),  # ty: ignore[invalid-argument-type]
+            )
+            connection = session.connection()
+            for statement in statements:
+                connection.execute(statement)
+
+            session.delete(db_organisation)
+            session.commit()
 
     def get_organisation(self, org_id: UUID) -> Organisation | None:
         """Get an organisation by ID.

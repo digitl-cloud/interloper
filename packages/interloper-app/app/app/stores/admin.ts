@@ -50,6 +50,14 @@ export const useAdminStore = defineStore('admin', () => {
         })
     }
 
+    /** Deletes the organisation and all its data; `name` must repeat the exact name. */
+    function deleteOrganisation(orgId: string, name: string) {
+        return apiFetch(`/admin/organisations/${orgId}`, {
+            method: 'DELETE',
+            body: { name },
+        })
+    }
+
     function listMembers(orgId: string) {
         return apiFetch<MemberResponse[]>(`/admin/organisations/${orgId}/members`)
     }
@@ -98,6 +106,7 @@ export const useAdminStore = defineStore('admin', () => {
         listOrganisations,
         createOrganisation,
         renameOrganisation,
+        deleteOrganisation,
         listMembers,
         joinOrganisation,
         updateMemberRole,

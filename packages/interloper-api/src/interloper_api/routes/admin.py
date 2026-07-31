@@ -72,6 +72,12 @@ class UpdateOrganisationRequest(BaseModel):
     name: str
 
 
+class DeleteOrganisationRequest(BaseModel):
+    """Confirmation body for deleting an organisation — must repeat its exact name."""
+
+    name: str
+
+
 class MemberResponse(BaseModel):
     """Organisation member."""
 
@@ -528,6 +534,21 @@ def update_organisation(
         member_count=len(members),
         created_at=org.created_at,
     )
+
+
+@router.delete("/organisations/{org_id}")
+def delete_organisation(
+    org_id: UUID,
+    body: DeleteOrganisationRequest,
+    user: Profile = Depends(require_super_admin),
+    store: Store = Depends(get_store),
+) -> dict[str, str]:
+    """Delete an organisation and all its data. The body must repeat the exact name."""
+    org = _require_org(store, org_id)
+    if body.name != org.name:
+        raise HTTPException(status_code=400, detail="Organisation name does not match")
+    store.delete_organisation(org_id)
+    return {"status": "ok"}
 
 
 # -- Members ------------------------------------------------------------------

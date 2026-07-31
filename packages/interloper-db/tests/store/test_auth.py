@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -13,9 +14,22 @@ from interloper.errors import NotFoundError
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session as SQLSession
+from sqlmodel import select
 
 from interloper_db import engine as engine_module
-from interloper_db.models import AuthSession, Invitation, Organisation, PersonalAccessToken, Profile, UserOrganisation
+from interloper_db.models import (
+    AuthSession,
+    Backfill,
+    Component,
+    ComponentRelation,
+    Event,
+    Invitation,
+    Organisation,
+    PersonalAccessToken,
+    Profile,
+    Run,
+    UserOrganisation,
+)
 from interloper_db.store import Store
 
 
@@ -35,7 +49,9 @@ def auth_db() -> Iterator[Engine]:
         # Dashless hex to match how SQLAlchemy's Uuid type binds values on SQLite.
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Profile, Organisation, UserOrganisation, Invitation, AuthSession, PersonalAccessToken):
+    auth_models = (Profile, Organisation, UserOrganisation, Invitation, AuthSession, PersonalAccessToken)
+    org_data_models = (Component, ComponentRelation, Backfill, Run, Event)
+    for model in auth_models + org_data_models:
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield eng
@@ -87,6 +103,73 @@ class TestListAllProfiles:
 
         assert sorted(org.name for org in orgs[admin.id]) == ["Acme", "Beta"]
         assert orgs[loner.id] == []
+
+
+class TestDeleteOrganisation:
+    def _seed_org_data(self, session: SQLSession, org_id) -> None:
+        """Plant one row of every org-owned kind directly (no catalog needed)."""
+        source = Component(org_id=org_id, kind="source", key="demo")
+        asset = Component(org_id=org_id, kind="asset", key="demo.a", parent_id=source.id)
+        session.add(source)
+        session.add(asset)
+        session.add(
+            ComponentRelation(
+                src_id=asset.id, dst_id=source.id, org_id=org_id, src_kind="asset", dst_kind="source", type="owner"
+            )
+        )
+        backfill = Backfill(org_id=org_id, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
+        session.add(backfill)
+        session.commit()
+        run = Run(org_id=org_id, component_id=source.id)
+        session.add(run)
+        session.commit()
+        session.add(Event(org_id=org_id, run_id=run.id, event_type="run_started", timestamp=datetime.now(timezone.utc)))
+        session.commit()
+
+    def test_deletes_org_and_everything_it_owns(self, store: Store, auth_db: Engine):
+        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        org = store.create_organisation(name="Doomed", creator_id=admin.id)
+        keeper = store.create_organisation(name="Keeper", creator_id=admin.id)
+        store.add_org_member(org.id, admin.id, "admin")
+        store.add_org_member(keeper.id, admin.id, "admin")
+        store.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
+        store.create_token(user_id=admin.id, organisation_id=org.id, name="laptop")
+        session_token = store.create_session(user_id=admin.id, organisation_id=org.id)
+        with SQLSession(auth_db) as session:
+            self._seed_org_data(session, org.id)
+            db_admin = session.get(Profile, admin.id)
+            assert db_admin is not None
+            db_admin.last_organisation_id = org.id
+            session.add(db_admin)
+            session.commit()
+
+        store.delete_organisation(org.id)
+
+        assert store.get_organisation(org.id) is None
+        with SQLSession(auth_db) as session:
+            for model in (Component, ComponentRelation, Backfill, Run, Event):
+                assert session.exec(select(model).where(model.org_id == org.id)).first() is None
+            assert (
+                session.exec(select(UserOrganisation).where(UserOrganisation.organisation_id == org.id)).first()
+                is None
+            )
+            assert session.exec(select(Invitation).where(Invitation.organisation_id == org.id)).first() is None
+            assert (
+                session.exec(select(PersonalAccessToken).where(PersonalAccessToken.organisation_id == org.id)).first()
+                is None
+            )
+        # The user, their session, and the other organisation survive; org refs are cleared.
+        resolved = store.resolve_session(session_token)
+        assert resolved is not None
+        profile, auth_session = resolved
+        assert auth_session.organisation_id is None
+        assert profile.last_organisation_id is None
+        assert store.get_organisation(keeper.id) is not None
+        assert store.get_user_role(admin.id, keeper.id) == "admin"
+
+    def test_missing_organisation_raises(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.delete_organisation(uuid4())
 
 
 class TestDeleteProfile:

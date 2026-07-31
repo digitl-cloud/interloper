@@ -34,11 +34,42 @@ async function loadData() {
     }
 }
 
+// Delete modal state — confirmed by typing the organisation's exact name.
+const deleteOpen = ref(false)
+const deleteTarget = ref<AdminOrganisation | null>(null)
+const deleteConfirmName = ref('')
+const deleting = ref(false)
+
 function openCreate() {
     formMode.value = 'create'
     formName.value = ''
     formTarget.value = null
     formOpen.value = true
+}
+
+function openDelete(org: AdminOrganisation) {
+    deleteTarget.value = org
+    deleteConfirmName.value = ''
+    deleteOpen.value = true
+}
+
+async function submitDelete() {
+    const target = deleteTarget.value
+    if (!target || deleteConfirmName.value !== target.name) return
+
+    deleting.value = true
+    try {
+        await adminStore.deleteOrganisation(target.id, deleteConfirmName.value)
+        toast.add({ title: `Organisation "${target.name}" deleted`, color: 'success' })
+        deleteOpen.value = false
+        await loadData()
+    }
+    catch (err) {
+        toast.add(errorToast(err, 'Failed to delete organisation'))
+    }
+    finally {
+        deleting.value = false
+    }
 }
 
 function openRename(org: AdminOrganisation) {
@@ -91,6 +122,14 @@ function rowActions(org: AdminOrganisation): DropdownMenuItem[][] {
                 onSelect: () => openRename(org),
             },
         ],
+        [
+            {
+                label: 'Delete organisation',
+                icon: 'i-lucide-trash-2',
+                color: 'error' as const,
+                onSelect: () => openDelete(org),
+            },
+        ],
     ]
 }
 
@@ -131,6 +170,38 @@ onMounted(loadData)
                          @click="openCreate" />
             </template>
         </DataTable>
+
+        <UModal v-model:open="deleteOpen"
+                title="Delete organisation"
+                :ui="{ footer: 'justify-end' }">
+            <template #body>
+                <div class="flex flex-col gap-3">
+                    <p class="text-sm text-muted">
+                        This permanently deletes
+                        <EntityBadge icon="i-lucide-building-2"
+                                     :label="deleteTarget?.name ?? ''" />
+                        with all its members, invitations, components, and execution history.
+                        This action cannot be undone.
+                    </p>
+                    <UInput v-model="deleteConfirmName"
+                            :placeholder="`Type “${deleteTarget?.name}” to confirm`"
+                            autofocus
+                            class="w-full"
+                            @keydown.enter="submitDelete" />
+                </div>
+            </template>
+            <template #footer>
+                <UButton label="Cancel"
+                         color="neutral"
+                         variant="outline"
+                         @click="deleteOpen = false" />
+                <UButton label="Delete"
+                         color="error"
+                         :disabled="deleteConfirmName !== deleteTarget?.name || deleting"
+                         :loading="deleting"
+                         @click="submitDelete" />
+            </template>
+        </UModal>
 
         <UModal v-model:open="formOpen"
                 :title="formMode === 'create' ? 'New organisation' : 'Rename organisation'"
