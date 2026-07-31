@@ -204,6 +204,29 @@ class WorkerSettings(BaseSettings):
     poll_interval: int = 5
 
 
+class TelemetrySettings(BaseSettings):
+    """OpenTelemetry settings (OTLP traces + metrics).
+
+    ``enabled`` is the single master switch — the SDK is never activated
+    from the standard ``OTEL_*`` environment variables alone. Exporting
+    requires the ``otel`` extra (``interloper[otel]``); when it is missing,
+    enabling telemetry logs a warning and stays a no-op. Fields left empty
+    (``endpoint``, ``headers``) fall through to the SDK's own
+    ``OTEL_EXPORTER_OTLP_*`` environment variables.
+    """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}OTEL_")
+
+    enabled: bool = False
+    endpoint: str = ""
+    protocol: str = "grpc"  # "grpc" | "http/protobuf"
+    headers: str = ""  # "key=value,key2=value2"; treated as a secret
+    service_name: str = ""  # empty → "interloper-<role>"
+    traces: bool = True
+    metrics: bool = True
+    sample_ratio: float = 1.0
+
+
 class ReaperSettings(BaseSettings):
     """Reaper settings (timed-out run cleanup; singleton)."""
 
@@ -235,6 +258,7 @@ class AppSettings(BaseSettings):
     reaper: ReaperSettings = Field(default_factory=ReaperSettings)
     launcher: LauncherSettings = Field(default_factory=LauncherSettings)
     runner: RunnerSettings = Field(default_factory=RunnerSettings)
+    otel: TelemetrySettings = Field(default_factory=TelemetrySettings)
     catalog: list[str] = Field(default_factory=list)
 
     _active: ClassVar[AppSettings | None] = None

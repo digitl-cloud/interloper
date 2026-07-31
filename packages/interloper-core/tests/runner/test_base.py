@@ -178,3 +178,85 @@ class TestPreflightValidation:
         asset.materializable = False
 
         AsyncRunner()._preflight_validation(il.DAG(asset), None)
+
+
+class TestTelemetrySpans:
+    """Inline spans emitted along the execution path."""
+
+    async def test_span_tree_and_traceparent_on_events(self, span_exporter):
+        il.MemoryDestination.clear()
+
+        @il.asset()
+        def solo() -> list[dict[str, Any]]:
+            return [{"x": 1}]
+
+        events: list[Event] = []
+        await AsyncRunner(on_event=events.append).run(
+            il.DAG(solo(id="solo", destinations=[il.MemoryDestination()])),
+            metadata={"run_id": "run-1"},
+        )
+
+        spans = {s.name: s for s in span_exporter.get_finished_spans()}
+        assert {
+            "interloper.run",
+            "interloper.asset",
+            "interloper.asset.execute",
+            "interloper.asset.normalize",
+            "interloper.destination.write",
+        } <= set(spans)
+
+        run_span = spans["interloper.run"]
+        asset_span = spans["interloper.asset"]
+        assert asset_span.parent is not None and asset_span.parent.span_id == run_span.context.span_id
+        for child in ("interloper.asset.execute", "interloper.asset.normalize", "interloper.destination.write"):
+            assert spans[child].parent is not None
+            assert spans[child].parent.span_id == asset_span.context.span_id
+
+        assert run_span.attributes is not None
+        assert run_span.attributes["interloper.run.id"] == "run-1"
+        assert run_span.attributes["interloper.runner.type"] == "async_runner"
+        assert asset_span.attributes is not None
+        assert asset_span.attributes["interloper.asset.key"] == "solo"
+
+        # The run span's context rides the metadata dict into every event —
+        # the correlation hook for logs and cross-process children.
+        trace_id = f"{run_span.context.trace_id:032x}"
+        assert events
+        for event in events:
+            assert trace_id in event.metadata.get("traceparent", "")
+
+    async def test_failed_run_marks_spans_as_error(self, span_exporter):
+        from opentelemetry.trace import StatusCode
+
+        @il.asset()
+        def boom() -> list[dict[str, Any]]:
+            raise ValueError("nope")
+
+        result = await AsyncRunner().run(il.DAG(boom(id="boom", destinations=[il.MemoryDestination()])))
+        assert result.status is ExecutionStatus.FAILED
+
+        spans = {s.name: s for s in span_exporter.get_finished_spans()}
+        assert spans["interloper.run"].status.status_code is StatusCode.ERROR
+        assert spans["interloper.asset"].status.status_code is StatusCode.ERROR
+        assert spans["interloper.asset.execute"].status.status_code is StatusCode.ERROR
+
+    async def test_remote_parent_from_metadata(self, span_exporter):
+        from interloper.telemetry.propagation import inject_metadata
+        from interloper.telemetry.tracer import tracer
+
+        il.MemoryDestination.clear()
+
+        @il.asset()
+        def solo() -> list[dict[str, Any]]:
+            return [{"x": 1}]
+
+        metadata: dict[str, Any] = {}
+        with tracer().start_as_current_span("producer") as producer:
+            inject_metadata(metadata)
+
+        await AsyncRunner().run(il.DAG(solo(id="solo", destinations=[il.MemoryDestination()])), metadata=metadata)
+
+        run_span = next(s for s in span_exporter.get_finished_spans() if s.name == "interloper.run")
+        assert run_span.context.trace_id == producer.get_span_context().trace_id
+        assert run_span.parent is not None
+        assert run_span.parent.span_id == producer.get_span_context().span_id

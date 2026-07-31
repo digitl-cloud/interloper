@@ -23,6 +23,8 @@ from interloper.representation import Representation
 from interloper.resource import Resource
 from interloper.resource.fields import SelectField
 from interloper.schema import Schema
+from interloper.telemetry import attributes as telemetry_attributes
+from interloper.telemetry.tracer import tracer
 from interloper.utils import concurrency
 from interloper.utils.concurrency import invoke
 from interloper.utils.data import is_empty
@@ -439,12 +441,14 @@ class Asset(Component):
         kwargs = await self._build_kwargs(context, partition_or_window, dag)
 
         exec_meta = self._event_metadata(metadata or {}, partition_or_window)
+        span_attrs = telemetry_attributes.from_metadata(exec_meta)
         EventBus.emit(
             EventType.ASSET_EXEC_STARTED,
             metadata={**exec_meta, "message": f"Executing '{self.key}'"},
         )
         try:
-            result = await invoke(self.data, **kwargs)
+            with tracer().start_as_current_span("interloper.asset.execute", attributes=span_attrs):
+                result = await invoke(self.data, **kwargs)
             EventBus.emit(
                 EventType.ASSET_EXEC_COMPLETED,
                 metadata={**exec_meta, "message": f"Executed '{self.key}'"},
@@ -463,7 +467,8 @@ class Asset(Component):
 
         # Normalization + conform is CPU-bound (pandas/pyarrow); offload it so
         # it never blocks the event loop while other assets run concurrently.
-        result = await asyncio.to_thread(self._normalize_and_conform, result)
+        with tracer().start_as_current_span("interloper.asset.normalize", attributes=span_attrs):
+            result = await asyncio.to_thread(self._normalize_and_conform, result)
 
         return result
 
@@ -647,12 +652,15 @@ class Asset(Component):
             dest_key = dest.key
             dest_meta = self._event_metadata(metadata, partition_or_window)
             dest_meta["destination_key"] = dest_key
+            span_attrs = telemetry_attributes.from_metadata(dest_meta)
+            span_attrs[telemetry_attributes.DESTINATION_KEY] = dest_key
             EventBus.emit(
                 EventType.DEST_WRITE_STARTED,
                 metadata={**dest_meta, "message": f"Writing '{self.key}'"},
             )
             try:
-                await invoke(dest.write, dest_context, result)
+                with tracer().start_as_current_span("interloper.destination.write", attributes=span_attrs):
+                    await invoke(dest.write, dest_context, result)
                 EventBus.emit(
                     EventType.DEST_WRITE_COMPLETED,
                     metadata={**dest_meta, "message": f"Wrote '{self.key}'"},
@@ -697,12 +705,16 @@ class Asset(Component):
         )
 
         dest_meta = self._event_metadata(metadata, effective_partition)
+        span_attrs = telemetry_attributes.from_metadata(dest_meta)
+        span_attrs[telemetry_attributes.DESTINATION_KEY] = dest.key
+        span_attrs[telemetry_attributes.UPSTREAM_KEY] = upstream_asset.key
         EventBus.emit(
             EventType.DEST_READ_STARTED,
             metadata={**dest_meta, "message": f"Reading '{upstream_asset.key}'"},
         )
         try:
-            result = await invoke(dest.read, dest_context)
+            with tracer().start_as_current_span("interloper.destination.read", attributes=span_attrs):
+                result = await invoke(dest.read, dest_context)
             EventBus.emit(
                 EventType.DEST_READ_COMPLETED,
                 metadata={**dest_meta, "message": f"Read '{upstream_asset.key}'"},

@@ -194,6 +194,17 @@ class AdminSmtpConfig(BaseModel):
     from_addr: str
 
 
+class AdminTelemetryConfig(BaseModel):
+    """OpenTelemetry status (endpoint/headers reduced to booleans)."""
+
+    enabled: bool
+    protocol: str
+    endpoint_configured: bool
+    traces: bool
+    metrics: bool
+    sample_ratio: float
+
+
 class AdminServicesConfig(BaseModel):
     """Background service roles and their tuning."""
 
@@ -201,6 +212,7 @@ class AdminServicesConfig(BaseModel):
     worker: AdminWorkerConfig
     reaper: AdminReaperConfig
     smtp: AdminSmtpConfig
+    telemetry: AdminTelemetryConfig
     mcp_external_url: str
 
 
@@ -373,6 +385,14 @@ def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any
                 enabled=settings.smtp.enabled,
                 host=settings.smtp.host,
                 from_addr=settings.smtp.from_addr,
+            ),
+            telemetry=AdminTelemetryConfig(
+                enabled=settings.otel.enabled,
+                protocol=settings.otel.protocol,
+                endpoint_configured=bool(settings.otel.endpoint),
+                traces=settings.otel.traces,
+                metrics=settings.otel.metrics,
+                sample_ratio=settings.otel.sample_ratio,
             ),
             mcp_external_url=settings.mcp.external_url,
         ),

@@ -13,6 +13,8 @@ from interloper.errors import RunnerError, format_exception
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
+from interloper.telemetry import attributes
+from interloper.telemetry.tracer import tracer
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
@@ -146,13 +148,17 @@ class AsyncRunner(Runner):
         """
         self.state.mark_asset_running(asset)
 
+        effective_partition = asset.effective_partition(partition_or_window)
+        span_attrs = attributes.from_metadata(
+            asset._event_metadata(self.state.metadata, effective_partition)
+        )
         try:
-            effective_partition = asset.effective_partition(partition_or_window)
-            result = await asset.materialize_async(
-                partition_or_window=effective_partition,
-                dag=self.state.dag,
-                metadata=self.state.metadata,
-            )
+            with tracer().start_as_current_span("interloper.asset", attributes=span_attrs):
+                result = await asset.materialize_async(
+                    partition_or_window=effective_partition,
+                    dag=self.state.dag,
+                    metadata=self.state.metadata,
+                )
             self.state.mark_asset_completed(asset)
         except Exception as e:
             self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())

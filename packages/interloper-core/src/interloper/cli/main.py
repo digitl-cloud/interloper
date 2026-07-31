@@ -9,6 +9,10 @@ import sys
 from interloper.cli.runtime import apply_cli_overrides
 from interloper.settings import AppSettings
 
+# service.name defaults to interloper-<role>; one process can host several
+# services ("app" runs api + scheduler threads), so roles stay coarse.
+_TELEMETRY_ROLES = {"run": "run", "launch": "run", "app": "server"}
+
 
 def _has_package(name: str) -> bool:
     """Check if a package is importable.
@@ -102,12 +106,17 @@ def main() -> None:
         settings = apply_cli_overrides(args, settings)
     AppSettings.activate(settings)
 
+    from interloper.telemetry import init_telemetry, shutdown_telemetry
+
+    init_telemetry(settings.otel, role=_TELEMETRY_ROLES.get(args.command, "cli"))
+
     try:
         if hasattr(args, "func"):
             args.func(args)
         else:
             parser.parse_args([args.command, "--help"])
     finally:
+        shutdown_telemetry()
         AppSettings.clear_active()
 
 
