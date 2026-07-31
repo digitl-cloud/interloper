@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import uuid
+from typing import Any
 from uuid import UUID
 
 import interloper as il
@@ -105,7 +106,16 @@ class HookController(Controller):
             return
         event_type = _TERMINAL_EVENT_TYPES[run.status]
 
-        for hook_row in self._matching_hooks(session, run):
+        target = session.get(Component, run.component_id)
+        if target is None:
+            return
+
+        hook_rows = self._matching_hooks(session, run, target)
+        if not hook_rows:
+            return
+
+        metadata = self._event_metadata(session, run, target, event_type)
+        for hook_row in hook_rows:
             claim = _claim_id(hook_row.id, run.id)
             if session.get(EventRow, UUID(claim)) is not None:
                 continue
@@ -114,17 +124,42 @@ class HookController(Controller):
             if not isinstance(hook, il.Hook) or not hook.enabled or event_type not in hook.events:
                 continue
 
-            self._fire(session, hook_row, hook, run, event_type, claim)
+            self._fire(session, hook_row, hook, run, event_type, metadata, claim)
 
-    def _matching_hooks(self, session: Session, run: Run) -> list[Component]:
-        """Hooks watching the run's target component or its parent.
+    def _event_metadata(self, session: Session, run: Run, target: Component, event_type: str) -> dict[str, Any]:
+        """Describe the event for the hooks about to see it.
+
+        The ids in the context are the machine-readable half; this is the half
+        a hook addressing humans (a Slack message) renders, so it carries the
+        component's display name and — for a failure — the error the run
+        recorded, which lives on the run's event rows rather than the run.
+
+        Returns:
+            The context metadata.
+        """
+        metadata: dict[str, Any] = {
+            "status": run.status,
+            "component_name": target.name or target.key,
+            "component_key": target.key,
+        }
+        if event_type == "run_failed":
+            error = session.exec(
+                select(EventRow.error)
+                .where(EventRow.run_id == run.id)
+                .where(EventRow.event_type == "run_failed")
+                .where(col(EventRow.error).is_not(None))
+                .order_by(col(EventRow.timestamp).desc())
+            ).first()
+            if error:
+                metadata["error"] = error
+        return metadata
+
+    def _matching_hooks(self, session: Session, run: Run, target: Component) -> list[Component]:
+        """Hooks watching *target* (the run's component) or its parent.
 
         Returns:
             The matching hook rows.
         """
-        target = session.get(Component, run.component_id)
-        if target is None:
-            return []
         watched_ids = [target.id] + ([target.parent_id] if target.parent_id else [])
 
         return list(
@@ -146,6 +181,7 @@ class HookController(Controller):
         hook: il.Hook,
         run: Run,
         event_type: str,
+        metadata: dict[str, Any],
         claim: str,
     ) -> None:
         """Fire one hook and record the outcome on its claim."""
@@ -155,7 +191,7 @@ class HookController(Controller):
             component_id=str(run.component_id),
             run_id=str(run.id),
             partition_date=run.partition_date.isoformat() if run.partition_date else None,
-            metadata={"status": run.status},
+            metadata=metadata,
             trigger=lambda component_id: self._trigger(session, run, component_id, watched_ids),
         )
 
