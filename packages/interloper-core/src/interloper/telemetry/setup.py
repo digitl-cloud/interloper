@@ -9,6 +9,7 @@ identically whether or not the ``interloper[otel]`` extra is installed.
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -16,11 +17,13 @@ if TYPE_CHECKING:
     from opentelemetry.sdk.trace import TracerProvider
 
     from interloper.settings import TelemetrySettings
+    from interloper.telemetry.metrics import OtelMetricsHandler
 
 logger = logging.getLogger(__name__)
 
 _tracer_provider: TracerProvider | None = None
 _meter_provider: MeterProvider | None = None
+_metrics_handler: OtelMetricsHandler | None = None
 _initialized = False
 
 
@@ -64,7 +67,7 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
     Returns:
         True when the SDK was (or already is) active.
     """
-    global _tracer_provider, _meter_provider, _initialized
+    global _tracer_provider, _meter_provider, _metrics_handler, _initialized
 
     if _initialized:
         return True
@@ -126,9 +129,33 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
         )
         metrics.set_meter_provider(_meter_provider)
 
+        _metrics_handler = _register_metrics_handler()
+
     _initialized = True
     logger.info("Telemetry initialized (role=%s, protocol=%s)", role, settings.protocol)
     return True
+
+
+def _register_metrics_handler() -> OtelMetricsHandler | None:
+    """Subscribe the metrics handler on the event bus.
+
+    Docker/k8s child containers stream their events to the host, which
+    re-emits them — the host is authoritative for metrics, so children
+    (marked by ``INTERLOPER_EVENTS_TO_STDERR``) skip the handler entirely.
+    Traces are unaffected: spans exist where code runs.
+
+    Returns:
+        The subscribed handler, or ``None`` in a child container.
+    """
+    if os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true":
+        return None
+
+    from interloper.events import EventBus
+    from interloper.telemetry.metrics import OtelMetricsHandler
+
+    handler = OtelMetricsHandler()
+    EventBus.subscribe(handler, event_types=OtelMetricsHandler.EVENT_TYPES)
+    return handler
 
 
 def instrument_fastapi(app: Any) -> None:
@@ -163,8 +190,15 @@ def force_flush() -> None:
 
 def shutdown_telemetry() -> None:
     """Flush and shut down the SDK providers (idempotent)."""
-    global _tracer_provider, _meter_provider, _initialized
+    global _tracer_provider, _meter_provider, _metrics_handler, _initialized
 
+    if _metrics_handler is not None:
+        from interloper.events import EventBus
+
+        # Deliver queued events to the handler before the provider goes away.
+        EventBus.flush(timeout=5.0)
+        EventBus.unsubscribe(_metrics_handler)
+        _metrics_handler = None
     if _tracer_provider is not None:
         _tracer_provider.shutdown()
         _tracer_provider = None
