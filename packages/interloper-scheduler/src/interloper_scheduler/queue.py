@@ -6,7 +6,7 @@ import logging
 from uuid import UUID
 
 from interloper.telemetry import attributes
-from interloper.telemetry.tracer import tracer
+from interloper.telemetry.tracer import meter, tracer
 from interloper_db import Store
 from interloper_db.models import Run
 from sqlmodel import Session, col, select
@@ -42,6 +42,10 @@ class QueueController(Controller):
         super().__init__(poll_interval=poll_interval)
         self._launcher = launcher or InProcessLauncher()
         self._store = store or Store.from_settings()
+        # The launch outcome emits no bus event, so this counter is inline.
+        self._launched_counter = meter().create_counter(
+            "interloper.runs.launched", unit="{run}", description="Runs dispatched by the queue"
+        )
 
     def _tick(self) -> None:
         """Dispatch queued runs until the queue is drained."""
@@ -62,8 +66,10 @@ class QueueController(Controller):
                     },
                 ):
                     self._launcher.launch(run_id)
+                self._launched_counter.add(1, {"outcome": "launched"})
             except Exception as e:
                 logger.exception("Failed to launch run %s: %s", run_id, e)
+                self._launched_counter.add(1, {"outcome": "failed"})
                 # The same terminal path as any failed run: stamps the
                 # component state and advances the backfill, so a failed
                 # dispatch never wedges its backfill.
