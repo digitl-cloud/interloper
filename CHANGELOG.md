@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v0.53.0 (2026-07-31)
+
+### Refactoring
+
+- **auth**: Rename signup_allowed_domains to allowed_domains
+  ([`617e165`](https://github.com/digitl-cloud/interloper/commit/617e16542aa6c01265aa4edf411fa334bd7a4d3f))
+
+### Breaking Changes
+
+- **auth**: The auth.signup_allowed_domains YAML key and the INTERLOPER_AUTH_SIGNUP_ALLOWED_DOMAINS
+  env var are renamed to auth.allowed_domains / INTERLOPER_AUTH_ALLOWED_DOMAINS; deployments
+  configuring the old name must update it.
+
+
 ## v0.52.0 (2026-07-31)
 
 ### Features
