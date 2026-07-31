@@ -9,6 +9,8 @@ import threading
 from collections.abc import Coroutine, Iterable
 from typing import Any, TypeVar
 
+from opentelemetry import context as otel_context
+
 _T = TypeVar("_T")
 
 
@@ -89,7 +91,19 @@ def run(coro: Coroutine[Any, Any, _T]) -> _T:
             "il.run() called from code already running on its own event loop; use 'await' instead."
         )
 
-    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    # run_coroutine_threadsafe binds the task to the loop thread's (empty)
+    # context, not the caller's — carry the caller's OTel context across so
+    # spans opened here parent under the caller's active span.
+    caller_ctx = otel_context.get_current()
+
+    async def _bridged() -> _T:
+        token = otel_context.attach(caller_ctx)
+        try:
+            return await coro
+        finally:
+            otel_context.detach(token)
+
+    future = asyncio.run_coroutine_threadsafe(_bridged(), loop)
     try:
         return future.result()
     except KeyboardInterrupt:

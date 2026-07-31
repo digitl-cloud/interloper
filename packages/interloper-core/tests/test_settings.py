@@ -2,7 +2,7 @@
 
 import pytest
 
-from interloper.settings import AgentSettings, AppSettings, AuthSettings
+from interloper.settings import AgentSettings, AppSettings, AuthSettings, TelemetrySettings
 
 
 def test_agent_settings_defaults():
@@ -61,3 +61,29 @@ def test_auth_settings_allowed_domains_env(monkeypatch: pytest.MonkeyPatch):
     settings = AppSettings()
 
     assert settings.auth.allowed_domains == ["digitlcloud.com", "example.com"]
+
+
+def test_telemetry_settings_defaults():
+    """Telemetry is off by default; both signals default on once enabled."""
+    settings = TelemetrySettings()
+
+    assert settings.enabled is False
+    assert settings.protocol == "grpc"
+    assert settings.traces is True
+    assert settings.metrics is True
+    assert settings.sample_ratio == 1.0
+
+
+def test_telemetry_settings_env_override(monkeypatch: pytest.MonkeyPatch):
+    """INTERLOPER_OTEL_* env vars reach the nested otel settings."""
+    monkeypatch.setenv("INTERLOPER_OTEL_ENABLED", "true")
+    monkeypatch.setenv("INTERLOPER_OTEL_ENDPOINT", "http://collector:4317")
+    monkeypatch.setenv("INTERLOPER_OTEL_PROTOCOL", "http/protobuf")
+    monkeypatch.setenv("INTERLOPER_OTEL_SAMPLE_RATIO", "0.25")
+
+    settings = AppSettings()
+
+    assert settings.otel.enabled is True
+    assert settings.otel.endpoint == "http://collector:4317"
+    assert settings.otel.protocol == "http/protobuf"
+    assert settings.otel.sample_ratio == 0.25

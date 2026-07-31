@@ -1,0 +1,174 @@
+"""OpenTelemetry SDK initialization and shutdown.
+
+Everything outside this module only touches ``opentelemetry-api`` (whose
+calls are no-ops without an SDK). This module is the single place that
+imports the SDK — lazily, inside function bodies — so the framework runs
+identically whether or not the ``interloper[otel]`` extra is installed.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from interloper.settings import TelemetrySettings
+
+logger = logging.getLogger(__name__)
+
+_tracer_provider: TracerProvider | None = None
+_meter_provider: MeterProvider | None = None
+_initialized = False
+
+
+def _parse_headers(headers: str) -> dict[str, str] | None:
+    if not headers:
+        return None
+    return dict(pair.split("=", 1) for pair in headers.split(",") if "=" in pair)
+
+
+def _exporter_kwargs(settings: TelemetrySettings) -> dict[str, Any]:
+    """Exporter constructor kwargs — only what is explicitly configured.
+
+    Unset fields are omitted so the SDK's native ``OTEL_EXPORTER_OTLP_*``
+    environment variables still apply.
+
+    Returns:
+        Keyword arguments for the OTLP exporter constructors.
+    """
+    kwargs: dict[str, Any] = {}
+    if settings.endpoint:
+        kwargs["endpoint"] = settings.endpoint
+    headers = _parse_headers(settings.headers)
+    if headers:
+        kwargs["headers"] = headers
+    return kwargs
+
+
+def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
+    """Initialize the OpenTelemetry SDK from interloper settings.
+
+    Idempotent; a fast no-op when telemetry is disabled. When enabled but
+    the ``interloper[otel]`` extra is not installed, logs a warning and
+    leaves the no-op API providers in place — telemetry must never take
+    the data plane down.
+
+    Args:
+        settings: The resolved telemetry settings.
+        role: Process role (``server``, ``run``, ``cli``); used for the
+            default service name and the ``interloper.role`` resource attribute.
+
+    Returns:
+        True when the SDK was (or already is) active.
+    """
+    global _tracer_provider, _meter_provider, _initialized
+
+    if _initialized:
+        return True
+    if not settings.enabled:
+        return False
+
+    try:
+        from opentelemetry import metrics, trace
+        from opentelemetry.sdk.resources import Resource
+    except ImportError:
+        logger.warning(
+            "Telemetry is enabled but the OpenTelemetry SDK is not installed; "
+            "install the 'otel' extra (pip install 'interloper[otel]') to export telemetry."
+        )
+        return False
+
+    from interloper.telemetry import attributes
+    from interloper.telemetry.tracer import _version
+
+    grpc = settings.protocol == "grpc"
+    exporter_kwargs = _exporter_kwargs(settings)
+    resource = Resource.create(
+        {
+            "service.name": settings.service_name or f"interloper-{role}",
+            "service.version": _version() or "unknown",
+            attributes.ROLE: role,
+        }
+    )
+
+    if settings.traces:
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
+        if grpc:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        else:
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+        _tracer_provider = TracerProvider(
+            resource=resource,
+            sampler=ParentBased(TraceIdRatioBased(settings.sample_ratio)),
+        )
+        _tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(**exporter_kwargs)))
+        trace.set_tracer_provider(_tracer_provider)
+
+    if settings.metrics:
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
+        if grpc:
+            from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+        else:
+            from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+
+        _meter_provider = MeterProvider(
+            resource=resource,
+            metric_readers=[PeriodicExportingMetricReader(OTLPMetricExporter(**exporter_kwargs))],
+        )
+        metrics.set_meter_provider(_meter_provider)
+
+    _initialized = True
+    logger.info("Telemetry initialized (role=%s, protocol=%s)", role, settings.protocol)
+    return True
+
+
+def instrument_fastapi(app: Any) -> None:
+    """Instrument a FastAPI app for request tracing.
+
+    A no-op unless telemetry is active and the FastAPI instrumentor
+    (part of the ``otel`` extra) is installed.
+
+    Args:
+        app: The FastAPI application instance.
+    """
+    if not _initialized:
+        return
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    except ImportError:
+        return
+    FastAPIInstrumentor.instrument_app(app, excluded_urls="/api/health")
+
+
+def force_flush() -> None:
+    """Flush pending telemetry without shutting the SDK down.
+
+    For reused worker processes (e.g. process pools) that must not lose
+    spans if the pool is torn down abruptly.
+    """
+    if _tracer_provider is not None:
+        _tracer_provider.force_flush()
+    if _meter_provider is not None:
+        _meter_provider.force_flush()
+
+
+def shutdown_telemetry() -> None:
+    """Flush and shut down the SDK providers (idempotent)."""
+    global _tracer_provider, _meter_provider, _initialized
+
+    if _tracer_provider is not None:
+        _tracer_provider.shutdown()
+        _tracer_provider = None
+    if _meter_provider is not None:
+        _meter_provider.shutdown()
+        _meter_provider = None
+    _initialized = False

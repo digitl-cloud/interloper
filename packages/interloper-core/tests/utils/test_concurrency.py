@@ -130,3 +130,27 @@ class TestRun:
 
         with pytest.raises(RuntimeError, match="use 'await'"):
             run(nested())
+
+
+class TestRunTelemetryContext:
+    """The bridge carries the caller's OTel context onto the loop thread."""
+
+    def test_caller_span_parents_bridge_spans(self, span_exporter):
+        from interloper.telemetry.tracer import tracer
+
+        async def child() -> int:
+            with tracer().start_as_current_span("child"):
+                return 42
+
+        with tracer().start_as_current_span("parent") as parent:
+            assert run(child()) == 42
+
+        spans = {s.name: s for s in span_exporter.get_finished_spans()}
+        assert spans["child"].parent is not None
+        assert spans["child"].parent.span_id == parent.get_span_context().span_id
+
+    def test_no_caller_context_still_runs(self, span_exporter):
+        async def noop() -> int:
+            return 1
+
+        assert run(noop()) == 1

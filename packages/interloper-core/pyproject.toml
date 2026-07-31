@@ -14,14 +14,23 @@ dependencies = [
     "httpx>=0.28.1",
     "pyyaml>=6.0.0",
     "typing_extensions>=4.0.0",
+    "opentelemetry-api>=1.42,<2",
 ]
 
 [project.optional-dependencies]
 google-cloud = ["interloper-google-cloud"]
 slack = ["interloper-slack"]
+otel = [
+    "opentelemetry-sdk>=1.42,<2",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.42,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.42,<2",
+    "opentelemetry-instrumentation-fastapi>=0.63b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.63b0",
+    "opentelemetry-instrumentation-httpx>=0.63b0",
+]
 
 [dependency-groups]
-dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0"]
+dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0", "opentelemetry-sdk>=1.42,<2"]
 
 [tool.uv.sources]
 interloper-google-cloud = { workspace = true }

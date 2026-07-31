@@ -8,6 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from opentelemetry.trace import StatusCode
 from pydantic import Field, PrivateAttr
 from typing_extensions import Self
 
@@ -18,6 +19,9 @@ from interloper.registry import Registry
 from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.runner.state import RunState
 from interloper.serializable import Serializable
+from interloper.telemetry import attributes
+from interloper.telemetry.propagation import context_from_env, extract_metadata, inject_metadata
+from interloper.telemetry.tracer import tracer
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
@@ -117,6 +121,11 @@ class Runner(Serializable):
         metadata.setdefault("run_id", str(uuid.uuid4()))
         run_id = metadata["run_id"]
 
+        # Remote parent: metadata carries a traceparent within the framework
+        # (e.g. MultiProcessRunner workers), the environment carries it into
+        # spawned containers (launchers, docker/k8s runner children).
+        parent_ctx = extract_metadata(metadata) or context_from_env()
+
         handler: Callable[[Event], None] | None = None
         if self.on_event is not None:
             on_event = self.on_event
@@ -127,7 +136,17 @@ class Runner(Serializable):
 
             EventBus.subscribe(handler)
         try:
-            return await self._run(dag, partition_or_window, metadata)
+            span_attrs = attributes.from_metadata(metadata)
+            span_attrs[attributes.RUNNER_TYPE] = self.key
+            if partition_or_window is not None:
+                span_attrs[attributes.PARTITION] = str(partition_or_window)
+            with tracer().start_as_current_span("interloper.run", context=parent_ctx, attributes=span_attrs) as span:
+                inject_metadata(metadata)
+                result = await self._run(dag, partition_or_window, metadata)
+                # Runners swallow asset failures into the result; surface them.
+                if result.status is ExecutionStatus.FAILED:
+                    span.set_status(StatusCode.ERROR, f"{len(result.failed_assets)} asset(s) failed")
+                return result
         finally:
             if handler is not None:
                 await asyncio.to_thread(EventBus.flush, 5.0)

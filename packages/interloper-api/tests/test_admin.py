@@ -157,12 +157,15 @@ def test_config_snapshot_redacts_secrets(fake_settings: SimpleNamespace) -> None
     secrets = (
         "oauth-secret", "smtp-secret", "pg-secret", "key-material",
         "l-secret", "nested-secret", "r-secret", "pull-secret",
+        "secret-header", "collector:4317",
     )
     for secret in secrets:
         assert secret not in payload
     assert snapshot.auth.google_oauth_configured is True
     assert snapshot.data.encryption_configured is True
     assert snapshot.services.reaper.timeout == 3600
+    assert snapshot.services.telemetry.enabled is True
+    assert snapshot.services.telemetry.endpoint_configured is True
 
 
 def test_config_snapshot_allowlists_launcher_and_runner_config(fake_settings: SimpleNamespace) -> None:
