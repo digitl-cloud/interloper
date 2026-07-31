@@ -31,6 +31,7 @@ from interloper.events.event import parse_event_from_log_line
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.runner.sync_runner import SyncRunner
+from interloper.telemetry.propagation import child_process_env
 from pydantic import Field, PrivateAttr
 
 logger = logging.getLogger(__name__)
@@ -268,6 +269,7 @@ class DockerRunner(SyncRunner):
         """Build the environment variables for the container."""
         env = dict(self.env_vars)
         env["INTERLOPER_EVENTS_TO_STDERR"] = "true"
+        env.update(child_process_env())
         return env
 
     def _build_volumes(self) -> dict[str, dict[str, str]]:

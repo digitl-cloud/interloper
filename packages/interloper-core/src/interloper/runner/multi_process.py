@@ -29,7 +29,18 @@ def _worker(
     Returns:
         Tuple of ``(id, success, error_message, formatted_traceback)``.
     """
+    from opentelemetry import context as otel_context
+
     from interloper.dag import DAGSpec
+    from interloper.settings import AppSettings
+    from interloper.telemetry import extract_metadata, force_flush, init_telemetry
+
+    # Fresh interpreter (or forked child with a dead exporter thread): the
+    # idempotent init reads the inherited environment; metadata carries the
+    # parent run span's context.
+    init_telemetry(AppSettings.get().otel, role="run")
+    ctx = extract_metadata(metadata)
+    token = otel_context.attach(ctx) if ctx is not None else None
 
     try:
         dag = DAGSpec(**dag_spec).reconstruct()
@@ -47,6 +58,12 @@ def _worker(
         )
     except Exception as e:  # noqa: BLE001
         return (asset_id, False, format_exception(e), traceback.format_exc())
+    finally:
+        if token is not None:
+            otel_context.detach(token)
+        # Pool workers are reused and may be torn down abruptly — don't
+        # rely on process-exit hooks to deliver spans.
+        force_flush()
     return (asset_id, True, None, None)
 
 

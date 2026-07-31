@@ -44,3 +44,33 @@ class TestFromSettings:
                 runner=RunnerSettings(),
                 catalog=None,
             )
+
+
+class TestInProcessLauncherTelemetry:
+    """The launch thread inherits the launch-time OTel context."""
+
+    def test_launch_thread_attaches_launch_context(self, span_exporter, monkeypatch):
+        import threading
+        from uuid import uuid4
+
+        from interloper.telemetry.tracer import tracer
+        from opentelemetry import trace as otel_trace
+
+        from interloper_scheduler.executor import RunExecutor
+
+        captured: dict[str, int] = {}
+        done = threading.Event()
+
+        def fake_execute(self: RunExecutor, run_id: object) -> bool:
+            captured["trace_id"] = otel_trace.get_current_span().get_span_context().trace_id
+            done.set()
+            return True
+
+        monkeypatch.setattr(RunExecutor, "execute", fake_execute)
+
+        launcher = InProcessLauncher(store=object())  # ty: ignore[invalid-argument-type]  # store is never touched
+        with tracer().start_as_current_span("interloper.run.launch") as span:
+            launcher.launch(uuid4())
+
+        assert done.wait(5)
+        assert captured["trace_id"] == span.get_span_context().trace_id

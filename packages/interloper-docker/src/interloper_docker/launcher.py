@@ -11,6 +11,7 @@ from uuid import UUID
 import docker
 from interloper.catalog.base import Catalog
 from interloper.errors import ConfigError
+from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
     from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
@@ -203,4 +204,5 @@ class DockerLauncher(Launcher):
         encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
         if encryption_key:
             environment["INTERLOPER_ENCRYPTION_KEY"] = encryption_key
+        environment.update(child_process_env())
         return environment

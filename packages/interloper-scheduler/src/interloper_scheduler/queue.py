@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from interloper.telemetry import attributes
+from interloper.telemetry.tracer import tracer
 from interloper_db import Store
 from interloper_db.models import Run
 from sqlmodel import Session, col, select
@@ -49,7 +51,17 @@ class QueueController(Controller):
                 return
             try:
                 logger.info("Launching run %s", run_id)
-                self._launcher.launch(run_id)
+                # Root span of the run's trace: the launched run (thread,
+                # container, or pod) parents its own spans under it via the
+                # propagated context. Empty ticks emit nothing.
+                with tracer().start_as_current_span(
+                    "interloper.run.launch",
+                    attributes={
+                        attributes.RUN_ID: str(run_id),
+                        attributes.LAUNCHER_TYPE: type(self._launcher).__name__,
+                    },
+                ):
+                    self._launcher.launch(run_id)
             except Exception as e:
                 logger.exception("Failed to launch run %s: %s", run_id, e)
                 # The same terminal path as any failed run: stamps the

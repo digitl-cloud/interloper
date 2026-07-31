@@ -53,3 +53,20 @@ class TestEnvCarrier:
     def test_unset_env_returns_none(self, monkeypatch):
         monkeypatch.delenv("TRACEPARENT", raising=False)
         assert context_from_env() is None
+
+
+class TestChildProcessEnv:
+    def test_forwards_otel_config_and_trace_context(self, span_exporter, monkeypatch):
+        from interloper.telemetry.propagation import child_process_env
+
+        monkeypatch.setenv("INTERLOPER_OTEL_ENABLED", "true")
+        monkeypatch.setenv("INTERLOPER_OTEL_ENDPOINT", "http://collector:4317")
+        monkeypatch.setenv("INTERLOPER_POSTGRES_PASSWORD", "not-telemetry")
+
+        with tracer().start_as_current_span("outer"):
+            env = child_process_env()
+
+        assert env["INTERLOPER_OTEL_ENABLED"] == "true"
+        assert env["INTERLOPER_OTEL_ENDPOINT"] == "http://collector:4317"
+        assert "INTERLOPER_POSTGRES_PASSWORD" not in env
+        assert "TRACEPARENT" in env

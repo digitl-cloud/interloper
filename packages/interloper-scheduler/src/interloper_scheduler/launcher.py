@@ -13,6 +13,7 @@ from uuid import UUID
 from interloper.errors import ConfigError
 from interloper.registry import Registry
 from interloper_db import Store
+from opentelemetry import context as otel_context
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
@@ -187,6 +188,18 @@ class InProcessLauncher(Launcher):
 
         runner = Runner.from_settings(RunnerSettings(type=self._runner_type, config=self._runner_config))
         executor = RunExecutor(store=self._store, runner=runner)
-        thread = threading.Thread(target=executor.execute, args=(run_id,), daemon=True)
+
+        # A bare thread does not inherit contextvars — carry the launch-time
+        # OTel context across so the run's spans parent under the launch span.
+        ctx = otel_context.get_current()
+
+        def _execute() -> None:
+            token = otel_context.attach(ctx)
+            try:
+                executor.execute(run_id)
+            finally:
+                otel_context.detach(token)
+
+        thread = threading.Thread(target=_execute, daemon=True)
         thread.start()
         logger.info("Launched run %s in background thread", run_id)
