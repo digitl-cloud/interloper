@@ -21,7 +21,7 @@ class _FakeStore:
 
     engine = None  # the fake Session ignores it
 
-    def __init__(self, executions: dict[UUID, list[dict[str, str]]]) -> None:
+    def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
         self._executions = executions
 
     def list_asset_executions(self, run_id: UUID) -> list[SimpleNamespace]:
@@ -48,35 +48,52 @@ def _patch_session(monkeypatch: pytest.MonkeyPatch, runs: dict[UUID, Any]) -> No
     monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(runs))
 
 
-class _AssetA:
-    key = "a"
-
-    def __init__(self) -> None:
-        self.materializable = True
-
-
-class _AssetB:
-    key = "b"
-
-    def __init__(self) -> None:
+class _Asset:
+    def __init__(self, asset_id: UUID, key: str = "a") -> None:
+        self.id = str(asset_id)
+        self.key = key
         self.materializable = True
 
 
 def test_succeeded_assets_are_marked_non_materializable(monkeypatch: pytest.MonkeyPatch) -> None:
     parent_id = uuid4()
+    id_a, id_b = uuid4(), uuid4()
     store = _FakeStore(
-        {parent_id: [{"asset_key": "a", "status": "success"}, {"asset_key": "b", "status": "failed"}]}
+        {parent_id: [{"asset_id": id_a, "status": "success"}, {"asset_id": id_b, "status": "failed"}]}
     )
     _patch_session(monkeypatch, {parent_id: SimpleNamespace(retry_of=None)})
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
-    assets = [_AssetA(), _AssetB()]
+    asset_a, asset_b = _Asset(id_a), _Asset(id_b)
+
+    executor._skip_succeeded_assets(parent_id, [asset_a, asset_b])  # ty: ignore[invalid-argument-type]
+
+    assert asset_a.materializable is False  # succeeded → skipped
+    assert asset_b.materializable is True  # failed → re-runs
+
+
+def test_statuses_match_by_asset_id_not_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A run can span many assets sharing one key (e.g. an ads_stats per
+    # account). One account's success must not skip the others' retries.
+    parent_id = uuid4()
+    id_a, id_b, id_c = uuid4(), uuid4(), uuid4()
+    store = _FakeStore(
+        {
+            parent_id: [
+                {"asset_id": id_a, "status": "success"},
+                {"asset_id": id_b, "status": "failed"},
+                {"asset_id": id_c, "status": "canceled"},
+            ]
+        }
+    )
+    _patch_session(monkeypatch, {parent_id: SimpleNamespace(retry_of=None)})
+
+    executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
+    assets = [_Asset(id_a, key="ads_stats"), _Asset(id_b, key="ads_stats"), _Asset(id_c, key="ads_stats")]
 
     executor._skip_succeeded_assets(parent_id, assets)  # ty: ignore[invalid-argument-type]
 
-    by_key = {type(a).key: a for a in assets}
-    assert by_key["a"].materializable is False  # succeeded → skipped
-    assert by_key["b"].materializable is True  # failed → re-runs
+    assert [a.materializable for a in assets] == [False, True, True]
 
 
 def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -85,10 +102,11 @@ def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.Mo
     # Retrying attempt2 must still skip 'a' by walking back to attempt1.
     root_id = uuid4()
     mid_id = uuid4()
+    id_a, id_b = uuid4(), uuid4()
     store = _FakeStore(
         {
-            mid_id: [{"asset_key": "b", "status": "failed"}],
-            root_id: [{"asset_key": "a", "status": "success"}, {"asset_key": "b", "status": "failed"}],
+            mid_id: [{"asset_id": id_b, "status": "failed"}],
+            root_id: [{"asset_id": id_a, "status": "success"}, {"asset_id": id_b, "status": "failed"}],
         }
     )
     _patch_session(
@@ -97,13 +115,12 @@ def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.Mo
     )
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
-    assets = [_AssetA(), _AssetB()]
+    asset_a, asset_b = _Asset(id_a), _Asset(id_b)
 
-    executor._skip_succeeded_assets(mid_id, assets)  # ty: ignore[invalid-argument-type]
+    executor._skip_succeeded_assets(mid_id, [asset_a, asset_b])  # ty: ignore[invalid-argument-type]
 
-    by_key = {type(a).key: a for a in assets}
-    assert by_key["a"].materializable is False
-    assert by_key["b"].materializable is True
+    assert asset_a.materializable is False
+    assert asset_b.materializable is True
 
 
 def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,10 +128,11 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     # most-recent (closest) success should win and the asset should be skipped.
     root_id = uuid4()
     mid_id = uuid4()
+    id_a = uuid4()
     store = _FakeStore(
         {
-            mid_id: [{"asset_key": "a", "status": "success"}],
-            root_id: [{"asset_key": "a", "status": "failed"}],
+            mid_id: [{"asset_id": id_a, "status": "success"}],
+            root_id: [{"asset_id": id_a, "status": "failed"}],
         }
     )
     _patch_session(
@@ -123,8 +141,8 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
-    assets = [_AssetA()]
+    asset = _Asset(id_a)
 
-    executor._skip_succeeded_assets(mid_id, assets)  # ty: ignore[invalid-argument-type]
+    executor._skip_succeeded_assets(mid_id, [asset])  # ty: ignore[invalid-argument-type]
 
-    assert assets[0].materializable is False
+    assert asset.materializable is False

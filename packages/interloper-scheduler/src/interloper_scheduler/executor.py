@@ -116,22 +116,24 @@ class RunExecutor:
         only the previously failed/cancelled assets re-execute. Successes are
         resolved by walking the ``retry_of`` chain back to the root attempt so
         that assets skipped by an intermediate failed-only retry (which emit no
-        events) still carry their earlier success forward.
+        events) still carry their earlier success forward. Statuses are matched
+        by asset row id, never by key — a run can span many assets sharing one
+        key (e.g. an ``ads_stats`` per account), and one success must not skip
+        the others.
         """
-        statuses: dict[str, str] = {}
+        statuses: dict[UUID, str] = {}
         parent_id: UUID | None = retry_of
         with Session(self._store.engine) as session:
             while parent_id:
                 for row in self._store.list_asset_executions(parent_id):
-                    # Closest ancestor wins: only record a key the first time we see it.
-                    if row.asset_key:
-                        statuses.setdefault(row.asset_key, row.status)
+                    # Closest ancestor wins: only record an asset the first time we see it.
+                    statuses.setdefault(row.asset_id, row.status)
                 parent = session.get(Run, parent_id)
                 parent_id = parent.retry_of if parent else None
 
-        success_keys = {key for key, status in statuses.items() if status == "success"}
+        success_ids = {asset_id for asset_id, status in statuses.items() if status == "success"}
         for asset in assets:
-            if type(asset).key in success_keys:
+            if UUID(asset.id) in success_ids:
                 asset.materializable = False
 
     def _resolve_upstream_deps(self, assets: list[il.Asset]) -> None:
