@@ -1,5 +1,6 @@
 from interloper.telemetry import attributes
 from interloper.telemetry.propagation import (
+    child_process_env,
     context_from_env,
     extract_metadata,
     inject_metadata,

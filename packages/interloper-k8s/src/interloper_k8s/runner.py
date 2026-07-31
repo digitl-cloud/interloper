@@ -22,6 +22,7 @@ from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.runner.results import ExecutionStatus
 from interloper.runner.sync_runner import SyncRunner
+from interloper.telemetry.propagation import child_process_env
 from kubernetes import client, config
 from kubernetes.client import V1Job
 from pydantic import Field, PrivateAttr
@@ -332,6 +333,7 @@ class KubernetesRunner(SyncRunner):
         """Build the environment variables for the container."""
         env = [client.V1EnvVar(name=k, value=v) for k, v in self.env_vars.items()]
         env.append(client.V1EnvVar(name="INTERLOPER_EVENTS_TO_STDERR", value="true"))
+        env.extend(client.V1EnvVar(name=k, value=v) for k, v in child_process_env().items())
         return env
 
     def _build_resources(self) -> client.V1ResourceRequirements | None:

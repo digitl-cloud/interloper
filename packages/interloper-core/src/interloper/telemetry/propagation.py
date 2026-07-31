@@ -55,6 +55,21 @@ def traceparent_env() -> dict[str, str]:
     return {key.upper(): value for key, value in carrier.items()}
 
 
+def child_process_env() -> dict[str, str]:
+    """Telemetry environment for a spawned process or container.
+
+    Forwards this process's ``INTERLOPER_OTEL_*`` configuration (so the
+    child initializes its own exporter) together with the current trace
+    context — merge into the child's environment.
+
+    Returns:
+        Environment variable mapping (possibly empty).
+    """
+    env = {key: value for key, value in os.environ.items() if key.startswith("INTERLOPER_OTEL_")}
+    env.update(traceparent_env())
+    return env
+
+
 def context_from_env() -> Context | None:
     """Read a remote parent context from this process's environment.
 

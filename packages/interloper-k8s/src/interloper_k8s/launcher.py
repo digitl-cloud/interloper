@@ -10,6 +10,7 @@ from uuid import UUID
 
 from interloper.catalog.base import Catalog
 from interloper.errors import ConfigError
+from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
     from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
@@ -282,6 +283,7 @@ class KubernetesLauncher(Launcher):
         encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
         if encryption_key:
             env_map["INTERLOPER_ENCRYPTION_KEY"] = encryption_key
+        env_map.update(child_process_env())
 
         return [client.V1EnvVar(name=k, value=v) for k, v in env_map.items()]
 

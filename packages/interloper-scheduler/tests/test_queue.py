@@ -96,3 +96,21 @@ def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
     refreshed = store.get_backfill(backfill.id)
     assert refreshed.status == "failed"
     assert refreshed.completed_at is not None
+
+
+def test_launch_emits_a_span_per_claimed_run(store: Store, span_exporter: Any) -> None:
+    store.create_run(_ORG)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    spans = [s for s in span_exporter.get_finished_spans() if s.name == "interloper.run.launch"]
+    assert len(spans) == 1
+    assert spans[0].attributes is not None
+    assert spans[0].attributes["interloper.run.id"] == str(launcher.launched[0])
+    assert spans[0].attributes["interloper.launcher.type"] == "_FakeLauncher"
+
+
+def test_empty_tick_emits_no_launch_spans(store: Store, span_exporter: Any) -> None:
+    QueueController(launcher=_FakeLauncher(), store=store)._tick()
+    assert not span_exporter.get_finished_spans()
