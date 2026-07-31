@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { AdminUser } from '~/types/admin'
 
 definePageMeta({
@@ -14,6 +14,9 @@ const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const adminStore = useAdminStore()
+const userStore = useUserStore()
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const rows = ref<AdminUser[]>([])
 const loading = ref(false)
@@ -48,6 +51,41 @@ async function loadData() {
     finally {
         loading.value = false
     }
+}
+
+async function deleteUser(user: AdminUser) {
+    const confirmed = await confirm({
+        title: 'Delete user',
+        description: 'This permanently deletes {subject}, along with their sessions, tokens, '
+            + 'organisation memberships, and the invitations they sent. This action cannot be undone.',
+        subject: { name: user.name || user.email, icon: 'i-lucide-user' },
+        confirmColor: 'error',
+    })
+    if (!confirmed) return
+
+    try {
+        await adminStore.deleteUser(user.id)
+        toast.add({ title: `${user.name || user.email} deleted`, color: 'success' })
+        await loadData()
+    }
+    catch (err) {
+        toast.add(errorToast(err, 'Failed to delete user'))
+    }
+}
+
+function rowActions(user: AdminUser): DropdownMenuItem[][] {
+    // No self-service deletion — the backend rejects it too.
+    if (user.id === userStore.user?.id) return []
+    return [
+        [
+            {
+                label: 'Delete user',
+                icon: 'i-lucide-trash-2',
+                color: 'error' as const,
+                onSelect: () => deleteUser(user),
+            },
+        ],
+    ]
 }
 
 function initials(user: AdminUser): string {
@@ -119,6 +157,7 @@ onMounted(loadData)
         <DataTable :columns="columns"
                    :data="filteredRows"
                    :loading="loading"
+                   :row-actions="rowActions"
                    no-actions
                    search-placeholder="Search users...">
             <template #toolbar>

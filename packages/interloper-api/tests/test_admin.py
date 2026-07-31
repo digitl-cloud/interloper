@@ -33,6 +33,10 @@ class FakeStore:
         self.created_invites: list[dict] = []
         self.added_members: list[tuple[UUID, UUID, str]] = []
         self.already_member = False
+        self.deleted_profiles: list[UUID] = []
+
+    def delete_profile(self, user_id: UUID) -> None:
+        self.deleted_profiles.append(user_id)
 
     # -- users --
     def list_all_profiles(self):
@@ -222,6 +226,28 @@ def test_super_admin_lists_all_users(store: FakeStore) -> None:
     assert body[0]["email"] == "member@acme.test"
     assert [org["name"] for org in body[0]["organisations"]] == ["Acme"]
     assert body[0]["is_super_admin"] is False
+
+
+def test_non_super_admin_cannot_delete_user(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=False).delete(f"/admin/users/{uuid4()}")
+    assert resp.status_code == 403
+    assert store.deleted_profiles == []
+
+
+def test_delete_user(store: FakeStore) -> None:
+    target = uuid4()
+    resp = _client(store, is_super_admin=True).delete(f"/admin/users/{target}")
+    assert resp.status_code == 200
+    assert store.deleted_profiles == [target]
+
+
+def test_cannot_delete_own_account(store: FakeStore) -> None:
+    client = _client(store, is_super_admin=True)
+    me = _profile(is_super_admin=True)
+    client.app.dependency_overrides[get_current_user] = lambda: me
+    resp = client.delete(f"/admin/users/{me.id}")
+    assert resp.status_code == 400
+    assert store.deleted_profiles == []
 
 
 def test_super_admin_lists_all_organisations(store: FakeStore) -> None:

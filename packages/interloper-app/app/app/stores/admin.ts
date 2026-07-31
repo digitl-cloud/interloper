@@ -28,6 +28,10 @@ export const useAdminStore = defineStore('admin', () => {
         return apiFetch<AdminUser[]>('/admin/users')
     }
 
+    function deleteUser(userId: string) {
+        return apiFetch(`/admin/users/${userId}`, { method: 'DELETE' })
+    }
+
     function listOrganisations() {
         return apiFetch<AdminOrganisation[]>('/admin/organisations')
     }
@@ -90,6 +94,7 @@ export const useAdminStore = defineStore('admin', () => {
     return {
         getConfig,
         listUsers,
+        deleteUser,
         listOrganisations,
         createOrganisation,
         renameOrganisation,

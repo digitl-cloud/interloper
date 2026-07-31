@@ -463,6 +463,19 @@ def list_all_users(
     ]
 
 
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: UUID,
+    user: Profile = Depends(require_super_admin),
+    store: Store = Depends(get_store),
+) -> dict[str, str]:
+    """Delete a user entirely: profile, sessions, tokens, memberships, sent invitations."""
+    if user_id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+    store.delete_profile(user_id)
+    return {"status": "ok"}
+
+
 # -- Organisations ------------------------------------------------------------
 
 
