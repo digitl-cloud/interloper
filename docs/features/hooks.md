@@ -49,9 +49,29 @@ il.WebhookHook(watches=[ingest_job], events=["run_failed"], url="https://ops.exa
   "run_id": "…",
   "partition_date": "2026-01-01",
   "hook_id": "…",
-  "metadata": {"status": "failed"}
+  "metadata": {"status": "failed", "component_name": "Facebook Ads", "component_key": "facebook_source"}
 }
 ```
+
+## Slack notifications
+
+`SlackHook` ships in the separate **`interloper-slack`** package (installable as the
+`interloper-core[slack]` extra). It is the notification counterpart to `WebhookHook` — same
+events, but the payload is a message a human reads rather than a document a service parses:
+
+```py
+from interloper_slack import SlackConnection, SlackHook
+
+SlackHook(
+    connection=SlackConnection(bot_token="xoxb-…"),
+    channel="C0123456789",
+    watches=[ingest_job],
+)
+```
+
+The bot token lives on the connection (encrypted at rest, one per workspace) and each hook
+picks its own channel. See the [package README](https://github.com/digitl-cloud/interloper/tree/main/packages/interloper-slack)
+for the Slack app scopes it needs.
 
 ## Custom hooks
 
@@ -62,11 +82,11 @@ connection):
 ```py
 import interloper as il
 
-class SlackHook(il.Hook):
-    channel: str
+class EmailHook(il.Hook):
+    recipient: str
 
     def fire(self, context: il.HookContext) -> None:
-        post_message(self.channel, f"{context.event_type} on {context.component_id}")
+        send_mail(self.recipient, f"{context.event_type} on {context.component_id}")
 ```
 
 The context carries the event's identity plus the capabilities the scheduler injects:
@@ -77,7 +97,7 @@ The context carries the event's identity plus the capabilities the scheduler inj
 | `component_id` | The watched component the run targeted. |
 | `run_id` | The terminal run. |
 | `partition_date` | The run's partition date, if any. |
-| `metadata` | Event details (e.g. the run's status). |
+| `metadata` | Event details: the run's `status`, plus the watched component's `component_name` / `component_key` so hooks addressing humans don't have to render a bare id. |
 | `trigger` | Capability to queue a run for a component id — how `TriggerHook` acts without any persistence dependency. |
 
 A subclass may extend the relation vocabulary — this is how `TriggerHook` adds the `target`

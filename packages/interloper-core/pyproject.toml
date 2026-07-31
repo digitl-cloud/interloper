@@ -18,12 +18,14 @@ dependencies = [
 
 [project.optional-dependencies]
 google-cloud = ["interloper-google-cloud"]
+slack = ["interloper-slack"]
 
 [dependency-groups]
 dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0"]
 
 [tool.uv.sources]
 interloper-google-cloud = { workspace = true }
+interloper-slack = { workspace = true }
 
 
 [project.entry-points."interloper.kinds"]

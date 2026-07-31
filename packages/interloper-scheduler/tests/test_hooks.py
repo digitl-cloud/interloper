@@ -83,6 +83,36 @@ def _terminal_run(store: Store, component_id: UUID, *, status: str = "success") 
         return db_run
 
 
+def _capture_posts(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Capture WebhookHook payloads, answering every POST with 200."""
+    import httpx
+
+    payloads: list[dict[str, Any]] = []
+
+    def fake_post(url: str, *, json: dict[str, Any], **kwargs: Any) -> httpx.Response:
+        payloads.append(json)
+        return httpx.Response(200, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    return payloads
+
+
+def _record_run_failure(run_id: UUID, error: str) -> None:
+    """Insert the ``run_failed`` event row that carries a run's error text."""
+    with Session(engine_module.get_engine()) as session:
+        session.add(
+            EventRow(
+                id=uuid4(),
+                org_id=_ORG,
+                run_id=run_id,
+                event_type="run_failed",
+                error=error,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+            )
+        )
+        session.commit()
+
+
 def _sweep(store: Store) -> HookController:
     controller = HookController(store=store, poll_interval=999)
     controller._watermark = _PAST
@@ -216,6 +246,80 @@ class TestHookEvaluation:
             events = session.exec(select(EventRow)).all()
             assert [e.event_type for e in events] == ["hook_failed"]
             assert events[0].error is not None and "loop" in events[0].error
+
+    def test_metadata_carries_component_identity(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+
+        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        store.create_component(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_completed"], "url": "https://example.test/n"},
+            relations={"watch": [(source.id, "")]},
+        )
+        _terminal_run(store, source.id)
+
+        _sweep(store)
+
+        assert payloads[0]["metadata"] == {
+            "status": "success",
+            "component_name": "Demo",
+            "component_key": "demo_source",
+        }
+
+    def test_metadata_falls_back_to_key_when_unnamed(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+
+        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        store.create_component(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_completed"], "url": "https://example.test/n"},
+            relations={"watch": [(source.id, "")]},
+        )
+        # create_component always derives a name, so the nullable column is
+        # the only way the fallback is reachable.
+        with Session(engine_module.get_engine()) as session:
+            row = session.get(Component, source.id)
+            assert row is not None
+            row.name = None
+            session.add(row)
+            session.commit()
+        _terminal_run(store, source.id)
+
+        _sweep(store)
+
+        assert payloads[0]["metadata"]["component_name"] == "demo_source"
+
+    def test_failure_metadata_carries_the_run_error(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+
+        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        store.create_component(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_failed"], "url": "https://example.test/n"},
+            relations={"watch": [(source.id, "")]},
+        )
+        run = _terminal_run(store, source.id, status="failed")
+        # The error text lives on the run's event rows, not the run itself.
+        _record_run_failure(run.id, "HTTPStatusError: 429 Too Many Requests")
+
+        _sweep(store)
+
+        assert payloads[0]["metadata"]["error"] == "HTTPStatusError: 429 Too Many Requests"
+
+    def test_success_metadata_has_no_error(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+
+        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        store.create_component(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_completed"], "url": "https://example.test/n"},
+            relations={"watch": [(source.id, "")]},
+        )
+        _terminal_run(store, source.id)
+
+        _sweep(store)
+
+        assert "error" not in payloads[0]["metadata"]
 
     def test_chain_to_unwatched_target_is_allowed(self, store: Store):
         source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
