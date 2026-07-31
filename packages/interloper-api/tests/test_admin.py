@@ -34,6 +34,22 @@ class FakeStore:
         self.added_members: list[tuple[UUID, UUID, str]] = []
         self.already_member = False
 
+    # -- users --
+    def list_all_profiles(self):
+        return [
+            (
+                SimpleNamespace(
+                    id=self.member.id,
+                    email=self.member.email,
+                    name=self.member.name,
+                    avatar_url=None,
+                    is_super_admin=False,
+                    created_at=datetime.now(timezone.utc),
+                ),
+                2,
+            )
+        ]
+
     # -- organisations --
     def list_all_organisations(self):
         return [(self.org, 1)]
@@ -125,6 +141,20 @@ def store() -> FakeStore:
 def test_non_super_admin_is_forbidden(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=False).get("/admin/organisations")
     assert resp.status_code == 403
+
+
+def test_non_super_admin_cannot_list_users(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=False).get("/admin/users")
+    assert resp.status_code == 403
+
+
+def test_super_admin_lists_all_users(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).get("/admin/users")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body[0]["email"] == "member@acme.test"
+    assert body[0]["organisation_count"] == 2
+    assert body[0]["is_super_admin"] is False
 
 
 def test_super_admin_lists_all_organisations(store: FakeStore) -> None:

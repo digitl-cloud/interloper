@@ -134,6 +134,24 @@ class AuthMixin(StoreBase):
         with self._session() as session:
             return session.get(Profile, user_id)
 
+    def list_all_profiles(self) -> list[tuple[Profile, int]]:
+        """List every profile with its organisation membership count (super-admin only).
+
+        Returns:
+            List of ``(Profile, organisation_count)`` tuples.
+        """
+        with self._session() as session:
+            profiles = session.exec(select(Profile)).all()
+            counts = dict(
+                session.exec(
+                    select(
+                        UserOrganisation.user_id,
+                        func.count(UserOrganisation.organisation_id),  # ty: ignore[invalid-argument-type]
+                    ).group_by(UserOrganisation.user_id)  # ty: ignore[invalid-argument-type]
+                ).all()
+            )
+            return [(profile, counts.get(profile.id, 0)) for profile in profiles]
+
     def get_profile_by_google_id(self, google_id: str) -> Profile | None:
         """Get a profile by Google OAuth subject identifier.
 

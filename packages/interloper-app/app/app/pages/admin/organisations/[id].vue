@@ -2,7 +2,7 @@
 import type { BreadcrumbItem } from '@nuxt/ui'
 import type { OrgMember } from '~/types/organisation'
 
-definePageMeta({ title: 'Manage organisation', middleware: 'super-admin' })
+definePageMeta({ title: 'Manage organisation', layout: 'admin', middleware: 'super-admin' })
 
 const route = useRoute()
 const orgId = computed(() => route.params.id as string)
@@ -22,8 +22,7 @@ const isMember = computed(() =>
 const inviteEndpoint = computed(() => `/admin/organisations/${orgId.value}/invitations`)
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { label: 'Platform admin', icon: 'i-lucide-shield' },
-    { label: 'Organisations', icon: 'i-lucide-building-2', to: '/admin' },
+    { label: 'Organisations', icon: 'i-lucide-building-2', to: '/admin/organisations' },
     { label: orgName.value ?? '…' },
 ])
 

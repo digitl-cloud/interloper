@@ -73,6 +73,21 @@ class TestAcceptInvitation:
         assert store.accept_invitation("no-such-token", invitee.id) is None
 
 
+class TestListAllProfiles:
+    def test_lists_profiles_with_membership_counts(self, store: Store):
+        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        loner = store.upsert_profile(google_id="g-loner", email="loner@example.com", name="Loner")
+        org_a = store.create_organisation(name="Acme", creator_id=admin.id)
+        org_b = store.create_organisation(name="Beta", creator_id=admin.id)
+        store.add_org_member(org_a.id, admin.id, "admin")
+        store.add_org_member(org_b.id, admin.id, "admin")
+
+        counts = {profile.id: count for profile, count in store.list_all_profiles()}
+
+        assert counts[admin.id] == 2
+        assert counts[loner.id] == 0
+
+
 class TestGetProfileByGoogleId:
     def test_returns_matching_profile(self, store: Store):
         profile = store.upsert_profile(google_id="g-1", email="user@example.com", name="User")
