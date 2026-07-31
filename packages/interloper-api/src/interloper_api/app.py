@@ -39,10 +39,7 @@ logger = logging.getLogger(__name__)
 def create_app(
     store: Store | None = None,
     catalog: Catalog | None = None,
-    auth_config: Any | None = None,
-    smtp_config: Any | None = None,
-    agent_config: Any | None = None,
-    app_settings: Any | None = None,
+    settings: Any | None = None,
     cors_origins: list[str] | None = None,
     **kwargs: Any,
 ) -> FastAPI:
@@ -51,12 +48,11 @@ def create_app(
     Args:
         store: The ``Store`` instance for persistence.
         catalog: Catalog instance.
-        auth_config: ``AuthConfig`` instance for authentication settings.
-        smtp_config: ``SmtpConfig`` instance for sending invitation emails.
-        agent_config: ``AgentSettings`` instance; the agent routes mount only
-            when it's enabled (or None) and the ``agent`` extra is installed.
-        app_settings: Full ``AppSettings``; when given, a secrets-redacted
-            snapshot is built once for the super-admin ``/admin/config`` view.
+        settings: Full ``AppSettings``; the factory slices what it needs
+            (auth, smtp, agent) and builds the secrets-redacted snapshot for
+            the super-admin ``/admin/config`` view. The agent routes mount
+            only when enabled (or with no settings) and the ``agent`` extra
+            is installed.
         cors_origins: Allowed CORS origins. Only needed in dev mode for direct
             WebSocket connections that bypass the Vite proxy.
         **kwargs: Additional kwargs forwarded to ``FastAPI()``.
@@ -93,10 +89,9 @@ def create_app(
         set_store(store)
     if catalog:
         set_catalog(catalog)
-    if auth_config:
-        set_auth_config(auth_config)
-    if smtp_config:
-        set_smtp_config(smtp_config)
+    if settings:
+        set_auth_config(settings.auth)
+        set_smtp_config(settings.smtp)
 
     api = APIRouter(prefix="/api")
     api.include_router(auth.router)
@@ -111,7 +106,7 @@ def create_app(
     api.include_router(ws.router)
 
     agent_available = False
-    if agent_config is None or agent_config.enabled:
+    if settings is None or settings.agent.enabled:
         try:
             from interloper_api.routes import agent as agent_routes
 
@@ -126,10 +121,8 @@ def create_app(
         logger.info("Agent routes not mounted: disabled via settings.")
     set_features({"agent": agent_available})
 
-    if app_settings:
-        set_admin_config(
-            admin.build_config_snapshot(app_settings, features={"agent": agent_available}, catalog=catalog)
-        )
+    if settings:
+        set_admin_config(admin.build_config_snapshot(settings, features={"agent": agent_available}, catalog=catalog))
 
     @api.get("/health")
     def health() -> dict[str, str]:

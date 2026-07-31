@@ -8,16 +8,17 @@ from interloper_api.app import create_app
 from interloper_api.dependencies import get_features, get_store
 
 
-def test_agent_routes_absent_when_disabled():
-    app = create_app(agent_config=SimpleNamespace(enabled=False))
+def test_agent_routes_absent_when_disabled(fake_settings: SimpleNamespace):
+    fake_settings.agent.enabled = False
+    app = create_app(settings=fake_settings)
     client = TestClient(app)
 
     assert client.post("/api/agent/sessions").status_code == 404
     assert get_features() == {"agent": False}
 
 
-def test_agent_routes_mounted_when_enabled():
-    app = create_app(agent_config=SimpleNamespace(enabled=True))
+def test_agent_routes_mounted_when_enabled(fake_settings: SimpleNamespace):
+    app = create_app(settings=fake_settings)
     app.dependency_overrides[get_store] = lambda: None
     client = TestClient(app)
 
