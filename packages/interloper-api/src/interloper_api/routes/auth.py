@@ -25,11 +25,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
     """Decide whether a first-time login may create a profile.
 
-    An empty ``signup_allowed_domains`` keeps signup open (the default).
+    An empty ``allowed_domains`` keeps signup open (the default).
     Otherwise the email must be on an allowed domain, be a configured
     super-admin, or hold a pending invitation.
     """
-    allowed_domains = auth_config.signup_allowed_domains
+    allowed_domains = auth_config.allowed_domains
     if not allowed_domains:
         return True
 

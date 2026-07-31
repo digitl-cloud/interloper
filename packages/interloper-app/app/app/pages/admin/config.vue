@@ -101,8 +101,8 @@ const sections = computed<ConfigSection[]>(() => {
     const authRows: ConfigRow[] = [
         {
             label: 'Allowed domains',
-            ...(auth.signup_allowed_domains.length
-                ? { badges: auth.signup_allowed_domains }
+            ...(auth.allowed_domains.length
+                ? { badges: auth.allowed_domains }
                 : { pill: { label: '*', color: 'warning' } }),
         },
         auth.super_admin_emails.length

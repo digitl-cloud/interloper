@@ -27,7 +27,7 @@ export interface AdminConfig {
         agent_model: string | null
     }
     auth: {
-        signup_allowed_domains: string[]
+        allowed_domains: string[]
         super_admin_emails: string[]
         google_oauth_configured: boolean
         google_redirect_uri: string

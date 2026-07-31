@@ -210,7 +210,7 @@ def test_super_admin_reads_config(store: FakeStore, fake_settings: SimpleNamespa
     resp = client.get("/admin/config")
     assert resp.status_code == 200
     assert resp.json()["deployment"]["launcher"]["type"] == "kubernetes"
-    assert resp.json()["auth"]["signup_allowed_domains"] == ["digitlcloud.com"]
+    assert resp.json()["auth"]["allowed_domains"] == ["digitlcloud.com"]
 
 
 def test_config_unavailable_returns_503(store: FakeStore) -> None:

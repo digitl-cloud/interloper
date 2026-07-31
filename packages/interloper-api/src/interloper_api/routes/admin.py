@@ -154,7 +154,7 @@ class AdminDeploymentConfig(BaseModel):
 class AdminAuthConfig(BaseModel):
     """Authentication and signup policy."""
 
-    signup_allowed_domains: list[str]
+    allowed_domains: list[str]
     super_admin_emails: list[str]
     google_oauth_configured: bool
     google_redirect_uri: str
@@ -346,7 +346,7 @@ def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any
             agent_model=settings.agent.model if settings.agent.enabled else None,
         ),
         auth=AdminAuthConfig(
-            signup_allowed_domains=settings.auth.signup_allowed_domains,
+            allowed_domains=settings.auth.allowed_domains,
             super_admin_emails=settings.auth.super_admin_emails,
             google_oauth_configured=bool(settings.auth.google_client_id and settings.auth.google_client_secret),
             google_redirect_uri=settings.auth.google_redirect_uri,

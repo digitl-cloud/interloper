@@ -27,7 +27,7 @@ def fake_settings() -> SimpleNamespace:
         runner=SimpleNamespace(type="async", config={"max_workers": 8, "env": "r-secret"}),
         agent=SimpleNamespace(enabled=True, model="gemini-2.5-flash"),
         auth=SimpleNamespace(
-            signup_allowed_domains=["digitlcloud.com"],
+            allowed_domains=["digitlcloud.com"],
             super_admin_emails=["boss@example.com"],
             google_client_id="cid",
             google_client_secret="oauth-secret",

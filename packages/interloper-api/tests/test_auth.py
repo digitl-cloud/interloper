@@ -3,7 +3,7 @@
 The Google OAuth exchange is faked at the httpx layer; a lightweight fake store
 records the calls. Two properties under test: a user whose email is in
 ``auth_config.super_admin_emails`` is promoted on login (promote-only — an
-existing super-admin is left alone), and ``signup_allowed_domains`` gates
+existing super-admin is left alone), and ``allowed_domains`` gates
 profile creation for first-time logins without touching existing profiles.
 """
 
@@ -49,7 +49,7 @@ class FakeStore:
         return "token"
 
 
-def _auth_config(super_admin_emails: list[str], signup_allowed_domains: list[str]) -> SimpleNamespace:
+def _auth_config(super_admin_emails: list[str], allowed_domains: list[str]) -> SimpleNamespace:
     return SimpleNamespace(
         google_client_id="client-id",
         google_client_secret="client-secret",
@@ -57,20 +57,20 @@ def _auth_config(super_admin_emails: list[str], signup_allowed_domains: list[str
         cookie_secure=False,
         session_expiry_days=1,
         super_admin_emails=super_admin_emails,
-        signup_allowed_domains=signup_allowed_domains,
+        allowed_domains=allowed_domains,
     )
 
 
 def _client(
     store: FakeStore,
     super_admin_emails: list[str] | None = None,
-    signup_allowed_domains: list[str] | None = None,
+    allowed_domains: list[str] | None = None,
 ) -> TestClient:
     app = FastAPI()
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_auth_config] = lambda: _auth_config(
-        super_admin_emails or [], signup_allowed_domains or []
+        super_admin_emails or [], allowed_domains or []
     )
     return TestClient(app, follow_redirects=False)
 
@@ -116,7 +116,7 @@ def test_existing_super_admin_is_not_touched() -> None:
 
 def test_signup_blocked_when_domain_not_allowed() -> None:
     store = FakeStore()
-    client = _client(store, signup_allowed_domains=["digitlcloud.com"])
+    client = _client(store, allowed_domains=["digitlcloud.com"])
     resp = client.get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert resp.headers["location"] == "/login?error=signup_not_allowed"
@@ -126,7 +126,7 @@ def test_signup_blocked_when_domain_not_allowed() -> None:
 
 def test_signup_allowed_for_listed_domain() -> None:
     store = FakeStore()
-    resp = _client(store, signup_allowed_domains=["example.com"]).get("/auth/google/callback", params={"code": "c"})
+    resp = _client(store, allowed_domains=["example.com"]).get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
     assert store.upserted
@@ -134,7 +134,7 @@ def test_signup_allowed_for_listed_domain() -> None:
 
 def test_existing_profile_bypasses_allowlist() -> None:
     store = FakeStore(exists=True)
-    resp = _client(store, signup_allowed_domains=["digitlcloud.com"]).get(
+    resp = _client(store, allowed_domains=["digitlcloud.com"]).get(
         "/auth/google/callback", params={"code": "c"}
     )
     assert resp.status_code == 302
@@ -144,7 +144,7 @@ def test_existing_profile_bypasses_allowlist() -> None:
 
 def test_invited_email_can_sign_up() -> None:
     store = FakeStore(invited=True)
-    resp = _client(store, signup_allowed_domains=["digitlcloud.com"]).get(
+    resp = _client(store, allowed_domains=["digitlcloud.com"]).get(
         "/auth/google/callback", params={"code": "c"}
     )
     assert resp.status_code == 302
@@ -154,7 +154,7 @@ def test_invited_email_can_sign_up() -> None:
 
 def test_super_admin_email_can_sign_up() -> None:
     store = FakeStore()
-    client = _client(store, super_admin_emails=["boss@example.com"], signup_allowed_domains=["digitlcloud.com"])
+    client = _client(store, super_admin_emails=["boss@example.com"], allowed_domains=["digitlcloud.com"])
     resp = client.get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
