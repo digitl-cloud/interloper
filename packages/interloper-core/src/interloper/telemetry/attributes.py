@@ -26,6 +26,7 @@ _METADATA_KEYS = {
     "asset_qualified_key": ASSET_QUALIFIED_KEY,
     "partition_or_window": PARTITION,
     "source_id": SOURCE_ID,
+    "destination_key": DESTINATION_KEY,
 }
 
 

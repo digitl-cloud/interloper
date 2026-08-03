@@ -653,7 +653,6 @@ class Asset(Component):
             dest_meta = self._event_metadata(metadata, partition_or_window)
             dest_meta["destination_key"] = dest_key
             span_attrs = telemetry_attributes.from_metadata(dest_meta)
-            span_attrs[telemetry_attributes.DESTINATION_KEY] = dest_key
             EventBus.emit(
                 EventType.DEST_WRITE_STARTED,
                 metadata={**dest_meta, "message": f"Writing '{self.key}'"},
@@ -705,8 +704,8 @@ class Asset(Component):
         )
 
         dest_meta = self._event_metadata(metadata, effective_partition)
+        dest_meta["destination_key"] = dest.key
         span_attrs = telemetry_attributes.from_metadata(dest_meta)
-        span_attrs[telemetry_attributes.DESTINATION_KEY] = dest.key
         span_attrs[telemetry_attributes.UPSTREAM_KEY] = upstream_asset.key
         EventBus.emit(
             EventType.DEST_READ_STARTED,
