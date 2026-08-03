@@ -130,3 +130,13 @@ class TestRegistration:
         finally:
             if handler is not None:
                 EventBus.unsubscribe(handler)
+
+
+class TestDestinationKeyAttribute:
+    def test_absent_destination_key_is_omitted(self, points):
+        handler = OtelMetricsHandler()
+        handler(_event(EventType.DEST_READ_COMPLETED, run_id="run-m7"))
+
+        (point,) = points("interloper.destination.io", operation="read", status="completed")
+        assert point.attributes is not None
+        assert "destination_key" not in point.attributes

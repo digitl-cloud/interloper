@@ -114,14 +114,11 @@ class OtelMetricsHandler:
                 self._asset_duration.record((event.timestamp - started).total_seconds(), attrs)
         elif event.type in _DEST_STATUS:
             operation, status = _DEST_STATUS[event.type]
-            self._dest_io.add(
-                1,
-                {
-                    "operation": operation,
-                    "status": status,
-                    "destination_key": str(metadata.get("destination_key", "")),
-                },
-            )
+            attrs = {"operation": operation, "status": status}
+            destination_key = metadata.get("destination_key")
+            if destination_key:
+                attrs["destination_key"] = str(destination_key)
+            self._dest_io.add(1, attrs)
 
     def _remember(self, store: OrderedDict, key: object, value: object) -> None:
         store[key] = value
