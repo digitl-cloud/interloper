@@ -14,6 +14,8 @@ from interloper.partitioning import Partition, PartitionWindow
 from interloper.runner.results import RunResult
 from interloper.serializable import Spec
 from interloper.source.base import Source
+from interloper.telemetry import attributes
+from interloper.telemetry.tracer import tracer
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
@@ -50,8 +52,12 @@ class DAGSpec(BaseModel):
         Returns:
             A new DAG instance with the same structure as the original.
         """
-        reconstructed = [Component.from_spec(spec, catalog) for spec in self.items]
-        return DAG(*reconstructed)  # ty: ignore[invalid-argument-type]
+        with tracer().start_as_current_span(
+            "interloper.dag_spec.reconstruct",
+            attributes={attributes.DAG_SPEC_ITEMS: len(self.items)},
+        ):
+            reconstructed = [Component.from_spec(spec, catalog) for spec in self.items]
+            return DAG(*reconstructed)  # ty: ignore[invalid-argument-type]
 
 
 # -- DAG -----------------------------------------------------------------------
@@ -318,7 +324,11 @@ class DAG:
         """
         from interloper.runner.async_runner import AsyncRunner
 
-        return await AsyncRunner().run(dag=self, partition_or_window=partition_or_window)
+        span_attrs: dict[str, Any] = {attributes.DAG_ASSET_COUNT: len(self.assets)}
+        if partition_or_window is not None:
+            span_attrs[attributes.PARTITION] = str(partition_or_window)
+        with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attrs):
+            return await AsyncRunner().run(dag=self, partition_or_window=partition_or_window)
 
     # -- Serialization ---------------------------------------------------------
 

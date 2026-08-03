@@ -253,6 +253,63 @@ class TestTelemetrySpans:
         assert normalize.attributes is not None
         assert normalize.attributes["interloper.asset.key"] == "raw"
 
+    async def test_schema_inference_is_traced_under_conform(self, span_exporter):
+        il.MemoryDestination.clear()
+
+        # No declared schema under AUTO → the inference branch runs.
+        @il.asset()
+        def undeclared() -> list[dict[str, Any]]:
+            return [{"x": 1}]
+
+        await AsyncRunner().run(il.DAG(undeclared(id="undeclared", destinations=[il.MemoryDestination()])))
+
+        spans = {s.name: s for s in span_exporter.get_finished_spans()}
+        infer = spans["interloper.asset.infer_schema"]
+        assert infer.parent is not None
+        assert infer.parent.span_id == spans["interloper.asset.conform"].context.span_id
+        # Nothing to reconcile against without a declared schema.
+        assert "interloper.conformer.reconcile" not in spans
+
+    async def test_reconcile_is_traced_when_a_schema_is_declared(self, span_exporter):
+        il.MemoryDestination.clear()
+
+        class Row(il.Schema):
+            x: int
+
+        @il.asset(schema=Row)
+        def declared() -> list[dict[str, Any]]:
+            return [{"x": 1}]
+
+        await AsyncRunner().run(il.DAG(declared(id="declared", destinations=[il.MemoryDestination()])))
+
+        spans = {s.name: s for s in span_exporter.get_finished_spans()}
+        reconcile = spans["interloper.conformer.reconcile"]
+        assert reconcile.parent is not None
+        assert reconcile.parent.span_id == spans["interloper.asset.conform"].context.span_id
+        assert "interloper.asset.infer_schema" not in spans
+
+    async def test_resource_resolution_is_traced_per_resource(self, span_exporter):
+        il.MemoryDestination.clear()
+
+        class Creds(il.Resource):
+            token: str = "t"
+
+        # Declared explicitly: this module's `from __future__ import
+        # annotations` makes hints strings, which type inference can't read.
+        @il.asset(resources={"creds": Creds})
+        def needs_resource(creds: Creds) -> list[dict[str, Any]]:
+            return [{"x": creds.token}]
+
+        await AsyncRunner().run(
+            il.DAG(needs_resource(id="needs_resource", destinations=[il.MemoryDestination()]))
+        )
+
+        spans = [s for s in span_exporter.get_finished_spans() if s.name == "interloper.asset.resolve_resource"]
+        assert len(spans) == 1
+        assert spans[0].attributes is not None
+        assert spans[0].attributes["interloper.resource.name"] == "creds"
+        assert spans[0].attributes["interloper.asset.key"] == "needs_resource"
+
     async def test_failed_run_marks_spans_as_error(self, span_exporter):
         from opentelemetry.trace import StatusCode
 

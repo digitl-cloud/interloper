@@ -587,7 +587,14 @@ class Asset(Component):
             if param_name == "context":
                 kwargs["context"] = context
             elif param_name in self.resource_types:
-                kwargs[param_name] = self._resolve_resource(param_name)
+                # Resolution is lookup + instantiation; the credentialed client
+                # a resource wraps is built lazily, so its cost lands under the
+                # data() span rather than here.
+                with tracer().start_as_current_span(
+                    "interloper.asset.resolve_resource",
+                    attributes={**self._span_attributes(), telemetry_attributes.RESOURCE_NAME: param_name},
+                ):
+                    kwargs[param_name] = self._resolve_resource(param_name)
             else:
                 if param_name not in self.dependencies:
                     continue
@@ -748,7 +755,7 @@ class Asset(Component):
         # Traced as two spans, not one: normalization and conform have very
         # different cost profiles, and normalization is skipped entirely when
         # no normalizer is configured — a combined span would hide both facts.
-        span_attrs = telemetry_attributes.from_metadata(self._event_metadata({}))
+        span_attrs = self._span_attributes()
         if self.normalizer is not None:
             with tracer().start_as_current_span("interloper.normalizer.normalize", attributes=span_attrs):
                 result = self.normalizer.normalize(result)
@@ -796,14 +803,16 @@ class Asset(Component):
             ) from e
 
         if schema is None:
-            self._effective_schema = self._infer_schema(conformer, result)
+            with tracer().start_as_current_span("interloper.asset.infer_schema", attributes=self._span_attributes()):
+                self._effective_schema = self._infer_schema(conformer, result)
             return result
 
         self._effective_schema = schema
         if strategy == MaterializationStrategy.STRICT:
             conformer.validate(result, schema, strict=True)
             return result
-        return conformer.reconcile(result, schema)
+        with tracer().start_as_current_span("interloper.conformer.reconcile", attributes=self._span_attributes()):
+            return conformer.reconcile(result, schema)
 
     def _infer_schema(self, conformer: Conformer, result: Any) -> type[Schema] | None:
         """Best-effort schema inference for the IO boundary (AUTO, no declared schema).
@@ -933,6 +942,18 @@ class Asset(Component):
         for dest in dests:
             self._validate_destination(dest)
         return dests
+
+    def _span_attributes(self) -> dict[str, str]:
+        """Identity attributes for spans opened below the asset's own span.
+
+        Run id and partition are omitted deliberately — the ancestor spans
+        already carry them, and these are emitted from code paths that
+        don't hold the run metadata.
+
+        Returns:
+            The asset's identity attributes.
+        """
+        return telemetry_attributes.from_metadata(self._event_metadata({}))
 
     def _event_metadata(
         self,

@@ -756,3 +756,35 @@ class TestFromSpecFile:
         file.write_text("path: interloper.destination.memory.MemoryDestination\n")
         with pytest.raises(DAGError, match="not runnable"):
             il.DAG.from_spec_file(file)
+
+
+class TestTelemetrySpans:
+    """Spans emitted by DAG-level operations."""
+
+    def test_reconstruct_is_traced_with_item_count(self, span_exporter):
+        dag = DAG(FakeAsset(), FakeOtherAsset())
+
+        DAGSpec.model_validate_json(dag.to_spec().model_dump_json()).reconstruct()
+
+        spans = [s for s in span_exporter.get_finished_spans() if s.name == "interloper.dag_spec.reconstruct"]
+        assert len(spans) == 1
+        assert spans[0].attributes is not None
+        assert spans[0].attributes["interloper.dag.spec_items"] == 2
+
+    async def test_materialize_wraps_the_run(self, span_exporter):
+        il.MemoryDestination.clear()
+
+        @il.asset()
+        def solo() -> list[dict[str, Any]]:
+            return [{"x": 1}]
+
+        await DAG(solo(id="solo", destinations=[il.MemoryDestination()])).materialize_async()
+
+        spans = {s.name: s for s in span_exporter.get_finished_spans()}
+        materialize = spans["interloper.dag.materialize"]
+        assert materialize.attributes is not None
+        assert materialize.attributes["interloper.dag.asset_count"] == 1
+        # The runner's own span nests under the DAG entrypoint.
+        run_span = spans["interloper.runner.run"]
+        assert run_span.parent is not None
+        assert run_span.parent.span_id == materialize.context.span_id
