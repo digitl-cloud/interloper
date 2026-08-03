@@ -72,10 +72,11 @@ thread, so it never blocks the event loop.
 
 The one thing the framework can't cover is that Slack answers a *rejected*
 call with HTTP 200 and `{"ok": false, "error": "..."}`, so `raise_for_status()`
-alone lets failures pass silently. Every response goes through `api.unwrap`,
-which checks `ok` and raises `SlackAPIError` carrying Slack's own error code.
-For the paginated picker that check lives in the `data_selector`, since
-`paginate` only raises for HTTP status.
+alone lets failures pass silently. Each call site checks `ok` itself and raises
+`RuntimeError` with Slack's own error code — the same shape as the other
+connections that face an in-body error flag. For the paginated picker that
+check lives in the `data_selector`, since `paginate` only raises for HTTP
+status.
 
 A failed firing is recorded on the hook's firing claim (as `hook_failed`) and
 is not retried.
