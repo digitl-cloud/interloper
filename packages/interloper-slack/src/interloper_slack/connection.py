@@ -7,13 +7,17 @@ from interloper.connection import Connection, connection
 from interloper.resource.fields import SecretField, fetch_field_provider
 from pydantic_settings import SettingsConfigDict
 
-from interloper_slack.api import acall
+from interloper_slack.api import apost
 
 #: Slack caps ``conversations.list`` at 1000 per page.
 _PAGE_LIMIT = 1000
 
 #: Both channel visibilities a bot can post to once invited.
 _CHANNEL_TYPES = "public_channel,private_channel"
+
+#: These calls run inside the API process, serving a form; a page that takes
+#: longer than this is not worth making the operator wait for.
+_TIMEOUT = 30.0
 
 
 @connection(
@@ -57,7 +61,7 @@ class SlackConnection(Connection):
         """
         results: list[dict[str, str]] = []
         cursor: str | None = None
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             while True:
                 params: dict[str, str] = {
                     "types": _CHANNEL_TYPES,
@@ -66,7 +70,7 @@ class SlackConnection(Connection):
                 }
                 if cursor:
                     params["cursor"] = cursor
-                payload = await acall(client, "conversations.list", self.bot_token, params=params)
+                payload = await apost(client, "conversations.list", self.bot_token, data=params)
                 results.extend(
                     {"id": channel["id"], "name": f"#{channel['name']}"} for channel in payload.get("channels", [])
                 )
@@ -84,6 +88,6 @@ class SlackConnection(Connection):
         Returns:
             True — an invalid token raises out of the call.
         """
-        async with httpx.AsyncClient(timeout=30) as client:
-            await acall(client, "auth.test", self.bot_token)
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            await apost(client, "auth.test", self.bot_token)
         return True

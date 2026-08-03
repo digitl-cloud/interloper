@@ -1,43 +1,19 @@
 """Tests for ``interloper_slack.connection``."""
 
-from collections.abc import Callable
-
-import httpx
 import pytest
 
 from interloper_slack import SlackAPIError, SlackConnection
 
 
-def _mock_slack(monkeypatch: pytest.MonkeyPatch, handler: Callable[[httpx.Request], httpx.Response]) -> list[httpx.URL]:
-    """Route every AsyncClient through *handler*, recording the URLs requested."""
-    seen: list[httpx.URL] = []
-    real_client = httpx.AsyncClient
-
-    def recording(request: httpx.Request) -> httpx.Response:
-        seen.append(request.url)
-        return handler(request)
-
-    def fake_client(**kwargs) -> httpx.AsyncClient:
-        # Bind the real class before patching, or constructing one here
-        # re-enters this factory.
-        return real_client(transport=httpx.MockTransport(recording))
-
-    monkeypatch.setattr(httpx, "AsyncClient", fake_client)
-    return seen
-
-
 class TestChannels:
-    async def test_pages_and_sorts(self, monkeypatch: pytest.MonkeyPatch):
-        pages = [
-            {
-                "ok": True,
-                "channels": [{"id": "C2", "name": "ops"}, {"id": "C1", "name": "Alerts"}],
-                "response_metadata": {"next_cursor": "page2"},
-            },
-            {"ok": True, "channels": [{"id": "C3", "name": "data"}], "response_metadata": {"next_cursor": ""}},
-        ]
-        calls = iter(pages)
-        seen = _mock_slack(monkeypatch, lambda request: httpx.Response(200, json=next(calls)))
+    async def test_pages_and_sorts(self, slack):
+        slack.ok(
+            channels=[{"id": "C2", "name": "ops"}, {"id": "C1", "name": "Alerts"}],
+            response_metadata={"next_cursor": "page2"},
+        ).ok(
+            channels=[{"id": "C3", "name": "data"}],
+            response_metadata={"next_cursor": ""},
+        )
 
         channels = await SlackConnection(bot_token="xoxb-t").channels()
 
@@ -47,44 +23,43 @@ class TestChannels:
             {"id": "C3", "name": "#data"},
             {"id": "C2", "name": "#ops"},
         ]
-        assert len(seen) == 2
-        assert "cursor=page2" in str(seen[1])
+        assert slack.endpoints == ["conversations.list", "conversations.list"]
+        assert slack.form_body(1)["cursor"] == "page2"
 
-    async def test_requests_both_visibilities_without_archived(self, monkeypatch: pytest.MonkeyPatch):
-        seen = _mock_slack(monkeypatch, lambda request: httpx.Response(200, json={"ok": True, "channels": []}))
+    async def test_requests_both_visibilities_without_archived(self, slack):
+        slack.ok(channels=[])
 
         await SlackConnection(bot_token="xoxb-t").channels()
 
-        url = str(seen[0])
-        assert "public_channel" in url and "private_channel" in url
-        assert "exclude_archived=true" in url
+        body = slack.form_body()
+        assert body["types"] == "public_channel,private_channel"
+        assert body["exclude_archived"] == "true"
+        assert "cursor" not in body
 
-    async def test_missing_cursor_key_terminates(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_missing_cursor_key_terminates(self, slack):
         # A single-page response omits response_metadata entirely.
-        seen = _mock_slack(
-            monkeypatch,
-            lambda request: httpx.Response(200, json={"ok": True, "channels": [{"id": "C1", "name": "a"}]}),
-        )
+        slack.ok(channels=[{"id": "C1", "name": "a"}])
 
         assert await SlackConnection(bot_token="xoxb-t").channels() == [{"id": "C1", "name": "#a"}]
-        assert len(seen) == 1
+        assert len(slack.requests) == 1
 
-    async def test_missing_scope_raises(self, monkeypatch: pytest.MonkeyPatch):
-        _mock_slack(monkeypatch, lambda request: httpx.Response(200, json={"ok": False, "error": "missing_scope"}))
+    async def test_missing_scope_raises(self, slack):
+        slack.error("missing_scope")
 
         with pytest.raises(SlackAPIError):
             await SlackConnection(bot_token="xoxb-t").channels()
 
 
 class TestCheck:
-    async def test_valid_token(self, monkeypatch: pytest.MonkeyPatch):
-        seen = _mock_slack(monkeypatch, lambda request: httpx.Response(200, json={"ok": True, "team": "Digitl"}))
+    async def test_valid_token(self, slack):
+        slack.ok(team="Digitl")
 
         assert await SlackConnection(bot_token="xoxb-t").check() is True
-        assert seen[0].path.endswith("/auth.test")
+        assert slack.endpoints == ["auth.test"]
+        assert slack.auth() == "Bearer xoxb-t"
 
-    async def test_invalid_token_raises(self, monkeypatch: pytest.MonkeyPatch):
-        _mock_slack(monkeypatch, lambda request: httpx.Response(200, json={"ok": False, "error": "invalid_auth"}))
+    async def test_invalid_token_raises(self, slack):
+        slack.error("invalid_auth")
 
         with pytest.raises(SlackAPIError):
             await SlackConnection(bot_token="xoxb-t").check()

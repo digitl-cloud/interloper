@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+import httpx
 from interloper.errors import ConfigError
 from interloper.hook import Hook, HookContext
 from interloper.resource.fields import FetchField, InputField
 
-from interloper_slack.api import call
+from interloper_slack.api import post
 from interloper_slack.connection import SlackConnection
 
 #: Event type → (emoji, past-tense verb) for the headline.
@@ -56,12 +57,8 @@ class SlackHook(Hook):
         if self.connection is None:
             raise ConfigError(f"SlackHook '{self.id}' fired without a Slack connection")
 
-        call(
-            "chat.postMessage",
-            self.connection.bot_token,
-            json=self._message(context),
-            timeout=self.timeout,
-        )
+        with httpx.Client(timeout=self.timeout) as client:
+            post(client, "chat.postMessage", self.connection.bot_token, json=self._message(context))
 
     def _message(self, context: HookContext) -> dict[str, Any]:
         """Build the ``chat.postMessage`` payload.
