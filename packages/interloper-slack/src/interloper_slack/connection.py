@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from functools import cached_property
+from typing import Any
+
 import httpx
 from interloper.connection import Connection, connection
 from interloper.resource.fields import SecretField, fetch_field_provider
+from interloper.rest import HTTPBearerAuth, JSONCursorPaginator, RESTClient
 from pydantic_settings import SettingsConfigDict
 
-from interloper_slack.api import apost
+from interloper_slack.api import unwrap
+
+API_BASE = "https://slack.com/api"
 
 #: Slack caps ``conversations.list`` at 1000 per page.
 _PAGE_LIMIT = 1000
@@ -15,9 +21,22 @@ _PAGE_LIMIT = 1000
 #: Both channel visibilities a bot can post to once invited.
 _CHANNEL_TYPES = "public_channel,private_channel"
 
-#: These calls run inside the API process, serving a form; a page that takes
-#: longer than this is not worth making the operator wait for.
+#: Every call here serves an operator waiting on a form or a firing hook;
+#: neither is worth blocking on longer than this.
 _TIMEOUT = 30.0
+
+
+def _channels(response: httpx.Response) -> list[dict[str, Any]]:
+    """Select one page of channels, applying Slack's ``ok`` check.
+
+    ``paginate`` only raises for HTTP status, so the selector is where a
+    rejected page becomes a :class:`~interloper_slack.api.SlackAPIError`
+    instead of a confusing miss on the ``channels`` key.
+
+    Returns:
+        The page's raw channel objects.
+    """
+    return unwrap(response).get("channels", [])
 
 
 @connection(
@@ -47,39 +66,42 @@ class SlackConnection(Connection):
         ),
     )
 
+    @cached_property
+    def client(self) -> RESTClient:
+        """The Slack Web API client every caller shares.
+
+        Sync, unlike most connections' clients: the consumers are a hook
+        firing (sync by contract) and a form lookup, neither of which has
+        independent requests to overlap. The API process runs sync providers
+        in a thread, so this does not block its event loop.
+        """
+        return RESTClient(API_BASE, auth=HTTPBearerAuth(self.bot_token), timeout=_TIMEOUT)
+
     @fetch_field_provider
-    async def channels(self) -> list[dict[str, str]]:
+    def channels(self) -> list[dict[str, str]]:
         """List the workspace channels this token can see.
 
-        Backs the hook's ``channel`` ``FetchField``. Pages through
-        ``conversations.list`` (archived channels excluded — posting to one
-        fails) and labels each option with a leading ``#``, so the picker
-        reads the way the channel does in Slack.
+        Backs the hook's ``channel`` ``FetchField``. Archived channels are
+        excluded — posting to one fails — and each option is labelled with a
+        leading ``#`` so the picker reads the way the channel does in Slack.
 
         Returns:
             Channel options with ``id`` and a display ``name``.
         """
-        results: list[dict[str, str]] = []
-        cursor: str | None = None
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            while True:
-                params: dict[str, str] = {
-                    "types": _CHANNEL_TYPES,
-                    "limit": str(_PAGE_LIMIT),
-                    "exclude_archived": "true",
-                }
-                if cursor:
-                    params["cursor"] = cursor
-                payload = await apost(client, "conversations.list", self.bot_token, data=params)
-                results.extend(
-                    {"id": channel["id"], "name": f"#{channel['name']}"} for channel in payload.get("channels", [])
-                )
-                cursor = payload.get("response_metadata", {}).get("next_cursor") or None
-                if not cursor:
-                    break
+        pages = self.client.paginate(
+            "/conversations.list",
+            JSONCursorPaginator(cursor_path="response_metadata.next_cursor", cursor_param="cursor"),
+            params={
+                "types": _CHANNEL_TYPES,
+                "limit": str(_PAGE_LIMIT),
+                "exclude_archived": "true",
+            },
+            data_selector=_channels,
+        )
+        results = [{"id": channel["id"], "name": f"#{channel['name']}"} for page in pages for channel in page]
         return sorted(results, key=lambda c: c["name"].lower())
 
-    async def check(self) -> bool:
+    def check(self) -> bool:
         """Prove the token works via ``auth.test``.
 
         ``auth.test`` needs no scope beyond a valid token, so it isolates a
@@ -88,6 +110,5 @@ class SlackConnection(Connection):
         Returns:
             True — an invalid token raises out of the call.
         """
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            await apost(client, "auth.test", self.bot_token)
+        unwrap(self.client.post("/auth.test"))
         return True

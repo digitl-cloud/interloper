@@ -59,16 +59,23 @@ and screen readers get the outcome without parsing blocks.
 
 ## Notes
 
-Slack answers a rejected API call with HTTP 200 and `{"ok": false, "error":
-"..."}`, so every call in this package goes through `api.post` / `api.apost`,
-which check `ok` and raise `SlackAPIError` carrying Slack's own error code.
+Every Slack call goes through the connection's `client` — a `cached_property`
+`il.RESTClient` with `il.HTTPBearerAuth`, like every other connection in the
+workspace. That client owns the base URL, the token, and the connection pool,
+so callers name a path and nothing else; the channel picker paginates with
+`il.JSONCursorPaginator` over Slack's `response_metadata.next_cursor`.
+
+The client is **sync**, where most connections' are async. The two consumers
+are a hook firing (sync by contract) and a form lookup — neither has
+independent requests to overlap, and the API process runs sync providers in a
+thread, so it never blocks the event loop.
+
+The one thing the framework can't cover is that Slack answers a *rejected*
+call with HTTP 200 and `{"ok": false, "error": "..."}`, so `raise_for_status()`
+alone lets failures pass silently. Every response goes through `api.unwrap`,
+which checks `ok` and raises `SlackAPIError` carrying Slack's own error code.
+For the paginated picker that check lives in the `data_selector`, since
+`paginate` only raises for HTTP status.
+
 A failed firing is recorded on the hook's firing claim (as `hook_failed`) and
 is not retried.
-
-`post` and `apost` are the same function twice, once per colour: same argument
-order, same keywords, same return. The client is always the caller's — it owns
-the timeout and decides how many calls share a connection — and the verb is
-always POST, which every Slack method accepts. Pass `json=` for endpoints that
-document `application/json` (`chat.postMessage`) and `data=` for the
-form-encoded ones (`conversations.list`); that split is Slack's, and the
-keywords mirror httpx's own.

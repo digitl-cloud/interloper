@@ -1,21 +1,9 @@
-"""Slack Web API access: one call shape, sync and async.
+"""Slack's response contract: a call can fail with HTTP 200.
 
-Slack answers a rejected call with HTTP 200 and ``{"ok": false, "error":
+Slack answers a rejected call with ``200`` and ``{"ok": false, "error":
 "..."}``, so ``raise_for_status()`` alone lets failures pass silently. Every
-call in this package goes through :func:`post` / :func:`apost` so the ``ok``
-check happens exactly once.
-
-The two are the same function twice, once per colour: same argument order,
-same keywords, same return. The client is always the caller's — it knows the
-timeout and how many calls should share a connection — and the verb is always
-POST, which every Slack method accepts, so there is no per-endpoint verb to
-remember.
-
-Whether the body is JSON or form-encoded is Slack's choice per method, not
-ours: ``chat.postMessage`` takes ``application/json``, while
-``conversations.list`` takes ``application/x-www-form-urlencoded``. The
-``json`` / ``data`` split mirrors httpx's own, so each call passes whichever
-its endpoint documents.
+response in this package goes through :func:`unwrap`, which is the only thing
+Slack needs beyond what :class:`~interloper.rest.RESTClient` already provides.
 """
 
 from __future__ import annotations
@@ -24,8 +12,6 @@ from typing import Any
 
 import httpx
 from interloper.errors import InterloperError
-
-API_BASE = "https://slack.com/api"
 
 
 class SlackAPIError(InterloperError):
@@ -43,16 +29,7 @@ class SlackAPIError(InterloperError):
         self.error = error
 
 
-def _headers(token: str) -> dict[str, str]:
-    """Bearer-auth headers for a Slack call.
-
-    Returns:
-        The request headers.
-    """
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _unwrap(endpoint: str, response: httpx.Response) -> dict[str, Any]:
+def unwrap(response: httpx.Response) -> dict[str, Any]:
     """Raise on transport failure and on ``ok: false``, else return the payload.
 
     Returns:
@@ -64,39 +41,6 @@ def _unwrap(endpoint: str, response: httpx.Response) -> dict[str, Any]:
     response.raise_for_status()
     payload: dict[str, Any] = response.json()
     if not payload.get("ok"):
+        endpoint = response.request.url.path.removeprefix("/api/")
         raise SlackAPIError(endpoint, str(payload.get("error", "unknown_error")))
     return payload
-
-
-def post(
-    client: httpx.Client,
-    endpoint: str,
-    token: str,
-    *,
-    json: dict[str, Any] | None = None,
-    data: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Call a Slack Web API *endpoint* (e.g. ``chat.postMessage``) and unwrap it.
-
-    Returns:
-        The decoded response body.
-    """
-    response = client.post(f"{API_BASE}/{endpoint}", json=json, data=data, headers=_headers(token))
-    return _unwrap(endpoint, response)
-
-
-async def apost(
-    client: httpx.AsyncClient,
-    endpoint: str,
-    token: str,
-    *,
-    json: dict[str, Any] | None = None,
-    data: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Call a Slack Web API *endpoint* on an async client and unwrap it.
-
-    Returns:
-        The decoded response body.
-    """
-    response = await client.post(f"{API_BASE}/{endpoint}", json=json, data=data, headers=_headers(token))
-    return _unwrap(endpoint, response)
