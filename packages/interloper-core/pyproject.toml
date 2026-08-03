@@ -99,9 +99,6 @@ convention = "google"
 "__init__.py" = ["F401", "F403"]
 "tests/**" = ["ANN", "D101", "D102", "B018"]
 
-# ###############
-# PYTEST
-# ###############
-[tool.pytest.ini_options]
-filterwarnings = ["ignore::DeprecationWarning"]
-asyncio_mode = "auto"
+# Pytest is configured once, at the workspace root: a per-package
+# [tool.pytest.ini_options] block would make it the rootdir for any run
+# scoped to this package, cutting off the shared root conftest.

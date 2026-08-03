@@ -11,6 +11,7 @@ import pytest
 import interloper as il
 from interloper.errors import ConfigError, PartitionError
 from interloper.events import Event
+from interloper.normalizer import Normalizer
 from interloper.partitioning.time import TimePartition, TimePartitionConfig
 from interloper.runner.async_runner import AsyncRunner
 from interloper.runner.base import RUNNERS
@@ -201,7 +202,7 @@ class TestTelemetrySpans:
             "interloper.runner.run",
             "interloper.asset.materialize",
             "interloper.asset.data",
-            "interloper.asset.normalize_and_conform",
+            "interloper.asset.conform",
             "interloper.destination.write",
         } <= set(spans)
 
@@ -210,12 +211,15 @@ class TestTelemetrySpans:
         assert asset_span.parent is not None and asset_span.parent.span_id == run_span.context.span_id
         children = (
             "interloper.asset.data",
-            "interloper.asset.normalize_and_conform",
+            "interloper.asset.conform",
             "interloper.destination.write",
         )
         for child in children:
             assert spans[child].parent is not None
             assert spans[child].parent.span_id == asset_span.context.span_id
+
+        # No normalizer configured — nothing ran, so no span claims otherwise.
+        assert "interloper.normalizer.normalize" not in spans
 
         assert run_span.attributes is not None
         assert run_span.attributes["interloper.run.id"] == "run-1"
@@ -229,6 +233,25 @@ class TestTelemetrySpans:
         assert events
         for event in events:
             assert trace_id in event.metadata.get("traceparent", "")
+
+    async def test_normalize_is_its_own_span_when_configured(self, span_exporter):
+        il.MemoryDestination.clear()
+
+        @il.asset(normalizer=Normalizer())
+        def raw() -> list[dict[str, Any]]:
+            return [{"rawName": "a"}]
+
+        await AsyncRunner().run(il.DAG(raw(id="raw", destinations=[il.MemoryDestination()])))
+
+        spans = {s.name: s for s in span_exporter.get_finished_spans()}
+        normalize = spans["interloper.normalizer.normalize"]
+        conform = spans["interloper.asset.conform"]
+        # Siblings under the asset span, not one merged span.
+        assert normalize.parent is not None and conform.parent is not None
+        assert normalize.parent.span_id == spans["interloper.asset.materialize"].context.span_id
+        assert conform.parent.span_id == normalize.parent.span_id
+        assert normalize.attributes is not None
+        assert normalize.attributes["interloper.asset.key"] == "raw"
 
     async def test_failed_run_marks_spans_as_error(self, span_exporter):
         from opentelemetry.trace import StatusCode

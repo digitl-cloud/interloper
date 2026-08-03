@@ -467,8 +467,7 @@ class Asset(Component):
 
         # Normalization + conform is CPU-bound (pandas/pyarrow); offload it so
         # it never blocks the event loop while other assets run concurrently.
-        with tracer().start_as_current_span("interloper.asset.normalize_and_conform", attributes=span_attrs):
-            result = await asyncio.to_thread(self._normalize_and_conform, result)
+        result = await asyncio.to_thread(self._normalize_and_conform, result)
 
         return result
 
@@ -746,9 +745,15 @@ class Asset(Component):
         Returns:
             The normalized and conformed result.
         """
+        # Traced as two spans, not one: normalization and conform have very
+        # different cost profiles, and normalization is skipped entirely when
+        # no normalizer is configured — a combined span would hide both facts.
+        span_attrs = telemetry_attributes.from_metadata(self._event_metadata({}))
         if self.normalizer is not None:
-            result = self.normalizer.normalize(result)
-        return self._conform(result)
+            with tracer().start_as_current_span("interloper.normalizer.normalize", attributes=span_attrs):
+                result = self.normalizer.normalize(result)
+        with tracer().start_as_current_span("interloper.asset.conform", attributes=span_attrs):
+            return self._conform(result)
 
     def _conform(self, result: Any) -> Any:
         """Enforce the asset's schema according to the materialization strategy.

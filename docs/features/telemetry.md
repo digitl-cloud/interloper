@@ -60,14 +60,19 @@ Span names follow the method each one wraps:
 Every span is named `interloper.<class>.<method>` after the call it wraps:
 
 ```
-interloper.launcher.launch                     Launcher.launch
-└── interloper.runner.run                      Runner.run
-    └── interloper.asset.materialize           Asset.materialize_async
-        ├── interloper.destination.read        Destination.read (per upstream)
-        ├── interloper.asset.data              Asset.data
-        ├── interloper.asset.normalize_and_conform   Asset._normalize_and_conform
-        └── interloper.destination.write       Destination.write (per destination)
+interloper.launcher.launch                  Launcher.launch
+└── interloper.runner.run                   Runner.run
+    └── interloper.asset.materialize        Asset.materialize_async
+        ├── interloper.destination.read     Destination.read (per upstream)
+        ├── interloper.asset.data           Asset.data
+        ├── interloper.normalizer.normalize Normalizer.normalize (only when configured)
+        ├── interloper.asset.conform        Asset._conform
+        └── interloper.destination.write    Destination.write (per destination)
 ```
+
+Normalization and conform are separate spans: their cost profiles differ, and
+normalization is skipped entirely when no normalizer is configured — so the
+absence of `interloper.normalizer.normalize` is itself information.
 
 Spans carry `interloper.*` attributes: `run.id`, `backfill.id`, `asset.key`,
 `asset.qualified_key`, `source.id`, `partition`, `destination.key`, `runner.type`.
