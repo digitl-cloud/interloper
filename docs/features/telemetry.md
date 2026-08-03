@@ -60,19 +60,31 @@ Span names follow the method each one wraps:
 Every span is named `interloper.<class>.<method>` after the call it wraps:
 
 ```
-interloper.launcher.launch                  Launcher.launch
-└── interloper.runner.run                   Runner.run
-    └── interloper.asset.materialize        Asset.materialize_async
-        ├── interloper.destination.read     Destination.read (per upstream)
-        ├── interloper.asset.data           Asset.data
-        ├── interloper.normalizer.normalize Normalizer.normalize (only when configured)
-        ├── interloper.asset.conform        Asset._conform
-        └── interloper.destination.write    Destination.write (per destination)
+interloper.launcher.launch                    Launcher.launch
+└── interloper.runner.run                     Runner.run
+    └── interloper.asset.materialize          Asset.materialize_async
+        ├── interloper.asset.resolve_resource Asset._resolve_resource (per resource)
+        ├── interloper.destination.read       Destination.read (per upstream)
+        ├── interloper.asset.data             Asset.data
+        ├── interloper.normalizer.normalize   Normalizer.normalize (only when configured)
+        └── interloper.asset.conform          Asset._conform
+            ├── interloper.asset.infer_schema Asset._infer_schema (AUTO, no declared schema)
+            └── interloper.conformer.reconcile  Conformer.reconcile (declared schema)
+        └── interloper.destination.write      Destination.write (per destination)
 ```
 
-Normalization and conform are separate spans: their cost profiles differ, and
-normalization is skipped entirely when no normalizer is configured — so the
-absence of `interloper.normalizer.normalize` is itself information.
+Two more spans sit outside the scheduled path: `interloper.dag.materialize`
+(`DAG.materialize_async`, the entrypoint when you drive a DAG directly) and
+`interloper.dag_spec.reconstruct` (`DAGSpec.reconstruct`, the deserialization
+cost paid by multiprocess and per-asset container workers).
+
+Several spans are conditional, and their absence is itself information:
+`interloper.normalizer.normalize` only when a normalizer is configured,
+`interloper.asset.infer_schema` only when a schema is inferred rather than
+declared, and `interloper.conformer.reconcile` only the other way around.
+Note that resource *resolution* is lookup and instantiation only — the
+credentialed client a resource wraps is built lazily, so its cost lands under
+`interloper.asset.data`.
 
 Spans carry `interloper.*` attributes: `run.id`, `backfill.id`, `asset.key`,
 `asset.qualified_key`, `source.id`, `partition`, `destination.key`, `runner.type`.
