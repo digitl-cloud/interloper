@@ -1,19 +1,19 @@
 """Shared Slack transport fake.
 
-``post`` / ``apost`` take the caller's client, so the fake intercepts client
-*construction* — what ``SlackHook.fire`` and the connection's providers do
-internally — and serves scripted responses off a ``MockTransport``. One fake
-covers both colours, since ``MockTransport`` handles sync and async alike.
+Every Slack call goes through the connection's ``client``, so the fake swaps
+the ``RESTClient`` that property builds for one on a ``MockTransport`` —
+base URL, bearer auth and pagination stay real, only the wire is faked.
 """
 
 from __future__ import annotations
 
 import json as jsonlib
 from typing import Any
-from urllib.parse import parse_qsl
 
 import httpx
 import pytest
+
+from interloper_slack import connection as connection_module
 
 
 class FakeSlack:
@@ -26,7 +26,6 @@ class FakeSlack:
     def __init__(self) -> None:
         """Start with an empty script and no recorded traffic."""
         self.requests: list[httpx.Request] = []
-        self.client_kwargs: list[dict[str, Any]] = []
         self._script: list[httpx.Response] = []
 
     # -- Scripting -------------------------------------------------------------
@@ -51,17 +50,21 @@ class FakeSlack:
         """The Slack endpoints called, in order."""
         return [request.url.path.removeprefix("/api/") for request in self.requests]
 
+    def params(self, index: int = 0) -> dict[str, str]:
+        """The query params of the *index*-th request."""
+        return dict(self.requests[index].url.params)
+
     def json_body(self, index: int = 0) -> dict[str, Any]:
         """The JSON body of the *index*-th request."""
         return jsonlib.loads(self.requests[index].content)
 
-    def form_body(self, index: int = 0) -> dict[str, str]:
-        """The form-encoded body of the *index*-th request."""
-        return dict(parse_qsl(self.requests[index].content.decode()))
-
     def auth(self, index: int = 0) -> str | None:
         """The Authorization header of the *index*-th request."""
         return self.requests[index].headers.get("Authorization")
+
+    def timeout(self, index: int = 0) -> Any:
+        """The timeout httpx resolved for the *index*-th request."""
+        return self.requests[index].extensions.get("timeout")
 
     # -- Transport -------------------------------------------------------------
 
@@ -73,18 +76,12 @@ class FakeSlack:
 
 @pytest.fixture
 def slack(monkeypatch: pytest.MonkeyPatch) -> FakeSlack:
-    """Route every httpx client this package builds through a recording transport."""
+    """Give the connection a real RESTClient wired to a recording transport."""
     fake = FakeSlack()
+    real = connection_module.RESTClient
 
-    for attr in ("Client", "AsyncClient"):
-        real = getattr(httpx, attr)
+    def factory(*args: Any, **kwargs: Any) -> Any:
+        return real(*args, transport=httpx.MockTransport(fake.handle), **kwargs)
 
-        # Bind the real class per iteration: patching httpx in place means a
-        # late lookup would find the factory and recurse.
-        def factory(_real: Any = real, **kwargs: Any) -> Any:
-            fake.client_kwargs.append(kwargs)
-            return _real(transport=httpx.MockTransport(fake.handle))
-
-        monkeypatch.setattr(httpx, attr, factory)
-
+    monkeypatch.setattr(connection_module, "RESTClient", factory)
     return fake

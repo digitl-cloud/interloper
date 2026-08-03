@@ -65,10 +65,11 @@ class TestFire:
 
         assert _text(slack) == ":x: *c1* failed\npartition `2026-07-30`"
 
-    def test_client_carries_the_configured_timeout(self, slack):
+    def test_request_carries_the_configured_timeout(self, slack):
         _hook(timeout=2.5).fire(il.HookContext(event_type="run_failed", component_id="c1"))
 
-        assert slack.client_kwargs[0]["timeout"] == 2.5
+        # Per-request override of the connection client's default.
+        assert slack.timeout() == {"connect": 2.5, "read": 2.5, "write": 2.5, "pool": 2.5}
 
     def test_without_connection_raises(self, slack):
         with pytest.raises(ConfigError, match="without a Slack connection"):
