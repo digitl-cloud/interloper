@@ -60,7 +60,15 @@ and screen readers get the outcome without parsing blocks.
 ## Notes
 
 Slack answers a rejected API call with HTTP 200 and `{"ok": false, "error":
-"..."}`, so every call in this package goes through `api.call` / `api.acall`,
+"..."}`, so every call in this package goes through `api.post` / `api.apost`,
 which check `ok` and raise `SlackAPIError` carrying Slack's own error code.
 A failed firing is recorded on the hook's firing claim (as `hook_failed`) and
 is not retried.
+
+`post` and `apost` are the same function twice, once per colour: same argument
+order, same keywords, same return. The client is always the caller's — it owns
+the timeout and decides how many calls share a connection — and the verb is
+always POST, which every Slack method accepts. Pass `json=` for endpoints that
+document `application/json` (`chat.postMessage`) and `data=` for the
+form-encoded ones (`conversations.list`); that split is Slack's, and the
+keywords mirror httpx's own.
