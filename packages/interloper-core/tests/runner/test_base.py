@@ -198,17 +198,22 @@ class TestTelemetrySpans:
 
         spans = {s.name: s for s in span_exporter.get_finished_spans()}
         assert {
-            "interloper.run",
-            "interloper.asset",
-            "interloper.asset.execute",
-            "interloper.asset.normalize",
+            "interloper.runner.run",
+            "interloper.asset.materialize",
+            "interloper.asset.data",
+            "interloper.asset.normalize_and_conform",
             "interloper.destination.write",
         } <= set(spans)
 
-        run_span = spans["interloper.run"]
-        asset_span = spans["interloper.asset"]
+        run_span = spans["interloper.runner.run"]
+        asset_span = spans["interloper.asset.materialize"]
         assert asset_span.parent is not None and asset_span.parent.span_id == run_span.context.span_id
-        for child in ("interloper.asset.execute", "interloper.asset.normalize", "interloper.destination.write"):
+        children = (
+            "interloper.asset.data",
+            "interloper.asset.normalize_and_conform",
+            "interloper.destination.write",
+        )
+        for child in children:
             assert spans[child].parent is not None
             assert spans[child].parent.span_id == asset_span.context.span_id
 
@@ -236,9 +241,9 @@ class TestTelemetrySpans:
         assert result.status is ExecutionStatus.FAILED
 
         spans = {s.name: s for s in span_exporter.get_finished_spans()}
-        assert spans["interloper.run"].status.status_code is StatusCode.ERROR
-        assert spans["interloper.asset"].status.status_code is StatusCode.ERROR
-        assert spans["interloper.asset.execute"].status.status_code is StatusCode.ERROR
+        assert spans["interloper.runner.run"].status.status_code is StatusCode.ERROR
+        assert spans["interloper.asset.materialize"].status.status_code is StatusCode.ERROR
+        assert spans["interloper.asset.data"].status.status_code is StatusCode.ERROR
 
     async def test_remote_parent_from_metadata(self, span_exporter):
         from interloper.telemetry.propagation import inject_metadata
@@ -256,7 +261,7 @@ class TestTelemetrySpans:
 
         await AsyncRunner().run(il.DAG(solo(id="solo", destinations=[il.MemoryDestination()])), metadata=metadata)
 
-        run_span = next(s for s in span_exporter.get_finished_spans() if s.name == "interloper.run")
+        run_span = next(s for s in span_exporter.get_finished_spans() if s.name == "interloper.runner.run")
         assert run_span.context.trace_id == producer.get_span_context().trace_id
         assert run_span.parent is not None
         assert run_span.parent.span_id == producer.get_span_context().span_id

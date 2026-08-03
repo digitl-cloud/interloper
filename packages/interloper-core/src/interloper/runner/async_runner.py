@@ -153,7 +153,7 @@ class AsyncRunner(Runner):
             asset._event_metadata(self.state.metadata, effective_partition)
         )
         try:
-            with tracer().start_as_current_span("interloper.asset", attributes=span_attrs):
+            with tracer().start_as_current_span("interloper.asset.materialize", attributes=span_attrs):
                 result = await asset.materialize_async(
                     partition_or_window=effective_partition,
                     dag=self.state.dag,

@@ -55,14 +55,18 @@ and the framework runs unchanged.
 
 Span tree for a scheduled run:
 
+Span names follow the method each one wraps:
+
+Every span is named `interloper.<class>.<method>` after the call it wraps:
+
 ```
-interloper.run.launch          scheduler (queue controller)
-└── interloper.run             run process / pod
-    └── interloper.asset       per asset (in-process runner)
-        ├── interloper.destination.read    per upstream dependency
-        ├── interloper.asset.execute       the data() call
-        ├── interloper.asset.normalize     normalization + schema conform
-        └── interloper.destination.write   per destination
+interloper.launcher.launch                     Launcher.launch
+└── interloper.runner.run                      Runner.run
+    └── interloper.asset.materialize           Asset.materialize_async
+        ├── interloper.destination.read        Destination.read (per upstream)
+        ├── interloper.asset.data              Asset.data
+        ├── interloper.asset.normalize_and_conform   Asset._normalize_and_conform
+        └── interloper.destination.write       Destination.write (per destination)
 ```
 
 Spans carry `interloper.*` attributes: `run.id`, `backfill.id`, `asset.key`,

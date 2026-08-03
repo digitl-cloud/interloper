@@ -39,8 +39,8 @@ def _worker(
     # idempotent init reads the inherited environment; metadata carries the
     # parent run span's context.
     init_telemetry(AppSettings.get().otel, role="run")
-    ctx = extract_metadata(metadata)
-    token = otel_context.attach(ctx) if ctx is not None else None
+    context = extract_metadata(metadata)
+    token = otel_context.attach(context) if context is not None else None
 
     try:
         dag = DAGSpec(**dag_spec).reconstruct()

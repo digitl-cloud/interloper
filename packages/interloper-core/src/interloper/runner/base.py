@@ -124,7 +124,7 @@ class Runner(Serializable):
         # Remote parent: metadata carries a traceparent within the framework
         # (e.g. MultiProcessRunner workers), the environment carries it into
         # spawned containers (launchers, docker/k8s runner children).
-        parent_ctx = extract_metadata(metadata) or context_from_env()
+        parent_context = extract_metadata(metadata) or context_from_env()
 
         handler: Callable[[Event], None] | None = None
         if self.on_event is not None:
@@ -140,7 +140,9 @@ class Runner(Serializable):
             span_attrs[attributes.RUNNER_TYPE] = self.key
             if partition_or_window is not None:
                 span_attrs[attributes.PARTITION] = str(partition_or_window)
-            with tracer().start_as_current_span("interloper.run", context=parent_ctx, attributes=span_attrs) as span:
+            with tracer().start_as_current_span(
+                "interloper.runner.run", context=parent_context, attributes=span_attrs
+            ) as span:
                 inject_metadata(metadata)
                 result = await self._run(dag, partition_or_window, metadata)
                 # Runners swallow asset failures into the result; surface them.
