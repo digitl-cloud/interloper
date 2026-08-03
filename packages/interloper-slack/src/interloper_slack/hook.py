@@ -8,7 +8,6 @@ from interloper.errors import ConfigError
 from interloper.hook import Hook, HookContext
 from interloper.resource.fields import FetchField, InputField
 
-from interloper_slack.api import unwrap
 from interloper_slack.connection import SlackConnection
 
 #: Event type → (emoji, past-tense verb) for the headline.
@@ -51,18 +50,21 @@ class SlackHook(Hook):
 
         Raises:
             ConfigError: If no Slack connection is attached.
-            SlackAPIError: If Slack rejects the message.
+            RuntimeError: If Slack rejects the message — it answers a refusal
+                with 200 and ``ok: false``, so the status alone is not enough.
         """
         if self.connection is None:
             raise ConfigError(f"SlackHook '{self.id}' fired without a Slack connection")
 
-        unwrap(
-            self.connection.client.post(
-                "/chat.postMessage",
-                json=self._message(context),
-                timeout=self.timeout,
-            )
+        response = self.connection.client.post(
+            "/chat.postMessage",
+            json=self._message(context),
+            timeout=self.timeout,
         )
+        response.raise_for_status()
+        body = response.json()
+        if not body.get("ok"):
+            raise RuntimeError(f"Slack API error: {body.get('error')}")
 
     def _message(self, context: HookContext) -> dict[str, Any]:
         """Build the ``chat.postMessage`` payload.

@@ -1,8 +1,9 @@
 """Tests for ``interloper_slack.connection``."""
 
+import httpx
 import pytest
 
-from interloper_slack import SlackAPIError, SlackConnection
+from interloper_slack import SlackConnection
 
 
 class TestClient:
@@ -60,7 +61,13 @@ class TestChannels:
         # paginate only raises for HTTP status, so the selector owns the ok check.
         slack.error("missing_scope")
 
-        with pytest.raises(SlackAPIError, match="missing_scope"):
+        with pytest.raises(RuntimeError, match="Slack API error: missing_scope"):
+            SlackConnection(bot_token="xoxb-t").channels()
+
+    def test_http_error_raises(self, slack):
+        slack.raw(httpx.Response(500))
+
+        with pytest.raises(httpx.HTTPStatusError):
             SlackConnection(bot_token="xoxb-t").channels()
 
 
@@ -72,9 +79,16 @@ class TestCheck:
         assert slack.endpoints == ["auth.test"]
 
     def test_invalid_token_raises(self, slack):
+        # Slack refuses with 200, so the status alone would read as success.
         slack.error("invalid_auth")
 
-        with pytest.raises(SlackAPIError, match="invalid_auth"):
+        with pytest.raises(RuntimeError, match="Slack API error: invalid_auth"):
+            SlackConnection(bot_token="xoxb-t").check()
+
+    def test_http_error_raises(self, slack):
+        slack.raw(httpx.Response(500))
+
+        with pytest.raises(httpx.HTTPStatusError):
             SlackConnection(bot_token="xoxb-t").check()
 
     def test_is_checkable(self):

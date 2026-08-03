@@ -11,8 +11,6 @@ from interloper.resource.fields import SecretField, fetch_field_provider
 from interloper.rest import HTTPBearerAuth, JSONCursorPaginator, RESTClient
 from pydantic_settings import SettingsConfigDict
 
-from interloper_slack.api import unwrap
-
 API_BASE = "https://slack.com/api"
 
 #: Slack caps ``conversations.list`` at 1000 per page.
@@ -27,16 +25,20 @@ _TIMEOUT = 30.0
 
 
 def _channels(response: httpx.Response) -> list[dict[str, Any]]:
-    """Select one page of channels, applying Slack's ``ok`` check.
+    """Select one page of channels, checking Slack's in-body ``ok`` flag.
 
     ``paginate`` only raises for HTTP status, so the selector is where a
-    rejected page becomes a :class:`~interloper_slack.api.SlackAPIError`
-    instead of a confusing miss on the ``channels`` key.
+    rejected page surfaces instead of a confusing miss on the ``channels``
+    key — Slack answers a refusal with 200 and ``ok: false``.
 
     Returns:
         The page's raw channel objects.
     """
-    return unwrap(response).get("channels", [])
+    response.raise_for_status()
+    body = response.json()
+    if not body.get("ok"):
+        raise RuntimeError(f"Slack API error: {body.get('error')}")
+    return body.get("channels", [])
 
 
 @connection(
@@ -108,7 +110,14 @@ class SlackConnection(Connection):
         bad credential from a missing ``channels:read`` grant.
 
         Returns:
-            True — an invalid token raises out of the call.
+            True — an invalid token raises instead.
+
+        Raises:
+            RuntimeError: If Slack rejects the token.
         """
-        unwrap(self.client.post("/auth.test"))
+        response = self.client.post("/auth.test")
+        response.raise_for_status()
+        body = response.json()
+        if not body.get("ok"):
+            raise RuntimeError(f"Slack API error: {body.get('error')}")
         return True

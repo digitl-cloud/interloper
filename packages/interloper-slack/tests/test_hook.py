@@ -2,11 +2,12 @@
 
 from typing import Any
 
+import httpx
 import interloper as il
 import pytest
 from interloper.errors import ConfigError
 
-from interloper_slack import SlackAPIError, SlackConnection, SlackHook
+from interloper_slack import SlackConnection, SlackHook
 
 
 def _hook(**kwargs: Any) -> SlackHook:
@@ -80,11 +81,17 @@ class TestFire:
         assert slack.requests == []
 
     def test_slack_rejection_propagates(self, slack):
-        # The evaluator records the failure on the firing claim, so fire()
-        # must raise rather than swallow a rejected post.
+        # Slack refuses with 200, and the evaluator records the failure on the
+        # firing claim — so fire() must raise rather than swallow it.
         slack.error("not_in_channel")
 
-        with pytest.raises(SlackAPIError, match="not_in_channel"):
+        with pytest.raises(RuntimeError, match="Slack API error: not_in_channel"):
+            _hook().fire(il.HookContext(event_type="run_failed", component_id="c1"))
+
+    def test_http_error_propagates(self, slack):
+        slack.raw(httpx.Response(500))
+
+        with pytest.raises(httpx.HTTPStatusError):
             _hook().fire(il.HookContext(event_type="run_failed", component_id="c1"))
 
 
