@@ -94,10 +94,10 @@ def run(coro: Coroutine[Any, Any, _T]) -> _T:
     # run_coroutine_threadsafe binds the task to the loop thread's (empty)
     # context, not the caller's — carry the caller's OTel context across so
     # spans opened here parent under the caller's active span.
-    caller_ctx = otel_context.get_current()
+    caller_context = otel_context.get_current()
 
     async def _bridged() -> _T:
-        token = otel_context.attach(caller_ctx)
+        token = otel_context.attach(caller_context)
         try:
             return await coro
         finally:

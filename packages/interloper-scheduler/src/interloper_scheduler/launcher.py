@@ -191,10 +191,10 @@ class InProcessLauncher(Launcher):
 
         # A bare thread does not inherit contextvars — carry the launch-time
         # OTel context across so the run's spans parent under the launch span.
-        ctx = otel_context.get_current()
+        context = otel_context.get_current()
 
         def _execute() -> None:
-            token = otel_context.attach(ctx)
+            token = otel_context.attach(context)
             try:
                 executor.execute(run_id)
             finally:

@@ -1,18 +1,1 @@
 """Shared test fixtures."""
-
-from __future__ import annotations
-
-import pytest
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-from interloper.telemetry.testing import install_span_exporter
-
-
-@pytest.fixture
-def span_exporter() -> InMemorySpanExporter:
-    """The process-wide in-memory span exporter, cleared for this test.
-
-    Returns:
-        The shared exporter.
-    """
-    return install_span_exporter()

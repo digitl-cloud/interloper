@@ -20,9 +20,9 @@ class TestMetadataCarrier:
             inject_metadata(metadata)
 
         assert "traceparent" in metadata
-        ctx = extract_metadata(metadata)
-        assert ctx is not None
-        extracted = trace.get_current_span(ctx).get_span_context()
+        context = extract_metadata(metadata)
+        assert context is not None
+        extracted = trace.get_current_span(context).get_span_context()
         assert extracted.trace_id == span.get_span_context().trace_id
 
     def test_extract_without_traceparent_returns_none(self):
@@ -42,9 +42,9 @@ class TestEnvCarrier:
 
         assert "TRACEPARENT" in env
         monkeypatch.setenv("TRACEPARENT", env["TRACEPARENT"])
-        ctx = context_from_env()
-        assert ctx is not None
-        extracted = trace.get_current_span(ctx).get_span_context()
+        context = context_from_env()
+        assert context is not None
+        extracted = trace.get_current_span(context).get_span_context()
         assert extracted.trace_id == span.get_span_context().trace_id
 
     def test_no_active_span_yields_empty_env(self, span_exporter):

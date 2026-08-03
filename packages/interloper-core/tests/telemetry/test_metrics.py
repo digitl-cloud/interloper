@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -11,7 +10,6 @@ import pytest
 from interloper.events import Event, EventBus, EventType
 from interloper.telemetry.metrics import OtelMetricsHandler
 from interloper.telemetry.setup import _register_metrics_handler
-from interloper.telemetry.testing import install_metric_reader
 
 _T0 = dt.datetime(2026, 7, 1, 12, 0, 0, tzinfo=dt.timezone.utc)
 
@@ -21,13 +19,13 @@ def _event(event_type: EventType, offset_s: float = 0.0, **metadata: Any) -> Eve
 
 
 @pytest.fixture
-def points() -> Any:
+def points(metric_reader: Any) -> Any:
     """Data-point lookup over the shared in-memory metric reader.
 
     Returns:
         A callable filtering data points by metric name and attributes.
     """
-    reader = install_metric_reader()
+    reader = metric_reader
 
     def _points(name: str, **attrs: str) -> list[Any]:
         found: list[Any] = []
@@ -111,16 +109,11 @@ class TestOtelMetricsHandler:
 
 
 class TestRegistration:
-    @pytest.fixture(autouse=True)
-    def _meter_provider(self) -> Iterator[None]:
-        install_metric_reader()
-        yield
-
-    def test_child_containers_skip_the_handler(self, monkeypatch):
+    def test_child_containers_skip_the_handler(self, metric_reader, monkeypatch):
         monkeypatch.setenv("INTERLOPER_EVENTS_TO_STDERR", "true")
         assert _register_metrics_handler() is None
 
-    def test_host_subscribes_the_handler(self, monkeypatch):
+    def test_host_subscribes_the_handler(self, metric_reader, monkeypatch):
         monkeypatch.delenv("INTERLOPER_EVENTS_TO_STDERR", raising=False)
         handler = _register_metrics_handler()
         try:

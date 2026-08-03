@@ -59,7 +59,7 @@ class QueueController(Controller):
                 # container, or pod) parents its own spans under it via the
                 # propagated context. Empty ticks emit nothing.
                 with tracer().start_as_current_span(
-                    "interloper.run.launch",
+                    "interloper.launcher.launch",
                     attributes={
                         attributes.RUN_ID: str(run_id),
                         attributes.LAUNCHER_TYPE: type(self._launcher).__name__,

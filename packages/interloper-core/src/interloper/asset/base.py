@@ -447,7 +447,7 @@ class Asset(Component):
             metadata={**exec_meta, "message": f"Executing '{self.key}'"},
         )
         try:
-            with tracer().start_as_current_span("interloper.asset.execute", attributes=span_attrs):
+            with tracer().start_as_current_span("interloper.asset.data", attributes=span_attrs):
                 result = await invoke(self.data, **kwargs)
             EventBus.emit(
                 EventType.ASSET_EXEC_COMPLETED,
@@ -467,7 +467,7 @@ class Asset(Component):
 
         # Normalization + conform is CPU-bound (pandas/pyarrow); offload it so
         # it never blocks the event loop while other assets run concurrently.
-        with tracer().start_as_current_span("interloper.asset.normalize", attributes=span_attrs):
+        with tracer().start_as_current_span("interloper.asset.normalize_and_conform", attributes=span_attrs):
             result = await asyncio.to_thread(self._normalize_and_conform, result)
 
         return result
