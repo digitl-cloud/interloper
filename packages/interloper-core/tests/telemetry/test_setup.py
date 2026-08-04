@@ -57,3 +57,29 @@ class TestExporterConfig:
         assert _exporter_kwargs(TelemetrySettings()) == {}
         kwargs = _exporter_kwargs(TelemetrySettings(endpoint="http://collector:4317", headers="x=y"))
         assert kwargs == {"endpoint": "http://collector:4317", "headers": {"x": "y"}}
+
+
+class TestDurationBuckets:
+    """The duration histograms need second-scaled buckets.
+
+    The SDK's defaults start (0, 5, 10, 25, …) — tuned for milliseconds. Left
+    alone, every run and asset finishing under 5s lands in a single bucket and
+    histogram_quantile interpolates across it, reporting seconds-off values
+    that look plausible on a dashboard.
+    """
+
+    def test_covers_sub_second_to_long_running(self):
+        assert setup._DURATION_BUCKETS[0] < 0.1
+        assert setup._DURATION_BUCKETS[-1] >= 3600
+        assert list(setup._DURATION_BUCKETS) == sorted(setup._DURATION_BUCKETS)
+        # Sub-second resolution is the point: several boundaries below 1s.
+        assert len([b for b in setup._DURATION_BUCKETS if b < 1.0]) >= 4
+
+    def test_views_cover_both_duration_instruments(self):
+        views = setup._duration_views()
+        assert {v._instrument_name for v in views} == {
+            "interloper.run.duration",
+            "interloper.asset.duration",
+        }
+        for view in views:
+            assert view._aggregation._boundaries == setup._DURATION_BUCKETS

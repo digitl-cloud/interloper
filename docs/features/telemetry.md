@@ -44,6 +44,31 @@ Settings live under the `otel` block of `interloper.yaml` or the matching
 | `traces` | `INTERLOPER_OTEL_TRACES` | `true` | Toggle the traces signal. |
 | `metrics` | `INTERLOPER_OTEL_METRICS` | `true` | Toggle the metrics signal. |
 | `sample_ratio` | `INTERLOPER_OTEL_SAMPLE_RATIO` | `1.0` | Head sampling ratio (parent-based). |
+| `metric_export_interval` | `INTERLOPER_OTEL_METRIC_EXPORT_INTERVAL` | `15` | Seconds between metric exports. Below the SDK's 60s default on purpose — see below. |
+
+### Why the export interval matters
+
+Runs are short-lived, and a metric counter is only exported once it has
+recorded something — so its very first sample already reads non-zero, and
+Prometheus never observes the rise from zero. At the SDK's 60s default most
+runs export exactly once, at shutdown, leaving `rate()` and `increase()`
+nothing to measure: dashboards built on them read zero even though the
+counters are correct.
+
+Two consequences worth knowing:
+
+- Prefer `max_over_time()` over `increase()` for "how many runs happened"
+  panels. It reads the counter's peak rather than its delta, so it is immune
+  to the missing zero baseline — at the cost of resetting when the process
+  restarts.
+- Tell Grafana how often data actually arrives by setting the Prometheus
+  datasource's **Scrape interval** (`timeInterval`) to match this setting.
+  Grafana sizes `$__rate_interval` from it; left at its 15s assumption while
+  data arrives every 60s, every rate window falls between two identical
+  samples.
+
+Setting this also makes the SDK's own `OTEL_METRIC_EXPORT_INTERVAL` inert,
+since the interval is always passed explicitly.
 
 Precedence: interloper settings win over the SDK's standard `OTEL_*` environment
 variables; anything you leave unset here (endpoint, headers, resource attributes, …)
@@ -115,6 +140,12 @@ sources get egress spans for free.
 | `interloper.asset.duration` | histogram (s) | `status`, `asset_key` |
 | `interloper.destination.io` | counter | `operation`, `status`, `destination_key` |
 | `interloper.runs.launched` | counter | `outcome` |
+
+The duration histograms use second-scaled bucket boundaries (50ms → 1h) rather
+than the SDK's defaults, which start at 0, 5, 10, 25 — tuned for milliseconds.
+Against second-valued durations those defaults put every run under five seconds
+in a single bucket, so quantiles get interpolated across it and report values
+that look plausible but track nothing.
 
 Metrics are derived from the [event bus](events.md), so they cost nothing on the
 execution hot path. Attributes are deliberately low-cardinality: ids and partitions

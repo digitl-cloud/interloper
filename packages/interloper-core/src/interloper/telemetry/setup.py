@@ -125,7 +125,13 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
 
         _meter_provider = MeterProvider(
             resource=resource,
-            metric_readers=[PeriodicExportingMetricReader(OTLPMetricExporter(**exporter_kwargs))],
+            metric_readers=[
+                PeriodicExportingMetricReader(
+                    OTLPMetricExporter(**exporter_kwargs),
+                    export_interval_millis=settings.metric_export_interval * 1000,
+                )
+            ],
+            views=_duration_views(),
         )
         metrics.set_meter_provider(_meter_provider)
 
@@ -136,6 +142,30 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
     _initialized = True
     logger.info("Telemetry initialized (role=%s, protocol=%s)", role, settings.protocol)
     return True
+
+
+#: Bucket boundaries for the duration histograms, in seconds. The SDK's
+#: defaults (0, 5, 10, 25 … 10000) are tuned for milliseconds — against
+#: second-valued durations every run under 5s falls in one bucket and every
+#: quantile is interpolated across it. These span a fast asset to a long load.
+_DURATION_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0, 3600.0)
+
+
+def _duration_views() -> list[Any]:
+    """Views giving the duration histograms second-scaled buckets.
+
+    Returns:
+        One view per duration instrument.
+    """
+    from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, View
+
+    return [
+        View(
+            instrument_name=name,
+            aggregation=ExplicitBucketHistogramAggregation(_DURATION_BUCKETS),
+        )
+        for name in ("interloper.run.duration", "interloper.asset.duration")
+    ]
 
 
 def _register_metrics_handler() -> OtelMetricsHandler | None:

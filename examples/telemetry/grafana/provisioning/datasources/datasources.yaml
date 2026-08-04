@@ -8,6 +8,12 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: true
+    jsonData:
+      # How often data actually arrives (the framework's metric_export_interval).
+      # Grafana sizes $__rate_interval from this; left at its 15s default
+      # assumption the rate windows fall between samples and every rate-based
+      # panel reads zero.
+      timeInterval: 15s
 
   - name: Tempo
     type: tempo
