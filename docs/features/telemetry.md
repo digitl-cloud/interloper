@@ -61,28 +61,63 @@ next run starts a fresh process whose counter begins at zero again, so the
 series never rises. A delta point is self-contained, so neither problem
 arises.
 
-**This requires a collector** with the `deltatocumulative` processor, which
-accumulates the deltas into one continuous cumulative series per stream —
-owned by the collector, which outlives every run:
+**This requires a collector**, configured as an aggregation gateway that
+Prometheus *scrapes* — not one that pushes. Three pieces have to line up, and
+each is load-bearing:
 
 ```yaml
+# collector
 processors:
   deltatocumulative:
-    max_stale: 30m   # evict idle streams so they don't pin memory
+    max_stale: 30m          # (1) accumulate deltas; evict idle streams
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:9464
+    enable_open_metrics: true   # (2) publish counter created timestamps
+    resource_to_telemetry_conversion: { enabled: true }
 
 service:
   pipelines:
     metrics:
       receivers: [otlp]
       processors: [deltatocumulative, batch]
-      exporters: [prometheusremotewrite]
+      exporters: [prometheus]
 ```
 
-Counts then come out as exact integers and sum across process restarts, and
-ordinary `increase()`/`rate()` queries work as written. Sending delta metrics
-straight to a backend that expects cumulative, without this processor, will
-misreport them. The accumulation state lives in the collector, so restarting
-it resets the running totals.
+```bash
+# prometheus
+--enable-feature=created-timestamp-zero-ingestion   # (3)
+```
+
+1. **`deltatocumulative`** accumulates the deltas into one continuous series
+   per stream, owned by the collector rather than by any run.
+2. **Scraping, with OpenMetrics.** The collector is long-lived and always
+   holds the current totals, so scraping it has none of the ephemeral-producer
+   problems. OpenMetrics carries each counter's *created timestamp*; the
+   remote-write v1 path drops it.
+3. **`created-timestamp-zero-ingestion`** makes Prometheus act on that
+   timestamp, writing a zero sample at the counter's start. Without it a
+   counter whose first observed value is 1 has no rise, and the first run of
+   every stream stays invisible to `increase()` — verified: the flag is the
+   difference between the series minimum reading `0` and reading `1`.
+
+The accumulation state lives in the collector, so restarting it resets the
+running totals.
+
+### Counting vs rating
+
+Both question shapes are legitimate, and they need different queries:
+
+- **"How many runs happened in this window?"** — an exact counter delta:
+  `(sum(interloper_runs_total) or vector(0)) - (sum(interloper_runs_total offset $__range) or vector(0))`.
+  Integers, no extrapolation.
+- **"What did activity look like over time?"** — `increase(...[$__rate_interval])`.
+  This extrapolates to the window edges by design, so bar heights are
+  approximate; ten runs can render as 10.5.
+
+Using `increase()` for the first question is the usual cause of counts that
+look slightly too high.
 
 Because the interval is always passed explicitly, the SDK's own
 `OTEL_METRIC_EXPORT_INTERVAL` is inert.
