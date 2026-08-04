@@ -205,11 +205,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (status) (increase(interloper_runs_total{job=~\"$service\"}[$__rate_interval]))",
+          "expr": "clamp_min(sum by (status) (interloper_runs_total{job=~\"$service\"}) - (sum by (status) (interloper_runs_total{job=~\"$service\"} offset $__interval) or sum by (status) (interloper_runs_total{job=~\"$service\"}) * 0), 0)",
           "legendFormat": "{{status}}"
         }
       ],
-      "description": "Activity per interval, not a count: rate-shaped panels extrapolate to the window edges, so bar heights are approximate. The stat and table panels above carry the exact counts."
+      "description": "Exact count per bucket. Min step is pinned to the bucket width so the buckets are disjoint \u2014 the bars can be read, and summed, as counts.",
+      "interval": "1m"
     },
     {
       "type": "timeseries",
@@ -334,11 +335,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (status) (increase(interloper_assets_total{job=~\"$service\"}[$__rate_interval]))",
+          "expr": "clamp_min(sum by (status) (interloper_assets_total{job=~\"$service\"}) - (sum by (status) (interloper_assets_total{job=~\"$service\"} offset $__interval) or sum by (status) (interloper_assets_total{job=~\"$service\"}) * 0), 0)",
           "legendFormat": "{{status}}"
         }
       ],
-      "description": "Activity per interval, not a count: rate-shaped panels extrapolate to the window edges, so bar heights are approximate. The stat and table panels above carry the exact counts."
+      "description": "Exact count per bucket. Min step is pinned to the bucket width so the buckets are disjoint \u2014 the bars can be read, and summed, as counts.",
+      "interval": "1m"
     },
     {
       "type": "timeseries",
@@ -500,11 +502,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (operation, status, destination_key) (increase(interloper_destination_io_total{job=~\"$service\"}[$__rate_interval]))",
+          "expr": "clamp_min(sum by (operation, status, destination_key) (interloper_destination_io_total{job=~\"$service\"}) - (sum by (operation, status, destination_key) (interloper_destination_io_total{job=~\"$service\"} offset $__interval) or sum by (operation, status, destination_key) (interloper_destination_io_total{job=~\"$service\"}) * 0), 0)",
           "legendFormat": "{{destination_key}} {{operation}} ({{status}})"
         }
       ],
-      "description": "Activity per interval, not a count: rate-shaped panels extrapolate to the window edges, so bar heights are approximate. The stat and table panels above carry the exact counts."
+      "description": "Exact count per bucket. Min step is pinned to the bucket width so the buckets are disjoint \u2014 the bars can be read, and summed, as counts.",
+      "interval": "1m"
     },
     {
       "type": "row",
