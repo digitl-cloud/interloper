@@ -1,6 +1,17 @@
 global:
   scrape_interval: 5s
 
-# Nothing is scraped: the collector remote-writes into this instance, which is
-# what makes short-lived pipeline runs visible at all.
-scrape_configs: []
+scrape_configs:
+  # The collector holds the accumulated totals for every run that ever
+  # reported, so this scrape is of a long-lived, always-present series —
+  # no short-lived process to miss.
+  - job_name: interloper
+    honor_labels: true
+    static_configs:
+      - targets: ["otel-collector:9464"]
+    metric_relabel_configs:
+      # Each producer's service.name becomes the job, so runs, the API and
+      # the scheduler stay distinguishable instead of collapsing into the
+      # scrape target's name.
+      - source_labels: [service_name]
+        target_label: job

@@ -12,6 +12,7 @@ services:
     ports:
       - "4317:4317" # OTLP gRPC — where the pipeline sends
       - "4318:4318" # OTLP HTTP
+      - "9464:9464" # scraped by Prometheus
     depends_on:
       - tempo
       - prometheus
@@ -32,7 +33,11 @@ services:
       - --storage.tsdb.path=/prometheus
       # The collector pushes metrics rather than being scraped, so that a
       # short-lived pipeline run can't finish before a scrape lands.
-      - --web.enable-remote-write-receiver
+      - --web.enable-otlp-receiver
+      # Writes a zero sample at each counter's start timestamp, so a counter
+      # whose first observed value is 1 is understood to have risen from 0.
+      # Without it the first run of every series is invisible to increase().
+      - --enable-feature=created-timestamp-zero-ingestion
       - --enable-feature=exemplar-storage
     volumes:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro

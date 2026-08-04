@@ -26,12 +26,16 @@ exporters:
     endpoint: tempo:4317
     tls:
       insecure: true
-  prometheusremotewrite:
-    endpoint: http://prometheus:9090/api/v1/write
-    tls:
-      insecure: true
-    # Keeps service.name/interloper.role as labels instead of folding them
-    # into a single target_info metric.
+  # Exposed for Prometheus to scrape, rather than pushed. The collector is
+  # long-lived and holds the accumulated totals, so scraping it has none of
+  # the ephemeral-producer problems: the series exists continuously, and
+  # OpenMetrics carries each counter's created timestamp — which is what
+  # lets Prometheus record that a counter now reading 1 started from 0.
+  prometheus:
+    endpoint: 0.0.0.0:9464
+    enable_open_metrics: true
+    # Keeps service.name/interloper.role as labels rather than folding them
+    # into a separate target_info metric.
     resource_to_telemetry_conversion:
       enabled: true
 
@@ -44,4 +48,4 @@ service:
     metrics:
       receivers: [otlp]
       processors: [deltatocumulative, batch]
-      exporters: [prometheusremotewrite]
+      exporters: [prometheus]

@@ -54,11 +54,17 @@ with the exception recorded on it.
 ## How the pieces fit
 
 ```
-pipeline.py ──OTLP/gRPC :4317──▶ otel-collector ──▶ Tempo       (traces)
-                                                └──▶ Prometheus (metrics, remote write)
-                                                          ▲
-                                                       Grafana :8080
+                    traces ────────────────▶ Tempo
+pipeline.py ──OTLP :4317──▶ otel-collector                     Grafana :8080
+                    metrics ── accumulated ──┐                      │
+                                             ▼                      │
+                          Prometheus scrapes :9464 ◀────────────────┘
 ```
+
+Metrics are *pulled* from the collector rather than pushed onward: the
+collector holds the accumulated totals and outlives every run, so scraping it
+avoids the short-lived-producer problem entirely. Traces are pushed straight
+through to Tempo.
 
 Ports deliberately avoid 3000/3001 so this can run alongside an interloper dev
 instance. Prometheus is on :9090 if you want to poke at raw series; Tempo is
@@ -80,12 +86,18 @@ Equivalently, without touching code:
 
 ## Notes
 
-- **Metrics are deltas, accumulated by the collector.** Runs report "N happened
-  since my last export" rather than a running total, and the collector's
-  `deltatocumulative` processor turns those into one continuous series it owns.
-  That is what makes the panels plain `increase()` queries returning exact
-  integers — and why counts sum across pipeline restarts instead of resetting
-  with every process. Remove that processor and the numbers become nonsense.
+- **Metrics are deltas, accumulated by the collector, and Prometheus scrapes it.**
+  Runs report "N happened since my last export" rather than a running total;
+  `deltatocumulative` accumulates those into one continuous series the collector
+  owns; and Prometheus scrapes that with `created-timestamp-zero-ingestion`, so
+  a counter first observed at 1 is recorded as having risen from 0. All three
+  pieces are load-bearing — drop any one and the first run of every series
+  disappears from the counts. See
+  [docs/features/telemetry.md](../../docs/features/telemetry.md).
+- **Counts are exact; rate panels are approximate.** The stat and table panels
+  use a counter delta over the range, so they read exactly 1 after one run. The
+  bar charts use `increase()`, which extrapolates by design — treat their
+  heights as activity, not as counts.
 - **The demo exports every 5s** (`metric_export_interval=5`, versus the
   framework's 60s default). Purely for responsiveness: the deltas are correct
   either way, they just land sooner.
