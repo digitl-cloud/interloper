@@ -16,7 +16,6 @@ the OpenTelemetry SDK by hand.
 import argparse
 import datetime as dt
 import logging
-import os
 import random
 import time
 from typing import Any
@@ -115,12 +114,15 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
 
-    # The SDK exports metrics every 60s by default, which would leave a short
-    # demo with a single data point — too few for rate()/increase() to plot.
-    os.environ.setdefault("OTEL_METRIC_EXPORT_INTERVAL", "5000")
-
     if not init_telemetry(
-        TelemetrySettings(enabled=True, endpoint=args.endpoint, service_name="interloper-example"),
+        TelemetrySettings(
+            enabled=True,
+            endpoint=args.endpoint,
+            service_name="interloper-example",
+            # Faster than the framework default so a short demo still gives the
+            # rate-based panels several points to work with.
+            metric_export_interval=5,
+        ),
         role="example",
     ):
         raise SystemExit("Telemetry did not start. Install the extra: uv sync --all-extras")

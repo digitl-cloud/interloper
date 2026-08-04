@@ -5,6 +5,18 @@ import pytest
 from interloper.settings import AgentSettings, AppSettings, AuthSettings, TelemetrySettings
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_yaml(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """Run each test where no ``interloper.yaml`` can be discovered.
+
+    ``AppSettings`` resolves its YAML source relative to the working
+    directory, so without this these tests assert against whatever the
+    repo-root config happens to contain — a block added there silently
+    overrides the env vars under test.
+    """
+    monkeypatch.chdir(tmp_path)
+
+
 def test_agent_settings_defaults():
     """Agent defaults: enabled, native Gemini model."""
     settings = AgentSettings()
@@ -87,3 +99,19 @@ def test_telemetry_settings_env_override(monkeypatch: pytest.MonkeyPatch):
     assert settings.otel.endpoint == "http://collector:4317"
     assert settings.otel.protocol == "http/protobuf"
     assert settings.otel.sample_ratio == 0.25
+
+
+def test_telemetry_metric_export_interval_default_is_below_the_sdk_default():
+    """Short-lived runs need frequent exports for rate()/increase() to work."""
+    settings = TelemetrySettings()
+
+    assert settings.metric_export_interval == 15
+
+
+def test_telemetry_metric_export_interval_env_override(monkeypatch: pytest.MonkeyPatch):
+    """INTERLOPER_OTEL_METRIC_EXPORT_INTERVAL reaches the nested otel settings."""
+    monkeypatch.setenv("INTERLOPER_OTEL_METRIC_EXPORT_INTERVAL", "5")
+
+    settings = AppSettings()
+
+    assert settings.otel.metric_export_interval == 5
