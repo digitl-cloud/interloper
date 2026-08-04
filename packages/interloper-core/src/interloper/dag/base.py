@@ -5,13 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from opentelemetry.trace import StatusCode
 from pydantic import BaseModel
 
 from interloper.asset.base import Asset, AssetIdentity
 from interloper.component import Component
 from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, DependencyNotFoundError
 from interloper.partitioning import Partition, PartitionWindow
-from interloper.runner.results import RunResult
+from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.serializable import Spec
 from interloper.source.base import Source
 from interloper.telemetry import attributes
@@ -327,8 +328,13 @@ class DAG:
         span_attrs: dict[str, Any] = {attributes.DAG_ASSET_COUNT: len(self.assets)}
         if partition_or_window is not None:
             span_attrs[attributes.PARTITION] = str(partition_or_window)
-        with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attrs):
-            return await AsyncRunner().run(dag=self, partition_or_window=partition_or_window)
+        with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attrs) as span:
+            result = await AsyncRunner().run(dag=self, partition_or_window=partition_or_window)
+            # A failed run is returned, not raised — without this the trace's
+            # root span reads OK while the failure sits on a descendant.
+            if result.status is ExecutionStatus.FAILED:
+                span.set_status(StatusCode.ERROR, f"{len(result.failed_assets)} asset(s) failed")
+            return result
 
     # -- Serialization ---------------------------------------------------------
 

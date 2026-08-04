@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 5s
+
+# Nothing is scraped: the collector remote-writes into this instance, which is
+# what makes short-lived pipeline runs visible at all.
+scrape_configs: []
