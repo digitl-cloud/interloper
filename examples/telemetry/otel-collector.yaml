@@ -17,9 +17,11 @@ processors:
   # series per stream — owned by the collector, which outlives every run —
   # which is what Prometheus' rate()/increase() are built for.
   deltatocumulative:
-    # Drop a stream's accumulated state after this long without new deltas,
-    # so idle series don't pin memory forever.
-    max_stale: 30m
+    # Hold a stream's accumulated state this long without new deltas. Must be
+    # at least the exporter's metric_expiration below: if the running total is
+    # dropped while the series is still published, the next delta restarts the
+    # count from zero and the counter appears to reset.
+    max_stale: 25h
 
 exporters:
   otlp/tempo:
@@ -34,6 +36,11 @@ exporters:
   prometheus:
     endpoint: 0.0.0.0:9464
     enable_open_metrics: true
+    # Keep publishing a counter this long after its last update. The default
+    # is 5 minutes, which silently drops the totals of any pipeline idle for
+    # longer — the series goes stale and every instant query reads zero, even
+    # though the runs happened. Runs here are minutes to hours apart.
+    metric_expiration: 24h
     # Keeps service.name/interloper.role as labels rather than folding them
     # into a separate target_info metric.
     resource_to_telemetry_conversion:

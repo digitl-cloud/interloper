@@ -69,12 +69,13 @@ each is load-bearing:
 # collector
 processors:
   deltatocumulative:
-    max_stale: 30m          # (1) accumulate deltas; evict idle streams
+    max_stale: 25h          # (1) accumulate deltas; hold state ≥ expiration
 
 exporters:
   prometheus:
     endpoint: 0.0.0.0:9464
     enable_open_metrics: true   # (2) publish counter created timestamps
+    metric_expiration: 24h      # (4) keep publishing idle counters
     resource_to_telemetry_conversion: { enabled: true }
 
 service:
@@ -101,6 +102,13 @@ service:
    counter whose first observed value is 1 has no rise, and the first run of
    every stream stays invisible to `increase()` — verified: the flag is the
    difference between the series minimum reading `0` and reading `1`.
+4. **`metric_expiration`** raised from its 5-minute default. The exporter
+   stops publishing a counter that has not been updated recently, so with the
+   default, totals vanish from any pipeline idle for five minutes: the series
+   goes stale and every instant query reads zero even though the runs
+   happened. `deltatocumulative`'s `max_stale` must be at least as long, or
+   the running total is discarded while the series is still published and the
+   counter silently restarts from zero.
 
 The accumulation state lives in the collector, so restarting it resets the
 running totals.
@@ -112,12 +120,15 @@ Both question shapes are legitimate, and they need different queries:
 - **"How many runs happened in this window?"** — an exact counter delta:
   `(sum(interloper_runs_total) or vector(0)) - (sum(interloper_runs_total offset $__range) or vector(0))`.
   Integers, no extrapolation.
-- **"What did activity look like over time?"** — `increase(...[$__rate_interval])`.
-  This extrapolates to the window edges by design, so bar heights are
-  approximate; ten runs can render as 10.5.
+- **"What did activity look like over time?"** — the same delta per bucket,
+  with the panel's minimum step pinned to the bucket width so the buckets are
+  disjoint.
 
-Using `increase()` for the first question is the usual cause of counts that
-look slightly too high.
+`increase()` suits neither: it extrapolates to the window edges, so ten runs
+render as 10.5, and `$__rate_interval` deliberately makes the window wider
+than the plotting step — which draws one burst of work as several adjacent
+bars that must not be summed. That combination is the usual cause of counts
+that look too high.
 
 Because the interval is always passed explicitly, the SDK's own
 `OTEL_METRIC_EXPORT_INTERVAL` is inert.

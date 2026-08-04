@@ -94,10 +94,16 @@ Equivalently, without touching code:
   pieces are load-bearing — drop any one and the first run of every series
   disappears from the counts. See
   [docs/features/telemetry.md](../../docs/features/telemetry.md).
-- **Counts are exact; rate panels are approximate.** The stat and table panels
-  use a counter delta over the range, so they read exactly 1 after one run. The
-  bar charts use `increase()`, which extrapolates by design — treat their
-  heights as activity, not as counts.
+- **Every count panel uses an exact counter delta**, not `increase()`. The bar
+  charts additionally pin their minimum step to the bucket width, so the
+  buckets are disjoint and the bars sum to the real total. With `increase()`
+  and Grafana's `$__rate_interval` the window is wider than the plotting step,
+  which draws a single run's work as several adjacent bars — four bars of ~5
+  summing to 18 for five executions. Only the duration quantiles use `rate()`,
+  which is correct there.
+- **Idle counters keep publishing for 24h** (`metric_expiration`). The
+  collector's 5-minute default drops the totals of any pipeline idle longer
+  than that, and every stat panel silently reads zero.
 - **The demo exports every 5s** (`metric_export_interval=5`, versus the
   framework's 60s default). Purely for responsiveness: the deltas are correct
   either way, they just land sooner.
