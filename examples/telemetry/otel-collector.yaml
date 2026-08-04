@@ -11,6 +11,16 @@ processors:
     # Short so a demo run shows up in Grafana within a couple of seconds.
     timeout: 1s
 
+  # Runs export their metrics as deltas ("N happened since my last export"),
+  # because a short-lived process has no earlier sample to be differenced
+  # against. This accumulates those deltas into one continuous cumulative
+  # series per stream — owned by the collector, which outlives every run —
+  # which is what Prometheus' rate()/increase() are built for.
+  deltatocumulative:
+    # Drop a stream's accumulated state after this long without new deltas,
+    # so idle series don't pin memory forever.
+    max_stale: 30m
+
 exporters:
   otlp/tempo:
     endpoint: tempo:4317
@@ -33,5 +43,5 @@ service:
       exporters: [otlp/tempo]
     metrics:
       receivers: [otlp]
-      processors: [batch]
+      processors: [deltatocumulative, batch]
       exporters: [prometheusremotewrite]

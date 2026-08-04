@@ -31,7 +31,7 @@
     {
       "type": "stat",
       "title": "Runs in range",
-      "description": "Peak counter value in range, not increase() — a short-lived process exports its counter already non-zero, so there is no rise for increase() to measure. Counts the largest single run of the pipeline; restarting it resets the counter.",
+      "description": "Runs completed within the dashboard time range, summed across pipeline restarts — runs export delta metrics that the collector accumulates into one continuous series.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
       "fieldConfig": {
@@ -46,7 +46,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(max_over_time(interloper_runs_total{job=~\"$service\"}[$__range]))",
+          "expr": "sum(increase(interloper_runs_total{job=~\"$service\"}[$__range]))",
           "instant": true
         }
       ]
@@ -80,7 +80,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(max_over_time(interloper_runs_total{job=~\"$service\",status=\"completed\"}[$__range])) / clamp_min(sum(max_over_time(interloper_runs_total{job=~\"$service\"}[$__range])), 1)",
+          "expr": "sum(increase(interloper_runs_total{job=~\"$service\",status=\"completed\"}[$__range])) / clamp_min(sum(increase(interloper_runs_total{job=~\"$service\"}[$__range])), 1)",
           "instant": true
         }
       ]
@@ -241,19 +241,19 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (asset_key) (max_over_time(interloper_assets_total{job=~\"$service\",status=\"completed\"}[$__range]))",
+          "expr": "sum by (asset_key) (increase(interloper_assets_total{job=~\"$service\",status=\"completed\"}[$__range]))",
           "instant": true,
           "format": "table"
         },
         {
           "refId": "B",
-          "expr": "sum by (asset_key) (max_over_time(interloper_assets_total{job=~\"$service\",status=\"failed\"}[$__range]))",
+          "expr": "sum by (asset_key) (increase(interloper_assets_total{job=~\"$service\",status=\"failed\"}[$__range]))",
           "instant": true,
           "format": "table"
         },
         {
           "refId": "C",
-          "expr": "sum by (asset_key) (max_over_time(interloper_assets_total{job=~\"$service\",status=\"canceled\"}[$__range]))",
+          "expr": "sum by (asset_key) (increase(interloper_assets_total{job=~\"$service\",status=\"canceled\"}[$__range]))",
           "instant": true,
           "format": "table"
         }

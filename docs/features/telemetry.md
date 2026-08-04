@@ -44,31 +44,48 @@ Settings live under the `otel` block of `interloper.yaml` or the matching
 | `traces` | `INTERLOPER_OTEL_TRACES` | `true` | Toggle the traces signal. |
 | `metrics` | `INTERLOPER_OTEL_METRICS` | `true` | Toggle the metrics signal. |
 | `sample_ratio` | `INTERLOPER_OTEL_SAMPLE_RATIO` | `1.0` | Head sampling ratio (parent-based). |
-| `metric_export_interval` | `INTERLOPER_OTEL_METRIC_EXPORT_INTERVAL` | `15` | Seconds between metric exports. Below the SDK's 60s default on purpose — see below. |
+| `metric_export_interval` | `INTERLOPER_OTEL_METRIC_EXPORT_INTERVAL` | `60` | Seconds between metric exports. A freshness knob: runs flush on exit regardless, and an idle interval exports nothing. |
 
-### Why the export interval matters
+### Delta temporality — required collector setup
 
-Runs are short-lived, and a metric counter is only exported once it has
-recorded something — so its very first sample already reads non-zero, and
-Prometheus never observes the rise from zero. At the SDK's 60s default most
-runs export exactly once, at shutdown, leaving `rate()` and `increase()`
-nothing to measure: dashboards built on them read zero even though the
-counters are correct.
+Metrics are exported with **delta temporality**: each point reports what
+happened since the previous export ("6 reads in the last interval") rather
+than a running total ("my counter is at 6"). This is not the OpenTelemetry
+default, and it is deliberate.
 
-Two consequences worth knowing:
+A cumulative point only means something next to an earlier one — the
+information lives in the difference between points. A run that lives a few
+seconds exports its counter once, with nothing before it to be differenced
+against, so the work it did is invisible to `rate()`/`increase()`; and the
+next run starts a fresh process whose counter begins at zero again, so the
+series never rises. A delta point is self-contained, so neither problem
+arises.
 
-- Prefer `max_over_time()` over `increase()` for "how many runs happened"
-  panels. It reads the counter's peak rather than its delta, so it is immune
-  to the missing zero baseline — at the cost of resetting when the process
-  restarts.
-- Tell Grafana how often data actually arrives by setting the Prometheus
-  datasource's **Scrape interval** (`timeInterval`) to match this setting.
-  Grafana sizes `$__rate_interval` from it; left at its 15s assumption while
-  data arrives every 60s, every rate window falls between two identical
-  samples.
+**This requires a collector** with the `deltatocumulative` processor, which
+accumulates the deltas into one continuous cumulative series per stream —
+owned by the collector, which outlives every run:
 
-Setting this also makes the SDK's own `OTEL_METRIC_EXPORT_INTERVAL` inert,
-since the interval is always passed explicitly.
+```yaml
+processors:
+  deltatocumulative:
+    max_stale: 30m   # evict idle streams so they don't pin memory
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [deltatocumulative, batch]
+      exporters: [prometheusremotewrite]
+```
+
+Counts then come out as exact integers and sum across process restarts, and
+ordinary `increase()`/`rate()` queries work as written. Sending delta metrics
+straight to a backend that expects cumulative, without this processor, will
+misreport them. The accumulation state lives in the collector, so restarting
+it resets the running totals.
+
+Because the interval is always passed explicitly, the SDK's own
+`OTEL_METRIC_EXPORT_INTERVAL` is inert.
 
 Precedence: interloper settings win over the SDK's standard `OTEL_*` environment
 variables; anything you leave unset here (endpoint, headers, resource attributes, …)

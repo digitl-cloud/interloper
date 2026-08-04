@@ -83,3 +83,32 @@ class TestDurationBuckets:
         }
         for view in views:
             assert view._aggregation._boundaries == setup._DURATION_BUCKETS
+
+
+class TestDeltaTemporality:
+    """Sums and histograms are exported as deltas, not running totals.
+
+    A run lives seconds and exports its counter once, with no earlier
+    sample to be differenced against — so under cumulative temporality the
+    work it did is invisible to rate()/increase(), and the next run
+    restarts the series from zero. Deltas are self-contained; the
+    collector accumulates them into one series that outlives any run.
+    """
+
+    def test_flows_are_delta_and_levels_stay_cumulative(self):
+        from opentelemetry.sdk.metrics import (
+            Counter,
+            Histogram,
+            ObservableCounter,
+            ObservableUpDownCounter,
+            UpDownCounter,
+        )
+        from opentelemetry.sdk.metrics.export import AggregationTemporality
+
+        preference = setup._delta_temporality()
+
+        for instrument in (Counter, Histogram, ObservableCounter):
+            assert preference[instrument] is AggregationTemporality.DELTA
+        # A level is meaningless as a delta of one.
+        for instrument in (UpDownCounter, ObservableUpDownCounter):
+            assert preference[instrument] is AggregationTemporality.CUMULATIVE
