@@ -127,7 +127,7 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
             resource=resource,
             metric_readers=[
                 PeriodicExportingMetricReader(
-                    OTLPMetricExporter(**exporter_kwargs),
+                    OTLPMetricExporter(**exporter_kwargs, preferred_temporality=_delta_temporality()),
                     export_interval_millis=settings.metric_export_interval * 1000,
                 )
             ],
@@ -149,6 +149,44 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
 #: second-valued durations every run under 5s falls in one bucket and every
 #: quantile is interpolated across it. These span a fast asset to a long load.
 _DURATION_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0, 3600.0)
+
+
+def _delta_temporality() -> dict[type, Any]:
+    """Export sums and histograms as deltas rather than running totals.
+
+    Runs are short-lived, and a cumulative point is only meaningful next to
+    a previous one: a process that lives seconds exports its counter once,
+    with no earlier sample to difference against, so the work it did is
+    invisible to ``rate()``/``increase()`` and every new process restarts
+    the series from zero. A delta point ("N happened since my last export")
+    is self-contained, and the collector's ``deltatocumulative`` processor
+    accumulates the deltas into one continuous series it owns for far
+    longer than any single run.
+
+    Up/down counters stay cumulative — they measure a level, not a flow,
+    so a delta of one would be meaningless on its own.
+
+    Returns:
+        Preferred temporality per instrument kind, for the OTLP exporter.
+    """
+    from opentelemetry.sdk.metrics import (
+        Counter,
+        Histogram,
+        ObservableCounter,
+        ObservableGauge,
+        ObservableUpDownCounter,
+        UpDownCounter,
+    )
+    from opentelemetry.sdk.metrics.export import AggregationTemporality
+
+    return {
+        Counter: AggregationTemporality.DELTA,
+        Histogram: AggregationTemporality.DELTA,
+        ObservableCounter: AggregationTemporality.DELTA,
+        UpDownCounter: AggregationTemporality.CUMULATIVE,
+        ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+        ObservableGauge: AggregationTemporality.CUMULATIVE,
+    }
 
 
 def _duration_views() -> list[Any]:

@@ -80,26 +80,20 @@ Equivalently, without touching code:
 
 ## Notes
 
-- **The metric export interval is forced to 5s** (`OTEL_METRIC_EXPORT_INTERVAL`).
-  The SDK default is 60s, which would give a short demo a single data point —
-  and the `rate()`-based timeseries panels need at least two to plot anything.
-- **The total/rate panels use `max_over_time`, not `increase`.** A counter from a
-  short-lived process is already non-zero in its very first exported sample:
-  OpenTelemetry only exports an instrument once it has recorded something, so
-  Prometheus never sees the 0 → 1 rise. `increase()` measures last − first within
-  the window, so it under-reports by the first increment — and reads exactly **0**
-  when every run completed before the first export (which is what happens at the
-  SDK's 60s default). `max_over_time` reads the counter's peak instead, which is
-  both correct and an integer. The trade-off: restarting the pipeline resets the
-  counter, so these panels show the largest single session rather than a sum
-  across sessions.
-- **The per-interval timeseries panels still use `increase()`**, which is the right
-  shape for "activity over time" — they rely on the 5s export interval above, and
-  will look sparse if you point a 60s-export process at this dashboard.
+- **Metrics are deltas, accumulated by the collector.** Runs report "N happened
+  since my last export" rather than a running total, and the collector's
+  `deltatocumulative` processor turns those into one continuous series it owns.
+  That is what makes the panels plain `increase()` queries returning exact
+  integers — and why counts sum across pipeline restarts instead of resetting
+  with every process. Remove that processor and the numbers become nonsense.
+- **The demo exports every 5s** (`metric_export_interval=5`, versus the
+  framework's 60s default). Purely for responsiveness: the deltas are correct
+  either way, they just land sooner.
 - **Panels go blank ~5 minutes after you stop the pipeline.** That is Prometheus'
-  lookback window, not a broken dashboard: a short-lived process stops producing
-  samples the moment it exits. The `max_over_time` panels keep working as long as
-  the dashboard time range still covers the run.
+  lookback window, not a broken dashboard. Range-based panels keep working as
+  long as the dashboard time range still covers the runs.
+- **Restarting the collector resets the accumulated totals**, since that is where
+  the running state lives.
 - The metric names are the OTLP names with dots replaced by underscores, e.g.
   `interloper.asset.duration` → `interloper_asset_duration_seconds`. `service.name`
   arrives as the `job` label.

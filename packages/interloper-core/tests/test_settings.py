@@ -101,11 +101,11 @@ def test_telemetry_settings_env_override(monkeypatch: pytest.MonkeyPatch):
     assert settings.otel.sample_ratio == 0.25
 
 
-def test_telemetry_metric_export_interval_default_is_below_the_sdk_default():
-    """Short-lived runs need frequent exports for rate()/increase() to work."""
+def test_telemetry_metric_export_interval_default():
+    """Delta temporality makes this a freshness knob, so the SDK default stands."""
     settings = TelemetrySettings()
 
-    assert settings.metric_export_interval == 15
+    assert settings.metric_export_interval == 60
 
 
 def test_telemetry_metric_export_interval_env_override(monkeypatch: pytest.MonkeyPatch):

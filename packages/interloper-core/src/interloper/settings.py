@@ -225,11 +225,11 @@ class TelemetrySettings(BaseSettings):
     traces: bool = True
     metrics: bool = True
     sample_ratio: float = 1.0
-    # Seconds between metric exports. Below the SDK's 60s default because runs
-    # are short-lived: at 60s most runs export exactly once (at shutdown), which
-    # leaves rate()/increase() nothing to measure — the counter is already
-    # non-zero in its first and only sample.
-    metric_export_interval: int = 15
+    # Seconds between metric exports. Metrics are exported as deltas, so this
+    # is a freshness/resolution knob, not a correctness one: a short-lived run
+    # flushes on exit regardless, and an interval with no activity exports
+    # nothing at all. Lower it for a more responsive dashboard.
+    metric_export_interval: int = 60
 
 
 class ReaperSettings(BaseSettings):
