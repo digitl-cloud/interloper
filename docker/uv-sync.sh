@@ -7,6 +7,10 @@
 #   ASSETS_EXTRAS     → --extra {name} flags (scoped to interloper-assets)
 #   SCHEDULER_EXTRAS  → --extra {name} flags (scoped to interloper-scheduler)
 #   API_EXTRAS        → --extra {name} flags (scoped to interloper-api)
+#   COMMON_EXTRAS     → --extra {name} flags, unscoped — for extras that
+#                       several workspace packages define (e.g. otel on
+#                       core, api, and db); uv applies each to whichever
+#                       selected packages carry it
 set -e
 
 # NOTE: the install pass intentionally omits --locked. semantic-release bumps
@@ -72,6 +76,13 @@ if $INSTALL; then
     done
     if $HAS_API && [ -n "${API_EXTRAS:-}" ]; then
         for e in $(echo "$API_EXTRAS" | tr ',' ' '); do
+            EXTRA_FLAGS="$EXTRA_FLAGS --extra $e"
+        done
+    fi
+
+    # COMMON_EXTRAS → --extra flags, regardless of which packages are selected
+    if [ -n "${COMMON_EXTRAS:-}" ]; then
+        for e in $(echo "$COMMON_EXTRAS" | tr ',' ' '); do
             EXTRA_FLAGS="$EXTRA_FLAGS --extra $e"
         done
     fi

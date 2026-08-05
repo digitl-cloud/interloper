@@ -47,6 +47,7 @@ REGISTRY      := europe-docker.pkg.dev/dc-int-connectors-prd/docker
 VERSION       := $(shell python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 CORE_EXTRAS   ?= google-cloud
 ASSETS_EXTRAS ?= bing,facebook,google
+COMMON_EXTRAS ?= otel
 
 # Image catalog. Each role is its own repository "interloper-<role>"; flavors
 # (extra-bearing variants) ride the TAG, not the image name:
@@ -100,6 +101,7 @@ docker-build-linux-%:
 	docker build --target $(call role_of,$*) -f $(call dockerfile_of,$*) --platform linux/amd64 \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
+		--build-arg COMMON_EXTRAS=$(COMMON_EXTRAS) \
 		$(call extras_arg,$*) \
 		-t $(call image_of,$*):$(call tag_of,$*) \
 		-t $(call image_of,$*):$(call latest_of,$*) \
@@ -110,6 +112,7 @@ docker-build-%:
 	docker build --target $(call role_of,$*) -f $(call dockerfile_of,$*) \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
+		--build-arg COMMON_EXTRAS=$(COMMON_EXTRAS) \
 		$(call extras_arg,$*) \
 		-t $(call image_of,$*):$(call tag_of,$*) \
 		-t $(call image_of,$*):$(call latest_of,$*) \

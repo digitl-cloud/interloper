@@ -137,6 +137,7 @@ jobs:
           build-args: |
             CORE_EXTRAS=google-cloud
             ASSETS_EXTRAS=bing,facebook,google
+            COMMON_EXTRAS=otel
             API_EXTRAS=${{ matrix.api_extras }}
             SCHEDULER_EXTRAS=${{ matrix.scheduler_extras }}
           cache-from: type=gha,scope=docker-${{ matrix.role }}-${{ matrix.flavor }}

@@ -258,10 +258,11 @@ shutdown_telemetry()  # flush before the process exits
 
 ## Kubernetes deployment
 
-The Helm chart wires everything from one block (build the images with the
-`otel` extras of the packages they carry — `interloper-db[otel]` for
-SQLAlchemy spans in the api and scheduler images, plus
-`interloper-api[otel]` for request spans in the api image):
+The Helm chart wires everything from one block. The published images ship
+with the `otel` extras of the packages they carry (`COMMON_EXTRAS=otel` at
+build time — SDK and exporters everywhere, SQLAlchemy spans where
+`interloper-db` is present, request spans in the api image); pass
+`COMMON_EXTRAS=""` when building images to leave them out.
 
 ```yaml
 otel:

@@ -32,12 +32,19 @@
 #   API_EXTRAS        comma-separated interloper-api extras (default: none).
 #                     Supported: agent (bundles interloper-agent so the
 #                     /agent routes mount). Each maps to --extra {name}.
+#   COMMON_EXTRAS     comma-separated extras defined by several workspace
+#                     packages (default: otel). Each maps to --extra {name},
+#                     applied to whichever selected packages carry it —
+#                     otel lands the SDK/exporters via core plus the
+#                     FastAPI/SQLAlchemy instrumentors via api/db where
+#                     those packages are in the image. Pass "" to disable.
 #
 # ================================================================
 
 ARG CORE_EXTRAS=google-cloud
 ARG ASSETS_EXTRAS=bing,facebook,google
 ARG SCHEDULER_EXTRAS=docker
+ARG COMMON_EXTRAS=otel
 
 
 # ── Python base: workspace manifests for dependency caching ────
@@ -77,6 +84,7 @@ ENV PATH="/interloper/.venv/bin:$PATH"
 
 # ── core ──────────────────────────────────────────────────────
 FROM base AS build-core
+ARG COMMON_EXTRAS
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh --frozen interloper-core
@@ -92,6 +100,7 @@ FROM base AS build-scheduler
 ARG CORE_EXTRAS
 ARG ASSETS_EXTRAS
 ARG SCHEDULER_EXTRAS
+ARG COMMON_EXTRAS
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh --frozen interloper-core interloper-assets interloper-db interloper-scheduler
@@ -107,6 +116,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM base AS build-worker
 ARG CORE_EXTRAS
 ARG ASSETS_EXTRAS
+ARG COMMON_EXTRAS
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh --frozen interloper-core interloper-assets
@@ -124,6 +134,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM base AS build-api
 ARG CORE_EXTRAS
 ARG API_EXTRAS
+ARG COMMON_EXTRAS
 ENV ASSETS_EXTRAS=""
 
 RUN --mount=type=cache,target=/root/.cache/uv \
