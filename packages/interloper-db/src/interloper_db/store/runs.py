@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
@@ -44,10 +45,97 @@ def _sanitize_text(value: str | None, *, max_len: int = _MAX_EVENT_TEXT) -> str 
     return cleaned
 
 
+def _sanitize_data(meta: dict[str, Any]) -> dict[str, Any] | None:
+    """Make a metadata dict safe to persist as JSONB, best-effort.
+
+    Non-JSON values are coerced through ``str``; a dict that still can't be
+    encoded (circular refs, NaN) is dropped rather than failing the event
+    write. Postgres ``jsonb`` rejects NUL escapes the same way ``text``
+    rejects NUL bytes, so they are stripped from the encoded form; an
+    oversized payload is replaced by a marker so the write can't fail on
+    size either.
+
+    Returns:
+        The cleaned dict, or ``None`` when there is nothing worth storing.
+    """
+    if not meta:
+        return None
+    try:
+        encoded = json.dumps(meta, default=str, allow_nan=False)
+    except (TypeError, ValueError):
+        return None
+    if len(encoded) > _MAX_EVENT_TEXT:
+        return {"truncated": True}
+    if "\\u0000" in encoded:
+        encoded = encoded.replace("\\u0000", "")
+    return json.loads(encoded) or None
+
+
+#: Metadata keys persisted as structured ``events`` columns — everything
+#: else spills into the ``data`` JSONB column.
+_PROMOTED_METADATA_KEYS = frozenset(
+    {
+        "run_id",
+        "backfill_id",
+        "asset_id",
+        "asset_key",
+        "component_id",
+        "component_kind",
+        "component_key",
+        "partition_or_window",
+        "error",
+        "traceback",
+        "message",
+        "level",
+    }
+)
+
+
+def _event_values(event: il.Event, org_id: UUID, run_id: UUID | None) -> dict[str, Any]:
+    """Map a framework event onto ``events`` column values.
+
+    The component reference comes from ``component_id``/``component_kind``/
+    ``component_key`` metadata; the ``asset_id``/``asset_key`` keys the asset
+    runners emit map onto the same columns (with kind ``"asset"``), so core
+    emitters need no knowledge of the persistence schema. Metadata not
+    covered by a structured column lands losslessly in ``data``.
+
+    Returns:
+        Column values for an ``events`` insert.
+    """
+    meta = event.metadata
+    try:
+        event_id = UUID(event.id)
+    except (ValueError, TypeError):
+        event_id = uuid4()
+
+    component_id = meta.get("component_id") or meta.get("asset_id")
+    component_kind = meta.get("component_kind") or ("asset" if meta.get("asset_id") else None)
+    component_key = meta.get("component_key") or meta.get("asset_key")
+
+    return {
+        "id": event_id,
+        "org_id": org_id,
+        "run_id": run_id,
+        "backfill_id": UUID(meta["backfill_id"]) if meta.get("backfill_id") else None,
+        "event_type": event.type.value,
+        "component_id": UUID(str(component_id)) if component_id else None,
+        "component_kind": _sanitize_text(component_kind),
+        "component_key": _sanitize_text(component_key),
+        "partition_or_window": _sanitize_text(meta.get("partition_or_window")),
+        "error": _sanitize_text(meta.get("error")),
+        "traceback": _sanitize_text(meta.get("traceback")),
+        "message": _sanitize_text(meta.get("message")),
+        "level": _sanitize_text(meta.get("level")),
+        "data": _sanitize_data({k: v for k, v in meta.items() if k not in _PROMOTED_METADATA_KEYS}),
+        "timestamp": event.timestamp,
+    }
+
+
 def _event_filters(
     run_id: UUID | None,
     org_id: UUID | None,
-    asset_ids: Sequence[UUID] | None,
+    component_ids: Sequence[UUID] | None,
     event_types: Sequence[str] | None,
 ) -> list[Any]:
     """The shared where-clauses of :meth:`RunMixin.list_events` / ``count_events``.
@@ -62,8 +150,8 @@ def _event_filters(
         filters.append(Event.run_id == run_id)
     if org_id:
         filters.append(Event.org_id == org_id)
-    if asset_ids:
-        filters.append(col(Event.asset_id).in_(asset_ids))
+    if component_ids:
+        filters.append(col(Event.component_id).in_(component_ids))
     if event_types:
         filters.append(col(Event.event_type).in_(event_types))
     return filters
@@ -112,35 +200,15 @@ class RunMixin(StoreBase):
         Returns:
             The saved Event row.
         """
-        meta = event.metadata
-        try:
-            event_id = UUID(event.id)
-        except (ValueError, TypeError):
-            event_id = uuid4()
-
-        values: dict[str, object | None] = {
-            "id": event_id,
-            "org_id": org_id,
-            "run_id": run_id,
-            "backfill_id": UUID(meta["backfill_id"]) if meta.get("backfill_id") else None,
-            "event_type": event.type.value,
-            "asset_id": UUID(meta["asset_id"]) if meta.get("asset_id") else None,
-            "asset_key": _sanitize_text(meta.get("asset_key")),
-            "partition_or_window": _sanitize_text(meta.get("partition_or_window")),
-            "error": _sanitize_text(meta.get("error")),
-            "traceback": _sanitize_text(meta.get("traceback")),
-            "message": _sanitize_text(meta.get("message")),
-            "level": _sanitize_text(meta.get("level")),
-            "timestamp": event.timestamp,
-        }
+        values = _event_values(event, org_id, run_id)
 
         with self._session() as session:
             stmt = pg_insert(Event).values(**values).on_conflict_do_nothing(index_elements=["id"])
             session.execute(stmt)  # ty: ignore[deprecated]
             session.commit()
-            saved = session.get(Event, event_id)
+            saved = session.get(Event, values["id"])
             if saved is None:  # pragma: no cover - only if the row was concurrently deleted
-                raise RuntimeError(f"Event {event_id} missing immediately after upsert")
+                raise RuntimeError(f"Event {values['id']} missing immediately after upsert")
             return saved
 
     def list_events(
@@ -148,12 +216,12 @@ class RunMixin(StoreBase):
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
-        asset_ids: Sequence[UUID] | None = None,
+        component_ids: Sequence[UUID] | None = None,
         event_types: Sequence[str] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Event]:
-        """List events, optionally filtered by run, asset(s) and/or type(s).
+        """List events, optionally filtered by run, component(s) and/or type(s).
 
         Ordering is ``timestamp ASC, id ASC`` — stable and deterministic so
         ``offset``/``limit`` paging never skips or repeats a row when several
@@ -162,7 +230,7 @@ class RunMixin(StoreBase):
         Args:
             run_id: Optional run filter.
             org_id: Optional org filter.
-            asset_ids: Optional filter to events of any of these assets.
+            component_ids: Optional filter to events of any of these components.
             event_types: Optional filter to events of any of these types.
             limit: Max results (default 100).
             offset: Pagination offset.
@@ -173,7 +241,7 @@ class RunMixin(StoreBase):
         with self._session() as session:
             statement = (
                 select(Event)
-                .where(*_event_filters(run_id, org_id, asset_ids, event_types))
+                .where(*_event_filters(run_id, org_id, component_ids, event_types))
                 .order_by(col(Event.timestamp).asc(), col(Event.id).asc())
                 .offset(offset)
                 .limit(limit)
@@ -185,7 +253,7 @@ class RunMixin(StoreBase):
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
-        asset_ids: Sequence[UUID] | None = None,
+        component_ids: Sequence[UUID] | None = None,
         event_types: Sequence[str] | None = None,
     ) -> int:
         """Count events matching the same filters as :meth:`list_events`.
@@ -193,7 +261,7 @@ class RunMixin(StoreBase):
         Args:
             run_id: Optional run filter.
             org_id: Optional org filter.
-            asset_ids: Optional filter to events of any of these assets.
+            component_ids: Optional filter to events of any of these components.
             event_types: Optional filter to events of any of these types.
 
         Returns:
@@ -201,7 +269,9 @@ class RunMixin(StoreBase):
         """
         with self._session() as session:
             statement = (
-                select(func.count()).select_from(Event).where(*_event_filters(run_id, org_id, asset_ids, event_types))
+                select(func.count())
+                .select_from(Event)
+                .where(*_event_filters(run_id, org_id, component_ids, event_types))
             )
             return session.exec(statement).one()
 

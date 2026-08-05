@@ -25,6 +25,8 @@ const iconMap: Record<EventType, string> = {
     backfill_started: 'i-lucide-rewind',
     backfill_completed: 'i-lucide-flag',
     backfill_failed: 'i-lucide-alert-circle',
+    hook_fired: 'i-lucide-webhook',
+    hook_failed: 'i-lucide-alert-circle',
     log: 'i-lucide-align-left',
 }
 
@@ -51,6 +53,8 @@ const labelMap: Record<EventType, string> = {
     backfill_started: 'Backfill Started',
     backfill_completed: 'Backfill Completed',
     backfill_failed: 'Backfill Failed',
+    hook_fired: 'Hook Fired',
+    hook_failed: 'Hook Failed',
     log: 'Log',
 }
 
@@ -77,6 +81,8 @@ const LIFECYCLE_TYPES: EventType[] = [
     'backfill_started',
     'backfill_completed',
     'backfill_failed',
+    'hook_fired',
+    'hook_failed',
 ]
 
 /** Every failure event, derived so new `*_failed` types are picked up automatically. */

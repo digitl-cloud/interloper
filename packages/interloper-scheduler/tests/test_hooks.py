@@ -18,6 +18,7 @@ from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Component, ComponentRelation, Run
 from interloper_db.models import Event as EventRow
+from interloper_db.store.runs import _event_values
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -47,15 +48,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
     store = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
 
     def sqlite_save_event(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
-        row = EventRow(
-            id=UUID(event.id),
-            org_id=org_id,
-            run_id=run_id,
-            event_type=event.type.value,
-            message=event.metadata.get("message"),
-            error=event.metadata.get("error"),
-            timestamp=event.timestamp,
-        )
+        row = EventRow(**_event_values(event, org_id, run_id))
         with Session(eng) as session:
             if session.get(EventRow, row.id) is None:
                 session.add(row)
@@ -125,7 +118,7 @@ class TestHookEvaluation:
         source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
         leaf = next(c for c in source.children if c.key == "e")
         root = next(c for c in source.children if c.key == "a")
-        store.create_component(
+        hook = store.create_component(
             _ORG, kind="hook", key="trigger_hook", name="Cascade",
             config={"events": ["run_completed"]},
             relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},
@@ -142,6 +135,10 @@ class TestHookEvaluation:
             events = session.exec(select(EventRow)).all()
             assert [e.event_type for e in events] == ["hook_fired"]
             assert events[0].run_id == run.id
+            # The claim carries the firing hook's identity, queryable per hook.
+            assert events[0].component_id == hook.id
+            assert events[0].component_kind == "hook"
+            assert events[0].component_key == "trigger_hook"
 
     def test_claim_prevents_refiring(self, store: Store):
         source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")

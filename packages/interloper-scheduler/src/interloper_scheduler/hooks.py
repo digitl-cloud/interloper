@@ -209,6 +209,9 @@ class HookController(Controller):
                 id=claim,
                 type=outcome,
                 metadata={
+                    "component_id": str(hook_row.id),
+                    "component_kind": "hook",
+                    "component_key": hook_row.key,
                     "message": f"Hook '{hook_row.name}' ({hook_row.key}) reacted to {event_type}",
                     "error": error,
                 },

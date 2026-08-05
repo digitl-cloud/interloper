@@ -311,7 +311,7 @@ class RunDetail(BaseModel):
 class RunErrorEvent(BaseModel):
     """One error event of a failed run."""
 
-    asset_key: str | None = None
+    component_key: str | None = None
     error: str
     timestamp: datetime
 

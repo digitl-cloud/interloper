@@ -56,7 +56,7 @@ const eventAssetIds = computed<string[] | null>(() => {
         .filter(e => statuses.includes(e.status) && e.asset_id)
         .map(e => e.asset_id!)
 })
-watch(eventAssetIds, ids => eventsStore.filterByAssets(ids))
+watch(eventAssetIds, ids => eventsStore.filterByComponents(ids))
 
 // Switching the status pill clears any single-asset drill-down.
 watch(statusFilter, () => { selectedAsset.value = null })
@@ -79,7 +79,7 @@ const viewTabs = [
 ]
 
 const markerTime = computed(() => eventInFocus.value?.timestamp ? new Date(eventInFocus.value.timestamp) : null)
-const highlightedAsset = computed(() => eventInFocus.value?.asset_id ?? null)
+const highlightedAsset = computed(() => eventInFocus.value?.component_id ?? null)
 
 const retrying = ref(false)
 

@@ -13,6 +13,7 @@ from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Run
 from interloper_db.models import Event as EventRow
+from interloper_db.store.runs import _event_values
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
@@ -55,14 +56,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
     store = Store(catalog=il.Catalog(components={}))
 
     def sqlite_save_event(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
-        row = EventRow(
-            id=UUID(event.id),
-            org_id=org_id,
-            run_id=run_id,
-            event_type=event.type.value,
-            error=event.metadata.get("error"),
-            timestamp=event.timestamp,
-        )
+        row = EventRow(**_event_values(event, org_id, run_id))
         with Session(eng) as session:
             session.add(row)
             session.commit()

@@ -73,18 +73,18 @@ const columns: TableColumn<RunEvent>[] = [
         header: 'Source',
         cell: ({ row }) => {
             const event = row.original as RunEvent
-            const names = event.asset_id ? assetDisplayName.value.get(event.asset_id) : null
+            const names = event.component_id ? assetDisplayName.value.get(event.component_id) : null
             if (!names) return h('span', { class: 'text-muted' }, '—')
             return h(EntityBadge, { icon: names.sourceIcon, label: names.sourceName })
         },
     },
     {
-        accessorKey: 'asset_key',
+        accessorKey: 'component_key',
         header: 'Asset',
         cell: ({ row }) => {
             const event = row.original as RunEvent
-            const names = event.asset_id ? assetDisplayName.value.get(event.asset_id) : null
-            const label = names?.assetName ?? event.asset_key
+            const names = event.component_id ? assetDisplayName.value.get(event.component_id) : null
+            const label = names?.assetName ?? event.component_key
             if (!label) return h('span', { class: 'text-muted' }, '—')
             return h(EntityBadge, { label })
         },
