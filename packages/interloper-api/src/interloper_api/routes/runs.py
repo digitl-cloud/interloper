@@ -83,7 +83,6 @@ class EventResponse(BaseModel):
     component_id: UUID | None = None
     component_kind: str | None
     component_key: str | None
-    partition_or_window: str | None
     error: str | None
     traceback: str | None
     message: str | None
@@ -158,7 +157,6 @@ def _event_to_response(event: Event) -> EventResponse:
         component_id=event.component_id,
         component_kind=event.component_kind,
         component_key=event.component_key,
-        partition_or_window=event.partition_or_window,
         error=event.error,
         traceback=event.traceback,
         message=event.message,

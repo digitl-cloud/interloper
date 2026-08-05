@@ -121,6 +121,27 @@ def test_event_values_spills_unpromoted_metadata_into_data() -> None:
     assert values["error"] == "boom"
 
 
+def test_event_values_spills_demoted_scope_keys_into_data() -> None:
+    """backfill_id / partition_or_window have no column since 006 — they ride
+    in ``data``, and the None values producers emit unconditionally don't."""
+    values = _event_values(
+        _framework_event(
+            {
+                "backfill_id": "b0e0a72f-7e2f-49a8-bb3e-9adfa22a1eb3",
+                "partition_or_window": "2026-08-04",
+                "target_kind": None,
+            }
+        ),
+        org_id=uuid4(),
+        run_id=None,
+    )
+    assert values["data"] == {
+        "backfill_id": "b0e0a72f-7e2f-49a8-bb3e-9adfa22a1eb3",
+        "partition_or_window": "2026-08-04",
+    }
+    assert "backfill_id" not in values and "partition_or_window" not in values
+
+
 def test_event_values_without_component_or_extras() -> None:
     run_id = uuid4()
     values = _event_values(_framework_event({"message": "run done"}), org_id=uuid4(), run_id=run_id)
