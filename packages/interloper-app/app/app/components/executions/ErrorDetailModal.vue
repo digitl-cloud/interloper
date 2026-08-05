@@ -10,7 +10,7 @@ const emit = defineEmits<{
 }>()
 
 const title = computed(() => {
-    const key = props.event.asset_key ?? 'Unknown'
+    const key = props.event.component_key ?? 'Unknown'
     return `Error: ${key}`
 })
 

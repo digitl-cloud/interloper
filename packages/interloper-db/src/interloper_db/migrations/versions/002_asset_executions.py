@@ -1,5 +1,11 @@
 """Create asset_executions view.
 
+Edited in place when the ``events`` table was generalized to components
+(migration 005): tables come from ``create_all()`` against the current
+models, so this view must reference the current column names to apply on a
+fresh database. Databases that ran the original version get the same
+definition re-applied by 005.
+
 Revision ID: 002
 Revises: 001
 """
@@ -23,12 +29,12 @@ WITH ranked AS (
     SELECT
         e.run_id,
         e.org_id,
-        e.asset_id,
-        e.asset_key,
+        e.component_id AS asset_id,
+        e.component_key AS asset_key,
         e.event_type,
         e.timestamp,
         row_number() OVER (
-            PARTITION BY e.run_id, e.asset_id
+            PARTITION BY e.run_id, e.component_id
             ORDER BY
                 CASE e.event_type
                     WHEN 'asset_failed' THEN 1
@@ -41,17 +47,17 @@ WITH ranked AS (
                 e.timestamp DESC
         ) AS rn,
         min(CASE WHEN e.event_type = 'asset_queued' THEN e.timestamp END) OVER (
-            PARTITION BY e.run_id, e.asset_id
+            PARTITION BY e.run_id, e.component_id
         ) AS queued_at,
         min(CASE WHEN e.event_type = 'asset_started' THEN e.timestamp END) OVER (
-            PARTITION BY e.run_id, e.asset_id
+            PARTITION BY e.run_id, e.component_id
         ) AS started_at,
         max(CASE WHEN e.event_type IN ('asset_completed', 'asset_failed', 'asset_canceled')
             THEN e.timestamp END) OVER (
-            PARTITION BY e.run_id, e.asset_id
+            PARTITION BY e.run_id, e.component_id
         ) AS completed_at
     FROM events e
-    WHERE e.asset_id IS NOT NULL
+    WHERE e.component_id IS NOT NULL AND e.component_kind = 'asset'
 )
 SELECT
     r.run_id,

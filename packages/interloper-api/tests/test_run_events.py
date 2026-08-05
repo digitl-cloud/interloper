@@ -46,10 +46,10 @@ class FakeStore:
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
-        asset_ids: list[UUID] | None = None,
+        component_ids: list[UUID] | None = None,
         event_types: list[str] | None = None,
     ) -> int:
-        self.count_calls.append((asset_ids, event_types))
+        self.count_calls.append((component_ids, event_types))
         return self.total
 
     def list_events(
@@ -57,12 +57,12 @@ class FakeStore:
         *,
         run_id: UUID | None = None,
         org_id: UUID | None = None,
-        asset_ids: list[UUID] | None = None,
+        component_ids: list[UUID] | None = None,
         event_types: list[str] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list:
-        self.list_calls.append((run_id, limit, offset, asset_ids, event_types))
+        self.list_calls.append((run_id, limit, offset, component_ids, event_types))
         # Return as many fake events as the page would hold, capped at the total.
         n = max(0, min(limit, self.total - offset))
         return [
@@ -107,21 +107,21 @@ def test_limit_is_clamped_to_max_page_size(store: FakeStore) -> None:
     assert store.list_calls[-1][1] == MAX_EVENTS_PAGE_SIZE
 
 
-def test_forwards_asset_filter_to_list_and_count(store: FakeStore) -> None:
-    asset_id = uuid4()
-    resp = _client(store).get(f"/runs/{_RUN_ID}/events?asset_id={asset_id}")
+def test_forwards_component_filter_to_list_and_count(store: FakeStore) -> None:
+    component_id = uuid4()
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?component_id={component_id}")
     assert resp.status_code == 200
-    # A single asset_id arrives as a one-element list.
-    assert store.list_calls[-1] == (_RUN_ID, 100, 0, [asset_id], None)
+    # A single component_id arrives as a one-element list.
+    assert store.list_calls[-1] == (_RUN_ID, 100, 0, [component_id], None)
     # X-Total-Count must reflect the same filter the listing used.
-    assert store.count_calls[-1] == ([asset_id], None)
+    assert store.count_calls[-1] == ([component_id], None)
 
 
-def test_forwards_multiple_asset_filters(store: FakeStore) -> None:
+def test_forwards_multiple_component_filters(store: FakeStore) -> None:
     a, b = uuid4(), uuid4()
-    resp = _client(store).get(f"/runs/{_RUN_ID}/events?asset_id={a}&asset_id={b}")
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?component_id={a}&component_id={b}")
     assert resp.status_code == 200
-    # Repeated asset_id params filter the listing to the whole set (e.g. one status).
+    # Repeated component_id params filter the listing to the whole set (e.g. one status).
     assert store.list_calls[-1] == (_RUN_ID, 100, 0, [a, b], None)
     assert store.count_calls[-1] == ([a, b], None)
 
@@ -134,8 +134,8 @@ def test_forwards_event_type_filter_to_list_and_count(store: FakeStore) -> None:
     assert store.count_calls[-1] == (None, ["log", "asset_failed"])
 
 
-def test_invalid_asset_filter_is_rejected(store: FakeStore) -> None:
-    resp = _client(store).get(f"/runs/{_RUN_ID}/events?asset_id=not-a-uuid")
+def test_invalid_component_filter_is_rejected(store: FakeStore) -> None:
+    resp = _client(store).get(f"/runs/{_RUN_ID}/events?component_id=not-a-uuid")
     assert resp.status_code == 422
 
 

@@ -140,7 +140,7 @@ def list_failures(ctx: ToolkitContext, limit: int = 20) -> FailureList | ToolErr
             run_id = run.id
             events = ctx.store.list_events(run_id=run_id)
             errors = [
-                RunErrorEvent(asset_key=e.asset_key, error=e.error, timestamp=e.timestamp)
+                RunErrorEvent(component_key=e.component_key, error=e.error, timestamp=e.timestamp)
                 for e in events
                 if e.error
             ]

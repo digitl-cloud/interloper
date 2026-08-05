@@ -80,13 +80,15 @@ class EventResponse(BaseModel):
     org_id: UUID
     run_id: UUID | None
     event_type: str
-    asset_id: UUID | None = None
-    asset_key: str | None
+    component_id: UUID | None = None
+    component_kind: str | None
+    component_key: str | None
     partition_or_window: str | None
     error: str | None
     traceback: str | None
     message: str | None
     level: str | None
+    data: dict[str, object] | None
     timestamp: str
 
 
@@ -153,13 +155,15 @@ def _event_to_response(event: Event) -> EventResponse:
         org_id=event.org_id,
         run_id=event.run_id,
         event_type=event.event_type,
-        asset_id=event.asset_id,
-        asset_key=event.asset_key,
+        component_id=event.component_id,
+        component_kind=event.component_kind,
+        component_key=event.component_key,
         partition_or_window=event.partition_or_window,
         error=event.error,
         traceback=event.traceback,
         message=event.message,
         level=event.level,
+        data=event.data,
         timestamp=str(event.timestamp),
     )
 
@@ -273,7 +277,7 @@ def list_run_events(
     response: Response,
     limit: int = 100,
     offset: int = 0,
-    asset_id: Annotated[list[UUID] | None, Query()] = None,
+    component_id: Annotated[list[UUID] | None, Query()] = None,
     event_type: Annotated[list[str] | None, Query()] = None,
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
@@ -281,20 +285,21 @@ def list_run_events(
     """List events for a run, oldest first.
 
     Events are ordered ``timestamp ASC`` and paged with ``limit``/``offset``.
-    ``asset_id`` and ``event_type`` may each be repeated to narrow the listing
-    to one or more assets (e.g. every asset sharing a status) and/or event
-    types (e.g. a "Lifecycle"/"Errors"/"Logs" tab); the two compose. The total
-    number of matching events (ignoring ``limit``/``offset``, honouring the
-    filters) is returned in the ``X-Total-Count`` response header so clients can
-    page through every event — including the terminal/outcome events
-    (``asset_completed``, ``asset_failed``, ``run_failed``, …) that sort last.
+    ``component_id`` and ``event_type`` may each be repeated to narrow the
+    listing to one or more components (e.g. every asset sharing a status)
+    and/or event types (e.g. a "Lifecycle"/"Errors"/"Logs" tab); the two
+    compose. The total number of matching events (ignoring
+    ``limit``/``offset``, honouring the filters) is returned in the
+    ``X-Total-Count`` response header so clients can page through every event
+    — including the terminal/outcome events (``asset_completed``,
+    ``asset_failed``, ``run_failed``, …) that sort last.
     """
     _load_authorized_run(run_id, user, store)
     limit = max(1, min(limit, MAX_EVENTS_PAGE_SIZE))
     offset = max(0, offset)
-    total = store.count_events(run_id=run_id, asset_ids=asset_id, event_types=event_type)
+    total = store.count_events(run_id=run_id, component_ids=component_id, event_types=event_type)
     response.headers["X-Total-Count"] = str(total)
     events = store.list_events(
-        run_id=run_id, asset_ids=asset_id, event_types=event_type, limit=limit, offset=offset
+        run_id=run_id, component_ids=component_id, event_types=event_type, limit=limit, offset=offset
     )
     return [_event_to_response(e) for e in events]

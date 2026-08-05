@@ -359,12 +359,21 @@ class Run(SQLModel, table=True):
 
 
 class Event(SQLModel, table=True):
-    """An execution event persisted for observability."""
+    """An execution event persisted for observability.
+
+    Follows the same contract as ``components``: ``component_id``/
+    ``component_kind``/``component_key`` reference the component the event
+    concerns — any kind, no schema change per kind. Deliberately no foreign
+    key: events are history and outlive the component; the denormalized
+    kind/key snapshot keeps a deleted component's events readable. The
+    structured columns carry only what every consumer renders; the rest of
+    the producer's metadata lands losslessly in ``data``.
+    """
 
     __tablename__: ClassVar[str] = "events"
     __table_args__: ClassVar[tuple[Any, ...]] = (
         Index("ix_events_run_id_timestamp", "run_id", "timestamp"),
-        Index("ix_events_asset_lookup", "run_id", "asset_key", "event_type", "timestamp"),
+        Index("ix_events_component_lookup", "run_id", "component_id", "event_type", "timestamp"),
     )
 
     id: UUID = SQLField(
@@ -379,10 +388,12 @@ class Event(SQLModel, table=True):
     partition_or_window: str | None = None
     error: str | None = None
     traceback: str | None = None
-    asset_id: UUID | None = SQLField(default=None)
-    asset_key: str | None = None
+    component_id: UUID | None = SQLField(default=None)
+    component_kind: str | None = None
+    component_key: str | None = None
     message: str | None = None
     level: str | None = None
+    data: dict[str, Any] | None = SQLField(default=None, sa_column=Column(PortableJSON))
     timestamp: datetime = SQLField(sa_column=Column(TZDateTime))
 
 

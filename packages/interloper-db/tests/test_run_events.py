@@ -50,14 +50,14 @@ def _seed(events: list[Event]) -> None:
         session.commit()
 
 
-def _make_events(n: int, *, run_id: UUID = _RUN_ID, start: int = 0, asset_id: UUID | None = None) -> list[Event]:
+def _make_events(n: int, *, run_id: UUID = _RUN_ID, start: int = 0, component_id: UUID | None = None) -> list[Event]:
     """Build ``n`` events for a run, one second apart, oldest first."""
     return [
         Event(
             id=uuid4(),
             org_id=_ORG_ID,
             run_id=run_id,
-            asset_id=asset_id,
+            component_id=component_id,
             event_type="asset_materializing" if i < n - 1 else "asset_completed",
             timestamp=_BASE_TS + timedelta(seconds=start + i),
         )
@@ -136,23 +136,23 @@ def test_filters_isolate_runs(store: RunMixin) -> None:
 
 def test_asset_filter_lists_and_counts_only_that_asset(store: RunMixin) -> None:
     asset_a, asset_b = uuid4(), uuid4()
-    _seed(_make_events(150, asset_id=asset_a))
-    _seed(_make_events(30, start=150, asset_id=asset_b))
+    _seed(_make_events(150, component_id=asset_a))
+    _seed(_make_events(30, start=150, component_id=asset_b))
 
-    assert store.count_events(run_id=_RUN_ID, asset_ids=[asset_a]) == 150
-    assert store.count_events(run_id=_RUN_ID, asset_ids=[asset_b]) == 30
+    assert store.count_events(run_id=_RUN_ID, component_ids=[asset_a]) == 150
+    assert store.count_events(run_id=_RUN_ID, component_ids=[asset_b]) == 30
 
     # Paging honours the filter: asset_a events past the first unfiltered
     # page are reachable through the filtered offsets.
-    page2 = store.list_events(run_id=_RUN_ID, asset_ids=[asset_a], limit=100, offset=100)
+    page2 = store.list_events(run_id=_RUN_ID, component_ids=[asset_a], limit=100, offset=100)
     assert len(page2) == 50
-    assert all(e.asset_id == asset_a for e in page2)
+    assert all(e.component_id == asset_a for e in page2)
 
     # asset_b's events all live beyond the first 150 rows of the run, yet its
     # filtered first page surfaces them.
-    page_b = store.list_events(run_id=_RUN_ID, asset_ids=[asset_b], limit=100, offset=0)
+    page_b = store.list_events(run_id=_RUN_ID, component_ids=[asset_b], limit=100, offset=0)
     assert len(page_b) == 30
-    assert all(e.asset_id == asset_b for e in page_b)
+    assert all(e.component_id == asset_b for e in page_b)
 
 
 def test_event_type_filter_lists_and_counts_only_those_types(store: RunMixin) -> None:
@@ -171,29 +171,29 @@ def test_event_type_filter_lists_and_counts_only_those_types(store: RunMixin) ->
 
 def test_asset_and_event_type_filters_compose(store: RunMixin) -> None:
     asset_a, asset_b = uuid4(), uuid4()
-    _seed(_make_events(5, asset_id=asset_a))
-    _seed(_make_events(5, start=5, asset_id=asset_b))
+    _seed(_make_events(5, component_id=asset_a))
+    _seed(_make_events(5, start=5, component_id=asset_b))
 
     # Each asset has exactly one "asset_completed"; narrowing to asset_a's set
     # of one type yields just that asset's completion.
-    assert store.count_events(run_id=_RUN_ID, asset_ids=[asset_a], event_types=["asset_completed"]) == 1
-    page = store.list_events(run_id=_RUN_ID, asset_ids=[asset_a], event_types=["asset_completed"])
+    assert store.count_events(run_id=_RUN_ID, component_ids=[asset_a], event_types=["asset_completed"]) == 1
+    page = store.list_events(run_id=_RUN_ID, component_ids=[asset_a], event_types=["asset_completed"])
     assert len(page) == 1
-    assert page[0].asset_id == asset_a
+    assert page[0].component_id == asset_a
     assert page[0].event_type == "asset_completed"
 
 
 def test_asset_filter_accepts_multiple_assets(store: RunMixin) -> None:
     asset_a, asset_b, asset_c = uuid4(), uuid4(), uuid4()
-    _seed(_make_events(10, asset_id=asset_a))
-    _seed(_make_events(5, start=10, asset_id=asset_b))
-    _seed(_make_events(7, start=15, asset_id=asset_c))
+    _seed(_make_events(10, component_id=asset_a))
+    _seed(_make_events(5, start=10, component_id=asset_b))
+    _seed(_make_events(7, start=15, component_id=asset_c))
 
     # A set of asset ids (e.g. every asset of one status) is the union of each.
-    assert store.count_events(run_id=_RUN_ID, asset_ids=[asset_a, asset_b]) == 15
-    page = store.list_events(run_id=_RUN_ID, asset_ids=[asset_a, asset_b], limit=100, offset=0)
+    assert store.count_events(run_id=_RUN_ID, component_ids=[asset_a, asset_b]) == 15
+    page = store.list_events(run_id=_RUN_ID, component_ids=[asset_a, asset_b], limit=100, offset=0)
     assert len(page) == 15
-    assert all(e.asset_id in {asset_a, asset_b} for e in page)
+    assert all(e.component_id in {asset_a, asset_b} for e in page)
 
 
 # -- complete_run job stamping -------------------------------------------------

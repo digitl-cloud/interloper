@@ -5,13 +5,15 @@ export interface RunEvent {
     org_id: string
     run_id: string | null
     event_type: EventType
-    asset_id: string | null
-    asset_key: string | null
+    component_id: string | null
+    component_kind: string | null
+    component_key: string | null
     partition_or_window: string | null
     error: string | null
     traceback: string | null
     message: string | null
     level: string | null
+    data: Record<string, unknown> | null
     timestamp: string
 }
 
@@ -26,11 +28,11 @@ export const useEventsStore = defineStore('events', () => {
      * State
      **********************/
     const runId = ref<string | null>(null)
-    // Server-side asset filter — one or more assets (e.g. every asset sharing a
-    // status). Events are paged from the server, so filtering must happen there
-    // too — filtering only the loaded pages client-side would hide every
-    // matching event that hasn't been scrolled into view yet.
-    const assetIds = ref<string[] | null>(null)
+    // Server-side component filter — one or more components (e.g. every asset
+    // sharing a status). Events are paged from the server, so filtering must
+    // happen there too — filtering only the loaded pages client-side would hide
+    // every matching event that hasn't been scrolled into view yet.
+    const componentIds = ref<string[] | null>(null)
     // Server-side event-type filter — the category tab (Lifecycle / Errors /
     // Logs). Composes with the asset filter; same server-paging rationale.
     const eventTypes = ref<string[] | null>(null)
@@ -105,7 +107,7 @@ export const useEventsStore = defineStore('events', () => {
             limit: String(EVENTS_PAGE_SIZE),
             offset: String(nextOffset.value),
         })
-        for (const aid of assetIds.value ?? []) params.append('asset_id', aid)
+        for (const cid of componentIds.value ?? []) params.append('component_id', cid)
         for (const et of eventTypes.value ?? []) params.append('event_type', et)
         const res = await apiFetchRaw<RunEvent[]>(`/runs/${id}/events?${params}`)
         if (epoch !== fetchEpoch) return // state was reset while in flight
@@ -125,7 +127,7 @@ export const useEventsStore = defineStore('events', () => {
         scope: () => runId.value ? orgStore.organisation?.id : null,
         shouldHandle: (record: Record<string, any>) =>
             record.run_id === runId.value
-            && (!assetIds.value || assetIds.value.includes(record.asset_id))
+            && (!componentIds.value || componentIds.value.includes(record.component_id))
             && (!eventTypes.value || eventTypes.value.includes(record.event_type)),
         onInsert: (record: Record<string, any>) => _upsert(record as RunEvent),
     })
@@ -162,15 +164,15 @@ export const useEventsStore = defineStore('events', () => {
      */
     async function fetchForRun(id: string) {
         runId.value = id
-        assetIds.value = null
+        componentIds.value = null
         eventTypes.value = null
         await _reload()
     }
 
-    /** Re-page from the start filtered to a set of assets (`null` clears it). */
-    async function filterByAssets(assets: string[] | null) {
-        if (!runId.value || _sameFilter(assets, assetIds.value)) return
-        assetIds.value = assets
+    /** Re-page from the start filtered to a set of components (`null` clears it). */
+    async function filterByComponents(components: string[] | null) {
+        if (!runId.value || _sameFilter(components, componentIds.value)) return
+        componentIds.value = components
         await _reload()
     }
 
@@ -203,13 +205,9 @@ export const useEventsStore = defineStore('events', () => {
         return events.value.find(e => e.id === id)
     }
 
-    function byAssetKey(key: string): RunEvent[] {
-        return events.value.filter(e => e.asset_key === key)
-    }
-
     function $reset() {
         runId.value = null
-        assetIds.value = null
+        componentIds.value = null
         eventTypes.value = null
         fetchEpoch++
         events.value = []
@@ -222,7 +220,7 @@ export const useEventsStore = defineStore('events', () => {
 
     return {
         runId,
-        assetIds,
+        componentIds,
         eventTypes,
         events,
         total,
@@ -231,11 +229,10 @@ export const useEventsStore = defineStore('events', () => {
         hasMore,
         error,
         fetchForRun,
-        filterByAssets,
+        filterByComponents,
         filterByEventTypes,
         loadMore,
         findById,
-        byAssetKey,
         _upsert,
         $reset,
     }

@@ -21,4 +21,6 @@ export type EventType =
     | 'backfill_started'
     | 'backfill_completed'
     | 'backfill_failed'
+    | 'hook_fired'
+    | 'hook_failed'
     | 'log'
