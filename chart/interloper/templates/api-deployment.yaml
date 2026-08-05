@@ -51,6 +51,10 @@ spec:
           {{- end }}
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
+            {{- if .Values.otel.enabled }}
+            - name: INTERLOPER_OTEL_SERVICE_NAME
+              value: interloper-api
+            {{- end }}
             {{- with .Values.api.forwardedAllowIps }}
             - name: FORWARDED_ALLOW_IPS
               value: {{ . | quote }}

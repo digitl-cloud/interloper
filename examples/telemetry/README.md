@@ -76,8 +76,7 @@ OpenTelemetry SDK by hand:
 
 ```py
 init_telemetry(
-    TelemetrySettings(enabled=True, endpoint="http://localhost:4317", service_name="interloper-example"),
-    role="example",
+    TelemetrySettings(enabled=True, endpoint="http://localhost:4317", service_name="interloper-example")
 )
 ```
 

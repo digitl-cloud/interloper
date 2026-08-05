@@ -70,3 +70,26 @@ class TestChildProcessEnv:
         assert env["INTERLOPER_OTEL_ENDPOINT"] == "http://collector:4317"
         assert "INTERLOPER_POSTGRES_PASSWORD" not in env
         assert "TRACEPARENT" in env
+
+    def test_children_get_their_own_service_name(self, monkeypatch):
+        # Shared config forwards; identity doesn't. A scheduler pod named
+        # via INTERLOPER_OTEL_SERVICE_NAME must not leak its name into the
+        # run pods it launches.
+        from interloper.telemetry.propagation import child_process_env
+
+        monkeypatch.setenv("INTERLOPER_OTEL_ENABLED", "true")
+        monkeypatch.setenv("INTERLOPER_OTEL_SERVICE_NAME", "interloper-scheduler")
+
+        env = child_process_env()
+
+        assert env["INTERLOPER_OTEL_SERVICE_NAME"] == "interloper-run"
+
+    def test_no_otel_config_injects_nothing(self, monkeypatch):
+        import os
+
+        from interloper.telemetry.propagation import child_process_env
+
+        for key in [k for k in os.environ if k.startswith("INTERLOPER_OTEL_")]:
+            monkeypatch.delenv(key, raising=False)
+
+        assert child_process_env() == {}

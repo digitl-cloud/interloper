@@ -52,6 +52,10 @@ spec:
           {{- end }}
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
+            {{- if .Values.otel.enabled }}
+            - name: INTERLOPER_OTEL_SERVICE_NAME
+              value: interloper-scheduler
+            {{- end }}
             {{- with .Values.scheduler.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

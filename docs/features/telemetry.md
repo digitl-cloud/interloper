@@ -40,11 +40,28 @@ Settings live under the `otel` block of `interloper.yaml` or the matching
 | `endpoint` | `INTERLOPER_OTEL_ENDPOINT` | — | OTLP endpoint. Empty falls through to the SDK's own `OTEL_EXPORTER_OTLP_ENDPOINT`. |
 | `protocol` | `INTERLOPER_OTEL_PROTOCOL` | `grpc` | `grpc` or `http/protobuf`. |
 | `headers` | `INTERLOPER_OTEL_HEADERS` | — | Exporter auth headers, `key=value,key2=value2`. Treat as a secret. |
-| `service_name` | `INTERLOPER_OTEL_SERVICE_NAME` | `interloper-<role>` | Overrides the per-role default (`interloper-server`, `interloper-run`, `interloper-cli`). |
+| `service_name` | `INTERLOPER_OTEL_SERVICE_NAME` | `interloper` | Set per deployment where distinct names matter; see below. |
 | `traces` | `INTERLOPER_OTEL_TRACES` | `true` | Toggle the traces signal. |
 | `metrics` | `INTERLOPER_OTEL_METRICS` | `true` | Toggle the metrics signal. |
 | `sample_ratio` | `INTERLOPER_OTEL_SAMPLE_RATIO` | `1.0` | Head sampling ratio (parent-based). |
 | `metric_export_interval` | `INTERLOPER_OTEL_METRIC_EXPORT_INTERVAL` | `60` | Seconds between metric exports. A freshness knob: runs flush on exit regardless, and an idle interval exports nothing. |
+
+### Service names
+
+`service.name` is deployment configuration, not something the framework
+infers: every process defaults to `interloper`, and the deployment that wants
+a distinct name sets `service_name` where that deployment is defined. The
+Helm chart does this for its own workloads — the api pod reports as
+`interloper-api` and the scheduler pod as `interloper-scheduler` — and the
+launchers name the run pods and per-asset containers they spawn
+`interloper-run` (identity is per-process, so it deliberately isn't inherited
+from the launching process's `INTERLOPER_OTEL_SERVICE_NAME`; the rest of the
+`INTERLOPER_OTEL_*` config is forwarded).
+
+Two consequences worth knowing: runs executed by the in-process launcher
+report under the host process's name, since `service.name` is fixed per
+process; and standalone scripts or notebooks report as plain `interloper`
+unless they pass ``service_name`` themselves.
 
 ### Delta temporality — required collector setup
 
@@ -141,11 +158,8 @@ and the framework runs unchanged.
 
 ## Traces
 
-Span tree for a scheduled run:
-
-Span names follow the method each one wraps:
-
-Every span is named `interloper.<class>.<method>` after the call it wraps:
+Every span is named `interloper.<class>.<method>` after the call it wraps.
+The tree for a scheduled run:
 
 ```
 interloper.launcher.launch                    Launcher.launch
@@ -235,7 +249,7 @@ import interloper as il
 from interloper.settings import TelemetrySettings
 from interloper.telemetry import init_telemetry, shutdown_telemetry
 
-init_telemetry(TelemetrySettings(enabled=True, endpoint="http://localhost:4317"), role="cli")
+init_telemetry(TelemetrySettings(enabled=True, endpoint="http://localhost:4317"))
 
 il.run(il.AsyncRunner().run(dag))
 

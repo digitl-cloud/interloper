@@ -51,7 +51,7 @@ def _exporter_kwargs(settings: TelemetrySettings) -> dict[str, Any]:
     return kwargs
 
 
-def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
+def init_telemetry(settings: TelemetrySettings) -> bool:
     """Initialize the OpenTelemetry SDK from interloper settings.
 
     Idempotent; a fast no-op when telemetry is disabled. When enabled but
@@ -59,10 +59,13 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
     leaves the no-op API providers in place — telemetry must never take
     the data plane down.
 
+    ``service.name`` defaults to ``interloper``; deployments that need
+    distinct names (api, scheduler, run pods) set ``service_name`` where
+    they are defined — e.g. ``INTERLOPER_OTEL_SERVICE_NAME`` per chart
+    deployment, or the launchers for the pods they spawn.
+
     Args:
         settings: The resolved telemetry settings.
-        role: Process role (``server``, ``run``, ``cli``); used for the
-            default service name and the ``interloper.role`` resource attribute.
 
     Returns:
         True when the SDK was (or already is) active.
@@ -84,16 +87,14 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
         )
         return False
 
-    from interloper.telemetry import attributes
     from interloper.telemetry.tracer import _version
 
     grpc = settings.protocol == "grpc"
     exporter_kwargs = _exporter_kwargs(settings)
     resource = Resource.create(
         {
-            "service.name": settings.service_name or f"interloper-{role}",
+            "service.name": settings.service_name or "interloper",
             "service.version": _version() or "unknown",
-            attributes.ROLE: role,
         }
     )
 
@@ -140,7 +141,9 @@ def init_telemetry(settings: TelemetrySettings, *, role: str) -> bool:
     _instrument_libraries()
 
     _initialized = True
-    logger.info("Telemetry initialized (role=%s, protocol=%s)", role, settings.protocol)
+    logger.info(
+        "Telemetry initialized (service=%s, protocol=%s)", settings.service_name or "interloper", settings.protocol
+    )
     return True
 
 

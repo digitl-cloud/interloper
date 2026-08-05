@@ -9,9 +9,6 @@ import sys
 from interloper.cli.runtime import apply_cli_overrides
 from interloper.settings import AppSettings
 
-# Coarse on purpose: one process can host several services ("app" runs both).
-_TELEMETRY_ROLES = {"run": "run", "launch": "run", "app": "server"}
-
 
 def _has_package(name: str) -> bool:
     """Check if a package is importable.
@@ -107,7 +104,7 @@ def main() -> None:
 
     from interloper.telemetry import init_telemetry, shutdown_telemetry
 
-    init_telemetry(settings.otel, role=_TELEMETRY_ROLES.get(args.command, "cli"))
+    init_telemetry(settings.otel)
 
     try:
         if hasattr(args, "func"):
