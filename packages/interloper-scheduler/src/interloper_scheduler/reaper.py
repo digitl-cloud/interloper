@@ -29,10 +29,11 @@ from typing import TYPE_CHECKING
 
 import interloper as il
 from interloper_db import Store
-from interloper_db.models import Run
+from interloper_db.models import Component, Run
 from sqlmodel import Session, select
 
 from interloper_scheduler.controller import Controller
+from interloper_scheduler.executor import run_event_metadata
 from interloper_scheduler.launcher import RunStatus
 
 if TYPE_CHECKING:
@@ -151,13 +152,13 @@ class Reaper(Controller):
         logger.warning("Reaping run %s: %s", run.id, error)
 
         try:
+            target = None
+            if run.component_id:
+                with Session(self._store.engine) as session:
+                    target = session.get(Component, run.component_id)
             event = il.Event(
                 type=il.EventType.RUN_FAILED,
-                metadata={
-                    "run_id": str(run.id),
-                    "backfill_id": str(run.backfill_id) if run.backfill_id else None,
-                    "error": error,
-                },
+                metadata={**run_event_metadata(run, target), "error": error},
             )
             self._store.save_event(event, org_id=run.org_id, run_id=run.id)
         except Exception:

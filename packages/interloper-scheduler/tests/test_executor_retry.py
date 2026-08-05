@@ -11,9 +11,10 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from interloper_db.models import Component, Run
 
 from interloper_scheduler import executor as executor_module
-from interloper_scheduler.executor import RunExecutor
+from interloper_scheduler.executor import RunExecutor, run_event_metadata
 
 
 class _FakeStore:
@@ -146,3 +147,31 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     executor._skip_succeeded_assets(mid_id, [asset])  # ty: ignore[invalid-argument-type]
 
     assert asset.materializable is False
+
+
+# -- run_event_metadata ----------------------------------------------------------
+
+
+def test_run_event_metadata_carries_target_context() -> None:
+    org = uuid4()
+    target = Component(org_id=org, kind="job", key="nightly", name="Nightly sync")
+    run = Run(id=uuid4(), org_id=org, component_id=target.id, backfill_id=uuid4())
+
+    metadata = run_event_metadata(run, target)
+
+    assert metadata == {
+        "run_id": str(run.id),
+        "backfill_id": str(run.backfill_id),
+        "target_id": str(target.id),
+        "target_kind": "job",
+        "target_key": "nightly",
+        "target_name": "Nightly sync",
+    }
+
+
+def test_run_event_metadata_without_target() -> None:
+    run = Run(id=uuid4(), org_id=uuid4())
+
+    metadata = run_event_metadata(run, None)
+
+    assert metadata == {"run_id": str(run.id), "backfill_id": None}

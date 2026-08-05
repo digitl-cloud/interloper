@@ -11,10 +11,36 @@ from uuid import UUID
 import interloper as il
 from interloper.runner import ExecutionStatus, Runner
 from interloper_db import Store
-from interloper_db.models import ComponentRelation, Run
+from interloper_db.models import Component, ComponentRelation, Run
 from sqlmodel import Session, col, select
 
 logger = logging.getLogger(__name__)
+
+
+def run_event_metadata(run: Run, target: Component | None) -> dict[str, Any]:
+    """Run-level event metadata: the run's ids plus its target's identity.
+
+    The runner spreads this dict into every event it emits, and the
+    ``target_*`` keys have no structured ``events`` column — they land in
+    each event's ``data``, making events self-describing for telemetry
+    (which job/source/asset the run materialized, under what name at the
+    time) without a join through ``runs``.
+
+    Returns:
+        The metadata dict.
+    """
+    metadata: dict[str, Any] = {
+        "run_id": str(run.id),
+        "backfill_id": str(run.backfill_id) if run.backfill_id else None,
+    }
+    if target is not None:
+        metadata |= {
+            "target_id": str(target.id),
+            "target_kind": target.kind,
+            "target_key": target.key,
+            "target_name": target.name,
+        }
+    return metadata
 
 
 class RunExecutor:
@@ -42,7 +68,7 @@ class RunExecutor:
             ``True`` if the run completed successfully, ``False`` otherwise.
         """
         org_id: UUID | None = None
-        backfill_id: str | None = None
+        run_metadata: dict[str, Any] = {"run_id": str(run_id), "backfill_id": None}
 
         try:
             logger.info("Starting run %s", run_id)
@@ -55,9 +81,9 @@ class RunExecutor:
 
                 component_id = db_run.component_id
                 org_id = db_run.org_id
-                backfill_id = str(db_run.backfill_id) if db_run.backfill_id else None
                 partition_date = db_run.partition_date
                 retry_of = db_run.retry_of if db_run.retry_scope == "failed" else None
+                run_metadata = run_event_metadata(db_run, session.get(Component, component_id))
 
                 self._mark_running(session, db_run)
 
@@ -76,7 +102,7 @@ class RunExecutor:
             dag = il.DAG(*assets)
             partition = il.TimePartition(partition_date) if partition_date else None
 
-            result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, backfill_id=backfill_id)
+            result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, metadata=run_metadata)
 
             success = result.status == ExecutionStatus.COMPLETED
             logger.info("Run %s completed: %s", run_id, result.status.name)
@@ -86,13 +112,8 @@ class RunExecutor:
         except Exception as e:
             logger.exception("Run %s failed: %s", run_id, e)
             try:
-                metadata: dict[str, Any] = {
-                    "run_id": str(run_id),
-                    "backfill_id": backfill_id,
-                    "error": str(e),
-                }
                 if org_id is not None:
-                    event = il.Event(type=il.EventType.RUN_FAILED, metadata=metadata)
+                    event = il.Event(type=il.EventType.RUN_FAILED, metadata={**run_metadata, "error": str(e)})
                     self._store.save_event(event, org_id=org_id, run_id=run_id)
                 self._store.complete_run(run_id, success=False)
             except Exception:
@@ -169,7 +190,7 @@ class RunExecutor:
         *,
         org_id: UUID,
         run_id: UUID,
-        backfill_id: str | None,
+        metadata: dict[str, Any],
     ) -> il.RunResult:
         def handle_event(event: il.Event) -> None:
             self._store.save_event(event, org_id=org_id, run_id=run_id)
@@ -177,16 +198,7 @@ class RunExecutor:
         # A fresh copy per execution: the runner template is shared across
         # runs, but run state and the event handler are per-run.
         runner = self._runner.model_copy(update={"on_event": handle_event})
-        return asyncio.run(
-            runner.run(
-                dag,
-                partition,
-                metadata={
-                    "run_id": str(run_id),
-                    "backfill_id": backfill_id,
-                },
-            )
-        )
+        return asyncio.run(runner.run(dag, partition, metadata=metadata))
 
 
 def _target_assets(component: il.Component) -> list[il.Asset]:

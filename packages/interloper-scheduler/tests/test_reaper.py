@@ -16,7 +16,7 @@ from interloper_db.models import Event as EventRow
 from interloper_db.store.runs import _event_values
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from interloper_scheduler.launcher import Launcher, RunState, RunStatus
 from interloper_scheduler.reaper import Reaper
@@ -123,3 +123,33 @@ class TestTimeoutFallback:
         assert reaper._reap() == 1
         assert _status(store, fresh) == "dispatched"
         assert _status(store, stale) == "failed"
+
+
+class TestTargetContext:
+    def test_reaped_run_event_carries_target_context_in_data(self, store: Store) -> None:
+        with Session(store.engine) as session:
+            target = Component(org_id=_ORG, kind="job", key="nightly", name="Nightly sync")
+            session.add(target)
+            session.commit()
+            target_id = target.id
+        run = store.create_run(_ORG, component_id=target_id)
+        assert run.id is not None
+        with Session(store.engine) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            db_run.status = "dispatched"
+            db_run.created_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=1200)
+            session.add(db_run)
+            session.commit()
+
+        assert Reaper(store=store, launcher=None, timeout=600)._reap() == 1
+
+        with Session(store.engine) as session:
+            reaped_event = session.exec(select(EventRow).where(EventRow.run_id == run.id)).one()
+            assert reaped_event.event_type == "run_failed"
+            assert reaped_event.data == {
+                "target_id": str(target_id),
+                "target_kind": "job",
+                "target_key": "nightly",
+                "target_name": "Nightly sync",
+            }
