@@ -47,3 +47,13 @@ smtp:
   host: smtp.gmail.com
   port: 465
   user: "no-reply@digitlcloud.com"
+
+otel:
+  enabled: true
+  endpoint: http://localhost:4317
+  protocol: grpc
+
+  # protocol: http/protobuf   # endpoint: http://localhost:4318
+  # sample_ratio: 0.1
+  # traces: false
+  # metrics: false
