@@ -19,6 +19,11 @@ DAG_SPEC_ITEMS = "interloper.dag.spec_items"
 RUNNER_TYPE = "interloper.runner.type"
 LAUNCHER_TYPE = "interloper.launcher.type"
 ROLE = "interloper.role"
+ORG_ID = "interloper.org.id"
+TARGET_ID = "interloper.target.id"
+TARGET_KIND = "interloper.target.kind"
+TARGET_KEY = "interloper.target.key"
+TARGET_NAME = "interloper.target.name"
 
 # Event-metadata keys (see Asset._event_metadata / RunState) → attribute names.
 _METADATA_KEYS = {
@@ -30,6 +35,11 @@ _METADATA_KEYS = {
     "partition_or_window": PARTITION,
     "source_id": SOURCE_ID,
     "destination_key": DESTINATION_KEY,
+    "org_id": ORG_ID,
+    "target_id": TARGET_ID,
+    "target_kind": TARGET_KIND,
+    "target_key": TARGET_KEY,
+    "target_name": TARGET_NAME,
 }
 
 

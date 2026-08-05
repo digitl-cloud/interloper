@@ -121,9 +121,7 @@ class Runner(Serializable):
         metadata.setdefault("run_id", str(uuid.uuid4()))
         run_id = metadata["run_id"]
 
-        # Remote parent: metadata carries a traceparent within the framework
-        # (e.g. MultiProcessRunner workers), the environment carries it into
-        # spawned containers (launchers, docker/k8s runner children).
+        # Remote parent: metadata in-process, environment across containers.
         parent_context = extract_metadata(metadata) or context_from_env()
 
         handler: Callable[[Event], None] | None = None

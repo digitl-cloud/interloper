@@ -39,3 +39,22 @@ class TestFromMetadata:
 
         run_id = uuid.uuid4()
         assert attributes.from_metadata({"run_id": run_id}) == {attributes.RUN_ID: str(run_id)}
+
+
+class TestPlatformIdentityMapping:
+    def test_identity_keys_map_to_namespaced_attributes(self):
+        attrs = attributes.from_metadata(
+            {
+                "run_id": "r1",
+                "org_id": "o1",
+                "target_id": "t1",
+                "target_kind": "job",
+                "target_key": "nightly",
+                "target_name": "Nightly sync",
+            }
+        )
+        assert attrs[attributes.ORG_ID] == "o1"
+        assert attrs[attributes.TARGET_ID] == "t1"
+        assert attrs[attributes.TARGET_KIND] == "job"
+        assert attrs[attributes.TARGET_KEY] == "nightly"
+        assert attrs[attributes.TARGET_NAME] == "Nightly sync"

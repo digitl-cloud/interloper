@@ -91,9 +91,8 @@ def run(coro: Coroutine[Any, Any, _T]) -> _T:
             "il.run() called from code already running on its own event loop; use 'await' instead."
         )
 
-    # run_coroutine_threadsafe binds the task to the loop thread's (empty)
-    # context, not the caller's — carry the caller's OTel context across so
-    # spans opened here parent under the caller's active span.
+    # run_coroutine_threadsafe binds the task to the loop thread's context,
+    # not the caller's — carry it across or spans go parentless.
     caller_context = otel_context.get_current()
 
     async def _bridged() -> _T:

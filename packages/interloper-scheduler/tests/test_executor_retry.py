@@ -162,6 +162,7 @@ def test_run_event_metadata_carries_target_context() -> None:
     assert metadata == {
         "run_id": str(run.id),
         "backfill_id": str(run.backfill_id),
+        "org_id": str(org),
         "target_id": str(target.id),
         "target_kind": "job",
         "target_key": "nightly",
@@ -174,4 +175,4 @@ def test_run_event_metadata_without_target() -> None:
 
     metadata = run_event_metadata(run, None)
 
-    assert metadata == {"run_id": str(run.id), "backfill_id": None}
+    assert metadata == {"run_id": str(run.id), "backfill_id": None, "org_id": str(run.org_id)}

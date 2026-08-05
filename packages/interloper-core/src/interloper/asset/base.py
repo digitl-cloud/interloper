@@ -587,9 +587,7 @@ class Asset(Component):
             if param_name == "context":
                 kwargs["context"] = context
             elif param_name in self.resource_types:
-                # Resolution is lookup + instantiation; the credentialed client
-                # a resource wraps is built lazily, so its cost lands under the
-                # data() span rather than here.
+                # Lazily-built clients cost under the data() span, not here.
                 with tracer().start_as_current_span(
                     "interloper.asset.resolve_resource",
                     attributes={**self._span_attributes(), telemetry_attributes.RESOURCE_NAME: param_name},
@@ -752,9 +750,7 @@ class Asset(Component):
         Returns:
             The normalized and conformed result.
         """
-        # Traced as two spans, not one: normalization and conform have very
-        # different cost profiles, and normalization is skipped entirely when
-        # no normalizer is configured — a combined span would hide both facts.
+        # Two spans, not one: normalization is skipped without a normalizer.
         span_attrs = self._span_attributes()
         if self.normalizer is not None:
             with tracer().start_as_current_span("interloper.normalizer.normalize", attributes=span_attrs):

@@ -197,12 +197,21 @@ sources get egress spans for free.
 
 | Instrument | Type | Attributes |
 |------------|------|------------|
-| `interloper.runs` | counter | `status` |
-| `interloper.run.duration` | histogram (s) | `status` |
+| `interloper.runs` | counter | `status` + identity† |
+| `interloper.run.duration` | histogram (s) | `status` + identity† |
 | `interloper.assets` | counter | `status`, `asset_key` |
 | `interloper.asset.duration` | histogram (s) | `status`, `asset_key` |
 | `interloper.destination.io` | counter | `operation`, `status`, `destination_key` |
 | `interloper.runs.launched` | counter | `outcome` |
+
+† **Platform identity** — `org_id`, `target_kind`, `target_key` — appears on
+run-level instruments when the run goes through the scheduler, which threads
+the run's organisation and target (job, source, or asset) into run metadata;
+standalone runs simply omit the attributes. The same identity lands on every
+span as `interloper.org.id` / `interloper.target.*`. It is deliberately kept
+off asset-level instruments: `org × asset_key` is the cardinality product that
+grows fastest with adoption, and per-org asset questions belong to traces
+(which carry full identity) or the run history.
 
 The duration histograms use second-scaled bucket boundaries (50ms → 1h) rather
 than the SDK's defaults, which start at 0, 5, 10, 25 — tuned for milliseconds.

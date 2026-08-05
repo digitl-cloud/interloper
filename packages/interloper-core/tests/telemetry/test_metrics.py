@@ -133,3 +133,43 @@ class TestDestinationKeyAttribute:
         (point,) = points("interloper.destination.io", operation="read", status="completed")
         assert point.attributes is not None
         assert "destination_key" not in point.attributes
+
+
+class TestPlatformIdentity:
+    """Run-level instruments carry the scheduler-threaded identity."""
+
+    def test_run_metrics_carry_org_and_target(self, points):
+        handler = OtelMetricsHandler()
+        identity = {"org_id": "org-p1", "target_kind": "job", "target_key": "nightly", "target_name": "Nightly"}
+        handler(_event(EventType.RUN_STARTED, 0, run_id="run-p1", **identity))
+        handler(_event(EventType.RUN_COMPLETED, 4.0, run_id="run-p1", **identity))
+
+        (counter,) = points("interloper.runs", org_id="org-p1", target_kind="job", target_key="nightly")
+        assert counter.value == 1
+        # target_name is deliberately not a metric attribute (mutable, 1:1 with key).
+        assert "target_name" not in (counter.attributes or {})
+        (duration,) = points("interloper.run.duration", org_id="org-p1", target_key="nightly")
+        assert duration.sum == 4.0
+
+    def test_standalone_runs_omit_identity_attributes(self, points):
+        handler = OtelMetricsHandler()
+        handler(_event(EventType.RUN_FAILED, run_id="run-p2"))
+
+        matches = [
+            p for p in points("interloper.runs", status="failed")
+            if "org_id" not in (p.attributes or {}) and "target_key" not in (p.attributes or {})
+        ]
+        assert matches
+
+    def test_asset_metrics_stay_identity_free(self, points):
+        handler = OtelMetricsHandler()
+        handler(
+            _event(
+                EventType.ASSET_COMPLETED,
+                run_id="run-p3", asset_id="a1", asset_key="orders_p3",
+                org_id="org-p1", target_key="nightly",
+            )
+        )
+        (counter,) = points("interloper.assets", asset_key="orders_p3")
+        assert "org_id" not in (counter.attributes or {})
+        assert "target_key" not in (counter.attributes or {})

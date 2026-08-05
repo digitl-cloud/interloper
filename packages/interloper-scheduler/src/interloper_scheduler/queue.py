@@ -55,9 +55,7 @@ class QueueController(Controller):
                 return
             try:
                 logger.info("Launching run %s", run_id)
-                # Root span of the run's trace: the launched run (thread,
-                # container, or pod) parents its own spans under it via the
-                # propagated context. Empty ticks emit nothing.
+                # Root of the run's trace; the launched run parents under it.
                 with tracer().start_as_current_span(
                     "interloper.launcher.launch",
                     attributes={

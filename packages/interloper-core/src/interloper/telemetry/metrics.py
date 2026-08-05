@@ -13,7 +13,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 from collections import OrderedDict
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from interloper.events.event import Event
 from interloper.events.types import EventType
@@ -21,18 +21,18 @@ from interloper.telemetry.tracer import meter
 
 logger = logging.getLogger(__name__)
 
-_RUN_STATUS = {EventType.RUN_COMPLETED: "completed", EventType.RUN_FAILED: "failed"}
-_ASSET_STATUS = {
-    EventType.ASSET_COMPLETED: "completed",
-    EventType.ASSET_FAILED: "failed",
-    EventType.ASSET_CANCELED: "canceled",
-}
-_DEST_STATUS = {
-    EventType.DEST_READ_COMPLETED: ("read", "completed"),
-    EventType.DEST_READ_FAILED: ("read", "failed"),
-    EventType.DEST_WRITE_COMPLETED: ("write", "completed"),
-    EventType.DEST_WRITE_FAILED: ("write", "failed"),
-}
+
+class _Bounded(OrderedDict):
+    """Mapping capped at ``cap`` entries; the oldest are evicted first."""
+
+    def __init__(self, cap: int) -> None:
+        super().__init__()
+        self._cap = cap
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        super().__setitem__(key, value)
+        while len(self) > self._cap:
+            self.popitem(last=False)
 
 
 class OtelMetricsHandler:
@@ -40,25 +40,48 @@ class OtelMetricsHandler:
 
     Docker/k8s hosts re-emit child-container events with deterministic
     ids, and hosts author their own terminal events under the same ids —
-    the handler therefore dedupes on ``event.id``. Tracking stores are
-    size-capped (oldest-first eviction) because start events can lose
-    their terminal counterpart.
+    the handler therefore dedupes on ``event.id``. Bookkeeping is bounded
+    because a start event can lose its terminal counterpart.
     """
 
     #: The event types this handler consumes — pass to ``EventBus.subscribe``.
     EVENT_TYPES: ClassVar[list[EventType]] = [
         EventType.RUN_STARTED,
-        *_RUN_STATUS,
+        EventType.RUN_COMPLETED,
+        EventType.RUN_FAILED,
         EventType.ASSET_STARTED,
-        *_ASSET_STATUS,
-        *_DEST_STATUS,
+        EventType.ASSET_COMPLETED,
+        EventType.ASSET_FAILED,
+        EventType.ASSET_CANCELED,
+        EventType.DEST_READ_COMPLETED,
+        EventType.DEST_READ_FAILED,
+        EventType.DEST_WRITE_COMPLETED,
+        EventType.DEST_WRITE_FAILED,
     ]
+
+    _RUN_STATUS: ClassVar[dict[EventType, str]] = {
+        EventType.RUN_COMPLETED: "completed",
+        EventType.RUN_FAILED: "failed",
+    }
+
+    _ASSET_STATUS: ClassVar[dict[EventType, str]] = {
+        EventType.ASSET_COMPLETED: "completed",
+        EventType.ASSET_FAILED: "failed",
+        EventType.ASSET_CANCELED: "canceled",
+    }
+
+    _DEST_STATUS: ClassVar[dict[EventType, tuple[str, str]]] = {
+        EventType.DEST_READ_COMPLETED: ("read", "completed"),
+        EventType.DEST_READ_FAILED: ("read", "failed"),
+        EventType.DEST_WRITE_COMPLETED: ("write", "completed"),
+        EventType.DEST_WRITE_FAILED: ("write", "failed"),
+    }
 
     def __init__(self, max_tracked: int = 4096) -> None:
         """Create the handler and its instruments.
 
         Args:
-            max_tracked: Cap for the dedupe and in-flight tracking stores.
+            max_tracked: Cap for the dedupe and start-time stores.
         """
         m = meter()
         self._runs = m.create_counter("interloper.runs", unit="{run}", description="Finished runs")
@@ -70,9 +93,8 @@ class OtelMetricsHandler:
         self._dest_io = m.create_counter(
             "interloper.destination.io", unit="{operation}", description="Destination read/write operations"
         )
-        self._max_tracked = max_tracked
-        self._seen: OrderedDict[str, None] = OrderedDict()
-        self._started: OrderedDict[tuple[str, ...], dt.datetime] = OrderedDict()
+        self._seen = _Bounded(max_tracked)
+        self._started = _Bounded(max_tracked)
 
     def __call__(self, event: Event) -> None:
         """Record the event's metrics.
@@ -84,43 +106,63 @@ class OtelMetricsHandler:
             event: The lifecycle event to record.
         """
         try:
-            self._handle(event)
+            if event.id in self._seen:
+                return
+            self._seen[event.id] = None
+            self._record(event)
         except Exception:
             logger.debug("Failed to record metrics for event %s", event.type, exc_info=True)
 
-    def _handle(self, event: Event) -> None:
-        if event.id in self._seen:
-            return
-        self._remember(self._seen, event.id, None)
+    def _record(self, event: Event) -> None:
+        if event.type is EventType.RUN_STARTED or event.type in self._RUN_STATUS:
+            self._record_run(event)
+        elif event.type is EventType.ASSET_STARTED or event.type in self._ASSET_STATUS:
+            self._record_asset(event)
+        elif event.type in self._DEST_STATUS:
+            self._record_destination_io(event)
 
-        metadata = event.metadata
-        run_id = str(metadata.get("run_id", ""))
-
+    def _record_run(self, event: Event) -> None:
+        key = ("run", str(event.metadata.get("run_id", "")))
         if event.type is EventType.RUN_STARTED:
-            self._remember(self._started, ("run", run_id), event.timestamp)
-        elif event.type in _RUN_STATUS:
-            attrs = {"status": _RUN_STATUS[event.type]}
-            self._runs.add(1, attrs)
-            started = self._started.pop(("run", run_id), None)
-            if started is not None:
-                self._run_duration.record((event.timestamp - started).total_seconds(), attrs)
-        elif event.type is EventType.ASSET_STARTED:
-            self._remember(self._started, ("asset", run_id, str(metadata.get("asset_id", ""))), event.timestamp)
-        elif event.type in _ASSET_STATUS:
-            attrs = {"status": _ASSET_STATUS[event.type], "asset_key": str(metadata.get("asset_key", ""))}
-            self._assets.add(1, attrs)
-            started = self._started.pop(("asset", run_id, str(metadata.get("asset_id", ""))), None)
-            if started is not None:
-                self._asset_duration.record((event.timestamp - started).total_seconds(), attrs)
-        elif event.type in _DEST_STATUS:
-            operation, status = _DEST_STATUS[event.type]
-            attrs = {"operation": operation, "status": status}
-            destination_key = metadata.get("destination_key")
-            if destination_key:
-                attrs["destination_key"] = str(destination_key)
-            self._dest_io.add(1, attrs)
+            self._started[key] = event.timestamp
+            return
 
-    def _remember(self, store: OrderedDict, key: object, value: object) -> None:
-        store[key] = value
-        while len(store) > self._max_tracked:
-            store.popitem(last=False)
+        IDENTITY_KEYS = ("org_id", "target_kind", "target_key")
+        identity = {key: str(event.metadata[key]) for key in IDENTITY_KEYS if event.metadata.get(key)}
+
+        attributes = {
+            "status": self._RUN_STATUS[event.type],
+            **identity,
+        }
+        self._runs.add(1, attributes)
+        if (seconds := self._elapsed(key, until=event.timestamp)) is not None:
+            self._run_duration.record(seconds, attributes)
+
+    def _record_asset(self, event: Event) -> None:
+        metadata = event.metadata
+        key = ("asset", str(metadata.get("run_id", "")), str(metadata.get("asset_id", "")))
+        if event.type is EventType.ASSET_STARTED:
+            self._started[key] = event.timestamp
+            return
+
+        attributes = {
+            "status": self._ASSET_STATUS[event.type],
+            "asset_key": str(metadata.get("asset_key", "")),
+        }
+        self._assets.add(1, attributes)
+        if (seconds := self._elapsed(key, until=event.timestamp)) is not None:
+            self._asset_duration.record(seconds, attributes)
+
+    def _record_destination_io(self, event: Event) -> None:
+        operation, status = self._DEST_STATUS[event.type]
+        attributes = {
+            "operation": operation,
+            "status": status,
+        }
+        if destination_key := event.metadata.get("destination_key"):
+            attributes["destination_key"] = str(destination_key)
+        self._dest_io.add(1, attributes)
+
+    def _elapsed(self, key: tuple[str, ...], *, until: dt.datetime) -> float | None:
+        started = self._started.pop(key, None)
+        return None if started is None else (until - started).total_seconds()

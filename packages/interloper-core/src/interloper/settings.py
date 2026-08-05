@@ -225,10 +225,8 @@ class TelemetrySettings(BaseSettings):
     traces: bool = True
     metrics: bool = True
     sample_ratio: float = 1.0
-    # Seconds between metric exports. Metrics are exported as deltas, so this
-    # is a freshness/resolution knob, not a correctness one: a short-lived run
-    # flushes on exit regardless, and an interval with no activity exports
-    # nothing at all. Lower it for a more responsive dashboard.
+    # Seconds between metric exports — a freshness knob, not a correctness
+    # one: runs flush on exit regardless.
     metric_export_interval: int = 60
 
 
