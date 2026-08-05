@@ -2,6 +2,68 @@
 
 <!-- version list -->
 
+## v0.55.0 (2026-08-05)
+
+### Bug Fixes
+
+- **core**: Carry destination_key on destination read events
+  ([`66d1fd6`](https://github.com/digitl-cloud/interloper/commit/66d1fd6600d3b348dd8634fe37603bc904aac495))
+
+- **core**: Make metrics usable for short-lived runs
+  ([`9140cf0`](https://github.com/digitl-cloud/interloper/commit/9140cf0069892e811c98ae0f45f9d80217a85e65))
+
+- **examples**: Count runs with max_over_time, not increase
+  ([`ed4fe4b`](https://github.com/digitl-cloud/interloper/commit/ed4fe4bd75a5cb9ddee770b476d4e2f174c0f38a))
+
+- **examples**: Disjoint bar buckets and non-expiring counters
+  ([`40c5e59`](https://github.com/digitl-cloud/interloper/commit/40c5e5996ae8dd461bcf23dbb7e0acc4fbc4a7fd))
+
+- **examples**: Scrape the collector so counters start at zero
+  ([`aadb0da`](https://github.com/digitl-cloud/interloper/commit/aadb0da393f4eb35cdd1f48b1140c02a9739af3d))
+
+### Documentation
+
+- **examples**: Local Grafana telemetry demo
+  ([`8e8f477`](https://github.com/digitl-cloud/interloper/commit/8e8f477dc413f3e0cf5fd543ecbda55aca38b820))
+
+### Features
+
+- Service instrumentation, helm otel wiring, docs
+  ([`2b51c42`](https://github.com/digitl-cloud/interloper/commit/2b51c42b17b5f1de68dbb4921d83add127ad9287))
+
+- **core**: Export metrics with delta temporality
+  ([`885d4ea`](https://github.com/digitl-cloud/interloper/commit/885d4eafc045895a8ddaec0ad9a84f35f851b9f0))
+
+- **core**: Otel metrics from the event bus
+  ([`77e4c6a`](https://github.com/digitl-cloud/interloper/commit/77e4c6a753fe3290a2b116eedd7f46e9c38300fb))
+
+- **core**: Platform identity on run metrics and spans
+  ([`3f7f2be`](https://github.com/digitl-cloud/interloper/commit/3f7f2beec5da65489a73109f440be6ba85b5d826))
+
+- **core**: Service.name is deployment configuration, not inference
+  ([`d60b830`](https://github.com/digitl-cloud/interloper/commit/d60b83086aae2c1e0098bc3a22ebf0367e951f2f))
+
+- **core**: Telemetry foundation with run/asset spans
+  ([`6c7f126`](https://github.com/digitl-cloud/interloper/commit/6c7f1260148cd324f289226d7a0e1c1bd2a5d7ba))
+
+- **core**: Trace resource resolution, schema work, and DAG spec round-trip
+  ([`3d6a4af`](https://github.com/digitl-cloud/interloper/commit/3d6a4af0e69619e517969d947eec0a5f41d58654))
+
+- **scheduler**: Trace propagation across launch boundaries
+  ([`180b0ab`](https://github.com/digitl-cloud/interloper/commit/180b0ab25ca9f7ace155d94cecf65e14706a3acd))
+
+### Refactoring
+
+- **core**: Instrumentation extras live with their satellites
+  ([`797241c`](https://github.com/digitl-cloud/interloper/commit/797241c6ea2132fffe8f1fe7e53c58a489de251d))
+
+- **core**: Name spans after the methods they wrap
+  ([`1ef38fd`](https://github.com/digitl-cloud/interloper/commit/1ef38fdd52b97cdc11402206bccb1629b9b089ff))
+
+- **core**: Trace normalize and conform as separate spans
+  ([`1ac89eb`](https://github.com/digitl-cloud/interloper/commit/1ac89eb916af304a407631a25245bd5e3165a385))
+
+
 ## v0.54.0 (2026-08-05)
 
 ### Continuous Integration

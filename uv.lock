@@ -2150,7 +2150,7 @@ wheels = [
 
 [[package]]
 name = "interloper-agent"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-agent" }
 dependencies = [
     { name = "google-adk", extra = ["extensions"] },
@@ -2171,7 +2171,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-api"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-api" }
 dependencies = [
     { name = "fastapi" },
@@ -2211,7 +2211,7 @@ provides-extras = ["agent", "otel"]
 
 [[package]]
 name = "interloper-app"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-app" }
 dependencies = [
     { name = "interloper-api" },
@@ -2228,7 +2228,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-assets"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-assets" }
 dependencies = [
     { name = "httpx" },
@@ -2264,7 +2264,7 @@ provides-extras = ["bing", "google", "facebook"]
 
 [[package]]
 name = "interloper-core"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-core" }
 dependencies = [
     { name = "httpx" },
@@ -2322,7 +2322,7 @@ dev = [
 
 [[package]]
 name = "interloper-db"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-db" }
 dependencies = [
     { name = "alembic" },
@@ -2354,7 +2354,7 @@ provides-extras = ["otel"]
 
 [[package]]
 name = "interloper-docker"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-docker" }
 dependencies = [
     { name = "docker" },
@@ -2371,7 +2371,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-google-cloud"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-google-cloud" }
 dependencies = [
     { name = "db-dtypes" },
@@ -2394,7 +2394,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-k8s"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-k8s" }
 dependencies = [
     { name = "interloper-core" },
@@ -2411,7 +2411,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-mcp"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-mcp" }
 dependencies = [
     { name = "interloper-core" },
@@ -2432,7 +2432,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-pandas"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-pandas" }
 dependencies = [
     { name = "interloper-core" },
@@ -2447,7 +2447,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-scheduler"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-scheduler" }
 dependencies = [
     { name = "croniter" },
@@ -2475,7 +2475,7 @@ provides-extras = ["docker", "k8s"]
 
 [[package]]
 name = "interloper-slack"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-slack" }
 dependencies = [
     { name = "interloper-core" },
@@ -2486,7 +2486,7 @@ requires-dist = [{ name = "interloper-core", editable = "packages/interloper-cor
 
 [[package]]
 name = "interloper-toolkit"
-version = "0.54.0"
+version = "0.55.0"
 source = { editable = "packages/interloper-toolkit" }
 dependencies = [
     { name = "interloper-core" },
@@ -2501,7 +2501,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-workspace"
-version = "0.54.0"
+version = "0.55.0"
 source = { virtual = "." }
 dependencies = [
     { name = "interloper-agent" },
