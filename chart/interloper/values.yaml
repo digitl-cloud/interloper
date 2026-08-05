@@ -196,9 +196,8 @@ auth: {}
 #   allowed_domains:
 #     - example.com
 
-# OpenTelemetry export (traces + metrics over OTLP). Requires images built
-# with the "otel" extras (interloper-core[otel]; add interloper-db[otel] /
-# interloper-api[otel] for SQLAlchemy and request spans); the scheduler
+# OpenTelemetry export (traces + metrics over OTLP). The published images
+# ship with the otel extras (COMMON_EXTRAS=otel at build time); the scheduler
 # forwards these settings (and the trace context) into the run pods it
 # launches. Exporter auth headers
 # ("key=value,key2=value2") are read from the INTERLOPER_OTEL_HEADERS key of
