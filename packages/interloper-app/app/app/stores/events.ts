@@ -8,7 +8,6 @@ export interface RunEvent {
     component_id: string | null
     component_kind: string | null
     component_key: string | null
-    partition_or_window: string | null
     error: string | null
     traceback: string | null
     message: string | null

@@ -383,9 +383,7 @@ class Event(SQLModel, table=True):
     )
     org_id: UUID
     run_id: UUID | None = SQLField(default=None, foreign_key="runs.id")
-    backfill_id: UUID | None = SQLField(default=None, foreign_key="backfills.id")
     event_type: str
-    partition_or_window: str | None = None
     error: str | None = None
     traceback: str | None = None
     component_id: UUID | None = SQLField(default=None)

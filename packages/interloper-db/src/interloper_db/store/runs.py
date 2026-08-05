@@ -71,12 +71,14 @@ def _sanitize_data(meta: dict[str, Any]) -> dict[str, Any] | None:
     return json.loads(encoded) or None
 
 
-#: Metadata keys persisted as structured ``events`` columns — everything
-#: else spills into the ``data`` JSONB column.
+#: Metadata keys whose content is already represented by a structured
+#: ``events`` column — everything else spills into the ``data`` JSONB
+#: column. ``asset_id``/``asset_key`` are the compat aliases core emitters
+#: use for the component columns; ``run_id`` is redundant with the
+#: ``save_event`` argument that fills the column.
 _PROMOTED_METADATA_KEYS = frozenset(
     {
         "run_id",
-        "backfill_id",
         # Also arrives via run metadata; the column is authoritative.
         "org_id",
         "asset_id",
@@ -84,7 +86,6 @@ _PROMOTED_METADATA_KEYS = frozenset(
         "component_id",
         "component_kind",
         "component_key",
-        "partition_or_window",
         "error",
         "traceback",
         "message",
@@ -119,17 +120,17 @@ def _event_values(event: il.Event, org_id: UUID, run_id: UUID | None) -> dict[st
         "id": event_id,
         "org_id": org_id,
         "run_id": run_id,
-        "backfill_id": UUID(meta["backfill_id"]) if meta.get("backfill_id") else None,
         "event_type": event.type.value,
         "component_id": UUID(str(component_id)) if component_id else None,
         "component_kind": _sanitize_text(component_kind),
         "component_key": _sanitize_text(component_key),
-        "partition_or_window": _sanitize_text(meta.get("partition_or_window")),
         "error": _sanitize_text(meta.get("error")),
         "traceback": _sanitize_text(meta.get("traceback")),
         "message": _sanitize_text(meta.get("message")),
         "level": _sanitize_text(meta.get("level")),
-        "data": _sanitize_data({k: v for k, v in meta.items() if k not in _PROMOTED_METADATA_KEYS}),
+        # None values are the absence of a key, not payload — producers emit
+        # them unconditionally (backfill_id on non-backfill runs, …).
+        "data": _sanitize_data({k: v for k, v in meta.items() if k not in _PROMOTED_METADATA_KEYS and v is not None}),
         "timestamp": event.timestamp,
     }
 
