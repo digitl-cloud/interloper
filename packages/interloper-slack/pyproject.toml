@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-slack"
-version = "0.53.1"
+version = "0.54.0"
 description = "Interloper Slack integration: notification hook and connection"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]

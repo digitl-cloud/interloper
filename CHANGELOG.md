@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v0.54.0 (2026-08-05)
+
+### Continuous Integration
+
+- Allow the slack scope in PR title validation
+  ([`02128bd`](https://github.com/digitl-cloud/interloper/commit/02128bdc94d687d93de8ba9043e92a613269d1d8))
+
+### Features
+
+- **scheduler**: Thread run target context into event metadata
+  ([`9c4ec3c`](https://github.com/digitl-cloud/interloper/commit/9c4ec3cc526eba6130d3aad5d9ecf99077bec7d1))
+
+- **slack**: Add Slack notification hook satellite package
+  ([`c673248`](https://github.com/digitl-cloud/interloper/commit/c67324874b89b1cd1f4e2a9bde309cc5230efc28))
+
+### Refactoring
+
+- **db**: Generalize the events table to components
+  ([`b3fc1ad`](https://github.com/digitl-cloud/interloper/commit/b3fc1ad7b7aa27652c0739dc9fee768dc942c53e))
+
+- **slack**: Check Slack's ok flag inline, drop api.py
+  ([`6d3db3b`](https://github.com/digitl-cloud/interloper/commit/6d3db3b704515176306074fcf361185357ab4f1a))
+
+- **slack**: Give the Slack API one call shape
+  ([`2a49aed`](https://github.com/digitl-cloud/interloper/commit/2a49aed6558146b8f43b92bcc334f0a5a4cc4338))
+
+- **slack**: Use the framework REST client on the connection
+  ([`bbaf500`](https://github.com/digitl-cloud/interloper/commit/bbaf5005de542ac481fb2240fb67f56366aed36b))
+
+### Breaking Changes
+
+- **db**: Events API/store surface renames — EventResponse asset_id/asset_key →
+  component_id/component_kind/component_key (+ data), the ?asset_id= filter on /runs/{id}/events →
+  ?component_id=, and list_events/count_events asset_ids → component_ids.
+
+
 ## v0.53.1 (2026-07-31)
 
 ### Bug Fixes
