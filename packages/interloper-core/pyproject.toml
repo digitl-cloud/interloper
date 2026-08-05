@@ -20,12 +20,12 @@ dependencies = [
 [project.optional-dependencies]
 google-cloud = ["interloper-google-cloud"]
 slack = ["interloper-slack"]
+# Instruments only what core itself depends on (httpx); FastAPI and
+# SQLAlchemy instrumentation ship with interloper-api[otel] / interloper-db[otel].
 otel = [
     "opentelemetry-sdk>=1.42,<2",
     "opentelemetry-exporter-otlp-proto-grpc>=1.42,<2",
     "opentelemetry-exporter-otlp-proto-http>=1.42,<2",
-    "opentelemetry-instrumentation-fastapi>=0.63b0",
-    "opentelemetry-instrumentation-sqlalchemy>=0.63b0",
     "opentelemetry-instrumentation-httpx>=0.63b0",
 ]
 
