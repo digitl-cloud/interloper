@@ -19,7 +19,7 @@ def _reset_state():
 
 class TestInitTelemetry:
     def test_disabled_is_a_noop(self):
-        assert init_telemetry(TelemetrySettings(enabled=False), role="cli") is False
+        assert init_telemetry(TelemetrySettings(enabled=False)) is False
         assert setup._initialized is False
 
     def test_missing_sdk_warns_and_stays_noop(self, monkeypatch, caplog):
@@ -27,7 +27,7 @@ class TestInitTelemetry:
         # simulating an install without the otel extra.
         monkeypatch.setitem(sys.modules, "opentelemetry.sdk.resources", None)
         with caplog.at_level("WARNING", logger="interloper.telemetry.setup"):
-            assert init_telemetry(TelemetrySettings(enabled=True), role="cli") is False
+            assert init_telemetry(TelemetrySettings(enabled=True)) is False
         assert "interloper[otel]" in caplog.text
         assert setup._initialized is False
 
@@ -35,8 +35,8 @@ class TestInitTelemetry:
         # Both signals off: initialization completes without installing
         # global providers (which are set-once per process).
         settings = TelemetrySettings(enabled=True, traces=False, metrics=False)
-        assert init_telemetry(settings, role="run") is True
-        assert init_telemetry(settings, role="run") is True
+        assert init_telemetry(settings) is True
+        assert init_telemetry(settings) is True
         assert setup._initialized is True
 
     def test_shutdown_without_init_is_safe(self):

@@ -123,7 +123,6 @@ def main() -> None:
             # rate-based panels several points to work with.
             metric_export_interval=5,
         ),
-        role="example",
     ):
         raise SystemExit("Telemetry did not start. Install the extra: uv sync --all-extras")
 

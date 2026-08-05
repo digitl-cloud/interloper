@@ -37,7 +37,7 @@ def _worker(
 
     # Fresh interpreter: re-init from the inherited environment; metadata
     # carries the parent span context.
-    init_telemetry(AppSettings.get().otel, role="run")
+    init_telemetry(AppSettings.get().otel)
     context = extract_metadata(metadata)
     token = otel_context.attach(context) if context is not None else None
 
