@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v0.56.0 (2026-08-05)
+
+### Chores
+
+- Update interloper.yaml
+  ([`14e19d6`](https://github.com/digitl-cloud/interloper/commit/14e19d6b7297da70f2688380a5c2a5b287f644ff))
+
+### Features
+
+- **docker**: Ship the otel extras in published images
+  ([`5841ba9`](https://github.com/digitl-cloud/interloper/commit/5841ba96c46b0cdee03f494897c770d5084d5d24))
+
+### Refactoring
+
+- **db**: Demote backfill_id and partition_or_window on events to data
+  ([`0223d8f`](https://github.com/digitl-cloud/interloper/commit/0223d8fc9e384c50a3ef1ae05a0afae8aabb11bd))
+
+### Breaking Changes
+
+- **db**: The events table drops the backfill_id and partition_or_window columns (values move into
+  data), and EventResponse no longer carries partition_or_window.
+
+
 ## v0.55.0 (2026-08-05)
 
 ### Bug Fixes
