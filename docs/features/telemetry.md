@@ -258,8 +258,10 @@ shutdown_telemetry()  # flush before the process exits
 
 ## Kubernetes deployment
 
-The Helm chart wires everything from one block (the images must be built with the
-`otel` extra):
+The Helm chart wires everything from one block (build the images with the
+`otel` extras of the packages they carry — `interloper-db[otel]` for
+SQLAlchemy spans in the api and scheduler images, plus
+`interloper-api[otel]` for request spans in the api image):
 
 ```yaml
 otel:

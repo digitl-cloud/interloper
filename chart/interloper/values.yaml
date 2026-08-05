@@ -197,8 +197,10 @@ auth: {}
 #     - example.com
 
 # OpenTelemetry export (traces + metrics over OTLP). Requires images built
-# with the "otel" extra; the scheduler forwards these settings (and the trace
-# context) into the run pods it launches. Exporter auth headers
+# with the "otel" extras (interloper-core[otel]; add interloper-db[otel] /
+# interloper-api[otel] for SQLAlchemy and request spans); the scheduler
+# forwards these settings (and the trace context) into the run pods it
+# launches. Exporter auth headers
 # ("key=value,key2=value2") are read from the INTERLOPER_OTEL_HEADERS key of
 # the release secret (add it via secrets.existingSecret, or per-deployment
 # extraEnv). Finer tuning (sampling, service name, signal toggles) via

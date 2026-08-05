@@ -2188,6 +2188,10 @@ dependencies = [
 agent = [
     { name = "interloper-agent" },
 ]
+otel = [
+    { name = "interloper-core", extra = ["otel"] },
+    { name = "opentelemetry-instrumentation-fastapi" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -2196,12 +2200,14 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "interloper-agent", marker = "extra == 'agent'", editable = "packages/interloper-agent" },
     { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "interloper-core", extras = ["otel"], marker = "extra == 'otel'", editable = "packages/interloper-core" },
     { name = "interloper-db", editable = "packages/interloper-db" },
+    { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'otel'", specifier = ">=0.63b0" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.41.0" },
     { name = "wsproto", specifier = ">=1.2.0" },
 ]
-provides-extras = ["agent"]
+provides-extras = ["agent", "otel"]
 
 [[package]]
 name = "interloper-app"
@@ -2276,9 +2282,7 @@ google-cloud = [
 otel = [
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-instrumentation-fastapi" },
     { name = "opentelemetry-instrumentation-httpx" },
-    { name = "opentelemetry-instrumentation-sqlalchemy" },
     { name = "opentelemetry-sdk" },
 ]
 slack = [
@@ -2300,9 +2304,7 @@ requires-dist = [
     { name = "opentelemetry-api", specifier = ">=1.42,<2" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
-    { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'otel'", specifier = ">=0.63b0" },
     { name = "opentelemetry-instrumentation-httpx", marker = "extra == 'otel'", specifier = ">=0.63b0" },
-    { name = "opentelemetry-instrumentation-sqlalchemy", marker = "extra == 'otel'", specifier = ">=0.63b0" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
@@ -2331,15 +2333,24 @@ dependencies = [
     { name = "sqlmodel" },
 ]
 
+[package.optional-dependencies]
+otel = [
+    { name = "interloper-core", extra = ["otel"] },
+    { name = "opentelemetry-instrumentation-sqlalchemy" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
     { name = "cryptography", specifier = ">=43.0.0" },
     { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "interloper-core", extras = ["otel"], marker = "extra == 'otel'", editable = "packages/interloper-core" },
+    { name = "opentelemetry-instrumentation-sqlalchemy", marker = "extra == 'otel'", specifier = ">=0.63b0" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "sqlmodel", specifier = ">=0.0.27" },
 ]
+provides-extras = ["otel"]
 
 [[package]]
 name = "interloper-docker"
