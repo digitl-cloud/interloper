@@ -77,6 +77,8 @@ _PROMOTED_METADATA_KEYS = frozenset(
     {
         "run_id",
         "backfill_id",
+        # Also arrives via run metadata; the column is authoritative.
+        "org_id",
         "asset_id",
         "asset_key",
         "component_id",

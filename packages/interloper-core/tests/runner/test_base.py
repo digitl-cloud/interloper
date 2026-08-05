@@ -194,7 +194,7 @@ class TestTelemetrySpans:
         events: list[Event] = []
         await AsyncRunner(on_event=events.append).run(
             il.DAG(solo(id="solo", destinations=[il.MemoryDestination()])),
-            metadata={"run_id": "run-1"},
+            metadata={"run_id": "run-1", "org_id": "org-1", "target_kind": "job", "target_key": "nightly"},
         )
 
         spans = {s.name: s for s in span_exporter.get_finished_spans()}
@@ -224,11 +224,13 @@ class TestTelemetrySpans:
         assert run_span.attributes is not None
         assert run_span.attributes["interloper.run.id"] == "run-1"
         assert run_span.attributes["interloper.runner.type"] == "async_runner"
+        assert run_span.attributes["interloper.org.id"] == "org-1"
+        assert run_span.attributes["interloper.target.key"] == "nightly"
+        assert asset_span.attributes["interloper.target.kind"] == "job"
         assert asset_span.attributes is not None
         assert asset_span.attributes["interloper.asset.key"] == "solo"
 
-        # The run span's context rides the metadata dict into every event —
-        # the correlation hook for logs and cross-process children.
+        # The run span's traceparent rides the metadata dict into every event.
         trace_id = f"{run_span.context.trace_id:032x}"
         assert events
         for event in events:

@@ -9,8 +9,7 @@ import sys
 from interloper.cli.runtime import apply_cli_overrides
 from interloper.settings import AppSettings
 
-# service.name defaults to interloper-<role>; one process can host several
-# services ("app" runs api + scheduler threads), so roles stay coarse.
+# Coarse on purpose: one process can host several services ("app" runs both).
 _TELEMETRY_ROLES = {"run": "run", "launch": "run", "app": "server"}
 
 

@@ -32,6 +32,7 @@ def run_event_metadata(run: Run, target: Component | None) -> dict[str, Any]:
     metadata: dict[str, Any] = {
         "run_id": str(run.id),
         "backfill_id": str(run.backfill_id) if run.backfill_id else None,
+        "org_id": str(run.org_id),
     }
     if target is not None:
         metadata |= {

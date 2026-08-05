@@ -35,9 +35,8 @@ def _worker(
     from interloper.settings import AppSettings
     from interloper.telemetry import extract_metadata, force_flush, init_telemetry
 
-    # Fresh interpreter (or forked child with a dead exporter thread): the
-    # idempotent init reads the inherited environment; metadata carries the
-    # parent run span's context.
+    # Fresh interpreter: re-init from the inherited environment; metadata
+    # carries the parent span context.
     init_telemetry(AppSettings.get().otel, role="run")
     context = extract_metadata(metadata)
     token = otel_context.attach(context) if context is not None else None
@@ -61,8 +60,7 @@ def _worker(
     finally:
         if token is not None:
             otel_context.detach(token)
-        # Pool workers are reused and may be torn down abruptly — don't
-        # rely on process-exit hooks to deliver spans.
+        # Pool workers are reused; exit hooks may never run.
         force_flush()
     return (asset_id, True, None, None)
 
