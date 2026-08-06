@@ -41,6 +41,18 @@ dev = [
 # ###############
 # UV
 # ###############
+[tool.uv]
+# google-adk caps opentelemetry-api/sdk at <=1.42.1, but the fastapi
+# instrumentation only names spans by route template (instead of the raw
+# URL — a metric-cardinality leak) for our nested routers from 0.65b0,
+# which requires the 1.44 SDK. The cap is Google's conservative pinning,
+# not a known break: the otel 1.x API is stable and adk only uses its
+# public surface. Drop this override once adk allows >=1.43.
+override-dependencies = [
+    "opentelemetry-api>=1.44.0",
+    "opentelemetry-sdk>=1.44.0",
+]
+
 [tool.uv.sources]
 interloper-core = { workspace = true }
 interloper-assets = { workspace = true }
