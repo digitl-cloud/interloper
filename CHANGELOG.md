@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.56.1 (2026-08-06)
+
+### Bug Fixes
+
+- Span names lose route templates on nested routers
+  ([`dd66483`](https://github.com/digitl-cloud/interloper/commit/dd66483b3cc7867e68d1985b7b9b30f6e8a415d4))
+
+
 ## v0.56.0 (2026-08-05)
 
 ### Chores
