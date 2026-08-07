@@ -207,6 +207,12 @@ When the API is served (`interloper app`), FastAPI request spans plus SQLAlchemy
 httpx client spans are enabled through the standard contrib instrumentors — REST-based
 sources get egress spans for free.
 
+HTTP spans follow the *stable* HTTP semantic conventions (`server.address`,
+`url.full`, `http.request.method`, `http.response.status_code`), not the deprecated
+ones the contrib instrumentors still default to: `init_telemetry` sets
+`OTEL_SEMCONV_STABILITY_OPT_IN=http` unless the environment already provides a
+value (e.g. `http/dup` to emit both during a migration).
+
 ## Metrics
 
 | Instrument | Type | Attributes |
