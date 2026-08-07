@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.57.0 (2026-08-07)
+
+### Features
+
+- **telemetry**: Emit stable HTTP semantic conventions
+  ([`69ae3d7`](https://github.com/digitl-cloud/interloper/commit/69ae3d7a1383e71de08e370298aadeb4f7468a7f))
+
+
 ## v0.56.1 (2026-08-06)
 
 ### Bug Fixes
