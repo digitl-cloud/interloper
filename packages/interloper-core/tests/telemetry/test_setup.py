@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 import pytest
@@ -42,6 +43,16 @@ class TestInitTelemetry:
     def test_shutdown_without_init_is_safe(self):
         shutdown_telemetry()
         assert setup._initialized is False
+
+    def test_opts_into_stable_http_semconv(self, monkeypatch):
+        monkeypatch.delenv("OTEL_SEMCONV_STABILITY_OPT_IN", raising=False)
+        init_telemetry(TelemetrySettings(enabled=True, traces=False, metrics=False))
+        assert os.environ["OTEL_SEMCONV_STABILITY_OPT_IN"] == "http"
+
+    def test_operator_semconv_override_wins(self, monkeypatch):
+        monkeypatch.setenv("OTEL_SEMCONV_STABILITY_OPT_IN", "http/dup")
+        init_telemetry(TelemetrySettings(enabled=True, traces=False, metrics=False))
+        assert os.environ["OTEL_SEMCONV_STABILITY_OPT_IN"] == "http/dup"
 
     def test_instrument_fastapi_is_a_noop_when_uninitialized(self):
         setup.instrument_fastapi(object())  # must not raise or touch the app

@@ -89,6 +89,16 @@ def init_telemetry(settings: TelemetrySettings) -> bool:
 
     from interloper.telemetry.tracer import _version
 
+    # Emit the stable HTTP semantic conventions (server.address, url.full,
+    # http.request.method, …) instead of the deprecated ones the contrib
+    # instrumentations still default to. Client spans then carry the target
+    # host natively — no downstream URL parsing to name vendor peers — and
+    # the eventual upstream default flip becomes a no-op instead of a
+    # surprise rename. Must be set before the first instrumentor
+    # initializes (they read it once per process); setdefault keeps the
+    # operator override available.
+    os.environ.setdefault("OTEL_SEMCONV_STABILITY_OPT_IN", "http")
+
     grpc = settings.protocol == "grpc"
     exporter_kwargs = _exporter_kwargs(settings)
     resource = Resource.create(
