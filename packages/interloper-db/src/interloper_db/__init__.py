@@ -11,7 +11,9 @@ from interloper_db.models import (
     Organisation,
     PersonalAccessToken,
     Profile,
+    Quota,
     Run,
+    Usage,
     UserOrganisation,
 )
 from interloper_db.provision import create_all, downgrade, ensure_database, upgrade
@@ -30,8 +32,10 @@ __all__ = [
     "Organisation",
     "PersonalAccessToken",
     "Profile",
+    "Quota",
     "Run",
     "Store",
+    "Usage",
     "UserOrganisation",
     "create_all",
     "downgrade",

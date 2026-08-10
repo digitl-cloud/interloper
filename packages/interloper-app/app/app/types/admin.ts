@@ -45,6 +45,32 @@ export interface AdminConfig {
         encryption_configured: boolean
         catalog: Record<string, string[]>
     }
+    quotas: AdminQuotaLimits
+}
+
+export interface AdminQuotaLimits {
+    max_sources: number | null
+    max_assets_per_source: number | null
+    max_successful_runs_per_month: number | null
+}
+
+export interface AdminOrgQuotaStatus {
+    id: string
+    name: string
+    limits: AdminQuotaLimits
+    effective: AdminQuotaLimits
+    sources: number
+    max_assets_per_source: number
+    successful_runs: number
+    reserved_runs: number
+    /** Recomputed from the runs table; differing from successful_runs signals ledger drift. */
+    recomputed_successful_runs: number
+}
+
+export interface AdminQuotas {
+    period_start: string
+    defaults: AdminQuotaLimits
+    organisations: AdminOrgQuotaStatus[]
 }
 
 export interface AdminUser {

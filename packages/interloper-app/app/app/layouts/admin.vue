@@ -36,6 +36,12 @@ const items = computed<NavigationMenuItem[]>(() => [
         active: route.path.startsWith('/admin/users'),
     },
     {
+        label: 'Quotas',
+        icon: 'i-lucide-gauge',
+        to: '/admin/quotas',
+        active: route.path.startsWith('/admin/quotas'),
+    },
+    {
         label: 'Config',
         icon: 'i-lucide-settings-2',
         to: '/admin/config',

@@ -112,6 +112,37 @@ class FakeStore:
     def delete_invitation(self, invitation_id: UUID) -> None:
         pass
 
+    # -- quotas --
+    def current_period_start(self):
+        import datetime as dt
+
+        return dt.date(2026, 8, 1)
+
+    def list_quotas(self):
+        return [SimpleNamespace(org_id=self.org.id, max_sources=5, max_assets_per_source=None)]
+
+    def list_usage(self, *, period_start=None, org_id=None):
+        import datetime as dt
+
+        return [
+            SimpleNamespace(
+                org_id=self.org.id,
+                metric="successful_runs",
+                period_start=dt.date(2026, 8, 1),
+                used=7,
+                reserved=1,
+            )
+        ]
+
+    def count_sources_by_org(self):
+        return {self.org.id: 2}
+
+    def max_assets_per_source_by_org(self):
+        return {self.org.id: 4}
+
+    def count_successful_runs_by_org(self, period_start):
+        return {self.org.id: 8}
+
 
 def _profile(*, is_super_admin: bool):
     return SimpleNamespace(
@@ -219,6 +250,53 @@ def test_super_admin_reads_config(store: FakeStore, fake_settings: SimpleNamespa
 def test_config_unavailable_returns_503(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=True).get("/admin/config")
     assert resp.status_code == 503
+
+
+def test_non_super_admin_cannot_read_quotas(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=False).get("/admin/quotas")
+    assert resp.status_code == 403
+
+
+def test_super_admin_reads_quota_overview(store: FakeStore) -> None:
+    from interloper_api.dependencies import get_quota_defaults
+
+    client = _client(store, is_super_admin=True)
+    client.app.dependency_overrides[get_quota_defaults] = lambda: SimpleNamespace(
+        max_sources=10, max_assets_per_source=20, max_successful_runs_per_month=100
+    )
+    resp = client.get("/admin/quotas")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["period_start"] == "2026-08-01"
+    assert body["defaults"]["max_successful_runs_per_month"] == 100
+
+    (org,) = body["organisations"]
+    assert org["limits"]["max_sources"] == 5
+    # Overrides win field-by-field; unset fields fall back to the defaults.
+    assert org["effective"]["max_sources"] == 5
+    assert org["effective"]["max_assets_per_source"] == 20
+    assert org["sources"] == 2
+    assert org["max_assets_per_source"] == 4
+    assert org["successful_runs"] == 7
+    assert org["reserved_runs"] == 1
+    assert org["recomputed_successful_runs"] == 8
+
+
+def test_quota_overview_defaults_absent_means_unlimited(store: FakeStore) -> None:
+    from interloper_api.dependencies import get_quota_defaults
+
+    client = _client(store, is_super_admin=True)
+    client.app.dependency_overrides[get_quota_defaults] = lambda: None
+    resp = client.get("/admin/quotas")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["defaults"] == {
+        "max_sources": None,
+        "max_assets_per_source": None,
+        "max_successful_runs_per_month": None,
+    }
+    (org,) = body["organisations"]
+    assert org["effective"]["max_assets_per_source"] is None
 
 
 def test_non_super_admin_cannot_list_users(store: FakeStore) -> None:

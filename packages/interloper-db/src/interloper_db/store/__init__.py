@@ -27,6 +27,7 @@ and hydration for any kind, with the semantics a kind genuinely owns
 - ``ComponentMixin`` — component CRUD, hydration (all kinds); builds on
   ``RelationMixin``, the vocabulary-validated relation read/write layer
 - ``RunMixin`` — runs, events, backfills
+- ``QuotaMixin`` — per-org quota limits and the usage ledger
 - ``DriftMixin`` — catalog-resolution status for stored keys
 """
 
@@ -43,13 +44,14 @@ from interloper_db.hydration import Hydrator
 from interloper_db.store.auth import AuthMixin
 from interloper_db.store.components import ComponentMixin
 from interloper_db.store.drift import DriftMixin
+from interloper_db.store.quotas import QuotaMixin
 from interloper_db.store.runs import RunMixin
 from interloper_db.store.tokens import TokenMixin
 
 logger = logging.getLogger(__name__)
 
 
-class Store(AuthMixin, TokenMixin, ComponentMixin, RunMixin, DriftMixin):
+class Store(AuthMixin, TokenMixin, ComponentMixin, RunMixin, QuotaMixin, DriftMixin):
     """Framework-level persistence layer.
 
     Bridges catalog definitions and database rows to hydrate and persist

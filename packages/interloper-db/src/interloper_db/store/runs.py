@@ -19,6 +19,7 @@ from sqlmodel import Session, col, select
 from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
 from interloper_db.store.base import StoreBase
 from interloper_db.store.components import stamp_component_state
+from interloper_db.store.quotas import settle_run_usage
 
 logger = logging.getLogger(__name__)
 
@@ -423,6 +424,8 @@ class RunMixin(StoreBase):
             db_run.status = "success" if success else "failed"
             db_run.completed_at = datetime.now(timezone.utc)
             session.add(db_run)
+
+            settle_run_usage(session, db_run, success=success)
 
             if db_run.component_id:
                 db_component = session.get(Component, db_run.component_id)

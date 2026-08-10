@@ -21,6 +21,7 @@ from interloper_db.models import (
     Organisation,
     PersonalAccessToken,
     Profile,
+    Quota,
     Run,
     UserOrganisation,
 )
@@ -401,6 +402,9 @@ class AuthMixin(StoreBase):
                 delete(ComponentRelation).where(ComponentRelation.org_id == org_id),  # ty: ignore[invalid-argument-type]
                 delete(Component).where(Component.org_id == org_id),  # ty: ignore[invalid-argument-type]
                 delete(PersonalAccessToken).where(PersonalAccessToken.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
+                delete(Quota).where(Quota.org_id == org_id),  # ty: ignore[invalid-argument-type]
+                # Usage is deliberately NOT deleted: it is the billing ledger
+                # and must survive its organisation.
                 delete(Invitation).where(Invitation.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
                 delete(UserOrganisation).where(UserOrganisation.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
                 update(AuthSession).where(AuthSession.organisation_id == org_id).values(organisation_id=None),  # ty: ignore[invalid-argument-type]

@@ -18,6 +18,7 @@ _auth_config: Any | None = None
 _smtp_config: Any | None = None
 _features: dict[str, bool] = {}
 _admin_config: Any | None = None
+_quota_defaults: Any | None = None
 
 # Role hierarchy: admin > editor > viewer
 _ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
@@ -152,6 +153,25 @@ def get_admin_config() -> Any:
         The AdminConfigResponse snapshot, or None if not configured.
     """
     return _admin_config
+
+
+def set_quota_defaults(defaults: Any) -> None:
+    """Set the global default quota limits (from settings, at app creation).
+
+    Args:
+        defaults: The QuotaSettings instance.
+    """
+    global _quota_defaults  # noqa: PLW0603
+    _quota_defaults = defaults
+
+
+def get_quota_defaults() -> Any:
+    """Return the global default quota limits.
+
+    Returns:
+        The QuotaSettings instance, or None if not configured.
+    """
+    return _quota_defaults
 
 
 # -- Auth dependencies -------------------------------------------------------

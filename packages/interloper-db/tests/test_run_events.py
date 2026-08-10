@@ -201,8 +201,8 @@ def test_asset_filter_accepts_multiple_assets(store: RunMixin) -> None:
 
 @pytest.fixture
 def run_store() -> Iterator[RunMixin]:
-    """A RunMixin over a database with runs and components tables."""
-    from interloper_db.models import Component, Run
+    """A RunMixin over a database with runs, components, and usage tables."""
+    from interloper_db.models import Component, Run, Usage
 
     eng = engine_module.init_engine(
         "sqlite://",
@@ -211,6 +211,7 @@ def run_store() -> Iterator[RunMixin]:
     )
     Component.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     Run.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+    Usage.__table__.create(eng)  # ty: ignore[unresolved-attribute]  (complete_run settles usage)
     try:
         mixin = RunMixin()
         mixin._engine = eng
