@@ -288,6 +288,11 @@ class TestIntraSourceWiring:
         demo_store.update_component(source.id, children=["a", "b", "c", "d", "e"])
         assert len(demo_store.list_relations(_ORG, type="dependency")) == 6
 
+    def test_update_without_children_leaves_child_set_untouched(self, demo_store: Store):
+        source = demo_store.create_component(_ORG, kind="source", key="demo_source", children=["b", "e"])
+        updated = demo_store.update_component(source.id, name="renamed")
+        assert {child.key for child in updated.children} == {"b", "e"}
+
 
 class TestChildRemovalGuard:
     """Narrowing a source's child set honors the delete guard's semantics."""
