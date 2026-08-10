@@ -223,6 +223,7 @@ value (e.g. `http/dup` to emit both during a migration).
 | `interloper.asset.duration` | histogram (s) | `status`, `asset_key` |
 | `interloper.destination.io` | counter | `operation`, `status`, `destination_key` |
 | `interloper.runs.launched` | counter | `outcome` |
+| `interloper.scheduler.tick` | gauge (unix s) | `loop` (`cron`, `hook`, `queue`, `reaper`) |
 
 † **Platform identity** — `org_id`, `target_kind`, `target_key` — appears on
 run-level instruments when the run goes through the scheduler, which threads
