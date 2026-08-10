@@ -152,8 +152,8 @@ class ComponentMixin(RelationMixin):
     ) -> Component:
         """Update a component's spec. ``None`` leaves a facet untouched.
 
-        Source kinds always top up newly available catalog assets; passing
-        ``children`` makes the child set exactly that list. The machine-owned
+        Passing ``children`` makes a source's child asset set exactly that
+        list; omitting it leaves the current set as is. The machine-owned
         ``state`` column is never touched here.
 
         Returns:
@@ -173,7 +173,8 @@ class ComponentMixin(RelationMixin):
                 self._apply_config(db_component, config, encrypted)
             if db_component.kind == "source":
                 self._check_source_collision(session, db_component)
-                self._ensure_children(session, db_component, children)
+                if children is not None:
+                    self._ensure_children(session, db_component, children)
             elif children is not None:
                 raise ConfigError(f"Components of kind '{db_component.kind}' have no children")
             self._sync_relations(session, db_component, relations)
@@ -467,10 +468,10 @@ class ComponentMixin(RelationMixin):
         missing ones are created, extra ones are removed. Removal follows the
         delete guard's semantics: blocking relations from outside the source
         (a required cross-source dependency) raise ``InUseError``; detaching
-        ones and intra-source edges cascade. When ``None``, existing rows are
-        kept and newly available catalog assets are added. Existing rows keep
-        their IDs (and therefore their cross-source deps, event references,
-        and per-asset overrides).
+        ones and intra-source edges cascade. ``None`` is the source-creation
+        default and enables every asset the catalog class declares. Existing
+        rows keep their IDs (and therefore their cross-source deps, event
+        references, and per-asset overrides).
         """
         source_cls = resolve_source_cls(self._catalog, db_source.key)
         if source_cls is None:
@@ -485,9 +486,9 @@ class ComponentMixin(RelationMixin):
             child.key: child
             for child in session.exec(select(Component).where(Component.parent_id == db_source.id)).all()
         }
-        # An explicit list is the exact child set; None keeps existing rows
-        # (drifted keys included) and tops up new catalog assets.
-        target = set(child_keys) if child_keys is not None else set(existing) | all_keys
+        # An explicit list is the exact child set; None (creation) is all
+        # catalog assets.
+        target = set(child_keys) if child_keys is not None else all_keys
         to_create = target - set(existing)
         to_remove = set(existing) - target
 
