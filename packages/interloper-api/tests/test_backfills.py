@@ -1,0 +1,115 @@
+"""Tests for ``interloper_api.routes.backfills`` — cancel endpoint and org-membership scoping.
+
+A lightweight fake store stands in for persistence so these stay pure unit
+tests, matching the style of ``test_runs.py``.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+from types import SimpleNamespace
+from uuid import UUID, uuid4
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from interloper.errors import NotFoundError
+
+from interloper_api.dependencies import get_current_user, get_store
+from interloper_api.routes import backfills as backfills_module
+
+_ORG_ID = uuid4()
+
+
+def _fake_backfill(backfill_id: UUID, status: str = "running") -> SimpleNamespace:
+    return SimpleNamespace(
+        id=backfill_id,
+        org_id=_ORG_ID,
+        component_id=None,
+        status=status,
+        start_date=dt.date(2026, 1, 1),
+        end_date=dt.date(2026, 1, 3),
+        concurrency=1,
+        fail_fast=False,
+        partitions=3,
+        started_at=None,
+        completed_at=None,
+        created_at=None,
+    )
+
+
+class FakeStore:
+    """In-memory stand-in implementing only what the backfill routes call."""
+
+    def __init__(self) -> None:
+        self.cancel_calls: list[UUID] = []
+        self.raise_not_found = False
+        self.raise_value_error: str | None = None
+        #: Role the fake user holds in the backfill's org. None = not a member.
+        self.role: str | None = "editor"
+
+    def get_backfill(self, backfill_id: UUID):
+        if self.raise_not_found:
+            raise NotFoundError(f"Backfill {backfill_id} not found")
+        return _fake_backfill(backfill_id)
+
+    def get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
+        return self.role
+
+    def cancel_backfill(self, backfill_id: UUID):
+        self.cancel_calls.append(backfill_id)
+        if self.raise_value_error is not None:
+            raise ValueError(self.raise_value_error)
+        return _fake_backfill(backfill_id, status="canceled")
+
+
+def _client(store: FakeStore) -> TestClient:
+    app = FastAPI()
+    app.include_router(backfills_module.router)
+    app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    return TestClient(app)
+
+
+@pytest.fixture
+def store() -> FakeStore:
+    return FakeStore()
+
+
+# -- Cancel ---------------------------------------------------------------------
+
+
+def test_cancel_returns_the_canceled_backfill(store: FakeStore) -> None:
+    backfill_id = uuid4()
+    resp = _client(store).post(f"/backfills/{backfill_id}/cancel")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "canceled"
+    assert store.cancel_calls == [backfill_id]
+
+
+def test_cancel_missing_backfill_returns_404(store: FakeStore) -> None:
+    store.raise_not_found = True
+    resp = _client(store).post(f"/backfills/{uuid4()}/cancel")
+    assert resp.status_code == 404
+    assert store.cancel_calls == []
+
+
+def test_cancel_terminal_backfill_returns_409(store: FakeStore) -> None:
+    store.raise_value_error = "Backfill is already canceled"
+    resp = _client(store).post(f"/backfills/{uuid4()}/cancel")
+    assert resp.status_code == 409
+    assert "already canceled" in resp.json()["detail"]
+
+
+def test_cancel_requires_editor_in_owning_org(store: FakeStore) -> None:
+    store.role = "viewer"
+    resp = _client(store).post(f"/backfills/{uuid4()}/cancel")
+    assert resp.status_code == 403
+    assert store.cancel_calls == []
+
+
+def test_cancel_returns_404_for_non_member(store: FakeStore) -> None:
+    store.role = None
+    resp = _client(store).post(f"/backfills/{uuid4()}/cancel")
+    assert resp.status_code == 404
+    assert store.cancel_calls == []
