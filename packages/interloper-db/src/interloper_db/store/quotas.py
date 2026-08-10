@@ -281,6 +281,28 @@ class QuotaMixin(StoreBase):
         with self._session() as session:
             return list(session.exec(select(Quota)).all())
 
+    def set_quota(self, org_id: UUID, limits: dict[str, int | None]) -> Quota:
+        """Set an organisation's quota overrides; only the given fields change.
+
+        ``None`` clears a field so it falls back to the global default.
+
+        Raises:
+            ValueError: On an unknown limit field or a negative value.
+        """
+        allowed = {"max_sources", "max_assets_per_source", "max_successful_runs_per_month"}
+        if unknown := set(limits) - allowed:
+            raise ValueError(f"Unknown quota limit(s): {sorted(unknown)}")
+        if negative := {field for field, value in limits.items() if value is not None and value < 0}:
+            raise ValueError(f"Quota limit(s) must be >= 0: {sorted(negative)}")
+        with self._session() as session:
+            quota = session.get(Quota, org_id) or Quota(org_id=org_id)
+            for field, value in limits.items():
+                setattr(quota, field, value)
+            session.add(quota)
+            session.commit()
+            session.refresh(quota)
+            return quota
+
     def list_usage(self, *, period_start: dt.date | None = None, org_id: UUID | None = None) -> list[Usage]:
         """Usage ledger rows, optionally filtered by period and organisation."""
         with self._session() as session:

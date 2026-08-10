@@ -1,4 +1,4 @@
-import type { AdminConfig, AdminOrganisation, AdminQuotas, AdminUser } from '~/types/admin'
+import type { AdminConfig, AdminOrganisation, AdminQuotaLimits, AdminQuotas, AdminUser } from '~/types/admin'
 
 interface MemberResponse {
     id: string
@@ -26,6 +26,14 @@ export const useAdminStore = defineStore('admin', () => {
 
     function getQuotas() {
         return apiFetch<AdminQuotas>('/admin/quotas')
+    }
+
+    /** Set an org's quota overrides; null clears a field (falls back to the default). */
+    function updateOrgQuota(orgId: string, limits: AdminQuotaLimits) {
+        return apiFetch<AdminQuotaLimits>(`/admin/organisations/${orgId}/quota`, {
+            method: 'PATCH',
+            body: limits,
+        })
     }
 
     function listUsers() {
@@ -106,6 +114,7 @@ export const useAdminStore = defineStore('admin', () => {
     return {
         getConfig,
         getQuotas,
+        updateOrgQuota,
         listUsers,
         deleteUser,
         listOrganisations,

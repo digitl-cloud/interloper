@@ -19,7 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from interloper_db import Organisation, Profile, Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import get_admin_config, get_quota_defaults, get_store, require_super_admin
 from interloper_api.email import send_invite_email
@@ -255,6 +255,14 @@ class AdminQuotasResponse(BaseModel):
     period_start: dt.date
     defaults: AdminQuotaLimits
     organisations: list[AdminOrgQuotaStatus]
+
+
+class AdminQuotaUpdateRequest(BaseModel):
+    """Per-org quota overrides. Omitted fields keep their value; null clears one."""
+
+    max_sources: int | None = Field(default=None, ge=0)
+    max_assets_per_source: int | None = Field(default=None, ge=0)
+    max_successful_runs_per_month: int | None = Field(default=None, ge=0)
 
 
 class AdminConfigResponse(BaseModel):
@@ -568,6 +576,19 @@ def get_quotas(
             )
         )
     return AdminQuotasResponse(period_start=period_start, defaults=defaults, organisations=organisations)
+
+
+@router.patch("/organisations/{org_id}/quota")
+def update_org_quota(
+    org_id: UUID,
+    body: AdminQuotaUpdateRequest,
+    user: Profile = Depends(require_super_admin),
+    store: Store = Depends(get_store),
+) -> AdminQuotaLimits:
+    """Set an organisation's quota overrides; omitted fields keep their value, null clears one."""
+    _require_org(store, org_id)
+    quota = store.set_quota(org_id, body.model_dump(exclude_unset=True))
+    return _quota_limits(quota)
 
 
 # -- Users --------------------------------------------------------------------

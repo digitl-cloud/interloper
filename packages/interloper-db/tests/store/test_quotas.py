@@ -325,3 +325,23 @@ class TestReconcileUsage:
         run = _run(store)
         store.complete_run(run.id, success=True)
         assert store.reconcile_usage() == []
+
+
+class TestSetQuota:
+    def test_creates_then_partially_updates(self, store: _Store):
+        quota = store.set_quota(_ORG_ID, {"max_sources": 5})
+        assert (quota.max_sources, quota.max_successful_runs_per_month) == (5, None)
+
+        quota = store.set_quota(_ORG_ID, {"max_successful_runs_per_month": 100})
+        assert (quota.max_sources, quota.max_successful_runs_per_month) == (5, 100)
+
+    def test_none_clears_an_override(self, store: _Store):
+        store.set_quota(_ORG_ID, {"max_sources": 5})
+        quota = store.set_quota(_ORG_ID, {"max_sources": None})
+        assert quota.max_sources is None
+
+    def test_rejects_unknown_and_negative(self, store: _Store):
+        with pytest.raises(ValueError, match="Unknown quota limit"):
+            store.set_quota(_ORG_ID, {"max_bananas": 1})
+        with pytest.raises(ValueError, match=">= 0"):
+            store.set_quota(_ORG_ID, {"max_sources": -1})
