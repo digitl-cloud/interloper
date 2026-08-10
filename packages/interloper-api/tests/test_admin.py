@@ -35,6 +35,7 @@ class FakeStore:
         self.already_member = False
         self.deleted_profiles: list[UUID] = []
         self.deleted_organisations: list[UUID] = []
+        self.quota_updates: list[tuple[UUID, dict]] = []
 
     def delete_profile(self, user_id: UUID) -> None:
         self.deleted_profiles.append(user_id)
@@ -142,6 +143,14 @@ class FakeStore:
 
     def count_successful_runs_by_org(self, period_start):
         return {self.org.id: 8}
+
+    def set_quota(self, org_id: UUID, limits: dict):
+        self.quota_updates.append((org_id, limits))
+        return SimpleNamespace(
+            max_sources=limits.get("max_sources"),
+            max_assets_per_source=limits.get("max_assets_per_source"),
+            max_successful_runs_per_month=limits.get("max_successful_runs_per_month"),
+        )
 
 
 def _profile(*, is_super_admin: bool):
@@ -466,3 +475,31 @@ def test_invite_into_any_org(store: FakeStore) -> None:
     )
     assert resp.status_code == 201
     assert store.created_invites[0]["email"] == "x@acme.test"
+
+
+def test_non_super_admin_cannot_update_quota(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=False).patch(f"/admin/organisations/{uuid4()}/quota", json={})
+    assert resp.status_code == 403
+
+
+def test_update_quota_passes_only_provided_fields(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).patch(
+        f"/admin/organisations/{store.org.id}/quota",
+        json={"max_sources": 5, "max_successful_runs_per_month": None},
+    )
+    assert resp.status_code == 200
+    assert store.quota_updates == [
+        (store.org.id, {"max_sources": 5, "max_successful_runs_per_month": None})
+    ]
+    body = resp.json()
+    assert body["max_sources"] == 5
+    assert body["max_successful_runs_per_month"] is None
+
+
+def test_update_quota_rejects_negative_limits(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).patch(
+        f"/admin/organisations/{store.org.id}/quota",
+        json={"max_sources": -1},
+    )
+    assert resp.status_code == 422
+    assert store.quota_updates == []

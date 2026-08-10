@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { AdminOrgQuotaStatus, AdminQuotas } from '~/types/admin'
 
 definePageMeta({
@@ -9,18 +9,19 @@ definePageMeta({
     middleware: 'super-admin',
     pageHeader: {
         title: 'Quotas',
-        description: 'Per-organisation limits and current-period usage. Limits are read-only for now; defaults come from the instance configuration.',
+        description: 'Per-organisation limits and current-period usage. Empty limits inherit the instance defaults.',
     },
 })
 
 const UBadge = resolveComponent('UBadge')
 
 const adminStore = useAdminStore()
+const toast = useToast()
 
 const quotas = ref<AdminQuotas | null>(null)
 const loading = ref(true)
 
-onMounted(async () => {
+async function loadData() {
     try {
         quotas.value = await adminStore.getQuotas()
     }
@@ -30,7 +31,75 @@ onMounted(async () => {
     finally {
         loading.value = false
     }
-})
+}
+
+onMounted(loadData)
+
+// Edit modal state — string-typed fields so an emptied input means "inherit".
+const editOpen = ref(false)
+const editTarget = ref<AdminOrgQuotaStatus | null>(null)
+const editForm = ref({ max_sources: '', max_assets_per_source: '', max_successful_runs_per_month: '' })
+const saving = ref(false)
+
+const LIMIT_FIELDS = [
+    { key: 'max_sources', label: 'Max sources' },
+    { key: 'max_assets_per_source', label: 'Max assets per source' },
+    { key: 'max_successful_runs_per_month', label: 'Max successful runs / month' },
+] as const
+
+function defaultPlaceholder(key: keyof typeof editForm.value): string {
+    const value = quotas.value?.defaults[key]
+    return value != null ? `default: ${value}` : 'default: unlimited'
+}
+
+function openEdit(org: AdminOrgQuotaStatus) {
+    editTarget.value = org
+    editForm.value = {
+        max_sources: org.limits.max_sources?.toString() ?? '',
+        max_assets_per_source: org.limits.max_assets_per_source?.toString() ?? '',
+        max_successful_runs_per_month: org.limits.max_successful_runs_per_month?.toString() ?? '',
+    }
+    editOpen.value = true
+}
+
+async function submitEdit() {
+    const target = editTarget.value
+    if (!target) return
+
+    saving.value = true
+    try {
+        await adminStore.updateOrgQuota(target.id, {
+            max_sources: editForm.value.max_sources === '' ? null : Number(editForm.value.max_sources),
+            max_assets_per_source: editForm.value.max_assets_per_source === ''
+                ? null
+                : Number(editForm.value.max_assets_per_source),
+            max_successful_runs_per_month: editForm.value.max_successful_runs_per_month === ''
+                ? null
+                : Number(editForm.value.max_successful_runs_per_month),
+        })
+        toast.add({ title: `Quota limits updated for ${target.name}`, color: 'success' })
+        editOpen.value = false
+        await loadData()
+    }
+    catch (err) {
+        toast.add(errorToast(err, 'Failed to update quota limits'))
+    }
+    finally {
+        saving.value = false
+    }
+}
+
+function rowActions(org: AdminOrgQuotaStatus): DropdownMenuItem[][] {
+    return [
+        [
+            {
+                label: 'Edit limits',
+                icon: 'i-lucide-pencil',
+                onSelect: () => openEdit(org),
+            },
+        ],
+    ]
+}
 
 const rows = computed(() => quotas.value?.organisations ?? [])
 
@@ -117,7 +186,41 @@ const columns: TableColumn<AdminOrgQuotaStatus>[] = [
         <DataTable :columns="columns"
                    :data="rows"
                    :loading="loading"
+                   :row-actions="rowActions"
                    no-actions
-                   search-placeholder="Search organisations..." />
+                   search-placeholder="Search organisations..."
+                   @edit="openEdit" />
+
+        <UModal v-model:open="editOpen"
+                :title="`Quota limits — ${editTarget?.name}`"
+                :ui="{ footer: 'justify-end' }">
+            <template #body>
+                <div class="flex flex-col gap-3">
+                    <p class="text-sm text-muted">
+                        Overrides for this organisation. Leave a field empty to inherit the instance default.
+                    </p>
+                    <UFormField v-for="field in LIMIT_FIELDS"
+                                :key="field.key"
+                                :label="field.label">
+                        <UInput v-model="editForm[field.key]"
+                                type="number"
+                                min="0"
+                                :placeholder="defaultPlaceholder(field.key)"
+                                class="w-full"
+                                @keydown.enter="submitEdit" />
+                    </UFormField>
+                </div>
+            </template>
+            <template #footer>
+                <UButton label="Cancel"
+                         color="neutral"
+                         variant="outline"
+                         @click="editOpen = false" />
+                <UButton label="Save"
+                         :disabled="saving"
+                         :loading="saving"
+                         @click="submitEdit" />
+            </template>
+        </UModal>
     </div>
 </template>
