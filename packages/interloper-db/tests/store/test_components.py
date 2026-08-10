@@ -433,3 +433,57 @@ class TestDerivedNames:
         assert row.name is None
 
 
+
+
+class TestQuotaGates:
+    """Capacity quotas gate source creation and the child-asset set size."""
+
+    def _store(self, **limits: int | None) -> Store:
+        from types import SimpleNamespace
+
+        from interloper_assets.demo.source import DemoSource
+
+        return Store(catalog=il.Catalog.from_assets([DemoSource]), quota_defaults=SimpleNamespace(**limits))
+
+    def test_source_limit_blocks_creation(self, component_db: Engine):
+        from interloper.errors import QuotaExceededError
+
+        store = self._store(max_sources=1)
+        store.create_component(_ORG, kind="source", key="demo_source", children=["a"])
+        with pytest.raises(QuotaExceededError) as excinfo:
+            store.create_component(_ORG, kind="source", key="demo_source", children=["a"])
+        assert excinfo.value.quota == "max_sources"
+        assert (excinfo.value.limit, excinfo.value.used) == (1, 1)
+
+    def test_source_limit_org_override_wins(self, component_db: Engine):
+        from interloper.errors import QuotaExceededError
+
+        from interloper_db.models import Quota
+
+        store = self._store(max_sources=1)
+        with Session(component_db) as session:
+            session.add(Quota(org_id=_ORG, max_sources=2))
+            session.commit()
+        store.create_component(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "one"})
+        store.create_component(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "two"})
+        with pytest.raises(QuotaExceededError):
+            store.create_component(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "3"})
+
+    def test_asset_limit_blocks_large_child_set(self, component_db: Engine):
+        from interloper.errors import QuotaExceededError
+
+        store = self._store(max_assets_per_source=2)
+        source = store.create_component(_ORG, kind="source", key="demo_source", children=["a", "b"])
+        with pytest.raises(QuotaExceededError) as excinfo:
+            store.update_component(source.id, children=["a", "b", "c"])
+        assert excinfo.value.quota == "max_assets_per_source"
+        # Creation with the full catalog set (children=None -> 5 assets) is also gated.
+        with pytest.raises(QuotaExceededError):
+            store.create_component(_ORG, kind="source", key="demo_source", config={"dataset": "full"})
+        # Shrinking or staying within the limit is fine.
+        assert {c.key for c in store.update_component(source.id, children=["a"]).children} == {"a"}
+
+    def test_unconfigured_quotas_gate_nothing(self, component_db: Engine):
+        store = self._store()
+        for dataset in ("one", "two", "three"):
+            store.create_component(_ORG, kind="source", key="demo_source", config={"dataset": dataset})

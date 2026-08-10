@@ -29,6 +29,18 @@ class StoreBase:
     _hydrator: Hydrator
     _encrypt: Any
     _decrypt: Any
+    # QuotaSettings-shaped defaults for quota limits; None = everything
+    # unlimited (quota checks short-circuit without touching the DB).
+    _quota_defaults: Any = None
+
+    @property
+    def quota_defaults(self) -> Any:
+        """The global default quota limits (QuotaSettings-shaped, or None).
+
+        Exposed so co-located machinery (the scheduler's claim/cron SQL)
+        enforces against the same defaults as the store.
+        """
+        return self._quota_defaults
 
     @property
     def engine(self) -> Engine:

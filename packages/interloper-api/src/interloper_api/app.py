@@ -9,7 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from interloper.catalog.base import Catalog
-from interloper.errors import ComponentDriftError, NotFoundError
+from interloper.errors import ComponentDriftError, NotFoundError, QuotaExceededError
 from interloper_db import Store
 
 from interloper_api.dependencies import (
@@ -76,6 +76,14 @@ def create_app(
         user resolves the drift, so surface it as a clean 409 the UI can act on.
         """
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(QuotaExceededError)
+    async def _quota_exceeded_handler(_request: Request, exc: QuotaExceededError) -> JSONResponse:
+        """Store-level quota enforcement surfaces as 429 with structured context."""
+        return JSONResponse(
+            status_code=429,
+            content={"detail": {"message": str(exc), "quota": exc.quota, "limit": exc.limit, "used": exc.used}},
+        )
 
     if cors_origins:
         app.add_middleware(

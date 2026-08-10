@@ -11,7 +11,7 @@ import interloper as il
 import pytest
 from interloper_db import Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Run
+from interloper_db.models import Backfill, Component, ComponentRelation, Event, Quota, Run, Usage
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -46,7 +46,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Run, Backfill):
+    for model in (Component, ComponentRelation, Run, Backfill, Event, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}))
@@ -114,3 +114,88 @@ def test_launch_emits_a_span_per_claimed_run(store: Store, span_exporter: Any) -
 def test_empty_tick_emits_no_launch_spans(store: Store, span_exporter: Any) -> None:
     QueueController(launcher=_FakeLauncher(), store=store)._tick()
     assert not [s for s in span_exporter.get_finished_spans() if s.name == "interloper.launcher.launch"]
+
+
+# -- Run quota at dispatch ------------------------------------------------------
+
+
+def _exhaust_quota(store: Store, limit: int = 1) -> None:
+    """Give the org a limit and a ledger already at it."""
+    from types import SimpleNamespace
+
+    from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, db_now, increment_usage, month_start
+
+    store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=limit)
+    with Session(store.engine) as session:
+        increment_usage(session, _ORG, METRIC_SUCCESSFUL_RUNS, month_start(db_now(session)), used=limit)
+        session.commit()
+
+
+def test_dispatch_reserves_a_quota_slot(store: Store) -> None:
+    from types import SimpleNamespace
+
+    from interloper_db.models import Usage
+
+    store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=5)
+    run = store.create_run(_ORG)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == [run.id]
+    with Session(store.engine) as session:
+        dispatched = session.get(Run, run.id)
+        assert dispatched is not None and dispatched.quota_reserved_at is not None
+        usage = session.exec(select(Usage)).one()
+        assert (usage.used, usage.reserved) == (0, 1)
+
+
+def test_quota_denied_claim_cancels_instead_of_blocking(store: Store) -> None:
+    first = store.create_run(_ORG)
+    second = store.create_run(_ORG)
+    _exhaust_quota(store)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == []
+    statuses = _statuses(store)
+    assert statuses[first.id] == "canceled"
+    assert statuses[second.id] == "canceled"
+    with Session(store.engine) as session:
+        from interloper_db.models import Event
+
+        messages = [e.message for e in session.exec(select(Event)).all()]
+    assert len(messages) == 2 and all(m and "quota" in m for m in messages)
+
+
+def test_quota_denied_backfill_run_cancels_the_whole_backfill(store: Store) -> None:
+    backfill = store.create_backfill(
+        _ORG,
+        start_date=dt.date(2026, 1, 1),
+        end_date=dt.date(2026, 1, 3),
+        concurrency=1,
+    )
+    _exhaust_quota(store)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == []
+    assert set(_statuses(store).values()) == {"canceled"}
+    refreshed = store.get_backfill(backfill.id)
+    assert refreshed.status == "canceled"
+    assert refreshed.completed_at is not None
+
+
+def test_unlimited_org_dispatches_without_touching_the_ledger(store: Store) -> None:
+    from interloper_db.models import Usage
+
+    run = store.create_run(_ORG)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == [run.id]
+    with Session(store.engine) as session:
+        assert session.exec(select(Usage)).all() == []

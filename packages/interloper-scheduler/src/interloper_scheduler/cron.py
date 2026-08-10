@@ -23,6 +23,7 @@ from croniter import croniter
 from interloper.errors import ConfigError
 from interloper_db import Store, stamp_component_state
 from interloper_db.models import Backfill, Component, Run
+from interloper_db.store.quotas import run_quota_status
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
@@ -119,6 +120,20 @@ class CronController(Controller):
                     continue
 
                 self._set_state(session, job, next_run_at=next_run)
+
+                # Quota-exhausted orgs skip run creation but still advance
+                # next_run_at (committed with this session) — otherwise the
+                # blocked job would re-fire every tick forever.
+                committed, limit = run_quota_status(session, job.org_id, self._store.quota_defaults)
+                if limit is not None and committed >= limit:
+                    logger.warning(
+                        "Skipping job '%s' - monthly successful-run quota exhausted (%d/%d) for org %s",
+                        job.name,
+                        committed,
+                        limit,
+                        job.org_id,
+                    )
+                    continue
 
                 # Create runs. The backfill is built inline rather than via
                 # Store.create_backfill: it must commit atomically with the

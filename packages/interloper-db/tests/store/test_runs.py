@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Run, Usage
+from interloper_db.models import Backfill, Quota, Run, Usage
 from interloper_db.store.runs import RunMixin
 
 _ORG_ID = uuid4()
@@ -37,9 +37,8 @@ def store() -> Iterator[RunMixin]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    Backfill.__table__.create(eng)  # ty: ignore[unresolved-attribute]
-    Run.__table__.create(eng)  # ty: ignore[unresolved-attribute]
-    Usage.__table__.create(eng)  # ty: ignore[unresolved-attribute]  (complete_run settles usage)
+    for model in (Backfill, Run, Quota, Usage):
+        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         mixin = RunMixin()
         mixin._engine = eng

@@ -17,7 +17,7 @@ import pytest
 from interloper.errors import ConfigError
 from interloper_db import Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Run
+from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -40,7 +40,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Run, Backfill):
+    for model in (Component, ComponentRelation, Run, Backfill, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}))
@@ -134,3 +134,27 @@ class TestConfig:
     def test_delay_must_cover_the_reconcile_interval(self, store: Store) -> None:
         with pytest.raises(ConfigError, match="max_execution_delay"):
             CronController(store=store, reconcile_interval=10, max_execution_delay=5)
+
+
+class TestRunQuota:
+    def test_exhausted_org_skips_run_but_advances_schedule(self, store: Store) -> None:
+        from types import SimpleNamespace
+
+        from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, db_now, increment_usage, month_start
+
+        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=1)
+        with Session(store.engine) as session:
+            increment_usage(session, _ORG, METRIC_SUCCESSFUL_RUNS, month_start(db_now(session)), used=1)
+            session.commit()
+
+        now = dt.datetime.now(dt.timezone.utc)
+        job_id = _job(
+            store,
+            config={"cron": "0 * * * *", "enabled": True},
+            state={"next_run_at": now.isoformat()},
+        )
+        CronController(store=store)._tick()
+
+        assert _runs(store) == []
+        # The schedule still advances so the job doesn't re-fire every tick.
+        assert _state(store, job_id)["next_run_at"] > now.isoformat()

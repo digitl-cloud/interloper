@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import datetime as dt
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
+from interloper.errors import QuotaExceededError
 from sqlalchemy import func
 from sqlalchemy import select as sa_select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -67,6 +69,11 @@ def db_now(session: Session) -> datetime:
     return value
 
 
+def _insert_fn(session: Session) -> Any:
+    """The dialect's upsert-capable insert constructor."""
+    return pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
+
+
 def increment_usage(
     session: Session,
     org_id: UUID,
@@ -84,9 +91,8 @@ def increment_usage(
     if metric not in USAGE_METRICS:
         raise ValueError(f"Unknown usage metric: {metric}")
     table = Usage.__table__  # ty: ignore[unresolved-attribute]
-    insert_fn = pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
     statement = (
-        insert_fn(table)
+        _insert_fn(session)(table)
         .values(org_id=org_id, metric=metric, period_start=period_start, used=used, reserved=reserved)
         .on_conflict_do_update(
             index_elements=["org_id", "metric", "period_start"],
@@ -113,6 +119,153 @@ def settle_run_usage(session: Session, db_run: Run, *, success: bool) -> None:
         increment_usage(session, db_run.org_id, METRIC_SUCCESSFUL_RUNS, charge_period, used=1)
     if reserved_period is not None:
         increment_usage(session, db_run.org_id, METRIC_SUCCESSFUL_RUNS, reserved_period, reserved=-1)
+
+
+# -- Enforcement ----------------------------------------------------------------
+#
+# All checks short-circuit without touching the database when neither the
+# organisation nor the defaults set a limit, so unconfigured instances pay
+# nothing. Capacity checks (sources, assets per source) serialize on the
+# org's quotas row via SELECT FOR UPDATE — the count-then-insert race is
+# the reason a plain count in application code is not enough. The run
+# quota's authoritative gate is the atomic dispatch-time reservation in
+# ``try_reserve_run``; the creation-time checks are advisory fail-fasts.
+
+
+def _effective_limit(session: Session, org_id: UUID, field: str, defaults: Any) -> int | None:
+    """Resolve a limit: org override wins over the global default; None = unlimited."""
+    override = session.get(Quota, org_id)
+    value = getattr(override, field, None) if override else None
+    if value is None:
+        value = getattr(defaults, field, None)
+    return value
+
+
+def _locked_effective_limit(session: Session, org_id: UUID, field: str, defaults: Any) -> int | None:
+    """Resolve a limit while holding the org's quota-row lock.
+
+    Upserts the (all-null) row first so there is always something to lock;
+    the lock is released with the caller's transaction and serializes
+    capacity checks per organisation.
+    """
+    table = Quota.__table__  # ty: ignore[unresolved-attribute]
+    statement = _insert_fn(session)(table).values(org_id=org_id).on_conflict_do_nothing(index_elements=["org_id"])
+    session.execute(statement)  # ty: ignore[deprecated]
+    override = session.exec(select(Quota).where(Quota.org_id == org_id).with_for_update()).first()
+    value = getattr(override, field, None) if override else None
+    if value is None:
+        value = getattr(defaults, field, None)
+    return value
+
+
+def check_source_quota(session: Session, org_id: UUID, defaults: Any) -> None:
+    """Reject creating a source when the organisation is at its source limit.
+
+    Part of the caller's transaction; call before inserting the new source.
+    """
+    if _effective_limit(session, org_id, "max_sources", defaults) is None:
+        return
+    limit = _locked_effective_limit(session, org_id, "max_sources", defaults)
+    if limit is None:
+        return
+    used = session.exec(
+        select(func.count())
+        .select_from(Component)
+        .where(col(Component.org_id) == org_id, col(Component.kind) == "source")
+    ).one()
+    if used >= limit:
+        raise QuotaExceededError(
+            f"Organisation is at its source limit ({used}/{limit}); delete a source or raise the quota",
+            quota="max_sources",
+            limit=limit,
+            used=used,
+        )
+
+
+def check_asset_quota(session: Session, db_source: Component, asset_count: int, defaults: Any) -> None:
+    """Reject a source child set larger than the assets-per-source limit.
+
+    ``asset_count`` is the size of the *desired* final set, so the check is
+    declarative — no counting race regardless of what the set is today.
+    """
+    if _effective_limit(session, db_source.org_id, "max_assets_per_source", defaults) is None:
+        return
+    limit = _locked_effective_limit(session, db_source.org_id, "max_assets_per_source", defaults)
+    if limit is None or asset_count <= limit:
+        return
+    raise QuotaExceededError(
+        f"Source '{db_source.name or db_source.key}' would have {asset_count} assets, "
+        f"exceeding the limit of {limit}",
+        quota="max_assets_per_source",
+        limit=limit,
+        used=asset_count,
+    )
+
+
+def run_quota_status(session: Session, org_id: UUID, defaults: Any) -> tuple[int, int | None]:
+    """The org's committed run usage this period: ``(used + reserved, limit)``.
+
+    Limit None means unlimited (and the ledger is not read at all).
+    """
+    limit = _effective_limit(session, org_id, "max_successful_runs_per_month", defaults)
+    if limit is None:
+        return 0, None
+    period_start = month_start(db_now(session))
+    row = session.get(Usage, (org_id, METRIC_SUCCESSFUL_RUNS, period_start))
+    committed = (row.used + row.reserved) if row else 0
+    return committed, limit
+
+
+def check_run_quota(session: Session, org_id: UUID, defaults: Any, *, source: str = "run") -> None:
+    """Advisory creation-time gate: reject new runs once the quota is exhausted.
+
+    Fail-fast only — runs admitted here can still be denied at dispatch by
+    ``try_reserve_run``, the authoritative gate.
+    """
+    committed, limit = run_quota_status(session, org_id, defaults)
+    if limit is not None and committed >= limit:
+        raise QuotaExceededError(
+            f"Cannot queue {source}: the monthly successful-run quota is exhausted ({committed}/{limit})",
+            quota="max_successful_runs_per_month",
+            limit=limit,
+            used=committed,
+        )
+
+
+def try_reserve_run(session: Session, db_run: Run, defaults: Any) -> bool:
+    """Atomically reserve a run-quota slot at dispatch time.
+
+    The reservation is a conditional upsert (``used + reserved < limit``),
+    so concurrent claimers can never overshoot; on success the run is
+    stamped with ``quota_reserved_at`` so settlement releases the right
+    period. Unlimited orgs are admitted without touching the ledger.
+
+    Returns:
+        True if the run may dispatch, False when the quota is exhausted.
+    """
+    limit = _effective_limit(session, db_run.org_id, "max_successful_runs_per_month", defaults)
+    if limit is None:
+        return True
+    if limit <= 0:
+        return False
+    now = db_now(session)
+    period_start = month_start(now)
+    table = Usage.__table__  # ty: ignore[unresolved-attribute]
+    statement = (
+        _insert_fn(session)(table)
+        .values(org_id=db_run.org_id, metric=METRIC_SUCCESSFUL_RUNS, period_start=period_start, used=0, reserved=1)
+        .on_conflict_do_update(
+            index_elements=["org_id", "metric", "period_start"],
+            set_={"reserved": table.c.reserved + 1},
+            where=(table.c.used + table.c.reserved < limit),
+        )
+    )
+    result = session.execute(statement)  # ty: ignore[deprecated]
+    if result.rowcount != 1:  # ty: ignore[unresolved-attribute]
+        return False
+    db_run.quota_reserved_at = now
+    session.add(db_run)
+    return True
 
 
 class QuotaMixin(StoreBase):
@@ -181,3 +334,31 @@ class QuotaMixin(StoreBase):
                 .group_by(Run.org_id)  # ty: ignore[invalid-argument-type]
             ).all()
             return dict(rows)
+
+    def reconcile_usage(self) -> list[dict[str, Any]]:
+        """Compare the current period's ledger against the runs table.
+
+        Returns one entry per organisation whose ``usage.used`` differs from
+        the recomputed successful-run count. Both sides move in the same
+        transaction on completion, so persistent drift is a bug signal;
+        transient off-by-ones are possible (the two reads are separate
+        queries, and charge months are DB-clock while ``completed_at`` is
+        the executor's clock at the boundary).
+        """
+        period_start = self.current_period_start()
+        recomputed = self.count_successful_runs_by_org(period_start)
+        ledger = {
+            row.org_id: row.used
+            for row in self.list_usage(period_start=period_start)
+            if row.metric == METRIC_SUCCESSFUL_RUNS
+        }
+        return [
+            {
+                "org_id": org_id,
+                "period_start": period_start,
+                "ledger": ledger.get(org_id, 0),
+                "recomputed": recomputed.get(org_id, 0),
+            }
+            for org_id in sorted(set(recomputed) | set(ledger), key=str)
+            if recomputed.get(org_id, 0) != ledger.get(org_id, 0)
+        ]

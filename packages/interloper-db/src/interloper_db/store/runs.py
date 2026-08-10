@@ -19,7 +19,7 @@ from sqlmodel import Session, col, select
 from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
 from interloper_db.store.base import StoreBase
 from interloper_db.store.components import stamp_component_state
-from interloper_db.store.quotas import settle_run_usage
+from interloper_db.store.quotas import check_run_quota, settle_run_usage
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +312,7 @@ class RunMixin(StoreBase):
             The created Run row.
         """
         with self._session() as session:
+            check_run_quota(session, org_id, self._quota_defaults)
             db_run = Run(
                 org_id=org_id,
                 component_id=component_id,
@@ -468,6 +469,7 @@ class RunMixin(StoreBase):
             if src.status != "failed":
                 raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
 
+            check_run_quota(session, src.org_id, self._quota_defaults, source="retry")
             db_run = Run(
                 org_id=src.org_id,
                 component_id=src.component_id,
@@ -510,7 +512,13 @@ class RunMixin(StoreBase):
         Returns:
             The created Backfill row with runs.
         """
+        max_days = getattr(self._quota_defaults, "max_backfill_days", None)
+        span = (end_date - start_date).days + 1
+        if max_days is not None and span > max_days:
+            raise ValueError(f"Backfill spans {span} days; the instance caps backfills at {max_days} days")
+
         with self._session() as session:
+            check_run_quota(session, org_id, self._quota_defaults, source="backfill")
             db_backfill = Backfill(
                 org_id=org_id,
                 component_id=component_id,
@@ -572,21 +580,7 @@ class RunMixin(StoreBase):
             if db_backfill.status not in ("running", "queued"):
                 raise ValueError(f"Backfill {backfill_id} is already {db_backfill.status}")
 
-            # skip_locked leaves runs the worker is claiming right now to the
-            # worker — they are effectively dispatched and drain like any
-            # other in-flight run.
-            cancellable = session.exec(
-                select(Run)
-                .where(Run.backfill_id == backfill_id, col(Run.status).in_(["pending", "queued"]))
-                .with_for_update(skip_locked=True)
-            ).all()
-            for db_run in cancellable:
-                db_run.status = "canceled"
-                session.add(db_run)
-
-            db_backfill.status = "canceled"
-            db_backfill.completed_at = datetime.now(timezone.utc)
-            session.add(db_backfill)
+            cancel_backfill_runs(session, db_backfill)
             session.commit()
             session.refresh(db_backfill)
             return db_backfill
@@ -637,6 +631,27 @@ class RunMixin(StoreBase):
                 col(Backfill.status).in_(["running", "queued"]),
             )
             return list(session.exec(statement).all())
+
+
+def cancel_backfill_runs(session: Session, db_backfill: Backfill) -> None:
+    """Cancel a backfill's not-yet-dispatched runs and terminalize it.
+
+    Part of the caller's transaction (the caller commits). ``skip_locked``
+    leaves runs the worker is claiming right now to the worker — they are
+    effectively dispatched and drain like any other in-flight run.
+    """
+    cancellable = session.exec(
+        select(Run)
+        .where(Run.backfill_id == db_backfill.id, col(Run.status).in_(["pending", "queued"]))
+        .with_for_update(skip_locked=True)
+    ).all()
+    for db_run in cancellable:
+        db_run.status = "canceled"
+        session.add(db_run)
+
+    db_backfill.status = "canceled"
+    db_backfill.completed_at = datetime.now(timezone.utc)
+    session.add(db_backfill)
 
 
 def _advance_backfill(session: Session, backfill_id: UUID, *, failed: bool) -> None:
