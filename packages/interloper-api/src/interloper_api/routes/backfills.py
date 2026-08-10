@@ -1,4 +1,4 @@
-"""Backfills API: read endpoints for backfill state."""
+"""Backfills API: queue, inspect, and cancel backfills."""
 
 from __future__ import annotations
 
@@ -123,4 +123,25 @@ def get_backfill(
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
     authorize_org_member(user, backfill.org_id, store, detail=f"Backfill {backfill_id} not found")
+    return _backfill_to_response(backfill)
+
+
+@router.post("/{backfill_id}/cancel")
+def cancel_backfill(
+    backfill_id: UUID,
+    user: Profile = Depends(get_current_user),
+    store: Store = Depends(get_store),
+) -> BackfillResponse:
+    """Cancel a backfill: pending and queued runs are canceled, in-flight runs drain."""
+    try:
+        backfill = store.get_backfill(backfill_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
+    authorize_org_member(
+        user, backfill.org_id, store, minimum="editor", detail=f"Backfill {backfill_id} not found"
+    )
+    try:
+        backfill = store.cancel_backfill(backfill_id)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return _backfill_to_response(backfill)

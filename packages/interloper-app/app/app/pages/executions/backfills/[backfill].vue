@@ -21,11 +21,40 @@ const breadcrumbs: BreadcrumbItem[] = [
 const { apiFetch } = useApi()
 const backfillsStore = useBackfillsStore()
 const componentsStore = useComponentsStore()
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const backfill = ref<Backfill | null>(null)
 const backfillRuns = ref<Run[]>([])
 const runsLoading = ref(false)
 const sorting = ref([{ id: 'partition_date', desc: false }])
+
+const cancellable = computed(() => backfill.value != null && ['running', 'queued'].includes(backfill.value.status))
+const cancelling = ref(false)
+
+async function onCancel() {
+    const confirmed = await confirm({
+        title: 'Cancel backfill',
+        description: 'Runs that have not started yet will be canceled. Runs already in flight finish on their own.',
+        confirmLabel: 'Cancel backfill',
+        confirmColor: 'error',
+        icon: 'i-lucide-ban',
+    })
+    if (!confirmed) return
+
+    cancelling.value = true
+    try {
+        backfill.value = await backfillsStore.cancelBackfill(backfillId)
+        backfillRuns.value = await apiFetch<Run[]>(`/runs?backfill_id=${backfillId}`)
+        toast.add({ title: 'Backfill canceled', color: 'success' })
+    }
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to cancel backfill'))
+    }
+    finally {
+        cancelling.value = false
+    }
+}
 
 const backfillTargetName = computed(() => {
     const target = componentsStore.byId(backfill.value?.component_id ?? '')
@@ -106,6 +135,16 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
                     variant="subtle">
                 {{ statusLabel(backfill.status) }}
             </UBadge>
+            <UButton v-if="cancellable"
+                     color="error"
+                     variant="subtle"
+                     size="xs"
+                     icon="i-lucide-ban"
+                     :loading="cancelling"
+                     class="ml-auto"
+                     @click="onCancel">
+                Cancel
+            </UButton>
         </div>
 
         <div v-if="backfill"

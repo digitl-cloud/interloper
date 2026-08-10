@@ -78,6 +78,13 @@ export const useBackfillsStore = defineStore('backfills', () => {
         return backfill.id
     }
 
+    /** Cancel a backfill: pending and queued runs stop, in-flight runs drain. */
+    async function cancelBackfill(id: string): Promise<Backfill> {
+        const backfill = await apiFetch<Backfill>(`/backfills/${id}/cancel`, { method: 'POST' })
+        _upsert(backfill)
+        return backfill
+    }
+
     /**********************
      * Lookups
      **********************/
@@ -100,6 +107,7 @@ export const useBackfillsStore = defineStore('backfills', () => {
         fetch,
         fetchOne,
         createBackfill,
+        cancelBackfill,
         findById,
         _upsert,
         _remove,

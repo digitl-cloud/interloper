@@ -545,6 +545,49 @@ class RunMixin(StoreBase):
             session.refresh(db_backfill)
             return db_backfill
 
+    def cancel_backfill(self, backfill_id: UUID) -> Backfill:
+        """Cancel a backfill: runs not yet dispatched will never execute.
+
+        Pending and queued runs flip to ``"canceled"``; runs already
+        dispatched or running drain to their own terminal state (their late
+        completions are no-ops on the now-terminal backfill).
+
+        Args:
+            backfill_id: The backfill UUID.
+
+        Returns:
+            The updated Backfill row.
+
+        Raises:
+            NotFoundError: If the backfill is not found.
+            ValueError: If the backfill is already terminal.
+        """
+        with self._session() as session:
+            db_backfill = session.get(Backfill, backfill_id)
+            if not db_backfill:
+                raise NotFoundError(f"Backfill {backfill_id} not found")
+            if db_backfill.status not in ("running", "queued"):
+                raise ValueError(f"Backfill {backfill_id} is already {db_backfill.status}")
+
+            # skip_locked leaves runs the worker is claiming right now to the
+            # worker — they are effectively dispatched and drain like any
+            # other in-flight run.
+            cancellable = session.exec(
+                select(Run)
+                .where(Run.backfill_id == backfill_id, col(Run.status).in_(["pending", "queued"]))
+                .with_for_update(skip_locked=True)
+            ).all()
+            for db_run in cancellable:
+                db_run.status = "canceled"
+                session.add(db_run)
+
+            db_backfill.status = "canceled"
+            db_backfill.completed_at = datetime.now(timezone.utc)
+            session.add(db_backfill)
+            session.commit()
+            session.refresh(db_backfill)
+            return db_backfill
+
     def get_backfill(self, backfill_id: UUID) -> Backfill:
         """Load a backfill by ID.
 
