@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v0.58.0 (2026-08-10)
+
+### Bug Fixes
+
+- Never top up a source's assets implicitly on update
+  ([`efde999`](https://github.com/digitl-cloud/interloper/commit/efde99942e4dc8989c148b185454e490ca407192))
+
+### Features
+
+- Cancel a backfill
+  ([`ab93a9f`](https://github.com/digitl-cloud/interloper/commit/ab93a9f179cd515afa4c381256b7676f527ab4f0))
+
+- Enforce organisation quotas
+  ([`c3ad20f`](https://github.com/digitl-cloud/interloper/commit/c3ad20fdffa881ec229df08972f371abbfca49e4))
+
+- Organisation quota schema and usage metering
+  ([`cf19400`](https://github.com/digitl-cloud/interloper/commit/cf1940054440363f7a90891b181d0fbcab4fa0ff))
+
+- **scheduler**: Per-loop liveness gauge
+  ([`abe14ec`](https://github.com/digitl-cloud/interloper/commit/abe14ecb4acf3e5db24143223b5a68f5599b946f))
+
+### Breaking Changes
+
+- PUT /components/{id} without children no longer adds newly available catalog assets to a source.
+
+
 ## v0.57.0 (2026-08-07)
 
 ### Features
