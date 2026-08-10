@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
-from uuid import UUID
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import meter, tracer
 from interloper_db import Store
-from interloper_db.models import Run
+from interloper_db.models import Backfill, Event, Run
+from interloper_db.store.quotas import try_reserve_run
+from interloper_db.store.runs import cancel_backfill_runs
 from sqlmodel import Session, col, select
 
 from interloper_scheduler.controller import Controller
@@ -74,25 +77,64 @@ class QueueController(Controller):
                 self._store.complete_run(run_id, success=False)
 
     def _claim_next(self) -> UUID | None:
-        """Claim the oldest queued run and mark it dispatched.
+        """Claim the oldest queued run, reserve its quota slot, and mark it dispatched.
+
+        This is the authoritative run-quota gate: dispatch requires an atomic
+        reservation, so an exhausted organisation can never execute past its
+        limit. Denied runs are canceled (their whole backfill with them) and
+        the loop moves on to the next queued run — canceling rather than
+        skipping keeps an exhausted org from head-of-line-blocking the queue.
 
         Returns:
             The claimed run id, or ``None`` when the queue is empty.
         """
-        with Session(self._store.engine) as session:
-            statement = (
-                select(Run)
-                .where(Run.status == "queued")
-                .order_by(col(Run.created_at).asc())
-                .limit(1)
-                .with_for_update(skip_locked=True)
-            )
-            run = session.exec(statement).first()
-            if not run or not run.id:
-                return None
+        while True:
+            with Session(self._store.engine) as session:
+                statement = (
+                    select(Run)
+                    .where(Run.status == "queued")
+                    .order_by(col(Run.created_at).asc())
+                    .limit(1)
+                    .with_for_update(skip_locked=True)
+                )
+                run = session.exec(statement).first()
+                if not run or not run.id:
+                    return None
 
-            run.status = "dispatched"
-            session.add(run)
-            session.commit()
-            logger.info("Dispatched run %s", run.id)
-            return run.id
+                if try_reserve_run(session, run, self._store.quota_defaults):
+                    run.status = "dispatched"
+                    session.add(run)
+                    session.commit()
+                    logger.info("Dispatched run %s", run.id)
+                    return run.id
+
+                self._cancel_over_quota(session, run)
+                session.commit()
+                logger.warning(
+                    "Canceled run %s: monthly successful-run quota exhausted for org %s", run.id, run.org_id
+                )
+
+    @staticmethod
+    def _cancel_over_quota(session: Session, run: Run) -> None:
+        """Cancel a quota-denied run (and its backfill), with an explanatory event.
+
+        A canceled run is never claimed again, so the event cannot double-write.
+        """
+        run.status = "canceled"
+        session.add(run)
+        if run.backfill_id:
+            backfill = session.get(Backfill, run.backfill_id)
+            if backfill and backfill.status in ("running", "queued"):
+                cancel_backfill_runs(session, backfill)
+        session.add(
+            Event(
+                id=uuid4(),
+                org_id=run.org_id,
+                run_id=run.id,
+                component_id=run.component_id,
+                event_type="log",
+                level="warning",
+                message="Run canceled: the organisation's monthly successful-run quota is exhausted",
+                timestamp=datetime.now(timezone.utc),
+            )
+        )

@@ -15,7 +15,7 @@ from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Component, ComponentRelation
+from interloper_db.models import Component, ComponentRelation, Quota, Usage
 
 
 @pytest.fixture
@@ -31,8 +31,8 @@ def component_db() -> Iterator[Engine]:
     def _enable_foreign_keys(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
-    Component.__table__.create(eng)  # ty: ignore[unresolved-attribute]
-    ComponentRelation.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+    for model in (Component, ComponentRelation, Quota, Usage):
+        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield eng
     finally:

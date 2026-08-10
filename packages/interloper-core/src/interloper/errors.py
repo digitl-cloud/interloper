@@ -150,6 +150,21 @@ class InUseError(InterloperError):
         self.referrers = referrers or []
 
 
+class QuotaExceededError(InterloperError):
+    """An organisation quota does not allow the requested operation.
+
+    Raised by the store layer; API routes surface it as HTTP 429 with the
+    structured fields so clients can show limit and usage.
+    """
+
+    def __init__(self, message: str, *, quota: str, limit: int, used: int) -> None:
+        """Initialize with a user-facing message and the quota context."""
+        super().__init__(message)
+        self.quota = quota
+        self.limit = limit
+        self.used = used
+
+
 # -- Hydration / Catalog -------------------------------------------------------
 
 

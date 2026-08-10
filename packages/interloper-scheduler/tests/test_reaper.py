@@ -11,7 +11,7 @@ import interloper as il
 import pytest
 from interloper_db import Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Run
+from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
 from interloper_db.store.runs import _event_values
 from sqlalchemy import event
@@ -50,7 +50,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Run, Backfill, EventRow):
+    for model in (Component, ComponentRelation, Run, Backfill, EventRow, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
 
     store = Store(catalog=il.Catalog(components={}))

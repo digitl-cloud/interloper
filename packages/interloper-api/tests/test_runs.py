@@ -160,3 +160,35 @@ def test_asset_executions_return_404_for_non_member(store: FakeStore) -> None:
     store.role = None
     resp = _client(store).get(f"/runs/{uuid4()}/asset-executions")
     assert resp.status_code == 404
+
+
+# -- Quota ---------------------------------------------------------------------
+
+
+def test_quota_exceeded_maps_to_429(store: FakeStore) -> None:
+    """The app-level handler turns QuotaExceededError into a structured 429."""
+    from interloper.errors import QuotaExceededError
+
+    def _raise(org_id, **kwargs):
+        raise QuotaExceededError("quota exhausted (3/3)", quota="max_successful_runs_per_month", limit=3, used=3)
+
+    store.get_component = lambda component_id: SimpleNamespace(  # ty: ignore[unresolved-attribute]
+        id=component_id, org_id=_ORG_ID, kind="job"
+    )
+    store.create_run = _raise  # ty: ignore[unresolved-attribute]
+    client = _client(store)
+
+    @client.app.exception_handler(QuotaExceededError)  # mirrors create_app's handler
+    async def _quota_handler(_request, exc: QuotaExceededError):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=429,
+            content={"detail": {"message": str(exc), "quota": exc.quota, "limit": exc.limit, "used": exc.used}},
+        )
+
+    resp = client.post("/runs/", json={"component_id": str(uuid4())})
+    assert resp.status_code == 429
+    detail = resp.json()["detail"]
+    assert detail["quota"] == "max_successful_runs_per_month"
+    assert (detail["limit"], detail["used"]) == (3, 3)

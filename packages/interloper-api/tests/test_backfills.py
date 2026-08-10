@@ -113,3 +113,17 @@ def test_cancel_returns_404_for_non_member(store: FakeStore) -> None:
     resp = _client(store).post(f"/backfills/{uuid4()}/cancel")
     assert resp.status_code == 404
     assert store.cancel_calls == []
+
+
+def test_create_backfill_span_cap_returns_400(store: FakeStore) -> None:
+    def _raise(org_id, **kwargs):
+        raise ValueError("Backfill spans 31 days; the instance caps backfills at 30 days")
+
+    store.get_component = lambda component_id, kind=None: _fake_backfill(component_id)  # ty: ignore[unresolved-attribute]
+    store.create_backfill = _raise  # ty: ignore[unresolved-attribute]
+    resp = _client(store).post(
+        "/backfills/",
+        json={"component_id": str(uuid4()), "start_date": "2026-01-01", "end_date": "2026-01-31"},
+    )
+    assert resp.status_code == 400
+    assert "caps backfills" in resp.json()["detail"]

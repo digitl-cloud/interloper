@@ -252,6 +252,9 @@ class QuotaSettings(BaseSettings):
     max_sources: int | None = None
     max_assets_per_source: int | None = None
     max_successful_runs_per_month: int | None = None
+    # Global guard, not a per-org quota: caps how many runs one backfill
+    # request may create.
+    max_backfill_days: int | None = None
 
 
 class AppSettings(BaseSettings):

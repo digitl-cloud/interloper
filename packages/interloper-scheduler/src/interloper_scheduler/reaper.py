@@ -76,12 +76,42 @@ class Reaper(Controller):
         self._store = store
         self._launcher = launcher
         self._timeout = timeout
+        # Usage reconciliation rides the reaper's loop (the singleton
+        # housekeeping process) roughly hourly.
+        self._reconcile_every = max(1, 3600 // max(1, poll_interval))
+        self._ticks_since_reconcile = self._reconcile_every  # reconcile on first tick
 
     def _tick(self) -> None:
         """Scan once and log when anything was reaped."""
         reaped = self._reap()
         if reaped:
             logger.info("Reaped %d dispatched run(s)", reaped)
+
+        self._ticks_since_reconcile += 1
+        if self._ticks_since_reconcile >= self._reconcile_every:
+            self._ticks_since_reconcile = 0
+            self._reconcile_usage()
+
+    def _reconcile_usage(self) -> None:
+        """Warn when the usage ledger drifts from the runs table.
+
+        Advisory only — nothing is corrected automatically. Transient
+        off-by-ones can appear while runs are completing; drift that
+        persists across cycles is a bug in the charging path.
+        """
+        try:
+            drifts = self._store.reconcile_usage()
+        except Exception:
+            logger.exception("Usage reconciliation failed")
+            return
+        for drift in drifts:
+            logger.warning(
+                "Usage ledger drift for org %s (period %s): ledger=%d, runs table=%d",
+                drift["org_id"],
+                drift["period_start"],
+                drift["ledger"],
+                drift["recomputed"],
+            )
 
     def _reap(self) -> int:
         """Scan dispatched runs and reap any that have terminated.

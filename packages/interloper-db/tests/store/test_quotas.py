@@ -5,10 +5,12 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Iterator
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from interloper.errors import QuotaExceededError
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -22,6 +24,7 @@ from interloper_db.store.quotas import (
     month_start,
     next_month_start,
     settle_run_usage,
+    try_reserve_run,
 )
 from interloper_db.store.runs import RunMixin
 
@@ -202,3 +205,123 @@ class TestQuotaReads:
 
     def test_current_period_start_is_this_month(self, store: _Store):
         assert store.current_period_start() == month_start(datetime.now(timezone.utc))
+
+
+# -- Enforcement ------------------------------------------------------------------
+
+
+def _defaults(**limits: int | None) -> SimpleNamespace:
+    return SimpleNamespace(**limits)
+
+
+class TestRunCreationGate:
+    def _exhaust(self, store: _Store, *, used: int = 0, reserved: int = 0) -> None:
+        with Session(store._engine) as session:
+            period = month_start(datetime.now(timezone.utc))
+            increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=used, reserved=reserved)
+            session.commit()
+
+    def test_create_run_blocked_at_limit(self, store: _Store):
+        store._quota_defaults = _defaults(max_successful_runs_per_month=2)
+        self._exhaust(store, used=1, reserved=1)  # reserved counts against the limit
+        with pytest.raises(QuotaExceededError) as excinfo:
+            store.create_run(_ORG_ID)
+        assert excinfo.value.quota == "max_successful_runs_per_month"
+        assert (excinfo.value.limit, excinfo.value.used) == (2, 2)
+
+    def test_create_run_allowed_below_limit(self, store: _Store):
+        store._quota_defaults = _defaults(max_successful_runs_per_month=2)
+        self._exhaust(store, used=1)
+        assert store.create_run(_ORG_ID).status == "queued"
+
+    def test_org_override_wins_over_default(self, store: _Store):
+        store._quota_defaults = _defaults(max_successful_runs_per_month=1)
+        with Session(store._engine) as session:
+            session.add(Quota(org_id=_ORG_ID, max_successful_runs_per_month=3))
+            session.commit()
+        self._exhaust(store, used=2)
+        assert store.create_run(_ORG_ID).status == "queued"
+
+    def test_retry_blocked_at_limit(self, store: _Store):
+        run = store.create_run(_ORG_ID)
+        store.complete_run(run.id, success=False)
+        store._quota_defaults = _defaults(max_successful_runs_per_month=1)
+        self._exhaust(store, used=1)
+        with pytest.raises(QuotaExceededError, match="retry"):
+            store.retry_run(run.id)
+
+    def test_backfill_blocked_at_limit(self, store: _Store):
+        store._quota_defaults = _defaults(max_successful_runs_per_month=1)
+        self._exhaust(store, used=1)
+        with pytest.raises(QuotaExceededError, match="backfill"):
+            store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
+
+    def test_backfill_span_cap(self, store: _Store):
+        store._quota_defaults = _defaults(max_backfill_days=2)
+        with pytest.raises(ValueError, match="caps backfills at 2 days"):
+            store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 3))
+        backfill = store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
+        assert backfill.partitions == 2
+
+
+class TestTryReserveRun:
+    def test_unlimited_admits_without_ledger(self, store: _Store):
+        run = _run(store)
+        with Session(store._engine) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            assert try_reserve_run(session, db_run, None) is True
+            session.commit()
+        assert _usage_rows(store) == {}
+
+    def test_reserves_and_stamps(self, store: _Store):
+        run = _run(store)
+        with Session(store._engine) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            assert try_reserve_run(session, db_run, _defaults(max_successful_runs_per_month=1)) is True
+            session.commit()
+        (counts,) = _usage_rows(store).values()
+        assert counts == (0, 1)
+        with Session(store._engine) as session:
+            reserved = session.get(Run, run.id)
+            assert reserved is not None and reserved.quota_reserved_at is not None
+
+    def test_denies_when_exhausted(self, store: _Store):
+        with Session(store._engine) as session:
+            period = month_start(datetime.now(timezone.utc))
+            increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=1)
+            session.commit()
+        run = _run(store)
+        with Session(store._engine) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            assert try_reserve_run(session, db_run, _defaults(max_successful_runs_per_month=1)) is False
+            session.commit()
+        (counts,) = _usage_rows(store).values()
+        assert counts == (1, 0)
+        with Session(store._engine) as session:
+            released = session.get(Run, run.id)
+            assert released is not None and released.quota_reserved_at is None
+
+    def test_zero_limit_denies(self, store: _Store):
+        run = _run(store)
+        with Session(store._engine) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            assert try_reserve_run(session, db_run, _defaults(max_successful_runs_per_month=0)) is False
+
+
+class TestReconcileUsage:
+    def test_reports_drift_both_ways(self, store: _Store):
+        period = month_start(datetime.now(timezone.utc))
+        with Session(store._engine) as session:
+            increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=5)
+            session.commit()
+        drifts = store.reconcile_usage()
+        assert drifts == [{"org_id": _ORG_ID, "period_start": period, "ledger": 5, "recomputed": 0}]
+
+    def test_in_sync_reports_nothing(self, store: _Store):
+        run = _run(store)
+        store.complete_run(run.id, success=True)
+        assert store.reconcile_usage() == []

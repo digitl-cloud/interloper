@@ -67,6 +67,7 @@ class Store(AuthMixin, TokenMixin, ComponentMixin, RunMixin, QuotaMixin, DriftMi
         engine: Engine | None = None,
         encrypt: Any | None = None,
         decrypt: Any | None = None,
+        quota_defaults: Any | None = None,
     ) -> None:
         """Initialize the store.
 
@@ -76,11 +77,14 @@ class Store(AuthMixin, TokenMixin, ComponentMixin, RunMixin, QuotaMixin, DriftMi
                 already-initialized process engine.
             encrypt: Optional callable ``(data: bytes) -> bytes`` for resource encryption.
             decrypt: Optional callable ``(data: bytes) -> bytes`` for resource decryption.
+            quota_defaults: QuotaSettings-shaped default limits enforced when
+                an organisation has no override. None = everything unlimited.
         """
         self._catalog = catalog
         self._engine = engine or get_engine()
         self._encrypt = encrypt
         self._decrypt = decrypt
+        self._quota_defaults = quota_defaults
         self._hydrator = Hydrator(catalog, decrypt=decrypt)
 
     @classmethod
@@ -110,16 +114,17 @@ class Store(AuthMixin, TokenMixin, ComponentMixin, RunMixin, QuotaMixin, DriftMi
 
         catalog = catalog if catalog is not None else Catalog.from_settings()
         engine = engine_from_settings()
-        key = AppSettings.get().secrets.encryption_key
+        settings = AppSettings.get()
+        key = settings.secrets.encryption_key
         if not key:
             logger.warning(
                 "INTERLOPER_ENCRYPTION_KEY is not configured; resource persistence will "
                 "fail closed (writes are rejected rather than stored in plaintext). Set it "
                 "to enable encrypted resources at rest."
             )
-            return cls(catalog=catalog, engine=engine)
+            return cls(catalog=catalog, engine=engine, quota_defaults=settings.quota)
 
         from interloper_db.crypto import make_cipher
 
         encrypt, decrypt = make_cipher(key)
-        return cls(catalog=catalog, engine=engine, encrypt=encrypt, decrypt=decrypt)
+        return cls(catalog=catalog, engine=engine, encrypt=encrypt, decrypt=decrypt, quota_defaults=settings.quota)
