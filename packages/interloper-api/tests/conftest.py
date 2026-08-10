@@ -51,5 +51,6 @@ def fake_settings() -> SimpleNamespace:
         mcp=SimpleNamespace(external_url="", token="mcp-secret"),
         secrets=SimpleNamespace(encryption_key="key-material"),
         postgres=SimpleNamespace(password="pg-secret"),
+        quota=SimpleNamespace(max_sources=None, max_assets_per_source=None, max_successful_runs_per_month=25),
         catalog=["interloper_assets.demo.source.DemoSource"],
     )

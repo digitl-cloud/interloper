@@ -159,6 +159,46 @@ class PersonalAccessToken(SQLModel, table=True):
     created_at: datetime | None = _ts()
 
 
+# -- Quotas --------------------------------------------------------------------
+
+
+class Quota(SQLModel, table=True):
+    """Per-organisation quota limits, one row per organisation, created lazily.
+
+    A null limit falls back to the global default (``QuotaSettings``); null
+    there means unlimited. Bare ``org_id`` (no FK) like every org-scoped data
+    table.
+    """
+
+    __tablename__: ClassVar[str] = "quotas"
+
+    org_id: UUID = SQLField(primary_key=True)
+    max_sources: int | None = None
+    max_assets_per_source: int | None = None
+    max_successful_runs_per_month: int | None = None
+    created_at: datetime | None = _ts()
+
+
+class Usage(SQLModel, table=True):
+    """Per-period usage counters — the append-only ledger billing reads.
+
+    ``used`` counts successful runs, charged at completion; ``reserved``
+    holds dispatch-time reservations not yet settled. Rows are never
+    deleted — deliberately not even with their organisation — so billing
+    history survives everything. Counters are only ever moved by atomic
+    increments; drift against the ``runs`` table is a bug signal, not
+    something to clamp away.
+    """
+
+    __tablename__: ClassVar[str] = "usage"
+
+    org_id: UUID = SQLField(primary_key=True)
+    metric: str = SQLField(primary_key=True)
+    period_start: dt.date = SQLField(primary_key=True)
+    used: int = 0
+    reserved: int = 0
+
+
 # -- Components ----------------------------------------------------------------
 
 
@@ -351,6 +391,9 @@ class Run(SQLModel, table=True):
     )
     attempt: int = 1
     retry_scope: str | None = None
+    # Set when a dispatch-time quota reservation was taken; its month tells
+    # settlement which usage period to release.
+    quota_reserved_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = _ts()

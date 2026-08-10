@@ -240,6 +240,20 @@ class ReaperSettings(BaseSettings):
     poll_interval: int = 60
 
 
+class QuotaSettings(BaseSettings):
+    """Default per-organisation quota limits; null means unlimited.
+
+    Per-organisation overrides live in the ``quotas`` table and win over
+    these defaults.
+    """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}QUOTA_")
+
+    max_sources: int | None = None
+    max_assets_per_source: int | None = None
+    max_successful_runs_per_month: int | None = None
+
+
 class AppSettings(BaseSettings):
     """Top-level runtime settings for the CLI."""
 
@@ -262,6 +276,7 @@ class AppSettings(BaseSettings):
     launcher: LauncherSettings = Field(default_factory=LauncherSettings)
     runner: RunnerSettings = Field(default_factory=RunnerSettings)
     otel: TelemetrySettings = Field(default_factory=TelemetrySettings)
+    quota: QuotaSettings = Field(default_factory=QuotaSettings)
     catalog: list[str] = Field(default_factory=list)
 
     _active: ClassVar[AppSettings | None] = None

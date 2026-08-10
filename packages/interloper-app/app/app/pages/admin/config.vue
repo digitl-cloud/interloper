@@ -66,7 +66,7 @@ function configAttrs(config: Record<string, unknown>, prefix = ''): { key: strin
 
 const sections = computed<ConfigSection[]>(() => {
     if (!config.value) return []
-    const { deployment, auth, services, data } = config.value
+    const { deployment, auth, services, data, quotas } = config.value
     const launcher = deployment.launcher
 
     const deploymentRows: ConfigRow[] = [
@@ -178,11 +178,19 @@ const sections = computed<ConfigSection[]>(() => {
         ...(catalogRows.length ? catalogRows : [{ label: 'Catalog', value: 'empty' }]),
     ]
 
+    const limitValue = (limit: number | null) => (limit != null ? String(limit) : 'unlimited')
+    const quotaRows: ConfigRow[] = [
+        { label: 'Max sources', value: limitValue(quotas.max_sources) },
+        { label: 'Max assets per source', value: limitValue(quotas.max_assets_per_source) },
+        { label: 'Max successful runs / month', value: limitValue(quotas.max_successful_runs_per_month) },
+    ]
+
     return [
         { title: 'Deployment', icon: 'i-lucide-server', rows: deploymentRows },
         { title: 'Authentication', icon: 'i-lucide-key-round', rows: authRows },
         { title: 'Services', icon: 'i-lucide-cog', rows: serviceRows },
         { title: 'Data', icon: 'i-lucide-database', rows: dataRows },
+        { title: 'Quota defaults', icon: 'i-lucide-gauge', rows: quotaRows },
     ]
 })
 </script>

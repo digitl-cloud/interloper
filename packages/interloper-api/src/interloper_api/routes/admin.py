@@ -8,6 +8,7 @@ no access to org-scoped *data* (sources, jobs, runs, …).
 
 from __future__ import annotations
 
+import datetime as dt
 import inspect
 import logging
 from datetime import datetime
@@ -17,9 +18,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from interloper_db import Organisation, Profile, Store
+from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_admin_config, get_store, require_super_admin
+from interloper_api.dependencies import get_admin_config, get_quota_defaults, get_store, require_super_admin
 from interloper_api.email import send_invite_email
 
 logger = logging.getLogger(__name__)
@@ -223,6 +225,38 @@ class AdminDataConfig(BaseModel):
     catalog: dict[str, list[str]]
 
 
+class AdminQuotaLimits(BaseModel):
+    """One set of quota limits; null means unlimited (or unset, for overrides)."""
+
+    max_sources: int | None = None
+    max_assets_per_source: int | None = None
+    max_successful_runs_per_month: int | None = None
+
+
+class AdminOrgQuotaStatus(BaseModel):
+    """One organisation's quota limits and current usage."""
+
+    id: UUID
+    name: str
+    limits: AdminQuotaLimits
+    effective: AdminQuotaLimits
+    sources: int
+    max_assets_per_source: int
+    successful_runs: int
+    reserved_runs: int
+    #: Recomputed from the runs table; a mismatch with ``successful_runs``
+    #: (the ledger) signals counter drift.
+    recomputed_successful_runs: int
+
+
+class AdminQuotasResponse(BaseModel):
+    """Quota overview: global defaults plus per-organisation status."""
+
+    period_start: dt.date
+    defaults: AdminQuotaLimits
+    organisations: list[AdminOrgQuotaStatus]
+
+
 class AdminConfigResponse(BaseModel):
     """Read-only, secrets-redacted snapshot of the instance configuration."""
 
@@ -230,6 +264,7 @@ class AdminConfigResponse(BaseModel):
     auth: AdminAuthConfig
     services: AdminServicesConfig
     data: AdminDataConfig
+    quotas: AdminQuotaLimits
 
 
 # Non-secret launcher/runner config keys exposed on /admin/config. Anything not
@@ -400,10 +435,37 @@ def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any
             encryption_configured=bool(settings.secrets.encryption_key),
             catalog=_catalog_by_kind(catalog) if catalog is not None else {},
         ),
+        quotas=_quota_limits(settings.quota),
     )
 
 
 # -- Helpers ------------------------------------------------------------------
+
+
+def _quota_limits(limits: Any) -> AdminQuotaLimits:
+    """Map any limits-shaped object (settings, Quota row, None) to the model."""
+    return AdminQuotaLimits(
+        max_sources=getattr(limits, "max_sources", None),
+        max_assets_per_source=getattr(limits, "max_assets_per_source", None),
+        max_successful_runs_per_month=getattr(limits, "max_successful_runs_per_month", None),
+    )
+
+
+def _effective_limits(overrides: AdminQuotaLimits, defaults: AdminQuotaLimits) -> AdminQuotaLimits:
+    """Per-org overrides win field-by-field over the global defaults."""
+    return AdminQuotaLimits(
+        max_sources=overrides.max_sources if overrides.max_sources is not None else defaults.max_sources,
+        max_assets_per_source=(
+            overrides.max_assets_per_source
+            if overrides.max_assets_per_source is not None
+            else defaults.max_assets_per_source
+        ),
+        max_successful_runs_per_month=(
+            overrides.max_successful_runs_per_month
+            if overrides.max_successful_runs_per_month is not None
+            else defaults.max_successful_runs_per_month
+        ),
+    )
 
 
 def _require_org(store: Store, org_id: UUID) -> Organisation:
@@ -464,6 +526,48 @@ def get_instance_config(
     if config is None:
         raise HTTPException(status_code=503, detail="Instance configuration not available")
     return config
+
+
+# -- Quotas ---------------------------------------------------------------------
+
+
+@router.get("/quotas")
+def get_quotas(
+    user: Profile = Depends(require_super_admin),
+    store: Store = Depends(get_store),
+    quota_defaults: Any = Depends(get_quota_defaults),
+) -> AdminQuotasResponse:
+    """Quota limits and current-period usage for every organisation."""
+    defaults = _quota_limits(quota_defaults)
+    period_start = store.current_period_start()
+    overrides = {quota.org_id: quota for quota in store.list_quotas()}
+    usage = {
+        row.org_id: row
+        for row in store.list_usage(period_start=period_start)
+        if row.metric == METRIC_SUCCESSFUL_RUNS
+    }
+    sources = store.count_sources_by_org()
+    max_assets = store.max_assets_per_source_by_org()
+    recomputed = store.count_successful_runs_by_org(period_start)
+
+    organisations = []
+    for org, _member_count in store.list_all_organisations():
+        limits = _quota_limits(overrides.get(org.id))
+        org_usage = usage.get(org.id)
+        organisations.append(
+            AdminOrgQuotaStatus(
+                id=org.id,
+                name=org.name,
+                limits=limits,
+                effective=_effective_limits(limits, defaults),
+                sources=sources.get(org.id, 0),
+                max_assets_per_source=max_assets.get(org.id, 0),
+                successful_runs=org_usage.used if org_usage else 0,
+                reserved_runs=org_usage.reserved if org_usage else 0,
+                recomputed_successful_runs=recomputed.get(org.id, 0),
+            )
+        )
+    return AdminQuotasResponse(period_start=period_start, defaults=defaults, organisations=organisations)
 
 
 # -- Users --------------------------------------------------------------------

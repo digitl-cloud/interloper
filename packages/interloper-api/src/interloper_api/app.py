@@ -17,6 +17,7 @@ from interloper_api.dependencies import (
     set_auth_config,
     set_catalog,
     set_features,
+    set_quota_defaults,
     set_smtp_config,
     set_store,
 )
@@ -92,6 +93,7 @@ def create_app(
     if settings:
         set_auth_config(settings.auth)
         set_smtp_config(settings.smtp)
+        set_quota_defaults(settings.quota)
 
     api = APIRouter(prefix="/api")
     api.include_router(auth.router)

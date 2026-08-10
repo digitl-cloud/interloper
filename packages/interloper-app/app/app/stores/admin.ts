@@ -1,4 +1,4 @@
-import type { AdminConfig, AdminOrganisation, AdminUser } from '~/types/admin'
+import type { AdminConfig, AdminOrganisation, AdminQuotas, AdminUser } from '~/types/admin'
 
 interface MemberResponse {
     id: string
@@ -22,6 +22,10 @@ export const useAdminStore = defineStore('admin', () => {
 
     function getConfig() {
         return apiFetch<AdminConfig>('/admin/config')
+    }
+
+    function getQuotas() {
+        return apiFetch<AdminQuotas>('/admin/quotas')
     }
 
     function listUsers() {
@@ -101,6 +105,7 @@ export const useAdminStore = defineStore('admin', () => {
 
     return {
         getConfig,
+        getQuotas,
         listUsers,
         deleteUser,
         listOrganisations,
