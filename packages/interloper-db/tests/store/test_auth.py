@@ -128,7 +128,7 @@ class TestDeleteOrganisation:
         session.add(Event(org_id=org_id, run_id=run.id, event_type="run_started", timestamp=datetime.now(timezone.utc)))
         session.commit()
 
-    def test_deletes_org_and_everything_it_owns(self, store: Store, auth_db: Engine):
+    def test_purges_payload_but_keeps_the_ledger(self, store: Store, auth_db: Engine):
         admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
         org = store.create_organisation(name="Doomed", creator_id=admin.id)
         keeper = store.create_organisation(name="Keeper", creator_id=admin.id)
@@ -147,9 +147,13 @@ class TestDeleteOrganisation:
 
         store.delete_organisation(org.id)
 
+        # The org reads as missing everywhere but the row survives, stamped.
         assert store.get_organisation(org.id) is None
+        retained = store.get_organisation(org.id, include_deleted=True)
+        assert retained is not None and retained.deleted_at is not None
         with SQLSession(auth_db) as session:
-            for model in (Component, ComponentRelation, Backfill, Run, Event):
+            # Sensitive payload is purged...
+            for model in (Component, ComponentRelation):
                 assert session.exec(select(model).where(model.org_id == org.id)).first() is None
             assert (
                 session.exec(select(UserOrganisation).where(UserOrganisation.organisation_id == org.id)).first()
@@ -160,6 +164,12 @@ class TestDeleteOrganisation:
                 session.exec(select(PersonalAccessToken).where(PersonalAccessToken.organisation_id == org.id)).first()
                 is None
             )
+            # ...but execution history survives for billing, detached from
+            # the purged components via the FK's SET NULL.
+            surviving_run = session.exec(select(Run).where(Run.org_id == org.id)).one()
+            assert surviving_run.component_id is None
+            assert session.exec(select(Backfill).where(Backfill.org_id == org.id)).first() is not None
+            assert session.exec(select(Event).where(Event.org_id == org.id)).first() is not None
         # The user, their session, and the other organisation survive; org refs are cleared.
         resolved = store.resolve_session(session_token)
         assert resolved is not None
@@ -168,6 +178,14 @@ class TestDeleteOrganisation:
         assert profile.last_organisation_id is None
         assert store.get_organisation(keeper.id) is not None
         assert store.get_user_role(admin.id, keeper.id) == "admin"
+
+    def test_double_delete_reads_as_missing(self, store: Store):
+        org = store.create_organisation(name="Once")
+        store.delete_organisation(org.id)
+        with pytest.raises(NotFoundError):
+            store.delete_organisation(org.id)
+        with pytest.raises(NotFoundError):
+            store.update_organisation(org.id, "Renamed")
 
     def test_missing_organisation_raises(self, store: Store):
         with pytest.raises(NotFoundError):

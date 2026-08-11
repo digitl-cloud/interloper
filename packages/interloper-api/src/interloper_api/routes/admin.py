@@ -41,6 +41,9 @@ class AdminOrganisationResponse(BaseModel):
     name: str
     member_count: int
     created_at: datetime | None = None
+    #: Soft-deleted orgs stay listed (their retained history and ledger are
+    #: still attributable) but are no longer manageable.
+    deleted_at: datetime | None = None
 
 
 class AdminUserOrganisation(BaseModel):
@@ -635,13 +638,14 @@ def list_all_organisations(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> list[AdminOrganisationResponse]:
-    """List every organisation with its member count."""
+    """List every organisation with its member count, soft-deleted ones included."""
     return [
         AdminOrganisationResponse(
             id=org.id,
             name=org.name,
             member_count=count,
             created_at=org.created_at,
+            deleted_at=org.deleted_at,
         )
         for org, count in store.list_all_organisations()
     ]
@@ -688,7 +692,11 @@ def delete_organisation(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Delete an organisation and all its data. The body must repeat the exact name."""
+    """Soft-delete an organisation: purges its data, keeps execution history and the usage ledger.
+
+    The body must repeat the exact name. Deleted organisations stay in the
+    list (read-only) and read as missing everywhere else.
+    """
     org = _require_org(store, org_id)
     if body.name != org.name:
         raise HTTPException(status_code=400, detail="Organisation name does not match")

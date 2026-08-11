@@ -13,16 +13,13 @@ from sqlmodel import Session, select
 
 from interloper_db.models import (
     AuthSession,
-    Backfill,
     Component,
     ComponentRelation,
-    Event,
     Invitation,
     Organisation,
     PersonalAccessToken,
     Profile,
     Quota,
-    Run,
     UserOrganisation,
 )
 from interloper_db.store.base import StoreBase
@@ -344,11 +341,11 @@ class AuthMixin(StoreBase):
             The updated Organisation.
 
         Raises:
-            NotFoundError: If the organisation is not found.
+            NotFoundError: If the organisation is not found or deleted.
         """
         with self._session() as session:
             db_organisation = session.get(Organisation, org_id)
-            if not db_organisation:
+            if not db_organisation or db_organisation.deleted_at is not None:
                 raise NotFoundError(f"Organisation {org_id} not found")
             db_organisation.name = name
             session.add(db_organisation)
@@ -374,37 +371,36 @@ class AuthMixin(StoreBase):
             return [(org, counts.get(org.id, 0)) for org in organisations]
 
     def delete_organisation(self, org_id: UUID) -> None:
-        """Delete an organisation and everything it owns.
+        """Soft-delete an organisation: purge its payload, keep the ledger.
 
-        Removes the org's execution history (events, runs, backfills), its
-        components and their relations, and its tokens, invitations, and
-        memberships. Live sessions and profiles pointing at the org are
-        detached (org reference cleared), not deleted. Bulk statements —
-        ordered children-first — so the cascade never depends on ORM-loaded
-        state. The ``asset_executions`` view follows the events.
+        The org row survives with ``deleted_at`` stamped, and so do its
+        runs, events, and backfills — execution history and the usage
+        ledger must stay attributable for billing, even after the org is
+        gone. Everything sensitive or live is removed: components and
+        their relations (encrypted credentials, client config), tokens,
+        quota overrides, invitations, and memberships; sessions and
+        profiles pointing at the org are detached. Retained runs and
+        backfills lose their component reference via the FK's SET NULL.
+        Bulk statements — ordered children-first — so the cascade never
+        depends on ORM-loaded state.
 
         Args:
             org_id: Organisation UUID.
 
         Raises:
-            NotFoundError: If the organisation is not found.
+            NotFoundError: If the organisation is not found or already deleted.
         """
         with self._session() as session:
             db_organisation = session.get(Organisation, org_id)
-            if not db_organisation:
+            if not db_organisation or db_organisation.deleted_at is not None:
                 raise NotFoundError(f"Organisation {org_id} not found")
 
             # ty misreads SQLModel column comparisons in DML where() as plain bools.
             statements = (
-                delete(Event).where(Event.org_id == org_id),  # ty: ignore[invalid-argument-type]
-                delete(Run).where(Run.org_id == org_id),  # ty: ignore[invalid-argument-type]
-                delete(Backfill).where(Backfill.org_id == org_id),  # ty: ignore[invalid-argument-type]
                 delete(ComponentRelation).where(ComponentRelation.org_id == org_id),  # ty: ignore[invalid-argument-type]
                 delete(Component).where(Component.org_id == org_id),  # ty: ignore[invalid-argument-type]
                 delete(PersonalAccessToken).where(PersonalAccessToken.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
                 delete(Quota).where(Quota.org_id == org_id),  # ty: ignore[invalid-argument-type]
-                # Usage is deliberately NOT deleted: it is the billing ledger
-                # and must survive its organisation.
                 delete(Invitation).where(Invitation.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
                 delete(UserOrganisation).where(UserOrganisation.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
                 update(AuthSession).where(AuthSession.organisation_id == org_id).values(organisation_id=None),  # ty: ignore[invalid-argument-type]
@@ -414,20 +410,25 @@ class AuthMixin(StoreBase):
             for statement in statements:
                 connection.execute(statement)
 
-            session.delete(db_organisation)
+            db_organisation.deleted_at = datetime.now(timezone.utc)
+            session.add(db_organisation)
             session.commit()
 
-    def get_organisation(self, org_id: UUID) -> Organisation | None:
-        """Get an organisation by ID.
+    def get_organisation(self, org_id: UUID, *, include_deleted: bool = False) -> Organisation | None:
+        """Get an organisation by ID; soft-deleted orgs read as missing by default.
 
         Args:
             org_id: Organisation UUID.
+            include_deleted: Also return soft-deleted organisations.
 
         Returns:
             The Organisation or None.
         """
         with self._session() as session:
-            return session.get(Organisation, org_id)
+            organisation = session.get(Organisation, org_id)
+            if organisation and organisation.deleted_at is not None and not include_deleted:
+                return None
+            return organisation
 
     def list_user_organisations(self, user_id: UUID) -> list[Organisation]:
         """List all organisations a user belongs to.

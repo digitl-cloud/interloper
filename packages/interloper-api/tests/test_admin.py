@@ -24,7 +24,7 @@ class FakeStore:
     """In-memory stand-in implementing only the methods admin routes call."""
 
     def __init__(self) -> None:
-        self.org = SimpleNamespace(id=uuid4(), name="Acme", created_at=datetime.now(timezone.utc))
+        self.org = SimpleNamespace(id=uuid4(), name="Acme", created_at=datetime.now(timezone.utc), deleted_at=None)
         self.member = SimpleNamespace(
             id=uuid4(), email="member@acme.test", name="Member", avatar_url=None
         )
@@ -502,4 +502,19 @@ def test_update_quota_rejects_negative_limits(store: FakeStore) -> None:
         json={"max_sources": -1},
     )
     assert resp.status_code == 422
+    assert store.quota_updates == []
+
+
+def test_deleted_org_is_listed_but_not_manageable(store: FakeStore) -> None:
+    """Soft-deleted orgs surface in the list (billing history) but 404 on management routes."""
+    store.org.deleted_at = datetime.now(timezone.utc)
+    store.get_organisation = lambda org_id: None  # ty: ignore[invalid-assignment]  (deleted orgs read as missing)
+    client = _client(store, is_super_admin=True)
+
+    listed = client.get("/admin/organisations")
+    assert listed.status_code == 200
+    assert listed.json()[0]["deleted_at"] is not None
+
+    resp = client.patch(f"/admin/organisations/{store.org.id}/quota", json={"max_sources": 1})
+    assert resp.status_code == 404
     assert store.quota_updates == []
