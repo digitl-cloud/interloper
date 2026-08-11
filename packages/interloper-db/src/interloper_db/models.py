@@ -68,7 +68,13 @@ class Profile(SQLModel, table=True):
 
 
 class Organisation(SQLModel, table=True):
-    """A tenant organisation."""
+    """A tenant organisation.
+
+    Deletion is soft (``deleted_at``): the row survives so retained
+    execution history and the usage ledger stay attributable for billing,
+    while the org's sensitive payload (components, tokens, memberships)
+    is purged.
+    """
 
     __tablename__: ClassVar[str] = "organisations"
 
@@ -78,6 +84,7 @@ class Organisation(SQLModel, table=True):
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
     )
     name: str
+    deleted_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = _ts()
 
 

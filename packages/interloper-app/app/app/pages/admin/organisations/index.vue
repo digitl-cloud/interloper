@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { h, resolveComponent } from 'vue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { AdminOrganisation } from '~/types/admin'
 
@@ -7,6 +8,8 @@ definePageMeta({
     layout: 'admin',
     middleware: 'super-admin',
 })
+
+const UBadge = resolveComponent('UBadge')
 
 const adminStore = useAdminStore()
 const toast = useToast()
@@ -105,10 +108,12 @@ async function submitForm() {
 }
 
 function openOrg(org: AdminOrganisation) {
+    if (org.deleted_at) return
     navigateTo(`/admin/organisations/${org.id}`)
 }
 
 function rowActions(org: AdminOrganisation): DropdownMenuItem[][] {
+    if (org.deleted_at) return []
     return [
         [
             {
@@ -137,6 +142,14 @@ const columns: TableColumn<AdminOrganisation>[] = [
     {
         accessorKey: 'name',
         header: 'Name',
+        cell: ({ row }) => {
+            const org = row.original
+            if (!org.deleted_at) return org.name
+            return h('div', { class: 'flex items-center gap-2' }, [
+                h('span', { class: 'text-dimmed line-through' }, org.name),
+                h(UBadge, { label: 'Deleted', color: 'neutral', variant: 'subtle', size: 'sm' }),
+            ])
+        },
     },
     {
         accessorKey: 'member_count',

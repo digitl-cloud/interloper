@@ -3,6 +3,8 @@ export interface AdminOrganisation {
     name: string
     member_count: number
     created_at: string | null
+    /** Soft-deleted orgs stay listed for billing history but are read-only. */
+    deleted_at: string | null
 }
 
 export interface AdminUserOrganisation {
