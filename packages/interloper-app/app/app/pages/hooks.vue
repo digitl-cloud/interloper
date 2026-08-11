@@ -122,17 +122,12 @@ async function handleDelete(ids: string[]) {
                 <template #empty>
                     <EmptyState icon="i-carbon-lightning"
                                 title="No hooks yet"
-                                description="A hook reacts to what your pipelines do. Watch a source, asset, or job and trigger downstream runs or notify an external system when runs complete or fail." />
-
-                    <div class="flex items-center gap-3 border border-default rounded-[14px] px-5 py-4 bg-(--ui-bg-band) mt-9">
-                        <div class="flex-1 text-sm text-toned">
-                            Create a hook to react to run outcomes on your components.
-                        </div>
+                                description="A hook reacts to what your pipelines do. Watch a source, asset, or job and trigger downstream runs or notify an external system when runs complete or fail.">
                         <UButton icon="i-lucide-plus"
                                  label="New hook"
-                                 size="md"
+                                 class="mt-5"
                                  @click="handleCreate" />
-                    </div>
+                    </EmptyState>
                 </template>
             </DataTable>
         </div>

@@ -57,12 +57,6 @@ watchEffect(() => {
     router.replace({ query: { ...route.query, run: undefined } })
 })
 
-/** Onboarding cards shown in the empty state. */
-const SETUP_STEPS = [
-    { to: '/sources', icon: 'i-lucide-plug', title: 'Step 1 · Connect a source', sub: 'Pull from Google Ads, Meta, Bing & more', link: 'Go to Sources' },
-    { to: '/destinations', icon: 'i-lucide-database', title: 'Step 2 · Add a destination', sub: 'Choose where assets are materialized', link: 'Go to Destinations' },
-]
-
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     { accessorKey: 'select' as any, header: '' },
     {
@@ -156,57 +150,12 @@ async function handleDelete(ids: string[]) {
                 <template #empty>
                     <EmptyState icon="i-lucide-calendar-clock"
                                 title="No jobs yet"
-                                description="A job is a scheduled pipeline. It runs your sources on a cron schedule and materializes the results into your destination — automatically, with no manual triggering. Every run is recorded under Executions." />
-
-                    <div class="mt-9">
-                        <div class="eyebrow text-primary">
-                            Before your first job
-                        </div>
-                        <h2 class="text-[19px] font-bold tracking-[-0.015em] text-highlighted mt-2">
-                            A job needs something to run
-                        </h2>
-                        <p class="text-[14.5px] text-muted leading-relaxed max-w-[640px] mt-2">
-                            Set up at least one source to pull from and one destination to write to.
-                            Once both exist, you can wire them into a scheduled job.
-                        </p>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-5">
-                        <NuxtLink v-for="step in SETUP_STEPS"
-                                  :key="step.to"
-                                  :to="step.to"
-                                  class="block border border-default rounded-[14px] p-5 bg-default shadow-xs transition hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5">
-                            <div class="flex items-center gap-3">
-                                <div class="size-[42px] rounded-[11px] bg-primary/10 text-primary flex items-center justify-center">
-                                    <UIcon :name="step.icon"
-                                           class="size-[21px]" />
-                                </div>
-                                <div>
-                                    <div class="text-[15.5px] font-semibold text-highlighted">{{ step.title }}</div>
-                                    <div class="text-[12.5px] text-dimmed mt-0.5">{{ step.sub }}</div>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-1.5 mt-3.5 text-primary text-[13.5px] font-semibold">
-                                {{ step.link }}
-                                <UIcon name="i-lucide-arrow-right"
-                                       class="size-3" />
-                            </div>
-                        </NuxtLink>
-                    </div>
-
-                    <div class="flex items-center gap-3 border border-default rounded-[14px] px-5 py-4 bg-(--ui-bg-band) mt-4">
-                        <div class="size-[30px] shrink-0 rounded-full bg-elevated flex items-center justify-center font-mono text-[13px] font-semibold text-muted">
-                            3
-                        </div>
-                        <div class="flex-1 text-sm text-toned">
-                            With a source and destination ready, create a job to run them on a schedule.
-                        </div>
+                                description="A job is a scheduled pipeline. It runs your sources on a cron schedule and materializes the results into your destination — automatically, with no manual triggering. Every run is recorded under Executions.">
                         <UButton icon="i-lucide-plus"
                                  label="New job"
-                                 size="md"
+                                 class="mt-5"
                                  @click="handleCreate" />
-                    </div>
-
+                    </EmptyState>
                 </template>
             </DataTable>
         </div>
