@@ -14,6 +14,8 @@ const props = defineProps<{
     rowActions?: (item: TData) => DropdownMenuItem[][]
     /** When true, suppresses the built-in actions column and row menus. */
     noActions?: boolean
+    /** When true, rows are read-only: no pointer cursor, since clicking one leads nowhere. */
+    noRowClick?: boolean
     /**
      * Impact preview for deleting the given ids (e.g.
      * `componentsStore.deleteImpact`). `blocking` referrers disable the
@@ -176,6 +178,7 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
                 :global-filter="globalFilter"
                 :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
                 sticky
+                :ui="{ tr: noRowClick ? '' : 'cursor-pointer' }"
                 class="max-h-[calc(100vh-16rem)]"
                 @select="(_e: Event, row: any) => emit('edit', row.original)"
                 @contextmenu="onRowContextMenu">

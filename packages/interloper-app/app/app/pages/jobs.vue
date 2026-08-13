@@ -93,7 +93,6 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         header: 'Status',
         cell: ({ row }) => h(UBadge, {
             color: jobEnabled(row.original) ? 'success' : 'neutral',
-            variant: 'subtle',
         }, () => jobEnabled(row.original) ? 'Enabled' : 'Disabled'),
     },
     ...stateSchemaColumns(catalogStore.definitionsForKind('job')[0]),

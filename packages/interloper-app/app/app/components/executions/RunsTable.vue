@@ -55,7 +55,7 @@ const columns: TableColumn<Run>[] = [
         header: 'Status',
         cell: ({ row }) => {
             const status = row.getValue<string>('status')
-            return h(UBadge, { color: statusColor(status), variant: 'subtle' }, () => statusLabel(status))
+            return h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
         },
     },
     {
@@ -104,6 +104,7 @@ function onPageChange(page: number) {
                     :loading="loading"
                     :sorting="[{ id: 'created_at', desc: true }]"
                     sticky
+                    :ui="{ tr: 'cursor-pointer' }"
                     @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
 
             <TableFooter class="py-3"

@@ -137,7 +137,7 @@ const columns: TableColumn<AdminUser>[] = [
         accessorKey: 'is_super_admin',
         header: 'Super admin',
         cell: ({ row }) => row.original.is_super_admin
-            ? h(UBadge, { label: 'Super admin', icon: 'i-lucide-shield', color: 'primary', variant: 'subtle' })
+            ? h(UBadge, { label: 'Super admin', icon: 'i-lucide-shield', color: 'primary' })
             : h('span', { class: 'text-dimmed' }, '—'),
     },
     {
@@ -159,6 +159,7 @@ onMounted(loadData)
                    :loading="loading"
                    :row-actions="rowActions"
                    no-actions
+                   no-row-click
                    search-placeholder="Search users...">
             <template #toolbar>
                 <USelect v-model="orgFilter"

@@ -157,6 +157,7 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
                    :loading="loading"
                    :row-actions="isAdmin ? getRowMenuItems : undefined"
                    no-actions
+                   no-row-click
                    search-placeholder="Search members...">
             <template #toolbar>
                 <slot name="toolbar" />

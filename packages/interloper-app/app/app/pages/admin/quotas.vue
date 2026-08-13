@@ -151,11 +151,10 @@ const columns: TableColumn<AdminOrgQuotaStatus>[] = [
         cell: ({ row }) => {
             const org = row.original
             return org.successful_runs === org.recomputed_successful_runs
-                ? h(UBadge, { label: 'In sync', color: 'success', variant: 'subtle' })
+                ? h(UBadge, { label: 'In sync', color: 'success' })
                 : h(UBadge, {
                         label: `Drift (runs table: ${org.recomputed_successful_runs})`,
                         color: 'warning',
-                        variant: 'subtle',
                     })
         },
     },

@@ -278,8 +278,7 @@ function onRowClick(row: any) {
                     </span>
                     <UBadge v-if="sourceDriftBadge(row.original.sourceId)"
                             :color="sourceDriftBadge(row.original.sourceId)!.color"
-                            :icon="sourceDriftBadge(row.original.sourceId)!.icon"
-                            variant="subtle">
+                            :icon="sourceDriftBadge(row.original.sourceId)!.icon">
                         {{ sourceDriftBadge(row.original.sourceId)!.label }}
                     </UBadge>
                 </div>
@@ -296,8 +295,7 @@ function onRowClick(row: any) {
                     <span>{{ row.original.name }}</span>
                     <UBadge v-if="statusBadge(row.original.assetStatus)"
                             :color="statusBadge(row.original.assetStatus)!.color"
-                            :icon="statusBadge(row.original.assetStatus)!.icon"
-                            variant="subtle">
+                            :icon="statusBadge(row.original.assetStatus)!.icon">
                         {{ statusBadge(row.original.assetStatus)!.label }}
                     </UBadge>
                 </div>
@@ -320,8 +318,7 @@ function onRowClick(row: any) {
                      class="flex items-center justify-center gap-1 flex-wrap">
                     <UBadge v-for="tag in row.original.tags"
                             :key="tag"
-                            color="neutral"
-                            variant="subtle">
+                            color="neutral">
                         {{ tag }}
                     </UBadge>
                 </div>
@@ -483,8 +480,7 @@ function onRowClick(row: any) {
                     <div v-else
                          class="flex items-center justify-center">
                         <UBadge :color="statusColor[row.original.lastRunStatus] ?? 'neutral'"
-                                :icon="statusIcon[row.original.lastRunStatus] ?? 'i-lucide-circle'"
-                                variant="subtle">
+                                :icon="statusIcon[row.original.lastRunStatus] ?? 'i-lucide-circle'">
                             {{ timeSince(new Date(row.original.lastRunAt)) }} ago
                         </UBadge>
                     </div>

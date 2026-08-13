@@ -72,7 +72,6 @@ function deselectAll() {
                     <span class="text-xs text-dimmed truncate">{{ source.key }}</span>
                 </div>
                 <UBadge color="neutral"
-                        variant="subtle"
                         size="xs"
                         class="ml-auto">
                     {{ source.children.length }} asset{{ source.children.length !== 1 ? 's' : '' }}
