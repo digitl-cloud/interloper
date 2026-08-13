@@ -75,6 +75,13 @@ export interface AdminQuotas {
     organisations: AdminOrgQuotaStatus[]
 }
 
+export interface AdminActivityEntry {
+    kind: string
+    when: string
+    title: string
+    detail: string | null
+}
+
 export interface AdminUser {
     id: string
     email: string

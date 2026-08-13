@@ -24,6 +24,13 @@ export function timeSince(date: Date): string {
     return Math.floor(seconds) + " seconds"
 }
 
+/** Date-only label, e.g. "4 Feb 2026". */
+export function formatDay(value: string | Date | null | undefined): string {
+    if (!value) return '—'
+    const date = typeof value === 'string' ? new Date(value) : value
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 export function formatDate(value: string | Date | null | undefined) {
     if (!value) return ''
     const date = typeof value === 'string' ? new Date(value) : value
