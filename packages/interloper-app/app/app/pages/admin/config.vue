@@ -6,8 +6,8 @@ definePageMeta({
     layout: 'admin',
     middleware: 'super-admin',
     pageHeader: {
-        title: 'Config',
-        description: 'Read-only snapshot of this instance\'s runtime configuration. Secrets are redacted; dimmed values are class defaults.',
+        title: 'Instance configuration',
+        description: 'How this deployment is wired — read-only, sourced from the running instance. Secrets are redacted; dimmed values are class defaults.',
     },
 })
 
@@ -66,7 +66,7 @@ function configAttrs(config: Record<string, unknown>, prefix = ''): { key: strin
 
 const sections = computed<ConfigSection[]>(() => {
     if (!config.value) return []
-    const { deployment, auth, services, data, quotas } = config.value
+    const { deployment, auth, services, data } = config.value
     const launcher = deployment.launcher
 
     const deploymentRows: ConfigRow[] = [
@@ -163,9 +163,12 @@ const sections = computed<ConfigSection[]>(() => {
         ...(services.mcp_external_url ? [{ label: 'MCP URL', value: services.mcp_external_url, mono: true }] : []),
     ]
 
+    const CATALOG_PREVIEW = 4
     const catalogRows: ConfigRow[] = Object.entries(data.catalog).map(([kind, keys]) => ({
         label: `${kindLabel(kind)} (${keys.length})`,
-        lines: keys,
+        lines: keys.length > CATALOG_PREVIEW
+            ? [...keys.slice(0, CATALOG_PREVIEW), `+ ${keys.length - CATALOG_PREVIEW} more`]
+            : keys,
     }))
 
     const dataRows: ConfigRow[] = [
@@ -178,19 +181,11 @@ const sections = computed<ConfigSection[]>(() => {
         ...(catalogRows.length ? catalogRows : [{ label: 'Catalog', value: 'empty' }]),
     ]
 
-    const limitValue = (limit: number | null) => (limit != null ? String(limit) : 'unlimited')
-    const quotaRows: ConfigRow[] = [
-        { label: 'Max sources', value: limitValue(quotas.max_sources) },
-        { label: 'Max assets per source', value: limitValue(quotas.max_assets_per_source) },
-        { label: 'Max successful runs / month', value: limitValue(quotas.max_successful_runs_per_month) },
-    ]
-
     return [
-        { title: 'Deployment', icon: 'i-lucide-server', rows: deploymentRows },
+        { title: 'Deployment', icon: 'i-lucide-hard-drive', rows: deploymentRows },
         { title: 'Authentication', icon: 'i-lucide-key-round', rows: authRows },
         { title: 'Services', icon: 'i-lucide-cog', rows: serviceRows },
         { title: 'Data', icon: 'i-lucide-database', rows: dataRows },
-        { title: 'Quota defaults', icon: 'i-lucide-gauge', rows: quotaRows },
     ]
 })
 </script>
@@ -225,7 +220,7 @@ const sections = computed<ConfigSection[]>(() => {
                          class="flex items-start gap-4 px-4 py-2.5 text-sm">
                         <span class="w-56 shrink-0 pt-px text-muted">{{ row.label }}</span>
                         <div class="min-w-0 flex-1">
-                            <div v-if="row.pill || row.badges || row.value || row.attrs"
+                            <div v-if="row.pill || row.badges || row.value"
                                  class="flex flex-wrap items-center gap-1.5">
                                 <UBadge v-if="row.pill"
                                         :color="row.pill.color">
@@ -239,16 +234,20 @@ const sections = computed<ConfigSection[]>(() => {
                                 <span v-if="row.value"
                                       class="min-w-0 break-all font-medium"
                                       :class="row.mono && 'font-mono text-[13px]'">{{ row.value }}</span>
+                            </div>
+                            <div v-if="row.attrs?.length"
+                                 class="flex flex-wrap gap-1.5"
+                                 :class="(row.pill || row.badges || row.value) && 'mt-1.5'">
                                 <span v-for="attr in row.attrs"
                                       :key="attr.key"
-                                      class="min-w-0 break-all rounded-[5px] px-1.5 py-0.5 font-mono text-xs"
+                                      class="whitespace-nowrap rounded-[5px] px-1.5 py-0.5 font-mono text-xs"
                                       :class="attr.dim ? 'bg-elevated/50 text-dimmed' : 'bg-elevated'"
                                       :title="attr.dim ? 'Class default (not configured)' : undefined">
                                     <span class="text-muted">{{ attr.key }}=</span>{{ attr.value }}
                                 </span>
                             </div>
                             <div v-if="row.lines"
-                                 class="grid grid-cols-1 gap-x-6 gap-y-0.5 lg:grid-cols-2">
+                                 class="flex flex-col gap-y-1 mt-1">
                                 <span v-for="line in row.lines"
                                       :key="line"
                                       class="break-all font-mono text-xs">{{ line }}</span>
