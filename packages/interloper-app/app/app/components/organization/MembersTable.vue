@@ -22,27 +22,6 @@ const emit = defineEmits<{
 
 const userStore = useUserStore()
 
-function getInitials(member: OrgMember): string {
-    const name = member.name?.trim()
-    if (name && name.length > 0) {
-        const parts = name.split(/\s+/)
-        const first = parts[0]?.[0] ?? ''
-        const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : ''
-        return last ? (first + last).toUpperCase() : first.toUpperCase()
-    }
-    return member.email?.charAt(0).toUpperCase() ?? '?'
-}
-
-/** Design avatar palette — deterministic per member so colors are stable. */
-const AVATAR_PALETTE = ['#10B6CB', '#6C5CE7', '#1FA463', '#E69E2E', '#2D7DF6', '#E5484D', '#C8511B']
-
-function avatarColor(member: OrgMember): string {
-    const key = member.email || member.id
-    let hash = 0
-    for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0
-    return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length]!
-}
-
 function getRowMenuItems(member: OrgMember): DropdownMenuItem[][] {
     if (member.status === 'active') {
         return [
@@ -86,8 +65,8 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
                     ? h(UAvatar, { src: member.avatar_url, alt: member.name ?? member.email, size: 'sm' })
                     : h('div', {
                         class: 'size-8 shrink-0 rounded-full flex items-center justify-center text-white text-xs font-semibold',
-                        style: { background: avatarColor(member) },
-                    }, getInitials(member))
+                        style: { background: avatarColor(member.email || member.id) },
+                    }, getInitials(member.name, member.email))
                 const name = member.name
                     ? h('span', { class: 'font-semibold text-highlighted' }, member.name)
                     : h('span', { class: 'text-dimmed' }, '—')
