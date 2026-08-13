@@ -1,4 +1,11 @@
-import type { AdminConfig, AdminOrganisation, AdminQuotaLimits, AdminQuotas, AdminUser } from '~/types/admin'
+import type {
+    AdminActivityEntry,
+    AdminConfig,
+    AdminOrganisation,
+    AdminQuotaLimits,
+    AdminQuotas,
+    AdminUser,
+} from '~/types/admin'
 
 interface MemberResponse {
     id: string
@@ -26,6 +33,11 @@ export const useAdminStore = defineStore('admin', () => {
 
     function getQuotas() {
         return apiFetch<AdminQuotas>('/admin/quotas')
+    }
+
+    /** Derived activity feed for one organisation, newest first. */
+    function getOrgActivity(orgId: string) {
+        return apiFetch<AdminActivityEntry[]>(`/admin/organisations/${orgId}/activity`)
     }
 
     /** Set an org's quota overrides; null clears a field (falls back to the default). */
@@ -114,6 +126,7 @@ export const useAdminStore = defineStore('admin', () => {
     return {
         getConfig,
         getQuotas,
+        getOrgActivity,
         updateOrgQuota,
         listUsers,
         deleteUser,
