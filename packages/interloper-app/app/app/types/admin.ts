@@ -59,6 +59,8 @@ export interface AdminQuotaLimits {
 export interface AdminOrgQuotaStatus {
     id: string
     name: string
+    /** Soft-deleted orgs keep their ledger visible but are read-only. */
+    deleted_at: string | null
     limits: AdminQuotaLimits
     effective: AdminQuotaLimits
     sources: number

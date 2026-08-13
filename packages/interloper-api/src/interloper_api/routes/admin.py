@@ -241,6 +241,8 @@ class AdminOrgQuotaStatus(BaseModel):
 
     id: UUID
     name: str
+    #: Soft-deleted orgs keep their ledger visible but are read-only.
+    deleted_at: datetime | None = None
     limits: AdminQuotaLimits
     effective: AdminQuotaLimits
     sources: int
@@ -578,6 +580,7 @@ def get_quotas(
             AdminOrgQuotaStatus(
                 id=org.id,
                 name=org.name,
+                deleted_at=org.deleted_at,
                 limits=limits,
                 effective=_effective_limits(limits, defaults),
                 sources=sources.get(org.id, 0),

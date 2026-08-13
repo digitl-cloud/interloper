@@ -88,29 +88,18 @@ function rowActions(user: AdminUser): DropdownMenuItem[][] {
     ]
 }
 
-function initials(user: AdminUser): string {
-    const name = user.name?.trim()
-    if (name) {
-        const parts = name.split(/\s+/)
-        const first = parts[0]?.[0] ?? ''
-        const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : ''
-        return (last ? first + last : first).toUpperCase()
-    }
-    return user.email?.charAt(0).toUpperCase() ?? '?'
-}
-
 const columns: TableColumn<AdminUser>[] = [
     {
         accessorKey: 'name',
         header: 'Name',
         cell: ({ row }) => {
             const user = row.original
-            const avatar = h(UAvatar, {
-                src: user.avatar_url ?? undefined,
-                alt: user.name ?? user.email,
-                text: initials(user),
-                size: 'sm',
-            })
+            const avatar = user.avatar_url
+                ? h(UAvatar, { src: user.avatar_url, alt: user.name ?? user.email, size: 'sm' })
+                : h('div', {
+                        class: 'size-8 shrink-0 rounded-full flex items-center justify-center text-white text-xs font-semibold',
+                        style: { background: avatarColor(user.email || user.id) },
+                    }, getInitials(user.name, user.email))
             const name = user.name
                 ? h('span', { class: 'font-semibold text-highlighted' }, user.name)
                 : h('span', { class: 'text-dimmed' }, '—')
@@ -120,6 +109,7 @@ const columns: TableColumn<AdminUser>[] = [
     {
         accessorKey: 'email',
         header: 'Email',
+        cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.email),
     },
     {
         id: 'organisations',
@@ -137,15 +127,13 @@ const columns: TableColumn<AdminUser>[] = [
         accessorKey: 'is_super_admin',
         header: 'Super admin',
         cell: ({ row }) => row.original.is_super_admin
-            ? h(UBadge, { label: 'Super admin', icon: 'i-lucide-shield', color: 'primary' })
+            ? h(UBadge, { label: 'Super admin', icon: 'i-lucide-shield', color: 'primary', variant: 'subtle' })
             : h('span', { class: 'text-dimmed' }, '—'),
     },
     {
         accessorKey: 'created_at',
         header: 'Joined',
-        cell: ({ row }) => row.original.created_at
-            ? new Date(row.original.created_at).toLocaleDateString()
-            : '—',
+        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDay(row.original.created_at)),
     },
 ]
 
