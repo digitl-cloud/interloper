@@ -258,3 +258,55 @@ class TestHasPendingInvitation:
             session.commit()
 
         assert not store.has_pending_invitation("new@example.com")
+
+
+class TestOrganisationActivity:
+    def test_composes_and_sorts_the_derived_feed(self, store: Store, auth_db: Engine):
+        admin = store.upsert_profile(google_id="g-act", email="act@example.com", name="Act Min")
+        org = store.create_organisation(name="Busy", creator_id=admin.id)
+        store.add_org_member(org.id, admin.id, "admin")
+        store.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
+        with SQLSession(auth_db) as session:
+            session.add(Component(org_id=org.id, kind="source", key="bing_ads", name="Bing"))
+            session.add(
+                Run(
+                    id=uuid4(),
+                    org_id=org.id,
+                    status="success",
+                    completed_at=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+                )
+            )
+            session.add(
+                Run(
+                    id=uuid4(),
+                    org_id=org.id,
+                    status="success",
+                    completed_at=datetime(2026, 8, 10, 13, 0, tzinfo=timezone.utc),
+                )
+            )
+            session.add(Run(id=uuid4(), org_id=org.id, status="failed"))
+            session.commit()
+
+        entries = store.list_organisation_activity(org.id)
+
+        kinds = [entry["kind"] for entry in entries]
+        assert set(kinds) == {"org_created", "member_joined", "invitation_sent", "source_added", "runs_completed"}
+        whens = [entry["when"] for entry in entries]
+        assert whens == sorted(whens, reverse=True)
+        assert all(when.tzinfo is not None for when in whens)
+        joined = next(entry for entry in entries if entry["kind"] == "member_joined")
+        assert joined["subject"] == "Act Min" and joined["extra"] == "admin"
+        invited = next(entry for entry in entries if entry["kind"] == "invitation_sent")
+        assert invited["subject"] == "new@example.com" and invited["extra"] == "Act Min"
+        runs = next(entry for entry in entries if entry["kind"] == "runs_completed")
+        assert runs["subject"] == "2"  # only the successful runs, aggregated per day
+
+    def test_limit_caps_the_feed(self, store: Store):
+        admin = store.upsert_profile(google_id="g-cap", email="cap@example.com", name="Cap")
+        org = store.create_organisation(name="Capped", creator_id=admin.id)
+        store.add_org_member(org.id, admin.id, "admin")
+        assert len(store.list_organisation_activity(org.id, limit=1)) == 1
+
+    def test_unknown_org_raises(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.list_organisation_activity(uuid4())

@@ -518,3 +518,29 @@ def test_deleted_org_is_listed_but_not_manageable(store: FakeStore) -> None:
     resp = client.patch(f"/admin/organisations/{store.org.id}/quota", json={"max_sources": 1})
     assert resp.status_code == 404
     assert store.quota_updates == []
+
+
+def test_non_super_admin_cannot_read_activity(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=False).get(f"/admin/organisations/{uuid4()}/activity")
+    assert resp.status_code == 403
+
+
+def test_activity_feed_composes_titles(store: FakeStore) -> None:
+    when = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
+    store.activity = [  # ty: ignore[unresolved-attribute]
+        {"kind": "runs_completed", "when": when, "subject": "1204", "extra": None},
+        {"kind": "invitation_sent", "when": when, "subject": "a@b.io", "extra": "Root"},
+        {"kind": "member_joined", "when": when, "subject": "Jonas", "extra": "editor"},
+        {"kind": "org_created", "when": when, "subject": None, "extra": None},
+    ]
+    store.list_organisation_activity = lambda org_id: store.activity  # ty: ignore[unresolved-attribute]
+
+    resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{store.org.id}/activity")
+    assert resp.status_code == 200
+    titles = [(entry["kind"], entry["title"], entry["detail"]) for entry in resp.json()]
+    assert titles == [
+        ("runs_completed", "1,204 runs completed successfully", None),
+        ("invitation_sent", "Invitation sent to a@b.io", "Invited by Root"),
+        ("member_joined", "Jonas joined the organisation", "Role: editor"),
+        ("org_created", "Organisation created", None),
+    ]

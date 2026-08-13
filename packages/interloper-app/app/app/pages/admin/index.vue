@@ -48,11 +48,6 @@ const periodLabel = computed(() => {
     return new Date(quotas.value.period_start).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
 })
 
-function shortDate(value: string | null): string {
-    if (!value) return '—'
-    return new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
 // -- Stat tiles ---------------------------------------------------------------
 
 const tiles = computed(() => {
@@ -142,7 +137,7 @@ const attention = computed<AttentionItem[]>(() => {
                 icon: 'i-lucide-user-minus',
                 tone: 'neutral',
                 title: `${user.name || user.email} belongs to no organisation`,
-                detail: `Signed up ${shortDate(user.created_at)} and was never invited anywhere — `
+                detail: `Signed up ${formatDay(user.created_at)} and was never invited anywhere — `
                     + 'cannot reach any workspace.',
                 action: 'Review',
                 to: '/admin/users',

@@ -268,6 +268,15 @@ class AdminQuotaUpdateRequest(BaseModel):
     max_successful_runs_per_month: int | None = Field(default=None, ge=0)
 
 
+class AdminActivityEntry(BaseModel):
+    """One event in an organisation's derived activity feed."""
+
+    kind: str
+    when: datetime
+    title: str
+    detail: str | None = None
+
+
 class AdminConfigResponse(BaseModel):
     """Read-only, secrets-redacted snapshot of the instance configuration."""
 
@@ -579,6 +588,44 @@ def get_quotas(
             )
         )
     return AdminQuotasResponse(period_start=period_start, defaults=defaults, organisations=organisations)
+
+
+def _activity_title(entry: dict[str, Any]) -> tuple[str, str | None]:
+    """Presentation strings for a derived activity entry."""
+    kind, subject, extra = entry["kind"], entry["subject"], entry["extra"]
+    if kind == "org_created":
+        return "Organisation created", None
+    if kind == "org_deleted":
+        return "Organisation deleted", "Retained read-only for billing history."
+    if kind == "member_joined":
+        return f"{subject} joined the organisation", f"Role: {extra}" if extra else None
+    if kind == "invitation_sent":
+        return f"Invitation sent to {subject}", f"Invited by {extra}" if extra else None
+    if kind == "source_added":
+        return f"Source added — {subject}", None
+    if kind == "runs_completed":
+        count = int(subject)
+        return f"{count:,} run{'' if count == 1 else 's'} completed successfully", None
+    return kind, None
+
+
+@router.get("/organisations/{org_id}/activity")
+def get_organisation_activity(
+    org_id: UUID,
+    user: Profile = Depends(require_super_admin),
+    store: Store = Depends(get_store),
+) -> list[AdminActivityEntry]:
+    """Derived activity feed for one organisation, newest first.
+
+    Composed from existing records (memberships, pending invitations,
+    sources, run aggregates, the org row itself) — there is no audit
+    trail, so actor attribution is limited to what those rows carry.
+    """
+    entries = []
+    for entry in store.list_organisation_activity(org_id):
+        title, detail = _activity_title(entry)
+        entries.append(AdminActivityEntry(kind=entry["kind"], when=entry["when"], title=title, detail=detail))
+    return entries
 
 
 @router.patch("/organisations/{org_id}/quota")

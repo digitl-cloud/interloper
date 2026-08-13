@@ -5,11 +5,12 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from interloper.errors import NotFoundError
 from sqlalchemy import delete, func, update
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from interloper_db.models import (
     AuthSession,
@@ -20,6 +21,7 @@ from interloper_db.models import (
     PersonalAccessToken,
     Profile,
     Quota,
+    Run,
     UserOrganisation,
 )
 from interloper_db.store.base import StoreBase
@@ -429,6 +431,94 @@ class AuthMixin(StoreBase):
             if organisation and organisation.deleted_at is not None and not include_deleted:
                 return None
             return organisation
+
+    def list_organisation_activity(self, org_id: UUID, *, limit: int = 20) -> list[dict[str, Any]]:
+        """A derived activity feed for one organisation, newest first.
+
+        Composed purely from existing records — the organisation row,
+        memberships, pending invitations, source components, and daily
+        successful-run aggregates. There is no audit table, so events whose
+        source rows are gone (accepted invitations' inviters, quota-change
+        history) are not reconstructible and deliberately absent.
+
+        Returns:
+            Entries as ``{kind, when, subject, extra}`` dicts, ``when``
+            always an aware UTC datetime.
+
+        Raises:
+            NotFoundError: If the organisation is not found.
+        """
+
+        def as_utc(value: Any) -> datetime:
+            if isinstance(value, str):  # SQLite aggregates come back as text
+                value = datetime.fromisoformat(value)
+            return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+        entries: list[dict[str, Any]] = []
+        with self._session() as session:
+            organisation = session.get(Organisation, org_id)
+            if not organisation:
+                raise NotFoundError(f"Organisation {org_id} not found")
+            if organisation.created_at:
+                entries.append({"kind": "org_created", "when": organisation.created_at, "subject": None, "extra": None})
+            if organisation.deleted_at:
+                entries.append({"kind": "org_deleted", "when": organisation.deleted_at, "subject": None, "extra": None})
+
+            memberships = session.exec(
+                select(UserOrganisation, Profile)
+                .where(UserOrganisation.organisation_id == org_id, col(Profile.id) == UserOrganisation.user_id)
+            ).all()
+            for membership, profile in memberships:
+                if membership.created_at:
+                    entries.append({
+                        "kind": "member_joined",
+                        "when": membership.created_at,
+                        "subject": profile.name or profile.email,
+                        "extra": membership.role,
+                    })
+
+            invitations = session.exec(select(Invitation).where(Invitation.organisation_id == org_id)).all()
+            inviter_ids = [invitation.invited_by for invitation in invitations]
+            inviters = {
+                profile.id: profile
+                for profile in session.exec(select(Profile).where(col(Profile.id).in_(inviter_ids))).all()
+            } if inviter_ids else {}
+            for invitation in invitations:
+                if invitation.created_at:
+                    inviter = inviters.get(invitation.invited_by)
+                    entries.append({
+                        "kind": "invitation_sent",
+                        "when": invitation.created_at,
+                        "subject": invitation.email,
+                        "extra": (inviter.name or inviter.email) if inviter else None,
+                    })
+
+            sources = session.exec(
+                select(Component).where(col(Component.org_id) == org_id, col(Component.kind) == "source")
+            ).all()
+            for source in sources:
+                if source.created_at:
+                    entries.append({
+                        "kind": "source_added",
+                        "when": source.created_at,
+                        "subject": source.name or source.key,
+                        "extra": None,
+                    })
+
+            # func.date() buckets per calendar day on both Postgres and SQLite.
+            day = func.date(col(Run.completed_at)).label("day")
+            run_days = session.exec(
+                select(day, func.count(), func.max(col(Run.completed_at)))
+                .where(col(Run.org_id) == org_id, col(Run.status) == "success")
+                .group_by(day)
+            ).all()
+            for _day, count, latest in run_days:
+                entries.append({"kind": "runs_completed", "when": latest, "subject": str(count), "extra": None})
+
+        for entry in entries:
+            entry["when"] = as_utc(entry["when"])
+        entries.sort(key=lambda entry: entry["when"], reverse=True)
+        return entries[:limit]
 
     def list_user_organisations(self, user_id: UUID) -> list[Organisation]:
         """List all organisations a user belongs to.
