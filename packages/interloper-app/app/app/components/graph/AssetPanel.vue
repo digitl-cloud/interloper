@@ -282,7 +282,6 @@ const dependencyRows = computed(() => {
                 <UBadge v-for="tag in assetDefn.tags"
                         :key="tag"
                         :color="tagColor(tag)"
-                        variant="subtle"
                         size="sm"
                         :label="tag" />
             </div>
@@ -392,7 +391,6 @@ const dependencyRows = computed(() => {
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Destinations</span>
                     <UBadge v-if="destinations.length"
                             color="neutral"
-                            variant="subtle"
                             class="ml-auto">
                         {{ destinations.length }}
                     </UBadge>
@@ -431,7 +429,6 @@ const dependencyRows = computed(() => {
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Partitions</span>
                     <UBadge v-if="partitionData.length"
                             color="neutral"
-                            variant="subtle"
                             class="ml-auto">
                         {{ partitionData.length }}
                     </UBadge>
@@ -482,7 +479,6 @@ const dependencyRows = computed(() => {
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Upstream dependencies</span>
                     <UBadge color="neutral"
-                            variant="subtle"
                             class="ml-auto">
                         {{ dependencyRows.length }}
                     </UBadge>
@@ -500,7 +496,6 @@ const dependencyRows = computed(() => {
                                 <div class="truncate text-xs text-muted">{{ dep.sourceName }}</div>
                             </div>
                             <UBadge color="neutral"
-                                    variant="subtle"
                                     size="sm"
                                     class="shrink-0 font-mono">
                                 {{ dep.param }}
@@ -519,7 +514,6 @@ const dependencyRows = computed(() => {
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Schema</span>
                     <UBadge color="neutral"
-                            variant="subtle"
                             class="ml-auto">
                         {{ schemaFields.length }}
                     </UBadge>
@@ -542,8 +536,7 @@ const dependencyRows = computed(() => {
                                         class="border-b border-default last:border-0">
                                         <td class="p-1.5 font-mono text-xs whitespace-nowrap">{{ field.name }}</td>
                                         <td class="p-1.5 whitespace-nowrap">
-                                            <UBadge color="neutral"
-                                                    variant="subtle">
+                                            <UBadge color="neutral">
                                                 {{ field.type }}
                                             </UBadge>
                                         </td>

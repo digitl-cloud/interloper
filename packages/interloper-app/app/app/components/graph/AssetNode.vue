@@ -251,7 +251,6 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                     <UBadge v-for="tag in tags"
                             :key="tag"
                             :color="tagColor(tag)"
-                            variant="subtle"
                             size="sm"
                             :label="tag" />
                 </div>

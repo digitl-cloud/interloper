@@ -51,7 +51,6 @@ function toggle(id: string) {
                     <span class="text-xs text-dimmed truncate">{{ component.key }}</span>
                 </div>
                 <UBadge color="neutral"
-                        variant="subtle"
                         size="xs"
                         class="ml-auto capitalize">
                     {{ component.kind }}

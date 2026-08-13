@@ -9,6 +9,10 @@ export default defineAppConfig({
       info: 'blue',
     },
     badge: {
+      // `soft` = tinted fill, no ring: badges carry no border. Statuses, tags,
+      // counts and log levels all ride this default; EntityBadge is the one
+      // documented exception, opting into `outline` so object references read
+      // as references.
       defaultVariants: {
         size: 'md',
         variant: 'soft'
@@ -109,20 +113,20 @@ export default defineAppConfig({
     },
     table: {
       slots: {
-        // Design table treatment: bordered card, #FAFAFB header band,
-        // #86868b header text, #F2F3F5 row dividers (lighter than the
-        // card border).
-        root: 'border border-default rounded-xl bg-default',
-        thead: 'bg-(--ui-bg-band)',
-        th: 'text-gray-700',
-        tbody: 'divide-(--ui-border-muted)'
+        // Borderless table treatment: no card frame and no header band — the
+        // header rule (#E8E8EC) and #F2F3F5 row dividers carry the structure,
+        // closed off by a rule under the last row.
+        root: 'bg-default',
+        thead: 'bg-default',
+        th: 'text-toned',
+        tbody: 'divide-(--ui-border-muted) [&>tr:last-child]:border-b [&>tr:last-child]:border-(--ui-border-muted)'
       },
       variants: {
         sticky: {
           true: {
             // The sticky variant's own bg-default/75 wins the class merge
-            // over slots.thead, so restate the header band here (opaque).
-            thead: 'bg-(--ui-bg-band) backdrop-blur-none'
+            // over slots.thead, so restate an opaque header background here.
+            thead: 'bg-default backdrop-blur-none'
           }
         }
       }
@@ -181,7 +185,18 @@ export default defineAppConfig({
         header: 'border-b border-default -mx-[30px] px-[30px] pb-5',
         title: 'text-[22px] font-bold tracking-[-0.01em]',
         footer: 'border-t border-default -mx-[30px] -mb-[30px] px-[30px] py-4'
-      }
+      },
+      compoundVariants: [
+        // Square edges: the theme rounds the drawer's inner edge per direction
+        // (`rounded-l-lg` for a right drawer). Those per-direction compounds win
+        // the class merge over `slots.content`, so the reset has to be one too.
+        {
+          inset: false,
+          class: {
+            content: 'rounded-none'
+          }
+        }
+      ]
     }
   }
 })

@@ -63,7 +63,6 @@ const items = computed<NavigationMenuItem[]>(() => [
             <template #default="{ collapsed }">
                 <UBadge v-if="!collapsed"
                         color="primary"
-                        variant="subtle"
                         size="lg"
                         class="eyebrow w-full justify-center py-2"
                         label="Admin portal" />

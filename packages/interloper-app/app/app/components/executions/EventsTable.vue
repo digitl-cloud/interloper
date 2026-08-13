@@ -96,14 +96,13 @@ const columns: TableColumn<RunEvent>[] = [
             const et = row.getValue<EventType>('event_type')
             const badge = h(UBadge, {
                 color: eventTypeColor(et),
-                variant: 'subtle',
                 icon: eventTypeIcon(et),
             }, () => eventTypeLabel(et))
             const level = row.original.level
             if (et !== 'log' || !level) return badge
             return h('div', { class: 'flex items-center gap-1.5' }, [
                 badge,
-                h(UBadge, { color: logLevelColor(level), variant: 'subtle' }, () => level),
+                h(UBadge, { color: logLevelColor(level) }, () => level),
             ])
         },
     },
@@ -145,7 +144,7 @@ const columns: TableColumn<RunEvent>[] = [
             :columns="columns"
             :loading="loading"
             sticky
-            :ui="{ tr: 'h-10', root: 'border-0 rounded-none' }"
+            :ui="{ tr: 'h-10' }"
             class="h-full"
             :on-hover="onRowHover">
         <template #body-bottom>

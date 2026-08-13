@@ -207,7 +207,6 @@ function depSelectionKey(assetKey: string, paramName: string): string {
                             <UBadge v-for="tag in asset.tags"
                                     :key="tag"
                                     :color="tagColor(tag)"
-                                    variant="subtle"
                                     size="sm">
                                 {{ tag }}
                             </UBadge>
@@ -222,7 +221,6 @@ function depSelectionKey(assetKey: string, paramName: string): string {
                         </UTooltip>
                         <UBadge v-if="depsByAsset.get(asset.key)?.length"
                                 color="info"
-                                variant="subtle"
                                 size="sm">
                             {{ depsByAsset.get(asset.key)!.length }} dep{{ depsByAsset.get(asset.key)!.length > 1 ? 's' : '' }}
                         </UBadge>
@@ -264,7 +262,6 @@ function depSelectionKey(assetKey: string, paramName: string): string {
 
                         <UBadge v-if="dep.isOptional"
                                 color="neutral"
-                                variant="outline"
                                 size="xs">
                             optional
                         </UBadge>

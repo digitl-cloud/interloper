@@ -98,7 +98,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
         header: 'Status',
         cell: ({ row }) => {
             const status = row.getValue<string>('status')
-            return h(UBadge, { color: statusColor(status), variant: 'subtle' }, () => statusLabel(status))
+            return h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
         },
     },
     {
@@ -131,8 +131,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
             <div class="flex items-center gap-3 mb-4 shrink-0">
             <PageBreadcrumb :items="breadcrumbs" />
             <UBadge v-if="backfill"
-                    :color="statusColor(backfill.status)"
-                    variant="subtle">
+                    :color="statusColor(backfill.status)">
                 {{ statusLabel(backfill.status) }}
             </UBadge>
             <UButton v-if="cancellable"
@@ -177,6 +176,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
                 :columns="columns"
                 :loading="runsLoading"
                 sticky
+                :ui="{ tr: 'cursor-pointer' }"
                 class="flex-1"
                 @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
         </div>

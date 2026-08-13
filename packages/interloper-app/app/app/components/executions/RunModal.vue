@@ -170,7 +170,6 @@ async function onSubmit() {
         <template #title>
             <span>Run</span>
             <UBadge color="neutral"
-                    variant="subtle"
                     class="ml-1.5">
                 {{ props.target.name ?? props.target.key }}
             </UBadge>

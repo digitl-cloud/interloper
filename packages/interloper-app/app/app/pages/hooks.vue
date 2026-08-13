@@ -51,7 +51,6 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
             h(UBadge, {
                 key: event,
                 color: 'neutral',
-                variant: 'subtle',
             }, () => event),
         )),
     },
@@ -76,7 +75,6 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         header: 'Status',
         cell: ({ row }) => h(UBadge, {
             color: hookEnabled(row.original) ? 'success' : 'neutral',
-            variant: 'subtle',
         }, () => hookEnabled(row.original) ? 'Enabled' : 'Disabled'),
     },
     ...stateSchemaColumns(catalogStore.definitionsForKind('hook')[0]),

@@ -95,7 +95,6 @@ const columns: TableColumn<ComponentRecord>[] = [
             if (badge) {
                 children.push(h(UBadge, {
                     color: badge.color,
-                    variant: 'subtle',
                     size: 'sm',
                     class: 'ml-1',
                 }, () => h('span', { class: 'flex items-center gap-1' }, [

@@ -228,14 +228,12 @@ const sections = computed<ConfigSection[]>(() => {
                             <div v-if="row.pill || row.badges || row.value || row.attrs"
                                  class="flex flex-wrap items-center gap-1.5">
                                 <UBadge v-if="row.pill"
-                                        :color="row.pill.color"
-                                        variant="subtle">
+                                        :color="row.pill.color">
                                     {{ row.pill.label }}
                                 </UBadge>
                                 <UBadge v-for="badge in row.badges"
                                         :key="badge"
-                                        color="neutral"
-                                        variant="outline">
+                                        color="neutral">
                                     {{ badge }}
                                 </UBadge>
                                 <span v-if="row.value"

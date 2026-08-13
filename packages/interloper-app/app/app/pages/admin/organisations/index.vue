@@ -147,7 +147,7 @@ const columns: TableColumn<AdminOrganisation>[] = [
             if (!org.deleted_at) return org.name
             return h('div', { class: 'flex items-center gap-2' }, [
                 h('span', { class: 'text-dimmed line-through' }, org.name),
-                h(UBadge, { label: 'Deleted', color: 'neutral', variant: 'subtle', size: 'sm' }),
+                h(UBadge, { label: 'Deleted', color: 'neutral', size: 'sm' }),
             ])
         },
     },

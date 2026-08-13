@@ -55,7 +55,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         header: 'Status',
         cell: ({ row }) => {
             const status = row.getValue<string>('status')
-            return h(UBadge, { color: statusColor(status), variant: 'subtle' }, () => statusLabel(status))
+            return h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
         },
     },
     {
@@ -109,6 +109,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                     :loading="loading"
                     :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
                     sticky
+                    :ui="{ tr: 'cursor-pointer' }"
                     @select="(_e: Event, row: any) => navigateTo(`/executions/backfills/${row.original.id}`)" />
 
             <TableFooter class="py-3"

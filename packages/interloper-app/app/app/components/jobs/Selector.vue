@@ -125,7 +125,6 @@ defineExpose({ title })
                 <div class="flex items-center gap-2">
                     <UBadge v-if="jobPartitioned(item)"
                             color="neutral"
-                            variant="subtle"
                             size="xs">
                         <UIcon name="i-lucide-calendar-days"
                                class="size-3" />
@@ -133,12 +132,10 @@ defineExpose({ title })
                     </UBadge>
                     <UBadge v-if="!jobEnabled(item)"
                             color="warning"
-                            variant="subtle"
                             size="xs">
                         Disabled
                     </UBadge>
                     <UBadge color="neutral"
-                            variant="subtle"
                             size="xs">
                         {{ jobTargetIds(item, 'source').length }} source{{ jobTargetIds(item, 'source').length !== 1 ? 's' : '' }}
                     </UBadge>

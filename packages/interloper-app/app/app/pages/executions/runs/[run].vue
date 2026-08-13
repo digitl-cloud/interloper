@@ -220,7 +220,6 @@ onUnmounted(() => {
                         <span class="ml-auto text-xs font-medium uppercase tracking-wide text-muted">Events</span>
                         <UBadge v-if="!eventsStore.loading"
                                 color="neutral"
-                                variant="subtle"
                                 size="sm">
                             {{ eventsStore.hasMore ? `${eventsStore.events.length} / ${eventsStore.total}` : eventsStore.events.length }}
                         </UBadge>
