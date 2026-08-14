@@ -19,7 +19,11 @@ from sqlmodel import Session, col, select
 from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
 from interloper_db.store.base import StoreBase
 from interloper_db.store.components import stamp_component_state
-from interloper_db.store.quotas import QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, settle_run_usage
+from interloper_db.store.quotas import (
+    QUOTA_MAX_BACKFILL_DAYS,
+    QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
+    settle_run_usage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -512,12 +516,11 @@ class RunMixin(StoreBase):
         Returns:
             The created Backfill row with runs.
         """
-        max_days = getattr(self._quota_defaults, "max_backfill_days", None)
-        span = (end_date - start_date).days + 1
-        if max_days is not None and span > max_days:
-            raise ValueError(f"Backfill spans {span} days; the instance caps backfills at {max_days} days")
-
         with self._session() as session:
+            # Cron top-ups (backfill_days job config) are deliberately not
+            # bounded here — they never pass through this method.
+            span = (end_date - start_date).days + 1
+            self.quotas.check(session, org_id, QUOTA_MAX_BACKFILL_DAYS, used=span)
             self.quotas.check(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="backfill")
             db_backfill = Backfill(
                 org_id=org_id,

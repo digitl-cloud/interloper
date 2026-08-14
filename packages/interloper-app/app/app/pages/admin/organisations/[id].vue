@@ -184,6 +184,7 @@ const LIMIT_FIELDS = [
     { key: 'max_sources', label: 'Max sources' },
     { key: 'max_assets_per_source', label: 'Max assets per source' },
     { key: 'max_successful_runs_per_month', label: 'Max successful runs / month' },
+    { key: 'max_backfill_days', label: 'Max backfill days' },
 ] as const
 
 const limitRows = computed(() => {

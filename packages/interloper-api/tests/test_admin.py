@@ -299,6 +299,7 @@ def test_quota_overview_defaults_absent_means_unlimited(store: FakeStore) -> Non
         "max_sources": None,
         "max_assets_per_source": None,
         "max_successful_runs_per_month": None,
+        "max_backfill_days": None,
     }
     (org,) = body["organisations"]
     assert org["effective"]["max_assets_per_source"] is None

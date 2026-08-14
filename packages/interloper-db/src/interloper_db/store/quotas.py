@@ -43,6 +43,7 @@ METRIC_SUCCESSFUL_RUNS = "successful_runs"
 QUOTA_MAX_SOURCES = "max_sources"
 QUOTA_MAX_ASSETS_PER_SOURCE = "max_assets_per_source"
 QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH = "max_successful_runs_per_month"
+QUOTA_MAX_BACKFILL_DAYS = "max_backfill_days"
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,29 @@ class CapacityQuota(QuotaDefinition):
             if current >= limit:
                 self._reject(current, limit, subject)
         elif used > limit:
+            self._reject(used, limit, subject)
+
+
+@dataclass(frozen=True)
+class BoundQuota(QuotaDefinition):
+    """Bounds a single operation's magnitude (stateless — no count, no ledger).
+
+    The gate always supplies ``used`` (the operation's size); nothing is
+    measured or reserved, so no lock is needed: the check is a pure
+    comparison against the effective limit.
+    """
+
+    def check(
+        self,
+        session: Session,
+        org_id: UUID,
+        limit: int,
+        *,
+        used: int | None = None,
+        subject: str | None = None,
+    ) -> None:
+        assert used is not None  # bound quotas are always checked declaratively
+        if used > limit:
             self._reject(used, limit, subject)
 
 
@@ -411,6 +435,13 @@ QUOTAS.register(
         message=lambda used, limit, subject: (
             f"Cannot queue {subject or 'run'}: the monthly successful-run quota is exhausted ({used}/{limit})"
         ),
+    ),
+)
+QUOTAS.register(
+    QUOTA_MAX_BACKFILL_DAYS,
+    BoundQuota(
+        key=QUOTA_MAX_BACKFILL_DAYS,
+        message=lambda used, limit, _subject: f"Backfill spans {used} days, exceeding the limit of {limit}",
     ),
 )
 
