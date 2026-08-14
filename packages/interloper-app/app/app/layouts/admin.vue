@@ -94,8 +94,7 @@ const items = computed<NavigationMenuItem[]>(() => [
                          :ui="{ body: '!p-0 !gap-0 overflow-hidden [&>*]:flex-1 [&>*]:flex [&>*]:flex-col [&>*]:min-h-0' }">
             <template #body>
                 <div class="flex-1 min-h-0 w-full overflow-y-auto">
-                    <div class="p-4 w-full"
-                         :class="pageHeader && 'max-w-[1040px] mx-auto'">
+                    <div class="p-4 w-full max-w-[1040px] mx-auto">
                         <div v-if="pageTitle"
                              class="mb-4">
                             <PageBreadcrumb :items="[titleCrumb(pageTitle)]" />

@@ -381,7 +381,7 @@ watch(orgId, loadData)
         </div>
 
         <div v-else-if="tab === 'usage'"
-             class="flex flex-col gap-3 w-full max-w-[1040px] mx-auto">
+             class="flex flex-col gap-3">
             <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
                 <div v-for="tile in usageTiles"
                      :key="tile.label"
@@ -436,7 +436,7 @@ watch(orgId, loadData)
         </div>
 
         <div v-else-if="tab === 'activity'"
-             class="overflow-hidden rounded-lg border border-default bg-default w-full max-w-[1040px] mx-auto">
+             class="overflow-hidden rounded-lg border border-default bg-default">
             <div class="border-b border-default px-4 py-3">
                 <div class="text-sm font-semibold">Activity</div>
                 <div class="text-xs text-dimmed mt-0.5">
@@ -466,7 +466,7 @@ watch(orgId, loadData)
         </div>
 
         <div v-else-if="tab === 'settings'"
-             class="flex flex-col gap-3 w-full max-w-[1040px] mx-auto">
+             class="flex flex-col gap-3">
             <section class="rounded-lg border border-default bg-default p-4 max-w-[660px] w-full">
                 <div class="text-sm font-semibold">Organisation name</div>
                 <p class="text-[13px] text-muted leading-normal mt-1">
