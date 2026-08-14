@@ -37,6 +37,7 @@ from sqlmodel import Session, col, select
 
 from interloper_db.drift import ComponentStatus, asset_status, resolve_component_cls, resolve_source_cls, source_status
 from interloper_db.models import Component, ComponentRelation
+from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES
 from interloper_db.store.relations import Binding, RelationMixin, _add_relation
 
 # Eager-load set for rows returned to API consumers: the parent, children
@@ -89,7 +90,7 @@ class ComponentMixin(RelationMixin):
         """
         with self._session() as session:
             if kind == "source":
-                self.quotas.check_source(session, org_id)
+                self.quotas.check(session, org_id, QUOTA_MAX_SOURCES)
             db_component = Component(org_id=org_id, kind=kind, key=key, name=name)
             self._apply_config(db_component, config, encrypted)
             if name is None:
@@ -491,7 +492,13 @@ class ComponentMixin(RelationMixin):
         # An explicit list is the exact child set; None (creation) is all
         # catalog assets.
         target = set(child_keys) if child_keys is not None else all_keys
-        self.quotas.check_assets(session, db_source, len(target))
+        self.quotas.check(
+            session,
+            db_source.org_id,
+            QUOTA_MAX_ASSETS_PER_SOURCE,
+            used=len(target),
+            subject=db_source.name or db_source.key,
+        )
         to_create = target - set(existing)
         to_remove = set(existing) - target
 
