@@ -49,6 +49,27 @@ const periodLabel = computed(() => {
     return new Date(quotas.value.period_start).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
 })
 
+const defaultChips = computed(() => {
+    const defaults = quotas.value?.defaults
+    if (!defaults) return []
+    return Object.entries(defaults).map(([key, value]) => ({
+        key,
+        value: value != null ? value.toLocaleString() : 'unlimited',
+    }))
+})
+
+/** The quota closest to its ceiling — what the usage column reports. */
+function peakQuota(usage: AdminOrgQuotaStatus) {
+    const candidates = [
+        { label: 'Sources', used: usage.sources, limit: usage.effective.max_sources },
+        { label: 'Assets / source', used: usage.max_assets_per_source, limit: usage.effective.max_assets_per_source },
+        { label: 'Runs', used: usage.successful_runs, limit: usage.effective.max_successful_runs_per_month },
+    ].filter((entry): entry is { label: string, used: number, limit: number } =>
+        entry.limit != null && entry.limit > 0)
+    if (!candidates.length) return null
+    return candidates.reduce((a, b) => (b.used / b.limit > a.used / a.limit ? b : a))
+}
+
 function openCreate() {
     createName.value = ''
     createOpen.value = true
@@ -110,22 +131,36 @@ const columns: TableColumn<AdminOrganisation>[] = [
         },
     },
     {
-        id: 'runs',
-        header: 'Runs',
+        id: 'quota',
+        header: 'Highest quota usage',
         cell: ({ row }) => {
             const usage = usageByOrg.value.get(row.original.id)
             if (row.original.deleted_at || !usage) return dash()
-            return h('span', { class: 'text-muted tabular-nums' }, usage.successful_runs.toLocaleString())
+            const peak = peakQuota(usage)
+            if (!peak) return dash()
+            return h('div', { class: 'flex flex-col gap-0.5' }, [
+                h('div', { class: 'w-32' }, h(AdminUsageMeter, { used: peak.used, limit: peak.limit })),
+                h('span', { class: 'text-[11.5px] text-dimmed whitespace-nowrap' },
+                    `${peak.label} ${peak.used.toLocaleString()} / ${peak.limit.toLocaleString()}`),
+            ])
         },
     },
     {
-        id: 'quota',
-        header: 'Run quota used',
+        id: 'ledger',
+        header: 'Ledger',
         cell: ({ row }) => {
             const usage = usageByOrg.value.get(row.original.id)
-            const limit = usage?.effective.max_successful_runs_per_month ?? null
-            if (row.original.deleted_at || !usage || limit == null) return dash()
-            return h('div', { class: 'w-32' }, h(AdminUsageMeter, { used: usage.successful_runs, limit }))
+            if (row.original.deleted_at || !usage) return dash()
+            const drift = usage.successful_runs !== usage.recomputed_successful_runs
+            const badge = drift
+                ? h(UBadge, { label: 'Drift', color: 'warning', variant: 'subtle', icon: 'i-lucide-triangle-alert' })
+                : h(UBadge, { label: 'In sync', color: 'success', variant: 'subtle', icon: 'i-lucide-check' })
+            if (!drift) return badge
+            return h('div', { class: 'flex flex-col gap-0.5 items-start' }, [
+                badge,
+                h('span', { class: 'text-[11.5px] text-dimmed whitespace-nowrap' },
+                    `runs table: ${usage.recomputed_successful_runs.toLocaleString()}`),
+            ])
         },
     },
     {
@@ -141,10 +176,19 @@ onMounted(loadData)
 <template>
     <div class="flex flex-col flex-1 min-h-0 gap-3">
         <div v-if="quotas"
-             class="flex items-center gap-2 text-sm text-muted shrink-0">
-            <UIcon name="i-lucide-calendar"
-                   class="size-4" />
-            <span>Runs and usage shown for the current quota period, <b class="text-default font-semibold">{{ periodLabel }}</b></span>
+             class="flex flex-wrap items-center gap-2.5 text-sm text-muted shrink-0">
+            <span class="flex items-center gap-1.5">
+                <UIcon name="i-lucide-calendar"
+                       class="size-4" />
+                Quota usage for <b class="text-default font-semibold">{{ periodLabel }}</b>
+            </span>
+            <span class="size-[3px] rounded-full bg-accented" />
+            <span>Instance defaults</span>
+            <span v-for="chip in defaultChips"
+                  :key="chip.key"
+                  class="rounded-md border border-default bg-default px-2 py-0.5 font-mono text-xs text-toned">
+                {{ chip.key }}=<b class="font-semibold">{{ chip.value }}</b>
+            </span>
         </div>
 
         <DataTable :columns="columns"

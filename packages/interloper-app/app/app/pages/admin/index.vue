@@ -116,7 +116,7 @@ const attention = computed<AttentionItem[]>(() => {
                 detail: `${row.successful_runs.toLocaleString()} of ${limit.toLocaleString()} successful runs`
                     + (row.reserved_runs ? `, plus ${row.reserved_runs} reserved.` : '.'),
                 action: 'Review',
-                to: '/admin/quotas',
+                to: '/admin/organisations',
             })
         }
         if (row.successful_runs !== row.recomputed_successful_runs) {
@@ -127,7 +127,7 @@ const attention = computed<AttentionItem[]>(() => {
                 detail: `Counter reads ${row.successful_runs.toLocaleString()} successful runs; recomputed `
                     + `from the runs table gives ${row.recomputed_successful_runs.toLocaleString()}.`,
                 action: 'Inspect',
-                to: '/admin/quotas',
+                to: '/admin/organisations',
             })
         }
     }
@@ -291,9 +291,9 @@ const activity = computed(() => {
                     <UIcon name="i-lucide-gauge"
                            class="size-4 text-muted" />
                     <span class="text-sm font-semibold">Quota pressure</span>
-                    <NuxtLink to="/admin/quotas"
+                    <NuxtLink to="/admin/organisations"
                               class="ml-auto text-xs font-semibold text-primary">
-                        All quotas →
+                        All organisations →
                     </NuxtLink>
                 </div>
                 <div v-if="pressure.length === 0"
@@ -340,7 +340,7 @@ const activity = computed(() => {
                 </div>
                 <NuxtLink v-for="org in topOrgs"
                           :key="org.id"
-                          to="/admin/quotas"
+                          :to="`/admin/organisations/${org.id}`"
                           class="flex items-center gap-3 px-4 py-3 border-b border-muted last:border-b-0 text-[13px] hover:bg-elevated/50">
                     <span class="flex-1 min-w-0 flex items-center gap-2.5">
                         <span class="w-[5px] h-[22px] rounded shrink-0"
