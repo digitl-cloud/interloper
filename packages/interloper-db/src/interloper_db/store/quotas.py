@@ -175,7 +175,7 @@ def check_source_quota(session: Session, org_id: UUID, defaults: Any) -> None:
     ).one()
     if used >= limit:
         raise QuotaExceededError(
-            f"Organisation is at its source limit ({used}/{limit}); delete a source or raise the quota",
+            f"Organisation is at its source limit ({used}/{limit})",
             quota="max_sources",
             limit=limit,
             used=used,
