@@ -14,13 +14,14 @@ definePageMeta({
 })
 
 const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
 
 const adminStore = useAdminStore()
 
 const quotas = ref<AdminQuotas | null>(null)
 const loading = ref(true)
 
-onMounted(async () => {
+async function loadData() {
     try {
         quotas.value = await adminStore.getQuotas()
     }
@@ -30,7 +31,18 @@ onMounted(async () => {
     finally {
         loading.value = false
     }
-})
+}
+
+onMounted(loadData)
+
+// Edit drawer — the AdminQuotaDrawer owns the form; rows open it via the pencil.
+const editOpen = ref(false)
+const editTarget = ref<AdminOrgQuotaStatus | null>(null)
+
+function openEdit(org: AdminOrgQuotaStatus) {
+    editTarget.value = org
+    editOpen.value = true
+}
 
 const rows = computed(() => quotas.value?.organisations ?? [])
 
@@ -139,6 +151,26 @@ const columns: TableColumn<AdminOrgQuotaStatus>[] = [
         },
     },
     {
+        id: 'edit',
+        header: '',
+        cell: ({ row }) => {
+            const org = row.original
+            if (org.deleted_at) return null
+            return h('div', { class: 'flex justify-end' }, h(UButton, {
+                'icon': 'i-lucide-pencil',
+                'color': 'neutral',
+                'variant': 'ghost',
+                'size': 'sm',
+                'aria-label': 'Edit quotas',
+                // Row click navigates to the org page; the pencil must not.
+                'onClick': (event: MouseEvent) => {
+                    event.stopPropagation()
+                    openEdit(org)
+                },
+            }))
+        },
+    },
+    {
         id: 'overrides',
         header: 'Overrides',
         cell: ({ row }) => {
@@ -177,5 +209,12 @@ const columns: TableColumn<AdminOrgQuotaStatus>[] = [
                    no-actions
                    search-placeholder="Search organisations..."
                    @edit="openOrg" />
+
+        <AdminQuotaDrawer v-model:open="editOpen"
+                          :org-id="editTarget?.id ?? ''"
+                          :org-name="editTarget?.name ?? ''"
+                          :limits="editTarget?.limits ?? null"
+                          :defaults="quotas?.defaults ?? null"
+                          @saved="loadData" />
     </div>
 </template>
