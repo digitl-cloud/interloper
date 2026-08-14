@@ -171,18 +171,6 @@ const columns: TableColumn<AdminOrgQuotaStatus>[] = [
             }))
         },
     },
-    {
-        id: 'overrides',
-        header: 'Overrides',
-        cell: ({ row }) => {
-            const limits = row.original.limits
-            const set = Object.entries(limits).filter(([, value]) => value != null)
-            if (!set.length) return dash()
-            return h('div', { class: 'flex flex-wrap gap-1' }, set.map(([key, value]) =>
-                h('span', { key, class: 'rounded-[5px] bg-elevated px-1.5 py-0.5 font-mono text-xs' }, `${key}=${value}`),
-            ))
-        },
-    },
 ]
 </script>
 
