@@ -2,6 +2,72 @@
 
 <!-- version list -->
 
+## v0.59.0 (2026-08-14)
+
+### Bug Fixes
+
+- **app**: Keep the quota pencil from triggering row navigation
+  ([`0c9cd3a`](https://github.com/digitl-cloud/interloper/commit/0c9cd3a3562ffd8553b8291b0a2278d96f5f0161))
+
+### Features
+
+- Administer per-organisation quota limits
+  ([`b0135c0`](https://github.com/digitl-cloud/interloper/commit/b0135c0bd5f329240e42bcdf60b9418f4b124104))
+
+- Soft-delete organisations, keeping the billing ledger
+  ([`b7f1182`](https://github.com/digitl-cloud/interloper/commit/b7f1182f691fe0e89994fc17cd5a6e1c486f0c98))
+
+- **app**: Admin overview dashboard
+  ([`1048933`](https://github.com/digitl-cloud/interloper/commit/1048933aac7052911d0df9d6535c1c14d1ce87bb))
+
+- **app**: Organisation detail page
+  ([`d86837c`](https://github.com/digitl-cloud/interloper/commit/d86837cc626980ce285bca97bf1d84138f433f1b))
+
+### Refactoring
+
+- Store quota limits as one row per quota key
+  ([`17082de`](https://github.com/digitl-cloud/interloper/commit/17082de748707253143b92bb84a5b479d871e02f))
+
+- **app**: Align the config page with the admin design
+  ([`c81b77b`](https://github.com/digitl-cloud/interloper/commit/c81b77bc1713bda295cf994b9b9bed586add437d))
+
+- **app**: Center the org detail panels at the content measure
+  ([`1720409`](https://github.com/digitl-cloud/interloper/commit/17204097f3fc888dd509701faeaa7e797d955a3e))
+
+- **app**: Drop the Overrides column from the quotas overview
+  ([`4552027`](https://github.com/digitl-cloud/interloper/commit/45520279ffcbcef0f8ad3a8388ac0ddedc79ca07))
+
+- **app**: Edit quotas in a side drawer
+  ([`a45588f`](https://github.com/digitl-cloud/interloper/commit/a45588f7c22de50c11d349095ac057d49aea4e9f))
+
+- **app**: Fix the admin content column at 1040px everywhere
+  ([`161ae9e`](https://github.com/digitl-cloud/interloper/commit/161ae9e7e0bd2a197bf66e54a26ce66506a22b44))
+
+- **app**: Flatten table, drawer, and badge chrome
+  ([`ebc330c`](https://github.com/digitl-cloud/interloper/commit/ebc330cfa7f40f5d04c20e4a7bb1c075ceb0d118))
+
+- **app**: Fold the quotas overview into the organisations page
+  ([`5dec1de`](https://github.com/digitl-cloud/interloper/commit/5dec1de90bd99cbe016c5139e23d82fce4e39667))
+
+- **app**: Open the quota drawer from the quotas overview
+  ([`6a87126`](https://github.com/digitl-cloud/interloper/commit/6a871267b43bb40ed34790d8a3af546d6fd6cf4c))
+
+- **app**: Redesign the admin list pages
+  ([`2c3ed8c`](https://github.com/digitl-cloud/interloper/commit/2c3ed8cc85357990f34cfb5e95daad674f51feb6))
+
+- **app**: Trim jobs and hooks empty states
+  ([`2badb57`](https://github.com/digitl-cloud/interloper/commit/2badb57fc920d94cee08f42295c1a25a56a50dfd))
+
+- **db**: Declare quotas in a registry behind a QuotaService
+  ([`58b0d9a`](https://github.com/digitl-cloud/interloper/commit/58b0d9afa735dfee2b357ac097cdd0e7a49da420))
+
+- **db**: Delegate quota checks to their definitions
+  ([`1024979`](https://github.com/digitl-cloud/interloper/commit/1024979212a76b1cf2dce00489c5374943a87589))
+
+- **db**: Update quota error message
+  ([`4f50730`](https://github.com/digitl-cloud/interloper/commit/4f507304cb9054159cc5a4142b86a1603bdf887c))
+
+
 ## v0.58.0 (2026-08-10)
 
 ### Bug Fixes
