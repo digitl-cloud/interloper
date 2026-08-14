@@ -186,8 +186,6 @@ const LIMIT_FIELDS = [
     { key: 'max_successful_runs_per_month', label: 'Max successful runs / month' },
 ] as const
 
-type LimitKey = typeof LIMIT_FIELDS[number]['key']
-
 const limitRows = computed(() => {
     const row = quotaRow.value
     const defaults = quotas.value?.defaults
@@ -210,52 +208,11 @@ const limitRows = computed(() => {
 const ledgerInSync = computed(() =>
     quotaRow.value != null && quotaRow.value.successful_runs === quotaRow.value.recomputed_successful_runs)
 
-// Edit modal — string-typed fields so an emptied input means "inherit".
+// Edit drawer — the AdminQuotaDrawer owns the form; we just open it.
 const editOpen = ref(false)
-const editForm = ref<Record<LimitKey, string>>({
-    max_sources: '',
-    max_assets_per_source: '',
-    max_successful_runs_per_month: '',
-})
-const saving = ref(false)
 
-function defaultPlaceholder(key: LimitKey): string {
-    const value = quotas.value?.defaults[key]
-    return value != null ? `default: ${value}` : 'default: unlimited'
-}
-
-function openEdit() {
-    const limits = quotaRow.value?.limits
-    editForm.value = {
-        max_sources: limits?.max_sources?.toString() ?? '',
-        max_assets_per_source: limits?.max_assets_per_source?.toString() ?? '',
-        max_successful_runs_per_month: limits?.max_successful_runs_per_month?.toString() ?? '',
-    }
-    editOpen.value = true
-}
-
-async function submitEdit() {
-    saving.value = true
-    try {
-        await adminStore.updateOrgQuota(orgId.value, {
-            max_sources: editForm.value.max_sources === '' ? null : Number(editForm.value.max_sources),
-            max_assets_per_source: editForm.value.max_assets_per_source === ''
-                ? null
-                : Number(editForm.value.max_assets_per_source),
-            max_successful_runs_per_month: editForm.value.max_successful_runs_per_month === ''
-                ? null
-                : Number(editForm.value.max_successful_runs_per_month),
-        })
-        toast.add({ title: 'Quota limits updated', color: 'success' })
-        editOpen.value = false
-        quotas.value = await adminStore.getQuotas()
-    }
-    catch (err) {
-        toast.add(errorToast(err, 'Failed to update quota limits'))
-    }
-    finally {
-        saving.value = false
-    }
+async function reloadQuotas() {
+    quotas.value = await adminStore.getQuotas()
 }
 
 // -- Activity ---------------------------------------------------------------------
@@ -405,7 +362,7 @@ watch(orgId, loadData)
                              variant="outline"
                              size="sm"
                              class="ml-auto"
-                             @click="openEdit" />
+                             @click="editOpen = true" />
                 </div>
                 <div v-for="row in limitRows"
                      :key="row.key"
@@ -531,36 +488,11 @@ watch(orgId, loadData)
             </section>
         </div>
 
-        <UModal v-model:open="editOpen"
-                :title="`Quota limits — ${org?.name}`"
-                :ui="{ footer: 'justify-end' }">
-            <template #body>
-                <div class="flex flex-col gap-3">
-                    <p class="text-sm text-muted">
-                        Overrides for this organisation. Leave a field empty to inherit the instance default.
-                    </p>
-                    <UFormField v-for="field in LIMIT_FIELDS"
-                                :key="field.key"
-                                :label="field.label">
-                        <UInput v-model="editForm[field.key]"
-                                type="number"
-                                min="0"
-                                :placeholder="defaultPlaceholder(field.key)"
-                                class="w-full"
-                                @keydown.enter="submitEdit" />
-                    </UFormField>
-                </div>
-            </template>
-            <template #footer>
-                <UButton label="Cancel"
-                         color="neutral"
-                         variant="outline"
-                         @click="editOpen = false" />
-                <UButton label="Save"
-                         :disabled="saving"
-                         :loading="saving"
-                         @click="submitEdit" />
-            </template>
-        </UModal>
+        <AdminQuotaDrawer v-model:open="editOpen"
+                          :org-id="orgId"
+                          :org-name="org?.name ?? ''"
+                          :limits="quotaRow?.limits ?? null"
+                          :defaults="quotas?.defaults ?? null"
+                          @saved="reloadQuotas" />
     </div>
 </template>
