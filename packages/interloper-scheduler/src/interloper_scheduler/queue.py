@@ -10,7 +10,6 @@ from interloper.telemetry import attributes
 from interloper.telemetry.tracer import meter, tracer
 from interloper_db import Store
 from interloper_db.models import Backfill, Event, Run
-from interloper_db.store.quotas import try_reserve_run
 from interloper_db.store.runs import cancel_backfill_runs
 from sqlmodel import Session, col, select
 
@@ -101,7 +100,7 @@ class QueueController(Controller):
                 if not run or not run.id:
                     return None
 
-                if try_reserve_run(session, run, self._store.quota_defaults):
+                if self._store.quotas.try_reserve_run(session, run):
                     run.status = "dispatched"
                     session.add(run)
                     session.commit()

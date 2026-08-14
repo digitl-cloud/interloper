@@ -19,7 +19,7 @@ from sqlmodel import Session, col, select
 from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
 from interloper_db.store.base import StoreBase
 from interloper_db.store.components import stamp_component_state
-from interloper_db.store.quotas import check_run_quota, settle_run_usage
+from interloper_db.store.quotas import settle_run_usage
 
 logger = logging.getLogger(__name__)
 
@@ -312,7 +312,7 @@ class RunMixin(StoreBase):
             The created Run row.
         """
         with self._session() as session:
-            check_run_quota(session, org_id, self._quota_defaults)
+            self.quotas.check_run_admission(session, org_id)
             db_run = Run(
                 org_id=org_id,
                 component_id=component_id,
@@ -469,7 +469,7 @@ class RunMixin(StoreBase):
             if src.status != "failed":
                 raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
 
-            check_run_quota(session, src.org_id, self._quota_defaults, source="retry")
+            self.quotas.check_run_admission(session, src.org_id, source="retry")
             db_run = Run(
                 org_id=src.org_id,
                 component_id=src.component_id,
@@ -518,7 +518,7 @@ class RunMixin(StoreBase):
             raise ValueError(f"Backfill spans {span} days; the instance caps backfills at {max_days} days")
 
         with self._session() as session:
-            check_run_quota(session, org_id, self._quota_defaults, source="backfill")
+            self.quotas.check_run_admission(session, org_id, source="backfill")
             db_backfill = Backfill(
                 org_id=org_id,
                 component_id=component_id,

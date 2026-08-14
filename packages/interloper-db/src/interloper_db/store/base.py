@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
 
     from interloper_db.hydration import Hydrator
+    from interloper_db.store.quotas import QuotaService
 
 
 class StoreBase:
@@ -34,13 +35,20 @@ class StoreBase:
     _quota_defaults: Any = None
 
     @property
-    def quota_defaults(self) -> Any:
-        """The global default quota limits (QuotaSettings-shaped, or None).
+    def quotas(self) -> QuotaService:
+        """Quota limit resolution and enforcement gates.
 
         Exposed so co-located machinery (the scheduler's claim/cron SQL)
-        enforces against the same defaults as the store.
+        enforces against the same defaults as the store. Lazily built; the
+        defaults are read per call, so late configuration is visible.
         """
-        return self._quota_defaults
+        service: QuotaService | None = getattr(self, "_quota_service", None)
+        if service is None:
+            from interloper_db.store.quotas import QuotaService as _QuotaService
+
+            service = _QuotaService(lambda: self._quota_defaults)
+            self._quota_service = service
+        return service
 
     @property
     def engine(self) -> Engine:
