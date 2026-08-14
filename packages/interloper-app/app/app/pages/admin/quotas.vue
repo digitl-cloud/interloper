@@ -156,17 +156,18 @@ const columns: TableColumn<AdminOrgQuotaStatus>[] = [
         cell: ({ row }) => {
             const org = row.original
             if (org.deleted_at) return null
-            return h('div', { class: 'flex justify-end' }, h(UButton, {
+            // The wrapper's native listener stops the click before the row's
+            // select handler navigates to the org page.
+            return h('div', {
+                class: 'flex justify-end',
+                onClick: (event: Event) => event.stopPropagation(),
+            }, h(UButton, {
                 'icon': 'i-lucide-pencil',
                 'color': 'neutral',
                 'variant': 'ghost',
                 'size': 'sm',
                 'aria-label': 'Edit quotas',
-                // Row click navigates to the org page; the pencil must not.
-                'onClick': (event: MouseEvent) => {
-                    event.stopPropagation()
-                    openEdit(org)
-                },
+                'onClick': () => openEdit(org),
             }))
         },
     },
