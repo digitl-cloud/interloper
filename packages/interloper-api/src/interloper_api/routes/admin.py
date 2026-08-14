@@ -465,7 +465,9 @@ def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any
 
 
 def _quota_limits(limits: Any) -> AdminQuotaLimits:
-    """Map any limits-shaped object (settings, Quota row, None) to the model."""
+    """Map limits from a ``{key: limit}`` dict (store) or attributes (settings)."""
+    if isinstance(limits, dict):
+        return AdminQuotaLimits(**{key: limits.get(key) for key in AdminQuotaLimits.model_fields})
     return AdminQuotaLimits(
         max_sources=getattr(limits, "max_sources", None),
         max_assets_per_source=getattr(limits, "max_assets_per_source", None),
@@ -562,7 +564,7 @@ def get_quotas(
     """Quota limits and current-period usage for every organisation."""
     defaults = _quota_limits(quota_defaults)
     period_start = store.current_period_start()
-    overrides = {quota.org_id: quota for quota in store.list_quotas()}
+    overrides = store.list_quota_overrides()
     usage = {
         row.org_id: row
         for row in store.list_usage(period_start=period_start)
@@ -574,7 +576,7 @@ def get_quotas(
 
     organisations = []
     for org, _member_count in store.list_all_organisations():
-        limits = _quota_limits(overrides.get(org.id))
+        limits = _quota_limits(overrides.get(org.id, {}))
         org_usage = usage.get(org.id)
         organisations.append(
             AdminOrgQuotaStatus(
@@ -640,8 +642,8 @@ def update_org_quota(
 ) -> AdminQuotaLimits:
     """Set an organisation's quota overrides; omitted fields keep their value, null clears one."""
     _require_org(store, org_id)
-    quota = store.set_quota(org_id, body.model_dump(exclude_unset=True))
-    return _quota_limits(quota)
+    overrides = store.set_quota(org_id, body.model_dump(exclude_unset=True))
+    return _quota_limits(overrides)
 
 
 # -- Users --------------------------------------------------------------------

@@ -170,20 +170,20 @@ class PersonalAccessToken(SQLModel, table=True):
 
 
 class Quota(SQLModel, table=True):
-    """Per-organisation quota limits, one row per organisation, created lazily.
+    """Per-organisation quota limit overrides, one row per quota key.
 
-    A null limit falls back to the global default (``QuotaSettings``); null
-    there means unlimited. Bare ``org_id`` (no FK) like every org-scoped data
-    table.
+    Rows are created lazily; a null ``limit`` is a cleared override (and the
+    enforcement lock anchor) — resolution falls back to the global default
+    (``QuotaSettings``), and null there means unlimited. New quota keys need
+    no schema change; the valid set is ``QUOTA_KEYS`` in the store. Bare
+    ``org_id`` (no FK) like every org-scoped data table.
     """
 
     __tablename__: ClassVar[str] = "quotas"
 
     org_id: UUID = SQLField(primary_key=True)
-    max_sources: int | None = None
-    max_assets_per_source: int | None = None
-    max_successful_runs_per_month: int | None = None
-    created_at: datetime | None = _ts()
+    key: str = SQLField(primary_key=True)
+    limit: int | None = None
 
 
 class Usage(SQLModel, table=True):

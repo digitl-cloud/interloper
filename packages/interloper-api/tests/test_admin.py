@@ -119,8 +119,8 @@ class FakeStore:
 
         return dt.date(2026, 8, 1)
 
-    def list_quotas(self):
-        return [SimpleNamespace(org_id=self.org.id, max_sources=5, max_assets_per_source=None)]
+    def list_quota_overrides(self):
+        return {self.org.id: {"max_sources": 5}}
 
     def list_usage(self, *, period_start=None, org_id=None):
         import datetime as dt
@@ -146,11 +146,7 @@ class FakeStore:
 
     def set_quota(self, org_id: UUID, limits: dict):
         self.quota_updates.append((org_id, limits))
-        return SimpleNamespace(
-            max_sources=limits.get("max_sources"),
-            max_assets_per_source=limits.get("max_assets_per_source"),
-            max_successful_runs_per_month=limits.get("max_successful_runs_per_month"),
-        )
+        return {key: value for key, value in limits.items() if value is not None}
 
 
 def _profile(*, is_super_admin: bool):

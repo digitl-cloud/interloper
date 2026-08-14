@@ -35,6 +35,15 @@ METRIC_SUCCESSFUL_RUNS = "successful_runs"
 #: DB, so writers must go through this to keep the ledger free of typo rows.
 USAGE_METRICS = frozenset({METRIC_SUCCESSFUL_RUNS})
 
+QUOTA_MAX_SOURCES = "max_sources"
+QUOTA_MAX_ASSETS_PER_SOURCE = "max_assets_per_source"
+QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH = "max_successful_runs_per_month"
+
+#: The closed set of quota keys. Limits are stored one row per key, so
+#: adding a quota is a new entry here (plus its enforcement site) — no
+#: schema change.
+QUOTA_KEYS = frozenset({QUOTA_MAX_SOURCES, QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH})
+
 
 def month_start(moment: datetime) -> dt.date:
     """The first day of the UTC calendar month a moment falls in.
@@ -132,29 +141,36 @@ def settle_run_usage(session: Session, db_run: Run, *, success: bool) -> None:
 # ``try_reserve_run``; the creation-time checks are advisory fail-fasts.
 
 
-def _effective_limit(session: Session, org_id: UUID, field: str, defaults: Any) -> int | None:
+def _effective_limit(session: Session, org_id: UUID, key: str, defaults: Any) -> int | None:
     """Resolve a limit: org override wins over the global default; None = unlimited."""
-    override = session.get(Quota, org_id)
-    value = getattr(override, field, None) if override else None
+    override = session.get(Quota, (org_id, key))
+    value = override.limit if override else None
     if value is None:
-        value = getattr(defaults, field, None)
+        value = getattr(defaults, key, None)
     return value
 
 
-def _locked_effective_limit(session: Session, org_id: UUID, field: str, defaults: Any) -> int | None:
-    """Resolve a limit while holding the org's quota-row lock.
+def _locked_effective_limit(session: Session, org_id: UUID, key: str, defaults: Any) -> int | None:
+    """Resolve a limit while holding the ``(org, key)`` quota-row lock.
 
-    Upserts the (all-null) row first so there is always something to lock;
-    the lock is released with the caller's transaction and serializes
-    capacity checks per organisation.
+    Upserts the (null-limit) row first so there is always something to
+    lock; the lock is released with the caller's transaction and
+    serializes checks per organisation *and* key, so independent quotas
+    never block each other.
     """
     table = Quota.__table__  # ty: ignore[unresolved-attribute]
-    statement = _insert_fn(session)(table).values(org_id=org_id).on_conflict_do_nothing(index_elements=["org_id"])
+    statement = (
+        _insert_fn(session)(table)
+        .values(org_id=org_id, key=key)
+        .on_conflict_do_nothing(index_elements=["org_id", "key"])
+    )
     session.execute(statement)  # ty: ignore[deprecated]
-    override = session.exec(select(Quota).where(Quota.org_id == org_id).with_for_update()).first()
-    value = getattr(override, field, None) if override else None
+    override = session.exec(
+        select(Quota).where(Quota.org_id == org_id, Quota.key == key).with_for_update()
+    ).first()
+    value = override.limit if override else None
     if value is None:
-        value = getattr(defaults, field, None)
+        value = getattr(defaults, key, None)
     return value
 
 
@@ -163,9 +179,9 @@ def check_source_quota(session: Session, org_id: UUID, defaults: Any) -> None:
 
     Part of the caller's transaction; call before inserting the new source.
     """
-    if _effective_limit(session, org_id, "max_sources", defaults) is None:
+    if _effective_limit(session, org_id, QUOTA_MAX_SOURCES, defaults) is None:
         return
-    limit = _locked_effective_limit(session, org_id, "max_sources", defaults)
+    limit = _locked_effective_limit(session, org_id, QUOTA_MAX_SOURCES, defaults)
     if limit is None:
         return
     used = session.exec(
@@ -176,7 +192,7 @@ def check_source_quota(session: Session, org_id: UUID, defaults: Any) -> None:
     if used >= limit:
         raise QuotaExceededError(
             f"Organisation is at its source limit ({used}/{limit})",
-            quota="max_sources",
+            quota=QUOTA_MAX_SOURCES,
             limit=limit,
             used=used,
         )
@@ -188,15 +204,15 @@ def check_asset_quota(session: Session, db_source: Component, asset_count: int, 
     ``asset_count`` is the size of the *desired* final set, so the check is
     declarative — no counting race regardless of what the set is today.
     """
-    if _effective_limit(session, db_source.org_id, "max_assets_per_source", defaults) is None:
+    if _effective_limit(session, db_source.org_id, QUOTA_MAX_ASSETS_PER_SOURCE, defaults) is None:
         return
-    limit = _locked_effective_limit(session, db_source.org_id, "max_assets_per_source", defaults)
+    limit = _locked_effective_limit(session, db_source.org_id, QUOTA_MAX_ASSETS_PER_SOURCE, defaults)
     if limit is None or asset_count <= limit:
         return
     raise QuotaExceededError(
         f"Source '{db_source.name or db_source.key}' would have {asset_count} assets, "
         f"exceeding the limit of {limit}",
-        quota="max_assets_per_source",
+        quota=QUOTA_MAX_ASSETS_PER_SOURCE,
         limit=limit,
         used=asset_count,
     )
@@ -207,7 +223,7 @@ def run_quota_status(session: Session, org_id: UUID, defaults: Any) -> tuple[int
 
     Limit None means unlimited (and the ledger is not read at all).
     """
-    limit = _effective_limit(session, org_id, "max_successful_runs_per_month", defaults)
+    limit = _effective_limit(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, defaults)
     if limit is None:
         return 0, None
     period_start = month_start(db_now(session))
@@ -226,7 +242,7 @@ def check_run_quota(session: Session, org_id: UUID, defaults: Any, *, source: st
     if limit is not None and committed >= limit:
         raise QuotaExceededError(
             f"Cannot queue {source}: the monthly successful-run quota is exhausted ({committed}/{limit})",
-            quota="max_successful_runs_per_month",
+            quota=QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
             limit=limit,
             used=committed,
         )
@@ -243,7 +259,7 @@ def try_reserve_run(session: Session, db_run: Run, defaults: Any) -> bool:
     Returns:
         True if the run may dispatch, False when the quota is exhausted.
     """
-    limit = _effective_limit(session, db_run.org_id, "max_successful_runs_per_month", defaults)
+    limit = _effective_limit(session, db_run.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, defaults)
     if limit is None:
         return True
     if limit <= 0:
@@ -271,37 +287,49 @@ def try_reserve_run(session: Session, db_run: Run, defaults: Any) -> bool:
 class QuotaMixin(StoreBase):
     """Store methods for quota limits and usage reads."""
 
-    def get_quota(self, org_id: UUID) -> Quota | None:
-        """The organisation's quota overrides, or None if none are set."""
+    def get_quota_overrides(self, org_id: UUID) -> dict[str, int]:
+        """The organisation's set overrides as ``{key: limit}`` (null rows excluded)."""
         with self._session() as session:
-            return session.get(Quota, org_id)
+            rows = session.exec(select(Quota).where(Quota.org_id == org_id)).all()
+            return {row.key: row.limit for row in rows if row.limit is not None}
 
-    def list_quotas(self) -> list[Quota]:
-        """All per-organisation quota override rows."""
+    def list_quota_overrides(self) -> dict[UUID, dict[str, int]]:
+        """Every organisation's set overrides, keyed by org id."""
         with self._session() as session:
-            return list(session.exec(select(Quota)).all())
+            rows = session.exec(select(Quota)).all()
+            overrides: dict[UUID, dict[str, int]] = {}
+            for row in rows:
+                if row.limit is not None:
+                    overrides.setdefault(row.org_id, {})[row.key] = row.limit
+            return overrides
 
-    def set_quota(self, org_id: UUID, limits: dict[str, int | None]) -> Quota:
-        """Set an organisation's quota overrides; only the given fields change.
+    def set_quota(self, org_id: UUID, limits: dict[str, int | None]) -> dict[str, int]:
+        """Set an organisation's quota overrides; only the given keys change.
 
-        ``None`` clears a field so it falls back to the global default.
+        ``None`` clears a key so it falls back to the global default (the
+        row is kept as a null-limit lock anchor).
+
+        Returns:
+            The organisation's overrides after the update.
 
         Raises:
-            ValueError: On an unknown limit field or a negative value.
+            ValueError: On an unknown quota key or a negative value.
         """
-        allowed = {"max_sources", "max_assets_per_source", "max_successful_runs_per_month"}
-        if unknown := set(limits) - allowed:
+        if unknown := set(limits) - QUOTA_KEYS:
             raise ValueError(f"Unknown quota limit(s): {sorted(unknown)}")
-        if negative := {field for field, value in limits.items() if value is not None and value < 0}:
+        if negative := {key for key, value in limits.items() if value is not None and value < 0}:
             raise ValueError(f"Quota limit(s) must be >= 0: {sorted(negative)}")
+        table = Quota.__table__  # ty: ignore[unresolved-attribute]
         with self._session() as session:
-            quota = session.get(Quota, org_id) or Quota(org_id=org_id)
-            for field, value in limits.items():
-                setattr(quota, field, value)
-            session.add(quota)
+            for key, value in limits.items():
+                statement = (
+                    _insert_fn(session)(table)
+                    .values(org_id=org_id, key=key, limit=value)
+                    .on_conflict_do_update(index_elements=["org_id", "key"], set_={"limit": value})
+                )
+                session.execute(statement)  # ty: ignore[deprecated]
             session.commit()
-            session.refresh(quota)
-            return quota
+        return self.get_quota_overrides(org_id)
 
     def list_usage(self, *, period_start: dt.date | None = None, org_id: UUID | None = None) -> list[Usage]:
         """Usage ledger rows, optionally filtered by period and organisation."""
