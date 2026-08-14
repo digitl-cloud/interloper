@@ -20,6 +20,8 @@ from interloper_db.models import Backfill, Component, Quota, Run, Usage
 from interloper_db.store.quotas import (
     METRIC_SUCCESSFUL_RUNS,
     QUOTAS,
+    CapacityQuota,
+    ConsumptionQuota,
     QuotaMixin,
     increment_usage,
     month_start,
@@ -358,8 +360,10 @@ class TestRegistry:
         assert set(QuotaSettings.model_fields) - guards == set(QUOTAS.keys())
 
     def test_capacity_quotas_carry_counters_and_consumption_metrics(self):
-        assert QUOTAS["max_sources"].count is not None
-        assert QUOTAS["max_successful_runs_per_month"].metric == METRIC_SUCCESSFUL_RUNS
+        sources = QUOTAS["max_sources"]
+        assert isinstance(sources, CapacityQuota) and sources.count is not None
+        runs = QUOTAS["max_successful_runs_per_month"]
+        assert isinstance(runs, ConsumptionQuota) and runs.metric == METRIC_SUCCESSFUL_RUNS
 
     def test_unregistered_key_fails_loudly(self, store: _Store):
         with Session(store._engine) as session:
