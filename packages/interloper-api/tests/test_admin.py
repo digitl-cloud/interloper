@@ -540,3 +540,10 @@ def test_activity_feed_composes_titles(store: FakeStore) -> None:
         ("member_joined", "Jonas joined the organisation", "Role: editor"),
         ("org_created", "Organisation created", None),
     ]
+
+
+def test_quota_wire_model_matches_the_registry() -> None:
+    """AdminQuotaLimits must expose exactly the registered quota keys."""
+    from interloper_db.store.quotas import QUOTAS
+
+    assert set(admin_module.AdminQuotaLimits.model_fields) == set(QUOTAS.keys())

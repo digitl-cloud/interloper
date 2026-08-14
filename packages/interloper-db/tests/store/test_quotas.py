@@ -19,12 +19,12 @@ from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Quota, Run, Usage
 from interloper_db.store.quotas import (
     METRIC_SUCCESSFUL_RUNS,
+    QUOTAS,
     QuotaMixin,
     increment_usage,
     month_start,
     next_month_start,
     settle_run_usage,
-    try_reserve_run,
 )
 from interloper_db.store.runs import RunMixin
 
@@ -270,16 +270,17 @@ class TestTryReserveRun:
         with Session(store._engine) as session:
             db_run = session.get(Run, run.id)
             assert db_run is not None
-            assert try_reserve_run(session, db_run, None) is True
+            assert store.quotas.try_reserve_run(session, db_run) is True
             session.commit()
         assert _usage_rows(store) == {}
 
     def test_reserves_and_stamps(self, store: _Store):
+        store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         run = _run(store)
         with Session(store._engine) as session:
             db_run = session.get(Run, run.id)
             assert db_run is not None
-            assert try_reserve_run(session, db_run, _defaults(max_successful_runs_per_month=1)) is True
+            assert store.quotas.try_reserve_run(session, db_run) is True
             session.commit()
         (counts,) = _usage_rows(store).values()
         assert counts == (0, 1)
@@ -292,11 +293,12 @@ class TestTryReserveRun:
             period = month_start(datetime.now(timezone.utc))
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=1)
             session.commit()
+        store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         run = _run(store)
         with Session(store._engine) as session:
             db_run = session.get(Run, run.id)
             assert db_run is not None
-            assert try_reserve_run(session, db_run, _defaults(max_successful_runs_per_month=1)) is False
+            assert store.quotas.try_reserve_run(session, db_run) is False
             session.commit()
         (counts,) = _usage_rows(store).values()
         assert counts == (1, 0)
@@ -305,11 +307,12 @@ class TestTryReserveRun:
             assert released is not None and released.quota_reserved_at is None
 
     def test_zero_limit_denies(self, store: _Store):
+        store._quota_defaults = _defaults(max_successful_runs_per_month=0)
         run = _run(store)
         with Session(store._engine) as session:
             db_run = session.get(Run, run.id)
             assert db_run is not None
-            assert try_reserve_run(session, db_run, _defaults(max_successful_runs_per_month=0)) is False
+            assert store.quotas.try_reserve_run(session, db_run) is False
 
 
 class TestReconcileUsage:
@@ -344,3 +347,21 @@ class TestSetQuota:
             store.set_quota(_ORG_ID, {"max_bananas": 1})
         with pytest.raises(ValueError, match=">= 0"):
             store.set_quota(_ORG_ID, {"max_sources": -1})
+
+
+class TestRegistry:
+    def test_settings_fields_match_registered_quotas(self):
+        """QuotaSettings carries exactly the per-org quota defaults plus known guards."""
+        from interloper.settings import QuotaSettings
+
+        guards = {"max_backfill_days"}
+        assert set(QuotaSettings.model_fields) - guards == set(QUOTAS.keys())
+
+    def test_capacity_quotas_carry_counters_and_consumption_metrics(self):
+        assert QUOTAS["max_sources"].count is not None
+        assert QUOTAS["max_successful_runs_per_month"].metric == METRIC_SUCCESSFUL_RUNS
+
+    def test_unregistered_key_fails_loudly(self, store: _Store):
+        with Session(store._engine) as session:
+            with pytest.raises(KeyError, match="not registered"):
+                store.quotas.effective(session, _ORG_ID, "max_bananas")
