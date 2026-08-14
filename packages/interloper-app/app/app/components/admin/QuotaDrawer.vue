@@ -26,6 +26,7 @@ const LIMIT_FIELDS = [
     { key: 'max_sources', label: 'Max sources' },
     { key: 'max_assets_per_source', label: 'Max assets per source' },
     { key: 'max_successful_runs_per_month', label: 'Max successful runs / month' },
+    { key: 'max_backfill_days', label: 'Max backfill days' },
 ] as const
 
 type LimitKey = typeof LIMIT_FIELDS[number]['key']
@@ -34,6 +35,7 @@ const form = ref<Record<LimitKey, string>>({
     max_sources: '',
     max_assets_per_source: '',
     max_successful_runs_per_month: '',
+    max_backfill_days: '',
 })
 const saving = ref(false)
 
@@ -43,6 +45,7 @@ watch(open, (opened) => {
         max_sources: props.limits?.max_sources?.toString() ?? '',
         max_assets_per_source: props.limits?.max_assets_per_source?.toString() ?? '',
         max_successful_runs_per_month: props.limits?.max_successful_runs_per_month?.toString() ?? '',
+        max_backfill_days: props.limits?.max_backfill_days?.toString() ?? '',
     }
 })
 
@@ -68,6 +71,7 @@ async function submit() {
             max_successful_runs_per_month: form.value.max_successful_runs_per_month === ''
                 ? null
                 : Number(form.value.max_successful_runs_per_month),
+            max_backfill_days: form.value.max_backfill_days === '' ? null : Number(form.value.max_backfill_days),
         })
         toast.add({ title: `Quota limits updated for ${props.orgName}`, color: 'success' })
         open.value = false

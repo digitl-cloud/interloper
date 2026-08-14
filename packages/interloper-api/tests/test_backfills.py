@@ -115,15 +115,30 @@ def test_cancel_returns_404_for_non_member(store: FakeStore) -> None:
     assert store.cancel_calls == []
 
 
-def test_create_backfill_span_cap_returns_400(store: FakeStore) -> None:
+def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
+    from interloper.errors import QuotaExceededError
+
     def _raise(org_id, **kwargs):
-        raise ValueError("Backfill spans 31 days; the instance caps backfills at 30 days")
+        raise QuotaExceededError(
+            "Backfill spans 31 days, exceeding the limit of 30", quota="max_backfill_days", limit=30, used=31
+        )
 
     store.get_component = lambda component_id, kind=None: _fake_backfill(component_id)  # ty: ignore[unresolved-attribute]
     store.create_backfill = _raise  # ty: ignore[unresolved-attribute]
-    resp = _client(store).post(
+    client = _client(store)
+
+    @client.app.exception_handler(QuotaExceededError)  # mirrors create_app's handler
+    async def _quota_handler(_request, exc: QuotaExceededError):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=429,
+            content={"detail": {"message": str(exc), "quota": exc.quota, "limit": exc.limit, "used": exc.used}},
+        )
+
+    resp = client.post(
         "/backfills/",
         json={"component_id": str(uuid4()), "start_date": "2026-01-01", "end_date": "2026-01-31"},
     )
-    assert resp.status_code == 400
-    assert "caps backfills" in resp.json()["detail"]
+    assert resp.status_code == 429
+    assert resp.json()["detail"]["quota"] == "max_backfill_days"

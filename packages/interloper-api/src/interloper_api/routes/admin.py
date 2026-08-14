@@ -234,6 +234,7 @@ class AdminQuotaLimits(BaseModel):
     max_sources: int | None = None
     max_assets_per_source: int | None = None
     max_successful_runs_per_month: int | None = None
+    max_backfill_days: int | None = None
 
 
 class AdminOrgQuotaStatus(BaseModel):
@@ -268,6 +269,7 @@ class AdminQuotaUpdateRequest(BaseModel):
     max_sources: int | None = Field(default=None, ge=0)
     max_assets_per_source: int | None = Field(default=None, ge=0)
     max_successful_runs_per_month: int | None = Field(default=None, ge=0)
+    max_backfill_days: int | None = Field(default=None, ge=0)
 
 
 class AdminActivityEntry(BaseModel):
@@ -472,6 +474,7 @@ def _quota_limits(limits: Any) -> AdminQuotaLimits:
         max_sources=getattr(limits, "max_sources", None),
         max_assets_per_source=getattr(limits, "max_assets_per_source", None),
         max_successful_runs_per_month=getattr(limits, "max_successful_runs_per_month", None),
+        max_backfill_days=getattr(limits, "max_backfill_days", None),
     )
 
 

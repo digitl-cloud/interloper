@@ -258,9 +258,17 @@ class TestRunCreationGate:
         with pytest.raises(QuotaExceededError, match="backfill"):
             store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
 
+    def test_backfill_span_override_wins(self, store: _Store):
+        store._quota_defaults = _defaults(max_backfill_days=2)
+        with Session(store._engine) as session:
+            session.add(Quota(org_id=_ORG_ID, key="max_backfill_days", limit=3))
+            session.commit()
+        backfill = store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 3))
+        assert backfill.partitions == 3
+
     def test_backfill_span_cap(self, store: _Store):
         store._quota_defaults = _defaults(max_backfill_days=2)
-        with pytest.raises(ValueError, match="caps backfills at 2 days"):
+        with pytest.raises(QuotaExceededError, match="exceeding the limit of 2"):
             store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 3))
         backfill = store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
         assert backfill.partitions == 2
@@ -353,11 +361,10 @@ class TestSetQuota:
 
 class TestRegistry:
     def test_settings_fields_match_registered_quotas(self):
-        """QuotaSettings carries exactly the per-org quota defaults plus known guards."""
+        """QuotaSettings carries exactly the per-org quota defaults."""
         from interloper.settings import QuotaSettings
 
-        guards = {"max_backfill_days"}
-        assert set(QuotaSettings.model_fields) - guards == set(QUOTAS.keys())
+        assert set(QuotaSettings.model_fields) == set(QUOTAS.keys())
 
     def test_capacity_quotas_carry_counters_and_consumption_metrics(self):
         sources = QUOTAS["max_sources"]

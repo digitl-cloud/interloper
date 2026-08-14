@@ -100,17 +100,14 @@ def create_backfill(
     job = load_authorized(
         lambda i: store.get_component(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
     )
-    try:
-        backfill = store.create_backfill(
-            job.org_id,
-            component_id=body.component_id,
-            start_date=body.start_date,
-            end_date=body.end_date,
-            concurrency=body.concurrency,
-            fail_fast=body.fail_fast,
-        )
-    except ValueError as e:  # span cap
-        raise HTTPException(status_code=400, detail=str(e))
+    backfill = store.create_backfill(
+        job.org_id,
+        component_id=body.component_id,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        concurrency=body.concurrency,
+        fail_fast=body.fail_fast,
+    )
     return _backfill_to_response(backfill)
 
 

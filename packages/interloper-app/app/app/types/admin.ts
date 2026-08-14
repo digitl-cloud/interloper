@@ -54,6 +54,7 @@ export interface AdminQuotaLimits {
     max_sources: number | null
     max_assets_per_source: number | null
     max_successful_runs_per_month: number | null
+    max_backfill_days: number | null
 }
 
 export interface AdminOrgQuotaStatus {
