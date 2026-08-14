@@ -462,7 +462,7 @@ class TestQuotaGates:
 
         store = self._store(max_sources=1)
         with Session(component_db) as session:
-            session.add(Quota(org_id=_ORG, max_sources=2))
+            session.add(Quota(org_id=_ORG, key="max_sources", limit=2))
             session.commit()
         store.create_component(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "one"})
         store.create_component(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "two"})

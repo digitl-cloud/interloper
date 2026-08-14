@@ -156,14 +156,14 @@ class TestSettleRunUsage:
 
 
 class TestQuotaReads:
-    def test_get_and_list_quotas(self, store: _Store):
-        assert store.get_quota(_ORG_ID) is None
+    def test_get_and_list_overrides(self, store: _Store):
+        assert store.get_quota_overrides(_ORG_ID) == {}
         with Session(store._engine) as session:
-            session.add(Quota(org_id=_ORG_ID, max_sources=3))
+            session.add(Quota(org_id=_ORG_ID, key="max_sources", limit=3))
+            session.add(Quota(org_id=_ORG_ID, key="max_assets_per_source", limit=None))  # cleared/anchor row
             session.commit()
-        quota = store.get_quota(_ORG_ID)
-        assert quota is not None and quota.max_sources == 3
-        assert [q.org_id for q in store.list_quotas()] == [_ORG_ID]
+        assert store.get_quota_overrides(_ORG_ID) == {"max_sources": 3}
+        assert store.list_quota_overrides() == {_ORG_ID: {"max_sources": 3}}
 
     def test_list_usage_filters(self, store: _Store):
         other_org = uuid4()
@@ -237,7 +237,7 @@ class TestRunCreationGate:
     def test_org_override_wins_over_default(self, store: _Store):
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         with Session(store._engine) as session:
-            session.add(Quota(org_id=_ORG_ID, max_successful_runs_per_month=3))
+            session.add(Quota(org_id=_ORG_ID, key="max_successful_runs_per_month", limit=3))
             session.commit()
         self._exhaust(store, used=2)
         assert store.create_run(_ORG_ID).status == "queued"
@@ -329,16 +329,15 @@ class TestReconcileUsage:
 
 class TestSetQuota:
     def test_creates_then_partially_updates(self, store: _Store):
-        quota = store.set_quota(_ORG_ID, {"max_sources": 5})
-        assert (quota.max_sources, quota.max_successful_runs_per_month) == (5, None)
-
-        quota = store.set_quota(_ORG_ID, {"max_successful_runs_per_month": 100})
-        assert (quota.max_sources, quota.max_successful_runs_per_month) == (5, 100)
+        assert store.set_quota(_ORG_ID, {"max_sources": 5}) == {"max_sources": 5}
+        assert store.set_quota(_ORG_ID, {"max_successful_runs_per_month": 100}) == {
+            "max_sources": 5,
+            "max_successful_runs_per_month": 100,
+        }
 
     def test_none_clears_an_override(self, store: _Store):
         store.set_quota(_ORG_ID, {"max_sources": 5})
-        quota = store.set_quota(_ORG_ID, {"max_sources": None})
-        assert quota.max_sources is None
+        assert store.set_quota(_ORG_ID, {"max_sources": None}) == {}
 
     def test_rejects_unknown_and_negative(self, store: _Store):
         with pytest.raises(ValueError, match="Unknown quota limit"):
