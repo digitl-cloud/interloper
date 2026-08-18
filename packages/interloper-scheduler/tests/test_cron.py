@@ -114,7 +114,7 @@ class TestScheduling:
         now = dt.datetime.now(dt.timezone.utc)
         job_id = _job(
             store,
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "backfill_days": 3},
+            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 3},
             state={"next_run_at": now.isoformat()},
         )
         CronController(store=store)._tick()
@@ -123,11 +123,71 @@ class TestScheduling:
             backfill = session.exec(select(Backfill)).one()
         assert backfill.component_id == job_id
         assert backfill.partitions == 3
+        # offset defaults to 1: the window ends on the last complete partition.
         assert backfill.end_date == now.date() - dt.timedelta(days=1)
         assert backfill.start_date == backfill.end_date - dt.timedelta(days=2)
         runs = _runs(store)
         assert len(runs) == 3
         assert all(run.status == "queued" and run.backfill_id == backfill.id for run in runs)
+
+    def test_offset_shifts_the_window_back(self, store: Store) -> None:
+        now = dt.datetime.now(dt.timezone.utc)
+        _job(
+            store,
+            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 2, "offset": 3},
+            state={"next_run_at": now.isoformat()},
+        )
+        CronController(store=store)._tick()
+
+        with Session(store.engine) as session:
+            backfill = session.exec(select(Backfill)).one()
+        assert backfill.end_date == now.date() - dt.timedelta(days=3)
+        assert backfill.start_date == now.date() - dt.timedelta(days=4)
+        assert backfill.partitions == 2
+        assert {run.partition_date for run in _runs(store)} == {backfill.start_date, backfill.end_date}
+
+    def test_zero_offset_covers_the_current_partition(self, store: Store) -> None:
+        now = dt.datetime.now(dt.timezone.utc)
+        _job(
+            store,
+            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 1, "offset": 0},
+            state={"next_run_at": now.isoformat()},
+        )
+        CronController(store=store)._tick()
+
+        with Session(store.engine) as session:
+            backfill = session.exec(select(Backfill)).one()
+        assert backfill.start_date == backfill.end_date == now.date()
+
+    def test_legacy_backfill_days_config_still_schedules(self, store: Store) -> None:
+        # A row the migration has not rewritten yet: it must schedule exactly
+        # as it did before the rename, not degrade to an unpartitioned run.
+        now = dt.datetime.now(dt.timezone.utc)
+        _job(
+            store,
+            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "backfill_days": 3},
+            state={"next_run_at": now.isoformat()},
+        )
+        CronController(store=store)._tick()
+
+        with Session(store.engine) as session:
+            backfill = session.exec(select(Backfill)).one()
+        assert backfill.partitions == 3
+        assert backfill.end_date == now.date() - dt.timedelta(days=1)
+        assert len(_runs(store)) == 3
+
+    def test_partitioned_job_without_lookback_creates_one_plain_run(self, store: Store) -> None:
+        now = dt.datetime.now(dt.timezone.utc)
+        _job(
+            store,
+            config={"cron": "0 * * * *", "enabled": True, "partitioned": True},
+            state={"next_run_at": now.isoformat()},
+        )
+        CronController(store=store)._tick()
+
+        runs = _runs(store)
+        assert len(runs) == 1
+        assert runs[0].partition_date is None
 
 
 class TestConfig:

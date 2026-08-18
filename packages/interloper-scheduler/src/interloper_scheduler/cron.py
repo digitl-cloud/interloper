@@ -14,13 +14,18 @@ correct chronological comparison — no JSON-to-timestamp casting needed.
 
 from __future__ import annotations
 
-import datetime as dt
 import logging
 from datetime import datetime, timezone
-from typing import cast
+from typing import Any, cast
 
 from croniter import croniter
 from interloper.errors import ConfigError
+from interloper.partitioning.time import (
+    TimeGranularity,
+    TimePartitionWindow,
+    lookback_window,
+    period_range,
+)
 from interloper_db import Store, stamp_component_state
 from interloper_db.models import Backfill, Component, Run
 from sqlalchemy import or_
@@ -138,35 +143,32 @@ class CronController(Controller):
                 # Store.create_backfill: it must commit atomically with the
                 # job's state advance (else a crash between the two would
                 # re-create it next tick), and cron top-ups queue every
-                # partition immediately instead of concurrency-gating.
-                if config.get("partitioned") and config.get("backfill_days"):
-                    end_date = now.date() - dt.timedelta(days=1)
-                    start_date = end_date - dt.timedelta(days=config["backfill_days"] - 1)
+                # partition immediately instead of concurrency-gating. Because
+                # every run is queued at once, the queue worker's FIFO claim
+                # order (runs.created_at) decides execution order here.
+                window = self._backfill_window(config, now)
+                if window is not None:
                     backfill = Backfill(
                         org_id=job.org_id,
                         component_id=job.id,
-                        start_date=start_date,
-                        end_date=end_date,
+                        start_date=window.start,
+                        end_date=window.end,
                         status="running",
                         started_at=now,
                     )
                     session.add(backfill)
                     session.flush()
 
-                    count = 0
-                    current = start_date
-                    while current <= end_date:
+                    for partition_date in period_range(window.start, window.end, window.granularity):
                         run = Run(
                             component_id=job.id,
                             org_id=job.org_id,
                             backfill_id=backfill.id,
                             status="queued",
-                            partition_date=current,
+                            partition_date=partition_date,
                         )
                         session.add(run)
-                        count += 1
-                        current += dt.timedelta(days=1)
-                    backfill.partitions = count
+                    backfill.partitions = window.partition_count()
                     session.add(backfill)
                 else:
                     run = Run(
@@ -178,6 +180,38 @@ class CronController(Controller):
 
             session.commit()
             logger.info("Processed %d job(s)", len(jobs))
+
+    @staticmethod
+    def _backfill_window(config: dict[str, Any], now: datetime) -> TimePartitionWindow | None:
+        """Resolve the trailing window a partitioned job covers this tick.
+
+        The granularity is pinned to ``DAY``: it belongs to the target assets,
+        not to the job's config (which would be a third denormalized value able
+        to drift from the catalog), and daily is the only granularity an asset
+        may declare today. Resolving it from the targets is what changes here
+        when that stops being true.
+
+        Returns:
+            The window, or ``None`` for an unpartitioned job (or one whose
+            lookback is unset).
+        """
+        if not config.get("partitioned"):
+            return None
+        # Pre-0.60 rows carry `backfill_days`, always with an implicit offset
+        # of 1. Read here as well as in `CronJob.__init__` because this is the
+        # other reader of a raw config: without it, a job whose row the
+        # migration has not rewritten yet would fall through to a single
+        # unpartitioned run, which then fails preflight against a partitioned
+        # target. Removed with the constructor shim.
+        lookback = config.get("lookback", config.get("backfill_days"))
+        if not lookback:
+            return None
+        return lookback_window(
+            now,
+            lookback=lookback,
+            offset=config.get("offset", 1),
+            granularity=TimeGranularity.DAY,
+        )
 
     @staticmethod
     def _state_datetime(job: Component, key: str) -> datetime | None:

@@ -107,8 +107,14 @@ export function jobPartitioned(c: ComponentRecord): boolean {
     return c.config?.partitioned ?? false
 }
 
-export function jobBackfillDays(c: ComponentRecord): number | null {
-    return c.config?.backfill_days ?? null
+/** How many partitions each run of a partitioned job covers. */
+export function jobLookback(c: ComponentRecord): number | null {
+    return c.config?.lookback ?? null
+}
+
+/** How many partitions back from the current one a job's window ends. */
+export function jobOffset(c: ComponentRecord): number {
+    return c.config?.offset ?? 1
 }
 
 export function jobNextRunAt(c: ComponentRecord): string | null {

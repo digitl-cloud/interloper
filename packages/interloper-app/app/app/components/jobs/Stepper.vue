@@ -3,14 +3,14 @@
  * Two-step form for creating and editing jobs.
  *
  * Step 1: Source selection (standalone mode only)
- * Step 2: Job details (name, cron, tags, enabled, backfill_days)
+ * Step 2: Job details (name, cron, tags, enabled, lookback/offset)
  *
  * Container-agnostic: the parent wraps this in a UDrawer, modal, or
  * any other container. Navigation state is exposed via defineExpose.
  */
 import type { StepperItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobBackfillDays, jobCron, jobEnabled, jobTags, jobTargetIds } from '~/types/component'
+import { jobCron, jobEnabled, jobLookback, jobOffset, jobTags, jobTargetIds } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
 import cronstrue from 'cronstrue'
 
@@ -29,7 +29,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     created: []
     updated: []
-    collected: [config: { name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; backfillDays: number | null }]
+    collected: [config: { name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; lookback: number | null; offset: number }]
 }>()
 
 const componentsStore = useComponentsStore()
@@ -43,13 +43,30 @@ const name = ref('')
 const cron = ref('')
 const tags = ref<string[]>([])
 const enabled = ref(true)
-const backfillDays = ref<number | null>(null)
+const lookback = ref<number | null>(null)
+const offset = ref<number>(1)
 const selectedSourceIds = ref<string[]>([])
 /** Asset targets carried through unchanged — the stepper only edits source targets. */
 const selectedAssetIds = ref<string[]>([])
 const submitting = ref(false)
 
 const isEditing = computed(() => !!props.job)
+
+/**
+ * The dates a run today would cover, mirroring `lookback_window` on the
+ * backend: `offset` partitions back from today, spanning `lookback` of them.
+ * Daily is the only granularity an asset can declare, so days are safe here.
+ */
+const windowPreview = computed(() => {
+    const span = lookback.value ?? 0
+    if (span < 1 || offset.value < 0) return null
+    const end = new Date()
+    end.setUTCDate(end.getUTCDate() - offset.value)
+    const start = new Date(end)
+    start.setUTCDate(start.getUTCDate() - (span - 1))
+    const iso = (d: Date) => d.toISOString().slice(0, 10)
+    return span === 1 ? iso(end) : `${iso(start)} to ${iso(end)}`
+})
 
 // ── Data fetching ────────────────────────────────────────────────
 
@@ -60,7 +77,8 @@ onMounted(async () => {
         cron.value = jobCron(props.job)
         tags.value = [...jobTags(props.job)]
         enabled.value = jobEnabled(props.job)
-        backfillDays.value = jobBackfillDays(props.job)
+        lookback.value = jobLookback(props.job)
+        offset.value = jobOffset(props.job)
         selectedSourceIds.value = jobTargetIds(props.job, 'source')
         selectedAssetIds.value = jobTargetIds(props.job, 'asset')
     }
@@ -157,7 +175,8 @@ async function submit() {
             tags: [...tags.value],
             enabled: enabled.value,
             partitioned: partitioned.value,
-            backfillDays: partitioned.value ? (backfillDays.value ?? null) : null,
+            lookback: partitioned.value ? (lookback.value ?? null) : null,
+            offset: partitioned.value ? offset.value : 1,
         })
         return
     }
@@ -172,7 +191,8 @@ async function submit() {
                 tags: tags.value,
                 enabled: enabled.value,
                 partitioned: partitioned.value,
-                backfill_days: partitioned.value ? (backfillDays.value ?? null) : null,
+                lookback: partitioned.value ? (lookback.value ?? null) : null,
+                offset: partitioned.value ? offset.value : 1,
             },
             relations: {
                 target: targetIds.map(id => ({ dst_id: id })),
@@ -276,7 +296,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                              @click="cron = preset.value" />
                 </div>
 
-                <USeparator label="Backfill" />
+                <USeparator label="Partitions" />
 
                 <template v-if="partitioned">
                     <div class="flex items-center gap-2 text-sm text-muted">
@@ -285,15 +305,32 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                         <span>Partitioned — selected sources contain date-partitioned assets.</span>
                     </div>
 
-                    <UFormField label="Backfill days"
-                                description="Number of days to backfill when a run is missed.">
-                        <UInput v-model.number="backfillDays"
-                                type="number"
-                                :min="1"
-                                :max="365"
-                                placeholder="7"
-                                class="w-full" />
-                    </UFormField>
+                    <div class="grid grid-cols-2 gap-3">
+                        <UFormField label="Lookback"
+                                    description="Partitions covered on every run.">
+                            <UInput v-model.number="lookback"
+                                    type="number"
+                                    :min="1"
+                                    :max="365"
+                                    placeholder="1"
+                                    class="w-full" />
+                        </UFormField>
+
+                        <UFormField label="Offset"
+                                    description="Partitions to stay behind the current one.">
+                            <UInput v-model.number="offset"
+                                    type="number"
+                                    :min="0"
+                                    :max="365"
+                                    placeholder="1"
+                                    class="w-full" />
+                        </UFormField>
+                    </div>
+
+                    <p v-if="windowPreview"
+                       class="text-sm text-muted">
+                        Run today, this covers {{ windowPreview }}.
+                    </p>
                 </template>
 
             </div>

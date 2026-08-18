@@ -9,7 +9,7 @@
  * Container-agnostic: the parent wraps this in a UDrawer, modal, etc.
  */
 import type { ComponentRecord } from '~/types/component'
-import { jobBackfillDays, jobCron, jobEnabled, jobPartitioned, jobTags, jobTargetIds } from '~/types/component'
+import { jobCron, jobEnabled, jobLookback, jobOffset, jobPartitioned, jobTags, jobTargetIds } from '~/types/component'
 import cronstrue from 'cronstrue'
 
 const props = withDefaults(defineProps<{
@@ -20,7 +20,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-    collected: [config: { id?: string; name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; backfillDays: number | null }]
+    collected: [config: { id?: string; name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; lookback: number | null; offset: number }]
 }>()
 
 const componentsStore = useComponentsStore()
@@ -57,11 +57,12 @@ function selectExisting(job: ComponentRecord) {
         tags: [...jobTags(job)],
         enabled: jobEnabled(job),
         partitioned: jobPartitioned(job),
-        backfillDays: jobBackfillDays(job),
+        lookback: jobLookback(job),
+        offset: jobOffset(job),
     })
 }
 
-function handleCreated(config: { name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; backfillDays: number | null }) {
+function handleCreated(config: { name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; lookback: number | null; offset: number }) {
     createDrawerOpen.value = false
     emit('collected', config)
 }

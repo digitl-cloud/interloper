@@ -739,7 +739,8 @@ def create_job(
     cron: str,
     target_source_ids: list[str],
     partitioned: bool = False,
-    backfill_days: int | None = None,
+    lookback: int | None = None,
+    offset: int = 1,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Create a cron job that runs the given sources on a schedule.
@@ -754,7 +755,10 @@ def create_job(
         cron: Standard cron expression (e.g. '0 6 * * *' for daily at 06:00 UTC).
         target_source_ids: UUIDs of the sources the job materializes.
         partitioned: Whether runs are date-partitioned.
-        backfill_days: For partitioned jobs, how many days each run covers.
+        lookback: For partitioned jobs, how many partitions each run covers.
+        offset: For partitioned jobs, how many partitions back from the current
+            one the window ends. 1 (the default) means it ends on the last
+            complete partition, i.e. yesterday for daily targets.
     """
     try:
         org_id = get_org_id(tool_context)
@@ -780,7 +784,8 @@ def create_job(
                     "enabled": True,
                     "tags": [],
                     "partitioned": partitioned,
-                    "backfill_days": backfill_days if partitioned else None,
+                    "lookback": lookback if partitioned else None,
+                    "offset": offset if partitioned else 1,
                 },
                 relations={"target": targets},
             )

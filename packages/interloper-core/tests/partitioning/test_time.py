@@ -12,6 +12,7 @@ from interloper.partitioning.time import (
     TimePartitionWindow,
     coerce_to_date,
     coerce_to_datetime,
+    lookback_window,
     period_range,
 )
 
@@ -262,3 +263,56 @@ class TestTimePartitionWindow:
         window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
         assert str(window) == "2026-01-01:2026-01-03"
         assert repr(window) == "2026-01-01 to 2026-01-03"
+
+
+class TestLookbackWindow:
+    NOW = dt.datetime(2026, 8, 18, 6, 0, tzinfo=dt.timezone.utc)
+
+    def test_defaults_cover_the_last_complete_partition(self) -> None:
+        window = lookback_window(self.NOW, lookback=1)
+        assert window is not None
+        assert (window.start, window.end) == (dt.date(2026, 8, 17), dt.date(2026, 8, 17))
+
+    def test_lookback_spans_partitions_back_from_the_end(self) -> None:
+        window = lookback_window(self.NOW, lookback=7)
+        assert window is not None
+        assert (window.start, window.end) == (dt.date(2026, 8, 11), dt.date(2026, 8, 17))
+        assert window.partition_count() == 7
+
+    def test_zero_offset_includes_the_current_partition(self) -> None:
+        window = lookback_window(self.NOW, lookback=1, offset=0)
+        assert window is not None
+        assert (window.start, window.end) == (dt.date(2026, 8, 18), dt.date(2026, 8, 18))
+
+    def test_offset_shifts_the_whole_window_back(self) -> None:
+        window = lookback_window(self.NOW, lookback=2, offset=3)
+        assert window is not None
+        assert (window.start, window.end) == (dt.date(2026, 8, 14), dt.date(2026, 8, 15))
+
+    def test_start_clamps_the_window(self) -> None:
+        window = lookback_window(self.NOW, lookback=30, start=dt.date(2026, 8, 10))
+        assert window is not None
+        assert (window.start, window.end) == (dt.date(2026, 8, 10), dt.date(2026, 8, 17))
+
+    def test_start_after_the_window_yields_nothing(self) -> None:
+        assert lookback_window(self.NOW, lookback=30, start=dt.date(2027, 1, 1)) is None
+
+    def test_counts_partitions_not_days(self) -> None:
+        window = lookback_window(self.NOW, lookback=3, granularity=TimeGranularity.MONTH)
+        assert window is not None
+        assert (window.start, window.end) == (dt.date(2026, 5, 1), dt.date(2026, 7, 1))
+        assert window.partition_count() == 3
+
+    def test_a_date_is_an_acceptable_reference(self) -> None:
+        window = lookback_window(dt.date(2026, 8, 18), lookback=1)
+        assert window is not None
+        assert window.end == dt.date(2026, 8, 17)
+
+    @pytest.mark.parametrize(("lookback", "offset"), [(0, 1), (-1, 1)])
+    def test_lookback_must_cover_a_partition(self, lookback: int, offset: int) -> None:
+        with pytest.raises(ValueError, match="at least one partition"):
+            lookback_window(self.NOW, lookback=lookback, offset=offset)
+
+    def test_offset_cannot_be_negative(self) -> None:
+        with pytest.raises(ValueError, match="cannot be negative"):
+            lookback_window(self.NOW, lookback=1, offset=-1)
