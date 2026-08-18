@@ -503,8 +503,11 @@ class RunMixin(StoreBase):
     ) -> Backfill:
         """Create a backfill with one run per partition from start to end (inclusive).
 
-        The first ``concurrency`` runs are queued immediately; the rest
-        are set to ``"pending"`` until earlier runs complete.
+        Runs are dispatched **newest partition first**: the latest
+        ``concurrency`` of them are queued immediately and the rest are
+        ``"pending"`` until earlier runs complete. The freshest data lands
+        first, and an interrupted backfill keeps the recent window rather than
+        the ancient tail.
 
         Args:
             org_id: Organisation UUID.
@@ -541,19 +544,21 @@ class RunMixin(StoreBase):
             session.add(db_backfill)
             session.flush()
 
-            launched = 0
-            for partition_date in period_range(window.start, window.end, window.granularity):
-                run_status = "queued" if launched < concurrency else "pending"
+            # Rows are created oldest-first but the *newest* `concurrency` of
+            # them are the ones queued, so the freshest partitions run first
+            # (`_advance_backfill` promotes in the same order). Creation order
+            # is deliberately left alone: `list_runs` orders by `created_at`
+            # desc, so reversing it would flip the runs list to oldest-first.
+            first_queued = max(0, span - concurrency)
+            for index, partition_date in enumerate(period_range(window.start, window.end, window.granularity)):
                 db_run = Run(
                     org_id=org_id,
                     component_id=component_id,
                     backfill_id=db_backfill.id,
                     partition_date=partition_date,
-                    status=run_status,
+                    status="queued" if index >= first_queued else "pending",
                 )
                 session.add(db_run)
-                if run_status == "queued":
-                    launched += 1
 
             db_backfill.partitions = span
             session.add(db_backfill)
@@ -696,8 +701,11 @@ def _advance_backfill(session: Session, backfill_id: UUID, *, failed: bool) -> N
             )
         ).all()
     )
+    # Newest partition first, matching create_backfill's initial dispatch.
     pending_runs = session.exec(
-        select(Run).where(Run.backfill_id == backfill_id, Run.status == "pending").order_by(Run.partition_date)  # ty: ignore[invalid-argument-type]
+        select(Run)
+        .where(Run.backfill_id == backfill_id, Run.status == "pending")
+        .order_by(col(Run.partition_date).desc())
     ).all()
 
     if in_flight_count == 0 and len(pending_runs) == 0:
