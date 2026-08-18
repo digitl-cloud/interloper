@@ -15,7 +15,7 @@ import pytest
 from interloper.errors import NotFoundError
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Quota, Run, Usage
@@ -72,6 +72,60 @@ def _run_statuses(store: RunMixin, backfill_id: UUID) -> dict[UUID, str]:
     with Session(store._engine) as session:
         runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
         return {run.id: run.status for run in runs if run.id}
+
+
+def _partition_statuses(store: RunMixin, backfill_id: UUID) -> dict[dt.date, str]:
+    with Session(store._engine) as session:
+        runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
+        return {run.partition_date: run.status for run in runs if run.partition_date}
+
+
+class TestCreateBackfill:
+    """Dispatch order: newest partition first (ITLPR-120)."""
+
+    def test_the_newest_partitions_are_queued_first(self, store: RunMixin):
+        backfill = _backfill(store, days=4, concurrency=2)
+
+        assert _partition_statuses(store, backfill.id) == {
+            dt.date(2026, 1, 1): "pending",
+            dt.date(2026, 1, 2): "pending",
+            dt.date(2026, 1, 3): "queued",
+            dt.date(2026, 1, 4): "queued",
+        }
+
+    def test_promotion_walks_backwards(self, store: RunMixin):
+        backfill = _backfill(store, days=4, concurrency=1)
+        assert _partition_statuses(store, backfill.id)[dt.date(2026, 1, 4)] == "queued"
+
+        dispatched = _mark_dispatched(store, backfill.id)
+        store.complete_run(dispatched, success=True)
+
+        statuses = _partition_statuses(store, backfill.id)
+        assert statuses[dt.date(2026, 1, 4)] == "success"
+        assert statuses[dt.date(2026, 1, 3)] == "queued"
+        assert statuses[dt.date(2026, 1, 2)] == "pending"
+
+    def test_concurrency_beyond_the_span_queues_everything(self, store: RunMixin):
+        backfill = _backfill(store, days=2, concurrency=5)
+        assert set(_partition_statuses(store, backfill.id).values()) == {"queued"}
+
+    def test_rows_are_still_created_oldest_first(self, store: RunMixin):
+        # `list_runs` orders by created_at desc, so creation order decides how
+        # the runs list reads: newest partition on top.
+        backfill = _backfill(store, days=3, concurrency=1)
+        with Session(store._engine) as session:
+            runs = session.exec(
+                select(Run).where(Run.backfill_id == backfill.id).order_by(col(Run.created_at))
+            ).all()
+        assert [run.partition_date for run in runs] == [
+            dt.date(2026, 1, 1),
+            dt.date(2026, 1, 2),
+            dt.date(2026, 1, 3),
+        ]
+
+    def test_inverted_range_is_rejected(self, store: RunMixin):
+        with pytest.raises(ValueError, match="ends before it starts"):
+            store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 5), end_date=dt.date(2026, 1, 1))
 
 
 class TestCancelBackfill:

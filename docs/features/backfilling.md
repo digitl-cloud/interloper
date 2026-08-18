@@ -108,6 +108,13 @@ for partition in window:
 
 See [Runners](runners.md) for all execution strategies and their options.
 
+## Dispatch order
+
+Both the framework and the platform work through a range **newest partition first**. Iterating a
+`TimePartitionWindow` yields the most recent partition first, and a platform backfill queues its
+latest partitions first, promoting the next-newest as slots free up. The freshest data lands
+first, and an interrupted backfill keeps the recent window rather than the ancient tail.
+
 ## Scheduled trailing windows
 
 A platform **job** re-materializes a trailing window on every tick. The window is counted in
