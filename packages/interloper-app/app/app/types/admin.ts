@@ -82,7 +82,6 @@ export interface AdminQuotaField {
 export interface AdminQuotas {
     period_start: string
     defaults: AdminQuotaLimits
-    /** One entry per quota, in display order — surfaces render from these. */
     fields: AdminQuotaField[]
     organisations: AdminOrgQuotaStatus[]
 }

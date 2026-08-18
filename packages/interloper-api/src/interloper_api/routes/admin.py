@@ -268,8 +268,6 @@ class AdminQuotasResponse(BaseModel):
 
     period_start: dt.date
     defaults: AdminQuotaLimits
-    #: One entry per quota, in display order — admin surfaces render from
-    #: these instead of hardcoding the quota set.
     fields: list[AdminQuotaField]
     organisations: list[AdminOrgQuotaStatus]
 

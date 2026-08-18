@@ -59,9 +59,7 @@ class QuotaDefinition(abc.ABC):
     """
 
     key: str
-    #: Human label for admin surfaces (served through the quotas API).
     label: str
-    #: ``message(used, limit, subject)`` — the rejection text.
     message: Callable[[int, int, str | None], str]
 
     #: Capacity checks resolve the limit under the ``(org, key)`` row lock;
@@ -101,7 +99,6 @@ class CapacityQuota(QuotaDefinition):
 
     requires_lock: ClassVar[bool] = True
 
-    #: Live usage count; None when every gate supplies ``used`` itself.
     count: Callable[[Session, UUID], int] | None = None
 
     def check(
@@ -151,7 +148,6 @@ class BoundQuota(QuotaDefinition):
 class ConsumptionQuota(QuotaDefinition):
     """Limits what accumulates per period, charged under ``metric`` in the ledger."""
 
-    #: Ledger metric this quota's usage is charged under.
     metric: str = ""
 
     def __post_init__(self) -> None:
