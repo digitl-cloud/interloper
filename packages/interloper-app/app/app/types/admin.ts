@@ -72,9 +72,18 @@ export interface AdminOrgQuotaStatus {
     recomputed_successful_runs: number
 }
 
+/** One quota's display descriptor: key, registry label, instance default. */
+export interface AdminQuotaField {
+    key: keyof AdminQuotaLimits
+    label: string
+    default: number | null
+}
+
 export interface AdminQuotas {
     period_start: string
     defaults: AdminQuotaLimits
+    /** One entry per quota, in display order — surfaces render from these. */
+    fields: AdminQuotaField[]
     organisations: AdminOrgQuotaStatus[]
 }
 

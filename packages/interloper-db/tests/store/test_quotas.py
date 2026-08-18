@@ -19,9 +19,13 @@ from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Quota, Run, Usage
 from interloper_db.store.quotas import (
     METRIC_SUCCESSFUL_RUNS,
+    QUOTA_MAX_ASSETS_PER_SOURCE,
+    QUOTA_MAX_BACKFILL_DAYS,
     QUOTAS,
+    BoundQuota,
     CapacityQuota,
     ConsumptionQuota,
+    QuotaDefinition,
     QuotaMixin,
     increment_usage,
     month_start,
@@ -376,3 +380,26 @@ class TestRegistry:
         with Session(store._engine) as session:
             with pytest.raises(KeyError, match="not registered"):
                 store.quotas.effective(session, _ORG_ID, "max_bananas")
+
+    def test_definition_is_abstract(self):
+        """The base class cannot be instantiated — subclasses must implement check()."""
+        with pytest.raises(TypeError, match="abstract"):
+            QuotaDefinition(key="max_bananas", label="Max bananas", message=lambda used, limit, subject: "")
+
+    def test_definitions_require_key_and_label(self):
+        with pytest.raises(ValueError, match="key and a label"):
+            BoundQuota(key="max_bananas", label="", message=lambda used, limit, subject: "")
+
+    def test_consumption_quota_requires_a_metric(self):
+        with pytest.raises(ValueError, match="ledger metric"):
+            ConsumptionQuota(key="max_bananas", label="Max bananas", message=lambda used, limit, subject: "")
+
+    def test_bound_quota_rejects_a_declarative_check_without_used(self):
+        definition = QUOTAS[QUOTA_MAX_BACKFILL_DAYS]
+        with pytest.raises(ValueError, match="pass used="):
+            definition.check(None, _ORG_ID, 5)  # ty: ignore[invalid-argument-type]
+
+    def test_counterless_capacity_quota_rejects_a_measured_check(self):
+        definition = QUOTAS[QUOTA_MAX_ASSETS_PER_SOURCE]
+        with pytest.raises(ValueError, match="no usage counter"):
+            definition.check(None, _ORG_ID, 5)  # ty: ignore[invalid-argument-type]

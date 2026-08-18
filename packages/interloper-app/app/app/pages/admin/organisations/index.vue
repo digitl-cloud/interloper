@@ -49,14 +49,10 @@ const periodLabel = computed(() => {
     return new Date(quotas.value.period_start).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
 })
 
-const defaultChips = computed(() => {
-    const defaults = quotas.value?.defaults
-    if (!defaults) return []
-    return Object.entries(defaults).map(([key, value]) => ({
-        key,
-        value: value != null ? value.toLocaleString() : 'unlimited',
-    }))
-})
+const defaultChips = computed(() => (quotas.value?.fields ?? []).map(field => ({
+    key: field.key,
+    value: field.default != null ? field.default.toLocaleString() : 'unlimited',
+})))
 
 /** The quota closest to its ceiling — what the usage column reports. */
 function peakQuota(usage: AdminOrgQuotaStatus) {

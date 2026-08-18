@@ -1,10 +1,12 @@
 <script setup lang="ts">
 /**
  * Right drawer for editing an organisation's quota overrides.
- * String-typed fields so an emptied input means "inherit the instance
- * default"; each field hints whether it inherits or overrides.
+ * The quota set comes from the API's field descriptors (key + label +
+ * instance default), so a new quota needs no change here. String-typed
+ * fields so an emptied input means "inherit the instance default"; each
+ * field hints whether it inherits or overrides.
  */
-import type { AdminQuotaLimits } from '~/types/admin'
+import type { AdminQuotaField, AdminQuotaLimits } from '~/types/admin'
 
 const open = defineModel<boolean>('open', { required: true })
 
@@ -13,8 +15,8 @@ const props = defineProps<{
     orgName: string
     /** The org's current overrides (nulls where inherited). */
     limits: AdminQuotaLimits | null
-    /** The instance defaults the empty fields fall back to. */
-    defaults: AdminQuotaLimits | null
+    /** The quotas to edit, with the defaults the empty fields fall back to. */
+    fields: AdminQuotaField[]
 }>()
 
 const emit = defineEmits<{ saved: [] }>()
@@ -22,57 +24,32 @@ const emit = defineEmits<{ saved: [] }>()
 const adminStore = useAdminStore()
 const toast = useToast()
 
-const LIMIT_FIELDS = [
-    { key: 'max_sources', label: 'Max sources' },
-    { key: 'max_assets_per_source', label: 'Max assets per source' },
-    { key: 'max_successful_runs_per_month', label: 'Max successful runs / month' },
-    { key: 'max_backfill_days', label: 'Max backfill days' },
-] as const
-
-type LimitKey = typeof LIMIT_FIELDS[number]['key']
-
-const form = ref<Record<LimitKey, string>>({
-    max_sources: '',
-    max_assets_per_source: '',
-    max_successful_runs_per_month: '',
-    max_backfill_days: '',
-})
+const form = ref<Record<string, string>>({})
 const saving = ref(false)
 
 watch(open, (opened) => {
     if (!opened) return
-    form.value = {
-        max_sources: props.limits?.max_sources?.toString() ?? '',
-        max_assets_per_source: props.limits?.max_assets_per_source?.toString() ?? '',
-        max_successful_runs_per_month: props.limits?.max_successful_runs_per_month?.toString() ?? '',
-        max_backfill_days: props.limits?.max_backfill_days?.toString() ?? '',
-    }
+    form.value = Object.fromEntries(
+        props.fields.map(field => [field.key, props.limits?.[field.key]?.toString() ?? '']),
+    )
 })
 
-function defaultLabel(key: LimitKey): string {
-    const value = props.defaults?.[key]
-    return value != null ? value.toLocaleString() : 'unlimited'
+function defaultLabel(field: AdminQuotaField): string {
+    return field.default != null ? field.default.toLocaleString() : 'unlimited'
 }
 
-function hint(key: LimitKey): string {
-    return form.value[key] === ''
-        ? `Inheriting ${defaultLabel(key)}`
-        : `Overrides the instance default of ${defaultLabel(key)}`
+function hint(field: AdminQuotaField): string {
+    return form.value[field.key] === ''
+        ? `Inheriting ${defaultLabel(field)}`
+        : `Overrides the instance default of ${defaultLabel(field)}`
 }
 
 async function submit() {
     saving.value = true
     try {
-        await adminStore.updateOrgQuota(props.orgId, {
-            max_sources: form.value.max_sources === '' ? null : Number(form.value.max_sources),
-            max_assets_per_source: form.value.max_assets_per_source === ''
-                ? null
-                : Number(form.value.max_assets_per_source),
-            max_successful_runs_per_month: form.value.max_successful_runs_per_month === ''
-                ? null
-                : Number(form.value.max_successful_runs_per_month),
-            max_backfill_days: form.value.max_backfill_days === '' ? null : Number(form.value.max_backfill_days),
-        })
+        await adminStore.updateOrgQuota(props.orgId, Object.fromEntries(
+            props.fields.map(field => [field.key, form.value[field.key] === '' ? null : Number(form.value[field.key])]),
+        ))
         toast.add({ title: `Quota limits updated for ${props.orgName}`, color: 'success' })
         open.value = false
         emit('saved')
@@ -106,17 +83,17 @@ async function submit() {
                 Leave a field empty to inherit the instance default.
             </p>
             <div class="flex flex-col gap-4">
-                <div v-for="field in LIMIT_FIELDS"
+                <div v-for="field in fields"
                      :key="field.key"
                      class="flex flex-col gap-1.5">
                     <label class="text-[13px] font-semibold">{{ field.label }}</label>
                     <UInput v-model="form[field.key]"
                             type="number"
                             min="0"
-                            :placeholder="`Instance default (${defaultLabel(field.key)})`"
+                            :placeholder="`Instance default (${defaultLabel(field)})`"
                             class="w-full font-mono"
                             @keydown.enter="submit" />
-                    <span class="text-xs text-dimmed">{{ hint(field.key) }}</span>
+                    <span class="text-xs text-dimmed">{{ hint(field) }}</span>
                 </div>
             </div>
         </template>

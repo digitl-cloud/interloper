@@ -20,6 +20,7 @@ limits.
 
 from __future__ import annotations
 
+import abc
 import datetime as dt
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -47,8 +48,8 @@ QUOTA_MAX_BACKFILL_DAYS = "max_backfill_days"
 
 
 @dataclass(frozen=True)
-class QuotaDefinition:
-    """One per-organisation quota: its key and its check semantics.
+class QuotaDefinition(abc.ABC):
+    """One per-organisation quota: its key, label, and check semantics.
 
     Subclasses own how usage is measured and compared; the
     :class:`QuotaService` only resolves the effective limit and delegates.
@@ -58,11 +59,21 @@ class QuotaDefinition:
     """
 
     key: str
+    #: Human label for admin surfaces (served through the quotas API).
+    label: str
+    #: ``message(used, limit, subject)`` — the rejection text.
+    message: Callable[[int, int, str | None], str]
+
     #: Capacity checks resolve the limit under the ``(org, key)`` row lock;
     #: the consumption advisory check does not (its authoritative gate is
     #: the atomic ledger reservation).
     requires_lock: ClassVar[bool] = False
 
+    def __post_init__(self) -> None:
+        if not self.key or not self.label:
+            raise ValueError("A quota definition needs a key and a label")
+
+    @abc.abstractmethod
     def check(
         self,
         session: Session,
@@ -73,13 +84,9 @@ class QuotaDefinition:
         subject: str | None = None,
     ) -> None:
         """Raise :class:`QuotaExceededError` when the limit rejects the operation."""
-        raise NotImplementedError
 
     def _reject(self, used: int, limit: int, subject: str | None) -> None:
         raise QuotaExceededError(self.message(used, limit, subject), quota=self.key, limit=limit, used=used)
-
-    #: ``message(used, limit, subject)`` — the rejection text.
-    message: Callable[[int, int, str | None], str] = lambda used, limit, subject: ""
 
 
 @dataclass(frozen=True)
@@ -107,7 +114,8 @@ class CapacityQuota(QuotaDefinition):
         subject: str | None = None,
     ) -> None:
         if used is None:
-            assert self.count is not None  # capacity quota registered with its counter
+            if self.count is None:
+                raise ValueError(f"Quota '{self.key}' has no usage counter; pass used= to check it declaratively")
             current = self.count(session, org_id)
             if current >= limit:
                 self._reject(current, limit, subject)
@@ -133,7 +141,8 @@ class BoundQuota(QuotaDefinition):
         used: int | None = None,
         subject: str | None = None,
     ) -> None:
-        assert used is not None  # bound quotas are always checked declaratively
+        if used is None:
+            raise ValueError(f"Quota '{self.key}' bounds a single operation; pass used= with its size")
         if used > limit:
             self._reject(used, limit, subject)
 
@@ -144,6 +153,11 @@ class ConsumptionQuota(QuotaDefinition):
 
     #: Ledger metric this quota's usage is charged under.
     metric: str = ""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not self.metric:
+            raise ValueError(f"Consumption quota '{self.key}' needs the ledger metric it charges under")
 
     def committed(self, session: Session, org_id: UUID) -> int:
         """The org's committed usage this period: ledger ``used + reserved``."""
@@ -381,7 +395,8 @@ class QuotaService:
         Limit None means unlimited (and the ledger is not read at all).
         """
         definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
-        assert isinstance(definition, ConsumptionQuota)
+        if not isinstance(definition, ConsumptionQuota):
+            raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
         limit = self.effective(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
         if limit is None:
             return 0, None
@@ -398,7 +413,8 @@ class QuotaService:
             True if the run may dispatch, False when the quota is exhausted.
         """
         definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
-        assert isinstance(definition, ConsumptionQuota)
+        if not isinstance(definition, ConsumptionQuota):
+            raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
         limit = self.effective(session, db_run.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
         if limit is None:
             return True
@@ -414,6 +430,7 @@ QUOTAS.register(
     QUOTA_MAX_SOURCES,
     CapacityQuota(
         key=QUOTA_MAX_SOURCES,
+        label="Max sources",
         count=_count_sources,
         message=lambda used, limit, _subject: f"Organisation is at its source limit ({used}/{limit})",
     ),
@@ -422,6 +439,7 @@ QUOTAS.register(
     QUOTA_MAX_ASSETS_PER_SOURCE,
     CapacityQuota(
         key=QUOTA_MAX_ASSETS_PER_SOURCE,
+        label="Max assets per source",
         message=lambda used, limit, subject: (
             f"Source '{subject}' would have {used} assets, exceeding the limit of {limit}"
         ),
@@ -431,6 +449,7 @@ QUOTAS.register(
     QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
     ConsumptionQuota(
         key=QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
+        label="Max successful runs / month",
         metric=METRIC_SUCCESSFUL_RUNS,
         message=lambda used, limit, subject: (
             f"Cannot queue {subject or 'run'}: the monthly successful-run quota is exhausted ({used}/{limit})"
@@ -441,6 +460,7 @@ QUOTAS.register(
     QUOTA_MAX_BACKFILL_DAYS,
     BoundQuota(
         key=QUOTA_MAX_BACKFILL_DAYS,
+        label="Max backfill days",
         message=lambda used, limit, _subject: f"Backfill spans {used} days, exceeding the limit of {limit}",
     ),
 )
