@@ -18,7 +18,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from interloper_db import Organisation, Profile, Store
-from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS
+from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import get_admin_config, get_quota_defaults, get_store, require_super_admin
@@ -255,11 +255,22 @@ class AdminOrgQuotaStatus(BaseModel):
     recomputed_successful_runs: int
 
 
+class AdminQuotaField(BaseModel):
+    """One quota's display descriptor: key, registry label, instance default."""
+
+    key: str
+    label: str
+    default: int | None = None
+
+
 class AdminQuotasResponse(BaseModel):
     """Quota overview: global defaults plus per-organisation status."""
 
     period_start: dt.date
     defaults: AdminQuotaLimits
+    #: One entry per quota, in display order — admin surfaces render from
+    #: these instead of hardcoding the quota set.
+    fields: list[AdminQuotaField]
     organisations: list[AdminOrgQuotaStatus]
 
 
@@ -470,29 +481,29 @@ def _quota_limits(limits: Any) -> AdminQuotaLimits:
     """Map limits from a ``{key: limit}`` dict (store) or attributes (settings)."""
     if isinstance(limits, dict):
         return AdminQuotaLimits(**{key: limits.get(key) for key in AdminQuotaLimits.model_fields})
-    return AdminQuotaLimits(
-        max_sources=getattr(limits, "max_sources", None),
-        max_assets_per_source=getattr(limits, "max_assets_per_source", None),
-        max_successful_runs_per_month=getattr(limits, "max_successful_runs_per_month", None),
-        max_backfill_days=getattr(limits, "max_backfill_days", None),
-    )
+    return AdminQuotaLimits(**{key: getattr(limits, key, None) for key in AdminQuotaLimits.model_fields})
 
 
 def _effective_limits(overrides: AdminQuotaLimits, defaults: AdminQuotaLimits) -> AdminQuotaLimits:
     """Per-org overrides win field-by-field over the global defaults."""
     return AdminQuotaLimits(
-        max_sources=overrides.max_sources if overrides.max_sources is not None else defaults.max_sources,
-        max_assets_per_source=(
-            overrides.max_assets_per_source
-            if overrides.max_assets_per_source is not None
-            else defaults.max_assets_per_source
-        ),
-        max_successful_runs_per_month=(
-            overrides.max_successful_runs_per_month
-            if overrides.max_successful_runs_per_month is not None
-            else defaults.max_successful_runs_per_month
-        ),
+        **{
+            key: override if (override := getattr(overrides, key)) is not None else getattr(defaults, key)
+            for key in AdminQuotaLimits.model_fields
+        }
     )
+
+
+def _quota_fields(defaults: AdminQuotaLimits) -> list[AdminQuotaField]:
+    """Field descriptors for admin quota surfaces, in the wire model's order.
+
+    Labels come from the registry definitions, so the frontend renders new
+    quotas without a matching code change.
+    """
+    return [
+        AdminQuotaField(key=key, label=QUOTAS[key].label, default=getattr(defaults, key))
+        for key in AdminQuotaLimits.model_fields
+    ]
 
 
 def _require_org(store: Store, org_id: UUID) -> Organisation:
@@ -595,7 +606,12 @@ def get_quotas(
                 recomputed_successful_runs=recomputed.get(org.id, 0),
             )
         )
-    return AdminQuotasResponse(period_start=period_start, defaults=defaults, organisations=organisations)
+    return AdminQuotasResponse(
+        period_start=period_start,
+        defaults=defaults,
+        fields=_quota_fields(defaults),
+        organisations=organisations,
+    )
 
 
 def _activity_title(entry: dict[str, Any]) -> tuple[str, str | None]:

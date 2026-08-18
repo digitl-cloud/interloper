@@ -41,7 +41,7 @@ export const useAdminStore = defineStore('admin', () => {
     }
 
     /** Set an org's quota overrides; null clears a field (falls back to the default). */
-    function updateOrgQuota(orgId: string, limits: AdminQuotaLimits) {
+    function updateOrgQuota(orgId: string, limits: Partial<AdminQuotaLimits>) {
         return apiFetch<AdminQuotaLimits>(`/admin/organisations/${orgId}/quota`, {
             method: 'PATCH',
             body: limits,

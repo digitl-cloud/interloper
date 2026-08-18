@@ -180,27 +180,19 @@ const usageTiles = computed(() => {
     ]
 })
 
-const LIMIT_FIELDS = [
-    { key: 'max_sources', label: 'Max sources' },
-    { key: 'max_assets_per_source', label: 'Max assets per source' },
-    { key: 'max_successful_runs_per_month', label: 'Max successful runs / month' },
-    { key: 'max_backfill_days', label: 'Max backfill days' },
-] as const
-
 const limitRows = computed(() => {
     const row = quotaRow.value
-    const defaults = quotas.value?.defaults
-    if (!row || !defaults) return []
-    return LIMIT_FIELDS.map(({ key, label }) => {
-        const override = row.limits[key]
-        const effective = row.effective[key]
+    if (!row) return []
+    return (quotas.value?.fields ?? []).map((field) => {
+        const override = row.limits[field.key]
+        const effective = row.effective[field.key]
         return {
-            key,
-            label,
+            key: field.key,
+            label: field.label,
             value: effective != null ? effective.toLocaleString() : 'Unlimited',
             overridden: override != null,
             note: override != null
-                ? `Instance default is ${defaults[key] != null ? defaults[key]!.toLocaleString() : 'unlimited'}`
+                ? `Instance default is ${field.default != null ? field.default.toLocaleString() : 'unlimited'}`
                 : 'Follows the instance default',
         }
     })
@@ -493,7 +485,7 @@ watch(orgId, loadData)
                           :org-id="orgId"
                           :org-name="org?.name ?? ''"
                           :limits="quotaRow?.limits ?? null"
-                          :defaults="quotas?.defaults ?? null"
+                          :fields="quotas?.fields ?? []"
                           @saved="reloadQuotas" />
     </div>
 </template>

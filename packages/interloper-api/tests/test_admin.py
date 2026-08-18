@@ -275,6 +275,12 @@ def test_super_admin_reads_quota_overview(store: FakeStore) -> None:
     assert body["period_start"] == "2026-08-01"
     assert body["defaults"]["max_successful_runs_per_month"] == 100
 
+    # Field descriptors drive the admin UI: wire-model order, registry labels.
+    assert [field["key"] for field in body["fields"]] == list(admin_module.AdminQuotaLimits.model_fields)
+    by_key = {field["key"]: field for field in body["fields"]}
+    assert by_key["max_sources"] == {"key": "max_sources", "label": "Max sources", "default": 10}
+    assert by_key["max_backfill_days"]["default"] is None
+
     (org,) = body["organisations"]
     assert org["limits"]["max_sources"] == 5
     # Overrides win field-by-field; unset fields fall back to the defaults.
