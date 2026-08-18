@@ -1,13 +1,13 @@
 # Backfilling
 
 Backfilling means processing a range of partitions. In Interloper there is **no separate
-backfiller object** — you simply run a DAG over a `TimePartitionWindow`, and the runner iterates
-the window for you.
+backfiller object**: a range of partitions is just a `TimePartitionWindow`, and you either hand
+it to an asset that can fetch the whole range at once, or iterate it one partition at a time.
 
-## Running a backfill
+## Iterating a window
 
-Pass a window to any runner's `run()` (or to `dag.materialize()`). The runner walks the window
-**from most recent to oldest**, running the DAG once per partition:
+A `TimePartitionWindow` is iterable, yielding a `TimePartition` per period **from most recent to
+oldest**. Running the DAG once per partition is an explicit loop:
 
 ```py
 import datetime as dt
@@ -30,22 +30,31 @@ window = il.TimePartitionWindow(
     end=dt.date(2025, 1, 7),
 )
 
-result = il.run(il.AsyncRunner(max_workers=4).run(dag, window))
-print(result.status)
+for partition in window:          # newest first
+    dag.materialize(partition)
 ```
 
-This produces seven runs, one per day.
+That is seven runs, one per day, freshest first.
+
+!!! note
+
+    Passing the *window itself* to a runner is a different thing: it is a single run covering the
+    whole range, and it requires every partitioned asset in the DAG to declare
+    `allow_window=True` (see below). A runner never splits a window into one run per partition;
+    that fan-out is either your own loop, or a **job** on the platform, which creates one queued
+    run per partition and executes them concurrently.
 
 ## Windowed backfill (single run)
 
-When an asset declares `allow_window=True`, the entire window is handed to it as a single run
-instead of being split into one run per date — let the asset fetch the whole range at once:
+When every partitioned asset in the DAG declares `allow_window=True`, the window can be passed
+straight to a runner: the entire range is handed to the asset as a **single run**, so it can
+fetch the whole thing at once.
 
 ```py
 @il.asset(partitioning=il.TimePartitionConfig(column="date", allow_window=True))
 def weekly_data(context: il.ExecutionContext):
-    start, end = context.partition_date_window
-    return fetch_range(start, end)
+    window = context.window
+    return fetch_range(window.start, window.end)
 ```
 
 ## Stopping on failure
@@ -55,7 +64,8 @@ By default the in-process runners stop the current run on the first asset failur
 
 ```py
 runner = il.AsyncRunner(fail_fast=False)
-result = il.run(runner.run(dag, window))
+for partition in window:
+    il.run(runner.run(dag, partition))
 ```
 
 ## Progress monitoring
@@ -68,28 +78,32 @@ def on_event(event: il.Event):
     if event.type is il.EventType.RUN_COMPLETED:
         print(f"Completed: {event.metadata.get('partition_or_window')}")
 
-result = il.run(il.AsyncRunner(on_event=on_event).run(dag, window))
+runner = il.AsyncRunner(on_event=on_event)
+for partition in window:
+    il.run(runner.run(dag, partition))
 ```
 
 See [Events](events.md) for the full event model.
 
 ## Distributed backfilling
 
-For large backfills, use the Docker or Kubernetes runners. They use the same window mechanism —
-each asset (with its ancestors) runs in an isolated container or Job:
+For large backfills, use the Docker or Kubernetes runners. They take the same partition scope as
+the in-process ones, and each asset (with its ancestors) runs in an isolated container or Job:
 
 ```py
 from interloper_docker.runner import DockerRunner
 
 runner = DockerRunner(image="interloper:latest-worker", max_containers=4)
-il.run(runner.run(dag, window))
+for partition in window:
+    il.run(runner.run(dag, partition))
 ```
 
 ```py
 from interloper_k8s.runner import KubernetesRunner
 
 runner = KubernetesRunner(image="my-repo/interloper:latest", namespace="data", max_jobs=4)
-il.run(runner.run(dag, window))
+for partition in window:
+    il.run(runner.run(dag, partition))
 ```
 
 See [Runners](runners.md) for all execution strategies and their options.

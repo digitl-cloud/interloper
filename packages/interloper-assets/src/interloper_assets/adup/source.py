@@ -61,6 +61,6 @@ class Adup(il.Source):
     )
     async def ads_stats(self, context: il.ExecutionContext, connection: AdupConnection) -> list[dict[str, Any]]:
         """Ad performance insights with metrics like impressions, clicks, conversions, and cost."""
-        start_date, end_date = context.partition_date_window
-        data = await get_report(connection.client, "AD_PERFORMANCE_REPORT", start_date, end_date)
+        window = context.window
+        data = await get_report(connection.client, "AD_PERFORMANCE_REPORT", window.start, window.end)
         return data["rows"]

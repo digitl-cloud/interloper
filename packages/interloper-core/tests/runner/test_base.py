@@ -12,7 +12,7 @@ import interloper as il
 from interloper.errors import ConfigError, PartitionError
 from interloper.events import Event
 from interloper.normalizer import Normalizer
-from interloper.partitioning.time import TimePartition, TimePartitionConfig
+from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig
 from interloper.runner.async_runner import AsyncRunner
 from interloper.runner.base import RUNNERS
 from interloper.runner.results import ExecutionStatus
@@ -167,6 +167,29 @@ class TestPreflightValidation:
         result = await AsyncRunner().run(dag, TimePartition(dt.date(2026, 1, 1)))
 
         assert result.status is ExecutionStatus.COMPLETED
+
+    async def test_scope_before_the_asset_start_fails_the_run(self):
+        calls: list[str] = []
+
+        @il.asset(partitioning=TimePartitionConfig(column="date", start=dt.date(2026, 1, 10)))
+        def bounded() -> list[dict[str, Any]]:
+            calls.append("bounded")
+            return [{"date": "2026-01-01"}]
+
+        dag = il.DAG(bounded(id="bounded", destinations=[il.MemoryDestination()]))
+        with pytest.raises(PartitionError, match="no data before 2026-01-10"):
+            await AsyncRunner().run(dag, TimePartition(dt.date(2026, 1, 5)))
+
+        assert calls == []
+
+    async def test_mismatched_granularity_fails_the_run(self):
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def daily() -> list[dict[str, Any]]:
+            return [{"date": "2026-01-01"}]
+
+        dag = il.DAG(daily(id="daily", destinations=[il.MemoryDestination()]))
+        with pytest.raises(PartitionError, match="partitioned by day"):
+            await AsyncRunner().run(dag, TimePartition(dt.date(2026, 1, 1), TimeGranularity.MONTH))
 
     def test_non_materializable_partitioned_assets_are_exempt(self):
         # Upstream dependencies are hydrated read-only (materializable=False);

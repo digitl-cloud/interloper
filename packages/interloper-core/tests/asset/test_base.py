@@ -5,6 +5,7 @@
 # classes (not lazily-evaluated strings).
 
 import asyncio
+import datetime as dt
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -17,6 +18,7 @@ from interloper.component.base import Component
 from interloper.errors import AssetError, DestinationError, PartitionError
 from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
+from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
 from interloper.serializable import Spec
 
 # -- Fixtures ------------------------------------------------------------------
@@ -375,6 +377,50 @@ class TestPartitioning:
     def test_window_allowed_passes(self):
         window = FakePartitionWindow(start="a", end="b")
         FakeAssetPartitionedWithWindow()._validate_partitioning(window)
+
+
+class FakeAssetDaily(il.Asset):
+    partitioning = TimePartitionConfig(column="date", allow_window=True)
+
+
+class FakeAssetBounded(il.Asset):
+    partitioning = TimePartitionConfig(column="date", allow_window=True, start=dt.date(2026, 1, 10))
+
+
+class TestTimePartitioning:
+    def test_matching_granularity_passes(self):
+        FakeAssetDaily()._validate_partitioning(TimePartition(dt.date(2026, 1, 1)))
+
+    def test_mismatched_partition_granularity_raises(self):
+        partition = TimePartition(dt.date(2026, 1, 1), TimeGranularity.MONTH)
+        with pytest.raises(PartitionError, match="partitioned by day"):
+            FakeAssetDaily()._validate_partitioning(partition)
+
+    def test_mismatched_window_granularity_raises(self):
+        window = TimePartitionWindow(
+            start=dt.date(2026, 1, 1), end=dt.date(2026, 3, 1), granularity=TimeGranularity.MONTH
+        )
+        with pytest.raises(PartitionError, match="partitioned by day"):
+            FakeAssetDaily()._validate_partitioning(window)
+
+    def test_partition_on_the_start_bound_passes(self):
+        FakeAssetBounded()._validate_partitioning(TimePartition(dt.date(2026, 1, 10)))
+
+    def test_partition_before_the_start_bound_raises(self):
+        with pytest.raises(PartitionError, match="no data before 2026-01-10"):
+            FakeAssetBounded()._validate_partitioning(TimePartition(dt.date(2026, 1, 9)))
+
+    def test_window_reaching_before_the_start_bound_raises(self):
+        window = TimePartitionWindow(start=dt.date(2026, 1, 5), end=dt.date(2026, 1, 20))
+        with pytest.raises(PartitionError, match="no data before 2026-01-10"):
+            FakeAssetBounded()._validate_partitioning(window)
+
+    def test_window_within_the_start_bound_passes(self):
+        window = TimePartitionWindow(start=dt.date(2026, 1, 10), end=dt.date(2026, 1, 20))
+        FakeAssetBounded()._validate_partitioning(window)
+
+    def test_unbounded_asset_accepts_any_partition(self):
+        FakeAssetDaily()._validate_partitioning(TimePartition(dt.date(1999, 1, 1)))
 
 
 # -- __call__ reconfiguration --------------------------------------------------

@@ -129,8 +129,9 @@ info.traceback         # traceback string if failed
 
 ## Partitioned & backfilled runs
 
-Pass a partition or window to the runner. A `TimePartitionWindow` runs the DAG once per date —
-see [Backfilling](backfilling.md):
+Pass a partition to the runner. A `TimePartitionWindow` may be passed instead, but only when
+every partitioned asset declares `allow_window=True`: the window then becomes a single run
+covering the whole range, never one run per date. See [Backfilling](backfilling.md):
 
 ```py
 result = await il.SerialRunner().run(

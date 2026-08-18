@@ -18,7 +18,14 @@ from interloper.destination import Destination, IOContext
 from interloper.errors import AssetError, NormalizerError, PartitionError, format_exception
 from interloper.events import EventBus, EventType
 from interloper.normalizer import MaterializationStrategy, Normalizer
-from interloper.partitioning import Partition, PartitionConfig, PartitionWindow
+from interloper.partitioning import (
+    Partition,
+    PartitionConfig,
+    PartitionWindow,
+    TimePartition,
+    TimePartitionConfig,
+    TimePartitionWindow,
+)
 from interloper.representation import Representation
 from interloper.resource import Resource
 from interloper.resource.fields import SelectField
@@ -852,6 +859,40 @@ class Asset(Component):
             and not self.partitioning.allow_window
         ):
             raise PartitionError(f"Asset '{self.key}' does not support windowed runs (allow_window=False).")
+
+        if isinstance(self.partitioning, TimePartitionConfig):
+            self._validate_time_partitioning(self.partitioning, partition_or_window)
+
+    def _validate_time_partitioning(
+        self,
+        partitioning: TimePartitionConfig,
+        partition_or_window: Partition | PartitionWindow | None,
+    ) -> None:
+        """Validate a scope against the asset's time partitioning.
+
+        Raises:
+            PartitionError: If the scope's granularity disagrees with the
+                asset's, or it reaches before the asset's ``start``.
+        """
+        scope = partition_or_window
+        if (
+            isinstance(scope, (TimePartition, TimePartitionWindow))
+            and scope.granularity is not partitioning.granularity
+        ):
+            raise PartitionError(
+                f"Asset '{self.key}' is partitioned by {partitioning.granularity.value}, "
+                f"but the run was given a {scope.granularity.value} partition."
+            )
+
+        if partitioning.start is None or scope is None:
+            return
+
+        earliest = scope.start if isinstance(scope, PartitionWindow) else scope.value
+        if partitioning.granularity.truncate(earliest) < partitioning.start:
+            raise PartitionError(
+                f"Asset '{self.key}' has no data before {partitioning.start.isoformat()}, "
+                f"but the run reaches back to {partitioning.granularity.truncate(earliest).isoformat()}."
+            )
 
     def _validate_destination(self, dest: Destination) -> None:
         """Validate that a destination is compatible with this asset's destination_types.

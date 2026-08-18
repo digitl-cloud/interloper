@@ -233,8 +233,8 @@ dag.materialize(partition_or_window=il.TimePartition(dt.date.today()))
 
 ## Backfilling
 
-To process a range of dates, pass a `TimePartitionWindow` to a runner. The runner iterates the
-window and runs the DAG once per date:
+To process a range of dates, build a `TimePartitionWindow` and iterate it. It yields one
+partition per period, newest first:
 
 ```py
 import datetime as dt
@@ -243,11 +243,13 @@ window = il.TimePartitionWindow(
     start=dt.date(2025, 1, 1),
     end=dt.date(2025, 1, 7),
 )
-il.run(il.AsyncRunner().run(dag, window))
+for partition in window:
+    dag.materialize(partition)
 ```
 
-There is no separate "backfiller" object — backfilling is just running a DAG over a window,
-and every runner (serial, async, multi-process, Docker, Kubernetes) supports it.
+There is no separate "backfiller" object, and every runner (serial, async, multi-process, Docker,
+Kubernetes) takes the same partition scope. An asset that declares `allow_window=True` can take
+the whole window as a single run instead of one run per date.
 
 ## Next steps
 
