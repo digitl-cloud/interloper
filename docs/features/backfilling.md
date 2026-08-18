@@ -107,3 +107,19 @@ for partition in window:
 ```
 
 See [Runners](runners.md) for all execution strategies and their options.
+
+## Scheduled trailing windows
+
+A platform **job** re-materializes a trailing window on every tick. The window is counted in
+partitions, not days: `offset` is how many partitions back from the current one it ends, and
+`lookback` how many it spans. With daily targets, the defaults (`offset=1`, `lookback=1`) mean
+"yesterday only", and `offset=3` suits a vendor whose data settles after three days.
+
+`il.lookback_window` is the same computation, available to anything driving its own schedule:
+
+```py
+il.lookback_window(dt.datetime.now(dt.timezone.utc), lookback=7, offset=1)
+# 2026-08-11 to 2026-08-17
+```
+
+It returns `None` when clamping to an asset's `start` leaves the window empty.

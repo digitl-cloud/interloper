@@ -395,3 +395,53 @@ class TimePartitionWindow(PartitionWindow):
     def partition_count(self) -> int:
         """Return the number of partitions in the window (inclusive)."""
         return self.granularity.periods_between(self.start, self.end) + 1
+
+
+# -- Scheduling helpers --------------------------------------------------------
+
+
+def lookback_window(
+    now: dt.date,
+    lookback: int,
+    offset: int = 1,
+    granularity: TimeGranularity = TimeGranularity.DAY,
+    start: dt.date | None = None,
+) -> TimePartitionWindow | None:
+    """Build the trailing window a scheduled workload should cover.
+
+    The window is counted in partitions, never in days: *offset* is how many
+    partitions back from the current one the window ends, and *lookback* is
+    how many partitions it spans. At daily granularity, ``offset=1,
+    lookback=1`` is "yesterday only" and ``offset=0`` includes the current
+    (still incomplete) partition.
+
+    Args:
+        now: The reference instant, in whatever timezone the caller labels
+            partitions with.
+        lookback: How many partitions the window spans (at least 1).
+        offset: How many partitions back from the current one the window ends.
+        granularity: The period one partition covers.
+        start: Optional lower bound (an asset's earliest partition) to clamp
+            the window to.
+
+    Returns:
+        The window, or ``None`` if clamping to *start* leaves it empty.
+
+    Raises:
+        ValueError: If *lookback* is below 1, or *offset* is negative.
+    """
+    if lookback < 1:
+        raise ValueError(f"lookback must cover at least one partition, got {lookback}.")
+    if offset < 0:
+        raise ValueError(f"offset cannot be negative, got {offset}.")
+
+    end = granularity.advance(now, -offset)
+    first = granularity.advance(end, -(lookback - 1))
+
+    if start is not None:
+        bound = granularity.truncate(start)
+        if end < bound:
+            return None
+        first = max(first, bound)
+
+    return TimePartitionWindow(first, end, granularity)

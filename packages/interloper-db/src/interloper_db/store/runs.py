@@ -6,12 +6,13 @@ import datetime as dt
 import json
 import logging
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import NotFoundError
+from interloper.partitioning.time import TimeGranularity, TimePartitionWindow, period_range
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
@@ -500,7 +501,7 @@ class RunMixin(StoreBase):
         concurrency: int = 1,
         fail_fast: bool = False,
     ) -> Backfill:
-        """Create a backfill with one run per day from start to end (inclusive).
+        """Create a backfill with one run per partition from start to end (inclusive).
 
         The first ``concurrency`` runs are queued immediately; the rest
         are set to ``"pending"`` until earlier runs complete.
@@ -515,11 +516,16 @@ class RunMixin(StoreBase):
 
         Returns:
             The created Backfill row with runs.
+
+        Raises:
+            ValueError: If the range is inverted.
         """
+        window = TimePartitionWindow(start_date, end_date, TimeGranularity.DAY)
+        span = window.partition_count()
+
         with self._session() as session:
-            # Cron top-ups (backfill_days job config) are deliberately not
+            # Cron top-ups (a job's `lookback` window) are deliberately not
             # bounded here — they never pass through this method.
-            span = (end_date - start_date).days + 1
             self.quotas.check(session, org_id, QUOTA_MAX_BACKFILL_DAYS, used=span)
             self.quotas.check(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="backfill")
             db_backfill = Backfill(
@@ -535,25 +541,21 @@ class RunMixin(StoreBase):
             session.add(db_backfill)
             session.flush()
 
-            current_date = start_date
-            partition_count = 0
             launched = 0
-            while current_date <= end_date:
+            for partition_date in period_range(window.start, window.end, window.granularity):
                 run_status = "queued" if launched < concurrency else "pending"
                 db_run = Run(
                     org_id=org_id,
                     component_id=component_id,
                     backfill_id=db_backfill.id,
-                    partition_date=current_date,
+                    partition_date=partition_date,
                     status=run_status,
                 )
                 session.add(db_run)
                 if run_status == "queued":
                     launched += 1
-                partition_count += 1
-                current_date += timedelta(days=1)
 
-            db_backfill.partitions = partition_count
+            db_backfill.partitions = span
             session.add(db_backfill)
             session.commit()
             session.refresh(db_backfill)

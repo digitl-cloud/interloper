@@ -31,7 +31,7 @@ class TestDefinition:
 
     def test_definition_self_describes(self):
         defn = il.CronJob.definition()
-        assert set(defn.config_schema["properties"]) == {"cron", "enabled", "tags", "partitioned", "backfill_days"}
+        assert set(defn.config_schema["properties"]) == {"cron", "enabled", "tags", "partitioned", "lookback", "offset"}
         assert "cron" in defn.config_schema.get("required", [])
         assert defn.relations["target"].kinds == ["source", "asset"]
         assert defn.relations["target"].slotted is False
@@ -47,7 +47,25 @@ class TestDefinition:
         assert job.enabled is True
         assert job.tags == []
         assert job.partitioned is False
-        assert job.backfill_days == 1
+        assert job.lookback == 1
+        assert job.offset == 1
+
+
+class TestLegacyConfig:
+    """The pre-0.60 ``backfill_days`` key, read for one release."""
+
+    def test_backfill_days_maps_onto_lookback(self):
+        job = il.CronJob(cron="0 6 * * *", partitioned=True, backfill_days=7)
+        assert job.lookback == 7
+        assert job.offset == 1
+
+    def test_new_keys_win_over_the_legacy_one(self):
+        job = il.CronJob(cron="0 6 * * *", partitioned=True, backfill_days=7, lookback=2, offset=0)
+        assert (job.lookback, job.offset) == (2, 0)
+
+    def test_a_null_backfill_days_stays_null(self):
+        job = il.CronJob(cron="0 6 * * *", backfill_days=None)
+        assert job.lookback is None
 
 
 class TestDag:
@@ -72,7 +90,8 @@ class TestSpec:
             enabled=False,
             tags=["daily"],
             partitioned=True,
-            backfill_days=7,
+            lookback=7,
+            offset=3,
             targets=[FakeSource(), FakeStandaloneAsset()],
         )
         clone = il.CronJob.from_spec(job.to_spec())
@@ -82,7 +101,8 @@ class TestSpec:
         assert clone.enabled is False
         assert clone.tags == ["daily"]
         assert clone.partitioned is True
-        assert clone.backfill_days == 7
+        assert clone.lookback == 7
+        assert clone.offset == 3
         assert isinstance(clone.targets[0], FakeSource)
         assert isinstance(clone.targets[1], FakeStandaloneAsset)
         assert [type(a).key for a in clone.targets[0].assets] == ["fake_asset"]
