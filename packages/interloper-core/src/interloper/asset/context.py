@@ -7,7 +7,12 @@ from typing import Any
 
 from interloper.events import EventLogger
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-from interloper.partitioning.time import TimePartitionConfig, coerce_to_date
+from interloper.partitioning.time import (
+    TimeGranularity,
+    TimePartitionConfig,
+    TimePartitionWindow,
+    coerce_to_date,
+)
 
 
 class ExecutionContext:
@@ -67,64 +72,115 @@ class ExecutionContext:
         return self._logger
 
     @property
-    def partition_date(self) -> dt.date:
-        """The partition value as a datetime.date object.
+    def partition(self) -> Partition:
+        """The partition this run covers.
 
-        Only available for time-based partitioning with a single partition.
+        The partition answers everything about its own scope: ``value`` (the
+        period's start), ``id`` (its canonical key), ``granularity`` and
+        ``bounds`` (its half-open extent) for a time partition. Nothing here
+        re-derives per granularity what the partition already knows.
 
         Raises:
-            AttributeError: If the asset is not time-partitioned or no partition is provided.
+            AttributeError: If the asset is not partitioned, no partition is
+                provided, or the context holds a window.
         """
         if self._partitioning is None:
-            raise AttributeError("`context.partition_date` is not available, asset is not partitioned.")
+            raise AttributeError("`context.partition` is not available, asset is not partitioned.")
 
-        if self._partition_or_window is None:
-            raise AttributeError("`context.partition_date` is not available, no partition provided.")
-
-        if not isinstance(self._partitioning, TimePartitionConfig):
-            raise AttributeError(  # noqa: TRY004
-                "`context.partition_date` is not available, asset is not time-partitioned. "
-                "Use `TimePartitionConfig` in the asset decorator."
-            )
-
-        if isinstance(self._partition_or_window, PartitionWindow):
-            raise AttributeError(  # noqa: TRY004
-                "`context.partition_date` is not available. "
-                "Context currently holds a partition window, not a partition."
-            )
-
-        return coerce_to_date(self._partition_or_window.value)
+        return self._require_single_partition("partition")
 
     @property
-    def partition_date_window(self) -> tuple[dt.date, dt.date]:
-        """A tuple of (start_date, end_date) representing a date range.
+    def window(self) -> PartitionWindow:
+        """The window this run covers, for an asset that declares ``allow_window``.
 
-        Only available for TimePartitionConfig with allow_window=True.
+        A single partition normalizes to a one-partition window, because a
+        windowed asset is still run per partition by the platform: reading
+        ``window`` must not depend on how the run was scoped.
 
         Raises:
-            AttributeError: If the asset is not time-partitioned or windows are not allowed.
+            AttributeError: If the asset is not time-partitioned, no partition
+                is provided, or windows are not allowed.
         """
-        if self._partitioning is None:
-            raise AttributeError("`context.partition_date_window` is not available, asset is not partitioned.")
+        partitioning = self._time_partitioning("window")
 
         if self._partition_or_window is None:
-            raise AttributeError("`context.partition_date_window` is not available, no partition provided.")
+            raise AttributeError("`context.window` is not available, no partition provided.")
 
-        if not isinstance(self._partitioning, TimePartitionConfig):
-            raise AttributeError(  # noqa: TRY004
-                "`context.partition_date_window` is not available, asset is not time-partitioned. "
-                "Use `TimePartitionConfig` in the asset decorator."
-            )
-
-        if not self._partitioning.allow_window:
+        if not partitioning.allow_window:
             raise AttributeError(
-                "`context.partition_date_window` is not available, asset does not allow windows. "
+                "`context.window` is not available, asset does not allow windows. "
                 "Set `allow_window=True` in `TimePartitionConfig` to enable windowed partitions."
             )
 
-        if isinstance(self._partition_or_window, Partition):
-            date = coerce_to_date(self._partition_or_window.value)
-            return (date, date)
+        if isinstance(self._partition_or_window, PartitionWindow):
+            return self._partition_or_window
 
-        assert isinstance(self._partition_or_window, PartitionWindow)
-        return (coerce_to_date(self._partition_or_window.start), coerce_to_date(self._partition_or_window.end))
+        value = self._partition_or_window.value
+        return TimePartitionWindow(value, value, partitioning.granularity)
+
+    @property
+    def partition_date(self) -> dt.date:
+        """The partition value as a datetime.date object.
+
+        Sugar over ``context.partition.value`` for the daily case, which is
+        essentially every asset: it asserts the granularity rather than
+        assuming it. Any other granularity reads :attr:`partition` (or
+        :attr:`window`) and asks the partition itself.
+
+        Raises:
+            AttributeError: If the asset is not time-partitioned, is
+                partitioned at another granularity, or no partition is provided.
+        """
+        partitioning = self._time_partitioning("partition_date")
+        partition = self._require_single_partition("partition_date")
+
+        if partitioning.granularity is not TimeGranularity.DAY:
+            raise AttributeError(
+                f"`context.partition_date` is not available, asset is partitioned by "
+                f"{partitioning.granularity.value}. Use `context.partition` instead."
+            )
+
+        return coerce_to_date(partition.value)
+
+    # -- Internals -------------------------------------------------------------
+
+    def _time_partitioning(self, accessor: str) -> TimePartitionConfig:
+        """Return the asset's time partition config, or explain why there is none.
+
+        Returns:
+            The asset's ``TimePartitionConfig``.
+
+        Raises:
+            AttributeError: If the asset is not time-partitioned.
+        """
+        if self._partitioning is None:
+            raise AttributeError(f"`context.{accessor}` is not available, asset is not partitioned.")
+
+        if not isinstance(self._partitioning, TimePartitionConfig):
+            raise AttributeError(  # noqa: TRY004
+                f"`context.{accessor}` is not available, asset is not time-partitioned. "
+                "Use `TimePartitionConfig` in the asset decorator."
+            )
+
+        return self._partitioning
+
+    def _require_single_partition(self, accessor: str) -> Partition:
+        """Return the single partition in scope, or explain why there is none.
+
+        Returns:
+            The context's ``Partition``.
+
+        Raises:
+            AttributeError: If no partition is provided, or the context holds
+                a window rather than a single partition.
+        """
+        if self._partition_or_window is None:
+            raise AttributeError(f"`context.{accessor}` is not available, no partition provided.")
+
+        if isinstance(self._partition_or_window, PartitionWindow):
+            raise AttributeError(  # noqa: TRY004
+                f"`context.{accessor}` is not available. "
+                "Context currently holds a partition window, not a partition."
+            )
+
+        return self._partition_or_window

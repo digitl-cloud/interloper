@@ -35,17 +35,59 @@ Data is stored in partition-aware paths:
 ./data/{dataset}/{asset_key}/date=2025-01-15/data.pkl
 ```
 
+## Granularity
+
+A time partition is a **period identified by its start**: the value is the period's first instant,
+and the granularity says how long the period lasts. `TimePartitionConfig` declares it:
+
+```py
+@il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.DAY))
+def daily_data(context: il.ExecutionContext): ...
+```
+
+`DAY` is the default and, today, the only accepted value. `TimeGranularity` declares the wider
+vocabulary (`HOUR`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`) and implements the arithmetic for
+every member, but the rest of the stack is still day-shaped (runs store a `DATE`, the CLI takes
+`--date`, database destinations delete a partition by equality), so declaring anything else raises
+rather than half-working.
+
+Every piece of partition arithmetic goes through the granularity, so assets and destinations never
+hardcode "a day":
+
+```py
+g = il.TimeGranularity.DAY
+
+g.truncate("2026-05-20")                    # 2026-05-20   (start of the period)
+g.advance(dt.date(2026, 5, 20), -1)         # 2026-05-19   (n periods back)
+g.bounds(dt.date(2026, 5, 20))              # (2026-05-20, 2026-05-21)  half-open
+g.periods_between(a, b)                     # whole periods from a to b
+g.format(dt.date(2026, 5, 20))              # "2026-05-20" (the partition id)
+```
+
+## Bounding the history
+
+`start` marks the first partition that exists for an asset. Runs that reach further back are
+rejected rather than silently returning empty data:
+
+```py
+@il.asset(partitioning=il.TimePartitionConfig(column="date", start=dt.date(2026, 1, 1)))
+def daily_data(context: il.ExecutionContext): ...
+```
+
 ## Windowed partitioning
 
-Some assets can process a range of dates in a single execution. Enable this with
-`allow_window=True` and read the bounds from `context.partition_date_window`:
+Some assets can process a range of periods in a single execution. Enable this with
+`allow_window=True` and read `context.window`:
 
 ```py
 @il.asset(partitioning=il.TimePartitionConfig(column="date", allow_window=True))
 def weekly_summary(context: il.ExecutionContext):
-    start, end = context.partition_date_window
-    return [{"start": start.isoformat(), "end": end.isoformat(), "value": 100}]
+    window = context.window
+    return [{"start": window.start.isoformat(), "end": window.end.isoformat(), "value": 100}]
 ```
+
+A windowed asset is still run one partition at a time by the platform, so a single partition
+normalizes to a one-partition window: `context.window` reads the same either way.
 
 Run with a window:
 
@@ -58,19 +100,32 @@ dag.materialize(
 )
 ```
 
+## What the context exposes
+
+The context hands over the **scope itself**, and the scope answers questions about itself. There is
+no accessor per granularity:
+
+| Accessor | Gives you |
+|----------|-----------|
+| `context.partition` | The `Partition` this run covers. Read `.value` (the period's start), `.id` (its canonical key), `.granularity`, `.bounds` (its half-open extent) |
+| `context.window` | The `PartitionWindow`, for an asset declaring `allow_window=True`. Read `.start` / `.end` (both inclusive), `.partition_count()`, or iterate it |
+| `context.partition_date` | Sugar over `context.partition.value` for the daily case: a `dt.date`, asserting the granularity rather than assuming it |
+
 !!! note
 
-    `context.partition_date` is only available for single-partition runs.
-    `context.partition_date_window` is only available when `allow_window=True` and a window is
-    passed. Accessing the wrong one raises `AttributeError`.
+    `context.partition` raises if the run is scoped to a window, and `context.window` raises unless
+    the asset declares `allow_window=True`. `context.partition_date` additionally raises if the
+    asset is partitioned at any granularity other than `DAY` — read `context.partition` there and
+    ask the partition itself.
 
 ## TimePartitionConfig
 
 ```py
 il.TimePartitionConfig(
-    column="date",          # Column carrying the partition value
-    allow_window=False,     # Whether the asset supports windowed runs
-    start_date=None,        # Optional lower bound (dt.date)
+    column="date",                          # Column carrying the partition value
+    allow_window=False,                     # Whether the asset supports windowed runs
+    granularity=il.TimeGranularity.DAY,     # The period one partition covers
+    start=None,                             # First partition that exists (dt.date)
 )
 ```
 
@@ -78,8 +133,8 @@ il.TimePartitionConfig(
 
 | Type | Description |
 |------|-------------|
-| `TimePartition(value=date)` | A single date partition (also accepts an ISO string or datetime) |
-| `TimePartitionWindow(start, end)` | A date range (inclusive) |
+| `TimePartition(value, granularity=DAY)` | A single partition, identified by its period start (also accepts an ISO string or datetime) |
+| `TimePartitionWindow(start, end, granularity=DAY)` | A contiguous range of partitions (both bounds inclusive) |
 
 A `TimePartitionWindow` is iterable. It yields `TimePartition` values **from most recent to
 oldest**:

@@ -92,5 +92,6 @@ and an OAuth connect flow.
 
 ### How do I run a backfill?
 
-Pass a `TimePartitionWindow` to a runner (or `dag.materialize()`). There's no separate backfiller
-object. See [Backfilling](features/backfilling.md).
+Build a `TimePartitionWindow` and iterate it, materializing the DAG once per partition (newest
+first). There's no separate backfiller object. An asset that declares `allow_window=True` can
+take the whole window as a single run instead. See [Backfilling](features/backfilling.md).

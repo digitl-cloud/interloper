@@ -6,6 +6,7 @@ from interloper.partitioning.base import (
     PartitionWindow,
 )
 from interloper.partitioning.time import (
+    TimeGranularity,
     TimePartition,
     TimePartitionConfig,
     TimePartitionWindow,
@@ -15,6 +16,7 @@ __all__ = [
     "Partition",
     "PartitionConfig",
     "PartitionWindow",
+    "TimeGranularity",
     "TimePartition",
     "TimePartitionConfig",
     "TimePartitionWindow",

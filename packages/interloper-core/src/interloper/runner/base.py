@@ -15,6 +15,7 @@ from typing_extensions import Self
 from interloper.errors import ConfigError, PartitionError, RunnerError
 from interloper.events import Event, EventBus
 from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.time import TimePartitionConfig
 from interloper.registry import Registry
 from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.runner.state import RunState
@@ -208,9 +209,14 @@ class Runner(Serializable):
     ) -> None:
         """Run preflight validations before execution begins.
 
+        Scope errors are raised here rather than left to the assets: a run
+        whose scope no asset can serve should fail as a whole, instead of
+        failing the offending assets while the rest of the DAG materializes.
+
         Raises:
             PartitionError: If partitioned assets are run without a partition,
-                or a windowed run includes assets that do not support windows.
+                a windowed run includes assets that do not support windows, or
+                the scope disagrees with an asset's time partitioning.
         """
         if partition_or_window is None:
             partitioned = sorted(
@@ -225,16 +231,18 @@ class Runner(Serializable):
                 )
             return
 
-        if not isinstance(partition_or_window, PartitionWindow):
-            return
+        if isinstance(partition_or_window, PartitionWindow):
+            unsupported = [
+                asset.key
+                for asset in dag.assets
+                if asset.materializable and asset.partitioning is not None and not asset.partitioning.allow_window
+            ]
+            if unsupported:
+                raise PartitionError(
+                    "Windowed runs require all partitioned assets to set allow_window=True. "
+                    f"Unsupported assets: {sorted(unsupported)}."
+                )
 
-        unsupported = [
-            asset.key
-            for asset in dag.assets
-            if asset.materializable and asset.partitioning is not None and not asset.partitioning.allow_window
-        ]
-        if unsupported:
-            raise PartitionError(
-                "Windowed runs require all partitioned assets to set allow_window=True. "
-                f"Unsupported assets: {sorted(unsupported)}."
-            )
+        for asset in dag.assets:
+            if asset.materializable and isinstance(asset.partitioning, TimePartitionConfig):
+                asset._validate_time_partitioning(asset.partitioning, partition_or_window)
