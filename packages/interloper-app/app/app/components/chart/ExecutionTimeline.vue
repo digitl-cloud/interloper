@@ -1,35 +1,63 @@
 <script setup lang="ts">
-import type { AssetExecution, ExecutionStatus } from '~/types/asset_execution'
+import type { TimelineBar, TimelineRow } from '~/types/timeline'
 
 /**********************
  * Models
  **********************/
-const selectedAsset = defineModel<string | null>('selectedAsset')
+/** Row in focus: everything else dims. Null clears the focus. */
+const selectedId = defineModel<string | null>('selectedId')
 
 /**********************
  * Props
  **********************/
 interface Props {
-    assetExecutions: AssetExecution[]
-    status?: ExecutionStatus
+    /** Lanes, in display order — sorting and grouping belong to the caller. */
+    rows: TimelineRow[]
+    /**
+     * Explicit time window in epoch ms. Without it the axis fits the data,
+     * spanning the earliest start to the latest end (a run's own duration);
+     * with it the axis spans the window (a wall-clock period), still growing
+     * to the right while something runs past its end.
+     */
+    rangeStart?: number | null
+    rangeEnd?: number | null
+    /** Tick labels: elapsed time from the window start, or wall-clock time. */
+    axis?: 'duration' | 'clock'
+    /** Width of the left label column in px; 0 renders labels inside the bars. */
+    labelWidth?: number
+    /** Heading for the label column, shown in the ruler above it. */
+    labelTitle?: string
+    /**
+     * Floor on a bar's rendered length as a fraction of the data extent, so
+     * brief executions stay legible when they're read as durations. Distorts
+     * the axis, so leave it at 0 for wall-clock windows.
+     */
+    minBarRatio?: number
     refreshRate?: number
     markerTime?: Date | null
-    highlightedAsset?: string | null
+    /** Row highlighted from outside (e.g. the event in focus); loses to a selection. */
+    highlightedId?: string | null
+    emptyMessage?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
+    rangeStart: null,
+    rangeEnd: null,
+    axis: 'duration',
+    labelWidth: 0,
+    labelTitle: '',
+    minBarRatio: 0,
     // 0 → advance every animation frame (display refresh rate). A positive value
     // throttles the layout updates to at most once per `refreshRate` ms.
     refreshRate: 0,
     markerTime: null,
-    highlightedAsset: null,
-    status: 'pending',
+    highlightedId: null,
+    emptyMessage: 'No executions yet',
 })
 
-const isRunning = computed(() => props.status === 'running')
-
-const assetDisplayName = useAssetDisplayName()
-const assetIcon = useAssetIcon()
+const emit = defineEmits<{
+    barClick: [bar: TimelineBar, row: TimelineRow]
+}>()
 
 /**********************
  * Colors
@@ -50,8 +78,12 @@ const ROW_HEIGHT = 40
 const AXIS_HEIGHT = 28
 const OVERSCAN = 4
 const MAX_ZOOM = 200
-
-const DEFAULT_ICON = 'i-lucide-box'
+/**
+ * Breathing room on both ends of the time track, so the first and last tick
+ * labels don't sit flush against the panel edges. The ruler and the rows share
+ * it, which keeps ticks, gridlines and bars on the same scale.
+ */
+const PLOT_GUTTER = 12
 
 function clamp(v: number, min: number, max: number) {
     return Math.min(Math.max(v, min), max)
@@ -61,105 +93,84 @@ function clamp(v: number, min: number, max: number) {
  * Data Processing
  *
  * `baseRows` is purely data-driven — it does NOT read the live clock, so it only
- * recomputes when `assetExecutions` change. Per-frame growth of running bars is
- * handled downstream (axisMax + the template), keeping animation work scoped to
- * the running rows rather than re-deriving the whole list every frame.
+ * recomputes when `rows` change. Per-frame growth of running bars is handled
+ * downstream (axisMax + the template), keeping animation work scoped to the
+ * running bars rather than re-deriving the whole list every frame.
  **********************/
-interface BaseRow {
-    id: string | null
-    name: string
-    icon: string
-    status: ExecutionStatus
-    /** Has a start time → render a time bar; otherwise a not-started placeholder. */
-    timed: boolean
+interface LayoutBar {
+    bar: TimelineBar
     running: boolean
     /** Relative ms from baseTime. */
     start: number
-    /** Relative ms from baseTime; undefined for running (grows live) and untimed rows. */
+    /** Relative ms from baseTime; undefined while running (grows live). */
     fixedEnd?: number
 }
 
-/** Sort weight: assets that ran sort first, non-started assets sink to the bottom. */
-const STATUS_WEIGHT: Record<string, number> = {
-    success: 0,
-    running: 1,
-    failed: 2,
-    canceled: 3,
-    skipped: 4,
-    queued: 5,
-    pending: 5,
+interface LayoutRow {
+    row: TimelineRow
+    bars: LayoutBar[]
 }
 
-interface Parsed {
-    id: string | null
-    name: string
-    icon: string
-    status: ExecutionStatus
-    startTime?: number
-    endTime?: number
-}
-
-const parsed = computed<Parsed[]>(() => {
-    return props.assetExecutions
-        .map(parseExecution)
-        .sort((a, b) => {
-            const wa = STATUS_WEIGHT[a.status] ?? 9
-            const wb = STATUS_WEIGHT[b.status] ?? 9
-            if (wa !== wb) return wa - wb
-            return (a.startTime ?? Infinity) - (b.startTime ?? Infinity)
-        })
-})
-
-function parseExecution(record: AssetExecution): Parsed {
-    const displayName = record.asset_id ? assetDisplayName.value.get(record.asset_id)?.label : undefined
-    return {
-        id: record.asset_id,
-        name: displayName ?? record.asset_key,
-        icon: (record.asset_id ? assetIcon.value.get(record.asset_id) : undefined) ?? DEFAULT_ICON,
-        status: record.status ?? 'pending',
-        startTime: record.started_at ? new Date(record.started_at).getTime() : undefined,
-        endTime: record.completed_at ? new Date(record.completed_at).getTime() : undefined,
-    }
-}
-
-/** Earliest start across the run; the zero of the relative time axis. */
+/** Zero of the relative time axis: the window start, or the earliest execution. */
 const baseTime = computed(() => {
-    const starts = parsed.value.map(p => p.startTime).filter((t): t is number => t !== undefined)
-    return starts.length ? Math.min(...starts) : 0
+    if (props.rangeStart !== null) return props.rangeStart
+    let earliest = Infinity
+    for (const row of props.rows) {
+        for (const bar of row.bars) if (bar.start < earliest) earliest = bar.start
+    }
+    return Number.isFinite(earliest) ? earliest : 0
 })
 
 /**
- * Largest relative end across all *settled* timed rows (running rows grow live and
- * are folded in via `axisMax`). Drives the min-visual-duration floor and the axis
- * extent without depending on the clock.
+ * Largest relative end across all *settled* bars, as the data reports it — the
+ * scale the minimum-bar floor is a fraction of. Clock-free, so it only moves
+ * when the data does.
  */
-const staticMaxEnd = computed(() => {
+const dataExtent = computed(() => {
     let max = 0
-    for (const p of parsed.value) {
-        if (p.startTime === undefined || p.status === 'running') continue
-        const end = (p.endTime ?? p.startTime) - baseTime.value
-        if (end > max) max = end
+    for (const row of props.rows) {
+        for (const bar of row.bars) {
+            if (bar.end === null) continue
+            const end = bar.end - baseTime.value
+            if (end > max) max = end
+        }
     }
     return max
 })
 
-const minVisualDuration = computed(() => Math.max(staticMaxEnd.value * 0.05, 1))
-
-const baseRows = computed<BaseRow[]>(() => {
-    return parsed.value.map((p) => {
-        const timed = p.startTime !== undefined
-        const running = p.status === 'running'
-        const start = timed ? p.startTime! - baseTime.value : 0
-        let fixedEnd: number | undefined
-        if (timed && !running) {
-            const rawEnd = (p.endTime ?? p.startTime!) - baseTime.value
-            fixedEnd = Math.max(rawEnd, start + minVisualDuration.value)
-        }
-        return { id: p.id, name: p.name, icon: p.icon, status: p.status, timed, running, start, fixedEnd }
-    })
+const minVisualDuration = computed(() => {
+    if (props.minBarRatio <= 0) return 0
+    return Math.max(dataExtent.value * props.minBarRatio, 1)
 })
 
-const hasRunning = computed(() => baseRows.value.some(r => r.running))
+const baseRows = computed<LayoutRow[]>(() => props.rows.map(row => ({
+    row,
+    bars: row.bars.map((bar) => {
+        const running = bar.end === null
+        const start = bar.start - baseTime.value
+        const fixedEnd = running
+            ? undefined
+            : Math.max(bar.end! - baseTime.value, start + minVisualDuration.value)
+        return { bar, running, start, fixedEnd }
+    }),
+})))
+
+const hasRunning = computed(() => baseRows.value.some(r => r.bars.some(b => b.running)))
+
+/**
+ * Right edge of the settled data *as laid out* — the floor can widen a bar past
+ * the raw extent, and the axis has to cover it or that bar renders as a sliver
+ * clipped against the edge.
+ */
+const settledExtent = computed(() => {
+    let max = dataExtent.value
+    for (const row of baseRows.value) {
+        for (const bar of row.bars) {
+            if (bar.fixedEnd !== undefined && bar.fixedEnd > max) max = bar.fixedEnd
+        }
+    }
+    return max
+})
 
 /**********************
  * Live clock (running bars only)
@@ -170,21 +181,22 @@ let lastTick = 0
 
 const relativeNow = computed(() => now.value - baseTime.value)
 
-/** Live end of a row in relative ms — only running rows depend on the clock. */
-function rowEnd(row: BaseRow): number {
-    if (row.running) return relativeNow.value
-    return row.fixedEnd ?? row.start
+/** Live end of a bar in relative ms — only running bars depend on the clock. */
+function barEnd(bar: LayoutBar): number {
+    if (bar.running) return relativeNow.value
+    return bar.fixedEnd ?? bar.start
 }
 
-/** Right edge of the data (100% when fitted). Only moves while something runs. */
+/** Right edge of the window (100% when fitted). Only moves while something runs. */
 const axisMax = computed(() => {
-    const settled = staticMaxEnd.value
+    const windowEnd = props.rangeEnd !== null ? props.rangeEnd - baseTime.value : 0
+    const settled = Math.max(settledExtent.value, windowEnd)
     const live = hasRunning.value ? Math.max(settled, relativeNow.value) : settled
     return Math.max(live, 1)
 })
 
 /**********************
- * Time viewport (zoom / pan) — #6
+ * Time viewport (zoom / pan)
  *
  * When `fitted`, the viewport tracks [0, axisMax] and follows the run live. Any
  * zoom/pan freezes it to an explicit [start, start+span] window in ms, so the
@@ -204,6 +216,15 @@ const view = computed(() => {
 function toPercent(relativeTime: number): number {
     const { start, span } = view.value
     return ((relativeTime - start) / span) * 100
+}
+
+/** Rendered edges of a bar, clipped to the viewport. */
+function barGeometry(bar: LayoutBar): { left: number, width: number, visible: boolean } {
+    const left = toPercent(bar.start)
+    const right = toPercent(barEnd(bar))
+    if (right < 0 || left > 100) return { left: 0, width: 0, visible: false }
+    const clippedLeft = clamp(left, 0, 100)
+    return { left: clippedLeft, width: Math.max(clamp(right, 0, 100) - clippedLeft, 0), visible: true }
 }
 
 function resetZoom() {
@@ -234,7 +255,7 @@ function panByMs(deltaMs: number) {
 /**********************
  * Axis ticks
  **********************/
-function formatTime(val: number): string {
+function formatDuration(val: number): string {
     if (val === 0) return '0'
     if (val < 1000) return `${Math.round(val)}ms`
     if (val < 60000) return `${(val / 1000).toFixed(1)}s`
@@ -242,17 +263,59 @@ function formatTime(val: number): string {
     return `${(val / 3600000).toFixed(1)}h`
 }
 
+const SECOND = 1000
+const MINUTE = 60 * SECOND
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
+
+/** Steps a wall-clock reader expects to see ticks on. */
+const CLOCK_STEPS = [
+    SECOND, 5 * SECOND, 15 * SECOND, 30 * SECOND,
+    MINUTE, 5 * MINUTE, 15 * MINUTE, 30 * MINUTE,
+    HOUR, 2 * HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR,
+    DAY, 7 * DAY,
+]
+
+/** Local midnight of the day containing `ms` — the anchor clock ticks align to. */
+function dayStart(ms: number): number {
+    const date = new Date(ms)
+    date.setHours(0, 0, 0, 0)
+    return date.getTime()
+}
+
+function formatClock(absolute: number, step: number): string {
+    const date = new Date(absolute)
+    const midnight = date.getHours() === 0 && date.getMinutes() === 0 && date.getSeconds() === 0
+    if (step >= DAY || midnight) {
+        return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+    }
+    return date.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        ...(step < MINUTE ? { second: '2-digit' } : {}),
+    })
+}
+
 /** "Nice" evenly-spaced ticks across the current viewport. */
 const ticks = computed(() => {
     const { start, end, span } = view.value
+    const result: { value: number, percent: number, label: string }[] = []
+
+    if (props.axis === 'clock') {
+        const step = CLOCK_STEPS.find(s => span / s <= 8) ?? CLOCK_STEPS.at(-1)!
+        const anchor = dayStart(baseTime.value + start) - baseTime.value
+        for (let v = anchor + Math.ceil((start - anchor) / step) * step; v <= end; v += step) {
+            result.push({ value: v, percent: toPercent(v), label: formatClock(baseTime.value + v, step) })
+        }
+        return result
+    }
+
     const rawStep = span / 6
     const magnitude = 10 ** Math.floor(Math.log10(rawStep))
     const normalized = rawStep / magnitude
     const step = (normalized < 1.5 ? 1 : normalized < 3 ? 2 : normalized < 7 ? 5 : 10) * magnitude
-
-    const result: { value: number; percent: number; label: string }[] = []
     for (let v = Math.ceil(start / step) * step; v <= end + step * 0.001; v += step) {
-        result.push({ value: v, percent: toPercent(v), label: formatTime(v) })
+        result.push({ value: v, percent: toPercent(v), label: formatDuration(v) })
     }
     return result
 })
@@ -268,9 +331,10 @@ const markerPercent = computed(() => {
 })
 
 /**********************
- * Virtualization — #5
+ * Virtualization
  **********************/
 const scrollEl = ref<HTMLElement | null>(null)
+const plotEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const viewportH = ref(600)
 
@@ -288,35 +352,62 @@ const visibleRange = computed(() => {
     return { start: clamp(first, 0, total), end: clamp(last, 0, total) }
 })
 
+/**
+ * Rows intersecting the viewport, each carrying only the bars visible in the
+ * current time window and their rendered geometry. Recomputed per frame while
+ * something runs, which is the only work the live clock should cost.
+ */
 const visibleRows = computed(() => {
     const { start, end } = visibleRange.value
-    return baseRows.value.slice(start, end).map((row, i) => ({ row, index: start + i }))
+    return baseRows.value.slice(start, end).map((layout, i) => ({
+        row: layout.row,
+        index: start + i,
+        /** The row had nothing to draw at all — not merely nothing in view. */
+        placeholder: layout.bars.length === 0,
+        bars: layout.bars
+            .map(bar => ({ ...bar, geometry: barGeometry(bar) }))
+            .filter(bar => bar.geometry.visible),
+    }))
 })
 
 /**********************
  * Focus / selection
  **********************/
-const focusedAsset = computed(() => selectedAsset.value ?? props.highlightedAsset)
+const focusedId = computed(() => selectedId.value ?? props.highlightedId)
 
 function rowOpacity(id: string | null): number {
-    if (!focusedAsset.value) return 1
-    return id === focusedAsset.value ? 1 : 0.25
+    if (!focusedId.value) return 1
+    return id === focusedId.value ? 1 : 0.25
 }
 
-function onBarClick(id: string | null) {
-    selectedAsset.value = id
+function onBarClick(layout: LayoutBar, row: TimelineRow) {
+    selectedId.value = row.id
+    emit('barClick', layout.bar, row)
 }
 
 function onBlankClick() {
-    selectedAsset.value = null
+    selectedId.value = null
+}
+
+/** Row name, the execution's own context, then how long it took. */
+function barTooltip(row: TimelineRow, layout: LayoutBar): string {
+    const parts = [row.name]
+    if (layout.bar.detail) parts.push(layout.bar.detail)
+    if (props.axis === 'clock') parts.push(formatDate(new Date(layout.bar.start)))
+    parts.push(formatElapsed(new Date(layout.bar.start), layout.bar.end ? new Date(layout.bar.end) : null))
+    return parts.join(' · ')
 }
 
 /**********************
  * Interaction: wheel zoom/pan + drag-to-pan the ruler
  **********************/
+function plotRect(): DOMRect | null {
+    return plotEl.value?.getBoundingClientRect() ?? null
+}
+
 function onWheel(e: WheelEvent) {
-    if (!scrollEl.value) return
-    const rect = scrollEl.value.getBoundingClientRect()
+    const rect = plotRect()
+    if (!rect) return
 
     if (e.ctrlKey || e.metaKey) {
         // Ctrl/⌘ + wheel (and trackpad pinch) → zoom at the cursor.
@@ -347,12 +438,12 @@ function onRulerPointerDown(e: PointerEvent) {
 }
 
 function onRulerPointerMove(e: PointerEvent) {
-    if (!dragging.value || !scrollEl.value) return
-    const width = scrollEl.value.getBoundingClientRect().width
+    const rect = plotRect()
+    if (!dragging.value || !rect) return
     const dx = e.clientX - dragX
     dragX = e.clientX
     // Dragging right reveals earlier time → viewStart decreases.
-    panByMs((-dx / width) * view.value.span)
+    panByMs((-dx / rect.width) * view.value.span)
 }
 
 function onRulerPointerUp() {
@@ -363,7 +454,7 @@ function onRulerPointerUp() {
  * Live ticking — advance running bars on requestAnimationFrame
  **********************/
 function frame(timestamp: number) {
-    if (!isRunning.value) return
+    if (!hasRunning.value) return
     if (timestamp - lastTick >= props.refreshRate) {
         now.value = Date.now()
         lastTick = timestamp
@@ -399,7 +490,7 @@ onMounted(() => {
         })
         resizeObserver.observe(scrollEl.value)
     }
-    if (isRunning.value) start()
+    if (hasRunning.value) start()
 })
 
 onUnmounted(() => {
@@ -408,7 +499,7 @@ onUnmounted(() => {
     scrollEl.value?.removeEventListener('wheel', onWheel)
 })
 
-watch(isRunning, (running) => {
+watch(hasRunning, (running) => {
     if (running) start()
     else stop()
 })
@@ -426,94 +517,131 @@ watch(axisMax, () => {
          @click="onBlankClick"
          @dblclick="resetZoom">
         <!-- Time axis / ruler: sticky, and the drag-to-pan surface when zoomed. -->
-        <div class="sticky top-0 z-20 flex select-none border-b border-default bg-(--ui-bg-band)"
+        <div class="sticky top-0 z-30 flex select-none border-b border-default bg-(--ui-bg-band)"
              :class="fitted ? '' : 'cursor-ew-resize'"
              :style="{ height: AXIS_HEIGHT + 'px' }"
              @pointerdown="onRulerPointerDown"
              @pointermove="onRulerPointerMove"
              @pointerup="onRulerPointerUp"
              @pointercancel="onRulerPointerUp">
-            <div v-for="t in ticks"
-                 :key="t.value"
-                 class="absolute top-0 flex h-full items-center whitespace-nowrap text-[10px] text-muted"
-                 :style="{
-                     left: `min(${t.percent}%, calc(100% - 1px))`,
-                     transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 99 ? 'translateX(-100%)' : 'translateX(-50%)',
-                 }">
-                {{ t.label }}
+            <div v-if="labelWidth"
+                 class="flex shrink-0 items-center border-r border-default px-4"
+                 :style="{ width: labelWidth + 'px' }">
+                <span class="truncate text-xs font-medium uppercase tracking-wide text-muted">{{ labelTitle }}</span>
             </div>
+            <div ref="plotEl"
+                 class="relative flex-1"
+                 :style="{ marginInline: PLOT_GUTTER + 'px' }">
+                <div v-for="t in ticks"
+                     :key="t.value"
+                     class="absolute top-0 flex h-full items-center whitespace-nowrap text-xs text-muted"
+                     :style="{
+                         left: `min(${t.percent}%, calc(100% - 1px))`,
+                         transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 96 ? 'translateX(-100%)' : 'translateX(-50%)',
+                     }">
+                    {{ t.label }}
+                </div>
 
-            <UButton v-if="!fitted"
-                     icon="i-lucide-zoom-out"
-                     label="Reset zoom"
-                     size="xs"
-                     color="neutral"
-                     variant="subtle"
-                     class="absolute right-2 top-1/2 z-30 -translate-y-1/2"
-                     @click.stop="resetZoom"
-                     @pointerdown.stop
-                     @dblclick.stop />
+                <UButton v-if="!fitted"
+                         icon="i-lucide-zoom-out"
+                         label="Reset zoom"
+                         size="xs"
+                         color="neutral"
+                         variant="subtle"
+                         class="absolute right-2 top-1/2 z-30 -translate-y-1/2"
+                         @click.stop="resetZoom"
+                         @pointerdown.stop
+                         @dblclick.stop />
+            </div>
         </div>
 
         <!-- Rows -->
         <div v-if="baseRows.length"
              class="relative"
-             :style="{ height: totalHeight + 'px' }">
-            <!-- Gridlines -->
-            <div v-for="t in ticks"
-                 :key="`grid-${t.value}`"
-                 class="absolute top-0 bottom-0 w-px bg-default"
-                 :style="{ left: `${t.percent}%` }" />
-
-            <!-- Bars (virtualized: only rows intersecting the viewport are rendered) -->
-            <template v-for="{ row, index } in visibleRows"
-                      :key="row.id ?? row.name">
-                <!-- Not-started placeholder (#3) -->
-                <div v-if="!row.timed"
-                     class="absolute flex max-w-[45%] items-center gap-1.5 overflow-hidden rounded-md border border-dashed border-default px-2 cursor-pointer text-muted transition-opacity"
+             :style="{ height: totalHeight + 'px', minHeight: `calc(100% - ${AXIS_HEIGHT}px)` }">
+            <!-- Label gutter -->
+            <div v-if="labelWidth"
+                 class="absolute inset-y-0 left-0 z-20 border-r border-default bg-default"
+                 :style="{ width: labelWidth + 'px' }">
+                <div v-for="{ row, index } in visibleRows"
+                     :key="`label-${row.id ?? row.name}`"
+                     class="absolute flex w-full items-center gap-2 px-4 cursor-pointer transition-opacity"
                      :style="{
-                         top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
-                         left: '0',
-                         height: BAR_HEIGHT + 'px',
+                         top: index * ROW_HEIGHT + 'px',
+                         height: ROW_HEIGHT + 'px',
                          opacity: rowOpacity(row.id),
                      }"
-                     :title="`${row.name} — ${row.status}`"
-                     @click.stop="onBarClick(row.id)">
+                     :title="row.name"
+                     @click.stop="selectedId = row.id">
                     <UIcon :name="row.icon"
-                           class="size-3.5 shrink-0" />
-                    <span class="truncate text-[11px] font-medium">{{ row.name }}</span>
+                           class="size-4 shrink-0 text-muted" />
+                    <span class="truncate text-sm font-medium">{{ row.name }}</span>
                 </div>
+            </div>
 
-                <!-- Time bar -->
-                <div v-else
-                     class="absolute flex items-center gap-1.5 overflow-hidden rounded-md px-2 cursor-pointer transition-opacity"
-                     :style="{
-                         top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
-                         left: `${toPercent(row.start)}%`,
-                         width: `${Math.max(toPercent(rowEnd(row)) - toPercent(row.start), 0)}%`,
-                         minWidth: '2px',
-                         height: BAR_HEIGHT + 'px',
-                         backgroundColor: getStatusColor(row.status),
-                         opacity: rowOpacity(row.id) * 0.95,
-                     }"
-                     :title="`${row.name} — ${((rowEnd(row) - row.start) / 1000).toFixed(1)}s`"
-                     @click.stop="onBarClick(row.id)">
-                    <UIcon :name="row.icon"
-                           class="size-3.5 shrink-0 text-white" />
-                    <span class="truncate text-[11px] font-bold text-white">{{ row.name }}</span>
-                </div>
-            </template>
+            <!-- Plot area: gridlines, bars, marker -->
+            <div class="absolute inset-y-0"
+                 :style="{ left: labelWidth + PLOT_GUTTER + 'px', right: PLOT_GUTTER + 'px' }">
+                <!-- Gridlines -->
+                <div v-for="t in ticks"
+                     :key="`grid-${t.value}`"
+                     class="absolute top-0 bottom-0 w-px bg-default"
+                     :style="{ left: `${t.percent}%` }" />
 
-            <!-- Marker -->
-            <div v-if="markerPercent !== null"
-                 class="pointer-events-none absolute top-0 bottom-0 z-10 w-0.5 bg-primary/50"
-                 :style="{ left: `${markerPercent}%` }" />
+                <!-- Bars (virtualized: only rows intersecting the viewport are rendered) -->
+                <template v-for="{ row, bars, index, placeholder } in visibleRows"
+                          :key="row.id ?? row.name">
+                    <!-- Nothing to draw: a placeholder carrying the row's status -->
+                    <div v-if="placeholder && !labelWidth"
+                         class="absolute flex max-w-[45%] items-center gap-1.5 overflow-hidden rounded-md border border-dashed border-default px-2 cursor-pointer text-muted transition-opacity"
+                         :style="{
+                             top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
+                             left: '0',
+                             height: BAR_HEIGHT + 'px',
+                             opacity: rowOpacity(row.id),
+                         }"
+                         :title="`${row.name} — ${statusLabel(row.status)}`"
+                         @click.stop="selectedId = row.id">
+                        <UIcon :name="row.icon"
+                               class="size-3.5 shrink-0" />
+                        <span class="truncate text-xs font-medium">{{ row.name }}</span>
+                    </div>
+
+                    <!-- Time bars -->
+                    <div v-for="layout in bars"
+                         :key="layout.bar.id"
+                         class="absolute flex items-center gap-1.5 overflow-hidden rounded-md cursor-pointer transition-opacity"
+                         :class="labelWidth ? '' : 'px-2'"
+                         :style="{
+                             top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
+                             left: `${layout.geometry.left}%`,
+                             width: `${layout.geometry.width}%`,
+                             minWidth: labelWidth ? '3px' : '2px',
+                             height: BAR_HEIGHT + 'px',
+                             backgroundColor: getStatusColor(layout.bar.status),
+                             opacity: rowOpacity(row.id) * 0.95,
+                         }"
+                         :title="barTooltip(row, layout)"
+                         @click.stop="onBarClick(layout, row)">
+                        <template v-if="!labelWidth">
+                            <UIcon :name="row.icon"
+                                   class="size-3.5 shrink-0 text-white" />
+                            <span class="truncate text-xs font-bold text-white">{{ row.name }}</span>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Marker -->
+                <div v-if="markerPercent !== null"
+                     class="pointer-events-none absolute top-0 bottom-0 z-10 w-0.5 bg-primary/50"
+                     :style="{ left: `${markerPercent}%` }" />
+            </div>
         </div>
 
         <!-- Empty state -->
         <div v-else
              class="flex h-full items-center justify-center text-sm text-muted">
-            No asset executions yet
+            {{ emptyMessage }}
         </div>
     </div>
 </template>

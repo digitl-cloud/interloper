@@ -2,7 +2,6 @@
 import type { BreadcrumbItem } from '@nuxt/ui'
 import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
-import type { ExecutionStatus } from '~/types/asset_execution'
 import type { EventCategory } from '~/utils/events'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
@@ -39,7 +38,7 @@ const eventInFocus = ref<RunEvent | null>(null)
 const filterStatuses = computed(() => statusFilter.value ? statusesForKey(statusFilter.value) : null)
 
 /** Timeline rows, narrowed to the active status pill. */
-const filteredAssetExecutions = computed(() => {
+const timelineRows = useAssetExecutionRows(() => {
     const statuses = filterStatuses.value
     if (!statuses) return assetExecutions.value
     return assetExecutions.value.filter(e => statuses.includes(e.status))
@@ -187,11 +186,12 @@ onUnmounted(() => {
                         <span class="text-sm">Run is currently queued...</span>
                     </div>
                     <ChartExecutionTimeline v-else-if="view === 'timeline'"
-                                            v-model:selected-asset="selectedAsset"
-                                            :asset-executions="filteredAssetExecutions"
-                                            :status="(run?.status as ExecutionStatus)"
+                                            v-model:selected-id="selectedAsset"
+                                            :rows="timelineRows"
+                                            :min-bar-ratio="0.05"
                                             :marker-time="markerTime"
-                                            :highlighted-asset="highlightedAsset" />
+                                            :highlighted-id="highlightedAsset"
+                                            empty-message="No asset executions yet" />
                     <ExecutionsRunGraph v-else
                                         v-model:selected-asset="selectedAsset"
                                         :run-id="runId" />

@@ -33,6 +33,7 @@ export function useNavSections() {
         {
             label: 'Overview',
             pages: [
+                { label: 'Timeline', icon: 'i-lucide-gantt-chart', to: '/timeline', keywords: ['gantt', 'schedule', 'runs', 'history'] },
                 { label: 'Graph', icon: 'i-lucide-workflow', to: '/graph', keywords: ['dag', 'pipeline', 'lineage'] },
                 { label: 'Collection', icon: 'i-lucide-library', to: '/collection', keywords: ['catalog', 'library'] },
             ],
