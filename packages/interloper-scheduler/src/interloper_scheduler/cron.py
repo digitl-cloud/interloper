@@ -197,13 +197,7 @@ class CronController(Controller):
         """
         if not config.get("partitioned"):
             return None
-        # Pre-0.60 rows carry `backfill_days`, always with an implicit offset
-        # of 1. Read here as well as in `CronJob.__init__` because this is the
-        # other reader of a raw config: without it, a job whose row the
-        # migration has not rewritten yet would fall through to a single
-        # unpartitioned run, which then fails preflight against a partitioned
-        # target. Removed with the constructor shim.
-        lookback = config.get("lookback", config.get("backfill_days"))
+        lookback = config.get("lookback")
         if not lookback:
             return None
         return lookback_window(
