@@ -172,6 +172,8 @@ def list_runs(
     component_id: UUID | None = None,
     backfill_id: UUID | None = None,
     status: str | None = None,
+    after: dt.datetime | None = None,
+    before: dt.datetime | None = None,
     limit: int = 50,
     offset: int = 0,
     user: Profile = Depends(require_viewer),
@@ -180,16 +182,25 @@ def list_runs(
 ) -> list[RunResponse]:
     """List runs with optional filters.
 
+    ``after``/``before`` bound the runs to those whose execution overlaps that
+    window — a run occupies ``started_at`` → ``completed_at`` (open-ended while
+    running), so runs that never started match no window. This is what a
+    timeline view over a time range asks for.
+
     The total number of matching runs (ignoring ``limit``/``offset``) is
     returned in the ``X-Total-Count`` response header so clients can paginate.
     """
-    total = store.count_runs(org_id, component_id=component_id, backfill_id=backfill_id, status=status)
+    total = store.count_runs(
+        org_id, component_id=component_id, backfill_id=backfill_id, status=status, after=after, before=before
+    )
     response.headers["X-Total-Count"] = str(total)
     runs = store.list_runs(
         org_id,
         component_id=component_id,
         backfill_id=backfill_id,
         status=status,
+        after=after,
+        before=before,
         limit=limit,
         offset=offset,
     )

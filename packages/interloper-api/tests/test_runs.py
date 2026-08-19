@@ -6,6 +6,7 @@ tests, matching the style of ``test_admin.py``.
 
 from __future__ import annotations
 
+import datetime as dt
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -14,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
 
-from interloper_api.dependencies import get_current_user, get_store
+from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
 from interloper_api.routes import runs as runs_module
 
 _ORG_ID = uuid4()
@@ -42,6 +43,8 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.retry_calls: list[tuple[UUID, str]] = []
+        self.list_calls: list[dict[str, object]] = []
+        self.count_calls: list[dict[str, object]] = []
         self.raise_not_found = False
         self.raise_value_error: str | None = None
         #: Role the fake user holds in the run's org. None = not a member.
@@ -56,6 +59,14 @@ class FakeStore:
 
     def get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
         return self.role
+
+    def list_runs(self, org_id: UUID, **kwargs):
+        self.list_calls.append(kwargs)
+        return []
+
+    def count_runs(self, org_id: UUID, **kwargs):
+        self.count_calls.append(kwargs)
+        return 0
 
     def retry_run(self, run_id: UUID, *, scope: str = "all"):
         self.retry_calls.append((run_id, scope))
@@ -192,3 +203,33 @@ def test_quota_exceeded_maps_to_429(store: FakeStore) -> None:
     detail = resp.json()["detail"]
     assert detail["quota"] == "max_successful_runs_per_month"
     assert (detail["limit"], detail["used"]) == (3, 3)
+
+
+# -- Listing -------------------------------------------------------------------
+
+
+def test_list_runs_forwards_the_time_window(store: FakeStore) -> None:
+    """A timeline view asks for one window; both the listing and its count honour it."""
+    client = _client(store)
+    client.app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
+    client.app.dependency_overrides[get_org_id] = lambda: _ORG_ID
+
+    resp = client.get("/runs/", params={"after": "2026-02-04T00:00:00Z", "before": "2026-02-05T00:00:00Z"})
+
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "0"
+    window = (
+        dt.datetime(2026, 2, 4, tzinfo=dt.timezone.utc),
+        dt.datetime(2026, 2, 5, tzinfo=dt.timezone.utc),
+    )
+    assert (store.list_calls[0]["after"], store.list_calls[0]["before"]) == window
+    assert (store.count_calls[0]["after"], store.count_calls[0]["before"]) == window
+
+
+def test_list_runs_without_window_passes_none(store: FakeStore) -> None:
+    client = _client(store)
+    client.app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
+    client.app.dependency_overrides[get_org_id] = lambda: _ORG_ID
+
+    assert client.get("/runs/").status_code == 200
+    assert (store.list_calls[0]["after"], store.list_calls[0]["before"]) == (None, None)

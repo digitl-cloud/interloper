@@ -164,3 +164,75 @@ class TestCancelBackfill:
     def test_cancel_missing_backfill_raises(self, store: RunMixin):
         with pytest.raises(NotFoundError):
             store.cancel_backfill(uuid4())
+
+
+def _H(hours: int) -> dt.timedelta:
+    return dt.timedelta(hours=hours)
+
+
+def _timed_run(
+    store: RunMixin,
+    *,
+    started_at: dt.datetime | None,
+    completed_at: dt.datetime | None,
+    org_id: UUID = _ORG_ID,
+) -> UUID:
+    """Insert a run occupying a known interval."""
+    with Session(store._engine) as session:
+        run = Run(
+            id=uuid4(),
+            org_id=org_id,
+            status="success" if completed_at else "running",
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+        session.add(run)
+        session.commit()
+        return run.id
+
+
+class TestListRunsWindow:
+    """`after`/`before` select runs whose execution overlaps the window."""
+
+    def test_overlapping_runs_only(self, store: RunMixin):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        before_window = _timed_run(store, started_at=base - _H(3), completed_at=base - _H(2))
+        straddling_start = _timed_run(store, started_at=base - _H(2), completed_at=base + _H(1))
+        inside = _timed_run(store, started_at=base + _H(2), completed_at=base + _H(3))
+        after_window = _timed_run(store, started_at=base + _H(6), completed_at=base + _H(7))
+
+        found = store.list_runs(_ORG_ID, after=base, before=base + _H(4), limit=100)
+
+        assert {r.id for r in found} == {straddling_start, inside}
+        assert before_window not in {r.id for r in found}
+        assert after_window not in {r.id for r in found}
+
+    def test_running_run_is_open_ended(self, store: RunMixin):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        running = _timed_run(store, started_at=base - _H(5), completed_at=None)
+
+        found = store.list_runs(_ORG_ID, after=base, before=base + _H(1), limit=100)
+
+        assert [r.id for r in found] == [running]
+
+    def test_never_started_runs_are_excluded(self, store: RunMixin):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        _timed_run(store, started_at=None, completed_at=None)
+
+        assert store.list_runs(_ORG_ID, after=base, before=base + _H(1), limit=100) == []
+        assert store.list_runs(_ORG_ID, after=base, limit=100) == []
+        assert store.count_runs(_ORG_ID, after=base) == 0
+
+    def test_count_matches_the_same_window(self, store: RunMixin):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        _timed_run(store, started_at=base + _H(1), completed_at=base + _H(2))
+        _timed_run(store, started_at=base + _H(9), completed_at=base + _H(10))
+
+        assert store.count_runs(_ORG_ID, after=base, before=base + _H(4)) == 1
+
+    def test_unbounded_listing_keeps_every_run(self, store: RunMixin):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        _timed_run(store, started_at=base, completed_at=base + _H(1))
+        _timed_run(store, started_at=None, completed_at=None)
+
+        assert len(store.list_runs(_ORG_ID, limit=100)) == 2

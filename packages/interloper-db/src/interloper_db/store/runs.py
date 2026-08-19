@@ -171,8 +171,15 @@ def _run_filters(
     component_id: UUID | None,
     backfill_id: UUID | None,
     status: str | None,
+    after: datetime | None = None,
+    before: datetime | None = None,
 ) -> list[Any]:
     """The shared where-clauses of :meth:`RunMixin.list_runs` / ``count_runs``.
+
+    ``after``/``before`` select the runs whose execution *overlaps* the window
+    — a run occupies ``[started_at, completed_at)``, left open-ended while it
+    is still running. Runs that never started occupy no time and so fall
+    outside every window.
 
     Returns:
         Filter expressions for the given criteria.
@@ -184,6 +191,14 @@ def _run_filters(
         filters.append(Run.backfill_id == backfill_id)
     if status:
         filters.append(Run.status == status)
+    if after is not None:
+        filters.append(col(Run.completed_at).is_(None) | (col(Run.completed_at) >= after))
+    if before is not None:
+        filters.append(col(Run.started_at) <= before)
+    if after is not None and before is None:
+        # An `after` bound alone still means "ran at some point", so a
+        # never-started run must not slip through on the NULL completed_at.
+        filters.append(col(Run.started_at).is_not(None))
     return filters
 
 
@@ -354,6 +369,8 @@ class RunMixin(StoreBase):
         component_id: UUID | None = None,
         backfill_id: UUID | None = None,
         status: str | None = None,
+        after: datetime | None = None,
+        before: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Run]:
@@ -364,6 +381,8 @@ class RunMixin(StoreBase):
             component_id: Optional target component filter.
             backfill_id: Optional backfill filter.
             status: Optional status filter.
+            after: Keep runs still executing at or after this instant.
+            before: Keep runs that had started by this instant.
             limit: Max results (default 50).
             offset: Pagination offset.
 
@@ -373,7 +392,7 @@ class RunMixin(StoreBase):
         with self._session() as session:
             statement = (
                 select(Run)
-                .where(*_run_filters(org_id, component_id, backfill_id, status))
+                .where(*_run_filters(org_id, component_id, backfill_id, status, after, before))
                 .order_by(col(Run.created_at).desc())
                 .offset(offset)
                 .limit(limit)
@@ -387,6 +406,8 @@ class RunMixin(StoreBase):
         component_id: UUID | None = None,
         backfill_id: UUID | None = None,
         status: str | None = None,
+        after: datetime | None = None,
+        before: datetime | None = None,
     ) -> int:
         """Count runs matching the same filters as :meth:`list_runs`.
 
@@ -395,13 +416,17 @@ class RunMixin(StoreBase):
             component_id: Optional target component filter.
             backfill_id: Optional backfill filter.
             status: Optional status filter.
+            after: Keep runs still executing at or after this instant.
+            before: Keep runs that had started by this instant.
 
         Returns:
             Total number of matching runs (ignoring limit/offset).
         """
         with self._session() as session:
             statement = (
-                select(func.count()).select_from(Run).where(*_run_filters(org_id, component_id, backfill_id, status))
+                select(func.count())
+                .select_from(Run)
+                .where(*_run_filters(org_id, component_id, backfill_id, status, after, before))
             )
             return session.exec(statement).one()
 
