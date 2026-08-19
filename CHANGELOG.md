@@ -2,6 +2,49 @@
 
 <!-- version list -->
 
+## v0.60.0 (2026-08-19)
+
+### Bug Fixes
+
+- **app**: Svg icon
+  ([`22d9108`](https://github.com/digitl-cloud/interloper/commit/22d910849c929a326407845f20dd5e021a0048d1))
+
+- **core**: Require a time partition for a time-partitioned asset
+  ([`0dc060a`](https://github.com/digitl-cloud/interloper/commit/0dc060ae7edace1f2dd7e8491ce21c943b8b3369))
+
+- **db**: Dispatch backfill runs newest partition first
+  ([`c82ffd9`](https://github.com/digitl-cloud/interloper/commit/c82ffd99e0e33872f1c1d1f17896547de23113ab))
+
+### Chores
+
+- Drop one-line field comments in the quota surfaces
+  ([`5d37c32`](https://github.com/digitl-cloud/interloper/commit/5d37c32b2b61483ea063715cb642a86aa5e20aa4))
+
+### Features
+
+- Make the backfill span a per-organisation quota
+  ([`cf9305e`](https://github.com/digitl-cloud/interloper/commit/cf9305ee6ace849ec9b671b453bce273212814b6))
+
+- **core**: Route time partitioning through an explicit granularity
+  ([`8862731`](https://github.com/digitl-cloud/interloper/commit/88627315f2657b52775d0542c1e94813b566b3a9))
+
+- **scheduler**: Count cron job windows in partitions with an offset
+  ([`af1157b`](https://github.com/digitl-cloud/interloper/commit/af1157b3a4e378489a9495723c03d5cca818d098))
+
+### Refactoring
+
+- Harden quota definitions and derive admin surfaces from them
+  ([`c185a0a`](https://github.com/digitl-cloud/interloper/commit/c185a0af1be33583a4bd8e8a44eea1196eb34894))
+
+- **app**: Render the job form's partition fields from the definition
+  ([`00f669d`](https://github.com/digitl-cloud/interloper/commit/00f669d8669c485ac999223ec489bbd66867dae7))
+
+### Breaking Changes
+
+- **scheduler**: `CronJob.backfill_days` is replaced by `lookback` and `offset`. Run `interloper db
+  upgrade` to rewrite persisted job configs.
+
+
 ## v0.59.0 (2026-08-14)
 
 ### Bug Fixes
