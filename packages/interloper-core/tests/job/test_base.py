@@ -51,23 +51,6 @@ class TestDefinition:
         assert job.offset == 1
 
 
-class TestLegacyConfig:
-    """The pre-0.60 ``backfill_days`` key, read for one release."""
-
-    def test_backfill_days_maps_onto_lookback(self):
-        job = il.CronJob(cron="0 6 * * *", partitioned=True, backfill_days=7)
-        assert job.lookback == 7
-        assert job.offset == 1
-
-    def test_new_keys_win_over_the_legacy_one(self):
-        job = il.CronJob(cron="0 6 * * *", partitioned=True, backfill_days=7, lookback=2, offset=0)
-        assert (job.lookback, job.offset) == (2, 0)
-
-    def test_a_null_backfill_days_stays_null(self):
-        job = il.CronJob(cron="0 6 * * *", backfill_days=None)
-        assert job.lookback is None
-
-
 class TestDag:
     """Compiling targets into an executable DAG."""
 

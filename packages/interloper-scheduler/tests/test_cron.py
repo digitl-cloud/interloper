@@ -159,23 +159,6 @@ class TestScheduling:
             backfill = session.exec(select(Backfill)).one()
         assert backfill.start_date == backfill.end_date == now.date()
 
-    def test_legacy_backfill_days_config_still_schedules(self, store: Store) -> None:
-        # A row the migration has not rewritten yet: it must schedule exactly
-        # as it did before the rename, not degrade to an unpartitioned run.
-        now = dt.datetime.now(dt.timezone.utc)
-        _job(
-            store,
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "backfill_days": 3},
-            state={"next_run_at": now.isoformat()},
-        )
-        CronController(store=store)._tick()
-
-        with Session(store.engine) as session:
-            backfill = session.exec(select(Backfill)).one()
-        assert backfill.partitions == 3
-        assert backfill.end_date == now.date() - dt.timedelta(days=1)
-        assert len(_runs(store)) == 3
-
     def test_partitioned_job_without_lookback_creates_one_plain_run(self, store: Store) -> None:
         now = dt.datetime.now(dt.timezone.utc)
         _job(
