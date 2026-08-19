@@ -422,6 +422,17 @@ class TestTimePartitioning:
     def test_unbounded_asset_accepts_any_partition(self):
         FakeAssetDaily()._validate_partitioning(TimePartition(dt.date(1999, 1, 1)))
 
+    def test_a_non_time_partition_is_rejected(self):
+        # Only time partitions carry a granularity, so anything else would
+        # reach the asset as a scope that cannot answer `granularity`/`bounds`.
+        with pytest.raises(PartitionError, match="is time-partitioned, but the run was given a FakePartition"):
+            FakeAssetDaily()._validate_partitioning(FakePartition(value="2026-01-01"))
+
+    def test_a_non_time_window_is_rejected(self):
+        window = FakePartitionWindow(start="2026-01-01", end="2026-01-03")
+        with pytest.raises(PartitionError, match="is time-partitioned"):
+            FakeAssetDaily()._validate_partitioning(window)
+
 
 # -- __call__ reconfiguration --------------------------------------------------
 

@@ -870,21 +870,33 @@ class Asset(Component):
     ) -> None:
         """Validate a scope against the asset's time partitioning.
 
+        A time-partitioned asset requires a *time* partition: only those carry
+        the granularity, so anything else would reach the asset as a scope that
+        cannot answer ``granularity`` or ``bounds`` — the contract
+        ``context.partition`` rests on.
+
         Raises:
-            PartitionError: If the scope's granularity disagrees with the
-                asset's, or it reaches before the asset's ``start``.
+            PartitionError: If the scope is not a time partition, its
+                granularity disagrees with the asset's, or it reaches before
+                the asset's ``start``.
         """
         scope = partition_or_window
-        if (
-            isinstance(scope, (TimePartition, TimePartitionWindow))
-            and scope.granularity is not partitioning.granularity
-        ):
+        if scope is None:
+            return
+
+        if not isinstance(scope, (TimePartition, TimePartitionWindow)):
+            raise PartitionError(
+                f"Asset '{self.key}' is time-partitioned, but the run was given a "
+                f"{type(scope).__name__}. Use `TimePartition` or `TimePartitionWindow`."
+            )
+
+        if scope.granularity is not partitioning.granularity:
             raise PartitionError(
                 f"Asset '{self.key}' is partitioned by {partitioning.granularity.value}, "
                 f"but the run was given a {scope.granularity.value} partition."
             )
 
-        if partitioning.start is None or scope is None:
+        if partitioning.start is None:
             return
 
         earliest = scope.start if isinstance(scope, PartitionWindow) else scope.value
