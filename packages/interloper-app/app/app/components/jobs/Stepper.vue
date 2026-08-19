@@ -43,8 +43,17 @@ const name = ref('')
 const cron = ref('')
 const tags = ref<string[]>([])
 const enabled = ref(true)
-const lookback = ref<number | null>(null)
-const offset = ref<number>(1)
+/**
+ * Config fields rendered from `cron_job`'s definition rather than by hand.
+ * The bespoke ones are excluded: `cron` has presets and a human-readable
+ * rendering, `partitioned` is derived from the targets rather than asked, and
+ * `tags` is a list, which SchemaForm has no widget for (the same reason the
+ * hooks stepper excludes its `events`).
+ */
+const JOB_KEY = 'cron_job'
+const OWN_FIELDS = ['cron', 'partitioned', 'tags', 'enabled']
+const partitionConfig = ref<Record<string, unknown>>({})
+const partitionConfigValid = ref(true)
 const selectedSourceIds = ref<string[]>([])
 /** Asset targets carried through unchanged — the stepper only edits source targets. */
 const selectedAssetIds = ref<string[]>([])
@@ -52,14 +61,20 @@ const submitting = ref(false)
 
 const isEditing = computed(() => !!props.job)
 
+/** `cron_job`'s config schema, the source of every non-bespoke field below. */
+const jobSchema = computed(() => catalogStore.catalog[JOB_KEY]?.config_schema)
+
 /**
  * The dates a run today would cover, mirroring `lookback_window` on the
  * backend: `offset` partitions back from today, spanning `lookback` of them.
  * Daily is the only granularity an asset can declare, so days are safe here.
  */
+const lookback = computed(() => Number(partitionConfig.value.lookback ?? 0))
+const offset = computed(() => Number(partitionConfig.value.offset ?? 1))
+
 const windowPreview = computed(() => {
-    const span = lookback.value ?? 0
-    if (span < 1 || offset.value < 0) return null
+    const span = lookback.value
+    if (!Number.isFinite(span) || span < 1 || offset.value < 0) return null
     const end = new Date()
     end.setUTCDate(end.getUTCDate() - offset.value)
     const start = new Date(end)
@@ -77,8 +92,7 @@ onMounted(async () => {
         cron.value = jobCron(props.job)
         tags.value = [...jobTags(props.job)]
         enabled.value = jobEnabled(props.job)
-        lookback.value = jobLookback(props.job)
-        offset.value = jobOffset(props.job)
+        partitionConfig.value = { lookback: jobLookback(props.job), offset: jobOffset(props.job) }
         selectedSourceIds.value = jobTargetIds(props.job, 'source')
         selectedAssetIds.value = jobTargetIds(props.job, 'asset')
     }
@@ -156,7 +170,7 @@ const recapRows = computed(() => {
 
 // ── Validation ──────────────────────────────────────────────────
 const detailsValid = computed(() =>
-    !!name.value.trim() && !!cron.value.trim(),
+    !!name.value.trim() && !!cron.value.trim() && (!partitioned.value || partitionConfigValid.value),
 )
 
 const canProceed = computed(() => {
@@ -175,7 +189,7 @@ async function submit() {
             tags: [...tags.value],
             enabled: enabled.value,
             partitioned: partitioned.value,
-            lookback: partitioned.value ? (lookback.value ?? null) : null,
+            lookback: partitioned.value ? (lookback.value || null) : null,
             offset: partitioned.value ? offset.value : 1,
         })
         return
@@ -191,8 +205,7 @@ async function submit() {
                 tags: tags.value,
                 enabled: enabled.value,
                 partitioned: partitioned.value,
-                lookback: partitioned.value ? (lookback.value ?? null) : null,
-                offset: partitioned.value ? offset.value : 1,
+                ...(partitioned.value ? partitionConfig.value : { lookback: null, offset: 1 }),
             },
             relations: {
                 target: targetIds.map(id => ({ dst_id: id })),
@@ -305,27 +318,12 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                         <span>Partitioned — selected sources contain date-partitioned assets.</span>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
-                        <UFormField label="Lookback"
-                                    description="Partitions covered on every run.">
-                            <UInput v-model.number="lookback"
-                                    type="number"
-                                    :min="1"
-                                    :max="365"
-                                    placeholder="1"
-                                    class="w-full" />
-                        </UFormField>
-
-                        <UFormField label="Offset"
-                                    description="Partitions to stay behind the current one.">
-                            <UInput v-model.number="offset"
-                                    type="number"
-                                    :min="0"
-                                    :max="365"
-                                    placeholder="1"
-                                    class="w-full" />
-                        </UFormField>
-                    </div>
+                    <SchemaForm v-if="jobSchema"
+                                v-model:data="partitionConfig"
+                                v-model:is-valid="partitionConfigValid"
+                                :schema="jobSchema"
+                                :component-key="JOB_KEY"
+                                :exclude="OWN_FIELDS" />
 
                     <p v-if="windowPreview"
                        class="text-sm text-muted">
