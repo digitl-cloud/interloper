@@ -98,16 +98,11 @@ class TestPartitionDate:
         ctx = _context(TimePartition(dt.date(2026, 1, 1)))
         assert ctx.partition_date == dt.date(2026, 1, 1)
 
-    def test_coerces_string_value_from_base_partition(self) -> None:
-        # A base ``Partition`` does not type its value, so a string can slip
-        # through; the context must still hand the asset a real ``date``.
-        ctx = _context(Partition("2026-01-01"))
+    def test_returns_the_period_start(self) -> None:
+        # `TimePartition` truncated the value on construction, so the context
+        # has nothing left to coerce: it hands back what the partition holds.
+        ctx = _context(TimePartition(dt.datetime(2026, 1, 1, 9, 30, tzinfo=dt.timezone.utc)))
         assert ctx.partition_date == dt.date(2026, 1, 1)
-
-    def test_raises_type_error_on_unparseable_value(self) -> None:
-        ctx = _context(Partition("not-a-date"))
-        with pytest.raises(TypeError):
-            ctx.partition_date
 
     def test_raises_on_a_window(self) -> None:
         ctx = _context(

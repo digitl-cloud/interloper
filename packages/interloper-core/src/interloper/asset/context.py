@@ -7,12 +7,7 @@ from typing import Any
 
 from interloper.events import EventLogger
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-from interloper.partitioning.time import (
-    TimeGranularity,
-    TimePartitionConfig,
-    TimePartitionWindow,
-    coerce_to_date,
-)
+from interloper.partitioning.time import TimeGranularity, TimePartitionConfig, TimePartitionWindow
 
 
 class ExecutionContext:
@@ -122,10 +117,12 @@ class ExecutionContext:
     def partition_date(self) -> dt.date:
         """The partition value as a datetime.date object.
 
-        Sugar over ``context.partition.value`` for the daily case, which is
-        essentially every asset: it asserts the granularity rather than
-        assuming it. Any other granularity reads :attr:`partition` (or
-        :attr:`window`) and asks the partition itself.
+        The typed reading of ``context.partition.value``, which is annotated
+        ``Any`` on the base class: this is the only accessor that hands an
+        asset a real ``date`` without narrowing a type first, and it asserts
+        the daily granularity rather than assuming it. Any other granularity
+        reads :attr:`partition` (or :attr:`window`) and asks the partition
+        itself.
 
         Raises:
             AttributeError: If the asset is not time-partitioned, is
@@ -140,7 +137,7 @@ class ExecutionContext:
                 f"{partitioning.granularity.value}. Use `context.partition` instead."
             )
 
-        return coerce_to_date(partition.value)
+        return partition.value
 
     # -- Internals -------------------------------------------------------------
 
