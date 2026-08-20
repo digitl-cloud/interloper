@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AdminOrganisation, AdminQuotas, AdminUser } from '~/types/admin'
+import type { AdminOrganisation, AdminQuotaLimits, AdminQuotas, AdminUser } from '~/types/admin'
 
 definePageMeta({
     title: 'Admin overview',
@@ -97,7 +97,7 @@ interface AttentionItem {
     to: string
 }
 
-function runPct(row: { successful_runs: number, effective: { max_successful_runs_per_month: number | null } }) {
+function runPct(row: { successful_runs: number, effective: AdminQuotaLimits }) {
     const limit = row.effective.max_successful_runs_per_month
     if (limit == null || limit <= 0) return null
     return Math.round((row.successful_runs / limit) * 100)

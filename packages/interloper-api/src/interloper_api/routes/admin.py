@@ -19,7 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from interloper_db import Organisation, Profile, Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, RootModel, field_validator
 
 from interloper_api.dependencies import get_admin_config, get_quota_defaults, get_store, require_super_admin
 from interloper_api.email import send_invite_email
@@ -228,13 +228,11 @@ class AdminDataConfig(BaseModel):
     catalog: dict[str, list[str]]
 
 
-class AdminQuotaLimits(BaseModel):
-    """One set of quota limits; null means unlimited (or unset, for overrides)."""
-
-    max_sources: int | None = None
-    max_assets_per_source: int | None = None
-    max_successful_runs_per_month: int | None = None
-    max_backfill_days: int | None = None
+#: One set of quota limits, keyed by quota key; null means unlimited (or
+#: unset, for overrides). Derived from the ``QUOTAS`` registry rather than
+#: declared field-by-field, so registering a quota surfaces it here — and in
+#: the frontend, which already indexes these by key — with no code change.
+AdminQuotaLimits = dict[str, int | None]
 
 
 class AdminOrgQuotaStatus(BaseModel):
@@ -272,13 +270,30 @@ class AdminQuotasResponse(BaseModel):
     organisations: list[AdminOrgQuotaStatus]
 
 
-class AdminQuotaUpdateRequest(BaseModel):
-    """Per-org quota overrides. Omitted fields keep their value; null clears one."""
+class AdminQuotaUpdateRequest(RootModel[AdminQuotaLimits]):
+    """Per-org quota overrides. Omitted keys keep their value; null clears one.
 
-    max_sources: int | None = Field(default=None, ge=0)
-    max_assets_per_source: int | None = Field(default=None, ge=0)
-    max_successful_runs_per_month: int | None = Field(default=None, ge=0)
-    max_backfill_days: int | None = Field(default=None, ge=0)
+    Keys are checked against the registry here so an unknown quota is a 422
+    at the boundary rather than a ``KeyError`` out of the store.
+    """
+
+    @field_validator("root")
+    @classmethod
+    def _known_keys_and_non_negative(cls, value: AdminQuotaLimits) -> AdminQuotaLimits:
+        """Validate the payload against the quota registry.
+
+        Returns:
+            The payload unchanged.
+
+        Raises:
+            ValueError: If a key names no registered quota, or a limit is
+                negative.
+        """
+        if unknown := sorted(set(value) - set(QUOTAS.keys())):
+            raise ValueError(f"Unknown quota(s): {', '.join(unknown)}. Known: {', '.join(sorted(QUOTAS.keys()))}")
+        if negative := sorted(key for key, limit in value.items() if limit is not None and limit < 0):
+            raise ValueError(f"Quota limits must be >= 0: {', '.join(negative)}")
+        return value
 
 
 class AdminActivityEntry(BaseModel):
@@ -476,32 +491,40 @@ def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any
 
 
 def _quota_limits(limits: Any) -> AdminQuotaLimits:
-    """Map limits from a ``{key: limit}`` dict (store) or attributes (settings)."""
+    """Map limits from a ``{key: limit}`` dict (store) or attributes (settings).
+
+    Returns:
+        Every registered quota's limit, ``None`` where unset.
+    """
     if isinstance(limits, dict):
-        return AdminQuotaLimits(**{key: limits.get(key) for key in AdminQuotaLimits.model_fields})
-    return AdminQuotaLimits(**{key: getattr(limits, key, None) for key in AdminQuotaLimits.model_fields})
+        return {key: limits.get(key) for key in QUOTAS.keys()}
+    return {key: getattr(limits, key, None) for key in QUOTAS.keys()}
 
 
 def _effective_limits(overrides: AdminQuotaLimits, defaults: AdminQuotaLimits) -> AdminQuotaLimits:
-    """Per-org overrides win field-by-field over the global defaults."""
-    return AdminQuotaLimits(
-        **{
-            key: override if (override := getattr(overrides, key)) is not None else getattr(defaults, key)
-            for key in AdminQuotaLimits.model_fields
-        }
-    )
+    """Per-org overrides win key-by-key over the global defaults.
+
+    Returns:
+        The effective limit of every registered quota.
+    """
+    return {
+        key: override if (override := overrides.get(key)) is not None else defaults.get(key)
+        for key in QUOTAS.keys()
+    }
 
 
 def _quota_fields(defaults: AdminQuotaLimits) -> list[AdminQuotaField]:
-    """Field descriptors for admin quota surfaces, in the wire model's order.
+    """Field descriptors for admin quota surfaces, in registry order.
 
-    Labels come from the registry definitions, so the frontend renders new
-    quotas without a matching code change.
+    Keys, labels and defaults all come from the registry, so registering a
+    quota is the whole change: no wire model, no frontend edit. ``Registry``
+    sorts its keys, so the admin surfaces list quotas alphabetically rather
+    than in the order they happen to be registered.
+
+    Returns:
+        One descriptor per registered quota.
     """
-    return [
-        AdminQuotaField(key=key, label=QUOTAS[key].label, default=getattr(defaults, key))
-        for key in AdminQuotaLimits.model_fields
-    ]
+    return [AdminQuotaField(key=key, label=QUOTAS[key].label, default=defaults.get(key)) for key in QUOTAS.keys()]
 
 
 def _require_org(store: Store, org_id: UUID) -> Organisation:
@@ -657,9 +680,9 @@ def update_org_quota(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> AdminQuotaLimits:
-    """Set an organisation's quota overrides; omitted fields keep their value, null clears one."""
+    """Set an organisation's quota overrides; omitted keys keep their value, null clears one."""
     _require_org(store, org_id)
-    overrides = store.set_quota(org_id, body.model_dump(exclude_unset=True))
+    overrides = store.set_quota(org_id, body.root)
     return _quota_limits(overrides)
 
 
