@@ -15,6 +15,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
+from interloper_db.store.quotas import QUOTAS
 
 from interloper_api.dependencies import get_admin_config, get_current_user, get_store
 from interloper_api.routes import admin as admin_module
@@ -275,8 +276,8 @@ def test_super_admin_reads_quota_overview(store: FakeStore) -> None:
     assert body["period_start"] == "2026-08-01"
     assert body["defaults"]["max_successful_runs_per_month"] == 100
 
-    # Field descriptors drive the admin UI: wire-model order, registry labels.
-    assert [field["key"] for field in body["fields"]] == list(admin_module.AdminQuotaLimits.model_fields)
+    # Field descriptors drive the admin UI: registry order (sorted), registry labels.
+    assert [field["key"] for field in body["fields"]] == list(QUOTAS.keys())
     by_key = {field["key"]: field for field in body["fields"]}
     assert by_key["max_sources"] == {"key": "max_sources", "label": "Max sources", "default": 10}
     assert by_key["max_backfill_days"]["default"] is None
@@ -301,12 +302,7 @@ def test_quota_overview_defaults_absent_means_unlimited(store: FakeStore) -> Non
     resp = client.get("/admin/quotas")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["defaults"] == {
-        "max_sources": None,
-        "max_assets_per_source": None,
-        "max_successful_runs_per_month": None,
-        "max_backfill_days": None,
-    }
+    assert body["defaults"] == dict.fromkeys(QUOTAS.keys())
     (org,) = body["organisations"]
     assert org["effective"]["max_assets_per_source"] is None
 
@@ -549,8 +545,18 @@ def test_activity_feed_composes_titles(store: FakeStore) -> None:
     ]
 
 
-def test_quota_wire_model_matches_the_registry() -> None:
-    """AdminQuotaLimits must expose exactly the registered quota keys."""
-    from interloper_db.store.quotas import QUOTAS
+def test_quota_payload_is_derived_from_the_registry() -> None:
+    """Registering a quota surfaces it in the payload with no wire-model edit."""
+    assert set(admin_module._quota_limits({})) == set(QUOTAS.keys())
+    assert [field.key for field in admin_module._quota_fields({})] == list(QUOTAS.keys())
 
-    assert set(admin_module.AdminQuotaLimits.model_fields) == set(QUOTAS.keys())
+
+def test_update_quota_rejects_an_unknown_quota(store: FakeStore) -> None:
+    """A bad key is a 422 at the boundary, not a KeyError out of the store."""
+    resp = _client(store, is_super_admin=True).patch(
+        f"/admin/organisations/{store.org.id}/quota",
+        json={"max_bananas": 5},
+    )
+    assert resp.status_code == 422
+    assert "max_bananas" in resp.text
+    assert store.quota_updates == []

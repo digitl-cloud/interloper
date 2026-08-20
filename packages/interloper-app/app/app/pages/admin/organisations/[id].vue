@@ -150,7 +150,7 @@ const usageTiles = computed(() => {
             value: row.sources.toLocaleString(),
             sub: eff.max_sources != null ? `of ${eff.max_sources.toLocaleString()} allowed` : 'no limit set',
             used: row.sources,
-            limit: eff.max_sources,
+            limit: eff.max_sources ?? null,
         },
         {
             label: 'Assets / source',
@@ -159,7 +159,7 @@ const usageTiles = computed(() => {
                 ? `largest source, of ${eff.max_assets_per_source.toLocaleString()}`
                 : 'largest source',
             used: row.max_assets_per_source,
-            limit: eff.max_assets_per_source,
+            limit: eff.max_assets_per_source ?? null,
         },
         {
             label: 'Successful runs',
@@ -168,7 +168,7 @@ const usageTiles = computed(() => {
                 ? `of ${eff.max_successful_runs_per_month.toLocaleString()} this period`
                 : 'this period',
             used: row.successful_runs,
-            limit: eff.max_successful_runs_per_month,
+            limit: eff.max_successful_runs_per_month ?? null,
         },
         {
             label: 'Reserved runs',

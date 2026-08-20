@@ -50,12 +50,13 @@ export interface AdminConfig {
     quotas: AdminQuotaLimits
 }
 
-export interface AdminQuotaLimits {
-    max_sources: number | null
-    max_assets_per_source: number | null
-    max_successful_runs_per_month: number | null
-    max_backfill_days: number | null
-}
+/**
+ * Quota limits keyed by quota key; null means unlimited (or unset, for
+ * overrides). Keyed rather than declared field-by-field because the API
+ * derives the payload from its quota registry: a new quota arrives here
+ * without a matching type edit, and the drawer already indexes by key.
+ */
+export type AdminQuotaLimits = Record<string, number | null>
 
 export interface AdminOrgQuotaStatus {
     id: string
@@ -74,7 +75,7 @@ export interface AdminOrgQuotaStatus {
 
 /** One quota's display descriptor: key, registry label, instance default. */
 export interface AdminQuotaField {
-    key: keyof AdminQuotaLimits
+    key: string
     label: string
     default: number | null
 }
