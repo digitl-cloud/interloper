@@ -2,10 +2,11 @@
 
 A time partition is a **period identified by its start**: the value is the
 period's first instant, and the :class:`TimeGranularity` says how long the
-period lasts. Daily is the only granularity accepted today (see
-:data:`SUPPORTED_GRANULARITIES`), but every piece of time arithmetic goes
-through the granularity, so widening it is a local change rather than a
-sweep through the codebase.
+period lasts. The granularities an asset may declare are the ones BigQuery
+time partitioning offers — hourly, daily, monthly, yearly (see
+:data:`SUPPORTED_GRANULARITIES`) — and every piece of time arithmetic goes
+through the granularity, so nothing outside this module hardcodes a period
+length.
 """
 
 from __future__ import annotations
@@ -60,10 +61,10 @@ def coerce_to_datetime(value: object) -> dt.datetime:
     Accepts a ``datetime``, a ``date`` (midnight is assumed), or an ISO-8601
     datetime string. Anything else raises ``TypeError``.
 
-    Partition values are period *labels*, not instants: they stay exactly as
-    naive or as aware as they arrive, so a window never mixes the two.
-    Choosing the timezone a period is labelled in belongs to whoever computes
-    "now".
+    Partition values are period *labels* in UTC, not instants: an aware
+    datetime is converted to UTC and stripped of its tzinfo, so ids, bounds
+    and comparisons never mix aware and naive values. This matches BigQuery,
+    whose time partitions are UTC-based.
 
     Args:
         value: The partition value to coerce.
@@ -75,12 +76,14 @@ def coerce_to_datetime(value: object) -> dt.datetime:
         TypeError: If the value cannot be interpreted as a datetime.
     """
     if isinstance(value, dt.datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(dt.timezone.utc).replace(tzinfo=None)
         return value
     if isinstance(value, dt.date):
         return dt.datetime(value.year, value.month, value.day)  # noqa: DTZ001 — a label, not an instant
     if isinstance(value, str):
         try:
-            return dt.datetime.fromisoformat(value)
+            return coerce_to_datetime(dt.datetime.fromisoformat(value))
         except ValueError as e:
             raise TypeError(
                 f"Could not parse partition value {value!r} as a datetime: expected an ISO-8601 datetime string."
@@ -115,11 +118,10 @@ class TimeGranularity(str, Enum):
     fully testable, and it is what makes the granularity a real seam rather
     than a placeholder.
 
-    Partition *identity* (:meth:`format` / :meth:`parse`) is implemented for
-    ``DAY`` only. An id is a storage contract: it lands in hive paths, object
-    prefixes and ``DELETE`` predicates, so the id format for the other
-    granularities stays deliberately unspecified until a destination needs
-    one.
+    Partition *identity* (:meth:`format` / :meth:`parse`) exists for the
+    declarable granularities. An id is a storage contract — it lands in hive
+    paths, object prefixes and ``DELETE`` predicates — so ``WEEK`` and
+    ``QUARTER``, which nothing may declare, deliberately have none.
 
     Only the granularities in :data:`SUPPORTED_GRANULARITIES` may be declared
     on a :class:`TimePartitionConfig`.
@@ -220,15 +222,28 @@ class TimeGranularity(str, Enum):
     def format(self, value: object) -> str:
         """Render a value as a partition id.
 
+        Ids are ISO-8601 prefixes — ``2026``, ``2026-08``, ``2026-08-21``,
+        ``2026-08-21T13`` — so they sort chronologically as strings, embed in
+        hive paths and object prefixes unchanged, and each shape names its
+        granularity unambiguously (see :func:`parse_partition_key`).
+
         Returns:
             The canonical id of the period containing *value*.
 
         Raises:
             NotImplementedError: For granularities whose id format is not
-                yet defined.
+                yet defined (``WEEK``/``QUARTER``: an id is a storage
+                contract, and BigQuery parity does not need them).
         """
+        start = self.truncate(value)
+        if self is TimeGranularity.HOUR:
+            return start.strftime("%Y-%m-%dT%H")
         if self is TimeGranularity.DAY:
-            return self.truncate(value).isoformat()
+            return start.isoformat()
+        if self is TimeGranularity.MONTH:
+            return start.strftime("%Y-%m")
+        if self is TimeGranularity.YEAR:
+            return start.strftime("%Y")
         raise NotImplementedError(
             f"No partition id format is defined for {self.value!r} granularity. "
             f"Supported: {', '.join(sorted(g.value for g in _FORMATTABLE))}."
@@ -243,24 +258,66 @@ class TimeGranularity(str, Enum):
         Raises:
             NotImplementedError: For granularities whose id format is not
                 yet defined.
+            ValueError: If *key* is not this granularity's format.
         """
-        if self is TimeGranularity.DAY:
-            return coerce_to_date(key)
-        raise NotImplementedError(
-            f"No partition id format is defined for {self.value!r} granularity. "
-            f"Supported: {', '.join(sorted(g.value for g in _FORMATTABLE))}."
-        )
+        if self not in _FORMATTABLE:
+            raise NotImplementedError(
+                f"No partition id format is defined for {self.value!r} granularity. "
+                f"Supported: {', '.join(sorted(g.value for g in _FORMATTABLE))}."
+            )
+        pattern = _KEY_FORMATS[self]
+        try:
+            parsed = dt.datetime.strptime(key, pattern)  # noqa: DTZ007 — a label, not an instant
+        except ValueError as e:
+            raise ValueError(
+                f"Partition key {key!r} is not a {self.value} key (expected the shape {pattern!r})."
+            ) from e
+        return parsed if self is TimeGranularity.HOUR else parsed.date()
 
 
-_FORMATTABLE = frozenset({TimeGranularity.DAY})
+#: The strptime shape of each granularity's partition id.
+_KEY_FORMATS: dict[TimeGranularity, str] = {
+    TimeGranularity.HOUR: "%Y-%m-%dT%H",
+    TimeGranularity.DAY: "%Y-%m-%d",
+    TimeGranularity.MONTH: "%Y-%m",
+    TimeGranularity.YEAR: "%Y",
+}
 
-SUPPORTED_GRANULARITIES = frozenset({TimeGranularity.DAY})
-"""Granularities an asset may declare today.
+_FORMATTABLE = frozenset(_KEY_FORMATS)
 
-The arithmetic covers every member of :class:`TimeGranularity`, but the rest
-of the stack is still day-shaped (``Run.partition_date`` is a ``DATE``, the
-CLI takes ``--date``, ``DatabaseDestination`` deletes a partition by
-equality), so declaring anything else is rejected rather than half-honoured.
+
+def parse_partition_key(key: str) -> TimePartition:
+    """Parse a partition id into a :class:`TimePartition`, inferring its granularity.
+
+    The id shapes are mutually unambiguous (``2026`` / ``2026-08`` /
+    ``2026-08-21`` / ``2026-08-21T13``), so the key alone carries the
+    granularity: storage and transport need one string, not a pair.
+
+    Returns:
+        The partition the key names.
+
+    Raises:
+        ValueError: If *key* matches no known id shape.
+    """
+    for granularity, pattern in _KEY_FORMATS.items():
+        try:
+            parsed = dt.datetime.strptime(key, pattern)  # noqa: DTZ007 — a label, not an instant
+        except ValueError:
+            continue
+        value = parsed if granularity is TimeGranularity.HOUR else parsed.date()
+        return TimePartition(value, granularity)
+    shapes = ", ".join(repr(p) for p in _KEY_FORMATS.values())
+    raise ValueError(f"Partition key {key!r} matches no granularity (known shapes: {shapes}).")
+
+
+SUPPORTED_GRANULARITIES = frozenset(
+    {TimeGranularity.HOUR, TimeGranularity.DAY, TimeGranularity.MONTH, TimeGranularity.YEAR}
+)
+"""Granularities an asset may declare: the set BigQuery time partitioning offers.
+
+``WEEK`` and ``QUARTER`` keep their arithmetic (it is pure and tested) but
+have no id format and cannot be declared — a partition id is a storage
+contract, and no destination needs those two.
 """
 
 

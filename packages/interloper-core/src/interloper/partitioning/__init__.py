@@ -11,6 +11,7 @@ from interloper.partitioning.time import (
     TimePartitionConfig,
     TimePartitionWindow,
     lookback_window,
+    parse_partition_key,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "TimePartitionConfig",
     "TimePartitionWindow",
     "lookback_window",
+    "parse_partition_key",
 ]

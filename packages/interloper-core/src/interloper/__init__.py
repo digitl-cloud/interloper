@@ -34,6 +34,7 @@ from interloper.partitioning import (
     TimePartitionConfig,
     TimePartitionWindow,
     lookback_window,
+    parse_partition_key,
 )
 from interloper.registry import Registry
 from interloper.resource import Resource, ResourceDefinition, ResourceRef
@@ -157,6 +158,7 @@ __all__ = [
     "fetch_field_provider",
     "is_fetch_field_provider",
     "lookback_window",
+    "parse_partition_key",
     "run",
     "schema",
     "source",

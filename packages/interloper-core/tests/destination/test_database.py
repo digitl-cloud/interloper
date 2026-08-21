@@ -30,10 +30,18 @@ class RecordingDB(DatabaseDestination):
     def _delete_partition(self, table, schema, column, value):
         self.calls.append(("delete_partition", (table, schema, column, value)))
 
+    def _delete_partition_range(self, table, schema, column, start, end):
+        self.calls.append(("delete_partition_range", (table, schema, column, start, end)))
+
     def _select_all(self, table, schema):
         return []
 
     def _select_partition(self, table, schema, column, value):
+        self.calls.append(("select_partition", (table, schema, column, value)))
+        return []
+
+    def _select_partition_range(self, table, schema, column, start, end):
+        self.calls.append(("select_partition_range", (table, schema, column, start, end)))
         return []
 
     def _count_by_partition(self, table, schema, column):
@@ -81,22 +89,60 @@ class TestWrite:
         dest.write(make_ctx(plain_asset()), [{"a": 1}])
         assert [c[0] for c in dest.calls] == ["insert"]
 
-    def test_single_partition_deletes_partition(self):
+    def test_single_time_partition_deletes_its_bounds(self):
+        # A time partition's rows may carry any value inside the period, so
+        # replacement deletes by half-open bounds rather than id equality.
         dest = RecordingDB(id="db")
         partition = TimePartition(datetime.date(2024, 1, 1))
         dest.write(make_ctx(partitioned_asset(), partition), [{"date": "2024-01-01"}])
-        assert dest.calls[0] == ("delete_partition", ("partitioned_asset", None, "date", "2024-01-01"))
+        assert dest.calls[0] == (
+            "delete_partition_range",
+            ("partitioned_asset", None, "date", datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)),
+        )
         assert dest.calls[1][0] == "insert"
+
+    def test_non_time_partition_deletes_by_id(self):
+        from interloper.partitioning.base import Partition, PartitionConfig
+
+        @il.asset(partitioning=PartitionConfig(column="region"))
+        def regional(context: il.ExecutionContext) -> list:
+            return []
+
+        dest = RecordingDB(id="db")
+        dest.write(make_ctx(regional(), Partition("eu")), [{"region": "eu"}])
+        assert dest.calls[0] == ("delete_partition", ("regional", None, "region", "eu"))
 
     def test_window_deletes_each_partition_inserts_once(self):
         dest = RecordingDB(id="db")
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 3))
         rows = [{"date": "2024-01-01"}, {"date": "2024-01-02"}, {"date": "2024-01-03"}]
         dest.write(make_ctx(partitioned_asset(), window), rows)
-        deletes = [c for c in dest.calls if c[0] == "delete_partition"]
+        deletes = [c for c in dest.calls if c[0] == "delete_partition_range"]
         inserts = [c for c in dest.calls if c[0] == "insert"]
         assert len(deletes) == 3
         assert len(inserts) == 1
+
+    def test_monthly_partition_bounds_span_the_month(self):
+        @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.MONTH))
+        def monthly(context: il.ExecutionContext) -> list:
+            return []
+
+        dest = RecordingDB(id="db")
+        partition = TimePartition(datetime.date(2024, 2, 10), il.TimeGranularity.MONTH)
+        dest.write(make_ctx(monthly(), partition), [{"date": "2024-02-10"}])
+        assert dest.calls[0] == (
+            "delete_partition_range",
+            ("monthly", None, "date", datetime.date(2024, 2, 1), datetime.date(2024, 3, 1)),
+        )
+
+    def test_time_partition_reads_by_bounds(self):
+        dest = RecordingDB(id="db")
+        partition = TimePartition(datetime.date(2024, 1, 1))
+        dest.read(make_ctx(partitioned_asset(), partition))
+        assert dest.calls[0] == (
+            "select_partition_range",
+            ("partitioned_asset", None, "date", datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)),
+        )
 
     def test_empty_data_is_a_noop(self):
         dest = RecordingDB(id="db")

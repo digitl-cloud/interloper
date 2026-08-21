@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 
 import pandas as pd
 from interloper.conformer import Conformer
-from interloper.representation import Representation
+from interloper.representation import Representation, iso_label
 
 from interloper_pandas.conformer import DATAFRAME_CONFORMER, dataframe_to_records
 
@@ -59,6 +59,15 @@ class DataFrameRepresentation(Representation):
             The matching rows.
         """
         return data[data[column].astype(str) == str(value)]
+
+    def filter_range(self, data: pd.DataFrame, column: str, start: Any, end: Any) -> pd.DataFrame:
+        """Return the rows whose *column* falls in ``[start, end)``.
+
+        Returns:
+            The matching rows.
+        """
+        labels = data[column].map(iso_label)
+        return data[(labels >= iso_label(start)) & (labels < iso_label(end))]
 
     @property
     def conformer(self) -> Conformer:

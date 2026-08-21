@@ -13,6 +13,7 @@ from interloper.partitioning.time import (
     coerce_to_date,
     coerce_to_datetime,
     lookback_window,
+    parse_partition_key,
     period_range,
 )
 
@@ -38,9 +39,15 @@ class TestCoerceToDate:
 
 
 class TestCoerceToDatetime:
-    def test_returns_datetime_unchanged(self) -> None:
-        value = dt.datetime(2026, 1, 1, 9, 30, tzinfo=dt.timezone.utc)
+    def test_returns_naive_datetime_unchanged(self) -> None:
+        value = dt.datetime(2026, 1, 1, 9, 30)  # noqa: DTZ001
         assert coerce_to_datetime(value) is value
+
+    def test_aware_datetime_becomes_naive_utc(self) -> None:
+        # Labels are UTC: mixing aware and naive values would poison every
+        # comparison downstream (bounds, clamps, window ordering).
+        cet = dt.timezone(dt.timedelta(hours=2))
+        assert coerce_to_datetime(dt.datetime(2026, 1, 1, 9, 30, tzinfo=cet)) == dt.datetime(2026, 1, 1, 7, 30)  # noqa: DTZ001
 
     def test_date_becomes_midnight(self) -> None:
         assert coerce_to_datetime(dt.date(2026, 1, 1)) == dt.datetime(2026, 1, 1)  # noqa: DTZ001
@@ -136,21 +143,52 @@ class TestTimeGranularityPeriodsBetween:
 
 
 class TestTimeGranularityIdentity:
-    def test_day_formats_as_iso_date(self) -> None:
-        assert TimeGranularity.DAY.format(dt.date(2026, 1, 1)) == "2026-01-01"
-
-    def test_day_parse_round_trips(self) -> None:
-        assert TimeGranularity.DAY.parse("2026-01-01") == dt.date(2026, 1, 1)
-
     @pytest.mark.parametrize(
-        "granularity",
-        [TimeGranularity.HOUR, TimeGranularity.WEEK, TimeGranularity.MONTH],
+        ("granularity", "value", "key"),
+        [
+            (TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13, 45), "2026-08-21T13"),  # noqa: DTZ001
+            (TimeGranularity.DAY, dt.date(2026, 8, 21), "2026-08-21"),
+            (TimeGranularity.MONTH, dt.date(2026, 8, 21), "2026-08"),
+            (TimeGranularity.YEAR, dt.date(2026, 8, 21), "2026"),
+        ],
     )
-    def test_other_granularities_have_no_id_format_yet(self, granularity: TimeGranularity) -> None:
+    def test_format_and_parse_round_trip(self, granularity: TimeGranularity, value: object, key: str) -> None:
+        assert granularity.format(value) == key
+        assert granularity.parse(key) == granularity.truncate(value)
+
+    def test_parse_rejects_a_key_of_another_shape(self) -> None:
+        with pytest.raises(ValueError, match="not a month key"):
+            TimeGranularity.MONTH.parse("2026-01-01")
+
+    @pytest.mark.parametrize("granularity", [TimeGranularity.WEEK, TimeGranularity.QUARTER])
+    def test_undeclarable_granularities_have_no_id_format(self, granularity: TimeGranularity) -> None:
         with pytest.raises(NotImplementedError, match="partition id format"):
             granularity.format(dt.date(2026, 1, 1))
         with pytest.raises(NotImplementedError, match="partition id format"):
             granularity.parse("2026-01-01")
+
+
+class TestParsePartitionKey:
+    @pytest.mark.parametrize(
+        ("key", "granularity", "value"),
+        [
+            ("2026", TimeGranularity.YEAR, dt.date(2026, 1, 1)),
+            ("2026-08", TimeGranularity.MONTH, dt.date(2026, 8, 1)),
+            ("2026-08-21", TimeGranularity.DAY, dt.date(2026, 8, 21)),
+            ("2026-08-21T13", TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13)),  # noqa: DTZ001
+        ],
+    )
+    def test_the_key_shape_carries_the_granularity(
+        self, key: str, granularity: TimeGranularity, value: object
+    ) -> None:
+        partition = parse_partition_key(key)
+        assert partition.granularity is granularity
+        assert partition.value == value
+        assert partition.id == key
+
+    def test_rejects_an_unknown_shape(self) -> None:
+        with pytest.raises(ValueError, match="matches no granularity"):
+            parse_partition_key("2026-W33")
 
 
 class TestPeriodRange:
@@ -174,8 +212,13 @@ class TestTimePartitionConfig:
     def test_defaults_to_daily(self) -> None:
         assert TimePartitionConfig(column="date").granularity is TimeGranularity.DAY
 
-    def test_day_is_the_only_supported_granularity(self) -> None:
-        assert SUPPORTED_GRANULARITIES == {TimeGranularity.DAY}
+    def test_supported_set_is_bigquery_parity(self) -> None:
+        assert SUPPORTED_GRANULARITIES == {
+            TimeGranularity.HOUR,
+            TimeGranularity.DAY,
+            TimeGranularity.MONTH,
+            TimeGranularity.YEAR,
+        }
 
     @pytest.mark.parametrize(
         "granularity",

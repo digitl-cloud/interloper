@@ -20,7 +20,7 @@ from interloper.destination import IOContext, destination
 from interloper.destination.database import DatabaseDestination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.normalizer import MaterializationStrategy
-from interloper.partitioning import PartitionConfig, TimePartitionConfig
+from interloper.partitioning import PartitionConfig, TimeGranularity, TimePartitionConfig
 from interloper.representation import Representation
 from interloper.resource.fields import FetchField, InputField, SelectField
 from interloper.schema import FieldSpec, Schema
@@ -368,6 +368,38 @@ class BigQueryDestination(DatabaseDestination):
         job_config = bigquery.QueryJobConfig(query_parameters=[_partition_param(bq_table, column, value)])
         self.client.query(query, job_config=job_config).result()
 
+    def _delete_partition_range(
+        self,
+        table: str,
+        schema: str | None,
+        column: str,
+        start: Any,
+        end: Any,
+    ) -> None:
+        """Delete rows whose *column* falls in ``[start, end)``.
+
+        No-op when the table does not exist yet.
+
+        Args:
+            table: Target table name.
+            schema: Database schema (dataset).
+            column: Partition column name.
+            start: The period's first instant (inclusive).
+            end: The period's end (exclusive).
+        """
+        bq_table = self._get_table(table, schema)
+        if bq_table is None:
+            return
+        ref = self._table_ref(table, schema)
+        query = f"DELETE FROM `{ref}` WHERE `{column}` >= @partition_start AND `{column}` < @partition_end"
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                _partition_param(bq_table, column, start, name="partition_start"),
+                _partition_param(bq_table, column, end, name="partition_end"),
+            ]
+        )
+        self.client.query(query, job_config=job_config).result()
+
     def _select_all(self, table: str, schema: str | None) -> list[dict[str, Any]]:
         """Select all rows from the BigQuery table.
 
@@ -416,6 +448,44 @@ class BigQueryDestination(DatabaseDestination):
         ref = self._table_ref(table, schema)
         query = f"SELECT * FROM `{ref}` WHERE `{column}` = @partition_value"
         job_config = bigquery.QueryJobConfig(query_parameters=[_partition_param(bq_table, column, value)])
+        rows = self.client.query(query, job_config=job_config).result()
+        return [dict(row) for row in rows]
+
+    def _select_partition_range(
+        self,
+        table: str,
+        schema: str | None,
+        column: str,
+        start: Any,
+        end: Any,
+    ) -> list[dict[str, Any]]:
+        """Select rows whose *column* falls in ``[start, end)``.
+
+        Args:
+            table: Target table name.
+            schema: Database schema (dataset).
+            column: Partition column name.
+            start: The period's first instant (inclusive).
+            end: The period's end (exclusive).
+
+        Returns:
+            Matching rows as list of dicts.
+
+        Raises:
+            DataNotFoundError: If the table does not exist.
+        """
+        bq_table = self._get_table(table, schema)
+        if bq_table is None:
+            qualified = self._table_ref(table, schema)
+            raise DataNotFoundError(f"Table '{qualified}' does not exist. Has the asset been materialized?")
+        ref = self._table_ref(table, schema)
+        query = f"SELECT * FROM `{ref}` WHERE `{column}` >= @partition_start AND `{column}` < @partition_end"
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                _partition_param(bq_table, column, start, name="partition_start"),
+                _partition_param(bq_table, column, end, name="partition_end"),
+            ]
+        )
         rows = self.client.query(query, job_config=job_config).result()
         return [dict(row) for row in rows]
 
@@ -509,35 +579,57 @@ def _asset_description(asset: Any) -> str | None:
 _TIME_PARTITIONABLE_TYPES = {"DATE", "DATETIME", "TIMESTAMP"}
 
 
+#: BigQuery's partitioning types, by the asset's declared granularity.
+_GRANULARITY_TO_BQ_TYPE = {
+    TimeGranularity.HOUR: bigquery.TimePartitioningType.HOUR,
+    TimeGranularity.DAY: bigquery.TimePartitioningType.DAY,
+    TimeGranularity.MONTH: bigquery.TimePartitioningType.MONTH,
+    TimeGranularity.YEAR: bigquery.TimePartitioningType.YEAR,
+}
+
+
 def _time_partitioning(
     config: PartitionConfig | None,
     bq_schema: list[bigquery.SchemaField] | None,
 ) -> bigquery.TimePartitioning | None:
     """Resolve the asset's partition config into a BigQuery time partitioning spec.
 
-    Daily partitioning on the partition column, when BigQuery supports it:
-    the column must be DATE / DATETIME / TIMESTAMP.  When the column type is
-    known (from the schema) and is not time-partitionable, or the config is
-    not time-based and no schema is available, returns ``None`` — the table
-    is created unpartitioned, which is always valid.
+    Partitioning at the asset's declared granularity, when BigQuery supports
+    it: the column must be DATE / DATETIME / TIMESTAMP, and hourly requires a
+    sub-day type (BigQuery rejects HOUR partitioning on a DATE column). When
+    the column type is known (from the schema) and does not support the
+    granularity, or the config is not time-based and no schema is available,
+    returns ``None`` — the table is created unpartitioned, which is always
+    valid.
 
     Args:
         config: The asset's partition config, if any.
         bq_schema: The table's field definitions, when known.
 
     Returns:
-        A daily ``TimePartitioning`` on the partition column, or ``None``.
+        A ``TimePartitioning`` at the asset's granularity, or ``None``.
     """
     if config is None:
         return None
 
+    granularity = config.granularity if isinstance(config, TimePartitionConfig) else TimeGranularity.DAY
     if bq_schema is not None:
         field = next((f for f in bq_schema if f.name == config.column), None)
-        if field is None or field.field_type not in _TIME_PARTITIONABLE_TYPES:
+        unsupported = (
+            field is None
+            or field.field_type not in _TIME_PARTITIONABLE_TYPES
+            or (granularity is TimeGranularity.HOUR and field.field_type == "DATE")
+        )
+        if unsupported:
             if isinstance(config, TimePartitionConfig):
+                reason = (
+                    "missing from the schema"
+                    if field is None
+                    else f"of type {field.field_type}"
+                    + (" (hourly partitioning needs DATETIME or TIMESTAMP)" if field.field_type == "DATE" else "")
+                )
                 warnings.warn(
-                    f"Partition column '{config.column}' is "
-                    f"{'missing from the schema' if field is None else f'of type {field.field_type}'}; "
+                    f"Partition column '{config.column}' is {reason}; "
                     "the BigQuery table will not be time-partitioned.",
                     UserWarning,
                     stacklevel=2,
@@ -546,7 +638,7 @@ def _time_partitioning(
     elif not isinstance(config, TimePartitionConfig):
         return None
 
-    return bigquery.TimePartitioning(type_=bigquery.TimePartitioningType.DAY, field=config.column)
+    return bigquery.TimePartitioning(type_=_GRANULARITY_TO_BQ_TYPE[granularity], field=config.column)
 
 
 def _merge_field_descriptions(
@@ -609,22 +701,25 @@ def _partition_param(
     bq_table: bigquery.Table,
     column: str,
     value: Any,
+    name: str = "partition_value",
 ) -> bigquery.ScalarQueryParameter:
-    """Build the partition-predicate query parameter, typed from the table.
+    """Build a partition-predicate query parameter, typed from the table.
 
-    Partition values arrive as strings (``Partition.id``), but the column may
-    be DATE / TIMESTAMP / INTEGER — BigQuery does not coerce a STRING
-    parameter in an equality predicate, so the parameter type must match the
-    actual column type.  Falls back to inferring from the value when the
-    column is not in the table schema.
+    Partition values arrive as strings (``Partition.id``) or as the period
+    bounds of a time partition (dates/datetimes), but the column may be
+    DATE / TIMESTAMP / INTEGER — BigQuery does not coerce a STRING parameter
+    in a comparison predicate, so the parameter type must match the actual
+    column type.  Falls back to inferring from the value when the column is
+    not in the table schema.
 
     Args:
         bq_table: The target table (for column type lookup).
         column: Partition column name.
-        value: Partition value.
+        value: Partition value or bound.
+        name: The query parameter's name.
 
     Returns:
-        A ``partition_value`` scalar parameter with the matching type.
+        A scalar parameter with the matching type.
     """
     field = next((f for f in bq_table.schema if f.name == column), None)
     if field is not None:
@@ -638,7 +733,28 @@ def _partition_param(
             value = datetime.datetime.fromisoformat(value)
         except ValueError:
             pass
-    return bigquery.ScalarQueryParameter("partition_value", param_type, value)
+    if param_type in ("TIMESTAMP", "DATETIME") and isinstance(value, datetime.date) and not isinstance(
+        value, datetime.datetime
+    ):
+        # A date bound against a datetime-typed column: promote to midnight so
+        # the client serializes it in the parameter's declared type.
+        value = datetime.datetime(value.year, value.month, value.day)  # noqa: DTZ001 — a label, not an instant
+    if param_type == "DATE" and isinstance(value, datetime.datetime):
+        # A datetime bound against a DATE column loses sub-day precision by
+        # definition; the caller guards hourly-on-DATE at table creation.
+        value = value.date()
+    if param_type == "STRING" and not isinstance(value, str):
+        value = _iso_string(value)
+    return bigquery.ScalarQueryParameter(name, param_type, value)
+
+
+def _iso_string(value: Any) -> str:
+    """Render a bound as an ISO-8601 string for STRING-typed columns.
+
+    Returns:
+        The ISO rendering of *value*.
+    """
+    return value.isoformat() if isinstance(value, (datetime.date, datetime.datetime)) else str(value)
 
 
 def _py_type_to_bq_type(py_type: Any) -> str:
