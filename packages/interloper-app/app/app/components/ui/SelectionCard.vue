@@ -15,7 +15,7 @@ const emit = defineEmits<{ select: [] }>()
 <template>
     <component :is="as"
                :type="as === 'button' ? 'button' : undefined"
-               class="rounded-[13px] border-2 text-left cursor-pointer transition"
+               class="rounded-lg border-2 text-left cursor-pointer transition"
                :class="selected
                    ? 'border-primary bg-primary/5'
                    : 'border-default bg-default hover:border-primary/40'"

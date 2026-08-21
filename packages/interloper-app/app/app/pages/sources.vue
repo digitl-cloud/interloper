@@ -82,7 +82,6 @@ function rowActions(source: ComponentRecord): DropdownMenuItem[][] {
 }
 
 const columns: TableColumn<ComponentRecord>[] = [
-    { accessorKey: 'select' as any, header: '' },
     {
         accessorKey: 'name',
         header: 'Source',
@@ -160,6 +159,11 @@ async function handleDelete(ids: string[]) {
 
 <template>
     <div>
+        <NavActions>
+            <UButton icon="i-lucide-plus"
+                     label="New source"
+                     @click="handleCreate" />
+        </NavActions>
         <DriftBanner />
 
         <div class="flex flex-col flex-1 min-h-0">
@@ -171,11 +175,6 @@ async function handleDelete(ids: string[]) {
                        search-placeholder="Search sources..."
                        @delete="handleDelete"
                        @edit="handleEdit">
-                <template #toolbar>
-                    <UButton icon="i-lucide-plus"
-                             label="New source"
-                             @click="handleCreate" />
-                </template>
 
                 <template #empty>
                     <SourcesEmptyState @create="handleCreate"

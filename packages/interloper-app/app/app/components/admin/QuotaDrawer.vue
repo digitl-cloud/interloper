@@ -76,7 +76,7 @@ async function submit() {
                      color="neutral"
                      variant="soft"
                      size="md"
-                     class="absolute top-[22px] right-[26px] rounded-[9px] text-muted"
+                     class="absolute top-[22px] right-[26px] rounded-md text-muted"
                      aria-label="Close"
                      @click="open = false" />
             <p class="text-[13px] text-muted leading-normal mb-4">

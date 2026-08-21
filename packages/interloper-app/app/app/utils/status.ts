@@ -11,6 +11,12 @@ export function statusColor(status?: string | null): 'success' | 'error' | 'info
     }
 }
 
+/** StatusPill palette for a status — its vocabulary has no `info`; running reads as the accent. */
+export function statusPillColor(status?: string | null): 'success' | 'error' | 'warning' | 'neutral' | 'primary' {
+    const color = statusColor(status)
+    return color === 'info' ? 'primary' : color
+}
+
 export function statusLabel(status?: string | null): string {
     if (!status) return '—'
     return status.charAt(0).toUpperCase() + status.slice(1)

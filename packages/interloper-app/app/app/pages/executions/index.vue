@@ -26,7 +26,6 @@ onMounted(() => {
         <UTabs :items="items"
                variant="link"
                :model-value="activeTab"
-               :ui="{ list: 'mb-4' }"
                @update:model-value="activeTab = $event as string">
             <template #runs>
                 <ExecutionsRunsTable />

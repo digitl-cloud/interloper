@@ -4,6 +4,7 @@ import type { OrgMember } from '~/types/organisation'
 definePageMeta({
     title: 'Organization',
     pageHeader: {
+        eyebrow: 'Workspace',
         title: 'Members',
         description: 'Invite your team to your workspace and give everyone the right level of access. '
             + 'Roles control who can build pipelines, who can only read data, and who can manage the workspace.',
@@ -158,7 +159,7 @@ const ROLE_CARDS = [
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div v-for="role in ROLE_CARDS"
                  :key="role.name"
-                 class="border border-default rounded-xl p-[18px] bg-default">
+                 class="border border-default rounded-lg p-[18px] bg-default">
                 <div class="flex items-center gap-2.5">
                     <div class="size-[34px] rounded-lg flex items-center justify-center"
                          :class="role.tile">

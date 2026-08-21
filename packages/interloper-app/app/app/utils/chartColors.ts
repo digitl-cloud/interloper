@@ -7,11 +7,11 @@ export const CHART_STATUS_COLORS: Record<string, { light: string, dark: string }
     failed: { light: '#e5484d', dark: '#ea686c' }, // red-500 / red-400
     running: { light: '#2d7df6', dark: '#5c9ef8' }, // blue-500 / blue-400
     canceled: { light: '#e69e2e', dark: '#e9ac46' }, // amber-500 / amber-400
-    default: { light: '#d4d4d9', dark: '#6b6b70' }, // gray-400 / gray-800
+    default: { light: '#d4d4d8', dark: '#71717a' }, // gray-300 / gray-500
 }
 
 export const CHART_AXIS_COLORS = {
-    axis: { light: '#6b6b70', dark: '#9a9aa0' }, // gray-800 / gray-600
-    grid: { light: '#e8e8ec', dark: '#3f3f44' }, // gray-300 / gray-900
+    axis: { light: '#52525b', dark: '#71717a' }, // gray-600 / gray-500
+    grid: { light: '#e4e4e7', dark: '#3f3f46' }, // gray-200 / gray-700
     bar: { light: '#2d7df6', dark: '#5c9ef8' }, // blue-500 / blue-400
 }

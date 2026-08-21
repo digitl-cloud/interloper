@@ -17,7 +17,7 @@ const COLOR_CLASSES: Record<NonNullable<typeof props.color>, string> = {
 </script>
 
 <template>
-    <span class="inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full text-[11px] font-semibold"
+    <span class="inline-flex items-center gap-1.5 px-2 py-[3px] rounded-md text-xs font-medium"
           :class="COLOR_CLASSES[color]">
         <span v-if="dot"
               class="size-1.5 rounded-full bg-current" />

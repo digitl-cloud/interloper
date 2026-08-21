@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { BreadcrumbItem } from '@nuxt/ui'
 import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
 import type { EventCategory } from '~/utils/events'
@@ -7,15 +6,10 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
 // orgSwitchTarget: this page is bespoke to one org's run — switching org from
 // the nav lands on the runs list instead.
-definePageMeta({ title: 'Run', orgSwitchTarget: '/executions?tab=runs', fullBleed: true })
+definePageMeta({ title: 'Run', orgSwitchTarget: '/executions?tab=runs', fullBleed: true, customNavbar: true })
 
 const route = useRoute()
 const runId = route.params.run!.toString()
-
-const breadcrumbs: BreadcrumbItem[] = [
-    titleCrumb('Runs', '/executions?tab=runs'),
-    { ...entityCrumb(runId, 'i-lucide-activity'), class: 'font-mono' },
-]
 
 const runsStore = useRunsStore()
 const eventsStore = useEventsStore()
@@ -77,6 +71,13 @@ const viewTabs = [
     { value: 'graph', label: 'Graph', icon: 'i-lucide-workflow' },
 ]
 
+/** Design's table caption for the events panel, honest about server paging. */
+const eventCaption = computed(() => {
+    const loaded = eventsStore.events.length
+    if (eventsStore.hasMore) return `${loaded} of ${eventsStore.total} events`
+    return `${loaded} event${loaded === 1 ? '' : 's'}`
+})
+
 const markerTime = computed(() => eventInFocus.value?.timestamp ? new Date(eventInFocus.value.timestamp) : null)
 const highlightedAsset = computed(() => eventInFocus.value?.component_id ?? null)
 
@@ -133,32 +134,33 @@ onUnmounted(() => {
              :error="fetchError"
              back-to="/executions?tab=runs"
              resource-label="run">
+        <NavTitle>
+            <ULink to="/executions?tab=runs"
+                   class="text-[15px] font-medium text-muted hover:text-highlighted">Runs</ULink>
+            <span class="text-[15px] text-dimmed">/</span>
+            <span class="truncate font-mono text-[15px] font-semibold">{{ runId }}</span>
+            <StatusPill v-if="run"
+                        :label="statusLabel(run.status)"
+                        :color="statusPillColor(run.status)" />
+        </NavTitle>
+        <NavActions v-if="run?.status === 'failed'">
+            <UButton label="Retry failed"
+                     icon="i-lucide-list-restart"
+                     color="neutral"
+                     variant="outline"
+                     size="sm"
+                     :loading="retrying"
+                     @click="onRetry('failed')" />
+            <UButton label="Retry all"
+                     icon="i-lucide-rotate-ccw"
+                     color="neutral"
+                     variant="outline"
+                     size="sm"
+                     :loading="retrying"
+                     @click="onRetry('all')" />
+        </NavActions>
         <div class="flex flex-col h-full min-h-0">
-            <div class="flex flex-col gap-4 mb-4 shrink-0 px-4 pt-4">
-                <div class="flex items-center gap-3">
-                    <PageBreadcrumb :items="breadcrumbs" />
-                    <UBadge v-if="run"
-                            :color="statusColor(run.status)">
-                        {{ statusLabel(run.status) }}
-                    </UBadge>
-                    <div v-if="run?.status === 'failed'"
-                         class="ml-auto flex items-center gap-2">
-                        <UButton label="Retry failed"
-                                 icon="i-lucide-list-restart"
-                                 color="neutral"
-                                 variant="outline"
-                                 size="sm"
-                                 :loading="retrying"
-                                 @click="onRetry('failed')" />
-                        <UButton label="Retry all"
-                                 icon="i-lucide-rotate-ccw"
-                                 color="neutral"
-                                 variant="outline"
-                                 size="sm"
-                                 :loading="retrying"
-                                 @click="onRetry('all')" />
-                    </div>
-                </div>
+            <div class="flex flex-col mb-4 shrink-0 px-4 pt-4">
                 <ExecutionsRunSummary v-if="run"
                                       v-model:status-filter="statusFilter"
                                       :run="run"
@@ -167,12 +169,12 @@ onUnmounted(() => {
 
         <SplitterGroup direction="vertical"
                        auto-save-id="run-panels"
-                       class="flex-1 min-h-0 rounded-lg px-4 pb-4">
+                       class="flex-1 min-h-0">
             <SplitterPanel :default-size="40"
                            :min-size="15"
                            class="flex flex-col overflow-hidden">
-                <div class="flex flex-col flex-1 min-h-0 border border-default rounded-xl bg-default overflow-hidden">
-                    <div class="flex items-center px-3.5 py-2 shrink-0 border-b border-default">
+                <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <div class="flex items-center px-4 pt-4 pb-3 shrink-0">
                         <UTabs v-model="view"
                                :items="viewTabs"
                                variant="pill"
@@ -200,29 +202,20 @@ onUnmounted(() => {
             </SplitterPanel>
 
             <SplitterResizeHandle
-                class="relative flex items-center justify-center bg-default rounded-lg data-[state=hover]:bg-accented data-[state=drag]:bg-accented transition-colors">
-                <div class="z-10 flex h-2 w-8 items-center justify-center rounded-md bg-muted">
-                    <UIcon name="i-lucide-grip-horizontal"
-                           class="size-3 text-muted" />
-                </div>
-            </SplitterResizeHandle>
+                class="relative h-px shrink-0 cursor-ns-resize bg-(--ui-border) transition-colors data-[state=hover]:bg-primary/30 data-[state=drag]:bg-primary/30 before:absolute before:inset-x-0 before:-top-1.5 before:-bottom-1.5 before:z-1" />
 
             <SplitterPanel :default-size="60"
                            :min-size="20"
                            class="flex flex-col min-h-0">
-                <div class="flex flex-col flex-1 min-h-0 border border-default rounded-xl bg-default overflow-hidden">
-                    <div class="flex items-center gap-2 px-3.5 py-2 shrink-0 border-b border-default">
+                <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
                         <UTabs v-model="eventCategory"
                                :items="eventTabs"
                                variant="pill"
                                size="xs"
                                :content="false" />
-                        <span class="ml-auto text-xs font-medium uppercase tracking-wide text-muted">Events</span>
-                        <UBadge v-if="!eventsStore.loading"
-                                color="neutral"
-                                size="sm">
-                            {{ eventsStore.hasMore ? `${eventsStore.events.length} / ${eventsStore.total}` : eventsStore.events.length }}
-                        </UBadge>
+                        <span v-if="!eventsStore.loading"
+                              class="ml-auto text-[13.5px] text-muted">{{ eventCaption }}</span>
                     </div>
                     <div class="flex-1 min-h-0">
                         <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"

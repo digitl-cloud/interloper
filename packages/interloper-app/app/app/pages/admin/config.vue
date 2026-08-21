@@ -1,15 +1,7 @@
 <script setup lang="ts">
 import type { AdminConfig } from '~/types/admin'
 
-definePageMeta({
-    title: 'Config',
-    layout: 'admin',
-    middleware: 'super-admin',
-    pageHeader: {
-        title: 'Instance configuration',
-        description: 'How this deployment is wired — read-only, sourced from the running instance. Secrets are redacted; dimmed values are class defaults.',
-    },
-})
+definePageMeta({ title: 'Instance configuration', layout: 'admin', middleware: 'super-admin' })
 
 const adminStore = useAdminStore()
 
@@ -191,7 +183,11 @@ const sections = computed<ConfigSection[]>(() => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
+    <div class="mx-auto flex w-full max-w-[1040px] flex-col gap-3">
+        <p class="mb-3 max-w-[660px] text-[14.5px] leading-relaxed text-muted">
+            How this deployment is wired — read-only, sourced from the running instance.
+            Secrets are redacted; dimmed values are class defaults.
+        </p>
         <div v-if="loading"
              class="flex items-center justify-center py-16">
             <UIcon name="i-lucide-loader-circle"
@@ -205,19 +201,14 @@ const sections = computed<ConfigSection[]>(() => {
 
         <div v-else
              class="flex flex-col gap-4">
-            <section v-for="section in sections"
+            <PanelCard v-for="section in sections"
                      :key="section.title"
-                     class="overflow-hidden rounded-lg border border-default bg-default">
-                <div class="flex items-center gap-2 border-b border-default bg-muted px-4 py-2.5">
-                    <UIcon :name="section.icon"
-                           class="size-4 text-muted" />
-                    <span class="text-sm font-semibold text-highlighted">{{ section.title }}</span>
-                </div>
-
-                <div class="divide-y divide-default">
-                    <div v-for="row in section.rows"
-                         :key="row.label"
-                         class="flex items-start gap-4 px-4 py-2.5 text-sm">
+                     :title="section.title"
+                     :icon="section.icon"
+                     class="mb-4">
+                <div v-for="row in section.rows"
+                     :key="row.label"
+                     class="flex items-start gap-4 px-4 py-3 text-sm">
                         <span class="w-56 shrink-0 pt-px text-muted">{{ row.label }}</span>
                         <div class="min-w-0 flex-1">
                             <div v-if="row.pill || row.badges || row.value"
@@ -240,7 +231,7 @@ const sections = computed<ConfigSection[]>(() => {
                                  :class="(row.pill || row.badges || row.value) && 'mt-1.5'">
                                 <span v-for="attr in row.attrs"
                                       :key="attr.key"
-                                      class="whitespace-nowrap rounded-[5px] px-1.5 py-0.5 font-mono text-xs"
+                                      class="whitespace-nowrap rounded-md px-1.5 py-0.5 font-mono text-xs"
                                       :class="attr.dim ? 'bg-elevated/50 text-dimmed' : 'bg-elevated'"
                                       :title="attr.dim ? 'Class default (not configured)' : undefined">
                                     <span class="text-muted">{{ attr.key }}=</span>{{ attr.value }}
@@ -254,8 +245,7 @@ const sections = computed<ConfigSection[]>(() => {
                             </div>
                         </div>
                     </div>
-                </div>
-            </section>
+            </PanelCard>
         </div>
     </div>
 </template>

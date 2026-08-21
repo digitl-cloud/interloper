@@ -26,14 +26,14 @@ withDefaults(defineProps<{
     <UCard v-if="variant === 'rich'"
            class="cursor-pointer transition hover:ring-primary/40 hover:shadow-md hover:-translate-y-0.5"
            :ui="{
-               root: 'rounded-[13px] shadow-xs divide-y-0 flex flex-col',
+               root: 'rounded-lg shadow-xs divide-y-0 flex flex-col',
                header: 'p-4 pb-0 sm:p-4 sm:pb-0',
                body: 'p-4 py-3 sm:p-4 sm:py-3 flex-1',
                footer: 'p-4 pt-0 sm:p-4 sm:pt-0',
            }">
         <template #header>
             <div class="flex items-center gap-3">
-                <div class="size-[38px] shrink-0 rounded-[10px] border border-default flex items-center justify-center">
+                <div class="size-[38px] shrink-0 rounded-lg border border-default flex items-center justify-center">
                     <UIcon :name="icon"
                            class="size-5" />
                 </div>
@@ -78,11 +78,11 @@ withDefaults(defineProps<{
                ? 'cursor-pointer transition hover:ring-primary/40 hover:shadow-md hover:-translate-y-0.5'
                : 'bg-(--ui-bg-band)'"
            :ui="{
-               root: 'rounded-[13px] shadow-xs',
+               root: 'rounded-lg shadow-xs',
                body: 'p-3.5 px-4 sm:p-3.5 sm:px-4',
            }">
         <div class="flex items-center gap-3">
-            <div class="size-10 shrink-0 rounded-[11px] border border-default bg-default flex items-center justify-center">
+            <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
                 <UIcon :name="icon"
                        class="size-6" />
             </div>

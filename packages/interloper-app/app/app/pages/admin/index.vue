@@ -2,13 +2,9 @@
 import type { AdminOrganisation, AdminQuotaLimits, AdminQuotas, AdminUser } from '~/types/admin'
 
 definePageMeta({
-    title: 'Admin overview',
+    title: 'Overview',
     layout: 'admin',
     middleware: 'super-admin',
-    pageHeader: {
-        title: 'Overview',
-        description: 'Platform-wide health and activity at a glance.',
-    },
 })
 
 const adminStore = useAdminStore()
@@ -234,33 +230,28 @@ const activity = computed(() => {
     </div>
 
     <div v-else
-         class="flex flex-col gap-3">
-        <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+         class="flex flex-col gap-7">
+        <div class="grid grid-cols-2 xl:grid-cols-4 gap-px overflow-hidden rounded-lg border border-default bg-(--ui-border)">
             <div v-for="tile in tiles"
                  :key="tile.label"
-                 class="rounded-lg border border-default bg-default px-4 py-3.5">
-                <div class="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-dimmed">
+                 class="flex flex-col gap-2.5 bg-muted p-4">
+                <span class="flex size-[34px] items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-inset ring-primary/25">
                     <UIcon :name="tile.icon"
-                           class="size-3.5" />
-                    {{ tile.label }}
+                           class="size-4" />
+                </span>
+                <div class="text-xs uppercase tracking-wider text-dimmed">{{ tile.label }}</div>
+                <div class="flex items-baseline gap-2 min-w-0">
+                    <span class="text-2xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</span>
+                    <span class="truncate text-[12.5px] text-muted">{{ tile.sub }}</span>
                 </div>
-                <div class="text-[27px] font-bold tracking-tight tabular-nums mt-2">{{ tile.value }}</div>
-                <div class="text-xs text-muted mt-0.5">{{ tile.sub }}</div>
             </div>
         </div>
 
-        <div class="grid lg:grid-cols-2 gap-3 items-start">
-            <section class="overflow-hidden rounded-lg border border-default bg-default">
-                <div class="flex items-center gap-2 border-b border-default px-4 py-2.5">
-                    <UIcon name="i-lucide-alert-triangle"
-                           class="size-4 text-warning" />
-                    <span class="text-sm font-semibold">Needs attention</span>
-                    <UBadge :label="String(attention.length)"
-                            color="warning"
-                            variant="subtle"
-                            size="sm"
-                            class="ml-auto" />
-                </div>
+        <div class="grid lg:grid-cols-2 gap-5 items-start">
+            <PanelCard title="Needs attention"
+                     icon="i-lucide-alert-triangle"
+                     icon-class="text-warning"
+                     :badge="attention.length">
                 <div v-if="attention.length === 0"
                      class="flex items-center gap-2.5 px-4 py-6 text-sm text-muted">
                     <UIcon name="i-lucide-check-circle"
@@ -269,7 +260,7 @@ const activity = computed(() => {
                 </div>
                 <div v-for="item in attention"
                      :key="item.title"
-                     class="flex items-start gap-3 px-4 py-3 border-b border-muted last:border-b-0">
+                     class="flex items-start gap-3 px-4 py-3">
                     <span class="flex size-6.5 shrink-0 items-center justify-center rounded-lg mt-0.5"
                           :class="ATTENTION_TILE[item.tone]">
                         <UIcon :name="item.icon"
@@ -284,18 +275,12 @@ const activity = computed(() => {
                         {{ item.action }} →
                     </NuxtLink>
                 </div>
-            </section>
+            </PanelCard>
 
-            <section class="overflow-hidden rounded-lg border border-default bg-default">
-                <div class="flex items-center gap-2 border-b border-default px-4 py-2.5">
-                    <UIcon name="i-lucide-gauge"
-                           class="size-4 text-muted" />
-                    <span class="text-sm font-semibold">Quota pressure</span>
-                    <NuxtLink to="/admin/organisations"
-                              class="ml-auto text-xs font-semibold text-primary">
-                        All organisations →
-                    </NuxtLink>
-                </div>
+            <PanelCard title="Quota pressure"
+                     icon="i-lucide-gauge"
+                     link-label="All organisations"
+                     link-to="/admin/organisations">
                 <div v-if="pressure.length === 0"
                      class="px-4 py-6 text-sm text-muted">
                     No run limits configured — usage is unmetered pressure-wise.
@@ -317,18 +302,19 @@ const activity = computed(() => {
                         <div class="text-[11.5px] text-dimmed mt-1">{{ entry.note }}</div>
                     </div>
                 </div>
-            </section>
+            </PanelCard>
         </div>
 
-        <div class="grid lg:grid-cols-2 gap-3 items-start">
-            <section class="overflow-hidden rounded-lg border border-default bg-default">
-                <div class="flex items-center gap-2 border-b border-default px-4 py-2.5">
+        <div class="grid lg:grid-cols-2 gap-5 items-start">
+            <section>
+                <div class="mb-3 flex items-center gap-2.5">
                     <UIcon name="i-lucide-trending-up"
                            class="size-4 text-muted" />
-                    <span class="text-sm font-semibold">Top organisations by usage</span>
-                    <span class="ml-auto text-[11.5px] text-dimmed">{{ periodLabel }}</span>
+                    <span class="text-[15px] font-semibold text-highlighted">Top organisations by usage</span>
+                    <span class="ml-auto text-xs text-dimmed">{{ periodLabel }}</span>
                 </div>
-                <div class="flex items-center gap-3 px-4 py-2 border-b border-muted text-xs font-medium text-muted">
+                <div class="overflow-hidden rounded-lg border border-default divide-y divide-default">
+                <div class="flex items-center gap-3 bg-muted px-4 py-3 text-sm font-semibold text-highlighted">
                     <span class="flex-1 min-w-0">Organisation</span>
                     <span class="w-16 text-right shrink-0">Runs</span>
                     <span class="w-14 text-right shrink-0">Sources</span>
@@ -341,7 +327,7 @@ const activity = computed(() => {
                 <NuxtLink v-for="org in topOrgs"
                           :key="org.id"
                           :to="`/admin/organisations/${org.id}`"
-                          class="flex items-center gap-3 px-4 py-3 border-b border-muted last:border-b-0 text-[13px] hover:bg-elevated/50">
+                          class="flex items-center gap-3 bg-default px-4 py-3 text-[13px] hover:bg-muted">
                     <span class="flex-1 min-w-0 flex items-center gap-2.5">
                         <span class="w-[5px] h-[22px] rounded shrink-0"
                               :style="{ background: org.tint }" />
@@ -351,21 +337,18 @@ const activity = computed(() => {
                     <span class="w-14 text-right tabular-nums text-muted shrink-0">{{ org.sources }}</span>
                     <span class="w-14 text-right tabular-nums text-muted shrink-0">{{ org.members }}</span>
                 </NuxtLink>
+                </div>
             </section>
 
-            <section class="overflow-hidden rounded-lg border border-default bg-default">
-                <div class="flex items-center gap-2 border-b border-default px-4 py-2.5">
-                    <UIcon name="i-lucide-activity"
-                           class="size-4 text-muted" />
-                    <span class="text-sm font-semibold">Recent activity</span>
-                </div>
+            <PanelCard title="Recent activity"
+                     icon="i-lucide-activity">
                 <div v-if="activity.length === 0"
                      class="px-4 py-6 text-sm text-muted">
                     Nothing yet.
                 </div>
                 <div v-for="entry in activity"
                      :key="entry.when + entry.text"
-                     class="flex items-start gap-3 px-4 py-2.5 border-b border-muted last:border-b-0">
+                     class="flex items-start gap-3 px-4 py-2.5">
                     <span class="flex size-6 shrink-0 items-center justify-center rounded-md bg-elevated text-muted mt-0.5">
                         <UIcon :name="entry.icon"
                                class="size-3.5" />
@@ -375,7 +358,7 @@ const activity = computed(() => {
                         <div class="text-[11.5px] text-dimmed mt-0.5">{{ entry.who }} · {{ entry.whenLabel }}</div>
                     </div>
                 </div>
-            </section>
+            </PanelCard>
         </div>
     </div>
 </template>

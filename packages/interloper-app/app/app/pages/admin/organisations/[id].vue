@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { BreadcrumbItem, TabsItem } from '@nuxt/ui'
+import type { TabsItem } from '@nuxt/ui'
 import type { AdminActivityEntry, AdminOrganisation, AdminOrgQuotaStatus, AdminQuotas } from '~/types/admin'
 import type { Organisation, OrgMember } from '~/types/organisation'
 
-definePageMeta({ title: 'Manage organisation', layout: 'admin', middleware: 'super-admin', titleInBreadcrumb: true })
+definePageMeta({ title: 'Manage organisation', layout: 'admin', middleware: 'super-admin', customNavbar: true, fullBleed: true })
 
 const route = useRoute()
 const orgId = computed(() => route.params.id as string)
@@ -24,11 +24,6 @@ const isMember = computed(() =>
     rows.value.some(r => r.status === 'active' && r.id === userStore.user?.id))
 
 const inviteEndpoint = computed(() => `/admin/organisations/${orgId.value}/invitations`)
-
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    titleCrumb('Organisations', '/admin/organisations'),
-    entityCrumb(org.value?.name ?? '…', 'i-lucide-building-2'),
-])
 
 const quotaRow = computed<AdminOrgQuotaStatus | null>(() =>
     quotas.value?.organisations.find(row => row.id === orgId.value) ?? null)
@@ -198,6 +193,15 @@ const limitRows = computed(() => {
     })
 })
 
+/** Day-of-period progress for the usage strip (quota counters reset monthly). */
+const periodElapsed = computed(() => {
+    if (!quotas.value) return null
+    const start = new Date(quotas.value.period_start)
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0)
+    const day = Math.min(new Date().getDate(), end.getDate())
+    return { label: `Day ${day} of ${end.getDate()}`, pct: Math.round((day / end.getDate()) * 100) }
+})
+
 const ledgerInSync = computed(() =>
     quotaRow.value != null && quotaRow.value.successful_runs === quotaRow.value.recomputed_successful_runs)
 
@@ -252,6 +256,7 @@ async function openWorkspace() {
 
 const deleteConfirmName = ref('')
 const deleting = ref(false)
+const deleteOpen = ref(false)
 
 async function submitDelete() {
     const target = org.value
@@ -276,209 +281,262 @@ watch(orgId, loadData)
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <div class="pb-4 shrink-0">
-            <PageBreadcrumb :items="breadcrumbs" />
-        </div>
+        <NavTitle>
+            <ULink to="/admin/organisations"
+                   class="text-[15px] font-medium text-muted hover:text-highlighted">Organisations</ULink>
+            <span class="text-[15px] text-dimmed">/</span>
+            <span class="truncate text-[15px] font-semibold">{{ org?.name ?? '…' }}</span>
+        </NavTitle>
+        <NavActions v-if="isMember">
+            <UButton icon="i-lucide-external-link"
+                     label="Open workspace"
+                     color="neutral"
+                     variant="outline"
+                     size="sm"
+                     @click="openWorkspace" />
+        </NavActions>
 
-        <div class="flex items-center gap-3.5 mb-5">
-            <span class="flex size-11 shrink-0 items-center justify-center rounded-xl text-white text-[17px] font-bold"
-                  :style="{ background: avatarColor(orgId) }">
-                {{ (org?.name ?? '?').charAt(0).toUpperCase() }}
-            </span>
-            <div class="min-w-0">
-                <h1 class="text-[21px] font-bold tracking-tight truncate">{{ org?.name ?? '…' }}</h1>
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-muted mt-0.5">
-                    <span>{{ rows.filter(r => r.status === 'active').length }} members</span>
-                    <span class="size-[3px] rounded-full bg-accented" />
-                    <span>{{ quotaRow?.sources ?? 0 }} sources</span>
-                    <span class="size-[3px] rounded-full bg-accented" />
-                    <span>Created {{ formatDay(org?.created_at) }}</span>
-                    <span class="size-[3px] rounded-full bg-accented" />
-                    <span class="font-mono text-xs">{{ orgId.slice(0, 8) }}</span>
-                </div>
-            </div>
-        </div>
-
+        <!-- Tab strip flush under the navbar, rule across the full panel. -->
         <UTabs v-model="tab"
                :items="tabItems"
                :content="false"
                variant="link"
-               class="mb-5 shrink-0" />
+               class="shrink-0"
+               :ui="{ list: 'px-6' }" />
 
-        <div v-if="tab === 'members'"
-             class="flex flex-col flex-1 min-h-0">
-            <OrganizationMembersTable :members="rows"
-                                      :loading="loading"
-                                      is-admin
-                                      @remove-member="removeMember"
-                                      @cancel-invite="cancelInvite"
-                                      @resend-invite="resendInvite">
-                <template #toolbar>
-                    <UButton v-if="!loading && !isMember"
-                             icon="i-lucide-log-in"
-                             label="Join"
-                             variant="outline"
-                             @click="joinOrganisation" />
-                    <UButton icon="i-lucide-user-plus"
-                             label="Invite"
-                             @click="inviteOpen = true" />
-                </template>
-            </OrganizationMembersTable>
+        <div class="flex-1 min-h-0 overflow-y-auto">
+            <div class="mx-auto w-full max-w-[1040px] px-6 py-8">
 
-            <OrganizationInviteModal v-model:open="inviteOpen"
-                                     :endpoint="inviteEndpoint"
-                                     @invited="loadData" />
-        </div>
+                <div v-if="tab === 'members'"
+                     class="flex flex-col min-h-0">
+                    <OrganizationMembersTable :members="rows"
+                                              :loading="loading"
+                                              is-admin
+                                              @remove-member="removeMember"
+                                              @cancel-invite="cancelInvite"
+                                              @resend-invite="resendInvite">
+                        <template #toolbar>
+                            <UButton v-if="!loading && !isMember"
+                                     icon="i-lucide-log-in"
+                                     label="Join"
+                                     variant="outline"
+                                     @click="joinOrganisation" />
+                            <UButton icon="i-lucide-user-plus"
+                                     label="Invite"
+                                     @click="inviteOpen = true" />
+                        </template>
+                    </OrganizationMembersTable>
 
-        <div v-else-if="tab === 'usage'"
-             class="flex flex-col gap-3">
-            <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                <div v-for="tile in usageTiles"
-                     :key="tile.label"
-                     class="rounded-lg border border-default bg-default px-4 py-3.5">
-                    <div class="text-[11.5px] font-semibold uppercase tracking-wider text-dimmed">{{ tile.label }}</div>
-                    <div class="text-[23px] font-bold tracking-tight tabular-nums mt-1.5">{{ tile.value }}</div>
-                    <div class="text-xs text-muted mt-0.5">{{ tile.sub }}</div>
-                    <AdminUsageMeter :used="tile.used"
-                                     :limit="tile.limit"
-                                     :show-label="false"
-                                     class="mt-2.5" />
+                    <OrganizationInviteModal v-model:open="inviteOpen"
+                                             :endpoint="inviteEndpoint"
+                                             @invited="loadData" />
                 </div>
+
+                <div v-else-if="tab === 'usage'"
+                     class="flex flex-col gap-7">
+                    <!-- Usage strip: fused stat cells over a period-elapsed bar. -->
+                    <div class="overflow-hidden rounded-lg border border-default bg-(--ui-border)">
+                        <div class="grid grid-cols-2 xl:grid-cols-4 gap-px">
+                            <div v-for="tile in usageTiles"
+                                 :key="tile.label"
+                                 class="flex flex-col gap-2.5 bg-muted p-4">
+                                <div class="text-xs uppercase tracking-wider text-dimmed">{{ tile.label }}</div>
+                                <div class="flex items-baseline gap-2 min-w-0">
+                                    <span class="text-2xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</span>
+                                    <span class="truncate text-[12.5px] text-muted">{{ tile.sub }}</span>
+                                </div>
+                                <AdminUsageMeter v-if="tile.limit != null"
+                                                 :used="tile.used"
+                                                 :limit="tile.limit"
+                                                 :show-label="false" />
+                            </div>
+                        </div>
+                        <div v-if="periodElapsed"
+                             class="border-t border-default bg-default px-4 py-3.5">
+                            <div class="flex items-baseline gap-2">
+                                <span class="flex-1 truncate text-[13.5px] font-medium">Period elapsed · {{ periodLabel }}</span>
+                                <span class="whitespace-nowrap text-[12.5px] text-muted">{{ periodElapsed.label }}</span>
+                                <span class="whitespace-nowrap text-[12.5px] font-semibold text-primary">{{ periodElapsed.pct }}%</span>
+                            </div>
+                            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-accented">
+                                <div class="h-full rounded-full bg-primary"
+                                     :style="{ width: periodElapsed.pct + '%' }" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <PanelCard v-if="quotaRow"
+                             title="Ledger"
+                             :description="ledgerInSync
+                                 ? 'The runs counter and a recount from the runs table agree.'
+                                 : 'The runs counter and a recount from the runs table disagree — inspect recent runs.'">
+                        <div class="flex items-start gap-3 px-4 py-3">
+                            <span class="w-56 shrink-0 text-sm text-muted">Status</span>
+                            <UBadge :label="ledgerInSync ? 'In sync' : 'Drift'"
+                                    :color="ledgerInSync ? 'success' : 'warning'"
+                                    :icon="ledgerInSync ? 'i-lucide-check' : 'i-lucide-triangle-alert'" />
+                        </div>
+                        <div class="flex items-start gap-3 px-4 py-3">
+                            <span class="w-56 shrink-0 text-sm text-muted">Counter</span>
+                            <span class="font-mono text-[13px] font-medium">{{ quotaRow.successful_runs.toLocaleString() }}</span>
+                        </div>
+                        <div class="flex items-start gap-3 px-4 py-3">
+                            <span class="w-56 shrink-0 text-sm text-muted">Runs table</span>
+                            <span class="font-mono text-[13px] font-medium">{{ quotaRow.recomputed_successful_runs.toLocaleString() }}</span>
+                        </div>
+                        <div class="flex items-start gap-3 px-4 py-3">
+                            <span class="w-56 shrink-0 text-sm text-muted">Reserved</span>
+                            <span class="font-mono text-[13px] font-medium">{{ quotaRow.reserved_runs.toLocaleString() }}</span>
+                        </div>
+                    </PanelCard>
+
+                    <section>
+                        <div class="mb-3 flex items-center gap-2.5">
+                            <div class="min-w-0">
+                                <div class="text-[15px] font-semibold text-highlighted">Limits</div>
+                            </div>
+                            <span class="ml-auto text-xs text-dimmed">Current period: {{ periodLabel }}</span>
+                            <UButton icon="i-lucide-pencil"
+                                     label="Edit limits"
+                                     color="neutral"
+                                     variant="outline"
+                                     size="sm"
+                                     @click="editOpen = true" />
+                        </div>
+                        <div class="overflow-hidden rounded-lg border border-default">
+                            <div class="flex items-center gap-4 border-b border-default bg-muted px-4 py-3 text-sm font-semibold text-highlighted">
+                                <span class="w-56 shrink-0">Limit</span>
+                                <span class="flex-1">Value</span>
+                                <span class="w-24">Source</span>
+                            </div>
+                            <div v-for="row in limitRows"
+                                 :key="row.key"
+                                 class="flex items-center gap-4 border-b border-default px-4 py-3 last:border-b-0">
+                                <span class="w-56 shrink-0 text-sm font-medium">{{ row.label }}</span>
+                                <span class="flex-1 min-w-0">
+                                    <span class="font-mono text-[13px] font-medium">{{ row.value }}</span>
+                                    <span class="ml-2 text-xs text-dimmed">{{ row.note }}</span>
+                                </span>
+                                <span class="w-24">
+                                    <UBadge :label="row.overridden ? 'Override' : 'Inherited'"
+                                            :color="row.overridden ? 'info' : 'neutral'"
+                                            size="sm" />
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <PanelCard v-else-if="tab === 'activity'"
+                         title="Activity"
+                         description="Derived from membership, invitation, quota and run records">
+                    <div v-if="activity.length === 0"
+                         class="px-4 py-6 text-sm text-muted">
+                        Nothing recorded yet.
+                    </div>
+                    <div v-for="entry in activity"
+                         :key="entry.kind + entry.when"
+                         class="flex items-start gap-3 px-4 py-3">
+                        <span class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-elevated text-muted">
+                            <UIcon :name="ACTIVITY_ICONS[entry.kind] ?? 'i-lucide-circle'"
+                                   class="size-3.5" />
+                        </span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-[13.5px] leading-snug">{{ entry.title }}</div>
+                            <div class="mt-0.5 text-xs text-dimmed">
+                                <template v-if="entry.detail">{{ entry.detail }} · </template>{{ timeSince(new Date(entry.when)) }} ago
+                            </div>
+                        </div>
+                    </div>
+                </PanelCard>
+
+                <div v-else-if="tab === 'settings'"
+                     class="flex flex-col gap-8">
+                    <PanelCard title="General"
+                             description="Naming and your own access to this organisation.">
+                        <div class="flex items-center gap-4 px-4 py-3.5">
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium">Organisation name</div>
+                                <div class="mt-0.5 text-[13px] text-dimmed">Members see this name everywhere in the app.</div>
+                            </div>
+                            <UInput v-model="renameValue"
+                                    class="w-60 max-w-[50%]"
+                                    @keydown.enter="submitRename" />
+                            <UButton label="Save"
+                                     :disabled="!renameValue.trim() || renameValue.trim() === org?.name || renaming"
+                                     :loading="renaming"
+                                     @click="submitRename" />
+                        </div>
+                        <div class="flex items-center gap-4 px-4 py-3.5">
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium">Your membership</div>
+                                <div class="mt-0.5 text-[13px] text-dimmed">
+                                    <template v-if="isMember">You are an active member, so you can open this workspace directly.</template>
+                                    <template v-else>You are not a member of this organisation. Join it to open its workspace.</template>
+                                </div>
+                            </div>
+                            <UButton v-if="isMember"
+                                     icon="i-lucide-log-in"
+                                     label="Open workspace"
+                                     color="neutral"
+                                     variant="outline"
+                                     @click="openWorkspace" />
+                            <UButton v-else
+                                     icon="i-lucide-log-in"
+                                     label="Join"
+                                     color="neutral"
+                                     variant="outline"
+                                     @click="joinOrganisation" />
+                        </div>
+                    </PanelCard>
+
+                    <PanelCard tone="danger"
+                             icon="i-lucide-octagon-alert"
+                             icon-class="text-error"
+                             title="Danger zone"
+                             description="Irreversible actions. Proceed only if you are certain.">
+                        <div class="flex items-center gap-4 px-4 py-3.5">
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium">Delete organisation</div>
+                                <div class="mt-0.5 text-[13px] text-dimmed">
+                                    Permanently deletes {{ org?.name ?? 'this organisation' }} with all its members,
+                                    invitations, components and execution history.
+                                </div>
+                            </div>
+                            <UButton label="Delete this organisation"
+                                     color="error"
+                                     @click="deleteOpen = true" />
+                        </div>
+                    </PanelCard>
+
+                    <UModal v-model:open="deleteOpen"
+                            :title="`Delete ${org?.name ?? 'organisation'}?`"
+                            description="This permanently deletes the organisation with all its members, invitations, components and execution history. This action cannot be undone.">
+                        <template #body>
+                            <UFormField :label="`Type “${org?.name}” to confirm`">
+                                <UInput v-model="deleteConfirmName"
+                                        :placeholder="org?.name"
+                                        class="w-full"
+                                        @keydown.enter="submitDelete" />
+                            </UFormField>
+                        </template>
+                        <template #footer>
+                            <div class="flex w-full justify-end gap-2">
+                                <UButton label="Cancel"
+                                         color="neutral"
+                                         variant="outline"
+                                         @click="deleteOpen = false" />
+                                <UButton label="Delete organisation"
+                                         color="error"
+                                         :disabled="deleteConfirmName !== org?.name || deleting"
+                                         :loading="deleting"
+                                         @click="submitDelete" />
+                            </div>
+                        </template>
+                    </UModal>
+                </div>
+
             </div>
-
-            <section class="overflow-hidden rounded-lg border border-default bg-default">
-                <div class="flex items-center gap-2 border-b border-default px-4 py-3">
-                    <span class="text-sm font-semibold">Limits</span>
-                    <span class="text-xs text-dimmed">Current period: {{ periodLabel }}</span>
-                    <UButton icon="i-lucide-pencil"
-                             label="Edit limits"
-                             variant="outline"
-                             size="sm"
-                             class="ml-auto"
-                             @click="editOpen = true" />
-                </div>
-                <div v-for="row in limitRows"
-                     :key="row.key"
-                     class="flex items-center gap-4 px-4 py-3 border-b border-muted">
-                    <span class="w-64 shrink-0 text-[13.5px] text-muted">{{ row.label }}</span>
-                    <span class="font-mono text-[13px] font-semibold">{{ row.value }}</span>
-                    <UBadge :label="row.overridden ? 'Override' : 'Inherited'"
-                            :color="row.overridden ? 'info' : 'neutral'"
-                            variant="subtle"
-                            size="sm" />
-                    <span class="text-xs text-dimmed">{{ row.note }}</span>
-                </div>
-                <div v-if="quotaRow"
-                     class="flex items-center gap-2.5 px-4 py-3 bg-elevated/40 text-[13.5px]">
-                    <UIcon :name="ledgerInSync ? 'i-lucide-check-circle' : 'i-lucide-triangle-alert'"
-                           class="size-4 shrink-0"
-                           :class="ledgerInSync ? 'text-success' : 'text-warning'" />
-                    <span v-if="ledgerInSync">
-                        Ledger in sync — the runs counter and the runs table both report
-                        <b>{{ quotaRow.successful_runs.toLocaleString() }}</b> successful runs.
-                    </span>
-                    <span v-else>
-                        Ledger drift — the counter reads <b>{{ quotaRow.successful_runs.toLocaleString() }}</b>,
-                        the runs table gives <b>{{ quotaRow.recomputed_successful_runs.toLocaleString() }}</b>.
-                    </span>
-                </div>
-            </section>
-        </div>
-
-        <div v-else-if="tab === 'activity'"
-             class="overflow-hidden rounded-lg border border-default bg-default">
-            <div class="border-b border-default px-4 py-3">
-                <div class="text-sm font-semibold">Activity</div>
-                <div class="text-xs text-dimmed mt-0.5">
-                    Derived from membership, invitation, source and run records
-                </div>
-            </div>
-            <div v-if="activity.length === 0"
-                 class="px-4 py-6 text-sm text-muted">
-                Nothing recorded yet.
-            </div>
-            <div v-for="entry in activity"
-                 :key="entry.kind + entry.when"
-                 class="flex items-start gap-3 px-4 py-3 border-b border-muted last:border-b-0">
-                <span class="flex size-6.5 shrink-0 items-center justify-center rounded-lg bg-elevated text-muted mt-0.5">
-                    <UIcon :name="ACTIVITY_ICONS[entry.kind] ?? 'i-lucide-circle'"
-                           class="size-3.5" />
-                </span>
-                <div class="flex-1 min-w-0">
-                    <div class="text-[13.5px] leading-snug">{{ entry.title }}</div>
-                    <div v-if="entry.detail"
-                         class="text-xs text-dimmed mt-0.5">{{ entry.detail }}</div>
-                </div>
-                <span class="shrink-0 text-xs text-dimmed whitespace-nowrap mt-0.5">
-                    {{ timeSince(new Date(entry.when)) }} ago
-                </span>
-            </div>
-        </div>
-
-        <div v-else-if="tab === 'settings'"
-             class="flex flex-col gap-3">
-            <section class="rounded-lg border border-default bg-default p-4 max-w-[660px] w-full">
-                <div class="text-sm font-semibold">Organisation name</div>
-                <p class="text-[13px] text-muted leading-normal mt-1">
-                    Shown across the app and in invitation emails.
-                </p>
-                <div class="flex items-center gap-2 mt-3">
-                    <UInput v-model="renameValue"
-                            class="flex-1"
-                            @keydown.enter="submitRename" />
-                    <UButton label="Save"
-                             :disabled="!renameValue.trim() || renameValue.trim() === org?.name || renaming"
-                             :loading="renaming"
-                             @click="submitRename" />
-                </div>
-            </section>
-
-            <section class="rounded-lg border border-default bg-default p-4 max-w-[660px] w-full">
-                <div class="text-sm font-semibold">Your membership</div>
-                <p class="text-[13px] text-muted leading-normal mt-1">
-                    <template v-if="isMember">
-                        You are an active member of this organisation, so you can open its workspace directly.
-                    </template>
-                    <template v-else>
-                        You are not a member of this organisation. Join it to open its workspace.
-                    </template>
-                </p>
-                <div class="mt-3">
-                    <UButton v-if="isMember"
-                             icon="i-lucide-log-in"
-                             label="Open workspace"
-                             variant="outline"
-                             @click="openWorkspace" />
-                    <UButton v-else
-                             icon="i-lucide-log-in"
-                             label="Join"
-                             variant="outline"
-                             @click="joinOrganisation" />
-                </div>
-            </section>
-
-            <section class="rounded-lg border border-error/40 bg-error/5 p-4 max-w-[660px] w-full">
-                <div class="flex items-center gap-2 text-sm font-semibold text-error">
-                    <UIcon name="i-lucide-octagon-alert"
-                           class="size-4" />
-                    Delete organisation
-                </div>
-                <p class="text-[13px] leading-relaxed mt-1 text-error/90">
-                    This permanently deletes {{ org?.name ?? 'this organisation' }} with all its members,
-                    invitations, components, and execution history. This action cannot be undone.
-                </p>
-                <div class="flex items-center gap-2 mt-3">
-                    <UInput v-model="deleteConfirmName"
-                            :placeholder="`Type “${org?.name}” to confirm`"
-                            class="flex-1"
-                            @keydown.enter="submitDelete" />
-                    <UButton label="Delete"
-                             color="error"
-                             :disabled="deleteConfirmName !== org?.name || deleting"
-                             :loading="deleting"
-                             @click="submitDelete" />
-                </div>
-            </section>
         </div>
 
         <AdminQuotaDrawer v-model:open="editOpen"

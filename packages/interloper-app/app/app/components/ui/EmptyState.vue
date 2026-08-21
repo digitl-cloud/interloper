@@ -8,8 +8,8 @@ defineProps<{
 </script>
 
 <template>
-    <div class="w-full border border-default rounded-[18px] px-8 py-[42px] text-center bg-gradient-to-b from-[#FCFCFD] to-[#F6F7F9] dark:from-transparent dark:to-(--ui-bg-muted)">
-        <div class="size-[58px] mx-auto rounded-[16px] bg-primary/10 text-primary flex items-center justify-center">
+    <div class="w-full border border-default rounded-lg px-8 py-[42px] text-center bg-gradient-to-b from-gray-50 to-gray-100 dark:from-transparent dark:to-(--ui-bg-muted)">
+        <div class="size-[58px] mx-auto rounded-lg bg-primary/10 text-primary flex items-center justify-center">
             <UIcon :name="icon"
                    class="size-7" />
         </div>

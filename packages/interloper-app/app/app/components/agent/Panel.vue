@@ -93,7 +93,7 @@ const SUGGESTIONS = [
 
         <!-- Header -->
         <div class="flex items-center gap-3 px-[18px] h-(--ui-header-height) border-b border-default shrink-0">
-            <div class="size-8 rounded-[9px] bg-primary text-inverted flex items-center justify-center">
+            <div class="size-8 rounded-md bg-primary text-inverted flex items-center justify-center">
                 <UIcon name="i-lucide-sparkles"
                        class="size-4" />
             </div>
@@ -105,7 +105,7 @@ const SUGGESTIONS = [
                      color="neutral"
                      variant="soft"
                      size="sm"
-                     class="rounded-[9px] text-muted"
+                     class="rounded-md text-muted"
                      aria-label="Close agent panel"
                      @click="open = false" />
         </div>
@@ -164,7 +164,7 @@ const SUGGESTIONS = [
                     <button v-for="suggestion in SUGGESTIONS"
                             :key="suggestion"
                             type="button"
-                            class="flex items-center gap-2 text-left px-3 py-2.5 border border-default rounded-[10px] bg-(--ui-bg-band) text-[13px] text-toned cursor-pointer transition hover:border-primary/40"
+                            class="flex items-center gap-2 text-left px-3 py-2.5 border border-default rounded-lg bg-(--ui-bg-band) text-[13px] text-toned cursor-pointer transition hover:border-primary/40"
                             @click="submit(suggestion)">
                         <UIcon name="i-lucide-arrow-up-right"
                                class="size-3.5 text-dimmed shrink-0" />

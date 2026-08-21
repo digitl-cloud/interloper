@@ -239,11 +239,11 @@ const ringClass = computed(() => {
 
             <!-- Main card: one header row in both states; expanded grows downward
                  (assets render as nested canvas nodes). -->
-            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border-2 border-[var(--ui-border-accented)]"
+            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-xl border-2 border-[var(--ui-border-accented)]"
                  :class="[container ? 'bg-muted' : 'bg-default', ringClass]">
                 <div class="flex h-[68px] shrink-0 items-center gap-3 px-4"
                      :class="container && 'border-b border-default bg-default'">
-                    <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-elevated">
+                    <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-elevated">
                         <UIcon :name="icon"
                                class="size-5" />
                     </div>

@@ -17,13 +17,14 @@ const appVersion = useRuntimeConfig().public.version
 interface PageHeaderMeta {
     title: string
     description?: string
+    eyebrow?: string
 }
 const pageHeader = computed(() => route.meta.pageHeader as PageHeaderMeta | undefined)
 
-/** Eyebrow-styled page title; breadcrumb pages set titleInBreadcrumb and render it as their first crumb. */
-const pageTitle = computed(() => route.meta.titleInBreadcrumb
-    ? undefined
-    : pageHeader.value?.title ?? (route.meta.title as string | undefined))
+/** Navbar title; pages with a bespoke navbar (run/backfill) teleport into it instead. */
+const pageTitle = computed(() => pageHeader.value?.title ?? (route.meta.title as string | undefined))
+/** Pages that fill the navbar themselves (crumb + id + status) via #navbar-title. */
+const customNavbar = computed(() => !!route.meta.customNavbar)
 
 const navSections = useNavSections()
 
@@ -52,7 +53,8 @@ const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((se
                                :ui="{ footer: 'border-t border-default' }">
                 <template #header="{ collapsed }">
                     <NavLogo v-if="!collapsed" />
-                    <UDashboardSidebarCollapse :class="collapsed ? 'mx-auto' : 'ms-auto'" />
+                    <LogoIcon v-else
+                              class="mx-auto h-6 w-auto text-primary" />
                 </template>
 
                 <template #default="{ collapsed }">
@@ -75,6 +77,7 @@ const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((se
 
                     <UNavigationMenu :collapsed="collapsed"
                                      :items="items"
+                                     color="neutral"
                                      orientation="vertical" />
                 </template>
 
@@ -92,20 +95,37 @@ const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((se
 
             <UDashboardPanel
                              :ui="{ body: '!p-0 !gap-0 overflow-hidden [&>*]:flex-1 [&>*]:flex [&>*]:flex-col [&>*]:min-h-0' }">
+                <template #header>
+                    <UDashboardNavbar :title="customNavbar ? undefined : pageTitle"
+                                      :ui="{ root: 'sm:px-4', title: 'text-[15px]' }">
+                        <template #leading>
+                            <UDashboardSidebarCollapse />
+                        </template>
+                        <template v-if="customNavbar"
+                                  #title>
+                            <!-- Detail pages teleport their crumb + status here. -->
+                            <div id="navbar-title"
+                                 class="flex min-w-0 items-center gap-2.5" />
+                        </template>
+                        <template #right>
+                            <div id="navbar-right"
+                                 class="flex items-center gap-2" />
+                        </template>
+                    </UDashboardNavbar>
+                </template>
                 <template #body>
                     <!-- Full-bleed pages (canvas/split views) manage their own frame. -->
                     <slot v-if="route.meta.fullBleed" />
                     <div v-else
                          class="flex-1 min-h-0 w-full overflow-y-auto">
-                        <div class="p-4 w-full"
-                             :class="pageHeader && 'max-w-[1040px] mx-auto'">
-                            <div v-if="pageTitle"
-                                 class="mb-4">
-                                <PageBreadcrumb :items="[titleCrumb(pageTitle)]" />
-                                <p v-if="pageHeader?.description"
-                                   class="text-[15px] text-muted leading-relaxed max-w-[660px] mt-2.5">
-                                    {{ pageHeader.description }}
-                                </p>
+                        <div class="p-6 w-full">
+                            <div v-if="pageHeader"
+                                 class="mb-6 max-w-[660px]">
+                                <p v-if="pageHeader.eyebrow"
+                                   class="eyebrow text-primary">{{ pageHeader.eyebrow }}</p>
+                                <h1 class="mt-2.5 text-[28px] font-bold leading-tight tracking-[-0.022em]">{{ pageHeader.title }}</h1>
+                                <p v-if="pageHeader.description"
+                                   class="mt-2.5 text-[15px] leading-relaxed text-muted">{{ pageHeader.description }}</p>
                             </div>
                             <slot />
                         </div>

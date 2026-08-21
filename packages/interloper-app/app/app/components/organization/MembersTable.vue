@@ -71,7 +71,7 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
                     ? h('span', { class: 'font-semibold text-highlighted' }, member.name)
                     : h('span', { class: 'text-dimmed' }, '—')
                 const you = member.id === userStore.user?.id
-                    ? h('span', { class: 'px-1.5 py-px rounded-[5px] bg-elevated text-[11px] font-semibold text-dimmed' }, 'You')
+                    ? h('span', { class: 'px-1.5 py-px rounded-md bg-elevated text-[11px] font-semibold text-dimmed' }, 'You')
                     : null
                 return h('div', { class: 'flex items-center gap-3' }, [avatar, name, you])
             },
@@ -86,7 +86,7 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
             cell: ({ row }) => {
                 const role = row.getValue<string>('role')
                 return h('span', {
-                    class: `inline-block px-2.5 py-1 rounded-[7px] text-xs font-semibold ${ROLE_TINTS[role] ?? ROLE_TINTS.viewer}`,
+                    class: `inline-block px-2.5 py-1 rounded-md text-xs font-semibold ${ROLE_TINTS[role] ?? ROLE_TINTS.viewer}`,
                 }, role.charAt(0).toUpperCase() + role.slice(1))
             },
         },
@@ -137,6 +137,7 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
                    :row-actions="isAdmin ? getRowMenuItems : undefined"
                    no-actions
                    no-row-click
+                   bordered
                    search-placeholder="Search members...">
             <template #toolbar>
                 <slot name="toolbar" />

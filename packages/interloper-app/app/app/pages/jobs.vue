@@ -58,7 +58,6 @@ watchEffect(() => {
 })
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
-    { accessorKey: 'select' as any, header: '' },
     {
         accessorKey: 'name',
         header: 'Name',
@@ -131,6 +130,11 @@ async function handleDelete(ids: string[]) {
 
 <template>
     <div>
+        <NavActions>
+            <UButton icon="i-lucide-plus"
+                     label="New job"
+                     @click="handleCreate" />
+        </NavActions>
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="jobs"
@@ -140,11 +144,6 @@ async function handleDelete(ids: string[]) {
                        search-placeholder="Search jobs..."
                        @delete="handleDelete"
                        @edit="handleEdit">
-                <template #toolbar>
-                    <UButton icon="i-lucide-plus"
-                             label="New job"
-                             @click="handleCreate" />
-                </template>
 
                 <template #empty>
                     <EmptyState icon="i-lucide-calendar-clock"

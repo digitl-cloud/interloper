@@ -45,7 +45,6 @@ componentsStore.fetchRelations()
 watch(kind, () => componentsStore.fetchAll([kind.value]))
 
 const columns: TableColumn<ComponentRecord>[] = [
-    { accessorKey: 'select' as any, header: '' },
     { accessorKey: 'name', header: 'Name' },
     {
         accessorKey: 'key',
@@ -105,6 +104,11 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
 
 <template>
     <div>
+        <NavActions>
+            <UButton icon="i-lucide-plus"
+                     :label="`New ${kind}`"
+                     @click="handleCreate" />
+        </NavActions>
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="resources"
@@ -113,12 +117,6 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
                        :search-placeholder="`Search ${pageTitle.toLowerCase()}...`"
                        @delete="handleDelete"
                        @edit="handleEdit">
-                <template #toolbar>
-                    <UButton icon="i-lucide-plus"
-                             :label="`New ${kind}`"
-                             @click="handleCreate" />
-                </template>
-
                 <template #empty>
                     <EmptyState :icon="KIND_ICONS[kind] ?? 'i-lucide-box'"
                                 :title="`No ${pageTitle.toLowerCase()} yet`"
@@ -146,7 +144,7 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
                     </div>
 
                     <div v-if="kind === 'connection'"
-                         class="flex items-center gap-3 border border-default rounded-[14px] px-5 py-4 bg-(--ui-bg-band) mt-6">
+                         class="flex items-center gap-3 border border-default rounded-lg px-5 py-4 bg-(--ui-bg-band) mt-6">
                         <UIcon name="i-lucide-info"
                                class="size-5 text-primary shrink-0" />
                         <div class="flex-1 text-[13.5px] text-toned leading-normal">
