@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v0.61.0 (2026-08-21)
+
+### Chores
+
+- **core**: Drop the legacy backfill_days shims
+  ([`720ec71`](https://github.com/digitl-cloud/interloper/commit/720ec71800f0b151462fe5b3298380cf12c305df))
+
+### Features
+
+- **app**: Add a Timeline page over job runs
+  ([`0c63534`](https://github.com/digitl-cloud/interloper/commit/0c635342920604443d255243e621c685103323fc))
+
+- **app**: Sync the app to the redesigned Claude Design project
+  ([`0c2a187`](https://github.com/digitl-cloud/interloper/commit/0c2a187f14291c64332148542b664674035dd642))
+
+### Refactoring
+
+- **api**: Derive the admin quota payload from the registry
+  ([`ec20f5a`](https://github.com/digitl-cloud/interloper/commit/ec20f5ae145e1f52424c1a29aab77df437e3d0b1))
+
+- **db**: Count the backfill span quota in partitions
+  ([`991ead6`](https://github.com/digitl-cloud/interloper/commit/991ead6693afbcb83fe321d40b356cd931384d05))
+
+### Breaking Changes
+
+- **core**: `CronJob` no longer accepts the `backfill_days` keyword; use `lookback` and `offset`.
+  Persisted configs were rewritten by migration 010 in 0.60.0.
+
+- **db**: The `max_backfill_days` quota is renamed to `max_backfill_partitions`, and its env var to
+  `INTERLOPER_QUOTA_MAX_BACKFILL_PARTITIONS`. Per-org override rows are migrated by 011; any
+  deployment setting the old env var must rename it.
+
+
 ## v0.60.0 (2026-08-19)
 
 ### Bug Fixes
