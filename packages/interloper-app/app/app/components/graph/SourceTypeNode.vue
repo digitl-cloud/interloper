@@ -54,7 +54,7 @@ const ringClass = computed(() => {
 
         <!-- Collapsed: solid card standing in for the members.
              Expanded: dashed outline over the canvas, members nest inside. -->
-        <div class="relative flex h-full w-full flex-col rounded-2xl"
+        <div class="relative flex h-full w-full flex-col rounded-xl"
              :class="[
                  open
                      ? 'border-2 border-dashed border-[var(--ui-text-dimmed)]/50 bg-transparent'
@@ -62,7 +62,7 @@ const ringClass = computed(() => {
                  ringClass,
              ]">
             <div class="flex h-[68px] shrink-0 items-center gap-3 px-4">
-                <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-elevated">
+                <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-elevated">
                     <UIcon :name="icon"
                            class="size-5" />
                 </div>

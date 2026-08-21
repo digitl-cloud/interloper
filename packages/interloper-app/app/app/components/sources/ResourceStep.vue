@@ -168,7 +168,7 @@ defineExpose({ formData })
                            :selected="selectedId === inst.id"
                            class="flex items-center gap-3 px-4 py-3"
                            @select="selectedId = inst.id">
-                <div class="size-10 shrink-0 rounded-[11px] border border-default bg-default flex items-center justify-center">
+                <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
                     <UIcon :name="componentIcon(definition.key)"
                            class="size-6" />
                 </div>

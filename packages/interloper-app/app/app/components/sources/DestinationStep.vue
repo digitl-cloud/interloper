@@ -122,7 +122,7 @@ function destLabel(key: string) {
                     <UCheckbox :model-value="isSelected(dest.id)"
                                @click.stop
                                @update:model-value="toggle(dest.id)" />
-                    <div class="size-10 shrink-0 rounded-[11px] border border-default bg-default flex items-center justify-center">
+                    <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
                         <UIcon :name="destIcon(dest.key)"
                                class="size-6" />
                     </div>

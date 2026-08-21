@@ -43,7 +43,7 @@ withDefaults(defineProps<{
                      color="neutral"
                      variant="soft"
                      size="md"
-                     class="absolute top-[22px] right-[26px] rounded-[9px] text-muted"
+                     class="absolute top-[22px] right-[26px] rounded-md text-muted"
                      aria-label="Close"
                      @click="open = false" />
             <slot />

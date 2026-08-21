@@ -6,7 +6,7 @@ defineProps<{
 </script>
 
 <template>
-    <div class="border border-default rounded-[12px] px-3.5 py-1 bg-default">
+    <div class="border border-default rounded-lg px-3.5 py-1 bg-default">
         <div v-for="(row, i) in rows"
              :key="row.label"
              class="flex items-center gap-2.5 py-2.5"

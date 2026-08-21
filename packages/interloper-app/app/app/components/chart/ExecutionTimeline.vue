@@ -75,7 +75,7 @@ function getStatusColor(status: string) {
  **********************/
 const BAR_HEIGHT = 28
 const ROW_HEIGHT = 40
-const AXIS_HEIGHT = 28
+const AXIS_HEIGHT = 30
 const OVERSCAN = 4
 const MAX_ZOOM = 200
 /**
@@ -83,7 +83,7 @@ const MAX_ZOOM = 200
  * labels don't sit flush against the panel edges. The ruler and the rows share
  * it, which keeps ticks, gridlines and bars on the same scale.
  */
-const PLOT_GUTTER = 12
+const PLOT_GUTTER = 16
 
 function clamp(v: number, min: number, max: number) {
     return Math.min(Math.max(v, min), max)
@@ -517,7 +517,7 @@ watch(axisMax, () => {
          @click="onBlankClick"
          @dblclick="resetZoom">
         <!-- Time axis / ruler: sticky, and the drag-to-pan surface when zoomed. -->
-        <div class="sticky top-0 z-30 flex select-none border-b border-default bg-(--ui-bg-band)"
+        <div class="sticky top-0 z-30 flex select-none border-b border-default bg-default"
              :class="fitted ? '' : 'cursor-ew-resize'"
              :style="{ height: AXIS_HEIGHT + 'px' }"
              @pointerdown="onRulerPointerDown"
@@ -534,7 +534,7 @@ watch(axisMax, () => {
                  :style="{ marginInline: PLOT_GUTTER + 'px' }">
                 <div v-for="t in ticks"
                      :key="t.value"
-                     class="absolute top-0 flex h-full items-center whitespace-nowrap text-xs text-muted"
+                     class="absolute top-0 flex h-full items-center whitespace-nowrap text-[12.5px] font-medium text-muted"
                      :style="{
                          left: `min(${t.percent}%, calc(100% - 1px))`,
                          transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 96 ? 'translateX(-100%)' : 'translateX(-50%)',
@@ -585,7 +585,7 @@ watch(axisMax, () => {
                 <!-- Gridlines -->
                 <div v-for="t in ticks"
                      :key="`grid-${t.value}`"
-                     class="absolute top-0 bottom-0 w-px bg-default"
+                     class="absolute top-0 bottom-0 w-px bg-elevated"
                      :style="{ left: `${t.percent}%` }" />
 
                 <!-- Bars (virtualized: only rows intersecting the viewport are rendered) -->
@@ -593,7 +593,7 @@ watch(axisMax, () => {
                           :key="row.id ?? row.name">
                     <!-- Nothing to draw: a placeholder carrying the row's status -->
                     <div v-if="placeholder && !labelWidth"
-                         class="absolute flex max-w-[45%] items-center gap-1.5 overflow-hidden rounded-md border border-dashed border-default px-2 cursor-pointer text-muted transition-opacity"
+                         class="absolute flex max-w-[45%] items-center gap-1.5 overflow-hidden rounded-md border border-dashed border-accented px-2 cursor-pointer text-dimmed transition-opacity"
                          :style="{
                              top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
                              left: '0',
@@ -616,10 +616,10 @@ watch(axisMax, () => {
                              top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
                              left: `${layout.geometry.left}%`,
                              width: `${layout.geometry.width}%`,
-                             minWidth: labelWidth ? '3px' : '2px',
+                             minWidth: '6px',
                              height: BAR_HEIGHT + 'px',
                              backgroundColor: getStatusColor(layout.bar.status),
-                             opacity: rowOpacity(row.id) * 0.95,
+                             opacity: rowOpacity(row.id) * 0.96,
                          }"
                          :title="barTooltip(row, layout)"
                          @click.stop="onBarClick(layout, row)">

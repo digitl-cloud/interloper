@@ -26,7 +26,7 @@ export function sortableHeader<T>(label: string) {
             label,
             icon,
             trailing: true,
-            class: '-mx-2.5 data-[state=open]:bg-elevated',
+            class: '-mx-2.5 text-sm font-semibold text-highlighted data-[state=open]:bg-elevated',
             'aria-label': `Sort by ${label}`,
             onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
         })

@@ -73,7 +73,7 @@ const groups = computed(() => {
                                    :selected="selectedKey === defn.key"
                                    class="flex flex-col items-center gap-2.5 px-3.5 py-[18px]"
                                    @select="selectedKey = defn.key">
-                        <div class="size-11 shrink-0 rounded-xl border border-default bg-default flex items-center justify-center">
+                        <div class="size-11 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
                             <UIcon :name="componentIcon(defn.key)"
                                    class="size-[26px]" />
                         </div>

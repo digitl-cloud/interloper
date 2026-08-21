@@ -42,7 +42,7 @@ function toggle(id: string) {
                 <UCheckbox :model-value="selectedIds.includes(component.id)"
                            @click.stop
                            @update:model-value="toggle(component.id)" />
-                <div class="size-10 shrink-0 rounded-[11px] border border-default bg-default flex items-center justify-center">
+                <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
                     <UIcon :name="componentIcon(component.key)"
                            class="size-6" />
                 </div>

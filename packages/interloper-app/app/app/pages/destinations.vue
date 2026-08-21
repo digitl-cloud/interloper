@@ -40,7 +40,6 @@ function typeName(key: string): string {
 }
 
 const columns: TableColumn<ComponentRecord>[] = [
-    { accessorKey: 'select' as any, header: '' },
     {
         accessorKey: 'key',
         header: 'Destination',
@@ -99,6 +98,11 @@ function handleSaved() {
 
 <template>
     <div>
+        <NavActions>
+            <UButton icon="i-lucide-plus"
+                     label="New destination"
+                     @click="handleCreate" />
+        </NavActions>
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="destinations"
@@ -107,11 +111,6 @@ function handleSaved() {
                        search-placeholder="Search destinations..."
                        @delete="handleDelete"
                        @edit="handleEdit">
-                <template #toolbar>
-                    <UButton icon="i-lucide-plus"
-                             label="New destination"
-                             @click="handleCreate" />
-                </template>
 
                 <template #empty>
                     <EmptyState icon="i-lucide-hard-drive"

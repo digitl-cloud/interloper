@@ -135,7 +135,7 @@ async function submit() {
 </script>
 
 <template>
-    <div class="border border-default rounded-[13px] p-4 my-2 w-full min-w-80 max-w-md">
+    <div class="border border-default rounded-lg p-4 my-2 w-full min-w-80 max-w-md">
         <!-- Unknown type: the catalog may not carry this key anymore -->
         <div v-if="!defn"
              class="flex items-center gap-2 text-[13px] text-muted">
@@ -147,7 +147,7 @@ async function submit() {
         <!-- Created: locked summary -->
         <div v-else-if="createdName"
              class="flex items-center gap-2.5">
-            <div class="size-8 shrink-0 rounded-[9px] border border-default bg-(--ui-bg-band) flex items-center justify-center">
+            <div class="size-8 shrink-0 rounded-md border border-default bg-(--ui-bg-band) flex items-center justify-center">
                 <UIcon :name="componentIcon(request.connectionKey)"
                        class="size-4.5" />
             </div>
@@ -163,7 +163,7 @@ async function submit() {
         <div v-else
              class="flex flex-col gap-3">
             <div class="flex items-center gap-2.5">
-                <div class="size-8 shrink-0 rounded-[9px] border border-default bg-(--ui-bg-band) flex items-center justify-center">
+                <div class="size-8 shrink-0 rounded-md border border-default bg-(--ui-bg-band) flex items-center justify-center">
                     <UIcon :name="componentIcon(request.connectionKey)"
                            class="size-4.5" />
                 </div>

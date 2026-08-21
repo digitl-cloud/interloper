@@ -37,43 +37,17 @@ export default defineAppConfig({
       }
     },
     navigationMenu: {
-      // Design sidebar hierarchy: section labels lighter (#86868b) than
-      // menu entries (#3f3f44 text, #86868b icons).
+      // Design sidebar: section labels lighter than entries; 8px item padding.
       slots: {
-        label: 'text-gray-700 dark:text-gray-800'
+        label: 'text-dimmed'
       },
       variants: {
         orientation: {
           vertical: {
-            // Design sidebar items: 8px vertical padding (~36px tall).
             link: 'py-2'
           }
         }
-      },
-      compoundVariants: [
-        // Sidebar active item: accent-tinted pill (a gray pill would be
-        // invisible on the gray sidebar).
-        {
-          orientation: 'vertical',
-          variant: 'pill',
-          active: true,
-          highlight: false,
-          class: {
-            link: 'before:bg-primary/10 text-primary',
-            linkLeadingIcon: 'text-primary group-data-[state=open]:text-primary'
-          }
-        },
-        {
-          orientation: 'vertical',
-          variant: 'pill',
-          active: false,
-          disabled: false,
-          class: {
-            link: 'text-toned',
-            linkLeadingIcon: 'text-gray-700'
-          }
-        }
-      ]
+      }
     },
     input: {
       defaultVariants: {
@@ -113,22 +87,10 @@ export default defineAppConfig({
     },
     table: {
       slots: {
-        // Borderless table treatment: no card frame and no header band — the
-        // header rule (#E8E8EC) and #F2F3F5 row dividers carry the structure,
-        // closed off by a rule under the last row.
-        root: 'bg-default',
-        thead: 'bg-default',
-        th: 'text-toned',
-        tbody: 'divide-(--ui-border-muted) [&>tr:last-child]:border-b [&>tr:last-child]:border-(--ui-border-muted)'
-      },
-      variants: {
-        sticky: {
-          true: {
-            // The sticky variant's own bg-default/75 wins the class merge
-            // over slots.thead, so restate an opaque header background here.
-            thead: 'bg-default backdrop-blur-none'
-          }
-        }
+        // Unframed tables: the first column sits flush with the table edge,
+        // aligned with the toolbar and caption around it.
+        th: 'first:pl-0',
+        td: 'first:pl-0'
       }
     },
     alert: {

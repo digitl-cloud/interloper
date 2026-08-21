@@ -17,6 +17,11 @@ const props = defineProps<{
     /** When true, rows are read-only: no pointer cursor, since clicking one leads nowhere. */
     noRowClick?: boolean
     /**
+     * Design "bordered" table: an outer rounded frame replaces the floating
+     * header band (detail/settings pages); list pages keep the band.
+     */
+    bordered?: boolean
+    /**
      * Impact preview for deleting the given ids (e.g.
      * `componentsStore.deleteImpact`). `blocking` referrers disable the
      * destructive button; `detaching` ones are listed as a heads-up — the
@@ -144,7 +149,7 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
 </script>
 
 <template>
-    <div class="w-full flex flex-col gap-4">
+    <div class="w-full flex flex-col gap-2">
         <div v-if="!showEmpty"
              class="flex items-center gap-3">
             <UInput v-model="globalFilter"
@@ -178,7 +183,11 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
                 :global-filter="globalFilter"
                 :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
                 sticky
-                :ui="{ tr: noRowClick ? '' : 'cursor-pointer' }"
+                :ui="{
+                    tr: noRowClick ? '' : 'cursor-pointer',
+                    ...(bordered && { thead: '[&>tr]:bg-muted', th: 'first:pl-4', td: 'first:pl-4' }),
+                }"
+                :class="bordered && 'rounded-lg border border-default'"
                 class="max-h-[calc(100vh-16rem)]"
                 @select="(_e: Event, row: any) => emit('edit', row.original)"
                 @contextmenu="onRowContextMenu">

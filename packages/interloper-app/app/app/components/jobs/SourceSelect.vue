@@ -63,7 +63,7 @@ function deselectAll() {
                 <UCheckbox :model-value="selectedIds.includes(source.id)"
                            @click.stop
                            @update:model-value="toggle(source.id)" />
-                <div class="size-10 shrink-0 rounded-[11px] border border-default bg-default flex items-center justify-center">
+                <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
                     <UIcon :name="sourceIcon(source)"
                            class="size-6" />
                 </div>

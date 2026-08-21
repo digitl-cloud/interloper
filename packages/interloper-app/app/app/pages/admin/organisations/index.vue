@@ -44,16 +44,6 @@ async function loadData() {
 const usageByOrg = computed(() => new Map<string, AdminOrgQuotaStatus>(
     (quotas.value?.organisations ?? []).map(row => [row.id, row])))
 
-const periodLabel = computed(() => {
-    if (!quotas.value) return ''
-    return new Date(quotas.value.period_start).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-})
-
-const defaultChips = computed(() => (quotas.value?.fields ?? []).map(field => ({
-    key: field.key,
-    value: field.default != null ? field.default.toLocaleString() : 'unlimited',
-})))
-
 /** The quota closest to its ceiling — what the usage column reports. */
 function peakQuota(usage: AdminOrgQuotaStatus) {
     const candidates = [
@@ -171,34 +161,17 @@ onMounted(loadData)
 
 <template>
     <div class="flex flex-col flex-1 min-h-0 gap-3">
-        <div v-if="quotas"
-             class="flex flex-wrap items-center gap-2.5 text-sm text-muted shrink-0">
-            <span class="flex items-center gap-1.5">
-                <UIcon name="i-lucide-calendar"
-                       class="size-4" />
-                Quota usage for <b class="text-default font-semibold">{{ periodLabel }}</b>
-            </span>
-            <span class="size-[3px] rounded-full bg-accented" />
-            <span>Instance defaults</span>
-            <span v-for="chip in defaultChips"
-                  :key="chip.key"
-                  class="rounded-md border border-default bg-default px-2 py-0.5 font-mono text-xs text-toned">
-                {{ chip.key }}=<b class="font-semibold">{{ chip.value }}</b>
-            </span>
-        </div>
-
+        <NavActions>
+            <UButton icon="i-lucide-plus"
+                     label="New organisation"
+                     @click="openCreate" />
+        </NavActions>
         <DataTable :columns="columns"
                    :data="rows"
                    :loading="loading"
                    no-actions
                    search-placeholder="Search organisations..."
-                   @edit="openOrg">
-            <template #toolbar>
-                <UButton icon="i-lucide-plus"
-                         label="New organisation"
-                         @click="openCreate" />
-            </template>
-        </DataTable>
+                   @edit="openOrg"/>
 
         <UModal v-model:open="createOpen"
                 title="New organisation"

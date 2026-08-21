@@ -766,8 +766,8 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
             <Panel v-if="editable && sourceEntries.length === 0"
                    position="top-left"
                    class="!inset-0 !m-0 flex items-center justify-center pointer-events-none">
-                <div class="pointer-events-auto w-[430px] max-w-[92%] bg-default border border-default rounded-[20px] shadow-2xl px-8 py-9 text-center">
-                    <div class="size-14 mx-auto rounded-[16px] bg-primary/10 text-primary flex items-center justify-center">
+                <div class="pointer-events-auto w-[430px] max-w-[92%] bg-default border border-default rounded-lg shadow-2xl px-8 py-9 text-center">
+                    <div class="size-14 mx-auto rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                         <UIcon name="i-lucide-workflow"
                                class="size-7" />
                     </div>

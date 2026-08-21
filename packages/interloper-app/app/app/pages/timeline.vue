@@ -58,24 +58,26 @@ onUnmounted(() => {
                    size="xs"
                    :content="false" />
 
-            <div class="ml-auto flex items-center gap-2">
-                <UBadge v-if="truncated"
-                        color="warning"
-                        variant="subtle"
-                        icon="i-lucide-triangle-alert"
-                        :title="`Only the ${runCount} most recent of ${total} runs in this window are shown — narrow the window to see them all.`">
-                    Showing {{ runCount }} of {{ total }}
-                </UBadge>
-                <span v-else
-                      class="text-xs text-muted">{{ runCount }} run(s)</span>
-                <UButton icon="i-lucide-refresh-cw"
-                         color="neutral"
-                         variant="outline"
-                         :loading="loading"
-                         aria-label="Refresh"
-                         @click="timelineStore.fetch()" />
-            </div>
         </div>
+
+        <NavActions>
+            <UBadge v-if="truncated"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-triangle-alert"
+                    :title="`Only the ${runCount} most recent of ${total} runs in this window are shown — narrow the window to see them all.`">
+                Showing {{ runCount }} of {{ total }}
+            </UBadge>
+            <span v-else
+                  class="text-xs text-muted">{{ runCount }} run(s)</span>
+            <UButton icon="i-lucide-refresh-cw"
+                     color="neutral"
+                     variant="outline"
+                     size="sm"
+                     :loading="loading"
+                     aria-label="Refresh"
+                     @click="timelineStore.fetch()" />
+        </NavActions>
 
         <div class="flex flex-1 min-h-0 flex-col">
             <div v-if="!loading && !rows.length"

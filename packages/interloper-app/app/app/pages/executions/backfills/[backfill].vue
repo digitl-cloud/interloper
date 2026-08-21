@@ -1,22 +1,17 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn, BreadcrumbItem } from '@nuxt/ui'
+import type { TableColumn } from '@nuxt/ui'
 import type { Run } from '~/types/run'
 import type { Backfill } from '~/types/backfill'
 
 // orgSwitchTarget: this page is bespoke to one org's backfill — switching org
 // from the nav lands on the backfills list instead.
-definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions?tab=backfills', titleInBreadcrumb: true })
+definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions?tab=backfills', customNavbar: true })
 
 const UBadge = resolveComponent('UBadge')
 
 const route = useRoute()
 const backfillId = route.params.backfill!.toString()
-
-const breadcrumbs: BreadcrumbItem[] = [
-    titleCrumb('Backfills', '/executions?tab=backfills'),
-    { ...entityCrumb(backfillId.substring(0, 8), 'i-lucide-calendar-range'), class: 'font-mono' },
-]
 
 const { apiFetch } = useApi()
 const backfillsStore = useBackfillsStore()
@@ -128,23 +123,25 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
              back-to="/executions?tab=backfills"
              resource-label="backfill">
         <div>
-            <div class="flex items-center gap-3 mb-4 shrink-0">
-            <PageBreadcrumb :items="breadcrumbs" />
-            <UBadge v-if="backfill"
-                    :color="statusColor(backfill.status)">
-                {{ statusLabel(backfill.status) }}
-            </UBadge>
-            <UButton v-if="cancellable"
-                     color="error"
-                     variant="subtle"
-                     size="xs"
-                     icon="i-lucide-ban"
-                     :loading="cancelling"
-                     class="ml-auto"
-                     @click="onCancel">
-                Cancel
-            </UButton>
-        </div>
+            <NavTitle>
+                <ULink to="/executions?tab=backfills"
+                       class="text-[15px] font-medium text-muted hover:text-highlighted">Backfills</ULink>
+                <span class="text-[15px] text-dimmed">/</span>
+                <span class="truncate font-mono text-[15px] font-semibold">{{ backfillId.substring(0, 8) }}</span>
+                <StatusPill v-if="backfill"
+                            :label="statusLabel(backfill.status)"
+                            :color="statusPillColor(backfill.status)" />
+            </NavTitle>
+            <NavActions v-if="cancellable">
+                <UButton color="error"
+                         variant="subtle"
+                         size="sm"
+                         icon="i-lucide-ban"
+                         :loading="cancelling"
+                         @click="onCancel">
+                    Cancel
+                </UButton>
+            </NavActions>
 
         <div v-if="backfill"
              class="flex items-center gap-4 mb-4 text-sm text-muted">

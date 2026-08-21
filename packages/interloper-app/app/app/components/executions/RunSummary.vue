@@ -80,12 +80,12 @@ const metaItems = computed(() => [
                         type="button"
                         :disabled="b.count === 0"
                         :aria-pressed="statusFilter === b.key"
-                        class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
+                        class="flex items-center gap-1.5 rounded-lg px-[9px] py-1 text-xs transition-colors"
                         :class="[
-                            b.count === 0 ? 'cursor-default opacity-50' : 'cursor-pointer hover:bg-elevated',
+                            b.count === 0 ? 'cursor-default opacity-50' : 'cursor-pointer',
                             statusFilter === b.key
-                                ? 'bg-elevated ring-1 ring-inset ring-primary'
-                                : 'bg-accented',
+                                ? 'bg-default ring-1 ring-inset ring-primary shadow-sm'
+                                : 'bg-elevated',
                             statusFilter && statusFilter !== b.key ? 'opacity-60' : '',
                         ]"
                         @click="toggleStatus(b)">
@@ -101,8 +101,8 @@ const metaItems = computed(() => [
         <div class="grid shrink-0 grid-cols-2 gap-2 lg:w-80">
             <div v-for="m in metaItems"
                  :key="m.label"
-                 class="flex flex-col gap-1 rounded-md border border-default bg-default px-3 py-2">
-                <div class="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                 class="flex flex-col gap-1 rounded-lg border border-default bg-default px-3 py-2">
+                <div class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-dimmed">
                     <UIcon :name="m.icon"
                            class="size-3" />
                     {{ m.label }}
