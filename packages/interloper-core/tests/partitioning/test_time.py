@@ -12,7 +12,6 @@ from interloper.partitioning.time import (
     TimePartitionWindow,
     coerce_to_date,
     coerce_to_datetime,
-    lookback_window,
     period_range,
 )
 
@@ -38,9 +37,15 @@ class TestCoerceToDate:
 
 
 class TestCoerceToDatetime:
-    def test_returns_datetime_unchanged(self) -> None:
-        value = dt.datetime(2026, 1, 1, 9, 30, tzinfo=dt.timezone.utc)
+    def test_returns_naive_datetime_unchanged(self) -> None:
+        value = dt.datetime(2026, 1, 1, 9, 30)  # noqa: DTZ001
         assert coerce_to_datetime(value) is value
+
+    def test_aware_datetime_becomes_naive_utc(self) -> None:
+        # Labels are UTC: mixing aware and naive values would poison every
+        # comparison downstream (bounds, clamps, window ordering).
+        cet = dt.timezone(dt.timedelta(hours=2))
+        assert coerce_to_datetime(dt.datetime(2026, 1, 1, 9, 30, tzinfo=cet)) == dt.datetime(2026, 1, 1, 7, 30)  # noqa: DTZ001
 
     def test_date_becomes_midnight(self) -> None:
         assert coerce_to_datetime(dt.date(2026, 1, 1)) == dt.datetime(2026, 1, 1)  # noqa: DTZ001
@@ -136,21 +141,52 @@ class TestTimeGranularityPeriodsBetween:
 
 
 class TestTimeGranularityIdentity:
-    def test_day_formats_as_iso_date(self) -> None:
-        assert TimeGranularity.DAY.format(dt.date(2026, 1, 1)) == "2026-01-01"
-
-    def test_day_parse_round_trips(self) -> None:
-        assert TimeGranularity.DAY.parse("2026-01-01") == dt.date(2026, 1, 1)
-
     @pytest.mark.parametrize(
-        "granularity",
-        [TimeGranularity.HOUR, TimeGranularity.WEEK, TimeGranularity.MONTH],
+        ("granularity", "value", "key"),
+        [
+            (TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13, 45), "2026-08-21T13"),  # noqa: DTZ001
+            (TimeGranularity.DAY, dt.date(2026, 8, 21), "2026-08-21"),
+            (TimeGranularity.MONTH, dt.date(2026, 8, 21), "2026-08"),
+            (TimeGranularity.YEAR, dt.date(2026, 8, 21), "2026"),
+        ],
     )
-    def test_other_granularities_have_no_id_format_yet(self, granularity: TimeGranularity) -> None:
+    def test_format_and_parse_round_trip(self, granularity: TimeGranularity, value: object, key: str) -> None:
+        assert granularity.format(value) == key
+        assert granularity.parse(key) == granularity.truncate(value)
+
+    def test_parse_rejects_a_key_of_another_shape(self) -> None:
+        with pytest.raises(ValueError, match="not a month key"):
+            TimeGranularity.MONTH.parse("2026-01-01")
+
+    @pytest.mark.parametrize("granularity", [TimeGranularity.WEEK, TimeGranularity.QUARTER])
+    def test_undeclarable_granularities_have_no_id_format(self, granularity: TimeGranularity) -> None:
         with pytest.raises(NotImplementedError, match="partition id format"):
             granularity.format(dt.date(2026, 1, 1))
         with pytest.raises(NotImplementedError, match="partition id format"):
             granularity.parse("2026-01-01")
+
+
+class TestTimePartitionFromKey:
+    @pytest.mark.parametrize(
+        ("key", "granularity", "value"),
+        [
+            ("2026", TimeGranularity.YEAR, dt.date(2026, 1, 1)),
+            ("2026-08", TimeGranularity.MONTH, dt.date(2026, 8, 1)),
+            ("2026-08-21", TimeGranularity.DAY, dt.date(2026, 8, 21)),
+            ("2026-08-21T13", TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13)),  # noqa: DTZ001
+        ],
+    )
+    def test_the_key_shape_carries_the_granularity(
+        self, key: str, granularity: TimeGranularity, value: object
+    ) -> None:
+        partition = TimePartition.from_key(key)
+        assert partition.granularity is granularity
+        assert partition.value == value
+        assert partition.id == key
+
+    def test_rejects_an_unknown_shape(self) -> None:
+        with pytest.raises(ValueError, match="matches no granularity"):
+            TimePartition.from_key("2026-W33")
 
 
 class TestPeriodRange:
@@ -174,8 +210,13 @@ class TestTimePartitionConfig:
     def test_defaults_to_daily(self) -> None:
         assert TimePartitionConfig(column="date").granularity is TimeGranularity.DAY
 
-    def test_day_is_the_only_supported_granularity(self) -> None:
-        assert SUPPORTED_GRANULARITIES == {TimeGranularity.DAY}
+    def test_supported_set_is_bigquery_parity(self) -> None:
+        assert SUPPORTED_GRANULARITIES == {
+            TimeGranularity.HOUR,
+            TimeGranularity.DAY,
+            TimeGranularity.MONTH,
+            TimeGranularity.YEAR,
+        }
 
     @pytest.mark.parametrize(
         "granularity",
@@ -265,54 +306,54 @@ class TestTimePartitionWindow:
         assert repr(window) == "2026-01-01 to 2026-01-03"
 
 
-class TestLookbackWindow:
+class TestTimePartitionWindowLookback:
     NOW = dt.datetime(2026, 8, 18, 6, 0, tzinfo=dt.timezone.utc)
 
     def test_defaults_cover_the_last_complete_partition(self) -> None:
-        window = lookback_window(self.NOW, lookback=1)
+        window = TimePartitionWindow.lookback(self.NOW, lookback=1)
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 8, 17), dt.date(2026, 8, 17))
 
     def test_lookback_spans_partitions_back_from_the_end(self) -> None:
-        window = lookback_window(self.NOW, lookback=7)
+        window = TimePartitionWindow.lookback(self.NOW, lookback=7)
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 8, 11), dt.date(2026, 8, 17))
         assert window.partition_count() == 7
 
     def test_zero_offset_includes_the_current_partition(self) -> None:
-        window = lookback_window(self.NOW, lookback=1, offset=0)
+        window = TimePartitionWindow.lookback(self.NOW, lookback=1, offset=0)
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 8, 18), dt.date(2026, 8, 18))
 
     def test_offset_shifts_the_whole_window_back(self) -> None:
-        window = lookback_window(self.NOW, lookback=2, offset=3)
+        window = TimePartitionWindow.lookback(self.NOW, lookback=2, offset=3)
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 8, 14), dt.date(2026, 8, 15))
 
     def test_start_clamps_the_window(self) -> None:
-        window = lookback_window(self.NOW, lookback=30, start=dt.date(2026, 8, 10))
+        window = TimePartitionWindow.lookback(self.NOW, lookback=30, start=dt.date(2026, 8, 10))
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 8, 10), dt.date(2026, 8, 17))
 
     def test_start_after_the_window_yields_nothing(self) -> None:
-        assert lookback_window(self.NOW, lookback=30, start=dt.date(2027, 1, 1)) is None
+        assert TimePartitionWindow.lookback(self.NOW, lookback=30, start=dt.date(2027, 1, 1)) is None
 
     def test_counts_partitions_not_days(self) -> None:
-        window = lookback_window(self.NOW, lookback=3, granularity=TimeGranularity.MONTH)
+        window = TimePartitionWindow.lookback(self.NOW, lookback=3, granularity=TimeGranularity.MONTH)
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 5, 1), dt.date(2026, 7, 1))
         assert window.partition_count() == 3
 
     def test_a_date_is_an_acceptable_reference(self) -> None:
-        window = lookback_window(dt.date(2026, 8, 18), lookback=1)
+        window = TimePartitionWindow.lookback(dt.date(2026, 8, 18), lookback=1)
         assert window is not None
         assert window.end == dt.date(2026, 8, 17)
 
     @pytest.mark.parametrize(("lookback", "offset"), [(0, 1), (-1, 1)])
     def test_lookback_must_cover_a_partition(self, lookback: int, offset: int) -> None:
         with pytest.raises(ValueError, match="at least one partition"):
-            lookback_window(self.NOW, lookback=lookback, offset=offset)
+            TimePartitionWindow.lookback(self.NOW, lookback=lookback, offset=offset)
 
     def test_offset_cannot_be_negative(self) -> None:
         with pytest.raises(ValueError, match="cannot be negative"):
-            lookback_window(self.NOW, lookback=1, offset=-1)
+            TimePartitionWindow.lookback(self.NOW, lookback=1, offset=-1)

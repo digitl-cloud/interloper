@@ -27,7 +27,8 @@ interloper run interloper_assets.demo.source.DemoSource
 ### Partitions
 
 ```sh
-interloper run <target> --date 2025-01-15                       # single partition
+interloper run <target> --date 2025-01-15                       # single partition (daily)
+interloper run <target> --date 2025-01                          # single partition (monthly asset)
 interloper run <target> --start-date 2025-01-01 --end-date 2025-01-07   # window (backfill)
 ```
 
@@ -37,7 +38,7 @@ interloper run <target> --start-date 2025-01-01 --end-date 2025-01-07   # window
 |--------|-------------|
 | `-f, --file PATH` | Run a declarative manifest (see below) |
 | `--dry-run` | Validate and print the plan without executing |
-| `--date ISO` | Single partition date |
+| `--date KEY` | Single partition key (`2025-01-15`, `2025-01`, `2025`, `2025-01-15T13`) |
 | `--start-date ISO` / `--end-date ISO` | Partition window |
 | `--events [pretty\|json]` | Event output format (default `pretty`) |
 | `--run-id ID` | Optional run identifier forwarded to the runner |

@@ -69,6 +69,27 @@ class TestWriteDispatch:
         assert by_scope["2024-01-01"] == [{"date": "2024-01-01", "v": 1}]
         assert by_scope["2024-01-02"] == [{"date": "2024-01-02", "v": 2}, {"date": "2024-01-02", "v": 3}]
 
+    def test_monthly_window_slices_rows_by_period(self):
+        # Rows carry daily dates; each monthly partition's slice is its whole
+        # month, which id equality on the period start would miss entirely.
+        @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.MONTH))
+        def monthly(context: il.ExecutionContext) -> list:
+            return []
+
+        dest = RecordingScopes(id="d")
+        rows = [
+            {"date": "2024-01-15", "v": 1},
+            {"date": "2024-02-10", "v": 2},
+            {"date": "2024-02-20", "v": 3},
+        ]
+        window = TimePartitionWindow(
+            datetime.date(2024, 1, 1), datetime.date(2024, 2, 1), il.TimeGranularity.MONTH
+        )
+        dest.write(ctx(monthly(), window), rows)
+        by_scope = {scope: data for kind, scope, data in dest.calls}
+        assert by_scope["2024-01"] == [{"date": "2024-01-15", "v": 1}]
+        assert by_scope["2024-02"] == [{"date": "2024-02-10", "v": 2}, {"date": "2024-02-20", "v": 3}]
+
     def test_window_write_splits_dataframes_natively(self):
         pd = pytest.importorskip("pandas")
 

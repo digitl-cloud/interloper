@@ -38,6 +38,13 @@ class TestDataFrameRepresentation:
         df = pd.DataFrame({"a": [1], "b": [2]})
         assert DataFrameRepresentation().columns(df) == ["a", "b"]
 
+    def test_filter_range_is_half_open(self):
+        import datetime as dt
+
+        df = pd.DataFrame({"d": ["2024-01-31", "2024-02-01", "2024-02-15", "2024-03-01"], "v": [0, 1, 2, 3]})
+        out = DataFrameRepresentation().filter_range(df, "d", dt.date(2024, 2, 1), dt.date(2024, 3, 1))
+        assert out["v"].tolist() == [1, 2]
+
     def test_filter_eq_compares_as_strings(self):
         df = pd.DataFrame({"d": ["2024-01-01", "2024-01-02"], "v": [1, 2]})
         out = DataFrameRepresentation().filter_eq(df, "d", "2024-01-02")

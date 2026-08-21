@@ -69,6 +69,36 @@ class TestRowsRepresentation:
         assert RowsRepresentation().columns([{"a": 1, "b": 2}]) == ["a", "b"]
         assert RowsRepresentation().columns([]) == []
 
+    def test_filter_range_is_half_open(self):
+        import datetime as dt
+
+        rows = [{"d": "2024-01-31"}, {"d": "2024-02-01"}, {"d": "2024-02-15"}, {"d": "2024-03-01"}]
+        out = RowsRepresentation().filter_range(rows, "d", dt.date(2024, 2, 1), dt.date(2024, 3, 1))
+        assert out == [{"d": "2024-02-01"}, {"d": "2024-02-15"}]
+
+    def test_filter_range_spans_dates_and_datetimes(self):
+        import datetime as dt
+
+        # A date bound is an ISO prefix of any datetime inside the period, so
+        # string comparison keeps the half-open range exact at both ends.
+        rows = [
+            {"d": "2024-01-31T23:00:00"},
+            {"d": "2024-02-01 00:30:00"},
+            {"d": dt.datetime(2024, 2, 29, 23, 59)},  # noqa: DTZ001
+            {"d": "2024-03-01T00:00:00"},
+        ]
+        out = RowsRepresentation().filter_range(rows, "d", dt.date(2024, 2, 1), dt.date(2024, 3, 1))
+        assert [str(r["d"])[:7] for r in out] == ["2024-02", "2024-02"]
+
+    def test_iso_label_normalizes_the_separator(self):
+        import datetime as dt
+
+        from interloper.representation import iso_label
+
+        assert iso_label(dt.datetime(2024, 2, 1, 10, 30)) == "2024-02-01T10:30:00"  # noqa: DTZ001
+        assert iso_label("2024-02-01 10:30:00") == "2024-02-01T10:30:00"
+        assert iso_label(dt.date(2024, 2, 1)) == "2024-02-01"
+
     def test_filter_eq_compares_as_strings(self):
         rows = [{"d": "2024-01-01", "v": 1}, {"d": "2024-01-02", "v": 2}]
         assert RowsRepresentation().filter_eq(rows, "d", "2024-01-02") == [{"d": "2024-01-02", "v": 2}]

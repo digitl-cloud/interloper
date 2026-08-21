@@ -20,6 +20,7 @@ dependence, no explicit registration calls.
 
 from __future__ import annotations
 
+import datetime as dt
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
@@ -39,6 +40,25 @@ def _adopt_representation(_name: str, loaded: Any) -> tuple[str, Representation]
 
 
 REPRESENTATIONS: Registry[Representation] = Registry("interloper.representations", adopt=_adopt_representation)
+
+
+def iso_label(value: Any) -> str:
+    """Normalize a time-partition column value for lexicographic comparison.
+
+    Dates and datetimes render as ISO-8601 with the ``T`` separator; strings
+    get their first space replaced by ``T`` (``str(datetime)`` and most SQL
+    text renderings use a space). Uniform ISO strings compare correctly as
+    strings, including a date against a datetime: the date is a prefix, and a
+    half-open range keeps prefix ordering exact at both bounds.
+
+    Returns:
+        The value as a comparable ISO-8601 string.
+    """
+    if isinstance(value, dt.datetime):
+        return value.isoformat()
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    return str(value).replace(" ", "T", 1)
 
 
 class Representation(ABC):
@@ -70,6 +90,16 @@ class Representation(ABC):
     @abstractmethod
     def filter_eq(self, data: Any, column: str, value: Any) -> Any:
         """Return the subset of *data* whose *column* equals *value* (compared as strings)."""
+
+    @abstractmethod
+    def filter_range(self, data: Any, column: str, start: Any, end: Any) -> Any:
+        """Return the rows whose *column* falls in ``[start, end)``.
+
+        Values and bounds are compared as ISO-8601 strings (see
+        :func:`iso_label`): the scoping primitive for time partitions, whose
+        rows may carry values anywhere inside the period rather than the
+        period's start.
+        """
 
     @property
     @abstractmethod
@@ -139,6 +169,17 @@ class RowsRepresentation(Representation):
             The matching rows.
         """
         return [row for row in data if str(row.get(column)) == str(value)]
+
+    def filter_range(
+        self, data: list[dict[str, Any]], column: str, start: Any, end: Any
+    ) -> list[dict[str, Any]]:
+        """Return the rows whose *column* falls in ``[start, end)``.
+
+        Returns:
+            The matching rows.
+        """
+        lo, hi = iso_label(start), iso_label(end)
+        return [row for row in data if lo <= iso_label(row.get(column)) < hi]
 
     @property
     def conformer(self) -> Conformer:
