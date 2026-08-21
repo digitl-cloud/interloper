@@ -20,12 +20,7 @@ from typing import Any, cast
 
 from croniter import croniter
 from interloper.errors import ConfigError
-from interloper.partitioning.time import (
-    TimeGranularity,
-    TimePartitionWindow,
-    lookback_window,
-    period_range,
-)
+from interloper.partitioning.time import TimeGranularity, TimePartitionWindow, period_range
 from interloper_db import Store, stamp_component_state
 from interloper_db.models import Backfill, Component, Run
 from sqlalchemy import or_
@@ -200,7 +195,7 @@ class CronController(Controller):
         lookback = config.get("lookback")
         if not lookback:
             return None
-        return lookback_window(
+        return TimePartitionWindow.lookback(
             now,
             lookback=lookback,
             offset=config.get("offset", 1),

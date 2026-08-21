@@ -122,10 +122,10 @@ partitions, not days: `offset` is how many partitions back from the current one 
 `lookback` how many it spans. With daily targets, the defaults (`offset=1`, `lookback=1`) mean
 "yesterday only", and `offset=3` suits a vendor whose data settles after three days.
 
-`il.lookback_window` is the same computation, available to anything driving its own schedule:
+`il.TimePartitionWindow.lookback` is the same computation, available to anything driving its own schedule:
 
 ```py
-il.lookback_window(dt.datetime.now(dt.timezone.utc), lookback=7, offset=1)
+il.TimePartitionWindow.lookback(dt.datetime.now(dt.timezone.utc), lookback=7, offset=1)
 # 2026-08-11 to 2026-08-17
 ```
 
