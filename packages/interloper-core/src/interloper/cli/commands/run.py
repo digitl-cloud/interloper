@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 
@@ -109,17 +108,17 @@ def register(
     run_parser.add_argument(
         "--date",
         default=None,
-        help="Partition date (ISO format, e.g. 2026-04-09)",
+        help="Partition key (e.g. 2026-04-09; also 2026-04, 2026, or 2026-04-09T13)",
     )
     run_parser.add_argument(
         "--start-date",
         default=None,
-        help="Partition window start date (ISO format). Must be used with --end-date.",
+        help="Partition window start key. Must be used with --end-date and share its granularity.",
     )
     run_parser.add_argument(
         "--end-date",
         default=None,
-        help="Partition window end date (ISO format). Must be used with --start-date.",
+        help="Partition window end key. Must be used with --start-date and share its granularity.",
     )
     run_parser.add_argument(
         "target",
@@ -303,6 +302,10 @@ def _print_plan(
 def _resolve_partition(args: argparse.Namespace) -> Partition | PartitionWindow | None:
     """Convert CLI date flags into a Partition or PartitionWindow.
 
+    The flags take partition keys, whose shape carries the granularity:
+    ``2026`` (year), ``2026-08`` (month), ``2026-08-21`` (day),
+    ``2026-08-21T13`` (hour). A window's two keys must share one shape.
+
     Returns:
         ``TimePartition`` for ``--date``, ``TimePartitionWindow`` for
         ``--start-date``/``--end-date``, or ``None`` if neither is set.
@@ -310,7 +313,7 @@ def _resolve_partition(args: argparse.Namespace) -> Partition | PartitionWindow 
     Raises:
         SystemExit: If the date arguments are invalid or inconsistent.
     """
-    from interloper.partitioning.time import TimePartition, TimePartitionWindow
+    from interloper.partitioning.time import TimePartitionWindow, parse_partition_key
 
     has_date = args.date is not None
     has_window = args.start_date is not None or args.end_date is not None
@@ -320,7 +323,7 @@ def _resolve_partition(args: argparse.Namespace) -> Partition | PartitionWindow 
 
     if has_date:
         try:
-            return TimePartition(dt.date.fromisoformat(args.date))
+            return parse_partition_key(args.date)
         except ValueError as exc:
             raise SystemExit(f"Error: invalid --date value: {exc}") from exc
 
@@ -328,10 +331,15 @@ def _resolve_partition(args: argparse.Namespace) -> Partition | PartitionWindow 
         if not (args.start_date and args.end_date):
             raise SystemExit("Error: both --start-date and --end-date must be provided.")
         try:
-            start = dt.date.fromisoformat(args.start_date)
-            end = dt.date.fromisoformat(args.end_date)
+            start = parse_partition_key(args.start_date)
+            end = parse_partition_key(args.end_date)
         except ValueError as exc:
             raise SystemExit(f"Error: invalid start/end date: {exc}") from exc
-        return TimePartitionWindow(start=start, end=end)
+        if start.granularity is not end.granularity:
+            raise SystemExit(
+                f"Error: --start-date is a {start.granularity.value} key but --end-date is a "
+                f"{end.granularity.value} key; a window's bounds must share one granularity."
+            )
+        return TimePartitionWindow(start=start.value, end=end.value, granularity=start.granularity)
 
     return None

@@ -7,6 +7,7 @@ from typing import Any
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.time import TimePartition
 from interloper.representation import Representation
 
 
@@ -83,14 +84,18 @@ class PartitionedDestination(Destination):
 def _partition_slice(data: Any, column: str, partition: Partition) -> Any:
     """Return the partition's slice of *data*.
 
-    Data recognized by a registered representation is filtered on the
-    partition column (compared as strings); other shapes pass through
-    unchanged since they cannot be split.
+    A time partition selects by its half-open bounds, because rows may carry
+    values anywhere inside the period (a monthly partition whose rows hold
+    daily dates); any other partition selects by id equality. Data no
+    registered representation recognizes passes through unchanged since it
+    cannot be split.
 
     Returns:
         The partition's slice of the data.
     """
     rep = Representation.of(data)
-    if rep.matches(data):
-        return rep.filter_eq(data, column, partition.id)
-    return data
+    if not rep.matches(data):
+        return data
+    if isinstance(partition, TimePartition):
+        return rep.filter_range(data, column, *partition.bounds)
+    return rep.filter_eq(data, column, partition.id)

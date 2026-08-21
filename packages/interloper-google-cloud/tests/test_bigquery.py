@@ -441,6 +441,28 @@ class TestTimePartitioning:
             tp = _time_partitioning(il.TimePartitionConfig(column="nope"), _schema_to_bq_fields(_RowSchema))
         assert tp is None
 
+    @pytest.mark.parametrize(
+        ("granularity", "bq_type"),
+        [
+            (il.TimeGranularity.DAY, "DAY"),
+            (il.TimeGranularity.MONTH, "MONTH"),
+            (il.TimeGranularity.YEAR, "YEAR"),
+        ],
+    )
+    def test_granularity_maps_to_the_bq_partitioning_type(self, granularity, bq_type):
+        config = il.TimePartitionConfig(column="day", granularity=granularity)
+        tp = _time_partitioning(config, _schema_to_bq_fields(_RowSchema))
+        assert tp is not None
+        assert tp.type_ == bq_type
+
+    def test_hourly_on_a_date_column_warns_and_skips(self):
+        # BigQuery rejects HOUR partitioning on a DATE column; falling back to
+        # an unpartitioned table beats a failed create.
+        config = il.TimePartitionConfig(column="day", granularity=il.TimeGranularity.HOUR)
+        with pytest.warns(UserWarning, match="hourly partitioning needs DATETIME or TIMESTAMP"):
+            tp = _time_partitioning(config, _schema_to_bq_fields(_RowSchema))
+        assert tp is None
+
 
 class TestCreateTableMetadata:
     """New tables carry partitioning, field descriptions, and table description."""
@@ -596,6 +618,39 @@ class TestPartitionParam:
         table.schema = []
         assert _partition_param(table, "day", "2024-01-01").type_ == "STRING"
         assert _partition_param(table, "n", 3).type_ == "INT64"
+
+    def test_range_params_are_typed_and_named(self):
+        import datetime as dt
+
+        table = MagicMock()
+        table.schema = [bigquery.SchemaField("day", "DATE")]
+        start = _partition_param(table, "day", dt.date(2024, 2, 1), name="partition_start")
+        end = _partition_param(table, "day", dt.date(2024, 3, 1), name="partition_end")
+        assert (start.name, start.type_, start.value) == ("partition_start", "DATE", dt.date(2024, 2, 1))
+        assert (end.name, end.type_) == ("partition_end", "DATE")
+
+    def test_date_bound_promotes_to_midnight_for_datetime_columns(self):
+        import datetime as dt
+
+        table = MagicMock()
+        table.schema = [bigquery.SchemaField("ts", "TIMESTAMP")]
+        param = _partition_param(table, "ts", dt.date(2024, 2, 1), name="partition_start")
+        assert param.type_ == "TIMESTAMP"
+        assert param.value == dt.datetime(2024, 2, 1)  # noqa: DTZ001
+
+    def test_delete_partition_range_builds_a_half_open_predicate(self):
+        import datetime as dt
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.schema = [bigquery.SchemaField("day", "DATE")]
+
+        dest._delete_partition_range("tbl", "ds", "day", dt.date(2024, 2, 1), dt.date(2024, 3, 1))
+
+        query = mock_client.query.call_args.args[0]
+        assert ">= @partition_start" in query
+        assert "< @partition_end" in query
+        params = mock_client.query.call_args.kwargs["job_config"].query_parameters
+        assert [p.name for p in params] == ["partition_start", "partition_end"]
 
     def test_delete_partition_uses_column_type(self):
         dest, mock_client = _make_destination(dataset="ds")

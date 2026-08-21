@@ -13,6 +13,7 @@ from interloper.destination.context import IOContext
 from interloper.destination.partitioned import PartitionedDestination
 from interloper.normalizer import MaterializationStrategy
 from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.time import TimePartition
 from interloper.representation import REPRESENTATIONS, Representation
 from interloper.resource.fields import SelectField
 from interloper.utils.data import is_empty
@@ -93,6 +94,17 @@ class DatabaseDestination(PartitionedDestination):
         """Delete rows matching a single partition value."""
 
     @abstractmethod
+    def _delete_partition_range(
+        self,
+        table: str,
+        schema: str | None,
+        column: str,
+        start: Any,
+        end: Any,
+    ) -> None:
+        """Delete rows whose *column* falls in ``[start, end)``."""
+
+    @abstractmethod
     def _select_all(self, table: str, schema: str | None) -> list[dict[str, Any]]:
         """Select all rows from the target table."""
 
@@ -105,6 +117,17 @@ class DatabaseDestination(PartitionedDestination):
         value: Any,
     ) -> list[dict[str, Any]]:
         """Select rows matching a single partition value."""
+
+    @abstractmethod
+    def _select_partition_range(
+        self,
+        table: str,
+        schema: str | None,
+        column: str,
+        start: Any,
+        end: Any,
+    ) -> list[dict[str, Any]]:
+        """Select rows whose *column* falls in ``[start, end)``."""
 
     # -- Introspection ---------------------------------------------------------
 
@@ -199,14 +222,14 @@ class DatabaseDestination(PartitionedDestination):
                 col = context.asset.partitioning.column
                 if replacing:
                     for partition in context.partition_or_window:
-                        self._delete_partition(table, schema, col, partition.id)
+                        self._delete_scope(table, schema, col, partition)
 
             else:
                 assert isinstance(context.partition_or_window, Partition)
                 assert context.asset.partitioning
                 col = context.asset.partitioning.column
                 if replacing:
-                    self._delete_partition(table, schema, col, context.partition_or_window.id)
+                    self._delete_scope(table, schema, col, context.partition_or_window)
 
             self._insert_data(table, schema, data, context)
 
@@ -233,6 +256,19 @@ class DatabaseDestination(PartitionedDestination):
         conformer.validate(data, context.schema, strict=True)
         return data
 
+    def _delete_scope(self, table: str, schema: str | None, column: str, partition: Partition) -> None:
+        """Delete one partition's rows: by bounds for a time partition, by id otherwise.
+
+        A time partition's rows may carry values anywhere inside the period
+        (a monthly partition whose rows hold daily dates), so equality on the
+        period start would miss them; the half-open bounds cannot.
+        """
+        if isinstance(partition, TimePartition):
+            start, end = partition.bounds
+            self._delete_partition_range(table, schema, column, start, end)
+        else:
+            self._delete_partition(table, schema, column, partition.id)
+
     def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
         """Load one scope from the database table.
 
@@ -245,4 +281,7 @@ class DatabaseDestination(PartitionedDestination):
             return self._from_rows(self._select_all(table, schema))
         assert context.asset.partitioning
         column = context.asset.partitioning.column
+        if isinstance(partition, TimePartition):
+            start, end = partition.bounds
+            return self._from_rows(self._select_partition_range(table, schema, column, start, end))
         return self._from_rows(self._select_partition(table, schema, column, partition.id))

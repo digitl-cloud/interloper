@@ -173,3 +173,47 @@ class TestRunJobSpecMode:
         spec_file.write_text(yaml.safe_dump(job.to_spec().model_dump(mode="json", exclude_none=True)))
 
         _cmd_run(_args(file=str(spec_file)))
+
+
+class TestResolvePartition:
+    """Partition keys on the CLI date flags: the shape carries the granularity."""
+
+    def test_day_key_stays_daily(self) -> None:
+        from interloper.cli.commands.run import _resolve_partition
+        from interloper.partitioning.time import TimeGranularity, TimePartition
+
+        partition = _resolve_partition(_args(date="2026-06-01"))
+        assert isinstance(partition, TimePartition)
+        assert partition.granularity is TimeGranularity.DAY
+
+    def test_month_key_yields_a_monthly_partition(self) -> None:
+        import datetime as dt
+
+        from interloper.cli.commands.run import _resolve_partition
+        from interloper.partitioning.time import TimeGranularity, TimePartition
+
+        partition = _resolve_partition(_args(date="2026-06"))
+        assert isinstance(partition, TimePartition)
+        assert partition.granularity is TimeGranularity.MONTH
+        assert partition.value == dt.date(2026, 6, 1)
+
+    def test_window_keys_must_share_a_granularity(self) -> None:
+        from interloper.cli.commands.run import _resolve_partition
+
+        with pytest.raises(SystemExit, match="must share one granularity"):
+            _resolve_partition(_args(start_date="2026-06", end_date="2026-08-01"))
+
+    def test_monthly_window(self) -> None:
+        from interloper.cli.commands.run import _resolve_partition
+        from interloper.partitioning.time import TimeGranularity, TimePartitionWindow
+
+        window = _resolve_partition(_args(start_date="2026-06", end_date="2026-08"))
+        assert isinstance(window, TimePartitionWindow)
+        assert window.granularity is TimeGranularity.MONTH
+        assert window.partition_count() == 3
+
+    def test_unknown_shape_is_a_clean_error(self) -> None:
+        from interloper.cli.commands.run import _resolve_partition
+
+        with pytest.raises(SystemExit, match="invalid --date"):
+            _resolve_partition(_args(date="not-a-key"))

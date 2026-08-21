@@ -45,11 +45,25 @@ and the granularity says how long the period lasts. `TimePartitionConfig` declar
 def daily_data(context: il.ExecutionContext): ...
 ```
 
-`DAY` is the default and, today, the only accepted value. `TimeGranularity` declares the wider
-vocabulary (`HOUR`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`) and implements the arithmetic for
-every member, but the rest of the stack is still day-shaped (runs store a `DATE`, the CLI takes
-`--date`, database destinations delete a partition by equality), so declaring anything else raises
-rather than half-working.
+`DAY` is the default. An asset may declare any of the granularities BigQuery time partitioning
+offers — `HOUR`, `DAY`, `MONTH`, `YEAR`. `WEEK` and `QUARTER` exist in the vocabulary with full
+arithmetic but cannot be declared: a partition id is a storage contract, and no destination needs
+those two.
+
+Each granularity has a canonical partition id, an ISO-8601 prefix whose shape carries the
+granularity:
+
+| Granularity | Id | Period |
+|---|---|---|
+| `HOUR` | `2026-08-21T13` | one hour, labelled in UTC |
+| `DAY` | `2026-08-21` | one day |
+| `MONTH` | `2026-08` | one calendar month |
+| `YEAR` | `2026` | one calendar year |
+
+`il.parse_partition_key("2026-08")` turns an id back into its `TimePartition`, inferring the
+granularity from the shape. Rows of a partition may carry column values anywhere inside the
+period (a monthly partition whose rows hold daily dates): destinations scope reads and replaces
+by the partition's half-open `bounds`, not by equality on its id.
 
 Every piece of partition arithmetic goes through the granularity, so assets and destinations never
 hardcode "a day":
@@ -63,6 +77,9 @@ g.bounds(dt.date(2026, 5, 20))              # (2026-05-20, 2026-05-21)  half-ope
 g.periods_between(a, b)                     # whole periods from a to b
 g.format(dt.date(2026, 5, 20))              # "2026-05-20" (the partition id)
 ```
+
+The CLI's date flags take partition keys, so `--date 2026-05` materializes a monthly asset's May
+partition and `--start-date 2026-01 --end-date 2026-06` is a six-month window.
 
 ## Bounding the history
 
