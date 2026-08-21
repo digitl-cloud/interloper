@@ -120,7 +120,10 @@ def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
 
     def _raise(org_id, **kwargs):
         raise QuotaExceededError(
-            "Backfill spans 31 days, exceeding the limit of 30", quota="max_backfill_days", limit=30, used=31
+            "Backfill spans 31 partitions, exceeding the limit of 30",
+            quota="max_backfill_partitions",
+            limit=30,
+            used=31,
         )
 
     store.get_component = lambda component_id, kind=None: _fake_backfill(component_id)  # ty: ignore[unresolved-attribute]
@@ -141,4 +144,4 @@ def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
         json={"component_id": str(uuid4()), "start_date": "2026-01-01", "end_date": "2026-01-31"},
     )
     assert resp.status_code == 429
-    assert resp.json()["detail"]["quota"] == "max_backfill_days"
+    assert resp.json()["detail"]["quota"] == "max_backfill_partitions"

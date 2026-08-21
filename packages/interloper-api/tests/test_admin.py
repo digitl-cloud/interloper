@@ -280,7 +280,7 @@ def test_super_admin_reads_quota_overview(store: FakeStore) -> None:
     assert [field["key"] for field in body["fields"]] == list(QUOTAS.keys())
     by_key = {field["key"]: field for field in body["fields"]}
     assert by_key["max_sources"] == {"key": "max_sources", "label": "Max sources", "default": 10}
-    assert by_key["max_backfill_days"]["default"] is None
+    assert by_key["max_backfill_partitions"]["default"] is None
 
     (org,) = body["organisations"]
     assert org["limits"]["max_sources"] == 5

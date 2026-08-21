@@ -21,7 +21,7 @@ from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
 from interloper_db.store.base import StoreBase
 from interloper_db.store.components import stamp_component_state
 from interloper_db.store.quotas import (
-    QUOTA_MAX_BACKFILL_DAYS,
+    QUOTA_MAX_BACKFILL_PARTITIONS,
     QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
     settle_run_usage,
 )
@@ -554,7 +554,7 @@ class RunMixin(StoreBase):
         with self._session() as session:
             # Cron top-ups (a job's `lookback` window) are deliberately not
             # bounded here — they never pass through this method.
-            self.quotas.check(session, org_id, QUOTA_MAX_BACKFILL_DAYS, used=span)
+            self.quotas.check(session, org_id, QUOTA_MAX_BACKFILL_PARTITIONS, used=span)
             self.quotas.check(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="backfill")
             db_backfill = Backfill(
                 org_id=org_id,

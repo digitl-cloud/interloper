@@ -44,7 +44,7 @@ METRIC_SUCCESSFUL_RUNS = "successful_runs"
 QUOTA_MAX_SOURCES = "max_sources"
 QUOTA_MAX_ASSETS_PER_SOURCE = "max_assets_per_source"
 QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH = "max_successful_runs_per_month"
-QUOTA_MAX_BACKFILL_DAYS = "max_backfill_days"
+QUOTA_MAX_BACKFILL_PARTITIONS = "max_backfill_partitions"
 
 
 @dataclass(frozen=True)
@@ -453,11 +453,11 @@ QUOTAS.register(
     ),
 )
 QUOTAS.register(
-    QUOTA_MAX_BACKFILL_DAYS,
+    QUOTA_MAX_BACKFILL_PARTITIONS,
     BoundQuota(
-        key=QUOTA_MAX_BACKFILL_DAYS,
-        label="Max backfill days",
-        message=lambda used, limit, _subject: f"Backfill spans {used} days, exceeding the limit of {limit}",
+        key=QUOTA_MAX_BACKFILL_PARTITIONS,
+        label="Max backfill partitions",
+        message=lambda used, limit, _subject: f"Backfill spans {used} partitions, exceeding the limit of {limit}",
     ),
 )
 

@@ -20,7 +20,7 @@ from interloper_db.models import Backfill, Component, Quota, Run, Usage
 from interloper_db.store.quotas import (
     METRIC_SUCCESSFUL_RUNS,
     QUOTA_MAX_ASSETS_PER_SOURCE,
-    QUOTA_MAX_BACKFILL_DAYS,
+    QUOTA_MAX_BACKFILL_PARTITIONS,
     QUOTAS,
     BoundQuota,
     CapacityQuota,
@@ -263,15 +263,15 @@ class TestRunCreationGate:
             store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
 
     def test_backfill_span_override_wins(self, store: _Store):
-        store._quota_defaults = _defaults(max_backfill_days=2)
+        store._quota_defaults = _defaults(max_backfill_partitions=2)
         with Session(store._engine) as session:
-            session.add(Quota(org_id=_ORG_ID, key="max_backfill_days", limit=3))
+            session.add(Quota(org_id=_ORG_ID, key="max_backfill_partitions", limit=3))
             session.commit()
         backfill = store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 3))
         assert backfill.partitions == 3
 
     def test_backfill_span_cap(self, store: _Store):
-        store._quota_defaults = _defaults(max_backfill_days=2)
+        store._quota_defaults = _defaults(max_backfill_partitions=2)
         with pytest.raises(QuotaExceededError, match="exceeding the limit of 2"):
             store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 3))
         backfill = store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
@@ -395,7 +395,7 @@ class TestRegistry:
             ConsumptionQuota(key="max_bananas", label="Max bananas", message=lambda used, limit, subject: "")
 
     def test_bound_quota_rejects_a_declarative_check_without_used(self):
-        definition = QUOTAS[QUOTA_MAX_BACKFILL_DAYS]
+        definition = QUOTAS[QUOTA_MAX_BACKFILL_PARTITIONS]
         with pytest.raises(ValueError, match="pass used="):
             definition.check(None, _ORG_ID, 5)  # ty: ignore[invalid-argument-type]
 
