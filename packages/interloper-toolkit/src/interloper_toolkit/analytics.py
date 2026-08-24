@@ -5,6 +5,8 @@ from __future__ import annotations
 import datetime
 from uuid import UUID
 
+from interloper.partitioning.time import TimePartition
+
 from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.models import (
     FreshnessReport,
@@ -82,12 +84,21 @@ def partition_coverage(
         start = datetime.date.fromisoformat(start_date)
         end = datetime.date.fromisoformat(end_date)
 
-        # Collect dates with successful runs
+        # Coverage is a daily question, so a run covers every day inside its partition.
         covered: set[datetime.date] = set()
         for r in runs:
-            if r.status == "success" and r.partition_date:
-                if start <= r.partition_date <= end:
-                    covered.add(r.partition_date)
+            if r.status != "success" or not r.partition_key:
+                continue
+            p_start, p_end = TimePartition.from_key(r.partition_key).bounds
+            if isinstance(p_start, datetime.datetime):
+                days = [p_start.date()]
+            else:
+                days = []
+                current = p_start
+                while current < p_end:
+                    days.append(current)
+                    current += datetime.timedelta(days=1)
+            covered.update(day for day in days if start <= day <= end)
 
         # Build expected date range
         expected: list[datetime.date] = []

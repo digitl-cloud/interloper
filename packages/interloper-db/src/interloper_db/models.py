@@ -355,8 +355,8 @@ class Backfill(SQLModel, table=True):
     )
     org_id: UUID = SQLField(index=True)
     status: str = "queued"
-    start_date: dt.date
-    end_date: dt.date
+    start_key: str
+    end_key: str
     concurrency: int = 1
     fail_fast: bool = False
     partitions: int = 0
@@ -390,7 +390,7 @@ class Run(SQLModel, table=True):
     )
     org_id: UUID
     backfill_id: UUID | None = SQLField(default=None, foreign_key="backfills.id")
-    partition_date: dt.date | None = None
+    partition_key: str | None = None
     status: str = "queued"
     retry_of: UUID | None = SQLField(
         default=None,

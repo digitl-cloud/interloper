@@ -60,8 +60,8 @@ export const useBackfillsStore = defineStore('backfills', () => {
     /** Queue a backfill for a job (backfills are job-only). Returns the created backfill's id. */
     async function createBackfill(input: {
         componentId: string
-        startDate: string
-        endDate: string
+        startKey: string
+        endKey: string
         concurrency?: number
         failFast?: boolean
     }): Promise<string> {
@@ -69,8 +69,8 @@ export const useBackfillsStore = defineStore('backfills', () => {
             method: 'POST',
             body: {
                 component_id: input.componentId,
-                start_date: input.startDate,
-                end_date: input.endDate,
+                start_key: input.startKey,
+                end_key: input.endKey,
                 concurrency: input.concurrency ?? 1,
                 fail_fast: input.failFast ?? false,
             },

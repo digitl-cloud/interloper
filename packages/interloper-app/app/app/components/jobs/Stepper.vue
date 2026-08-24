@@ -13,6 +13,7 @@ import type { ComponentRecord } from '~/types/component'
 import { jobCron, jobEnabled, jobLookback, jobOffset, jobTags, jobTargetIds } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
 import cronstrue from 'cronstrue'
+import { KEY_PATTERNS, type PartitionGranularity } from '~/composables/partitionGranularity'
 
 const props = withDefaults(defineProps<{
     /** Pass an existing job to edit, or null to create. */
@@ -65,22 +66,30 @@ const isEditing = computed(() => !!props.job)
 const jobSchema = computed(() => catalogStore.catalog[JOB_KEY]?.config_schema)
 
 /**
- * The dates a run today would cover, mirroring `lookback_window` on the
- * backend: `offset` partitions back from today, spanning `lookback` of them.
- * Daily is the only granularity an asset can declare, so days are safe here.
+ * The partitions a run today would cover, mirroring the backend's
+ * `TimePartitionWindow.lookback`: `offset` partitions back from the current
+ * one, spanning `lookback` of them, stepped in the granularity the selected
+ * sources' assets declare.
  */
 const lookback = computed(() => Number(partitionConfig.value.lookback ?? 0))
 const offset = computed(() => Number(partitionConfig.value.offset ?? 1))
 
+function periodKey(granularity: PartitionGranularity, periodsBack: number): string {
+    const now = new Date()
+    switch (granularity) {
+        case 'hour': now.setUTCHours(now.getUTCHours() - periodsBack); return now.toISOString().slice(0, 13)
+        case 'day': now.setUTCDate(now.getUTCDate() - periodsBack); return now.toISOString().slice(0, 10)
+        case 'month': now.setUTCMonth(now.getUTCMonth() - periodsBack); return now.toISOString().slice(0, 7)
+        case 'year': return String(now.getUTCFullYear() - periodsBack)
+    }
+}
+
 const windowPreview = computed(() => {
     const span = lookback.value
     if (!Number.isFinite(span) || span < 1 || offset.value < 0) return null
-    const end = new Date()
-    end.setUTCDate(end.getUTCDate() - offset.value)
-    const start = new Date(end)
-    start.setUTCDate(start.getUTCDate() - (span - 1))
-    const iso = (d: Date) => d.toISOString().slice(0, 10)
-    return span === 1 ? iso(end) : `${iso(start)} to ${iso(end)}`
+    const end = periodKey(windowGranularity.value, offset.value)
+    const start = periodKey(windowGranularity.value, offset.value + span - 1)
+    return span === 1 ? end : `${start} to ${end}`
 })
 
 // ── Data fetching ────────────────────────────────────────────────
@@ -119,6 +128,24 @@ const partitioned = computed(() => {
         if (defn && sourceHasPartitionedAssets(defn)) return true
     }
     return false
+})
+
+/** The selected sources' granularity, for the window preview's step size. */
+const windowGranularity = computed<PartitionGranularity>(() => {
+    const found = new Set<string>()
+    for (const sourceId of selectedSourceIds.value) {
+        const source = componentsStore.byId(sourceId)
+        const defn = source ? catalogStore.getSourceDefinition(source.key) : undefined
+        for (const asset of defn?.assets ?? []) {
+            if (asset.partitioning == null) continue
+            const granularity = asset.partitioning.granularity
+            found.add(typeof granularity === 'string' ? granularity : 'day')
+        }
+    }
+    const [only] = found
+    return found.size === 1 && only !== undefined && only in KEY_PATTERNS
+        ? only as PartitionGranularity
+        : 'day'
 })
 
 // ── Cron helpers ────────────────────────────────────────────────

@@ -7,7 +7,6 @@ operations — toggling, triggering — stay here, agent-only.
 
 from __future__ import annotations
 
-import datetime
 from typing import Any
 from uuid import UUID
 
@@ -76,20 +75,21 @@ def list_failures(limit: int = 20, tool_context: ToolContext | None = None) -> d
 
 def trigger_run(
     component_id: str,
-    partition_date: str | None = None,
+    partition_key: str | None = None,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Queue a single run for a job.
 
     Args:
         component_id: UUID of the job to run.
-        partition_date: Optional partition date in ISO format (YYYY-MM-DD).
+        partition_key: Optional partition key. The shape carries the
+            granularity: 2026-04-09 (day), 2026-04 (month), 2026 (year),
+            2026-04-09T13 (hour).
     """
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        pd = datetime.date.fromisoformat(partition_date) if partition_date else None
-        run = store.create_run(org_id, component_id=UUID(component_id), partition_date=pd)
+        run = store.create_run(org_id, component_id=UUID(component_id), partition_key=partition_key)
         return {
             "status": "success",
             "message": "Run queued successfully",
@@ -108,18 +108,20 @@ def list_backfills(active_only: bool = True, tool_context: ToolContext | None = 
 
 def trigger_backfill(
     component_id: str,
-    start_date: str,
-    end_date: str,
+    start_key: str,
+    end_key: str,
     concurrency: int = 1,
     fail_fast: bool = False,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """Start a backfill for a job over a date range.
+    """Start a backfill for a job over a partition range.
 
     Args:
         component_id: UUID of the job.
-        start_date: Start date in ISO format (YYYY-MM-DD).
-        end_date: End date in ISO format (YYYY-MM-DD), inclusive.
+        start_key: First partition's key (e.g. 2026-04-09, or 2026-04 for a
+            monthly job).
+        end_key: Last partition's key, inclusive. Must share the start key's
+            granularity.
         concurrency: Max number of runs in-flight at once (default 1).
         fail_fast: If true, cancel remaining runs on first failure (default false).
     """
@@ -129,8 +131,8 @@ def trigger_backfill(
         backfill = store.create_backfill(
             org_id,
             component_id=UUID(component_id),
-            start_date=datetime.date.fromisoformat(start_date),
-            end_date=datetime.date.fromisoformat(end_date),
+            start_key=start_key,
+            end_key=end_key,
             concurrency=concurrency,
             fail_fast=fail_fast,
         )

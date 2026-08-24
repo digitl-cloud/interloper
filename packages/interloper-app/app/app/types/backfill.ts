@@ -4,8 +4,8 @@ export interface Backfill {
     /** Target component (backfills are job-only); null if the job was deleted. */
     component_id: string | null
     status: string
-    start_date: string
-    end_date: string
+    start_key: string
+    end_key: string
     concurrency: number
     fail_fast: boolean
     partitions: number

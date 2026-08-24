@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import json
 import logging
 from collections.abc import Sequence
@@ -12,7 +11,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import NotFoundError
-from interloper.partitioning.time import TimeGranularity, TimePartitionWindow, period_range
+from interloper.partitioning.time import TimePartition, TimePartitionWindow, period_range
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
@@ -319,24 +318,30 @@ class RunMixin(StoreBase):
         org_id: UUID,
         *,
         component_id: UUID | None = None,
-        partition_date: dt.date | None = None,
+        partition_key: str | None = None,
     ) -> Run:
         """Create a single queued run.
 
         Args:
             org_id: Organisation UUID.
             component_id: Optional target component UUID (any runnable kind).
-            partition_date: Optional partition date.
+            partition_key: Optional partition key (its shape carries the
+                granularity, e.g. ``2026-08-21`` or ``2026-08``).
 
         Returns:
             The created Run row.
+
+        Raises:
+            ValueError: If *partition_key* matches no known key shape.
         """
+        if partition_key is not None:
+            TimePartition.from_key(partition_key)
         with self._session() as session:
             self.quotas.check(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
             db_run = Run(
                 org_id=org_id,
                 component_id=component_id,
-                partition_date=partition_date,
+                partition_key=partition_key,
                 status="queued",
             )
             session.add(db_run)
@@ -503,7 +508,7 @@ class RunMixin(StoreBase):
             db_run = Run(
                 org_id=src.org_id,
                 component_id=src.component_id,
-                partition_date=src.partition_date,
+                partition_key=src.partition_key,
                 status="queued",
                 retry_of=run_id,
                 attempt=src.attempt + 1,
@@ -521,24 +526,26 @@ class RunMixin(StoreBase):
         org_id: UUID,
         *,
         component_id: UUID | None = None,
-        start_date: dt.date,
-        end_date: dt.date,
+        start_key: str,
+        end_key: str,
         concurrency: int = 1,
         fail_fast: bool = False,
     ) -> Backfill:
         """Create a backfill with one run per partition from start to end (inclusive).
 
-        Runs are dispatched **newest partition first**: the latest
-        ``concurrency`` of them are queued immediately and the rest are
-        ``"pending"`` until earlier runs complete. The freshest data lands
-        first, and an interrupted backfill keeps the recent window rather than
-        the ancient tail.
+        The bounds are partition keys whose shape carries the granularity
+        (``2026-08-21``, ``2026-08``, ``2026``, ``2026-08-21T13``), so a
+        monthly backfill is just two month keys. Runs are dispatched
+        **newest partition first**: the latest ``concurrency`` of them are
+        queued immediately and the rest are ``"pending"`` until earlier runs
+        complete. The freshest data lands first, and an interrupted backfill
+        keeps the recent window rather than the ancient tail.
 
         Args:
             org_id: Organisation UUID.
             component_id: Optional target component UUID.
-            start_date: First partition date.
-            end_date: Last partition date (inclusive).
+            start_key: First partition's key.
+            end_key: Last partition's key (inclusive).
             concurrency: Max runs in-flight at once.
             fail_fast: Cancel remaining runs on first failure.
 
@@ -546,9 +553,17 @@ class RunMixin(StoreBase):
             The created Backfill row with runs.
 
         Raises:
-            ValueError: If the range is inverted.
+            ValueError: If a key matches no known shape, the two keys differ
+                in granularity, or the range is inverted.
         """
-        window = TimePartitionWindow(start_date, end_date, TimeGranularity.DAY)
+        start = TimePartition.from_key(start_key)
+        end = TimePartition.from_key(end_key)
+        if start.granularity is not end.granularity:
+            raise ValueError(
+                f"Backfill bounds must share one granularity: {start_key!r} is a "
+                f"{start.granularity.value} key but {end_key!r} is a {end.granularity.value} key"
+            )
+        window = TimePartitionWindow(start.value, end.value, start.granularity)
         span = window.partition_count()
 
         with self._session() as session:
@@ -559,8 +574,8 @@ class RunMixin(StoreBase):
             db_backfill = Backfill(
                 org_id=org_id,
                 component_id=component_id,
-                start_date=start_date,
-                end_date=end_date,
+                start_key=start_key,
+                end_key=end_key,
                 concurrency=concurrency,
                 fail_fast=fail_fast,
                 status="running",
@@ -575,12 +590,12 @@ class RunMixin(StoreBase):
             # is deliberately left alone: `list_runs` orders by `created_at`
             # desc, so reversing it would flip the runs list to oldest-first.
             first_queued = max(0, span - concurrency)
-            for index, partition_date in enumerate(period_range(window.start, window.end, window.granularity)):
+            for index, value in enumerate(period_range(window.start, window.end, window.granularity)):
                 db_run = Run(
                     org_id=org_id,
                     component_id=component_id,
                     backfill_id=db_backfill.id,
-                    partition_date=partition_date,
+                    partition_key=window.granularity.format(value),
                     status="queued" if index >= first_queued else "pending",
                 )
                 session.add(db_run)
@@ -726,11 +741,12 @@ def _advance_backfill(session: Session, backfill_id: UUID, *, failed: bool) -> N
             )
         ).all()
     )
-    # Newest partition first, matching create_backfill's initial dispatch.
+    # Newest partition first, matching create_backfill's initial dispatch. A
+    # backfill is single-granularity, so the string order is the time order.
     pending_runs = session.exec(
         select(Run)
         .where(Run.backfill_id == backfill_id, Run.status == "pending")
-        .order_by(col(Run.partition_date).desc())
+        .order_by(col(Run.partition_key).desc())
     ).all()
 
     if in_flight_count == 0 and len(pending_runs) == 0:

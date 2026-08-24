@@ -63,7 +63,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         header: 'Range',
         cell: ({ row }) => {
             const backfill = row.original as Backfill
-            return h('span', { class: 'text-muted text-xs' }, `${backfill.start_date} → ${backfill.end_date}`)
+            return h('span', { class: 'text-muted text-xs' }, `${backfill.start_key} → ${backfill.end_key}`)
         },
     },
     {

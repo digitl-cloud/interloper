@@ -32,6 +32,7 @@ from interloper.errors import (
     InUseError,
     NotFoundError,
 )
+from interloper.partitioning.time import TimeGranularity
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
@@ -572,6 +573,62 @@ class ComponentMixin(RelationMixin):
             parent = session.get(Component, db_component.parent_id)
             return asset_status(self._catalog, db_component.key, source_key=parent.key if parent else None)
         return source_status(self._catalog, db_component.key)
+
+    def job_partition_granularity(self, session: Session, job_id: UUID) -> TimeGranularity | None:
+        """Resolve the granularity a job's partitioned targets share.
+
+        Granularity lives on the target assets' catalog definitions, never on
+        the job's config (a denormalized copy could silently drift from the
+        catalog). A source target contributes the granularities of its
+        partitioned assets; an owned-asset target is looked up inside its
+        parent source's definition.
+
+        Returns:
+            The single granularity, or ``None`` when no partitioned target
+            resolves (the caller decides the fallback).
+
+        Raises:
+            ValueError: If the targets disagree on granularity — scheduling a
+                window would be wrong for some of them, so fail closed.
+        """
+        granularities: set[TimeGranularity] = set()
+        targets = session.exec(
+            select(ComponentRelation).where(ComponentRelation.src_id == job_id, ComponentRelation.type == "target")
+        ).all()
+        for relation in targets:
+            target = session.get(Component, relation.dst_id)
+            if target is None:
+                continue
+            for partitioning in self._target_partitionings(session, target):
+                if (granularity := partitioning.get("granularity")) is not None:
+                    granularities.add(TimeGranularity(granularity))
+        if len(granularities) > 1:
+            names = ", ".join(sorted(g.value for g in granularities))
+            raise ValueError(f"Job targets disagree on partition granularity ({names})")
+        return next(iter(granularities), None)
+
+    def _target_partitionings(self, session: Session, target: Component) -> list[dict[str, Any]]:
+        """The partitioning dicts of one target's partitioned assets.
+
+        Returns:
+            One dict per partitioned asset the target resolves to; empty when
+            the catalog key does not resolve (drift is the run path's problem,
+            not the scheduler's).
+        """
+        if target.kind == "source":
+            defn = self._catalog.get(target.key)
+            assets = getattr(defn, "assets", None) or []
+            return [a.partitioning for a in assets if a.partitioning is not None]
+        if target.kind == "asset":
+            if target.parent_id is not None:
+                parent = session.get(Component, target.parent_id)
+                defn = self._catalog.get(parent.key) if parent else None
+                assets = getattr(defn, "assets", None) or []
+                return [a.partitioning for a in assets if a.key == target.key and a.partitioning is not None]
+            defn = self._catalog.get(target.key)
+            partitioning = getattr(defn, "partitioning", None)
+            return [partitioning] if partitioning is not None else []
+        return []
 
     def _check_job_targets(self, session: Session, db_job: Component) -> None:
         """Fail closed when any job target's catalog key has drifted."""

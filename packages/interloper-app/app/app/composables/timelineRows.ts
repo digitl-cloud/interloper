@@ -96,7 +96,7 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
                 id: run.id,
                 status: run.status as ExecutionStatus,
                 ...interval,
-                detail: run.partition_date ?? undefined,
+                detail: run.partition_key ?? undefined,
             }
             const target = run.component_id && componentsStore.byId(run.component_id) ? run.component_id : null
             if (!target) {

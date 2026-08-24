@@ -82,7 +82,7 @@ class RunExecutor:
 
                 component_id = db_run.component_id
                 org_id = db_run.org_id
-                partition_date = db_run.partition_date
+                partition_key = db_run.partition_key
                 retry_of = db_run.retry_of if db_run.retry_scope == "failed" else None
                 run_metadata = run_event_metadata(db_run, session.get(Component, component_id))
 
@@ -101,7 +101,7 @@ class RunExecutor:
                 self._skip_succeeded_assets(retry_of, assets)
 
             dag = il.DAG(*assets)
-            partition = il.TimePartition(partition_date) if partition_date else None
+            partition = il.TimePartition.from_key(partition_key) if partition_key else None
 
             result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, metadata=run_metadata)
 

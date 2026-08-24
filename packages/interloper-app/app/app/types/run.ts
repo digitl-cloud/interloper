@@ -4,7 +4,7 @@ export interface Run {
     /** Target component (job, source, or asset); null if the target was deleted. */
     component_id: string | null
     backfill_id: string | null
-    partition_date: string | null
+    partition_key: string | null
     status: string
     retry_of: string | null
     attempt: number

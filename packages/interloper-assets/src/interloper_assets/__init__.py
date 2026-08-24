@@ -9,7 +9,7 @@ from interloper_assets.brandwatch.source import Brandwatch, BrandwatchConnection
 from interloper_assets.campaign_manager_360.source import CampaignManager360, CampaignManager360Connection
 from interloper_assets.campaign_performance_analysis.source import CampaignPerformanceAnalysis
 from interloper_assets.criteo.source import Criteo, CriteoConnection
-from interloper_assets.demo.source import DemoSource, demo_asset
+from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from interloper_assets.display_video_360.source import DisplayVideo360, DisplayVideo360Connection
 from interloper_assets.facebook_ads.source import FacebookAds, FacebookAdsConnection
 from interloper_assets.facebook_insights.source import FacebookInsights, FacebookInsightsConnection
@@ -49,6 +49,7 @@ __all__ = [
     "CampaignPerformanceAnalysis",
     "Criteo",
     "CriteoConnection",
+    "DemoMonthlySource",
     "DemoSource",
     "demo_asset",
     "DisplayVideo360",

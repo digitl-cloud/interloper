@@ -51,8 +51,8 @@ def store() -> Iterator[RunMixin]:
 def _backfill(store: RunMixin, *, days: int = 4, concurrency: int = 2) -> Backfill:
     return store.create_backfill(
         _ORG_ID,
-        start_date=dt.date(2026, 1, 1),
-        end_date=dt.date(2026, 1, days),
+        start_key="2026-01-01",
+        end_key=f"2026-01-{days:02d}",
         concurrency=concurrency,
     )
 
@@ -74,10 +74,10 @@ def _run_statuses(store: RunMixin, backfill_id: UUID) -> dict[UUID, str]:
         return {run.id: run.status for run in runs if run.id}
 
 
-def _partition_statuses(store: RunMixin, backfill_id: UUID) -> dict[dt.date, str]:
+def _partition_statuses(store: RunMixin, backfill_id: UUID) -> dict[str, str]:
     with Session(store._engine) as session:
         runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
-        return {run.partition_date: run.status for run in runs if run.partition_date}
+        return {run.partition_key: run.status for run in runs if run.partition_key}
 
 
 class TestCreateBackfill:
@@ -87,23 +87,23 @@ class TestCreateBackfill:
         backfill = _backfill(store, days=4, concurrency=2)
 
         assert _partition_statuses(store, backfill.id) == {
-            dt.date(2026, 1, 1): "pending",
-            dt.date(2026, 1, 2): "pending",
-            dt.date(2026, 1, 3): "queued",
-            dt.date(2026, 1, 4): "queued",
+            "2026-01-01": "pending",
+            "2026-01-02": "pending",
+            "2026-01-03": "queued",
+            "2026-01-04": "queued",
         }
 
     def test_promotion_walks_backwards(self, store: RunMixin):
         backfill = _backfill(store, days=4, concurrency=1)
-        assert _partition_statuses(store, backfill.id)[dt.date(2026, 1, 4)] == "queued"
+        assert _partition_statuses(store, backfill.id)["2026-01-04"] == "queued"
 
         dispatched = _mark_dispatched(store, backfill.id)
         store.complete_run(dispatched, success=True)
 
         statuses = _partition_statuses(store, backfill.id)
-        assert statuses[dt.date(2026, 1, 4)] == "success"
-        assert statuses[dt.date(2026, 1, 3)] == "queued"
-        assert statuses[dt.date(2026, 1, 2)] == "pending"
+        assert statuses["2026-01-04"] == "success"
+        assert statuses["2026-01-03"] == "queued"
+        assert statuses["2026-01-02"] == "pending"
 
     def test_concurrency_beyond_the_span_queues_everything(self, store: RunMixin):
         backfill = _backfill(store, days=2, concurrency=5)
@@ -117,15 +117,15 @@ class TestCreateBackfill:
             runs = session.exec(
                 select(Run).where(Run.backfill_id == backfill.id).order_by(col(Run.created_at))
             ).all()
-        assert [run.partition_date for run in runs] == [
-            dt.date(2026, 1, 1),
-            dt.date(2026, 1, 2),
-            dt.date(2026, 1, 3),
+        assert [run.partition_key for run in runs] == [
+            "2026-01-01",
+            "2026-01-02",
+            "2026-01-03",
         ]
 
     def test_inverted_range_is_rejected(self, store: RunMixin):
         with pytest.raises(ValueError, match="ends before it starts"):
-            store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 5), end_date=dt.date(2026, 1, 1))
+            store.create_backfill(_ORG_ID, start_key="2026-01-05", end_key="2026-01-01")
 
 
 class TestCancelBackfill:

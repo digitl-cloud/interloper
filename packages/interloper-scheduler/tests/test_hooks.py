@@ -64,7 +64,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
 
 def _terminal_run(store: Store, component_id: UUID, *, status: str = "success") -> Run:
-    run = store.create_run(_ORG, component_id=component_id, partition_date=dt.date(2026, 7, 6))
+    run = store.create_run(_ORG, component_id=component_id, partition_key="2026-07-06")
     with Session(engine_module.get_engine()) as session:
         db_run = session.get(Run, run.id)
         assert db_run is not None
@@ -131,7 +131,7 @@ class TestHookEvaluation:
             queued = session.exec(select(Run).where(Run.status == "queued")).all()
             assert len(queued) == 1
             assert queued[0].component_id == root.id
-            assert queued[0].partition_date == run.partition_date
+            assert queued[0].partition_key == run.partition_key
             events = session.exec(select(EventRow)).all()
             assert [e.event_type for e in events] == ["hook_fired"]
             assert events[0].run_id == run.id

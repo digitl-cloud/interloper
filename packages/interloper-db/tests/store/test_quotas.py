@@ -260,21 +260,21 @@ class TestRunCreationGate:
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         self._exhaust(store, used=1)
         with pytest.raises(QuotaExceededError, match="backfill"):
-            store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
+            store.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-02")
 
     def test_backfill_span_override_wins(self, store: _Store):
         store._quota_defaults = _defaults(max_backfill_partitions=2)
         with Session(store._engine) as session:
             session.add(Quota(org_id=_ORG_ID, key="max_backfill_partitions", limit=3))
             session.commit()
-        backfill = store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 3))
+        backfill = store.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-03")
         assert backfill.partitions == 3
 
     def test_backfill_span_cap(self, store: _Store):
         store._quota_defaults = _defaults(max_backfill_partitions=2)
         with pytest.raises(QuotaExceededError, match="exceeding the limit of 2"):
-            store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 3))
-        backfill = store.create_backfill(_ORG_ID, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
+            store.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-03")
+        backfill = store.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-02")
         assert backfill.partitions == 2
 
 

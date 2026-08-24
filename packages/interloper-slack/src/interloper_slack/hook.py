@@ -100,6 +100,6 @@ class SlackHook(Hook):
         parts = []
         if context.run_id:
             parts.append(f"Run `{context.run_id}`")
-        if context.partition_date:
-            parts.append(f"partition `{context.partition_date}`")
+        if context.partition_key:
+            parts.append(f"partition `{context.partition_key}`")
         return " · ".join(parts)
