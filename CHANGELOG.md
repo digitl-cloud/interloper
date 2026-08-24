@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.62.0 (2026-08-24)
+
+### Features
+
+- **core**: Support hourly, monthly, and yearly time partitioning
+  ([`160a04c`](https://github.com/digitl-cloud/interloper/commit/160a04c1fe24c1bdb51dac272735e709cd150e33))
+
+- **db**: Schedule non-daily assets as platform jobs
+  ([`b8aff04`](https://github.com/digitl-cloud/interloper/commit/b8aff04eb07c1cb0badecc59f8c208d4db9eb9fe))
+
+### Breaking Changes
+
+- **db**: `Run.partition_date` → `partition_key` and `Backfill.start_date`/`end_date` →
+  `start_key`/`end_key` across the DB (migration 012), store API, HTTP API and frontend;
+  `HookContext.partition_date` → `partition_key` (webhook payloads included);
+  `Store.create_run`/`create_backfill` take keys. Run `interloper db upgrade`.
+
+
 ## v0.61.0 (2026-08-21)
 
 ### Chores
