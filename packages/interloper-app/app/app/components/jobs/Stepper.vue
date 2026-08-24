@@ -10,7 +10,7 @@
  */
 import type { StepperItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobCron, jobEnabled, jobLookback, jobOffset, jobTargetIds } from '~/types/component'
+import { jobCron, jobLookback, jobOffset, jobTargetIds } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
 import cronstrue from 'cronstrue'
 import { KEY_PATTERNS, type PartitionGranularity } from '~/composables/partitionGranularity'
@@ -42,17 +42,16 @@ const sources = computed(() => componentsStore.byKind('source'))
 // ── Form state ──────────────────────────────────────────────────
 const name = ref('')
 const cron = ref('')
-const enabled = ref(true)
 /**
  * Config fields rendered from `cron_job`'s definition rather than by hand.
  * The bespoke ones stay hand-built: `cron` has presets and a human-readable
- * rendering, `partitioned` is derived from the targets rather than asked, and
- * `enabled`'s UI copy has no counterpart in core yet. The window fields render
- * in their own Partitions section; everything else (`tags`, and any field
- * added to `CronJob` later) lands in the general form automatically.
+ * rendering, `partitioned` is derived from the targets rather than asked.
+ * The window fields render in their own Partitions section; everything else
+ * (`tags`, `enabled`, and any field added to `CronJob` later) lands in the
+ * general form automatically.
  */
 const JOB_KEY = 'cron_job'
-const BESPOKE_FIELDS = ['cron', 'partitioned', 'enabled']
+const BESPOKE_FIELDS = ['cron', 'partitioned']
 const WINDOW_FIELDS = ['lookback', 'offset']
 const configData = ref<Record<string, unknown>>({})
 const configValid = ref(true)
@@ -102,7 +101,6 @@ onMounted(async () => {
     if (props.job) {
         name.value = props.job.name ?? ''
         cron.value = jobCron(props.job)
-        enabled.value = jobEnabled(props.job)
         configData.value = Object.fromEntries(
             Object.entries(props.job.config ?? {})
                 .filter(([key]) => !BESPOKE_FIELDS.includes(key) && !WINDOW_FIELDS.includes(key)),
@@ -221,7 +219,7 @@ async function submit() {
             name: name.value.trim(),
             cron: cron.value.trim(),
             tags: [...(configData.value.tags as string[] ?? [])],
-            enabled: enabled.value,
+            enabled: (configData.value.enabled as boolean) ?? true,
             partitioned: partitioned.value,
             lookback: partitioned.value ? (lookback.value || null) : null,
             offset: partitioned.value ? offset.value : 1,
@@ -237,7 +235,6 @@ async function submit() {
             config: {
                 ...configData.value,
                 cron: cron.value.trim(),
-                enabled: enabled.value,
                 partitioned: partitioned.value,
                 ...(partitioned.value ? partitionConfig.value : { lookback: null, offset: 1 }),
             },
@@ -315,14 +312,6 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                             :schema="jobSchema"
                             :component-key="JOB_KEY"
                             :exclude="[...BESPOKE_FIELDS, ...WINDOW_FIELDS]" />
-
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium">Enabled</p>
-                        <p class="text-xs text-muted">Job will run on the configured schedule.</p>
-                    </div>
-                    <USwitch v-model="enabled" />
-                </div>
 
                 <USeparator label="Schedule" />
 
