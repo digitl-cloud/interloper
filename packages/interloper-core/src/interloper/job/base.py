@@ -54,7 +54,7 @@ class Job(Component):
 
     targets: list[Source | Asset] = Field(default_factory=list)
     destinations: list[Destination] = Field(default_factory=list)
-    enabled: bool = Field(default=True)
+    enabled: bool = Field(default=True, description="Job will run on the configured schedule")
     tags: list[str] = Field(default_factory=list)
 
     @field_validator("destinations", mode="before")
