@@ -10,7 +10,7 @@
  */
 import type { StepperItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobCron, jobEnabled, jobLookback, jobOffset, jobTags, jobTargetIds } from '~/types/component'
+import { jobCron, jobEnabled, jobLookback, jobOffset, jobTargetIds } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
 import cronstrue from 'cronstrue'
 import { KEY_PATTERNS, type PartitionGranularity } from '~/composables/partitionGranularity'
@@ -42,17 +42,20 @@ const sources = computed(() => componentsStore.byKind('source'))
 // ── Form state ──────────────────────────────────────────────────
 const name = ref('')
 const cron = ref('')
-const tags = ref<string[]>([])
 const enabled = ref(true)
 /**
  * Config fields rendered from `cron_job`'s definition rather than by hand.
- * The bespoke ones are excluded: `cron` has presets and a human-readable
+ * The bespoke ones stay hand-built: `cron` has presets and a human-readable
  * rendering, `partitioned` is derived from the targets rather than asked, and
- * `tags` is a list, which SchemaForm has no widget for (the same reason the
- * hooks stepper excludes its `events`).
+ * `enabled`'s UI copy has no counterpart in core yet. The window fields render
+ * in their own Partitions section; everything else (`tags`, and any field
+ * added to `CronJob` later) lands in the general form automatically.
  */
 const JOB_KEY = 'cron_job'
-const OWN_FIELDS = ['cron', 'partitioned', 'tags', 'enabled']
+const BESPOKE_FIELDS = ['cron', 'partitioned', 'enabled']
+const WINDOW_FIELDS = ['lookback', 'offset']
+const configData = ref<Record<string, unknown>>({})
+const configValid = ref(true)
 const partitionConfig = ref<Record<string, unknown>>({})
 const partitionConfigValid = ref(true)
 const selectedSourceIds = ref<string[]>([])
@@ -99,8 +102,11 @@ onMounted(async () => {
     if (props.job) {
         name.value = props.job.name ?? ''
         cron.value = jobCron(props.job)
-        tags.value = [...jobTags(props.job)]
         enabled.value = jobEnabled(props.job)
+        configData.value = Object.fromEntries(
+            Object.entries(props.job.config ?? {})
+                .filter(([key]) => !BESPOKE_FIELDS.includes(key) && !WINDOW_FIELDS.includes(key)),
+        )
         partitionConfig.value = { lookback: jobLookback(props.job), offset: jobOffset(props.job) }
         selectedSourceIds.value = jobTargetIds(props.job, 'source')
         selectedAssetIds.value = jobTargetIds(props.job, 'asset')
@@ -197,7 +203,8 @@ const recapRows = computed(() => {
 
 // ── Validation ──────────────────────────────────────────────────
 const detailsValid = computed(() =>
-    !!name.value.trim() && !!cron.value.trim() && (!partitioned.value || partitionConfigValid.value),
+    !!name.value.trim() && !!cron.value.trim() && configValid.value
+    && (!partitioned.value || partitionConfigValid.value),
 )
 
 const canProceed = computed(() => {
@@ -213,7 +220,7 @@ async function submit() {
         emit('collected', {
             name: name.value.trim(),
             cron: cron.value.trim(),
-            tags: [...tags.value],
+            tags: [...(configData.value.tags as string[] ?? [])],
             enabled: enabled.value,
             partitioned: partitioned.value,
             lookback: partitioned.value ? (lookback.value || null) : null,
@@ -228,8 +235,8 @@ async function submit() {
         const input = {
             name: name.value.trim(),
             config: {
+                ...configData.value,
                 cron: cron.value.trim(),
-                tags: tags.value,
                 enabled: enabled.value,
                 partitioned: partitioned.value,
                 ...(partitioned.value ? partitionConfig.value : { lookback: null, offset: 1 }),
@@ -302,11 +309,12 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                             class="w-full" />
                 </UFormField>
 
-                <UFormField label="Tags">
-                    <UInputTags v-model="tags"
-                                placeholder="Add a tag..."
-                                class="w-full" />
-                </UFormField>
+                <SchemaForm v-if="jobSchema"
+                            v-model:data="configData"
+                            v-model:is-valid="configValid"
+                            :schema="jobSchema"
+                            :component-key="JOB_KEY"
+                            :exclude="[...BESPOKE_FIELDS, ...WINDOW_FIELDS]" />
 
                 <div class="flex items-center justify-between">
                     <div>
@@ -350,7 +358,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                 v-model:is-valid="partitionConfigValid"
                                 :schema="jobSchema"
                                 :component-key="JOB_KEY"
-                                :exclude="OWN_FIELDS" />
+                                :include="WINDOW_FIELDS" />
 
                     <p v-if="windowPreview"
                        class="text-sm text-muted">

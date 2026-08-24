@@ -9,6 +9,7 @@
  *   - number (default for integer/number)
  *   - switch (default for boolean)
  *   - select (default for enum)
+ *   - array (default for array: multi-select when items are enum-constrained, tag input otherwise)
  *
  * Supports `x-oauth` at the schema root for OAuth sign-in:
  *   - UTabs toggle between "Sign in" and "Manual" modes
@@ -41,6 +42,7 @@ interface JsonSchemaProperty {
     'x-fetch'?: FetchMeta
     'x-discriminator'?: boolean
     'x-info'?: string
+    items?: JsonSchemaProperty
     minimum?: number
     maximum?: number
     minLength?: number
@@ -64,6 +66,8 @@ const props = defineProps<{
     componentKey?: string
     /** Fields to exclude from the form (e.g. 'id'). */
     exclude?: string[]
+    /** When set, render only these fields (exclude still applies). */
+    include?: string[]
     /**
      * Resource data from sibling steps, keyed by slot name.
      * Used by `x-fetch` fields, which resolve options from the resource in
@@ -355,6 +359,9 @@ function resolveProperty(prop: JsonSchemaProperty): JsonSchemaProperty {
         const branch = anyOf.find(b => b.type !== 'null') ?? anyOf[0] ?? {}
         resolved = { ...deref(branch), ...siblings }
     }
+    if (resolved.items) {
+        resolved = { ...resolved, items: resolveProperty(resolved.items) }
+    }
     return resolved
 }
 
@@ -378,12 +385,14 @@ function resolveWidget(prop: JsonSchemaProperty): string {
         case 'boolean': return 'switch'
         case 'integer':
         case 'number': return 'number'
+        case 'array': return 'array'
         default: return 'text'
     }
 }
 
 /** Resolve options for a field, including x-options-from context lookups. */
 function resolveOptions(prop: JsonSchemaProperty): unknown[] | undefined {
+    if (prop.type === 'array') return prop.items ? resolveOptions(prop.items) : undefined
     if (prop['x-options']) return prop['x-options']
     if (prop['x-options-from'] && props.optionsContext) {
         return props.optionsContext[prop['x-options-from']]
@@ -396,10 +405,12 @@ const fields = computed(() => {
     const properties = resolvedProperties.value
     const required = new Set(props.schema?.required ?? [])
     const excluded = new Set(props.exclude ?? ['id'])
+    const included = props.include ? new Set(props.include) : null
 
     return Object.entries(properties)
         .filter(([key, prop]) => {
             if (excluded.has(key)) return false
+            if (included && !included.has(key)) return false
             // Hide x-options-from fields when no options are available
             const entity = prop['x-options-from']
             if (entity) {
@@ -477,11 +488,16 @@ function handleOAuthSuccess(tokens: Record<string, unknown>) {
     if (token !== undefined) data.value[field] = token
 }
 
-/** Initialise default values for fields that have them. */
+/** Initialise default values for fields that have them; arrays start empty. */
 function initDefaults() {
     for (const field of fields.value) {
-        if (data.value[field.key] === undefined && field.default !== undefined) {
-            data.value[field.key] = field.default
+        if (data.value[field.key] !== undefined) continue
+        if (field.default !== undefined) {
+            // Clone array defaults: the schema object must not be mutated through the model.
+            data.value[field.key] = Array.isArray(field.default) ? [...field.default] : field.default
+        }
+        else if (field.widget === 'array') {
+            data.value[field.key] = []
         }
     }
 }
@@ -524,7 +540,10 @@ watch(
         const signIn = oauthAvailable.value && activeTab.value === 'oauth'
         isValid.value = fields.value
             .filter(f => f.required && !(signIn && envResolvedFieldKeys.value.has(f.key)))
-            .every(f => data.value[f.key] !== undefined && data.value[f.key] !== '')
+            .every((f) => {
+                const value = data.value[f.key]
+                return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== ''
+            })
     },
     { deep: true, immediate: true },
 )
@@ -626,6 +645,19 @@ defineExpose({ setErrors })
             <UInput v-else-if="field.widget === 'fetch'"
                     v-model="data[field.key]"
                     class="w-full" />
+
+            <!-- Array of constrained values: multi-select -->
+            <USelectMenu v-else-if="field.widget === 'array' && field.options"
+                         v-model="data[field.key]"
+                         multiple
+                         :items="(field.options ?? []).map((o: any) => typeof o === 'object' && o.label ? o : { label: String(o), value: o })"
+                         value-key="value"
+                         class="w-full" />
+
+            <!-- Free-form array: tag input -->
+            <UInputTags v-else-if="field.widget === 'array'"
+                        v-model="data[field.key]"
+                        class="w-full" />
 
             <!-- Select (x-options or enum) -->
             <USelect v-else-if="field.widget === 'select'"
