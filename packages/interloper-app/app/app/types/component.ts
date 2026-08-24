@@ -103,10 +103,6 @@ export function jobEnabled(c: ComponentRecord): boolean {
     return c.config?.enabled ?? true
 }
 
-export function jobPartitioned(c: ComponentRecord): boolean {
-    return c.config?.partitioned ?? false
-}
-
 /** How many partitions each run of a partitioned job covers. */
 export function jobLookback(c: ComponentRecord): number | null {
     return c.config?.lookback ?? null

@@ -110,11 +110,11 @@ class TestJobRoundTrip:
             kind="job",
             key="cron_job",
             name="Demo Daily",
-            config={"cron": "0 6 * * *", "tags": ["daily"], "enabled": True, "partitioned": True},
+            config={"cron": "0 6 * * *", "tags": ["daily"], "enabled": True},
             relations={"target": [(db_source.id, "")]},
         )
         assert db_job.name == "Demo Daily"
-        assert db_job.config == {"cron": "0 6 * * *", "tags": ["daily"], "enabled": True, "partitioned": True}
+        assert db_job.config == {"cron": "0 6 * * *", "tags": ["daily"], "enabled": True}
         assert db_job.state is None
         assert [rel.dst_id for rel in db_job.out_relations] == [db_source.id]
 

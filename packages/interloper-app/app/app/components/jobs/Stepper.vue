@@ -2,7 +2,7 @@
 /**
  * Two-step form for creating and editing jobs.
  *
- * Step 1: Target selection (standalone mode only)
+ * Step 1: Target selection
  * Step 2: Job details (name, cron, tags, enabled, lookback/offset)
  *
  * Container-agnostic: the parent wraps this in a UDrawer, modal, or
@@ -13,22 +13,14 @@ import type { ComponentRecord } from '~/types/component'
 import { jobLookback, jobOffset, relationIds } from '~/types/component'
 import { KEY_PATTERNS, targetGranularities, type PartitionGranularity } from '~/composables/partitionGranularity'
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
     /** Pass an existing job to edit, or null to create. */
     job: ComponentRecord | null
-    /** 'standalone' saves to API, 'collect' emits config without saving. */
-    mode?: 'standalone' | 'collect'
-    /** Asset keys selected by the parent (collect mode). Used to derive partitioning. */
-    assetKeys?: string[]
-}>(), {
-    mode: 'standalone',
-    assetKeys: () => [],
-})
+}>()
 
 const emit = defineEmits<{
     created: []
     updated: []
-    collected: [config: { name: string; cron: string; tags: string[]; enabled: boolean; partitioned: boolean; lookback: number | null; offset: number }]
 }>()
 
 const componentsStore = useComponentsStore()
@@ -39,13 +31,11 @@ const toast = useToast()
 const name = ref('')
 /**
  * Config fields rendered from `cron_job`'s definition rather than by hand.
- * Only `partitioned` stays out: it is derived from the targets rather than
- * asked. The window fields render in their own Partitions section; everything
- * else (`tags`, `enabled`, `cron`, and any field added to `CronJob` later)
- * lands in the general form automatically.
+ * The window fields render in their own Partitions section; everything else
+ * (`tags`, `enabled`, `cron`, and any field added to `CronJob` later) lands
+ * in the general form automatically.
  */
 const JOB_KEY = 'cron_job'
-const BESPOKE_FIELDS = ['partitioned']
 const WINDOW_FIELDS = ['lookback', 'offset']
 const configData = ref<Record<string, unknown>>({})
 const configValid = ref(true)
@@ -110,31 +100,21 @@ onMounted(async () => {
     await componentsStore.fetchAll(['source', 'asset'])
     if (props.job) {
         name.value = props.job.name ?? ''
+        // `partitioned` is retired (derived from the targets since migration 013);
+        // dropping it here keeps a pre-013 config from resubmitting the key.
         configData.value = Object.fromEntries(
             Object.entries(props.job.config ?? {})
-                .filter(([key]) => !BESPOKE_FIELDS.includes(key) && !WINDOW_FIELDS.includes(key)),
+                .filter(([key]) => !WINDOW_FIELDS.includes(key) && key !== 'partitioned'),
         )
         partitionConfig.value = { lookback: jobLookback(props.job), offset: jobOffset(props.job) }
         targetIds.value = relationIds(props.job, 'target')
     }
 })
 
-// ── Partitioning (auto-detected) ────────────────────────────────
+// ── Partitioning (derived from the targets) ─────────────────────
 
 /** Granularities the selected targets declare; empty = nothing partitioned. */
-const granularitySet = computed<Set<string>>(() => {
-    if (props.mode === 'collect') {
-        const found = new Set<string>()
-        for (const key of props.assetKeys) {
-            const partitioning = catalogStore.getAssetDefinition(key)?.partitioning
-            if (partitioning == null) continue
-            const granularity = partitioning.granularity
-            found.add(typeof granularity === 'string' ? granularity : 'day')
-        }
-        return found
-    }
-    return targetGranularities(targetIds.value)
-})
+const granularitySet = computed<Set<string>>(() => targetGranularities(targetIds.value))
 
 const partitioned = computed(() => granularitySet.value.size > 0)
 
@@ -147,22 +127,17 @@ const windowGranularity = computed<PartitionGranularity>(() => {
 })
 
 // ── Stepper ─────────────────────────────────────────────────────
-const steps = computed<StepperItem[]>(() => {
-    const items: StepperItem[] = []
-    if (props.mode !== 'collect') {
-        items.push({ title: 'Targets', icon: 'i-lucide-crosshair', slot: 'targets' as const })
-    }
-    items.push({ title: 'Details', icon: 'i-lucide-settings-2', slot: 'details' as const })
-    return items
-})
+const steps = computed<StepperItem[]>(() => [
+    { title: 'Targets', icon: 'i-lucide-crosshair', slot: 'targets' as const },
+    { title: 'Details', icon: 'i-lucide-settings-2', slot: 'details' as const },
+])
 
 const { activeStep, hasPrev, hasNext, isLastStep, reset: resetStepper, next: nextStep, prev: prevStep } = useStepperFlow(computed(() => steps.value.length))
 
 const displaySteps = useCheckedSteps(steps, activeStep)
 
-/** Recap of the targets chosen on step 1 (standalone mode only). */
+/** Recap of the targets chosen on step 1. */
 const recapRows = computed(() => {
-    if (props.mode === 'collect') return []
     const names = targetIds.value
         .map(id => componentsStore.byId(id)?.name)
         .filter(Boolean)
@@ -188,19 +163,6 @@ const canProceed = computed(() => {
 
 // ── Submit ──────────────────────────────────────────────────────
 async function submit() {
-    if (props.mode === 'collect') {
-        emit('collected', {
-            name: name.value.trim(),
-            cron: String(configData.value.cron ?? '').trim(),
-            tags: [...(configData.value.tags as string[] ?? [])],
-            enabled: (configData.value.enabled as boolean) ?? true,
-            partitioned: partitioned.value,
-            lookback: partitioned.value ? (lookback.value || null) : null,
-            offset: partitioned.value ? offset.value : 1,
-        })
-        return
-    }
-
     submitting.value = true
     try {
         const input = {
@@ -208,7 +170,6 @@ async function submit() {
             config: {
                 ...configData.value,
                 cron: String(configData.value.cron ?? '').trim(),
-                partitioned: partitioned.value,
                 ...(partitioned.value ? partitionConfig.value : { lookback: null, offset: 1 }),
             },
             relations: {
@@ -245,7 +206,6 @@ function handleNext() {
 const title = computed(() => isEditing.value ? 'Edit Job' : 'New Job')
 const submitLabel = computed(() => {
     if (!isLastStep.value) return 'Next'
-    if (props.mode === 'collect') return 'Confirm Job'
     return isEditing.value ? 'Save Job' : 'Create Job'
 })
 
@@ -255,10 +215,10 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 <template>
     <UStepper v-model="activeStep"
               :items="displaySteps"
-              :linear="steps.length > 1"
-              :disabled="steps.length > 1"
+              linear
+              disabled
               class="w-full">
-        <!-- Targets (first in standalone, skipped in collect mode) -->
+        <!-- Targets -->
         <template #targets>
             <WizardComponentSelect v-model="targetIds"
                                    :components="targetCandidates"
@@ -285,7 +245,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                             v-model:is-valid="configValid"
                             :schema="jobSchema"
                             :component-key="JOB_KEY"
-                            :exclude="[...BESPOKE_FIELDS, ...WINDOW_FIELDS]" />
+                            :exclude="WINDOW_FIELDS" />
 
                 <USeparator label="Partitions" />
 

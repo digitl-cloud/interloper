@@ -12,8 +12,9 @@ class CronJob(Job):
     """A job triggered by a cron expression.
 
     The trigger is declarative intent the scheduler acts on: ``cron`` sets the
-    cadence, and a partitioned workload covers a trailing window of partitions
-    on every tick.
+    cadence, and a job whose targets declare time partitioning covers a
+    trailing window of partitions on every tick. Whether a job is partitioned
+    is derived from its targets' catalog definitions, never stored.
 
     The window is counted in **partitions**, not days: ``offset`` is how many
     partitions back from the current one it ends, and ``lookback`` how many it
@@ -23,7 +24,6 @@ class CronJob(Job):
     """
 
     cron: str = CronField(title="Cron expression", description="When the job runs (UTC)")
-    partitioned: bool = Field(default=False)
     lookback: int | None = Field(
         default=1,
         ge=1,
@@ -34,4 +34,3 @@ class CronJob(Job):
         ge=0,
         description="How many partitions back from the current one the window ends",
     )
-

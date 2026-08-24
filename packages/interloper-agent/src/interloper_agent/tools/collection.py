@@ -738,8 +738,7 @@ def create_job(
     name: str,
     cron: str,
     target_source_ids: list[str],
-    partitioned: bool = False,
-    lookback: int | None = None,
+    lookback: int | None = 1,
     offset: int = 1,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
@@ -750,15 +749,17 @@ def create_job(
     name, the schedule in words, and the targets, and get the user's
     explicit confirmation BEFORE calling this.
 
+    Whether runs are partitioned is derived from the targets: a job over
+    time-partitioned assets covers a trailing window of partitions each tick.
+
     Args:
         name: Display name for the job (e.g. 'Facebook Ads daily').
         cron: Standard cron expression (e.g. '0 6 * * *' for daily at 06:00 UTC).
         target_source_ids: UUIDs of the sources the job materializes.
-        partitioned: Whether runs are date-partitioned.
-        lookback: For partitioned jobs, how many partitions each run covers.
-        offset: For partitioned jobs, how many partitions back from the current
-            one the window ends. 1 (the default) means it ends on the last
-            complete partition, i.e. yesterday for daily targets.
+        lookback: For partitioned targets, how many partitions each run covers.
+        offset: For partitioned targets, how many partitions back from the
+            current one the window ends. 1 (the default) means it ends on the
+            last complete partition, i.e. yesterday for daily targets.
     """
     try:
         org_id = get_org_id(tool_context)
@@ -783,9 +784,8 @@ def create_job(
                     "cron": cron,
                     "enabled": True,
                     "tags": [],
-                    "partitioned": partitioned,
-                    "lookback": lookback if partitioned else None,
-                    "offset": offset if partitioned else 1,
+                    "lookback": lookback,
+                    "offset": offset,
                 },
                 relations={"target": targets},
             )

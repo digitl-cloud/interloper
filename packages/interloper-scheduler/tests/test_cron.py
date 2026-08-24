@@ -111,11 +111,12 @@ class TestScheduling:
         assert _runs(store) == []
 
     def test_partitioned_job_creates_a_backfill_window(self, store: Store) -> None:
+        store = _catalog_store()
         now = dt.datetime.now(dt.timezone.utc)
-        job_id = _job(
+        job_id = _job_targeting(
             store,
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 3},
-            state={"next_run_at": now.isoformat()},
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 3},
         )
         CronController(store=store)._tick()
 
@@ -131,11 +132,12 @@ class TestScheduling:
         assert all(run.status == "queued" and run.backfill_id == backfill.id for run in runs)
 
     def test_offset_shifts_the_window_back(self, store: Store) -> None:
+        store = _catalog_store()
         now = dt.datetime.now(dt.timezone.utc)
-        _job(
+        _job_targeting(
             store,
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 2, "offset": 3},
-            state={"next_run_at": now.isoformat()},
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 2, "offset": 3},
         )
         CronController(store=store)._tick()
 
@@ -147,11 +149,12 @@ class TestScheduling:
         assert {run.partition_key for run in _runs(store)} == {backfill.start_key, backfill.end_key}
 
     def test_zero_offset_covers_the_current_partition(self, store: Store) -> None:
+        store = _catalog_store()
         now = dt.datetime.now(dt.timezone.utc)
-        _job(
+        _job_targeting(
             store,
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 1, "offset": 0},
-            state={"next_run_at": now.isoformat()},
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 1, "offset": 0},
         )
         CronController(store=store)._tick()
 
@@ -160,11 +163,11 @@ class TestScheduling:
         assert backfill.start_key == backfill.end_key == now.date().isoformat()
 
     def test_partitioned_job_without_lookback_creates_one_plain_run(self, store: Store) -> None:
-        now = dt.datetime.now(dt.timezone.utc)
-        _job(
+        store = _catalog_store()
+        _job_targeting(
             store,
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True},
-            state={"next_run_at": now.isoformat()},
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": None},
         )
         CronController(store=store)._tick()
 
@@ -267,7 +270,7 @@ class TestGranularityResolution:
         _job_targeting(
             store,
             "monthly_source",
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 2},
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 2},
         )
         CronController(store=store)._tick()
 
@@ -289,7 +292,7 @@ class TestGranularityResolution:
             store,
             "monthly_source",
             "daily_source",
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 1},
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 1},
         )
         before = _state(store, job_id)["next_run_at"]
         CronController(store=store)._tick()
@@ -300,15 +303,19 @@ class TestGranularityResolution:
             assert session.exec(select(Backfill)).all() == []
         assert _state(store, job_id)["next_run_at"] > before
 
-    def test_job_without_resolvable_targets_falls_back_to_daily(self, store: Store) -> None:
+    def test_job_without_partitioned_targets_runs_unwindowed(self, store: Store) -> None:
+        # Partitioning is derived from the targets: nothing partitioned in
+        # scope means a single plain run, regardless of lookback.
         now = dt.datetime.now(dt.timezone.utc)
         _job(
             store,
-            config={"cron": "0 * * * *", "enabled": True, "partitioned": True, "lookback": 1},
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 1},
             state={"next_run_at": now.isoformat()},
         )
         CronController(store=store)._tick()
 
         with Session(store.engine) as session:
-            backfill = session.exec(select(Backfill)).one()
-        assert backfill.end_key == (now.date() - dt.timedelta(days=1)).isoformat()
+            assert session.exec(select(Backfill)).all() == []
+        runs = _runs(store)
+        assert len(runs) == 1
+        assert runs[0].partition_key is None
