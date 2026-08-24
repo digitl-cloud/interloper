@@ -2,7 +2,7 @@
 /**
  * Two-step form for creating and editing jobs.
  *
- * Step 1: Source selection (standalone mode only)
+ * Step 1: Target selection (standalone mode only)
  * Step 2: Job details (name, cron, tags, enabled, lookback/offset)
  *
  * Container-agnostic: the parent wraps this in a UDrawer, modal, or
@@ -10,10 +10,9 @@
  */
 import type { StepperItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobCron, jobLookback, jobOffset, jobTargetIds } from '~/types/component'
-import type { SourceDefinition } from '~/types/catalog'
+import { jobCron, jobLookback, jobOffset, relationIds } from '~/types/component'
 import cronstrue from 'cronstrue'
-import { KEY_PATTERNS, type PartitionGranularity } from '~/composables/partitionGranularity'
+import { KEY_PATTERNS, targetGranularities, type PartitionGranularity } from '~/composables/partitionGranularity'
 
 const props = withDefaults(defineProps<{
     /** Pass an existing job to edit, or null to create. */
@@ -37,8 +36,6 @@ const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
-const sources = computed(() => componentsStore.byKind('source'))
-
 // ── Form state ──────────────────────────────────────────────────
 const name = ref('')
 const cron = ref('')
@@ -57,9 +54,7 @@ const configData = ref<Record<string, unknown>>({})
 const configValid = ref(true)
 const partitionConfig = ref<Record<string, unknown>>({})
 const partitionConfigValid = ref(true)
-const selectedSourceIds = ref<string[]>([])
-/** Asset targets carried through unchanged — the stepper only edits source targets. */
-const selectedAssetIds = ref<string[]>([])
+const targetIds = ref<string[]>([])
 const submitting = ref(false)
 
 const isEditing = computed(() => !!props.job)
@@ -68,10 +63,28 @@ const isEditing = computed(() => !!props.job)
 const jobSchema = computed(() => catalogStore.catalog[JOB_KEY]?.config_schema)
 
 /**
+ * Candidates for the target relation, from the definition's allowed kinds.
+ * Owned assets run through their source, so only standalone assets are
+ * offered — but targets a job already carries (e.g. set via the API) stay
+ * listed so editing never silently drops them.
+ */
+const targetCandidates = computed<ComponentRecord[]>(() => {
+    const kinds = catalogStore.catalog[JOB_KEY]?.relations?.target?.kinds ?? ['source']
+    const natural = kinds.flatMap(kind =>
+        componentsStore.byKind(kind).filter(c => c.kind !== 'asset' || c.parent_id === null),
+    )
+    const naturalIds = new Set(natural.map(c => c.id))
+    const carried = targetIds.value
+        .map(id => componentsStore.byId(id))
+        .filter((c): c is ComponentRecord => !!c && !naturalIds.has(c.id))
+    return [...natural, ...carried]
+})
+
+/**
  * The partitions a run today would cover, mirroring the backend's
  * `TimePartitionWindow.lookback`: `offset` partitions back from the current
  * one, spanning `lookback` of them, stepped in the granularity the selected
- * sources' assets declare.
+ * targets declare.
  */
 const lookback = computed(() => Number(partitionConfig.value.lookback ?? 0))
 const offset = computed(() => Number(partitionConfig.value.offset ?? 1))
@@ -97,7 +110,7 @@ const windowPreview = computed(() => {
 // ── Data fetching ────────────────────────────────────────────────
 
 onMounted(async () => {
-    await componentsStore.fetchAll(['source'])
+    await componentsStore.fetchAll(['source', 'asset'])
     if (props.job) {
         name.value = props.job.name ?? ''
         cron.value = jobCron(props.job)
@@ -106,48 +119,33 @@ onMounted(async () => {
                 .filter(([key]) => !BESPOKE_FIELDS.includes(key) && !WINDOW_FIELDS.includes(key)),
         )
         partitionConfig.value = { lookback: jobLookback(props.job), offset: jobOffset(props.job) }
-        selectedSourceIds.value = jobTargetIds(props.job, 'source')
-        selectedAssetIds.value = jobTargetIds(props.job, 'asset')
+        targetIds.value = relationIds(props.job, 'target')
     }
 })
 
 // ── Partitioning (auto-detected) ────────────────────────────────
 
-function sourceHasPartitionedAssets(defn: SourceDefinition): boolean {
-    return defn.assets.some(a => a.partitioning != null)
-}
-
-const partitioned = computed(() => {
+/** Granularities the selected targets declare; empty = nothing partitioned. */
+const granularitySet = computed<Set<string>>(() => {
     if (props.mode === 'collect') {
-        if (props.assetKeys.length === 0) return false
-        const assetKeySet = new Set(props.assetKeys)
-        return catalogStore.sourceDefinitions.some(sd =>
-            sd.assets.some(a => assetKeySet.has(a.key) && a.partitioning != null),
-        )
-    }
-    for (const sourceId of selectedSourceIds.value) {
-        const source = componentsStore.byId(sourceId)
-        if (!source) continue
-        const defn = catalogStore.getSourceDefinition(source.key)
-        if (defn && sourceHasPartitionedAssets(defn)) return true
-    }
-    return false
-})
-
-/** The selected sources' granularity, for the window preview's step size. */
-const windowGranularity = computed<PartitionGranularity>(() => {
-    const found = new Set<string>()
-    for (const sourceId of selectedSourceIds.value) {
-        const source = componentsStore.byId(sourceId)
-        const defn = source ? catalogStore.getSourceDefinition(source.key) : undefined
-        for (const asset of defn?.assets ?? []) {
-            if (asset.partitioning == null) continue
-            const granularity = asset.partitioning.granularity
+        const found = new Set<string>()
+        for (const key of props.assetKeys) {
+            const partitioning = catalogStore.getAssetDefinition(key)?.partitioning
+            if (partitioning == null) continue
+            const granularity = partitioning.granularity
             found.add(typeof granularity === 'string' ? granularity : 'day')
         }
+        return found
     }
-    const [only] = found
-    return found.size === 1 && only !== undefined && only in KEY_PATTERNS
+    return targetGranularities(targetIds.value)
+})
+
+const partitioned = computed(() => granularitySet.value.size > 0)
+
+/** The selected targets' granularity, for the window preview's step size. */
+const windowGranularity = computed<PartitionGranularity>(() => {
+    const [only] = granularitySet.value
+    return granularitySet.value.size === 1 && only !== undefined && only in KEY_PATTERNS
         ? only as PartitionGranularity
         : 'day'
 })
@@ -176,7 +174,7 @@ const cronDescription = computed(() => {
 const steps = computed<StepperItem[]>(() => {
     const items: StepperItem[] = []
     if (props.mode !== 'collect') {
-        items.push({ title: 'Sources', icon: 'i-lucide-plug', slot: 'sources' as const })
+        items.push({ title: 'Targets', icon: 'i-lucide-crosshair', slot: 'targets' as const })
     }
     items.push({ title: 'Details', icon: 'i-lucide-settings-2', slot: 'details' as const })
     return items
@@ -186,15 +184,15 @@ const { activeStep, hasPrev, hasNext, isLastStep, reset: resetStepper, next: nex
 
 const displaySteps = useCheckedSteps(steps, activeStep)
 
-/** Recap of the sources chosen on step 1 (standalone mode only). */
+/** Recap of the targets chosen on step 1 (standalone mode only). */
 const recapRows = computed(() => {
     if (props.mode === 'collect') return []
-    const names = selectedSourceIds.value
+    const names = targetIds.value
         .map(id => componentsStore.byId(id)?.name)
         .filter(Boolean)
     return [{
-        icon: 'i-lucide-plug',
-        label: 'Sources',
+        icon: 'i-lucide-crosshair',
+        label: 'Targets',
         value: names.length ? names.join(', ') : 'None',
     }]
 })
@@ -207,7 +205,7 @@ const detailsValid = computed(() =>
 
 const canProceed = computed(() => {
     const slot = steps.value[activeStep.value]?.slot
-    if (slot === 'sources') return selectedSourceIds.value.length > 0
+    if (slot === 'targets') return targetIds.value.length > 0
     if (slot === 'details') return detailsValid.value
     return false
 })
@@ -229,7 +227,6 @@ async function submit() {
 
     submitting.value = true
     try {
-        const targetIds = selectedSourceIds.value.concat(selectedAssetIds.value)
         const input = {
             name: name.value.trim(),
             config: {
@@ -239,7 +236,7 @@ async function submit() {
                 ...(partitioned.value ? partitionConfig.value : { lookback: null, offset: 1 }),
             },
             relations: {
-                target: targetIds.map(id => ({ dst_id: id })),
+                target: targetIds.value.map(id => ({ dst_id: id })),
             },
         }
 
@@ -285,10 +282,11 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
               :linear="steps.length > 1"
               :disabled="steps.length > 1"
               class="w-full">
-        <!-- Sources (first in standalone, skipped in collect mode) -->
-        <template #sources>
-            <JobsSourceSelect v-model="selectedSourceIds"
-                              :sources="sources" />
+        <!-- Targets (first in standalone, skipped in collect mode) -->
+        <template #targets>
+            <WizardComponentSelect v-model="targetIds"
+                                   :components="targetCandidates"
+                                   noun="targeted" />
         </template>
 
         <!-- Details -->
@@ -339,7 +337,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                     <div class="flex items-center gap-2 text-sm text-muted">
                         <UIcon name="i-lucide-calendar-days"
                                class="size-4 shrink-0" />
-                        <span>Partitioned — selected sources contain date-partitioned assets.</span>
+                        <span>Partitioned: the selected targets contain time-partitioned assets.</span>
                     </div>
 
                     <SchemaForm v-if="jobSchema"
