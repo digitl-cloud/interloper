@@ -1,6 +1,6 @@
 import type { ComponentRecord } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
-import { jobTargetIds } from '~/types/component'
+import { relationIds } from '~/types/component'
 
 /** The granularities an asset may declare (the set BigQuery offers). */
 export type PartitionGranularity = 'hour' | 'day' | 'month' | 'year'
@@ -51,6 +51,31 @@ function granularitiesOf(defn: SourceDefinition | undefined): Set<string> {
 }
 
 /**
+ * Granularities declared by target components' catalog definitions: every
+ * partitioned asset under a source target, or the asset itself for an asset
+ * target. Empty means no partitioned asset in scope.
+ */
+export function targetGranularities(ids: string[]): Set<string> {
+    const componentsStore = useComponentsStore()
+    const catalogStore = useCatalogStore()
+    const found = new Set<string>()
+    for (const id of ids) {
+        const target = componentsStore.byId(id)
+        if (!target) continue
+        if (target.kind === 'source') {
+            granularitiesOf(catalogStore.getSourceDefinition(target.key)).forEach(g => found.add(g))
+        }
+        else if (target.kind === 'asset') {
+            const partitioning = catalogStore.getAssetDefinition(target.key)?.partitioning
+            if (partitioning == null) continue
+            const granularity = partitioning.granularity
+            found.add(typeof granularity === 'string' ? granularity : 'day')
+        }
+    }
+    return found
+}
+
+/**
  * Resolve the partition granularity of a runnable component's targets.
  *
  * Granularity lives on the target assets' catalog definitions — never on the
@@ -60,7 +85,6 @@ function granularitiesOf(defn: SourceDefinition | undefined): Set<string> {
  * the picker's shape is moot).
  */
 export function usePartitionGranularity(target: () => ComponentRecord): ComputedRef<PartitionGranularity> {
-    const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
 
     return computed(() => {
@@ -70,11 +94,7 @@ export function usePartitionGranularity(target: () => ComponentRecord): Computed
             granularitiesOf(catalogStore.getSourceDefinition(record.key)).forEach(g => found.add(g))
         }
         else if (record.kind === 'job') {
-            for (const sourceId of jobTargetIds(record, 'source')) {
-                const source = componentsStore.byId(sourceId)
-                if (!source) continue
-                granularitiesOf(catalogStore.getSourceDefinition(source.key)).forEach(g => found.add(g))
-            }
+            targetGranularities(relationIds(record, 'target')).forEach(g => found.add(g))
         }
         const [only] = found
         return found.size === 1 && only !== undefined && only in KEY_PATTERNS

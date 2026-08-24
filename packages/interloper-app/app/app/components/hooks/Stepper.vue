@@ -220,7 +220,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                 <p class="text-sm text-muted">
                     Components this hook observes — it fires when one of their runs matches the selected events.
                 </p>
-                <HooksComponentSelect v-model="watchIds"
+                <WizardComponentSelect v-model="watchIds"
                                       :components="watchCandidates"
                                       noun="watched" />
             </div>
@@ -233,7 +233,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                     Components a trigger-style hook runs when it fires. Optional — leave empty for hooks that only
                     notify.
                 </p>
-                <HooksComponentSelect v-model="targetIds"
+                <WizardComponentSelect v-model="targetIds"
                                       :components="targetCandidates"
                                       noun="targeted" />
             </div>

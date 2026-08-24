@@ -3,7 +3,7 @@ import { h, resolveComponent } from 'vue'
 import cronstrue from 'cronstrue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobCron, jobEnabled, jobTargetIds } from '~/types/component'
+import { jobCron, jobEnabled, relationIds } from '~/types/component'
 
 definePageMeta({ title: 'Jobs' })
 
@@ -72,18 +72,18 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         }, cronLabel(jobCron(row.original))),
     },
     {
-        accessorKey: 'source_ids',
-        header: 'Sources',
+        accessorKey: 'target_ids',
+        header: 'Targets',
         cell: ({ row }) => {
-            const sources = jobTargetIds(row.original, 'source')
+            const targets = relationIds(row.original, 'target')
                 .map(id => componentsStore.byId(id))
-                .filter((s): s is ComponentRecord => !!s)
-            if (sources.length === 0) return h('span', { class: 'text-muted' }, '—')
-            const first = sources[0]!
+                .filter((t): t is ComponentRecord => !!t)
+            if (targets.length === 0) return h('span', { class: 'text-muted' }, '—')
+            const first = targets[0]!
             return h(EntityBadge, {
                 icon: componentIcon(first.key),
                 label: first.name ?? first.key,
-                extra: sources.length - 1,
+                extra: targets.length - 1,
             })
         },
     },
