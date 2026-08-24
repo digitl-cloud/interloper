@@ -197,7 +197,7 @@ class TestAnalytics:
         job = Component(org_id=ORG_ID, kind="job", key="daily")
         job_id = job.id
         runs = [
-            Run(id=uuid4(), org_id=ORG_ID, component_id=job_id, status="success", partition_date=date)
+            Run(id=uuid4(), org_id=ORG_ID, component_id=job_id, status="success", partition_key=date.isoformat())
             for date in (datetime.date(2026, 7, 1), datetime.date(2026, 7, 3))
         ]
         with Session(engine_module.get_engine()) as session:

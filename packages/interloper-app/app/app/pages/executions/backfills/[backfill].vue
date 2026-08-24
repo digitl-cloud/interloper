@@ -22,7 +22,7 @@ const { confirm } = useConfirm()
 const backfill = ref<Backfill | null>(null)
 const backfillRuns = ref<Run[]>([])
 const runsLoading = ref(false)
-const sorting = ref([{ id: 'partition_date', desc: false }])
+const sorting = ref([{ id: 'partition_key', desc: false }])
 
 const cancellable = computed(() => backfill.value != null && ['running', 'queued'].includes(backfill.value.status))
 const cancelling = ref(false)
@@ -84,9 +84,9 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
         cell: ({ row }) => h('span', { class: 'font-mono text-xs' }, row.getValue<string>('id').substring(0, 8)),
     },
     {
-        accessorKey: 'partition_date',
+        accessorKey: 'partition_key',
         header: 'Partition',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, row.getValue<string>('partition_date') || '—'),
+        cell: ({ row }) => h('span', { class: 'text-muted' }, row.getValue<string>('partition_key') || '—'),
     },
     {
         accessorKey: 'status',
@@ -153,7 +153,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
             <div class="flex items-center gap-1.5">
                 <UIcon name="i-lucide-calendar-range"
                        class="size-4" />
-                <span>{{ backfill.start_date }} → {{ backfill.end_date }}</span>
+                <span>{{ backfill.start_key }} → {{ backfill.end_key }}</span>
             </div>
             <div class="flex items-center gap-1.5">
                 <UIcon name="i-lucide-layers"

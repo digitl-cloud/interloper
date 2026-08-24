@@ -190,7 +190,7 @@ class HookController(Controller):
             event_type=event_type,
             component_id=str(run.component_id),
             run_id=str(run.id),
-            partition_date=run.partition_date.isoformat() if run.partition_date else None,
+            partition_key=run.partition_key,
             metadata=metadata,
             trigger=lambda component_id: self._trigger(session, run, component_id, watched_ids),
         )
@@ -250,4 +250,4 @@ class HookController(Controller):
                 f"Refusing to trigger component {component_id}: the hook watches it "
                 "(directly or via its parent), which would loop forever"
             )
-        self._store.create_run(run.org_id, component_id=UUID(component_id), partition_date=run.partition_date)
+        self._store.create_run(run.org_id, component_id=UUID(component_id), partition_key=run.partition_key)

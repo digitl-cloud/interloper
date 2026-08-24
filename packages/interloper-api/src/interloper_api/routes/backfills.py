@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,8 +26,8 @@ class BackfillCreateRequest(BaseModel):
     """Request body for queuing a backfill."""
 
     component_id: UUID
-    start_date: dt.date
-    end_date: dt.date
+    start_key: str
+    end_key: str
     concurrency: int = 1
     fail_fast: bool = False
 
@@ -40,8 +39,8 @@ class BackfillResponse(BaseModel):
     org_id: UUID
     component_id: UUID | None
     status: str
-    start_date: dt.date
-    end_date: dt.date
+    start_key: str
+    end_key: str
     concurrency: int
     fail_fast: bool
     partitions: int
@@ -64,8 +63,8 @@ def _backfill_to_response(backfill: Backfill) -> BackfillResponse:
         org_id=backfill.org_id,
         component_id=backfill.component_id,
         status=backfill.status,
-        start_date=backfill.start_date,
-        end_date=backfill.end_date,
+        start_key=backfill.start_key,
+        end_key=backfill.end_key,
         concurrency=backfill.concurrency,
         fail_fast=backfill.fail_fast,
         partitions=backfill.partitions,
@@ -96,18 +95,21 @@ def create_backfill(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> BackfillResponse:
-    """Queue a backfill for a job over a date range."""
+    """Queue a backfill for a job over a partition-key range."""
     job = load_authorized(
         lambda i: store.get_component(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
     )
-    backfill = store.create_backfill(
-        job.org_id,
-        component_id=body.component_id,
-        start_date=body.start_date,
-        end_date=body.end_date,
-        concurrency=body.concurrency,
-        fail_fast=body.fail_fast,
-    )
+    try:
+        backfill = store.create_backfill(
+            job.org_id,
+            component_id=body.component_id,
+            start_key=body.start_key,
+            end_key=body.end_key,
+            concurrency=body.concurrency,
+            fail_fast=body.fail_fast,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return _backfill_to_response(backfill)
 
 

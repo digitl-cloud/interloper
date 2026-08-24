@@ -29,7 +29,7 @@ class HookContext(BaseModel):
     event_type: str
     component_id: str
     run_id: str | None = None
-    partition_date: str | None = None
+    partition_key: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     trigger: Callable[[str], None] | None = Field(default=None, exclude=True)
 

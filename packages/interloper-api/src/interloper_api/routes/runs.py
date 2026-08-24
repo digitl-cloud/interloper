@@ -37,7 +37,7 @@ class RunResponse(BaseModel):
     org_id: UUID
     component_id: UUID | None
     backfill_id: UUID | None
-    partition_date: dt.date | None
+    partition_key: str | None
     status: str
     retry_of: UUID | None = None
     attempt: int = 1
@@ -51,7 +51,7 @@ class RunCreateRequest(BaseModel):
     """Request body for queuing a run targeting a runnable component."""
 
     component_id: UUID
-    partition_date: dt.date | None = None
+    partition_key: str | None = None
 
 
 class RetryRequest(BaseModel):
@@ -105,7 +105,7 @@ def _run_to_response(run: Run) -> RunResponse:
         org_id=run.org_id,
         component_id=run.component_id,
         backfill_id=run.backfill_id,
-        partition_date=run.partition_date,
+        partition_key=run.partition_key,
         status=run.status,
         retry_of=run.retry_of,
         attempt=run.attempt,
@@ -217,7 +217,10 @@ def create_run(
     target = load_authorized(store.get_component, body.component_id, user, store, label="Component", minimum="editor")
     if not KINDS[target.kind].runnable:
         raise HTTPException(status_code=400, detail=f"Components of kind '{target.kind}' cannot be run")
-    run = store.create_run(target.org_id, component_id=body.component_id, partition_date=body.partition_date)
+    try:
+        run = store.create_run(target.org_id, component_id=body.component_id, partition_key=body.partition_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return _run_to_response(run)
 
 

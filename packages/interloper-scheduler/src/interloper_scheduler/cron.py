@@ -141,26 +141,32 @@ class CronController(Controller):
                 # partition immediately instead of concurrency-gating. Because
                 # every run is queued at once, the queue worker's FIFO claim
                 # order (runs.created_at) decides execution order here.
-                window = self._backfill_window(config, now)
+                try:
+                    window = self._backfill_window(session, job, config, now)
+                except ValueError as exc:
+                    # Targets disagree on granularity: skip rather than
+                    # backfill a window that is wrong for some of them.
+                    logger.error("Skipping job '%s': %s", job.name, exc)
+                    continue
                 if window is not None:
                     backfill = Backfill(
                         org_id=job.org_id,
                         component_id=job.id,
-                        start_date=window.start,
-                        end_date=window.end,
+                        start_key=window.granularity.format(window.start),
+                        end_key=window.granularity.format(window.end),
                         status="running",
                         started_at=now,
                     )
                     session.add(backfill)
                     session.flush()
 
-                    for partition_date in period_range(window.start, window.end, window.granularity):
+                    for value in period_range(window.start, window.end, window.granularity):
                         run = Run(
                             component_id=job.id,
                             org_id=job.org_id,
                             backfill_id=backfill.id,
                             status="queued",
-                            partition_date=partition_date,
+                            partition_key=window.granularity.format(value),
                         )
                         session.add(run)
                     backfill.partitions = window.partition_count()
@@ -176,30 +182,39 @@ class CronController(Controller):
             session.commit()
             logger.info("Processed %d job(s)", len(jobs))
 
-    @staticmethod
-    def _backfill_window(config: dict[str, Any], now: datetime) -> TimePartitionWindow | None:
+    def _backfill_window(
+        self,
+        session: Session,
+        job: Component,
+        config: dict[str, Any],
+        now: datetime,
+    ) -> TimePartitionWindow | None:
         """Resolve the trailing window a partitioned job covers this tick.
 
-        The granularity is pinned to ``DAY``: it belongs to the target assets,
-        not to the job's config (which would be a third denormalized value able
-        to drift from the catalog), and daily is the only granularity an asset
-        may declare today. Resolving it from the targets is what changes here
-        when that stops being true.
+        The granularity comes from the job's target assets' catalog
+        definitions, never from the job's config (a denormalized copy could
+        silently drift from the catalog). A job whose partitioned targets
+        resolve to nothing falls back to ``DAY``, today's behaviour for every
+        existing job.
 
         Returns:
             The window, or ``None`` for an unpartitioned job (or one whose
             lookback is unset).
+
+        Raises:
+            ValueError: If the targets disagree on granularity.
         """
         if not config.get("partitioned"):
             return None
         lookback = config.get("lookback")
         if not lookback:
             return None
+        granularity = self._store.job_partition_granularity(session, job.id) or TimeGranularity.DAY
         return TimePartitionWindow.lookback(
             now,
             lookback=lookback,
             offset=config.get("offset", 1),
-            granularity=TimeGranularity.DAY,
+            granularity=granularity,
         )
 
     @staticmethod

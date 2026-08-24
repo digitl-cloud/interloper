@@ -6,7 +6,6 @@ tests, matching the style of ``test_runs.py``.
 
 from __future__ import annotations
 
-import datetime as dt
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -27,8 +26,8 @@ def _fake_backfill(backfill_id: UUID, status: str = "running") -> SimpleNamespac
         org_id=_ORG_ID,
         component_id=None,
         status=status,
-        start_date=dt.date(2026, 1, 1),
-        end_date=dt.date(2026, 1, 3),
+        start_key="2026-01-01",
+        end_key="2026-01-03",
         concurrency=1,
         fail_fast=False,
         partitions=3,
@@ -141,7 +140,7 @@ def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
 
     resp = client.post(
         "/backfills/",
-        json={"component_id": str(uuid4()), "start_date": "2026-01-01", "end_date": "2026-01-31"},
+        json={"component_id": str(uuid4()), "start_key": "2026-01-01", "end_key": "2026-01-31"},
     )
     assert resp.status_code == 429
     assert resp.json()["detail"]["quota"] == "max_backfill_partitions"

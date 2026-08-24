@@ -38,7 +38,7 @@ class WebhookHook(Hook):
             "event_type": context.event_type,
             "component_id": context.component_id,
             "run_id": context.run_id,
-            "partition_date": context.partition_date,
+            "partition_key": context.partition_key,
             "hook_id": self.id,
             "metadata": context.metadata,
         }

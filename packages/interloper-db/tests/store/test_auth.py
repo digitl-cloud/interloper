@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -119,7 +118,7 @@ class TestDeleteOrganisation:
                 src_id=asset.id, dst_id=source.id, org_id=org_id, src_kind="asset", dst_kind="source", type="owner"
             )
         )
-        backfill = Backfill(org_id=org_id, start_date=dt.date(2026, 1, 1), end_date=dt.date(2026, 1, 2))
+        backfill = Backfill(org_id=org_id, start_key="2026-01-01", end_key="2026-01-02")
         session.add(backfill)
         session.commit()
         run = Run(org_id=org_id, component_id=source.id)

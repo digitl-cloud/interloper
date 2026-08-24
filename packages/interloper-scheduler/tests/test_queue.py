@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 from collections.abc import Iterator
 from typing import Any
 from uuid import UUID, uuid4
@@ -86,8 +85,8 @@ def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
     """
     backfill = store.create_backfill(
         _ORG,
-        start_date=dt.date(2026, 1, 1),
-        end_date=dt.date(2026, 1, 2),
+        start_key="2026-01-01",
+        end_key="2026-01-02",
         concurrency=1,
     )
     QueueController(launcher=_FakeLauncher(fail=True), store=store)._tick()
@@ -172,8 +171,8 @@ def test_quota_denied_claim_cancels_instead_of_blocking(store: Store) -> None:
 def test_quota_denied_backfill_run_cancels_the_whole_backfill(store: Store) -> None:
     backfill = store.create_backfill(
         _ORG,
-        start_date=dt.date(2026, 1, 1),
-        end_date=dt.date(2026, 1, 3),
+        start_key="2026-01-01",
+        end_key="2026-01-03",
         concurrency=1,
     )
     _exhaust_quota(store)

@@ -25,7 +25,7 @@ class TestFire:
                 event_type="run_failed",
                 component_id="c1",
                 run_id="r1",
-                partition_date="2026-07-30",
+                partition_key="2026-07-30",
                 metadata={"status": "failed", "component_name": "Facebook Ads", "error": "boom"},
             )
         )
@@ -62,7 +62,7 @@ class TestFire:
         assert _text(slack) == ":bell: *c1* run_cancelled"
 
     def test_partition_without_run_id(self, slack):
-        _hook().fire(il.HookContext(event_type="run_failed", component_id="c1", partition_date="2026-07-30"))
+        _hook().fire(il.HookContext(event_type="run_failed", component_id="c1", partition_key="2026-07-30"))
 
         assert _text(slack) == ":x: *c1* failed\npartition `2026-07-30`"
 

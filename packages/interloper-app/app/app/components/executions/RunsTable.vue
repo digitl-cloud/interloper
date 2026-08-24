@@ -46,9 +46,9 @@ const columns: TableColumn<Run>[] = [
         },
     },
     {
-        accessorKey: 'partition_date',
+        accessorKey: 'partition_key',
         header: 'Partition',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, row.getValue<string>('partition_date') || '—'),
+        cell: ({ row }) => h('span', { class: 'text-muted' }, row.getValue<string>('partition_key') || '—'),
     },
     {
         accessorKey: 'status',

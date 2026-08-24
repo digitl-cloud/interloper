@@ -10,6 +10,12 @@ import { today, getLocalTimeZone } from '@internationalized/date'
 import type { DateRange } from 'reka-ui'
 import type { ComponentRecord } from '~/types/component'
 import { jobPartitioned } from '~/types/component'
+import {
+    KEY_PATTERNS,
+    KEY_PLACEHOLDERS,
+    previousPeriodKey,
+    usePartitionGranularity,
+} from '~/composables/partitionGranularity'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -30,6 +36,15 @@ const toast = useToast()
 const isJob = computed(() => props.target.kind === 'job')
 const partitioned = computed(() => props.partitioned ?? (isJob.value && jobPartitioned(props.target)))
 
+const granularity = usePartitionGranularity(() => props.target)
+const usesKeys = computed(() => partitioned.value && granularity.value !== 'day')
+const startKey = ref('')
+const endKey = ref('')
+const keysValid = computed(() =>
+    KEY_PATTERNS[granularity.value].test(startKey.value)
+    && (!isJob.value || KEY_PATTERNS[granularity.value].test(endKey.value)),
+)
+
 const submitting = ref(false)
 const failFast = ref(false)
 
@@ -43,8 +58,8 @@ const singleDate = computed({
     set: (d) => { dateRange.value = { start: d, end: d } },
 })
 
-const startISO = computed(() => dateRange.value.start?.toString())
-const endISO = computed(() => dateRange.value.end?.toString())
+const startISO = computed(() => (usesKeys.value ? startKey.value : dateRange.value.start?.toString()))
+const endISO = computed(() => (usesKeys.value ? (isJob.value ? endKey.value : startKey.value) : dateRange.value.end?.toString()))
 const isRange = computed(() => startISO.value !== endISO.value)
 
 interface Preset {
@@ -123,15 +138,17 @@ const activePreset = computed(() =>
     })?.label,
 )
 
-// Reset state when modal opens
+// Immediate: the parent often mounts this with `open` already true, so a plain watch would never fire.
 watch(open, (isOpen) => {
     if (isOpen) {
         const t = today(getLocalTimeZone())
         dateRange.value = { start: t, end: t }
+        startKey.value = previousPeriodKey(granularity.value)
+        endKey.value = startKey.value
         failFast.value = false
         submitting.value = false
     }
-})
+}, { immediate: true })
 
 async function onSubmit() {
     if (!startISO.value || !endISO.value) return
@@ -140,8 +157,8 @@ async function onSubmit() {
         if (isRange.value) {
             const backfillId = await backfillsStore.createBackfill({
                 componentId: props.target.id,
-                startDate: startISO.value,
-                endDate: endISO.value,
+                startKey: startISO.value,
+                endKey: endISO.value,
                 failFast: failFast.value,
             })
             toast.add({ title: `Backfill queued (${backfillId.slice(0, 8)})`, color: 'success' })
@@ -178,7 +195,8 @@ async function onSubmit() {
         <template #body>
             <div class="flex">
                 <!-- Presets -->
-                <div class="flex flex-col gap-1 border-r border-default pr-4">
+                <div v-if="!usesKeys"
+                     class="flex flex-col gap-1 border-r border-default pr-4">
                     <UButton v-for="preset in visiblePresets"
                              :key="preset.label"
                              :icon="preset.icon"
@@ -190,8 +208,35 @@ async function onSubmit() {
                              @click="dateRange = preset.range()" />
                 </div>
 
-                <!-- Calendar -->
-                <div class="flex flex-col w-full pl-4">
+                <!-- Partition keys (non-daily targets) or calendar (daily) -->
+                <div v-if="usesKeys"
+                     class="flex flex-col w-full pl-4 gap-3">
+                    <UFormField :label="isJob ? 'From partition' : 'Partition'"
+                                :description="`One ${granularity} per key.`">
+                        <UInput v-model="startKey"
+                                :placeholder="KEY_PLACEHOLDERS[granularity]"
+                                class="w-full font-mono" />
+                    </UFormField>
+                    <UFormField v-if="isJob"
+                                label="To partition (inclusive)">
+                        <UInput v-model="endKey"
+                                :placeholder="KEY_PLACEHOLDERS[granularity]"
+                                class="w-full font-mono" />
+                    </UFormField>
+                    <p class="text-xs text-muted">
+                        <template v-if="!keysValid">
+                            Keys must look like <code>{{ KEY_PLACEHOLDERS[granularity] }}</code> (one per {{ granularity }}).
+                        </template>
+                        <template v-else-if="isRange">
+                            This will create a <strong>backfill</strong> with one run per {{ granularity }} from {{ startISO }} to {{ endISO }}.
+                        </template>
+                        <template v-else>
+                            This will queue a single <strong>run</strong> for {{ startISO }}.
+                        </template>
+                    </p>
+                </div>
+                <div v-else
+                     class="flex flex-col w-full pl-4">
                     <UCalendar v-if="isJob"
                                v-model="dateRange"
                                range />
@@ -228,7 +273,7 @@ async function onSubmit() {
                      @click="open = false" />
             <UButton :label="isRange ? 'Start Backfill' : 'Start Run'"
                      :loading="submitting"
-                     :disabled="!startISO || !endISO"
+                     :disabled="!startISO || !endISO || (usesKeys && !keysValid)"
                      @click="onSubmit" />
         </template>
     </UModal>

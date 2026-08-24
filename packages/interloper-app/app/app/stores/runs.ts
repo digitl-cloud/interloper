@@ -83,10 +83,10 @@ export const useRunsStore = defineStore('runs', () => {
     }
 
     /** Queue a manual run for a runnable component (job, source, or asset). Returns the created run's id. */
-    async function createRun(componentId: string, partitionDate?: string): Promise<string> {
+    async function createRun(componentId: string, partitionKey?: string): Promise<string> {
         const run = await apiFetch<Run>('/runs', {
             method: 'POST',
-            body: { component_id: componentId, partition_date: partitionDate },
+            body: { component_id: componentId, partition_key: partitionKey },
         })
         return run.id
     }

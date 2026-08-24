@@ -30,7 +30,7 @@ class TestWebhookHook:
             "event_type": "run_failed",
             "component_id": "c1",
             "run_id": "r1",
-            "partition_date": None,
+            "partition_key": None,
             "hook_id": "h1",
             "metadata": {"error": "boom"},
         }
