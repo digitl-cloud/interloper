@@ -10,8 +10,7 @@
  */
 import type { StepperItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobCron, jobLookback, jobOffset, relationIds } from '~/types/component'
-import cronstrue from 'cronstrue'
+import { jobLookback, jobOffset, relationIds } from '~/types/component'
 import { KEY_PATTERNS, targetGranularities, type PartitionGranularity } from '~/composables/partitionGranularity'
 
 const props = withDefaults(defineProps<{
@@ -38,17 +37,15 @@ const toast = useToast()
 
 // ── Form state ──────────────────────────────────────────────────
 const name = ref('')
-const cron = ref('')
 /**
  * Config fields rendered from `cron_job`'s definition rather than by hand.
- * The bespoke ones stay hand-built: `cron` has presets and a human-readable
- * rendering, `partitioned` is derived from the targets rather than asked.
- * The window fields render in their own Partitions section; everything else
- * (`tags`, `enabled`, and any field added to `CronJob` later) lands in the
- * general form automatically.
+ * Only `partitioned` stays out: it is derived from the targets rather than
+ * asked. The window fields render in their own Partitions section; everything
+ * else (`tags`, `enabled`, `cron`, and any field added to `CronJob` later)
+ * lands in the general form automatically.
  */
 const JOB_KEY = 'cron_job'
-const BESPOKE_FIELDS = ['cron', 'partitioned']
+const BESPOKE_FIELDS = ['partitioned']
 const WINDOW_FIELDS = ['lookback', 'offset']
 const configData = ref<Record<string, unknown>>({})
 const configValid = ref(true)
@@ -113,7 +110,6 @@ onMounted(async () => {
     await componentsStore.fetchAll(['source', 'asset'])
     if (props.job) {
         name.value = props.job.name ?? ''
-        cron.value = jobCron(props.job)
         configData.value = Object.fromEntries(
             Object.entries(props.job.config ?? {})
                 .filter(([key]) => !BESPOKE_FIELDS.includes(key) && !WINDOW_FIELDS.includes(key)),
@@ -150,26 +146,6 @@ const windowGranularity = computed<PartitionGranularity>(() => {
         : 'day'
 })
 
-// ── Cron helpers ────────────────────────────────────────────────
-const cronPresets = [
-    { label: 'Every hour', value: '0 * * * *' },
-    { label: 'Every 6 hours', value: '0 */6 * * *' },
-    { label: 'Daily at midnight', value: '0 0 * * *' },
-    { label: 'Daily at 6 AM', value: '0 6 * * *' },
-    { label: 'Weekly (Monday)', value: '0 0 * * 1' },
-    { label: 'Monthly (1st)', value: '0 0 1 * *' },
-]
-
-const cronDescription = computed(() => {
-    if (!cron.value) return ''
-    try {
-        return cronstrue.toString(cron.value, { use24HourTimeFormat: true })
-    }
-    catch {
-        return ''
-    }
-})
-
 // ── Stepper ─────────────────────────────────────────────────────
 const steps = computed<StepperItem[]>(() => {
     const items: StepperItem[] = []
@@ -199,7 +175,7 @@ const recapRows = computed(() => {
 
 // ── Validation ──────────────────────────────────────────────────
 const detailsValid = computed(() =>
-    !!name.value.trim() && !!cron.value.trim() && configValid.value
+    !!name.value.trim() && configValid.value
     && (!partitioned.value || partitionConfigValid.value),
 )
 
@@ -215,7 +191,7 @@ async function submit() {
     if (props.mode === 'collect') {
         emit('collected', {
             name: name.value.trim(),
-            cron: cron.value.trim(),
+            cron: String(configData.value.cron ?? '').trim(),
             tags: [...(configData.value.tags as string[] ?? [])],
             enabled: (configData.value.enabled as boolean) ?? true,
             partitioned: partitioned.value,
@@ -231,7 +207,7 @@ async function submit() {
             name: name.value.trim(),
             config: {
                 ...configData.value,
-                cron: cron.value.trim(),
+                cron: String(configData.value.cron ?? '').trim(),
                 partitioned: partitioned.value,
                 ...(partitioned.value ? partitionConfig.value : { lookback: null, offset: 1 }),
             },
@@ -310,26 +286,6 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                             :schema="jobSchema"
                             :component-key="JOB_KEY"
                             :exclude="[...BESPOKE_FIELDS, ...WINDOW_FIELDS]" />
-
-                <USeparator label="Schedule" />
-
-                <UFormField label="Cron expression"
-                            required
-                            :description="cronDescription">
-                    <UInput v-model="cron"
-                            placeholder="0 0 * * *"
-                            class="w-full font-mono" />
-                </UFormField>
-
-                <div class="flex flex-wrap gap-1.5">
-                    <UButton v-for="preset in cronPresets"
-                             :key="preset.value"
-                             size="xs"
-                             variant="soft"
-                             color="neutral"
-                             :label="preset.label"
-                             @click="cron = preset.value" />
-                </div>
 
                 <USeparator label="Partitions" />
 

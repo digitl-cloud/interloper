@@ -10,6 +10,7 @@
  *   - switch (default for boolean)
  *   - select (default for enum)
  *   - array (default for array: multi-select when items are enum-constrained, tag input otherwise)
+ *   - cron (expression input with schedule presets and a human-readable rendering)
  *
  * Supports `x-oauth` at the schema root for OAuth sign-in:
  *   - UTabs toggle between "Sign in" and "Manual" modes
@@ -19,6 +20,7 @@
  */
 
 import type { FormError, TabsItem } from '@nuxt/ui'
+import cronstrue from 'cronstrue'
 
 interface FetchMeta {
     /** `<slot>.<method>` resolved via `/components/resolve`. */
@@ -372,6 +374,26 @@ const resolvedProperties = computed<Record<string, JsonSchemaProperty>>(() => {
     )
 })
 
+const CRON_PRESETS = [
+    { label: 'Every hour', value: '0 * * * *' },
+    { label: 'Every 6 hours', value: '0 */6 * * *' },
+    { label: 'Daily at midnight', value: '0 0 * * *' },
+    { label: 'Daily at 6 AM', value: '0 6 * * *' },
+    { label: 'Weekly (Monday)', value: '0 0 * * 1' },
+    { label: 'Monthly (1st)', value: '0 0 1 * *' },
+]
+
+/** Human-readable rendering of a cron expression, or '' when it doesn't parse. */
+function cronText(value: unknown): string {
+    if (!value || typeof value !== 'string') return ''
+    try {
+        return cronstrue.toString(value, { use24HourTimeFormat: true })
+    }
+    catch {
+        return ''
+    }
+}
+
 /** Human label for a raw enum value: "reconcile" → "Reconcile". */
 function enumLabel(value: unknown): string {
     return String(value).replaceAll(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -645,6 +667,27 @@ defineExpose({ setErrors })
             <UInput v-else-if="field.widget === 'fetch'"
                     v-model="data[field.key]"
                     class="w-full" />
+
+            <!-- Cron expression: presets and a human-readable rendering -->
+            <div v-else-if="field.widget === 'cron'"
+                 class="flex flex-col gap-1.5 w-full">
+                <UInput v-model="data[field.key]"
+                        placeholder="0 0 * * *"
+                        class="w-full font-mono" />
+                <p v-if="cronText(data[field.key])"
+                   class="text-xs text-muted">
+                    {{ cronText(data[field.key]) }}
+                </p>
+                <div class="flex flex-wrap gap-1.5">
+                    <UButton v-for="preset in CRON_PRESETS"
+                             :key="preset.value"
+                             size="xs"
+                             variant="soft"
+                             color="neutral"
+                             :label="preset.label"
+                             @click="data[field.key] = preset.value" />
+                </div>
+            </div>
 
             <!-- Array of constrained values: multi-select -->
             <USelectMenu v-else-if="field.widget === 'array' && field.options"

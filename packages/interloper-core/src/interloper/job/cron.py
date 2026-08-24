@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from interloper.job.base import Job
+from interloper.resource.fields import CronField
 
 
 class CronJob(Job):
@@ -21,7 +22,7 @@ class CronJob(Job):
     three days.
     """
 
-    cron: str = Field(description="Cron Expression")
+    cron: str = CronField(title="Cron expression", description="When the job runs (UTC)")
     partitioned: bool = Field(default=False)
     lookback: int | None = Field(
         default=1,
