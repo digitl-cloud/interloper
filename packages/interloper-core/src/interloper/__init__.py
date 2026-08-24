@@ -37,6 +37,7 @@ from interloper.partitioning import (
 from interloper.registry import Registry
 from interloper.resource import Resource, ResourceDefinition, ResourceRef
 from interloper.resource.fields import (
+    CronField,
     FetchField,
     InputField,
     JsonField,
@@ -84,6 +85,7 @@ __all__ = [
     "ComponentDefinition",
     "Config",
     "Connection",
+    "CronField",
     "CronJob",
     "Destination",
     "DestinationDefinition",

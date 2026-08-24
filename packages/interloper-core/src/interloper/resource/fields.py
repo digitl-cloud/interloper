@@ -231,6 +231,23 @@ def TextField(default: Any = ..., **kwargs: Any) -> Any:
     return Field(default, json_schema_extra=_extra(kwargs, "textarea"), **kwargs)
 
 
+def CronField(default: Any = ..., **kwargs: Any) -> Any:
+    """Cron-expression field rendered with presets and a human-readable schedule.
+
+    Args:
+        default: Default value (``...`` means required).
+        **kwargs: Forwarded to ``pydantic.Field``.
+
+    Returns:
+        A Pydantic Field descriptor.
+
+    Example::
+
+        cron: str = CronField(description="When the job runs")
+    """
+    return Field(default, json_schema_extra=_extra(kwargs, "cron"), **kwargs)
+
+
 def JsonField(default: Any = ..., **kwargs: Any) -> Any:
     """Dict/object field rendered as a JSON code editor.
 
