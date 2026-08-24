@@ -9,11 +9,12 @@
 import { today, getLocalTimeZone } from '@internationalized/date'
 import type { DateRange } from 'reka-ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobPartitioned } from '~/types/component'
+import { relationIds } from '~/types/component'
 import {
     KEY_PATTERNS,
     KEY_PLACEHOLDERS,
     previousPeriodKey,
+    targetGranularities,
     usePartitionGranularity,
 } from '~/composables/partitionGranularity'
 
@@ -34,7 +35,10 @@ const backfillsStore = useBackfillsStore()
 const toast = useToast()
 
 const isJob = computed(() => props.target.kind === 'job')
-const partitioned = computed(() => props.partitioned ?? (isJob.value && jobPartitioned(props.target)))
+// A job is partitioned iff its targets declare time partitioning (derived, never stored).
+const partitioned = computed(() =>
+    props.partitioned ?? (isJob.value && targetGranularities(relationIds(props.target, 'target')).size > 0),
+)
 
 const granularity = usePartitionGranularity(() => props.target)
 const usesKeys = computed(() => partitioned.value && granularity.value !== 'day')

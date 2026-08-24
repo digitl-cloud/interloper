@@ -31,7 +31,7 @@ class TestDefinition:
 
     def test_definition_self_describes(self):
         defn = il.CronJob.definition()
-        assert set(defn.config_schema["properties"]) == {"cron", "enabled", "tags", "partitioned", "lookback", "offset"}
+        assert set(defn.config_schema["properties"]) == {"cron", "enabled", "tags", "lookback", "offset"}
         assert "cron" in defn.config_schema.get("required", [])
         assert defn.relations["target"].kinds == ["source", "asset"]
         assert defn.relations["target"].slotted is False
@@ -46,7 +46,6 @@ class TestDefinition:
         assert job.targets == []
         assert job.enabled is True
         assert job.tags == []
-        assert job.partitioned is False
         assert job.lookback == 1
         assert job.offset == 1
 
@@ -72,7 +71,6 @@ class TestSpec:
             cron="0 6 * * *",
             enabled=False,
             tags=["daily"],
-            partitioned=True,
             lookback=7,
             offset=3,
             targets=[FakeSource(), FakeStandaloneAsset()],
@@ -83,7 +81,6 @@ class TestSpec:
         assert clone.cron == "0 6 * * *"
         assert clone.enabled is False
         assert clone.tags == ["daily"]
-        assert clone.partitioned is True
         assert clone.lookback == 7
         assert clone.offset == 3
         assert isinstance(clone.targets[0], FakeSource)

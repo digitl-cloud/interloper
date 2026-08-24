@@ -20,7 +20,7 @@ from typing import Any, cast
 
 from croniter import croniter
 from interloper.errors import ConfigError
-from interloper.partitioning.time import TimeGranularity, TimePartitionWindow, period_range
+from interloper.partitioning.time import TimePartitionWindow, period_range
 from interloper_db import Store, stamp_component_state
 from interloper_db.models import Backfill, Component, Run
 from sqlalchemy import or_
@@ -191,25 +191,25 @@ class CronController(Controller):
     ) -> TimePartitionWindow | None:
         """Resolve the trailing window a partitioned job covers this tick.
 
-        The granularity comes from the job's target assets' catalog
-        definitions, never from the job's config (a denormalized copy could
-        silently drift from the catalog). A job whose partitioned targets
-        resolve to nothing falls back to ``DAY``, today's behaviour for every
-        existing job.
+        Whether a job is partitioned, and at which granularity, comes from its
+        target assets' catalog definitions, never from the job's config (a
+        denormalized copy could silently drift from the catalog): no partitioned
+        target means a single unwindowed run.
 
         Returns:
             The window, or ``None`` for an unpartitioned job (or one whose
-            lookback is unset).
+            lookback is explicitly null).
 
         Raises:
             ValueError: If the targets disagree on granularity.
         """
-        if not config.get("partitioned"):
-            return None
-        lookback = config.get("lookback")
+        # A missing key means the model default (1); an explicit null opts out.
+        lookback = config.get("lookback", 1)
         if not lookback:
             return None
-        granularity = self._store.job_partition_granularity(session, job.id) or TimeGranularity.DAY
+        granularity = self._store.job_partition_granularity(session, job.id)
+        if granularity is None:
+            return None
         return TimePartitionWindow.lookback(
             now,
             lookback=lookback,
