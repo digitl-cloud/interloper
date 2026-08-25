@@ -131,15 +131,14 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
+        <NavActions>
+            <UButton icon="i-lucide-plus"
+                     label="New source"
+                     @click="onCreateSource" />
+        </NavActions>
         <GraphToolbar v-model:group-by="groupBy"
                       v-model:status-filter="statusFilter"
-                      :counts="statusCounts">
-            <template #end>
-                <UButton icon="i-lucide-plus"
-                         label="New source"
-                         @click="onCreateSource" />
-            </template>
-        </GraphToolbar>
+                      :counts="statusCounts" />
         <SplitterGroup direction="horizontal"
                        auto-save-id="graph-panels"
                        class="flex-1 min-h-0">

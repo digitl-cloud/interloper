@@ -83,6 +83,11 @@ const showEmpty = computed(() => !componentsStore.loading && componentsStore.byK
 
 <template>
     <div class="flex flex-col min-h-0 flex-1">
+        <NavActions>
+            <UButton icon="i-lucide-plus"
+                     label="New source"
+                     @click="onCreateSource" />
+        </NavActions>
         <div v-if="showEmpty"
              class="flex-1 min-h-0 overflow-y-auto">
             <div class="p-4 w-full max-w-[1040px] mx-auto">
@@ -100,8 +105,7 @@ const showEmpty = computed(() => !componentsStore.loading && componentsStore.byK
                            class="flex flex-col min-h-0 overflow-y-auto">
                 <div class="p-4 flex flex-col min-h-0 flex-1">
                     <DriftBanner />
-                    <CollectionTable @create="onCreateSource"
-                                     @edit-source="onEditSource"
+                    <CollectionTable @edit-source="onEditSource"
                                      @view-asset="onViewAsset" />
                 </div>
             </SplitterPanel>

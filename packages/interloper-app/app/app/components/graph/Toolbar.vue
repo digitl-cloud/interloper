@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /**
- * Graph canvas toolbar. Status filter pills on the left with the group-by
- * tabs beside them; the `end` slot holds host actions (e.g. New Source),
- * pushed to the right.
+ * Graph canvas toolbar: status filter pills on the left with the group-by
+ * tabs beside them.
  */
 const groupBy = defineModel<GroupBy>('groupBy', { default: 'type' })
 
@@ -54,9 +53,5 @@ const filterItems = computed(() => FILTERS
                variant="pill"
                size="xs"
                :content="false" />
-
-        <div class="ml-auto">
-            <slot name="end" />
-        </div>
     </div>
 </template>
