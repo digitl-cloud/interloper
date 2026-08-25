@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.64.1 (2026-08-25)
+
+### Bug Fixes
+
+- **app**: Restore the run page's events table gutter
+  ([`a42cc77`](https://github.com/digitl-cloud/interloper/commit/a42cc77a236adba69a4a76929abc6cc6d5bf7092))
+
+
 ## v0.64.0 (2026-08-25)
 
 ### Bug Fixes
