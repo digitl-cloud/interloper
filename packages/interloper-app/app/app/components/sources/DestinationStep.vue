@@ -30,6 +30,13 @@ const loading = ref(false)
 
 const destinations = computed(() => componentsStore.byKind('destination'))
 
+/** Type choices for the nested create drawer, filtered to compatible keys. */
+const compatibleDefinitions = computed(() => {
+    const all = catalogStore.destinationDefinitions
+    if (!props.compatibleKeys?.length) return all
+    return all.filter(d => props.compatibleKeys!.includes(d.key))
+})
+
 // ── Load destinations ───────────────────────────────────────────
 
 onMounted(async () => {
@@ -148,11 +155,15 @@ function destLabel(key: string) {
                  :ui="{ content: 'w-[36rem]', description: 'sr-only' }">
             <template #description>Create a destination</template>
             <template #body>
-                <DestinationsStepper v-if="drawerOpen"
-                                      ref="destStepperRef"
-                                      mode="standalone"
-                                      :compatible-keys="props.compatibleKeys ?? []"
-                                      @created="handleCreated" />
+                <WizardDefinitionStepper v-if="drawerOpen"
+                                         ref="destStepperRef"
+                                         kind="destination"
+                                         noun="Destination"
+                                         :component="null"
+                                         :definitions="compatibleDefinitions"
+                                         resource-slot-steps
+                                         name-optional
+                                         @created="handleCreated" />
             </template>
             <template #footer>
                 <WizardStepperNav v-if="destStepperRef"

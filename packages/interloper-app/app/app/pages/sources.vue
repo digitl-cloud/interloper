@@ -187,7 +187,7 @@ async function handleDelete(ids: string[]) {
                       default-title="New Source"
                       description="Configure a new source"
                       :stepper="stepperRef">
-            <SourcesStepper v-if="drawerOpen"
+            <SourcesWizard v-if="drawerOpen"
                             :key="editingSource?.id ?? 'new'"
                             ref="stepperRef"
                             :source="editingSource"

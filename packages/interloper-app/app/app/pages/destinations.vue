@@ -149,13 +149,18 @@ function handleSaved() {
                       default-title="New Destination"
                       description="Configure destination"
                       :stepper="stepperRef">
-            <DestinationsStepper v-if="drawerOpen"
-                                 :key="editingDestination?.id ?? 'new'"
-                                 ref="stepperRef"
-                                 :destination="editingDestination"
-                                 :initial-type-key="presetTypeKey"
-                                 @created="handleSaved"
-                                 @updated="handleSaved" />
+            <WizardDefinitionStepper v-if="drawerOpen"
+                                     :key="editingDestination?.id ?? 'new'"
+                                     ref="stepperRef"
+                                     kind="destination"
+                                     noun="Destination"
+                                     :component="editingDestination"
+                                     :initial-type-key="presetTypeKey"
+                                     :definitions="catalogStore.destinationDefinitions"
+                                     resource-slot-steps
+                                     name-optional
+                                     @created="handleSaved"
+                                     @updated="handleSaved" />
         </WizardDrawer>
     </div>
 </template>

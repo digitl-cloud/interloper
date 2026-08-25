@@ -128,7 +128,7 @@ const showEmpty = computed(() => !componentsStore.loading && componentsStore.byK
                       default-title="New Source"
                       description="Configure source"
                       :stepper="sourceStepperRef">
-            <SourcesStepper v-if="drawerOpen"
+            <SourcesWizard v-if="drawerOpen"
                             :key="editingSource?.id ?? 'new'"
                             ref="sourceStepperRef"
                             :source="editingSource"

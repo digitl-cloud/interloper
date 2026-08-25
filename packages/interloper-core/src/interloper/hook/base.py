@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,7 +13,8 @@ from interloper.job.base import Job
 from interloper.source.base import Source
 
 #: Event types a hook may subscribe to (v1: run-terminal outcomes).
-HOOK_EVENT_TYPES: tuple[str, ...] = ("run_completed", "run_failed")
+HookEvent = Literal["run_completed", "run_failed"]
+HOOK_EVENT_TYPES: tuple[str, ...] = get_args(HookEvent)
 
 
 class HookContext(BaseModel):
@@ -73,11 +74,12 @@ class Hook(Component):
     state_model: ClassVar[type[BaseModel] | None] = HookState
 
     watches: list[Source | Asset | Job] = Field(default_factory=list)
-    events: list[str] = Field(
-        default_factory=lambda: ["run_failed"],
-        description="Run outcomes this hook reacts to (run_completed, run_failed)",
+    events: list[HookEvent] = Field(
+        default=["run_failed"],
+        min_length=1,
+        description="Run outcomes this hook reacts to",
     )
-    enabled: bool = Field(default=True)
+    enabled: bool = Field(default=True, description="Hook will fire on matching events")
 
     def fire(self, context: HookContext) -> None:
         """Execute this hook's reaction to an event.

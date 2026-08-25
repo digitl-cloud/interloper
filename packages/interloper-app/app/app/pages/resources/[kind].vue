@@ -12,10 +12,8 @@ const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 
 const kind = computed(() => route.params.kind as string)
-const pageTitle = computed(() => {
-    const k = kind.value
-    return k.charAt(0).toUpperCase() + k.slice(1) + 's'
-})
+const kindLabel = computed(() => kind.value.charAt(0).toUpperCase() + kind.value.slice(1))
+const pageTitle = computed(() => `${kindLabel.value}s`)
 
 /** Available type definitions for this resource kind. */
 const definitions = computed(() => catalogStore.definitionsForKind(kind.value))
@@ -163,15 +161,17 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
                       :default-title="`New ${kind}`"
                       :description="`${editingResource ? 'Edit' : 'Configure a new'} ${kind}`"
                       :stepper="stepperRef">
-            <ResourcesStepper v-if="drawerOpen"
-                              :key="editingResource?.id ?? 'new'"
-                              ref="stepperRef"
-                              :kind="kind"
-                              :initial-type-key="presetTypeKey"
-                              :definitions="definitions"
-                              :resource="editingResource"
-                              @created="handleSaved"
-                              @updated="handleSaved" />
+            <WizardDefinitionStepper v-if="drawerOpen"
+                                     :key="editingResource?.id ?? 'new'"
+                                     ref="stepperRef"
+                                     :kind="kind"
+                                     :noun="kindLabel"
+                                     :component="editingResource"
+                                     :initial-type-key="presetTypeKey"
+                                     :definitions="definitions"
+                                     :config-label="kind === 'connection' ? 'Credentials' : 'Configuration'"
+                                     @created="handleSaved"
+                                     @updated="handleSaved" />
         </WizardDrawer>
     </div>
 </template>

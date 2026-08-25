@@ -169,7 +169,7 @@ async function handleDelete(ids: string[]) {
                                      definition-key="cron_job"
                                      noun="Job"
                                      :component="editingJob"
-                                     :relation-steps="['target']"
+                                     :relation-steps="[{ type: 'target', standaloneAssetsOnly: true }]"
                                      :exclude="['lookback', 'offset']"
                                      @created="handleSaved"
                                      @updated="handleSaved">
