@@ -181,7 +181,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                       default-title="New Source"
                       description="Configure source"
                       :stepper="sourceStepperRef">
-            <SourcesStepper v-if="sourceDrawerOpen"
+            <SourcesWizard v-if="sourceDrawerOpen"
                             :key="editingSource?.id ?? 'new'"
                             ref="sourceStepperRef"
                             :source="editingSource"

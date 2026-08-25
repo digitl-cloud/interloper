@@ -45,6 +45,7 @@ interface JsonSchemaProperty {
     'x-discriminator'?: boolean
     'x-info'?: string
     items?: JsonSchemaProperty
+    minItems?: number
     minimum?: number
     maximum?: number
     minLength?: number
@@ -452,6 +453,7 @@ const fields = computed(() => {
             options: resolveOptions(prop),
             min: prop.minimum,
             max: prop.maximum,
+            minItems: prop.minItems,
             isOAuthField: oauthFieldKeys.value.has(key),
             fetchMeta: prop['x-fetch'] ?? null,
         }))
@@ -561,10 +563,11 @@ watch(
     () => {
         const signIn = oauthAvailable.value && activeTab.value === 'oauth'
         isValid.value = fields.value
-            .filter(f => f.required && !(signIn && envResolvedFieldKeys.value.has(f.key)))
+            .filter(f => (f.required || f.minItems) && !(signIn && envResolvedFieldKeys.value.has(f.key)))
             .every((f) => {
                 const value = data.value[f.key]
-                return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== ''
+                if (Array.isArray(value)) return value.length >= (f.minItems ?? 1)
+                return value !== undefined && value !== ''
             })
     },
     { deep: true, immediate: true },

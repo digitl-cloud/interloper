@@ -133,12 +133,25 @@ async function handleDelete(ids: string[]) {
                       :default-title="editingHook ? 'Edit Hook' : 'New Hook'"
                       description="Configure hook"
                       :stepper="stepperRef">
-            <HooksStepper v-if="drawerOpen"
-                          :key="editingHook?.id ?? 'new'"
-                          ref="stepperRef"
-                          :hook="editingHook"
-                          @created="handleSaved"
-                          @updated="handleSaved" />
+            <WizardDefinitionStepper v-if="drawerOpen"
+                                     :key="editingHook?.id ?? 'new'"
+                                     ref="stepperRef"
+                                     kind="hook"
+                                     noun="Hook"
+                                     :component="editingHook"
+                                     :relation-steps="[
+                                         {
+                                             type: 'watch',
+                                             description: 'Components this hook observes — it fires when one of their runs matches the selected events.',
+                                         },
+                                         {
+                                             type: 'target',
+                                             required: false,
+                                             description: 'Components a trigger-style hook runs when it fires. Optional — leave empty for hooks that only notify.',
+                                         },
+                                     ]"
+                                     @created="handleSaved"
+                                     @updated="handleSaved" />
         </WizardDrawer>
     </div>
 </template>
