@@ -217,7 +217,7 @@ onUnmounted(() => {
                         <span v-if="!eventsStore.loading"
                               class="ml-auto text-[13.5px] text-muted">{{ eventCaption }}</span>
                     </div>
-                    <div class="flex-1 min-h-0">
+                    <div class="flex-1 min-h-0 px-4">
                         <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
                                                :events="eventsStore.events"
                                                :loading="eventsStore.loading"
