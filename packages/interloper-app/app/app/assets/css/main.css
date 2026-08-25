@@ -154,10 +154,10 @@
 .dark {
     /* dark surfaces stay bespoke: the design's gray scale is light-oriented,
        so these are ink-family (#1d1d1f) tones rather than scale slots */
-    --ui-text-dimmed: var(--color-gray-600);
-    --ui-text-muted: var(--color-gray-500);
-    --ui-text-toned: var(--color-gray-400);
-    --ui-text: var(--color-gray-300);
+    --ui-text-dimmed: var(--color-gray-500);
+    --ui-text-muted: var(--color-gray-400);
+    --ui-text-toned: var(--color-gray-300);
+    --ui-text: var(--color-gray-200);
     --ui-text-highlighted: #ffffff;
     --ui-text-inverted: var(--color-gray-950);
     --ui-bg: var(--color-gray-900);
