@@ -162,12 +162,24 @@ async function handleDelete(ids: string[]) {
                       :default-title="editingJob ? 'Edit Job' : 'New Job'"
                       description="Configure job"
                       :stepper="stepperRef">
-            <JobsStepper v-if="drawerOpen"
-                         :key="editingJob?.id ?? 'new'"
-                         ref="stepperRef"
-                         :job="editingJob"
-                         @created="handleSaved"
-                         @updated="handleSaved" />
+            <WizardDefinitionStepper v-if="drawerOpen"
+                                     :key="editingJob?.id ?? 'new'"
+                                     ref="stepperRef"
+                                     kind="job"
+                                     definition-key="cron_job"
+                                     noun="Job"
+                                     :component="editingJob"
+                                     :relation-steps="['target']"
+                                     :exclude="['lookback', 'offset']"
+                                     @created="handleSaved"
+                                     @updated="handleSaved">
+                <template #details="{ relations, extra }">
+                    <JobsWindowSection v-model:config="extra.config"
+                                       v-model:valid="extra.valid"
+                                       :target-ids="relations.target ?? []"
+                                       :job="editingJob" />
+                </template>
+            </WizardDefinitionStepper>
         </WizardDrawer>
 
         <ExecutionsRunModal v-if="runModalJob"
