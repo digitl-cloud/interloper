@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v0.64.0 (2026-08-25)
+
+### Bug Fixes
+
+- **app**: Brighten the dark-mode text tokens
+  ([`cf336aa`](https://github.com/digitl-cloud/interloper/commit/cf336aa05cc5be0ba9a0a72cd108380ec1c932f8))
+
+- **app**: Move canvas pages' primary action into the navbar
+  ([`3149d26`](https://github.com/digitl-cloud/interloper/commit/3149d26647cf1c36c2bb908fc0d68a39c47cec0d))
+
+### Features
+
+- Migrate every component wizard onto the definition-driven stepper
+  ([`5118c16`](https://github.com/digitl-cloud/interloper/commit/5118c164fe636fec901ba550b4bad09038a70520))
+
+- **app**: Pilot the definition-driven wizard on jobs
+  ([`f2c93ec`](https://github.com/digitl-cloud/interloper/commit/f2c93ecac463d268974956ed131a54c0ca21466c))
+
+### Breaking Changes
+
+- Hook.events rejects unknown event names and empty lists at the model level (previously any
+  list[str]).
+
+
 ## v0.63.0 (2026-08-25)
 
 ### Features
