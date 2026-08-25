@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v0.63.0 (2026-08-25)
+
+### Features
+
+- Derive whether a job is partitioned from its targets
+  ([`421034d`](https://github.com/digitl-cloud/interloper/commit/421034d46f1902867c82abbfd17358f8f4a7bae0))
+
+- Generate the job form's enabled field from its definition
+  ([`7be171d`](https://github.com/digitl-cloud/interloper/commit/7be171dd2e40248e1866d353c26c8b6ac907753e))
+
+- Render the cron field from its definition via a cron widget
+  ([`262c7df`](https://github.com/digitl-cloud/interloper/commit/262c7df24eca488c2232546d235d63aa995bba14))
+
+- **app**: Derive the job target picker from the relation vocabulary
+  ([`3d6b500`](https://github.com/digitl-cloud/interloper/commit/3d6b500152cb749dc96ca13b351b748d316e7bf3))
+
+- **app**: Render list fields in schema-driven forms
+  ([`1a52cba`](https://github.com/digitl-cloud/interloper/commit/1a52cba10716c2082855d23d75d8c690f4445db1))
+
+### Breaking Changes
+
+- CronJob no longer has a partitioned field; job configs must not carry the key (migration 013
+  strips it) and the agent create_job tool no longer accepts a partitioned argument.
+
+
 ## v0.62.0 (2026-08-24)
 
 ### Features
