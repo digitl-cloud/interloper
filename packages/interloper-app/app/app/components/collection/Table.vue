@@ -74,7 +74,6 @@ const groupingOptions = ref<GroupingOptions>({
 const expandedOptions = { autoResetExpanded: false }
 
 const emit = defineEmits<{
-    create: []
     'edit-source': [sourceId: string]
     'view-asset': [assetId: string, sourceId: string]
 }>()
@@ -221,10 +220,6 @@ function onRowClick(row: any) {
                      :icon="allExpanded ? 'i-lucide-chevrons-down-up' : 'i-lucide-chevrons-up-down'"
                      :label="allExpanded ? 'Collapse all' : 'Expand all'"
                      @click="toggleAllExpanded" />
-            <UButton icon="i-lucide-plus"
-                     label="New Source"
-                     class="ml-auto"
-                     @click="emit('create')" />
         </div>
 
         <UTable v-model:expanded="expanded"
