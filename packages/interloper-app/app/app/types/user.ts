@@ -5,6 +5,7 @@ export interface User {
     email: string
     name: string | null
     avatar_url: string | null
+    timezone: string | null
     role: string
     is_super_admin: boolean
     organisation: Organisation | null

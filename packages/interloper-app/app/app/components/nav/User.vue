@@ -33,6 +33,12 @@ const items = computed<DropdownMenuItem[][]>(() => {
         }],
     ]
 
+    groups.push([{
+        label: 'Profile',
+        icon: 'i-lucide-user',
+        onSelect: () => navigateTo('/settings/profile'),
+    }])
+
     if (userStore.isSuperAdmin) {
         groups.push([{
             label: 'Platform admin',

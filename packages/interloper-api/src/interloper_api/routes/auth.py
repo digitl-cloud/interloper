@@ -6,12 +6,13 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from interloper_db import Organisation, Profile, Store
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import get_auth_config, get_current_user, get_features, get_store
 
@@ -56,6 +57,7 @@ class AuthUserResponse(BaseModel):
     email: str
     name: str | None = None
     avatar_url: str | None = None
+    timezone: str | None = None
     role: str
     is_super_admin: bool = False
     organisation: OrganisationResponse | None = None
@@ -219,12 +221,51 @@ def get_me(
         email=profile.email,
         name=profile.name,
         avatar_url=profile.avatar_url,
+        timezone=profile.timezone,
         role=role,
         is_super_admin=profile.is_super_admin,
         organisation=OrganisationResponse.model_validate(org, from_attributes=True) if org else None,
         last_organisation_id=profile.last_organisation_id,
         features=get_features(),
     )
+
+
+class UpdateMeRequest(BaseModel):
+    """User-editable profile fields; omitted fields stay untouched.
+
+    Email is absent by design: it is Google-managed and refreshed at every
+    login, so an edit here would be silently reverted.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    timezone: str | None = None
+
+
+class ProfileResponse(BaseModel):
+    """The caller's own profile, as returned by profile updates."""
+
+    id: UUID
+    email: str
+    name: str | None = None
+    avatar_url: str | None = None
+    timezone: str | None = None
+
+
+@router.patch("/me")
+def update_me(
+    body: UpdateMeRequest,
+    user: Profile = Depends(get_current_user),
+    store: Store = Depends(get_store),
+) -> ProfileResponse:
+    """Update the current user's profile (display name, timezone)."""
+    if body.timezone is not None:
+        try:
+            ZoneInfo(body.timezone)
+        except (KeyError, ValueError):
+            raise HTTPException(status_code=422, detail=f"Unknown timezone {body.timezone!r}")
+
+    profile = store.update_profile(user.id, name=body.name, timezone=body.timezone)
+    return ProfileResponse.model_validate(profile, from_attributes=True)
 
 
 class SwitchOrgRequest(BaseModel):
