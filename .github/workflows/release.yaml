@@ -78,27 +78,49 @@ jobs:
       - name: Pytest
         run: uv run pytest
 
+      # TEMPORARY: runs the same PSR CLI the python-semantic-release@v10
+      # action runs, via uvx with GitPython pinned. GitPython 3.1.60 removed
+      # Actor.name_email_regex, which breaks every PSR config load inside the
+      # action's image (python-semantic-release/python-semantic-release#1476).
+      # Revert to the action once a PSR release carries the fix (PR #1477).
       - name: Release
         id: release
-        uses: python-semantic-release/python-semantic-release@v10
-        with:
-          prerelease: ${{ inputs.release_type == 'release-candidate' }}
-          prerelease_token: rc
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name "Semantic Release"
+          git config user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+          before=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          flags="--commit --tag --vcs-release --prerelease-token rc"
+          if [ "${{ inputs.release_type }}" = "release-candidate" ]; then
+            flags="$flags --no-changelog --as-prerelease"
+          else
+            flags="$flags --changelog"
+          fi
           # Force a bump level when the commit history alone wouldn't trigger a
-          # release (only chore/refactor since the last tag). Empty = let PSR
+          # release (only chore/refactor since the last tag). auto = let PSR
           # decide from the Conventional Commits, the normal path.
-          force: ${{ inputs.force != 'auto' && inputs.force || '' }}
-          # Runs the configured build_command (`uv lock`) so the release
-          # commit carries a lock file consistent with the stamped versions.
-          # The actual package build happens in the publish step below.
-          build: true
-          changelog: ${{ inputs.release_type == 'stable' }}
-          commit: true
-          tag: true
-          vcs_release: true
-          github_token: ${{ steps.app-token.outputs.token }}
-          git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-          git_committer_name: "Semantic Release"
+          if [ "${{ inputs.force }}" != "auto" ]; then
+            flags="$flags --${{ inputs.force }}"
+          fi
+
+          # The configured build_command (`uv lock`) runs as part of `version`,
+          # so the release commit carries a lock file consistent with the
+          # stamped versions. The actual package build happens in the publish
+          # step below.
+          # --with pip: the configured build_command bootstraps uv via
+          # `python -m pip`, and uv-managed venvs ship without pip.
+          uvx --from "python-semantic-release==10.6.1" --with "gitpython<3.1.60" --with pip \
+            semantic-release -v version $flags
+
+          after=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$after" ] && [ "$after" != "$before" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build & Publish
         if: steps.release.outputs.released == 'true'
