@@ -112,6 +112,38 @@ frontend:
   affinity: {}
   podAnnotations: {}
 
+# ── MCP (read-only Model Context Protocol server) ──────────────────────────
+# Serves the streamable-HTTP MCP endpoint (/mcp) for external AI agents,
+# authenticated per request with personal access tokens minted in the app
+# (Settings → Authentication). Off by default — it is an optional, separate
+# surface from the API.
+mcp:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: ""  # defaults to {image.registry}/interloper-mcp
+    tag: ""
+  # Public base URL (e.g. https://mcp.example.com), used in OAuth
+  # protected-resource metadata. Ignored when extraConfig carries an `mcp`
+  # section (the YAML block then owns the whole submodel).
+  externalUrl: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  service:
+    type: ClusterIP
+    port: 3001
+    annotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+  extraEnvFrom: []
+
 # ── DB init Job (schema bootstrap; runs once per release) ──────────────────
 dbInit:
   enabled: true
@@ -304,6 +336,10 @@ httpRoute:
     - interloper.local
   apiPath: /api
   rootPath: /
+  # Hostnames routed to the MCP service (its own host, e.g. mcp.example.com).
+  # Rendered as a separate HTTPRoute when mcp.enabled and non-empty; shares
+  # parentRefs with the main route.
+  mcpHostnames: []
 
 # =============================================================================
 # RBAC (required by the Kubernetes launcher)

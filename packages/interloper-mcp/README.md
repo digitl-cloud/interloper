@@ -59,23 +59,13 @@ claude mcp add --transport http interloper http://localhost:3001/mcp \
 Database and catalog configuration is the standard interloper set
 (`INTERLOPER_POSTGRES_*`, `INTERLOPER_CATALOG`, ...).
 
-## Deployment (not yet wired)
+## Deployment
 
-The container target would follow the existing dockerfile pattern:
-
-```dockerfile
-FROM base AS build-mcp
-COPY packages ./packages
-RUN docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-toolkit interloper-mcp
-
-FROM runtime AS mcp
-COPY --from=build-mcp /interloper/.venv /interloper/.venv
-USER app
-EXPOSE 3001
-CMD ["interloper-mcp"]
-```
-
-plus a `mcp` role in the Makefile/publish workflow, a Helm/Flux workload
-(`apps/interloper/mcp/` with an HTTPRoute for `mcp.interloper.app` — wildcard
-DNS + TLS already cover it), and its own GSA/IAM DB user in terraform if it
-should not share the app's identity.
+The `mcp` dockerfile target ships as `interloper-mcp:<version>` alongside the
+other role images (Makefile `ROLES` + the publish workflow). The Helm chart
+deploys it with `mcp.enabled=true` — the workload shares the release's
+Postgres/catalog configuration, sets `INTERLOPER_MCP_EXTERNAL_URL` from
+`mcp.externalUrl`, and gets its own HTTPRoute when `httpRoute.mcpHostnames`
+names its host. What remains cluster-side is the environment values (Flux)
+and, if it should not share the app's identity, its own GSA/IAM DB user in
+terraform.

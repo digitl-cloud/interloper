@@ -9,8 +9,9 @@ Deploys Interloper (scheduler + API + frontend) onto Kubernetes.
 | **scheduler** | Singleton: runs cron, the queue worker, and the reaper in one process. Dispatches runs via the configured launcher. Required. |
 | **api** | FastAPI backend serving `/api/*`. |
 | **frontend** | nginx serving the pre-built Nuxt SPA. |
+| **mcp** | Read-only MCP server (streamable HTTP, PAT bearer auth) for external AI agents. Optional, off by default (`mcp.enabled`). |
 
-All three are deployed as separate Deployments by default.  Each can be
+The first three are deployed as separate Deployments by default.  Each can be
 disabled via `<component>.enabled: false`.
 
 ## Images
@@ -28,6 +29,7 @@ ghcr.io/digitl-cloud/interloper-api:<version>                # base (no /agent r
 ghcr.io/digitl-cloud/interloper-api:<version>-agent          # bundles the ADK agent
 ghcr.io/digitl-cloud/interloper-frontend:<version>
 ghcr.io/digitl-cloud/interloper-worker:<version>             # kubernetes runner per-asset Job target
+ghcr.io/digitl-cloud/interloper-mcp:<version>                # read-only MCP server
 ```
 
 The chart picks the scheduler tag suffix from `launcher.type`
