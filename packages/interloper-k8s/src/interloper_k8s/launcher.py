@@ -89,6 +89,7 @@ class KubernetesLauncher(Launcher):
         node_selector: dict[str, str] | None = None,
         tolerations: list[dict[str, Any]] | None = None,
         ttl_seconds_after_finished: int = 300,
+        env_from: list[str] | None = None,
     ) -> None:
         """Initialize the Kubernetes launcher.
 
@@ -111,6 +112,10 @@ class KubernetesLauncher(Launcher):
             tolerations: Pod tolerations for scheduling.
             ttl_seconds_after_finished: Seconds before K8s auto-deletes
                 completed Jobs.
+            env_from: Names of Secrets mounted as env into the container.
+                Runs hydrate connections, so they need the same
+                runtime-resolved credentials (e.g. the in-house OAuth
+                provider trio) the API resolves from its environment.
         """
         super().__init__(runner_type=runner_type, runner_config=runner_config)
         self._catalog = catalog
@@ -128,6 +133,7 @@ class KubernetesLauncher(Launcher):
         self._node_selector = node_selector
         self._tolerations = tolerations or []
         self._ttl_seconds_after_finished = ttl_seconds_after_finished
+        self._env_from = env_from or []
 
         try:
             config.load_incluster_config()
@@ -152,6 +158,9 @@ class KubernetesLauncher(Launcher):
             command=["interloper"],
             args=["launch", str(run_id)],
             env=env,
+            env_from=[client.V1EnvFromSource(secret_ref=client.V1SecretEnvSource(name=n)) for n in self._env_from]
+            if self._env_from
+            else None,
             resources=self._build_resources(),
         )
 

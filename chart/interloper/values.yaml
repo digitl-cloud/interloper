@@ -192,6 +192,10 @@ launcher:
     namespace: ""  # defaults to release namespace
     # service_account_name: "{{ .Release.Name }}-launcher"  # auto-filled if rbac.create
     # image_pull_policy: IfNotPresent
+    # Secrets mounted as env into every run pod. Runs hydrate connections, so
+    # they need the same runtime-resolved credentials the API mounts via
+    # api.extraEnvFrom (e.g. the OAuth provider secret).
+    # env_from: [my-oauth-providers-secret]
     # resources:
     #   requests: {cpu: "100m", memory: "256Mi"}
     #   limits: {memory: "512Mi"}
