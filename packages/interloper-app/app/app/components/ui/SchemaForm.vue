@@ -11,6 +11,7 @@
  *   - select (default for enum)
  *   - array (default for array: multi-select when items are enum-constrained, tag input otherwise)
  *   - cron (expression input with schedule presets and a human-readable rendering)
+ *   - timezone (searchable IANA timezone select, defaulting to the user's profile timezone)
  *
  * Supports `x-oauth` at the schema root for OAuth sign-in:
  *   - UTabs toggle between "Sign in" and "Manual" modes
@@ -395,6 +396,15 @@ function cronText(value: unknown): string {
     }
 }
 
+/**
+ * The sibling timezone field's current value, labelling the cron widget's
+ * rendering with the zone the schedule is read in (never the viewer's).
+ */
+const cronZone = computed<string | null>(() => {
+    const key = Object.entries(resolvedProperties.value).find(([, prop]) => prop['x-widget'] === 'timezone')?.[0]
+    return key ? data.value[key] ?? null : null
+})
+
 /** Human label for a raw enum value: "reconcile" → "Reconcile". */
 function enumLabel(value: unknown): string {
     return String(value).replaceAll(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -512,11 +522,18 @@ function handleOAuthSuccess(tokens: Record<string, unknown>) {
     if (token !== undefined) data.value[field] = token
 }
 
+const userStore = useUserStore()
+
 /** Initialise default values for fields that have them; arrays start empty. */
 function initDefaults() {
     for (const field of fields.value) {
         if (data.value[field.key] !== undefined) continue
-        if (field.default !== undefined) {
+        // Timezone fields default to the creator's profile timezone; the
+        // stored value stays explicit either way.
+        if (field.widget === 'timezone') {
+            data.value[field.key] = userStore.user?.timezone ?? field.default ?? 'UTC'
+        }
+        else if (field.default !== undefined) {
             // Clone array defaults: the schema object must not be mutated through the model.
             data.value[field.key] = Array.isArray(field.default) ? [...field.default] : field.default
         }
@@ -679,7 +696,7 @@ defineExpose({ setErrors })
                         class="w-full font-mono" />
                 <p v-if="cronText(data[field.key])"
                    class="text-xs text-muted">
-                    {{ cronText(data[field.key]) }}
+                    {{ cronText(data[field.key]) }}<template v-if="cronZone"> · {{ cronZone }}</template>
                 </p>
                 <div class="flex flex-wrap gap-1.5">
                     <UButton v-for="preset in CRON_PRESETS"
@@ -691,6 +708,11 @@ defineExpose({ setErrors })
                              @click="data[field.key] = preset.value" />
                 </div>
             </div>
+
+            <!-- Timezone: searchable IANA zone picker -->
+            <TimezoneSelect v-else-if="field.widget === 'timezone'"
+                            v-model="data[field.key]"
+                            class="w-full" />
 
             <!-- Array of constrained values: multi-select -->
             <USelectMenu v-else-if="field.widget === 'array' && field.options"

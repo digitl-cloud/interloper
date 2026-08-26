@@ -1,6 +1,7 @@
 """Tests for ``interloper.partitioning.time``."""
 
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -343,6 +344,22 @@ class TestTimePartitionWindowLookback:
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 5, 1), dt.date(2026, 7, 1))
         assert window.partition_count() == 3
+
+    def test_daily_window_follows_the_reference_zone_calendar(self) -> None:
+        # 22:00 UTC on the 18th is already the 19th in Berlin: that zone's
+        # "yesterday" is the 18th while UTC's is still the 17th.
+        local_now = dt.datetime(2026, 8, 18, 22, 0, tzinfo=dt.timezone.utc).astimezone(ZoneInfo("Europe/Berlin"))
+        window = TimePartitionWindow.lookback(local_now, lookback=1)
+        assert window is not None
+        assert (window.start, window.end) == (dt.date(2026, 8, 18), dt.date(2026, 8, 18))
+
+    def test_hourly_window_is_utc_derived_regardless_of_zone(self) -> None:
+        # Kathmandu is UTC+05:45: hour ids are UTC labels, so an aware
+        # reference normalizes back to UTC instead of the fractional offset.
+        local_now = dt.datetime(2026, 8, 18, 6, 30, tzinfo=dt.timezone.utc).astimezone(ZoneInfo("Asia/Kathmandu"))
+        window = TimePartitionWindow.lookback(local_now, lookback=1, granularity=TimeGranularity.HOUR)
+        assert window is not None
+        assert (window.start, window.end) == (dt.datetime(2026, 8, 18, 5), dt.datetime(2026, 8, 18, 5))  # noqa: DTZ001
 
     def test_a_date_is_an_acceptable_reference(self) -> None:
         window = TimePartitionWindow.lookback(dt.date(2026, 8, 18), lookback=1)

@@ -44,6 +44,7 @@ from interloper.resource.fields import (
     SecretField,
     SelectField,
     TextField,
+    TimezoneField,
     fetch_field_provider,
     is_fetch_field_provider,
 )
@@ -148,6 +149,7 @@ __all__ = [
     "TimePartition",
     "TimePartitionConfig",
     "TimePartitionWindow",
+    "TimezoneField",
     "TriggerHook",
     "WebhookHook",
     "asset",

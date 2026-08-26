@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import cronstrue from 'cronstrue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { jobCron, jobEnabled, relationIds } from '~/types/component'
+import { jobCron, jobEnabled, jobTimezone, relationIds } from '~/types/component'
 
 definePageMeta({ title: 'Jobs' })
 
@@ -29,15 +28,6 @@ const runModalJob = ref<ComponentRecord | null>(null)
 
 componentsStore.fetchAll()
 componentsStore.fetchRelations()
-
-function cronLabel(cron: string): string {
-    try {
-        return cronstrue.toString(cron, { use24HourTimeFormat: true })
-    }
-    catch {
-        return cron
-    }
-}
 
 function openRun(job: ComponentRecord) {
     runModalJob.value = job
@@ -69,7 +59,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         cell: ({ row }) => h('span', {
             class: 'text-muted',
             title: jobCron(row.original),
-        }, cronLabel(jobCron(row.original))),
+        }, scheduleSummary(jobCron(row.original), jobTimezone(row.original))),
     },
     {
         accessorKey: 'target_ids',
@@ -173,11 +163,12 @@ async function handleDelete(ids: string[]) {
                                      :exclude="['lookback', 'offset']"
                                      @created="handleSaved"
                                      @updated="handleSaved">
-                <template #details="{ relations, extra }">
+                <template #details="{ relations, extra, configData }">
                     <JobsWindowSection v-model:config="extra.config"
                                        v-model:valid="extra.valid"
                                        :target-ids="relations.target ?? []"
-                                       :job="editingJob" />
+                                       :job="editingJob"
+                                       :timezone="typeof configData.timezone === 'string' ? configData.timezone : undefined" />
                 </template>
             </WizardDefinitionStepper>
         </WizardDrawer>

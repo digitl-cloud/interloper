@@ -7,13 +7,15 @@
  */
 import type { ComponentRecord } from '~/types/component'
 import { jobLookback, jobOffset } from '~/types/component'
-import { KEY_PATTERNS, targetGranularities, type PartitionGranularity } from '~/composables/partitionGranularity'
+import { KEY_PATTERNS, periodKey, targetGranularities, type PartitionGranularity } from '~/composables/partitionGranularity'
 
 const props = defineProps<{
     /** The selected target component ids (live, from the wizard). */
     targetIds: string[]
     /** The job being edited, or null — seeds the window fields. */
     job: ComponentRecord | null
+    /** The job timezone picked in the wizard — the preview's calendar. */
+    timezone?: string
 }>()
 
 /** The wizard's extension contract: config merged on submit, valid gating it. */
@@ -53,21 +55,12 @@ const windowGranularity = computed<PartitionGranularity>(() => {
 const lookback = computed(() => Number(partitionConfig.value.lookback ?? 0))
 const offset = computed(() => Number(partitionConfig.value.offset ?? 1))
 
-function periodKey(granularity: PartitionGranularity, periodsBack: number): string {
-    const now = new Date()
-    switch (granularity) {
-        case 'hour': now.setUTCHours(now.getUTCHours() - periodsBack); return now.toISOString().slice(0, 13)
-        case 'day': now.setUTCDate(now.getUTCDate() - periodsBack); return now.toISOString().slice(0, 10)
-        case 'month': now.setUTCMonth(now.getUTCMonth() - periodsBack); return now.toISOString().slice(0, 7)
-        case 'year': return String(now.getUTCFullYear() - periodsBack)
-    }
-}
-
 const windowPreview = computed(() => {
     const span = lookback.value
     if (!Number.isFinite(span) || span < 1 || offset.value < 0) return null
-    const end = periodKey(windowGranularity.value, offset.value)
-    const start = periodKey(windowGranularity.value, offset.value + span - 1)
+    const zone = props.timezone || 'UTC'
+    const end = periodKey(windowGranularity.value, offset.value, zone)
+    const start = periodKey(windowGranularity.value, offset.value + span - 1, zone)
     return span === 1 ? end : `${start} to ${end}`
 })
 

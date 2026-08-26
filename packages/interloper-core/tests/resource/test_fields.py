@@ -61,6 +61,16 @@ class TestPresentationKwargs:
         assert prop["x-widget"] == "select"
 
 
+class TestTimezoneField:
+    def test_emits_timezone_widget(self):
+        class FakeZonedSource(il.Source):
+            timezone: str = il.TimezoneField(default="UTC")
+
+        prop = FakeZonedSource.definition().config_schema["properties"]["timezone"]
+        assert prop["x-widget"] == "timezone"
+        assert prop["default"] == "UTC"
+
+
 class TestDiscriminatorMarker:
     def test_marker_serialized_as_x_discriminator(self):
         class FakeMarkedSource(il.Source):

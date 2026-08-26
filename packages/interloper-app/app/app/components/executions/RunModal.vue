@@ -6,10 +6,10 @@
  * Sources/assets: single partition date → run (backfills are job-only).
  * Mirrors the MaterializeModal layout from the old app.
  */
-import { today, getLocalTimeZone } from '@internationalized/date'
+import { today } from '@internationalized/date'
 import type { DateRange } from 'reka-ui'
 import type { ComponentRecord } from '~/types/component'
-import { relationIds } from '~/types/component'
+import { jobTimezone, relationIds } from '~/types/component'
 import {
     KEY_PATTERNS,
     KEY_PLACEHOLDERS,
@@ -35,6 +35,10 @@ const backfillsStore = useBackfillsStore()
 const toast = useToast()
 
 const isJob = computed(() => props.target.kind === 'job')
+// The modal's "today"/"yesterday" clock: the job's timezone, matching the
+// windows the scheduler derives for it; UTC (the partition-label zone) for
+// direct source/asset runs.
+const clockZone = computed(() => (isJob.value ? jobTimezone(props.target) : 'UTC'))
 // A job is partitioned iff its targets declare time partitioning (derived, never stored).
 const partitioned = computed(() =>
     props.partitioned ?? (isJob.value && targetGranularities(relationIds(props.target, 'target')).size > 0),
@@ -52,7 +56,7 @@ const keysValid = computed(() =>
 const submitting = ref(false)
 const failFast = ref(false)
 
-const now = today(getLocalTimeZone())
+const now = today(clockZone.value)
 
 const dateRange = shallowRef<DateRange>({ start: now, end: now })
 
@@ -77,7 +81,7 @@ const presets: Preset[] = [
         label: 'Today',
         icon: 'i-lucide-calendar',
         range: () => {
-            const t = today(getLocalTimeZone())
+            const t = today(clockZone.value)
             return { start: t, end: t }
         },
     },
@@ -85,7 +89,7 @@ const presets: Preset[] = [
         label: 'Yesterday',
         icon: 'i-lucide-calendar-minus',
         range: () => {
-            const t = today(getLocalTimeZone()).subtract({ days: 1 })
+            const t = today(clockZone.value).subtract({ days: 1 })
             return { start: t, end: t }
         },
     },
@@ -93,7 +97,7 @@ const presets: Preset[] = [
         label: 'Last 7 days',
         icon: 'i-lucide-calendar-range',
         range: () => {
-            const t = today(getLocalTimeZone())
+            const t = today(clockZone.value)
             return { start: t.subtract({ days: 6 }), end: t }
         },
     },
@@ -101,7 +105,7 @@ const presets: Preset[] = [
         label: 'Last 30 days',
         icon: 'i-lucide-calendar-range',
         range: () => {
-            const t = today(getLocalTimeZone())
+            const t = today(clockZone.value)
             return { start: t.subtract({ days: 29 }), end: t }
         },
     },
@@ -109,7 +113,7 @@ const presets: Preset[] = [
         label: 'This month',
         icon: 'i-lucide-calendar-days',
         range: () => {
-            const t = today(getLocalTimeZone())
+            const t = today(clockZone.value)
             return { start: t.set({ day: 1 }), end: t }
         },
     },
@@ -117,7 +121,7 @@ const presets: Preset[] = [
         label: 'Last month',
         icon: 'i-lucide-calendar-fold',
         range: () => {
-            const t = today(getLocalTimeZone())
+            const t = today(clockZone.value)
             const firstOfLast = t.subtract({ months: 1 }).set({ day: 1 })
             const lastOfLast = t.set({ day: 1 }).subtract({ days: 1 })
             return { start: firstOfLast, end: lastOfLast }
@@ -145,9 +149,9 @@ const activePreset = computed(() =>
 // Immediate: the parent often mounts this with `open` already true, so a plain watch would never fire.
 watch(open, (isOpen) => {
     if (isOpen) {
-        const t = today(getLocalTimeZone())
+        const t = today(clockZone.value)
         dateRange.value = { start: t, end: t }
-        startKey.value = previousPeriodKey(granularity.value)
+        startKey.value = previousPeriodKey(granularity.value, clockZone.value)
         endKey.value = startKey.value
         failFast.value = false
         submitting.value = false
