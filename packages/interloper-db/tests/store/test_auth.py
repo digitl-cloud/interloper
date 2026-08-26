@@ -309,3 +309,35 @@ class TestOrganisationActivity:
     def test_unknown_org_raises(self, store: Store):
         with pytest.raises(NotFoundError):
             store.list_organisation_activity(uuid4())
+
+
+class TestUpdateProfile:
+    def test_updates_name_and_timezone_independently(self, store: Store):
+        profile = store.upsert_profile(google_id="g-upd", email="upd@example.com", name="Google Name")
+
+        renamed = store.update_profile(profile.id, name="Custom Name")
+        assert renamed.name == "Custom Name"
+        assert renamed.timezone is None
+
+        zoned = store.update_profile(profile.id, timezone="Europe/Berlin")
+        assert zoned.name == "Custom Name"
+        assert zoned.timezone == "Europe/Berlin"
+
+    def test_missing_profile_raises(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.update_profile(uuid4(), name="Ghost")
+
+    def test_user_set_name_survives_login_upsert(self, store: Store):
+        profile = store.upsert_profile(google_id="g-keep", email="keep@example.com", name="Google Name")
+        store.update_profile(profile.id, name="Custom Name")
+
+        relogged = store.upsert_profile(google_id="g-keep", email="keep@example.com", name="Google Name")
+
+        assert relogged.name == "Custom Name"
+
+    def test_login_upsert_fills_an_empty_name(self, store: Store):
+        store.upsert_profile(google_id="g-fill", email="fill@example.com")
+
+        filled = store.upsert_profile(google_id="g-fill", email="fill@example.com", name="Google Name")
+
+        assert filled.name == "Google Name"

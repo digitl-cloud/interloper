@@ -20,6 +20,7 @@ export const useUserStore = defineStore('user', () => {
         loading.value = true
         try {
             user.value = await apiFetch<User>('/auth/me')
+            setDisplayTimeZone(user.value.timezone)
         }
         catch {
             user.value = null
@@ -27,6 +28,17 @@ export const useUserStore = defineStore('user', () => {
         finally {
             loading.value = false
         }
+    }
+
+    async function updateProfile(patch: { name?: string, timezone?: string }) {
+        const updated = await apiFetch<Pick<User, 'id' | 'email' | 'name' | 'avatar_url' | 'timezone'>>(
+            '/auth/me',
+            { method: 'PATCH', body: patch },
+        )
+        if (user.value) {
+            user.value = { ...user.value, name: updated.name, timezone: updated.timezone }
+        }
+        setDisplayTimeZone(updated.timezone)
     }
 
     function signIn(redirect?: string) {
@@ -61,6 +73,7 @@ export const useUserStore = defineStore('user', () => {
         findProfile,
         requireProfile,
         fetchMe,
+        updateProfile,
         signIn,
         signOut,
     }

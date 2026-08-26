@@ -159,3 +159,67 @@ def test_super_admin_email_can_sign_up() -> None:
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
     assert store.promoted == [store.profile.id]
+
+
+# -- PATCH /auth/me -------------------------------------------------------------
+
+
+class FakeProfileStore:
+    """In-memory stand-in implementing only ``update_profile``."""
+
+    def __init__(self) -> None:
+        self.profile = SimpleNamespace(
+            id=uuid4(),
+            email="user@example.com",
+            name="Google Name",
+            avatar_url=None,
+            timezone=None,
+        )
+
+    def update_profile(self, user_id: UUID, *, name: str | None = None, timezone: str | None = None):
+        if name is not None:
+            self.profile.name = name
+        if timezone is not None:
+            self.profile.timezone = timezone
+        return self.profile
+
+
+def _me_client(store: FakeProfileStore) -> TestClient:
+    from interloper_api.dependencies import get_current_user
+
+    app = FastAPI()
+    app.include_router(auth_module.router)
+    app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[get_current_user] = lambda: store.profile
+    return TestClient(app)
+
+
+def test_update_me_sets_name_and_timezone() -> None:
+    store = FakeProfileStore()
+    resp = _me_client(store).patch("/auth/me", json={"name": "Custom", "timezone": "Europe/Berlin"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Custom"
+    assert body["timezone"] == "Europe/Berlin"
+
+
+def test_update_me_omitted_fields_stay_untouched() -> None:
+    store = FakeProfileStore()
+    resp = _me_client(store).patch("/auth/me", json={"timezone": "UTC"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Google Name"
+    assert store.profile.timezone == "UTC"
+
+
+def test_update_me_rejects_unknown_timezone() -> None:
+    store = FakeProfileStore()
+    resp = _me_client(store).patch("/auth/me", json={"timezone": "Mars/Olympus_Mons"})
+    assert resp.status_code == 422
+    assert store.profile.timezone is None
+
+
+def test_update_me_rejects_empty_name() -> None:
+    store = FakeProfileStore()
+    resp = _me_client(store).patch("/auth/me", json={"name": ""})
+    assert resp.status_code == 422
+    assert store.profile.name == "Google Name"

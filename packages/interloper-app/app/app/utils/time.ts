@@ -1,3 +1,17 @@
+/** The user's preferred display timezone (IANA name); undefined falls back to the browser's. */
+let displayTimeZone: string | undefined
+
+/** Set by the user store when the profile loads or changes; invalid names fall back to the browser's. */
+export function setDisplayTimeZone(tz: string | null | undefined) {
+    try {
+        if (tz) new Intl.DateTimeFormat(undefined, { timeZone: tz })
+        displayTimeZone = tz ?? undefined
+    }
+    catch {
+        displayTimeZone = undefined
+    }
+}
+
 export function timeSince(date: Date): string {
     const seconds = Math.floor((new Date().valueOf() - date.valueOf()) / 1000)
     let interval = seconds / 31536000
@@ -28,19 +42,23 @@ export function timeSince(date: Date): string {
 export function formatDay(value: string | Date | null | undefined): string {
     if (!value) return '—'
     const date = typeof value === 'string' ? new Date(value) : value
-    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: displayTimeZone })
 }
 
 export function formatDate(value: string | Date | null | undefined) {
     if (!value) return ''
     const date = typeof value === 'string' ? new Date(value) : value
-    const day = date.getDate()
-    const month = date.toLocaleDateString('en-US', { month: 'short' })
-    const hours = date.getHours().toString().padStart(2, '0')
-    const minutes = date.getMinutes().toString().padStart(2, '0')
-    const seconds = date.getSeconds().toString().padStart(2, '0')
+    const day = date.toLocaleString('en-US', { day: 'numeric', timeZone: displayTimeZone })
+    const month = date.toLocaleString('en-US', { month: 'short', timeZone: displayTimeZone })
+    const time = date.toLocaleString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        timeZone: displayTimeZone,
+    })
 
-    return `${day} ${month}, ${hours}:${minutes}:${seconds}`
+    return `${day} ${month}, ${time}`
 }
 
 export function formatElapsed(start?: string | Date | null, end?: string | Date | null) {

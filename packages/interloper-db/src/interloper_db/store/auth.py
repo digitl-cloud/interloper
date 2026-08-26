@@ -82,7 +82,8 @@ class AuthMixin(StoreBase):
         Args:
             google_id: Google OAuth subject identifier.
             email: User email.
-            name: Display name (``None`` leaves the stored value untouched).
+            name: Display name. Only fills an empty profile — a name the user
+                set themselves (:meth:`update_profile`) survives logins.
             avatar_url: Avatar URL (``None`` leaves the stored value untouched).
 
         Returns:
@@ -94,7 +95,7 @@ class AuthMixin(StoreBase):
 
             if db_profile:
                 db_profile.email = email
-                if name is not None:
+                if name is not None and not db_profile.name:
                     db_profile.name = name
                 if avatar_url is not None:
                     db_profile.avatar_url = avatar_url
@@ -108,6 +109,33 @@ class AuthMixin(StoreBase):
                 )
                 session.add(db_profile)
 
+            session.commit()
+            session.refresh(db_profile)
+            return db_profile
+
+    def update_profile(self, user_id: UUID, *, name: str | None = None, timezone: str | None = None) -> Profile:
+        """Update a profile's user-editable fields.
+
+        Args:
+            user_id: Profile UUID.
+            name: New display name (``None`` leaves the stored value untouched).
+            timezone: New IANA timezone name (``None`` leaves the stored value untouched).
+
+        Returns:
+            The updated Profile.
+
+        Raises:
+            NotFoundError: If the profile is not found.
+        """
+        with self._session() as session:
+            db_profile = session.get(Profile, user_id)
+            if not db_profile:
+                raise NotFoundError(f"Profile {user_id} not found")
+            if name is not None:
+                db_profile.name = name
+            if timezone is not None:
+                db_profile.timezone = timezone
+            session.add(db_profile)
             session.commit()
             session.refresh(db_profile)
             return db_profile
