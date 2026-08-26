@@ -31,7 +31,7 @@ class TestDefinition:
 
     def test_definition_self_describes(self):
         defn = il.CronJob.definition()
-        assert set(defn.config_schema["properties"]) == {"cron", "enabled", "tags", "lookback", "offset"}
+        assert set(defn.config_schema["properties"]) == {"cron", "timezone", "enabled", "tags", "lookback", "offset"}
         assert "cron" in defn.config_schema.get("required", [])
         assert defn.relations["target"].kinds == ["source", "asset"]
         assert defn.relations["target"].slotted is False

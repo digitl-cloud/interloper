@@ -21,8 +21,6 @@ watch([name, timezone], () => {
     saved.value = false
 })
 
-const timezones = Intl.supportedValuesOf('timeZone')
-
 const dirty = computed(() => {
     const baseName = userStore.user?.name ?? ''
     const baseTimezone = userStore.user?.timezone ?? browserTimezone
@@ -116,9 +114,8 @@ async function save() {
                         Used to display run times and schedules.
                     </div>
                 </div>
-                <USelectMenu v-model="timezone"
-                             :items="timezones"
-                             class="min-w-0 flex-1 basis-60 max-w-[280px]" />
+                <TimezoneSelect v-model="timezone"
+                                class="min-w-0 flex-1 basis-60 max-w-[280px]" />
             </div>
         </div>
 

@@ -15,8 +15,9 @@ correct chronological comparison — no JSON-to-timestamp casting needed.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import Any, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from croniter import croniter
 from interloper.errors import ConfigError
@@ -97,7 +98,8 @@ class CronController(Controller):
                 if not cron_expr:
                     continue
 
-                next_run = self._calculate_next_run(cron_expr, now)
+                zone = self._job_zone(job, config)
+                next_run = self._calculate_next_run(cron_expr, now, zone)
                 scheduled_time = self._state_datetime(job, "next_run_at")
 
                 # New job: schedule for the future, don't run yet
@@ -142,7 +144,7 @@ class CronController(Controller):
                 # every run is queued at once, the queue worker's FIFO claim
                 # order (runs.created_at) decides execution order here.
                 try:
-                    window = self._backfill_window(session, job, config, now)
+                    window = self._backfill_window(session, job, config, now.astimezone(zone))
                 except ValueError as exc:
                     # Targets disagree on granularity: skip rather than
                     # backfill a window that is wrong for some of them.
@@ -196,6 +198,11 @@ class CronController(Controller):
         denormalized copy could silently drift from the catalog): no partitioned
         target means a single unwindowed run.
 
+        *now* is the tick instant on the job's wall clock, so a daily job's
+        "yesterday" is its timezone's yesterday; HOUR windows normalize back
+        to UTC inside the window arithmetic (see
+        :meth:`TimePartitionWindow.lookback`).
+
         Returns:
             The window, or ``None`` for an unpartitioned job (or one whose
             lookback is explicitly null).
@@ -233,18 +240,42 @@ class CronController(Controller):
         session.add(job)
         session.flush()
 
-    def _calculate_next_run(self, cron_expr: str, base_time: datetime) -> datetime:
+    @staticmethod
+    def _job_zone(job: Component, config: dict[str, Any]) -> tzinfo:
+        """Resolve the job's timezone from its raw config, defaulting to UTC.
+
+        The config was zoneinfo-validated at write time, but the scheduler
+        reads raw dicts — an unresolvable name (e.g. after a tzdata change)
+        must degrade to UTC rather than wedge the whole tick.
+
+        Returns:
+            The job's zone, or UTC when the config carries none.
+        """
+        name = config.get("timezone") or "UTC"
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError, TypeError):
+            logger.warning("Job '%s' has an unknown timezone %r - evaluating in UTC", job.name, name)
+            return timezone.utc
+
+    def _calculate_next_run(self, cron_expr: str, base_time: datetime, zone: tzinfo) -> datetime:
         """Calculate the next run time from a cron expression.
+
+        The expression is read on the wall clock of *zone* (croniter handles
+        the DST transitions: a fire time inside the spring-forward gap slides
+        to the first instant after it), and the result is converted back to
+        UTC — state storage stays UTC everywhere.
 
         Args:
             cron_expr: Cron expression string.
             base_time: The reference time.
+            zone: The timezone the expression is evaluated in.
 
         Returns:
             The next scheduled datetime (UTC).
         """
-        itr = croniter(cron_expr, base_time)
+        itr = croniter(cron_expr, base_time.astimezone(zone))
         next_run = cast(datetime, itr.get_next(datetime))
         if next_run.tzinfo is None:
-            return next_run.replace(tzinfo=timezone.utc)
-        return next_run
+            next_run = next_run.replace(tzinfo=zone)
+        return next_run.astimezone(timezone.utc)

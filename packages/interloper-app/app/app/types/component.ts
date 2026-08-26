@@ -95,6 +95,11 @@ export function jobCron(c: ComponentRecord): string {
     return c.config?.cron ?? ''
 }
 
+/** The IANA timezone a job's cron is evaluated in. */
+export function jobTimezone(c: ComponentRecord): string {
+    return c.config?.timezone ?? 'UTC'
+}
+
 export function jobTags(c: ComponentRecord): string[] {
     return c.config?.tags ?? []
 }

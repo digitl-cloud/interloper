@@ -466,6 +466,14 @@ class TimePartitionWindow(PartitionWindow):
         lookback=1`` is "yesterday only" and ``offset=0`` includes the
         current (still incomplete) partition.
 
+        The caller's timezone reaches the window through *now*: passing an
+        aware datetime localized to a zone makes DAY/MONTH/YEAR windows
+        follow that zone's calendar (its "yesterday"). HOUR windows are the
+        deliberate exception — an aware *now* is normalized back to UTC (see
+        :func:`coerce_to_datetime`), because hour partition ids are naive-UTC
+        labels and zones on a fractional offset (e.g. UTC+05:45) don't align
+        to UTC hour boundaries at all.
+
         Args:
             now: The reference instant, in whatever timezone the caller
                 labels partitions with.

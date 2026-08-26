@@ -11,6 +11,7 @@ import datetime as dt
 from collections.abc import Iterator
 from typing import Any
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import interloper as il
 import pytest
@@ -227,13 +228,23 @@ def daily_source():  # noqa: D103
     return [daily_stats]
 
 
+@il.source
+def hourly_source():  # noqa: D103
+    @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.HOUR))
+    def hourly_stats(context: il.ExecutionContext) -> list:
+        return []
+
+    return [hourly_stats]
+
+
 def _catalog_store() -> Store:
-    """A store over the fixture engine whose catalog knows both test sources."""
+    """A store over the fixture engine whose catalog knows the test sources."""
     return Store(
         catalog=il.Catalog(
             components={
                 "monthly_source": monthly_source.definition(),
                 "daily_source": daily_source.definition(),
+                "hourly_source": hourly_source.definition(),
             }
         )
     )
@@ -259,6 +270,103 @@ def _job_targeting(store: Store, *source_keys: str, config: dict[str, Any]) -> U
         session.commit()
     assert row.id is not None
     return row.id
+
+
+class TestTimezone:
+    """Cron evaluation on the job's wall clock — storage stays UTC everywhere."""
+
+    BERLIN = ZoneInfo("Europe/Berlin")
+
+    def _next(self, store: Store, expr: str, base: dt.datetime) -> dt.datetime:
+        return CronController(store=store)._calculate_next_run(expr, base, self.BERLIN)
+
+    def test_daily_fire_tracks_wall_time_across_spring_forward(self, store: Store) -> None:
+        # Berlin flips CET -> CEST on 2026-03-29: 06:00 wall time moves from
+        # 05:00 UTC to 04:00 UTC.
+        before = self._next(store, "0 6 * * *", dt.datetime(2026, 3, 27, 12, 0, tzinfo=dt.timezone.utc))
+        assert before == dt.datetime(2026, 3, 28, 5, 0, tzinfo=dt.timezone.utc)
+        on_flip = self._next(store, "0 6 * * *", before)
+        assert on_flip == dt.datetime(2026, 3, 29, 4, 0, tzinfo=dt.timezone.utc)
+
+    def test_daily_fire_tracks_wall_time_across_fall_back(self, store: Store) -> None:
+        # CEST -> CET on 2026-10-25: 06:00 wall time moves from 04:00 UTC back
+        # to 05:00 UTC.
+        before = self._next(store, "0 6 * * *", dt.datetime(2026, 10, 23, 12, 0, tzinfo=dt.timezone.utc))
+        assert before == dt.datetime(2026, 10, 24, 4, 0, tzinfo=dt.timezone.utc)
+        on_flip = self._next(store, "0 6 * * *", before)
+        assert on_flip == dt.datetime(2026, 10, 25, 5, 0, tzinfo=dt.timezone.utc)
+
+    def test_spring_forward_gap_fires_once_after_the_gap(self, store: Store) -> None:
+        # 02:30 does not exist on 2026-03-29 (02:00 CET jumps to 03:00 CEST):
+        # the fire slides to the first instant after the gap, once.
+        fire = self._next(store, "30 2 * * *", dt.datetime(2026, 3, 28, 23, 0, tzinfo=dt.timezone.utc))
+        assert fire == dt.datetime(2026, 3, 29, 1, 0, tzinfo=dt.timezone.utc)  # 03:00 CEST
+        assert self._next(store, "30 2 * * *", fire) == dt.datetime(2026, 3, 30, 0, 30, tzinfo=dt.timezone.utc)
+
+    def test_fall_back_fold_fires_in_both_folds(self, store: Store) -> None:
+        # 02:30 happens twice on 2026-10-25: the wall-clock schedule yields
+        # both instants (02:30 CEST, then 02:30 CET an hour later).
+        first = self._next(store, "30 2 * * *", dt.datetime(2026, 10, 24, 22, 0, tzinfo=dt.timezone.utc))
+        assert first == dt.datetime(2026, 10, 25, 0, 30, tzinfo=dt.timezone.utc)
+        second = self._next(store, "30 2 * * *", first)
+        assert second == dt.datetime(2026, 10, 25, 1, 30, tzinfo=dt.timezone.utc)
+
+    def test_tick_stores_utc_that_is_the_jobs_wall_time(self, store: Store) -> None:
+        now = dt.datetime.now(dt.timezone.utc)
+        job_id = _job(
+            store,
+            config={"cron": "0 6 * * *", "enabled": True, "timezone": "Europe/Berlin"},
+            state={"next_run_at": now.isoformat()},
+        )
+        CronController(store=store)._tick()
+        parsed = dt.datetime.fromisoformat(_state(store, job_id)["next_run_at"])
+        assert parsed.utcoffset() == dt.timedelta(0)
+        local = parsed.astimezone(self.BERLIN)
+        assert (local.hour, local.minute) == (6, 0)
+
+    def test_daily_window_covers_the_job_zones_yesterday(self, store: Store) -> None:
+        store = _catalog_store()
+        now = dt.datetime.now(dt.timezone.utc)
+        # Pick a zone whose local date currently differs from UTC's, so the
+        # assertion can't pass through the UTC calendar by accident.
+        zone_name = "Etc/GMT-14" if now.hour >= 12 else "Etc/GMT+12"
+        local_today = now.astimezone(ZoneInfo(zone_name)).date()
+        assert local_today != now.date()
+        _job_targeting(
+            store,
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 1, "timezone": zone_name},
+        )
+        CronController(store=store)._tick()
+
+        with Session(store.engine) as session:
+            backfill = session.exec(select(Backfill)).one()
+        assert backfill.end_key == (local_today - dt.timedelta(days=1)).isoformat()
+
+    def test_hourly_window_stays_utc_regardless_of_job_timezone(self, store: Store) -> None:
+        store = _catalog_store()
+        now = dt.datetime.now(dt.timezone.utc)
+        _job_targeting(
+            store,
+            "hourly_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 1, "timezone": "Asia/Kathmandu"},
+        )
+        CronController(store=store)._tick()
+
+        with Session(store.engine) as session:
+            backfill = session.exec(select(Backfill)).one()
+        assert backfill.end_key == (now - dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H")
+
+    def test_unknown_timezone_falls_back_to_utc(self, store: Store) -> None:
+        now = dt.datetime.now(dt.timezone.utc)
+        job_id = _job(
+            store,
+            config={"cron": "0 * * * *", "enabled": True, "timezone": "Not/AZone"},
+            state={"next_run_at": now.isoformat()},
+        )
+        CronController(store=store)._tick()
+        assert [run.status for run in _runs(store)] == ["queued"]
+        assert _state(store, job_id)["next_run_at"] > now.isoformat()
 
 
 class TestGranularityResolution:

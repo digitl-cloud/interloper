@@ -1,3 +1,4 @@
+import { today } from '@internationalized/date'
 import type { ComponentRecord } from '~/types/component'
 import type { SourceDefinition } from '~/types/catalog'
 import { relationIds } from '~/types/component'
@@ -20,25 +21,31 @@ export const KEY_PLACEHOLDERS: Record<PartitionGranularity, string> = {
     year: '2026',
 }
 
-/** The most recent *complete* period's key: the natural default to run. */
-export function previousPeriodKey(granularity: PartitionGranularity): string {
-    const now = new Date()
-    switch (granularity) {
-        case 'hour': {
-            now.setUTCHours(now.getUTCHours() - 1)
-            return `${now.toISOString().slice(0, 13)}`
-        }
-        case 'day': {
-            now.setUTCDate(now.getUTCDate() - 1)
-            return now.toISOString().slice(0, 10)
-        }
-        case 'month': {
-            now.setUTCMonth(now.getUTCMonth() - 1)
-            return now.toISOString().slice(0, 7)
-        }
-        case 'year':
-            return String(now.getUTCFullYear() - 1)
+/**
+ * The key of the period `periodsBack` whole periods before the current one,
+ * on the given zone's calendar. Hour keys are always UTC-derived — hour
+ * partition ids are UTC labels, mirroring the core granularity contract.
+ */
+export function periodKey(granularity: PartitionGranularity, periodsBack: number, timeZone = 'UTC'): string {
+    if (granularity === 'hour') {
+        const now = new Date()
+        now.setUTCHours(now.getUTCHours() - periodsBack)
+        return now.toISOString().slice(0, 13)
     }
+    const t = today(timeZone)
+    switch (granularity) {
+        case 'day':
+            return t.subtract({ days: periodsBack }).toString()
+        case 'month':
+            return t.subtract({ months: periodsBack }).toString().slice(0, 7)
+        case 'year':
+            return String(t.year - periodsBack)
+    }
+}
+
+/** The most recent *complete* period's key: the natural default to run. */
+export function previousPeriodKey(granularity: PartitionGranularity, timeZone = 'UTC'): string {
+    return periodKey(granularity, 1, timeZone)
 }
 
 function granularitiesOf(defn: SourceDefinition | undefined): Set<string> {

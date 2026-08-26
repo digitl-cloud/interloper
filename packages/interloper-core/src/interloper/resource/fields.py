@@ -248,6 +248,23 @@ def CronField(default: Any = ..., **kwargs: Any) -> Any:
     return Field(default, json_schema_extra=_extra(kwargs, "cron"), **kwargs)
 
 
+def TimezoneField(default: Any = ..., **kwargs: Any) -> Any:
+    """IANA timezone field rendered as a searchable timezone picker.
+
+    Args:
+        default: Default value (``...`` means required).
+        **kwargs: Forwarded to ``pydantic.Field``.
+
+    Returns:
+        A Pydantic Field descriptor.
+
+    Example::
+
+        timezone: str = TimezoneField(default="UTC", description="Timezone the cron is evaluated in")
+    """
+    return Field(default, json_schema_extra=_extra(kwargs, "timezone"), **kwargs)
+
+
 def JsonField(default: Any = ..., **kwargs: Any) -> Any:
     """Dict/object field rendered as a JSON code editor.
 
