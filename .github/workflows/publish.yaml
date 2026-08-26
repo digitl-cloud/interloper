@@ -87,6 +87,7 @@ jobs:
           - { role: frontend,  flavor: "",       api_extras: "",      scheduler_extras: "" }
           - { role: docs,      flavor: "",       api_extras: "",      scheduler_extras: "", file: docs.dockerfile }
           - { role: worker,    flavor: "",       api_extras: "",      scheduler_extras: "" }
+          - { role: mcp,       flavor: "",       api_extras: "",      scheduler_extras: "" }
           - { role: scheduler, flavor: "",       api_extras: "",      scheduler_extras: "" }
           - { role: scheduler, flavor: k8s,      api_extras: "",      scheduler_extras: "k8s" }
           - { role: scheduler, flavor: docker,   api_extras: "",      scheduler_extras: "docker" }

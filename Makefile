@@ -56,7 +56,7 @@ COMMON_EXTRAS ?= otel
 # plus the matching "latest" / "latest-<flavor>" tags on stable releases.
 # NOTE: the `docker` job matrix in .github/workflows/publish.yaml mirrors this
 # catalog — update both together when adding or removing a role or flavor.
-ROLES := api frontend worker scheduler docs
+ROLES := api frontend worker scheduler docs mcp
 
 # Flavors per role, and the build-arg that carries a flavor's extra. A role
 # with no FLAVORS_<role> builds only its base image.

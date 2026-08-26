@@ -8,6 +8,7 @@
 #   scheduler  core + db + scheduler + assets (cron + worker + reaper)
 #   worker     core + assets only (per-asset Job target for runner.type=kubernetes)
 #   api        core + db + api (assets installed; SDK extras skipped)
+#   mcp        core + db + toolkit + mcp (read-only MCP server, PAT auth)
 #   frontend   pre-built Nuxt SPA served by nginx
 #
 # The static documentation site has its own standalone build: docs.dockerfile.
@@ -144,6 +145,22 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-api
 
 
+# ── mcp ───────────────────────────────────────────────────────
+# Like the api, the MCP server only reads catalog metadata — assets stay
+# importable but the heavy SDK extras are skipped. google-adk is never
+# pulled: the shared tool logic lives in interloper-toolkit.
+FROM base AS build-mcp
+ARG CORE_EXTRAS
+ARG COMMON_EXTRAS
+ENV ASSETS_EXTRAS=""
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh --frozen interloper-core interloper-assets interloper-db interloper-toolkit interloper-mcp
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-toolkit interloper-mcp
+
+
 # ── frontend (Nuxt SPA, built static) ────────────────────────
 # Pin this stage to the *build* platform (the runner's native arch) rather
 # than the target. The SPA output is static, architecture-independent assets,
@@ -192,6 +209,13 @@ COPY --from=build-api --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 EXPOSE 3000
 CMD ["interloper", "app", "--api", "--no-cron", "--no-worker", "--no-reaper", "--no-create-tables"]
+
+# ── mcp (streamable-HTTP MCP server; horizontally scalable) ───
+FROM runtime AS mcp
+COPY --from=build-mcp --chown=app:app /interloper/.venv /interloper/.venv
+USER app
+EXPOSE 3001
+CMD ["interloper-mcp"]
 
 # ── frontend (nginx serving the pre-built SPA) ────────────────
 FROM nginx:1.27-alpine-slim AS frontend
