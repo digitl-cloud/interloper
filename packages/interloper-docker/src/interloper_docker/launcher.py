@@ -86,6 +86,7 @@ class DockerLauncher(Launcher):
         runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
         volumes: dict[str, dict[str, str]] | None = None,
+        forward_env: list[str] | None = None,
     ) -> None:
         """Initialize the Docker launcher.
 
@@ -102,6 +103,11 @@ class DockerLauncher(Launcher):
             volumes: Volume mounts for the container.  When
                 ``runner_type`` is ``"docker"``, the Docker socket is
                 mounted automatically if not already included.
+            forward_env: Names of variables copied from the launcher's own
+                environment into the container (unset ones are skipped).
+                Runs hydrate connections, so they need the same
+                runtime-resolved credentials (e.g. the in-house OAuth
+                provider trio) the API resolves from its environment.
         """
         super().__init__(runner_type=runner_type, runner_config=runner_config)
         self._client = docker.from_env()
@@ -113,6 +119,7 @@ class DockerLauncher(Launcher):
         self._postgres_password = postgres_password
         self._postgres_database = postgres_database
         self._volumes = dict(volumes or {})
+        self._forward_env = forward_env or []
         if runner_type == "docker" and "/var/run/docker.sock" not in self._volumes:
             self._volumes["/var/run/docker.sock"] = {"bind": "/var/run/docker.sock", "mode": "rw"}
 
@@ -204,5 +211,9 @@ class DockerLauncher(Launcher):
         encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
         if encryption_key:
             environment["INTERLOPER_ENCRYPTION_KEY"] = encryption_key
+        for name in self._forward_env:
+            value = os.environ.get(name)
+            if value:
+                environment[name] = value
         environment.update(child_process_env())
         return environment
