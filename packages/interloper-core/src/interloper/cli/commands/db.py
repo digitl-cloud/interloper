@@ -16,24 +16,20 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     db_sub = db_parser.add_subparsers(dest="db_command")
     db_parser.set_defaults(requires=["interloper_db"])
 
-    # db init
     init_parser = db_sub.add_parser(
         "init",
         help="Ensure database exists, create tables, and migrate to head (idempotent)",
     )
     init_parser.set_defaults(handler=_cmd_init, requires=["interloper_db"])
 
-    # db reset
     reset_parser = db_sub.add_parser("reset", help="Drop and recreate all tables")
     reset_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
     reset_parser.set_defaults(handler=_cmd_reset, requires=["interloper_db"])
 
-    # db upgrade
     upgrade_parser = db_sub.add_parser("upgrade", help="Run Alembic migrations to head (or a specific revision)")
     upgrade_parser.add_argument("revision", nargs="?", default="head", help="Target revision (default: head)")
     upgrade_parser.set_defaults(handler=_cmd_upgrade, requires=["interloper_db"])
 
-    # db downgrade
     downgrade_parser = db_sub.add_parser("downgrade", help="Downgrade Alembic migrations")
     downgrade_parser.add_argument("revision", nargs="?", default="-1", help="Target revision (default: -1)")
     downgrade_parser.set_defaults(handler=_cmd_downgrade, requires=["interloper_db"])

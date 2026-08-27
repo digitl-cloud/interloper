@@ -62,7 +62,7 @@ def run_services(
     reaper = None
     nuxt_process: subprocess.Popen[bytes] | None = None
 
-    # -- API server -----------------------------------------------------------
+    # -- API server ------------------------------------------------------------
     if run_api:
         import uvicorn
         from interloper_api import create_app
@@ -99,7 +99,7 @@ def run_services(
         )
         api_server = uvicorn.Server(uvi_config)
 
-    # -- Cron controller + hook evaluator ---------------------------------------
+    # -- Cron controller + hook evaluator --------------------------------------
     # The hook evaluator rides the cron service: both are cluster singletons
     # that turn declarative component intent into runs/side effects.
     hook_controller = None
@@ -114,7 +114,7 @@ def run_services(
         )
         hook_controller = HookController(store=store)
 
-    # -- Queue worker / reaper ------------------------------------------------
+    # -- Queue worker / reaper -------------------------------------------------
     # Both need a Launcher; build it once if either is enabled.
     if run_worker or run_reaper:
         from interloper_scheduler import Launcher
@@ -146,7 +146,7 @@ def run_services(
                 poll_interval=settings.reaper.poll_interval,
             )
 
-    # -- Shutdown -------------------------------------------------------------
+    # -- Shutdown --------------------------------------------------------------
     def signal_nuxt(signal_number: int) -> None:
         if nuxt_process is not None:
             _kill_process_group(nuxt_process, signal_number)
@@ -168,7 +168,7 @@ def run_services(
         if api_server:
             api_server.should_exit = True
 
-    # -- Nuxt dev server (dev mode only) ----------------------------------------
+    # -- Nuxt dev server (dev mode only) ---------------------------------------
     if dev_mode:
         from interloper_app import source_dir
 
@@ -214,7 +214,7 @@ def run_services(
         atexit.register(signal_nuxt, signal.SIGKILL)
         logger.info("Starting Nuxt dev server from %s", source_dir())
 
-    # -- Signal handling ------------------------------------------------------
+    # -- Signal handling -------------------------------------------------------
     def on_signal(signal_number: int, frame: object) -> None:
         shutdown_all(f"signal {signal.Signals(signal_number).name}")
 
@@ -225,7 +225,7 @@ def run_services(
         # before shutdown runs and the Nuxt tree is orphaned.
         signal.signal(signal.SIGHUP, on_signal)
 
-    # -- Start threads --------------------------------------------------------
+    # -- Start threads ---------------------------------------------------------
     threads: list[threading.Thread] = []
     if cron_controller:
         threads.append(threading.Thread(target=cron_controller.start, name="cron", daemon=True))
@@ -259,7 +259,6 @@ def run_services(
     services = ", ".join(t.name or "?" for t in threads)
     logger.info("Started services: %s", services)
 
-    # Block until shutdown signal
     while not stop_event.is_set():
         stop_event.wait(timeout=1)
 
@@ -340,7 +339,6 @@ def _mount_spa(app: Any, directory: Any) -> None:
                 await self.app(scope, receive, send)
                 return
 
-            # Check if the request matches an actual static file on disk
             path = scope["path"].lstrip("/")
             file_path = static_directory / path
             if path and file_path.is_file():

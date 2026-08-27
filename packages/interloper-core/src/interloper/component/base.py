@@ -224,7 +224,6 @@ class Component(Serializable):
         module_globals = vars(module) if module else {}
 
         for attr_name, annotation in list(raw_annotations.items()):
-            # Skip if already explicitly declared or already a ResourceRef.
             if attr_name in explicit:
                 continue
             if isinstance(cls.__dict__.get(attr_name), ResourceRef):
@@ -291,7 +290,7 @@ class Component(Serializable):
         if not self.id:
             self.id = str(uuid.uuid4())
 
-    # -- Instance discrimination -------------------------------------------------
+    # -- Instance discrimination -----------------------------------------------
 
     @classmethod
     def _discriminator_fields(cls) -> list[str]:
@@ -371,7 +370,6 @@ class Component(Serializable):
             if isinstance(source_res, res_type):
                 target.resources[name] = source_res
             else:
-                # Fall back to type match.
                 for sr in self.resources.values():
                     if isinstance(sr, res_type):
                         target.resources[name] = sr

@@ -106,10 +106,8 @@ class DAG:
             else:
                 raise DAGError(f"Expected Asset or Source, got {type(item)}")
 
-        # Build asset map keyed by instance id
         self.asset_map = {asset.id: asset for asset in self.assets}
 
-        # Check for duplicate ids
         if len(self.asset_map) != len(self.assets):
             seen: set[str] = set()
             duplicates: list[str] = []
@@ -119,7 +117,6 @@ class DAG:
                 seen.add(asset.id)
             raise DAGError(f"Duplicate asset id found: {duplicates}")
 
-        # Initialize successors with empty lists
         for asset in self.assets:
             self.successors[asset.id] = []
 

@@ -56,7 +56,7 @@ def is_fetch_field_provider(candidate: Any) -> bool:
     return bool(getattr(candidate, FETCH_FIELD_PROVIDER_ATTR, False))
 
 
-def validate_fetch_field_providers(cls: type[BaseModel], res_types: dict[str, Any]) -> None:
+def validate_fetch_field_providers(cls: type[BaseModel], resource_types: dict[str, Any]) -> None:
     """Check every ``FetchField(provider=...)`` on *cls* resolves to a provider.
 
     For each field carrying an ``x-fetch``, the provider ``"<slot>.<method>"``
@@ -66,7 +66,7 @@ def validate_fetch_field_providers(cls: type[BaseModel], res_types: dict[str, An
 
     Args:
         cls: The component class being defined (source or destination).
-        res_types: The component's ``resource_types`` (slot → resource class).
+        resource_types: The component's ``resource_types`` (slot → resource class).
 
     Raises:
         TypeError: If a provider reference is malformed, names an unknown
@@ -85,17 +85,17 @@ def validate_fetch_field_providers(cls: type[BaseModel], res_types: dict[str, An
             raise TypeError(
                 f"{cls.__name__}.{field_name}: FetchField provider '{provider}' must be of the form '<slot>.<method>'"
             )
-        res_cls = res_types.get(slot)
-        if res_cls is None:
+        resource_cls = resource_types.get(slot)
+        if resource_cls is None:
             raise TypeError(
                 f"{cls.__name__}.{field_name}: FetchField provider '{provider}' "
                 f"references resource slot '{slot}', which is not declared in resources={{}}"
             )
-        target = getattr(res_cls, method, None)
+        target = getattr(resource_cls, method, None)
         if not is_fetch_field_provider(target):
             raise TypeError(
                 f"{cls.__name__}.{field_name}: FetchField provider '{provider}' targets "
-                f"'{res_cls.__name__}.{method}', which is not a @fetch_field_provider method"
+                f"'{resource_cls.__name__}.{method}', which is not a @fetch_field_provider method"
             )
 
 

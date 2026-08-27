@@ -219,14 +219,12 @@ class TelemetrySettings(BaseSettings):
 
     enabled: bool = False
     endpoint: str = ""
-    protocol: str = "grpc"  # "grpc" | "http/protobuf"
-    headers: str = ""  # "key=value,key2=value2"; treated as a secret
-    service_name: str = ""  # empty → "interloper-<role>"
+    protocol: str = "grpc"
+    headers: str = ""
+    service_name: str = ""
     traces: bool = True
     metrics: bool = True
     sample_ratio: float = 1.0
-    # Seconds between metric exports — a freshness knob, not a correctness
-    # one: runs flush on exit regardless.
     metric_export_interval: int = 60
 
 
@@ -252,8 +250,6 @@ class QuotaSettings(BaseSettings):
     max_sources: int | None = None
     max_assets_per_source: int | None = None
     max_successful_runs_per_month: int | None = None
-    # Caps how many runs one backfill request may create. Per-org rows in the
-    # `quotas` table override this instance-wide default like any other quota.
     max_backfill_partitions: int | None = None
 
 

@@ -180,8 +180,6 @@ class Asset(Component):
 
     # Private
     _source: Source | None = PrivateAttr(default=None)
-    # Effective schema of the last conform: the declared schema, or the one
-    # inferred from the data. Carried to destinations via IOContext.schema.
     _effective_schema: type[Schema] | None = PrivateAttr(default=None)
 
     @field_validator("destinations", mode="before")

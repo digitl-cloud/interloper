@@ -212,7 +212,6 @@ def _build_source_from_class(
     """
     source_cls = Source.build_class(cls, classvars=classvars, fields=fields)
 
-    # Set _source_type backref on each asset.
     for asset_cls in source_cls.asset_types:
         asset_cls._source_type = source_cls
 

@@ -111,7 +111,7 @@ def _adopt_provider(_name: str, loaded: Any) -> tuple[str, OAuthProvider]:
 PROVIDERS: Registry[OAuthProvider] = Registry("interloper.oauth_providers", adopt=_adopt_provider)
 
 
-# -- In-house app credentials (environment) -------------------------------------
+# -- In-house app credentials (environment) ------------------------------------
 
 #: Credential field → env var suffix. The trio a provider needs for sign-in.
 _ENV_FIELDS: dict[str, str] = {
