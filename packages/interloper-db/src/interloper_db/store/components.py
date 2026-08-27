@@ -31,6 +31,7 @@ from interloper.errors import (
     HydrationError,
     InUseError,
     NotFoundError,
+    format_exception,
 )
 from interloper.partitioning.time import TimeGranularity
 from sqlalchemy.orm import selectinload
@@ -299,8 +300,12 @@ class ComponentMixin(RelationMixin):
         try:
             return il.Component.from_spec(spec)
         except Exception as e:
+            # format_exception, never str(e): a ValidationError here carries the
+            # decrypted payload of sensitive kinds in its input_value dumps, and
+            # this message is persisted into run events and shown in the UI.
             raise HydrationError(
-                f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): {e}"
+                f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): "
+                f"{format_exception(e)}"
             ) from e
 
     def _load_owned_asset(self, parent_id: UUID, key: str, asset_id: UUID) -> il.Asset:

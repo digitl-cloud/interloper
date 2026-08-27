@@ -32,7 +32,7 @@ from uuid import UUID
 
 from interloper.catalog.base import Catalog
 from interloper.component import KINDS
-from interloper.errors import CatalogKeyError, HydrationError
+from interloper.errors import CatalogKeyError, HydrationError, format_exception
 from interloper.serializable import Spec
 from sqlmodel import Session, select
 
@@ -106,7 +106,7 @@ class Hydrator:
                 raise HydrationError(
                     f"Failed to decrypt component {db_component.id}; the configured "
                     "INTERLOPER_ENCRYPTION_KEY may be wrong or the data was not encrypted "
-                    f"with it: {e}"
+                    f"with it: {format_exception(e)}"
                 ) from e
         return json.loads(raw)
 

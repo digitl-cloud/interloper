@@ -11,6 +11,8 @@ compatibility with existing ``except ValueError:`` handlers.
 
 from __future__ import annotations
 
+from pydantic import ValidationError
+
 
 class InterloperError(Exception):
     """Base exception for all Interloper framework errors."""
@@ -209,9 +211,20 @@ def format_exception(exc: BaseException) -> str:
     results, the UI — treat as "no error". Always lead with the type name so
     the error stays identifiable either way.
 
+    Pydantic's ``ValidationError`` never formats via ``str()``: its string
+    embeds each error's ``input_value``, and for a sensitive model (e.g. a
+    connection's decrypted payload) that would leak secrets into whatever
+    carries the message. It collapses to field-and-reason lines instead.
+
     Returns:
         ``"TypeName: message"``, or just ``"TypeName"`` when the message is empty.
     """
+    if isinstance(exc, ValidationError):
+        details = "; ".join(
+            f"{'.'.join(str(loc) for loc in error['loc']) or '(root)'}: {error['msg']}"
+            for error in exc.errors(include_url=False, include_input=False)
+        )
+        return f"ValidationError: {exc.error_count()} validation error(s) for {exc.title}: {details}"
     message = str(exc)
     name = type(exc).__name__
     return f"{name}: {message}" if message else name
