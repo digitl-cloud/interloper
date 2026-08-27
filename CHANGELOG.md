@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.65.1 (2026-08-27)
+
+### Bug Fixes
+
+- **app**: Collapse the settings authentication menu by default
+  ([`539ee43`](https://github.com/digitl-cloud/interloper/commit/539ee430b70610dba0a1cb2d6b5cc88c0c5ff4f6))
+
+- **mcp**: Route the MCP under /mcp on the app host
+  ([`2f30108`](https://github.com/digitl-cloud/interloper/commit/2f30108ba0bc221c94652845e0ca1b0970159eba))
+
+
 ## v0.65.0 (2026-08-27)
 
 ### Bug Fixes
