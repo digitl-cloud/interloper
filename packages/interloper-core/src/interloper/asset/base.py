@@ -91,7 +91,7 @@ class AssetDefinition(ComponentDefinition):
     Cross-entity references use keys (not inlined schemas):
     - ``resource_types`` maps resource name → component key
     - ``destination_types`` lists destination component keys
-    - ``requires`` maps param name → asset key (bare or qualified)
+    - ``requires`` maps parameter name → asset key (bare or qualified)
 
     Same-entity data is inlined:
     - ``asset_schema`` is the asset's own output schema
@@ -215,20 +215,20 @@ class Asset(Component):
             return
         explicit: dict[str, type[Resource]] = cls.__dict__.get("resource_types", {})
         try:
-            sig = inspect.signature(cls.data)
+            signature = inspect.signature(cls.data)
         except (TypeError, ValueError):
             return
         inferred: dict[str, type[Resource]] = {}
-        for param_name, param in sig.parameters.items():
-            if param_name in ("self", "context", "source", "kwargs"):
+        for parameter_name, parameter in signature.parameters.items():
+            if parameter_name in ("self", "context", "source", "kwargs"):
                 continue
-            if param_name in explicit:
+            if parameter_name in explicit:
                 continue
-            hint = param.annotation
+            hint = parameter.annotation
             if hint is inspect.Parameter.empty:
                 continue
             if isinstance(hint, type) and issubclass(hint, Resource):
-                inferred[param_name] = hint
+                inferred[parameter_name] = hint
         if inferred:
             cls.resource_types = {**explicit, **inferred}
 
@@ -339,8 +339,10 @@ class Asset(Component):
         """
         relations = super().relation_definitions()
         if "dependency" in relations:
-            slots = {param: RelationSlot(key=key) for param, key in cls.requires.items()}
-            slots |= {param: RelationSlot(key=key, required=False) for param, key in cls.optional_requires.items()}
+            slots = {parameter: RelationSlot(key=key) for parameter, key in cls.requires.items()}
+            slots |= {
+                parameter: RelationSlot(key=key, required=False) for parameter, key in cls.optional_requires.items()
+            }
             relations["dependency"] = relations["dependency"].model_copy(update={"slots": slots})
         if "destination" in relations:
             relations["destination"] = relations["destination"].model_copy(
@@ -557,12 +559,12 @@ class Asset(Component):
                 "Cannot compute partition row counts without a partition column."
             )
 
-        dests = self._resolve_destinations()
-        if not dests:
+        destinations = self._resolve_destinations()
+        if not destinations:
             raise AssetError(f"No destinations found for asset '{self.key}'")
 
         context = IOContext(asset=self)
-        return dests[0].partition_row_counts(context)
+        return destinations[0].partition_row_counts(context)
 
     # -- Internals -------------------------------------------------------------
     async def _build_kwargs(
@@ -585,44 +587,44 @@ class Asset(Component):
             AssetError: If a dependency cannot be resolved or read.
         """
         kwargs: dict[str, Any] = {}
-        sig = inspect.signature(self.data)
+        signature = inspect.signature(self.data)
         optional_names = set(self.optional_requires)
 
-        for param_name in sig.parameters:
-            if param_name in ("self", "source", "kwargs"):
+        for parameter_name in signature.parameters:
+            if parameter_name in ("self", "source", "kwargs"):
                 continue
-            if param_name == "context":
+            if parameter_name == "context":
                 kwargs["context"] = context
-            elif param_name in self.resource_types:
+            elif parameter_name in self.resource_types:
                 # Lazily-built clients cost under the data() span, not here.
                 with tracer().start_as_current_span(
                     "interloper.asset.resolve_resource",
-                    attributes={**self._span_attributes(), telemetry_attributes.RESOURCE_NAME: param_name},
+                    attributes={**self._span_attributes(), telemetry_attributes.RESOURCE_NAME: parameter_name},
                 ):
-                    kwargs[param_name] = self._resolve_resource(param_name)
+                    kwargs[parameter_name] = self._resolve_resource(parameter_name)
             else:
-                if param_name not in self.dependencies:
+                if parameter_name not in self.dependencies:
                     continue
                 if dag is None:
-                    if param_name in optional_names:
-                        kwargs[param_name] = None
+                    if parameter_name in optional_names:
+                        kwargs[parameter_name] = None
                         continue
                     raise AssetError(
                         f"Asset '{self.key}' has dependencies but no DAG provided. "
                         "Pass a DAG to run() or materialize() for dependency resolution."
                     )
 
-                upstream_id = self.dependencies[param_name]
+                upstream_id = self.dependencies[parameter_name]
                 upstream_asset = dag.asset_map[upstream_id]
-                if param_name in optional_names:
+                if parameter_name in optional_names:
                     try:
-                        kwargs[param_name] = await self._destination_read(
+                        kwargs[parameter_name] = await self._destination_read(
                             upstream_asset, partition_or_window, context.metadata
                         )
                     except (AssetError, Exception):  # noqa: BLE001
-                        kwargs[param_name] = None
+                        kwargs[parameter_name] = None
                 else:
-                    kwargs[param_name] = await self._destination_read(
+                    kwargs[parameter_name] = await self._destination_read(
                         upstream_asset, partition_or_window, context.metadata
                     )
 
@@ -635,8 +637,8 @@ class Asset(Component):
         result: Any,
     ) -> None:
         """Write the execution result to all configured destinations."""
-        dests = self._resolve_destinations()
-        if not dests:
+        destinations = self._resolve_destinations()
+        if not destinations:
             return
 
         if is_empty(result):
@@ -646,40 +648,40 @@ class Asset(Component):
                     **self._event_metadata(metadata, partition_or_window),
                     "level": "WARNING",
                     "message": (
-                        f"Asset '{self.key}' produced no data; skipping write to {len(dests)} destination(s)"
+                        f"Asset '{self.key}' produced no data; skipping write to {len(destinations)} destination(s)"
                     ),
                 },
             )
             return
 
-        dest_context = IOContext(
+        destination_context = IOContext(
             asset=self,
             partition_or_window=self.effective_partition(partition_or_window),
             metadata=metadata,
             schema=self._effective_schema or self.schema,
         )
 
-        for dest in dests:
-            dest_key = dest.key
-            dest_meta = self._event_metadata(metadata, partition_or_window)
-            dest_meta["destination_key"] = dest_key
-            span_attrs = telemetry_attributes.from_metadata(dest_meta)
+        for destination in destinations:
+            destination_key = destination.key
+            destination_meta = self._event_metadata(metadata, partition_or_window)
+            destination_meta["destination_key"] = destination_key
+            span_attrs = telemetry_attributes.from_metadata(destination_meta)
             EventBus.emit(
                 EventType.DEST_WRITE_STARTED,
-                metadata={**dest_meta, "message": f"Writing '{self.key}'"},
+                metadata={**destination_meta, "message": f"Writing '{self.key}'"},
             )
             try:
                 with tracer().start_as_current_span("interloper.destination.write", attributes=span_attrs):
-                    await invoke(dest.write, dest_context, result)
+                    await invoke(destination.write, destination_context, result)
                 EventBus.emit(
                     EventType.DEST_WRITE_COMPLETED,
-                    metadata={**dest_meta, "message": f"Wrote '{self.key}'"},
+                    metadata={**destination_meta, "message": f"Wrote '{self.key}'"},
                 )
             except Exception as e:
                 EventBus.emit(
                     EventType.DEST_WRITE_FAILED,
                     metadata={
-                        **dest_meta,
+                        **destination_meta,
                         "error": format_exception(e),
                         "traceback": traceback.format_exc(),
                         "message": f"Failed to write '{self.key}': {format_exception(e)}",
@@ -701,39 +703,39 @@ class Asset(Component):
         Raises:
             AssetError: If no destination is found for the upstream asset.
         """
-        dests = upstream_asset._resolve_destinations()
-        if not dests:
+        destinations = upstream_asset._resolve_destinations()
+        if not destinations:
             raise AssetError(f"No destination found for upstream asset '{upstream_asset.key}'")
-        dest = dests[0]
+        destination = destinations[0]
 
         effective_partition = upstream_asset.effective_partition(partition_or_window)
-        dest_context = IOContext(
+        destination_context = IOContext(
             asset=upstream_asset,
             partition_or_window=effective_partition,
             metadata=metadata,
             schema=upstream_asset.schema,
         )
 
-        dest_meta = self._event_metadata(metadata, effective_partition)
-        dest_meta["destination_key"] = dest.key
-        span_attrs = telemetry_attributes.from_metadata(dest_meta)
+        destination_meta = self._event_metadata(metadata, effective_partition)
+        destination_meta["destination_key"] = destination.key
+        span_attrs = telemetry_attributes.from_metadata(destination_meta)
         span_attrs[telemetry_attributes.UPSTREAM_KEY] = upstream_asset.key
         EventBus.emit(
             EventType.DEST_READ_STARTED,
-            metadata={**dest_meta, "message": f"Reading '{upstream_asset.key}'"},
+            metadata={**destination_meta, "message": f"Reading '{upstream_asset.key}'"},
         )
         try:
             with tracer().start_as_current_span("interloper.destination.read", attributes=span_attrs):
-                result = await invoke(dest.read, dest_context)
+                result = await invoke(destination.read, destination_context)
             EventBus.emit(
                 EventType.DEST_READ_COMPLETED,
-                metadata={**dest_meta, "message": f"Read '{upstream_asset.key}'"},
+                metadata={**destination_meta, "message": f"Read '{upstream_asset.key}'"},
             )
         except Exception as e:
             EventBus.emit(
                 EventType.DEST_READ_FAILED,
                 metadata={
-                    **dest_meta,
+                    **destination_meta,
                     "error": format_exception(e),
                     "traceback": traceback.format_exc(),
                     "message": f"Failed to read '{upstream_asset.key}': {format_exception(e)}",
@@ -906,7 +908,7 @@ class Asset(Component):
                 f"but the run reaches back to {partitioning.granularity.truncate(earliest).isoformat()}."
             )
 
-    def _validate_destination(self, dest: Destination) -> None:
+    def _validate_destination(self, destination: Destination) -> None:
         """Validate that a destination is compatible with this asset's destination_types.
 
         Raises:
@@ -915,12 +917,12 @@ class Asset(Component):
         allowed = self.destination_types
         if not allowed:
             return
-        if not isinstance(dest, tuple(allowed)):
+        if not isinstance(destination, tuple(allowed)):
             from interloper.errors import DestinationError
 
             allowed_names = ", ".join(t.__name__ for t in allowed)
             raise DestinationError(
-                f"Destination '{type(dest).__name__}' is not compatible with "
+                f"Destination '{type(destination).__name__}' is not compatible with "
                 f"asset '{self.key}'. Allowed types: [{allowed_names}]"
             )
 
@@ -985,12 +987,12 @@ class Asset(Component):
         Returns:
             A list of validated destination instances (may be empty).
         """
-        dests = self.destinations
-        if not dests and self._source is not None:
-            dests = self._source.destinations
-        for dest in dests:
-            self._validate_destination(dest)
-        return dests
+        destinations = self.destinations
+        if not destinations and self._source is not None:
+            destinations = self._source.destinations
+        for destination in destinations:
+            self._validate_destination(destination)
+        return destinations
 
     def _span_attributes(self) -> dict[str, str]:
         """Identity attributes for spans opened below the asset's own span.

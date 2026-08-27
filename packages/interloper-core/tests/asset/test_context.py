@@ -32,12 +32,12 @@ class TestPartition:
         assert partition.bounds == (dt.date(2026, 1, 1), dt.date(2026, 1, 2))
 
     def test_works_for_a_non_time_partition(self) -> None:
-        ctx = ExecutionContext(
+        context = ExecutionContext(
             asset_key="asset",
             partitioning=PartitionConfig(column="region"),
             partition_or_window=Partition("eu"),
         )
-        assert ctx.partition.id == "eu"
+        assert context.partition.id == "eu"
 
     def test_raises_when_unpartitioned(self) -> None:
         with pytest.raises(AttributeError, match="asset is not partitioned"):
@@ -48,12 +48,12 @@ class TestPartition:
             _context(None).partition
 
     def test_raises_on_a_window(self) -> None:
-        ctx = _context(
+        context = _context(
             TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3)),
             allow_window=True,
         )
         with pytest.raises(AttributeError, match="partition window, not a partition"):
-            ctx.partition
+            context.partition
 
 
 class TestWindow:
@@ -75,18 +75,18 @@ class TestWindow:
         assert window.granularity is TimeGranularity.DAY
 
     def test_raises_when_windows_are_not_allowed(self) -> None:
-        ctx = _context(TimePartition(dt.date(2026, 1, 1)))
+        context = _context(TimePartition(dt.date(2026, 1, 1)))
         with pytest.raises(AttributeError, match="does not allow windows"):
-            ctx.window
+            context.window
 
     def test_raises_when_not_time_partitioned(self) -> None:
-        ctx = ExecutionContext(
+        context = ExecutionContext(
             asset_key="asset",
             partitioning=PartitionConfig(column="region"),
             partition_or_window=Partition("eu"),
         )
         with pytest.raises(AttributeError, match="not time-partitioned"):
-            ctx.window
+            context.window
 
     def test_raises_without_a_partition(self) -> None:
         with pytest.raises(AttributeError, match="no partition provided"):
@@ -95,19 +95,19 @@ class TestWindow:
 
 class TestPartitionDate:
     def test_returns_date_from_time_partition(self) -> None:
-        ctx = _context(TimePartition(dt.date(2026, 1, 1)))
-        assert ctx.partition_date == dt.date(2026, 1, 1)
+        context = _context(TimePartition(dt.date(2026, 1, 1)))
+        assert context.partition_date == dt.date(2026, 1, 1)
 
     def test_returns_the_period_start(self) -> None:
         # `TimePartition` truncated the value on construction, so the context
         # has nothing left to coerce: it hands back what the partition holds.
-        ctx = _context(TimePartition(dt.datetime(2026, 1, 1, 9, 30, tzinfo=dt.timezone.utc)))
-        assert ctx.partition_date == dt.date(2026, 1, 1)
+        context = _context(TimePartition(dt.datetime(2026, 1, 1, 9, 30, tzinfo=dt.timezone.utc)))
+        assert context.partition_date == dt.date(2026, 1, 1)
 
     def test_raises_on_a_window(self) -> None:
-        ctx = _context(
+        context = _context(
             TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3)),
             allow_window=True,
         )
         with pytest.raises(AttributeError, match="partition window, not a partition"):
-            ctx.partition_date
+            context.partition_date

@@ -349,24 +349,24 @@ class Source(Component):
         for asset_cls in cls.asset_types:
             if not hasattr(asset_cls, "data"):
                 continue
-            sig = inspect.signature(asset_cls.data)
+            signature = inspect.signature(asset_cls.data)
             inferred: dict[str, str] = {}
             inferred_optional: dict[str, str] = {}
-            for param_name, param in sig.parameters.items():
-                if param_name in ("self", "context", "source", "kwargs"):
+            for parameter_name, parameter in signature.parameters.items():
+                if parameter_name in ("self", "context", "source", "kwargs"):
                     continue
-                if param_name in asset_cls.resource_types:
+                if parameter_name in asset_cls.resource_types:
                     continue
-                if param_name in asset_cls.requires:
+                if parameter_name in asset_cls.requires:
                     continue
-                if param_name in asset_cls.optional_requires:
+                if parameter_name in asset_cls.optional_requires:
                     continue
-                if param_name in sibling_keys and param_name != asset_cls.key:
-                    qualified = str(AssetIdentity(cls.key, param_name))
-                    if param.default is None:
-                        inferred_optional[param_name] = qualified
+                if parameter_name in sibling_keys and parameter_name != asset_cls.key:
+                    qualified = str(AssetIdentity(cls.key, parameter_name))
+                    if parameter.default is None:
+                        inferred_optional[parameter_name] = qualified
                     else:
-                        inferred[param_name] = qualified
+                        inferred[parameter_name] = qualified
             if inferred:
                 asset_cls.requires = {**asset_cls.requires, **inferred}
             if inferred_optional:
@@ -448,8 +448,8 @@ class Source(Component):
             self._resolve_deps(asset, siblings)
 
         # Trickle source resources down to destinations
-        for dest in self.destinations:
-            self.trickle_resources(dest)
+        for destination in self.destinations:
+            self.trickle_resources(destination)
 
     def __getattr__(self, name: str) -> Asset:
         """Instance-level asset lookup fallback.
@@ -474,7 +474,7 @@ class Source(Component):
         Raises:
             AttributeError: If no asset matches the given key.
         """
-        # Delegate private attrs and Pydantic internals to BaseModel
+        # Delegate private attributes and Pydantic internals to BaseModel
         if name.startswith("_"):
             return super().__getattr__(name)  # ty: ignore[unresolved-attribute]
         for asset in self.assets:
@@ -493,15 +493,15 @@ class Source(Component):
         relations) are never overwritten.
         """
         for mapping in (asset.requires, asset.optional_requires):
-            for param_name, required_qk in mapping.items():
-                if param_name in asset.dependencies:
+            for parameter_name, required_qk in mapping.items():
+                if parameter_name in asset.dependencies:
                     continue
                 expected = AssetIdentity.resolve(required_qk, own_source_key=self.key)
                 if expected.source_key != self.key:
                     continue
                 sibling = siblings.get(expected.asset_key)
                 if sibling is not None and sibling is not asset:
-                    asset.dependencies[param_name] = sibling.id
+                    asset.dependencies[parameter_name] = sibling.id
 
     # -- Definition ------------------------------------------------------------
 

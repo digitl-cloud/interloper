@@ -36,12 +36,12 @@ class Destination(Component):
             resource_types = {"connection": PostgresConnection}
 
             def read(self, context: IOContext) -> Any:
-                conn = self.resources["connection"]
-                return query_table(conn.connection_string, context.table)
+                connection = self.resources["connection"]
+                return query_table(connection.connection_string, context.table)
 
             def write(self, context: IOContext, data: Any) -> None:
-                conn = self.resources["connection"]
-                insert_into(conn.connection_string, context.table, data)
+                connection = self.resources["connection"]
+                insert_into(connection.connection_string, context.table, data)
     """
 
     tags: ClassVar[list[str]] = []

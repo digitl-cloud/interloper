@@ -69,12 +69,12 @@ def select(response: httpx.Response, selector: DataSelector) -> Any:
 
 
 def _with_param(request: httpx.Request, key: str, value: Any) -> None:
-    """Override a single query param on ``request`` in place."""
+    """Override a single query parameter on ``request`` in place."""
     request.url = request.url.copy_set_param(key, str(value))
 
 
 def _clone_with_param(request: httpx.Request, key: str, value: Any) -> httpx.Request:
-    """Copy ``request`` with one query param overridden (for concurrent fan-out).
+    """Copy ``request`` with one query parameter overridden (for concurrent fan-out).
 
     Returns:
         A new request identical to ``request`` but with ``key=value``.
@@ -171,7 +171,7 @@ class PageNumberPaginator(RangePaginator):
         self._has_next = True
 
     def init_request(self, request: httpx.Request) -> None:
-        """Reset state and set the first page param."""
+        """Reset state and set the first page parameter."""
         self._page = self.base_page
         self._has_next = True
         _with_param(request, self.page_param, self.base_page)
@@ -338,7 +338,7 @@ class JSONLinkPaginator(BasePaginator):
 
 
 class JSONCursorPaginator(BasePaginator):
-    """Carry a cursor value from the response JSON into the next request param. Sequential."""
+    """Carry a cursor value from the response JSON into the next request parameter. Sequential."""
 
     def __init__(self, *, cursor_path: str, cursor_param: str) -> None:
         """Carry a JSON cursor into the next request."""
@@ -351,7 +351,7 @@ class JSONCursorPaginator(BasePaginator):
         self._cursor = _extract(response.json(), self.cursor_path, None)
 
     def update_request(self, request: httpx.Request) -> None:
-        """Set the cursor query param for the next page."""
+        """Set the cursor query parameter for the next page."""
         assert self._cursor is not None
         _with_param(request, self.cursor_param, self._cursor)
 

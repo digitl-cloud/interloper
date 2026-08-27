@@ -54,4 +54,4 @@ def from_metadata(metadata: dict[str, Any]) -> dict[str, str]:
     Returns:
         Attribute dict keyed by the ``interloper.*`` attribute names.
     """
-    return {attr: str(metadata[key]) for key, attr in _METADATA_KEYS.items() if metadata.get(key) is not None}
+    return {attribute: str(metadata[key]) for key, attribute in _METADATA_KEYS.items() if metadata.get(key) is not None}

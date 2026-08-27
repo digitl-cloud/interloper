@@ -45,9 +45,9 @@ class Registry(Generic[T]):
         self._loaded = group is None
         self._load_lock = threading.RLock()
 
-    def register(self, name: str, obj: T) -> None:
-        """Register *obj* under *name* (first-wins, idempotent)."""
-        self._entries.setdefault(name, obj)
+    def register(self, name: str, entry: T) -> None:
+        """Register *entry* under *name* (first-wins, idempotent)."""
+        self._entries.setdefault(name, entry)
 
     def get(self, name: str) -> T | None:
         """Look up an entry by name.
@@ -67,8 +67,8 @@ class Registry(Generic[T]):
         Raises:
             KeyError: If the name has no entry.
         """
-        obj = self.get(name)
-        if obj is None:
+        entry = self.get(name)
+        if entry is None:
             available = ", ".join(self.keys())
             where = f" in entry-point group '{self._group}'" if self._group else ""
             hint = (
@@ -77,7 +77,7 @@ class Registry(Generic[T]):
                 else " (no entries discovered — is the package declaring it installed?)"
             )
             raise KeyError(f"'{name}' is not registered{where}{hint}")
-        return obj
+        return entry
 
     def keys(self) -> tuple[str, ...]:
         """All registered names.
@@ -95,7 +95,7 @@ class Registry(Generic[T]):
             The objects, ordered by name.
         """
         self._load()
-        return tuple(obj for _, obj in sorted(self._entries.items()))
+        return tuple(entry for _, entry in sorted(self._entries.items()))
 
     def items(self) -> tuple[tuple[str, T], ...]:
         """All registered entries.
@@ -131,6 +131,6 @@ class Registry(Generic[T]):
                 return
             for entry_point in entry_points(group=self._group):
                 loaded = entry_point.load()
-                name, obj = self._adopt(entry_point.name, loaded) if self._adopt else (entry_point.name, loaded)
-                self.register(name, obj)
+                name, entry = self._adopt(entry_point.name, loaded) if self._adopt else (entry_point.name, loaded)
+                self.register(name, entry)
             self._loaded = True

@@ -26,8 +26,10 @@ def validate_key(key: str) -> None:
         ValueError: If the key is invalid.
     """
     if not _KEY_RE.match(key):
-        msg = f"Key '{key}' is invalid. Must start with a letter and contain only letters, numbers, and underscores."
-        raise ValueError(msg)
+        message = (
+            f"Key '{key}' is invalid. Must start with a letter and contain only letters, numbers, and underscores."
+        )
+        raise ValueError(message)
 
 
 def to_identifier(text: str) -> str:

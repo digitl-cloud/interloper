@@ -21,24 +21,24 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "init",
         help="Ensure database exists, create tables, and migrate to head (idempotent)",
     )
-    init_parser.set_defaults(func=_cmd_init, requires=["interloper_db"])
+    init_parser.set_defaults(handler=_cmd_init, requires=["interloper_db"])
 
     # db reset
     reset_parser = db_sub.add_parser("reset", help="Drop and recreate all tables")
     reset_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
-    reset_parser.set_defaults(func=_cmd_reset, requires=["interloper_db"])
+    reset_parser.set_defaults(handler=_cmd_reset, requires=["interloper_db"])
 
     # db upgrade
     upgrade_parser = db_sub.add_parser("upgrade", help="Run Alembic migrations to head (or a specific revision)")
     upgrade_parser.add_argument("revision", nargs="?", default="head", help="Target revision (default: head)")
-    upgrade_parser.set_defaults(func=_cmd_upgrade, requires=["interloper_db"])
+    upgrade_parser.set_defaults(handler=_cmd_upgrade, requires=["interloper_db"])
 
     # db downgrade
     downgrade_parser = db_sub.add_parser("downgrade", help="Downgrade Alembic migrations")
     downgrade_parser.add_argument("revision", nargs="?", default="-1", help="Target revision (default: -1)")
-    downgrade_parser.set_defaults(func=_cmd_downgrade, requires=["interloper_db"])
+    downgrade_parser.set_defaults(handler=_cmd_downgrade, requires=["interloper_db"])
 
-    db_parser.set_defaults(func=lambda args: db_parser.print_help(), requires=["interloper_db"])
+    db_parser.set_defaults(handler=lambda args: db_parser.print_help(), requires=["interloper_db"])
 
 
 def _cmd_init(args: argparse.Namespace) -> None:

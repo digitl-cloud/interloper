@@ -127,12 +127,12 @@ class Spec(BaseModel):
         path = Path(path)
         try:
             text = path.read_text()
-        except OSError as exc:
-            raise SpecError(f"Cannot read spec file '{path}': {exc}") from exc
+        except OSError as exception:
+            raise SpecError(f"Cannot read spec file '{path}': {exception}") from exception
         try:
             data = yaml.safe_load(text)
-        except yaml.YAMLError as exc:
-            raise SpecError(f"Invalid YAML in spec file '{path}': {exc}") from exc
+        except yaml.YAMLError as exception:
+            raise SpecError(f"Invalid YAML in spec file '{path}': {exception}") from exception
         if not isinstance(data, dict):
             raise SpecError(f"Spec file '{path}' must be a YAML mapping")
 
@@ -145,8 +145,8 @@ class Spec(BaseModel):
 
         try:
             return cls.model_validate(data)
-        except ValidationError as exc:
-            raise SpecError(f"Invalid spec file '{path}': {exc}") from exc
+        except ValidationError as exception:
+            raise SpecError(f"Invalid spec file '{path}': {exception}") from exception
 
     def reconstruct(self, catalog: Catalog | None = None) -> Serializable:
         """Import the class and rebuild the instance, walking nested specs.

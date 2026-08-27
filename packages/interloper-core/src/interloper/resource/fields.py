@@ -51,9 +51,9 @@ def fetch_field_provider(fn: F) -> F:
     return fn
 
 
-def is_fetch_field_provider(obj: Any) -> bool:
-    """Return whether *obj* (a function or bound method) is a fetch provider."""
-    return bool(getattr(obj, FETCH_FIELD_PROVIDER_ATTR, False))
+def is_fetch_field_provider(candidate: Any) -> bool:
+    """Return whether *candidate* (a function or bound method) is a fetch provider."""
+    return bool(getattr(candidate, FETCH_FIELD_PROVIDER_ATTR, False))
 
 
 def validate_fetch_field_providers(cls: type[BaseModel], res_types: dict[str, Any]) -> None:

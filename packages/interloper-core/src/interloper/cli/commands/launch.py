@@ -27,7 +27,7 @@ def register(
         help="The UUID of the run to execute",
     )
     launch_parser.set_defaults(
-        func=_cmd_launch,
+        handler=_cmd_launch,
         requires=["interloper_db", "interloper_scheduler"],
     )
 

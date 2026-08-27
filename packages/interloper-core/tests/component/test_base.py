@@ -92,23 +92,23 @@ class TestIdentity:
         assert FakeResource.kind == il.Resource.kind
 
     def test_instance_id_auto_generated(self):
-        c = FakeResource()
-        assert c.id
+        resource = FakeResource()
+        assert resource.id
         import uuid as _uuid
 
-        assert str(_uuid.UUID(c.id)) == c.id  # one identity format: full UUID
+        assert str(_uuid.UUID(resource.id)) == resource.id  # one identity format: full UUID
 
     def test_instance_id_explicit_preserved(self):
-        c = FakeResource(id="explicit1")
-        assert c.id == "explicit1"
+        resource = FakeResource(id="explicit1")
+        assert resource.id == "explicit1"
 
     def test_path_is_fully_qualified(self):
-        c = FakeResource()
-        assert c.path().endswith(".FakeResource")
+        resource = FakeResource()
+        assert resource.path().endswith(".FakeResource")
 
     def test_str_format(self):
-        c = FakeResource(id="abcd1234")
-        assert str(c) == "FakeResource (key: fake_resource, id: abcd1234)"
+        resource = FakeResource(id="abcd1234")
+        assert str(resource) == "FakeResource (key: fake_resource, id: abcd1234)"
 
     def test_has_own_field_true_for_non_none_default(self):
         assert FakeResource.has_own_field("text")
@@ -363,10 +363,10 @@ class TestResources:
 
     def test_init_kwarg_routed_into_resources(self):
         """A Resource passed under a ResourceRef slot name lands in ``resources``."""
-        res = FakeResource(text="direct")
-        c = FakeConsumer(resource=res)
-        assert c.resources["resource"] is res
-        assert c.resource is res
+        resource = FakeResource(text="direct")
+        consumer = FakeConsumer(resource=resource)
+        assert consumer.resources["resource"] is resource
+        assert consumer.resource is resource
 
     def test_init_kwarg_wrong_type_rejected(self):
         with pytest.raises(TypeError, match="resource 'resource' must be an instance of FakeResource"):
@@ -378,9 +378,9 @@ class TestResources:
 
     def test_init_kwarg_merges_with_other_resources(self):
         other = FakeAltResource()
-        res = FakeResource()
-        c = FakeConsumer(resource=res, resources={"extra": other})
-        assert c.resources == {"resource": res, "extra": other}
+        resource = FakeResource()
+        consumer = FakeConsumer(resource=resource, resources={"extra": other})
+        assert consumer.resources == {"resource": resource, "extra": other}
 
     def test_init_kwarg_for_explicit_model_field_untouched(self):
         """A slot that is also a real pydantic field goes through pydantic, not ``resources``."""
@@ -389,14 +389,14 @@ class TestResources:
             resource_types: ClassVar[dict[str, type]] = {"slot": FakeResource}
             slot: FakeResource | None = None
 
-        res = FakeResource()
-        c = FakeExplicitFieldConsumer(slot=res)
-        assert c.slot is res
-        assert "slot" not in c.resources
+        resource = FakeResource()
+        consumer = FakeExplicitFieldConsumer(slot=resource)
+        assert consumer.slot is resource
+        assert "slot" not in consumer.resources
 
     def test_init_kwarg_roundtrips_via_spec(self):
-        c = FakeConsumer(resource=FakeResource(text="abc"))
-        restored = Component.from_spec(c.to_spec())
+        consumer = FakeConsumer(resource=FakeResource(text="abc"))
+        restored = Component.from_spec(consumer.to_spec())
         assert isinstance(restored.resources["resource"], FakeResource)
         assert restored.resources["resource"].text == "abc"
 
@@ -412,49 +412,49 @@ class TestSerialization:
         assert isinstance(spec, Spec)
 
     def test_to_spec_captures_path_and_id(self):
-        c = FakeResource(id="fixed123", text="abc")
-        spec = c.to_spec()
-        assert spec.path == c.path()
+        resource = FakeResource(id="fixed123", text="abc")
+        spec = resource.to_spec()
+        assert spec.path == resource.path()
         assert spec.id == "fixed123"
 
     def test_to_spec_omits_id_from_init(self):
-        c = FakeResource(id="fixed123", text="abc")
-        init = c.to_spec().init or {}
+        resource = FakeResource(id="fixed123", text="abc")
+        init = resource.to_spec().init or {}
         assert "id" not in init
 
     def test_to_spec_omits_none_valued_fields(self):
-        c = FakeComponent(child=None)
-        init = c.to_spec().init or {}
+        component = FakeComponent(child=None)
+        init = component.to_spec().init or {}
         assert "child" not in init
 
     def test_to_spec_captures_scalar_fields(self):
-        c = FakeResource(text="abc", value="xyz")
-        init = c.to_spec().init or {}
+        resource = FakeResource(text="abc", value="xyz")
+        init = resource.to_spec().init or {}
         assert init.get("text") == "abc"
         assert init.get("value") == "xyz"
 
     def test_to_spec_serializes_enum_as_value(self):
-        c = FakeComponent(text="abc", mode=Mode.SLOW)
-        init = c.to_spec().init or {}
+        component = FakeComponent(text="abc", mode=Mode.SLOW)
+        init = component.to_spec().init or {}
         assert init["mode"] == "slow"
 
     def test_to_spec_serializes_date_as_iso_string(self):
-        c = FakeComponent(text="abc", date=dt.date(2026, 4, 9))
-        init = c.to_spec().init or {}
+        component = FakeComponent(text="abc", date=dt.date(2026, 4, 9))
+        init = component.to_spec().init or {}
         assert init["date"] == "2026-04-09"
 
     # -- Round-trip: every nesting shape ------------------------------------
 
     def test_roundtrip_plain_component(self):
-        c = FakeResource(text="abc", value="xyz")
-        restored = Component.from_spec(c.to_spec())
+        resource = FakeResource(text="abc", value="xyz")
+        restored = Component.from_spec(resource.to_spec())
         assert isinstance(restored, FakeResource)
         assert restored.text == "abc"
         assert restored.value == "xyz"
 
     def test_roundtrip_preserves_instance_id(self):
-        c = FakeResource(id="fixedid1", text="abc")
-        restored = Component.from_spec(c.to_spec())
+        resource = FakeResource(id="fixedid1", text="abc")
+        restored = Component.from_spec(resource.to_spec())
         assert restored.id == "fixedid1"
 
     def test_roundtrip_generates_new_id_when_absent(self):
@@ -466,19 +466,19 @@ class TestSerialization:
         assert str(_uuid.UUID(restored.id)) == restored.id
 
     def test_roundtrip_single_nested_component(self):
-        c = FakeComponent(child=FakeOtherComponent(value="v1"))
-        restored = FakeComponent.from_spec(c.to_spec())
+        component = FakeComponent(child=FakeOtherComponent(value="v1"))
+        restored = FakeComponent.from_spec(component.to_spec())
         assert isinstance(restored.child, FakeOtherComponent)
         assert restored.child.value == "v1"
 
     def test_roundtrip_list_of_components(self):
-        c = FakeComponent(
+        component = FakeComponent(
             children=[
                 FakeOtherComponent(value="v1"),
                 FakeResource(text="r1"),
             ]
         )
-        restored = FakeComponent.from_spec(c.to_spec())
+        restored = FakeComponent.from_spec(component.to_spec())
         assert isinstance(restored.children, list)
         assert len(restored.children) == 2
         assert isinstance(restored.children[0], FakeOtherComponent)
@@ -487,26 +487,26 @@ class TestSerialization:
         assert restored.children[1].text == "r1"
 
     def test_roundtrip_dict_of_components(self):
-        c = FakeComponent(
+        component = FakeComponent(
             resources={
                 "primary": FakeResource(text="a"),
                 "secondary": FakeResource(text="b"),
             }
         )
-        restored = FakeComponent.from_spec(c.to_spec())
+        restored = FakeComponent.from_spec(component.to_spec())
         assert set(restored.resources) == {"primary", "secondary"}
         assert isinstance(restored.resources["primary"], FakeResource)
         assert restored.resources["primary"].text == "a"
         assert restored.resources["secondary"].text == "b"
 
     def test_roundtrip_mixed_nested_shapes(self):
-        c = FakeComponent(
+        component = FakeComponent(
             child=FakeOtherComponent(value="v0"),
             children=[FakeOtherComponent(value="v1"), FakeResource(text="r1")],
             resources={"r": FakeResource(text="abc", value="xyz")},
             labels=["a", "b"],
         )
-        restored = FakeComponent.from_spec(c.to_spec())
+        restored = FakeComponent.from_spec(component.to_spec())
 
         assert isinstance(restored.child, FakeOtherComponent)
         assert restored.child.value == "v0"
@@ -523,12 +523,12 @@ class TestSerialization:
 
     def test_roundtrip_via_json_string(self):
         """Spec must survive a full JSON string round-trip."""
-        c = FakeComponent(
+        component = FakeComponent(
             mode=Mode.SLOW,
             child=FakeOtherComponent(value="v1"),
             resources={"r": FakeResource(text="abc")},
         )
-        spec_json = c.to_spec().model_dump_json()
+        spec_json = component.to_spec().model_dump_json()
         reloaded_spec = Spec.model_validate_json(spec_json)
         restored = reloaded_spec.reconstruct()
 
@@ -560,10 +560,10 @@ class TestSerialization:
         assert restored.text == "abc"
 
     def test_from_spec_on_subclass_walks_nested_specs(self):
-        c = FakeComponent(
+        component = FakeComponent(
             children=[FakeOtherComponent(value="v1"), FakeResource(text="r1")],
         )
-        restored = FakeComponent.from_spec(c.to_spec())
+        restored = FakeComponent.from_spec(component.to_spec())
         assert isinstance(restored.children, list)
         assert isinstance(restored.children[0], FakeOtherComponent)
         assert isinstance(restored.children[1], FakeResource)
@@ -579,8 +579,8 @@ class TestSerialization:
 
     def test_component_shaped_dict_inside_user_dict_is_reconstructed(self):
         """A Spec-shaped dict nested inside a user dict is walked and reconstructed."""
-        c = FakeComponent(resources={"r": FakeResource(text="abc")})
-        restored = Component.from_spec(c.to_spec())
+        component = FakeComponent(resources={"r": FakeResource(text="abc")})
+        restored = Component.from_spec(component.to_spec())
         assert isinstance(restored.resources["r"], FakeResource)
 
     # -- Error cases -------------------------------------------------------

@@ -38,7 +38,7 @@ def register(
         default=8000,
         help="Bind port (default: 8000)",
     )
-    agent_parser.set_defaults(func=_cmd_agent, requires=["interloper_agent"])
+    agent_parser.set_defaults(handler=_cmd_agent, requires=["interloper_agent"])
 
 
 def _cmd_agent(args: argparse.Namespace) -> None:

@@ -79,10 +79,10 @@ class ResourceRef(IgnoredDescriptor, Generic[T]):
         owner.resource_types[name] = self.resource_type
 
     @overload
-    def __get__(self, obj: None, objtype: type) -> ResourceRef[T]: ...
+    def __get__(self, instance: None, owner: type) -> ResourceRef[T]: ...
     @overload
-    def __get__(self, obj: Any, objtype: type) -> T: ...
-    def __get__(self, obj: Any, objtype: type | None = None) -> T | ResourceRef[T]:
+    def __get__(self, instance: Any, owner: type) -> T: ...
+    def __get__(self, instance: Any, owner: type | None = None) -> T | ResourceRef[T]:
         """Resolve the resource from the component's resources dict.
 
         Returns:
@@ -92,17 +92,17 @@ class ResourceRef(IgnoredDescriptor, Generic[T]):
         Raises:
             ValueError: If the resource is required but not provided.
         """
-        if obj is None:
+        if instance is None:
             return self
-        value = obj.resources.get(self.attr_name)
+        value = instance.resources.get(self.attr_name)
         if value is None and self.required:
             raise ValueError(
-                f"{type(obj).__name__} requires a '{self.attr_name}' resource "
+                f"{type(instance).__name__} requires a '{self.attr_name}' resource "
                 f"({self.resource_type.__name__}) but none was provided."
             )
         return value
 
     def __repr__(self) -> str:
         """Return a readable representation of this ResourceRef."""
-        req = ", required=True" if self.required else ""
-        return f"ResourceRef({self.resource_type.__name__}{req})"
+        required_suffix = ", required=True" if self.required else ""
+        return f"ResourceRef({self.resource_type.__name__}{required_suffix})"

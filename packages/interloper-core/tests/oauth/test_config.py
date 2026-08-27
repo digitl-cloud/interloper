@@ -8,29 +8,29 @@ from interloper.oauth import OAuthConfig
 
 class TestOAuthConfig:
     def test_resolves_metadata_from_registry(self):
-        cfg = OAuthConfig("amazon", scope="advertising::campaign_management")
+        config = OAuthConfig("amazon", scope="advertising::campaign_management")
 
-        assert cfg.auth_url == "https://www.amazon.com/ap/oa"
-        assert cfg.label == "Amazon"
-        assert cfg.icon == "icon:amazon"
-        assert cfg.scope == "advertising::campaign_management"
+        assert config.auth_url == "https://www.amazon.com/ap/oa"
+        assert config.label == "Amazon"
+        assert config.icon == "icon:amazon"
+        assert config.scope == "advertising::campaign_management"
 
     def test_explicit_overrides_win_over_registry(self):
-        cfg = OAuthConfig("amazon", auth_url="https://other/auth", label="Other", icon="icon:other")
+        config = OAuthConfig("amazon", auth_url="https://other/auth", label="Other", icon="icon:other")
 
-        assert cfg.auth_url == "https://other/auth"
-        assert cfg.label == "Other"
-        assert cfg.icon == "icon:other"
+        assert config.auth_url == "https://other/auth"
+        assert config.label == "Other"
+        assert config.icon == "icon:other"
 
     def test_unknown_provider_requires_auth_url(self):
         with pytest.raises(ConfigError, match="Unknown OAuth provider: 'nope'"):
             OAuthConfig("nope")
 
     def test_unknown_provider_with_auth_url_is_allowed(self):
-        cfg = OAuthConfig("nope", auth_url="https://nope/auth")
+        config = OAuthConfig("nope", auth_url="https://nope/auth")
 
-        assert cfg.auth_url == "https://nope/auth"
-        assert cfg.label == "Nope"
+        assert config.auth_url == "https://nope/auth"
+        assert config.label == "Nope"
 
     def test_fields_default_to_identity_trio(self):
         assert OAuthConfig("amazon").fields == {
@@ -40,13 +40,13 @@ class TestOAuthConfig:
         }
 
     def test_to_schema_ext(self):
-        cfg = OAuthConfig(
+        config = OAuthConfig(
             "facebook",
             scope="ads_read",
             fields={"client_id": "app_id", "client_secret": "app_secret", "refresh_token": "access_token"},
         )
 
-        assert cfg.to_schema_ext() == {
+        assert config.to_schema_ext() == {
             "provider": "facebook",
             "auth_url": "https://www.facebook.com/v19.0/dialog/oauth",
             "scope": "ads_read",

@@ -203,10 +203,10 @@ class ComponentDriftError(InterloperError):
 # -- Formatting ----------------------------------------------------------------
 
 
-def format_exception(exc: BaseException) -> str:
+def format_exception(exception: BaseException) -> str:
     """Format an exception as a non-empty, single-line error string.
 
-    ``str(exc)`` alone is empty for message-less exceptions (e.g.
+    ``str(exception)`` alone is empty for message-less exceptions (e.g.
     ``httpx.ReadTimeout``), which downstream consumers — event rows, run
     results, the UI — treat as "no error". Always lead with the type name so
     the error stays identifiable either way.
@@ -219,12 +219,12 @@ def format_exception(exc: BaseException) -> str:
     Returns:
         ``"TypeName: message"``, or just ``"TypeName"`` when the message is empty.
     """
-    if isinstance(exc, ValidationError):
+    if isinstance(exception, ValidationError):
         details = "; ".join(
             f"{'.'.join(str(loc) for loc in error['loc']) or '(root)'}: {error['msg']}"
-            for error in exc.errors(include_url=False, include_input=False)
+            for error in exception.errors(include_url=False, include_input=False)
         )
-        return f"ValidationError: {exc.error_count()} validation error(s) for {exc.title}: {details}"
-    message = str(exc)
-    name = type(exc).__name__
+        return f"ValidationError: {exception.error_count()} validation error(s) for {exception.title}: {details}"
+    message = str(exception)
+    name = type(exception).__name__
     return f"{name}: {message}" if message else name

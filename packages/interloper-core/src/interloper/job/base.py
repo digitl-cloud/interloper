@@ -76,5 +76,5 @@ class Job(Component):
             if not target.destinations and self.destinations:
                 target.destinations = list(self.destinations)
             self.trickle_resources(target)
-        for dest in self.destinations:
-            self.trickle_resources(dest)
+        for destination in self.destinations:
+            self.trickle_resources(destination)

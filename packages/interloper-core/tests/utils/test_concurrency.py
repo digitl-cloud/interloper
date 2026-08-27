@@ -14,11 +14,11 @@ class TestBoundedGather:
     """Order-preserving concurrent await with a concurrency cap."""
 
     async def test_preserves_input_order(self):
-        async def val(x: int) -> int:
+        async def identity(x: int) -> int:
             await asyncio.sleep(0.01 * (5 - x))  # later inputs finish sooner
             return x
 
-        assert await bounded_gather((val(i) for i in range(5)), limit=5) == [0, 1, 2, 3, 4]
+        assert await bounded_gather((identity(i) for i in range(5)), limit=5) == [0, 1, 2, 3, 4]
 
     async def test_caps_concurrency_at_limit(self):
         inflight = 0

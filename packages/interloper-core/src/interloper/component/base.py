@@ -508,6 +508,10 @@ class Component(Serializable):
         relations = dict(cls.relation_types)
         if "resource" in relations:
             relations["resource"] = relations["resource"].model_copy(
-                update={"slots": {name: RelationSlot(key=res.key) for name, res in cls.resource_types.items()}}
+                update={
+                    "slots": {
+                        name: RelationSlot(key=resource_type.key) for name, resource_type in cls.resource_types.items()
+                    }
+                }
             )
         return relations

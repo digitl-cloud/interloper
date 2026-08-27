@@ -125,7 +125,7 @@ def register(
         nargs="*",
         help="Inline DAGSpec JSON (when --format inline) or one or more dotted import paths",
     )
-    run_parser.set_defaults(func=_cmd_run)
+    run_parser.set_defaults(handler=_cmd_run)
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
@@ -265,16 +265,16 @@ def _dag_from_paths(paths: list[str]) -> DAG:
     items: list[object] = []
     for path in paths:
         try:
-            obj = import_from_path(path)
+            imported = import_from_path(path)
         except (ImportError, AttributeError) as exc:
             raise SystemExit(f"Error: failed to import '{path}': {exc}") from exc
 
-        if not isinstance(obj, type):
+        if not isinstance(imported, type):
             raise SystemExit(f"Error: '{path}' did not resolve to a class")
-        if not issubclass(obj, (Source, Asset, Destination)):
+        if not issubclass(imported, (Source, Asset, Destination)):
             raise SystemExit(f"Error: '{path}' is not a Source, Asset, or Destination subclass")
 
-        items.append(obj())
+        items.append(imported())
 
     return DAG(*items)  # ty: ignore[invalid-argument-type]
 
