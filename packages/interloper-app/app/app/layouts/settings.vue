@@ -27,7 +27,8 @@ const items = computed<NavigationMenuItem[]>(() => {
         {
             label: 'Authentication',
             icon: 'i-lucide-shield-check',
-            defaultOpen: true,
+            // Collapsed by default, but never hide the active child.
+            defaultOpen: onAuth,
             active: onAuth,
             children: [
                 {
