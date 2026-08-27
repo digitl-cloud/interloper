@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v0.65.0 (2026-08-27)
+
+### Bug Fixes
+
+- Deliver runtime credential env to run pods
+  ([`759fe5e`](https://github.com/digitl-cloud/interloper/commit/759fe5e602310c5b8e052e7b01eaf356cba0fcb7))
+
+### Continuous Integration
+
+- Run semantic-release directly with GitPython pinned
+  ([`8774c13`](https://github.com/digitl-cloud/interloper/commit/8774c13ecfe7fdecb62515648659e4dbbb5adcc0))
+
+### Features
+
+- Schedule jobs in their own timezone
+  ([`2c52df5`](https://github.com/digitl-cloud/interloper/commit/2c52df565a58ccfac1c7bf5f63fb9ecfc9cec567))
+
+- **app**: User settings area with profile and token management
+  ([`20a1704`](https://github.com/digitl-cloud/interloper/commit/20a1704d2f9517ad18f1dc588d3fea3f21701ca1))
+
+- **mcp**: Wire the MCP server for deployment
+  ([`8492660`](https://github.com/digitl-cloud/interloper/commit/8492660a346a044b9b3d358c40c7a223b86b88a0))
+
+
 ## v0.64.1 (2026-08-25)
 
 ### Bug Fixes
