@@ -94,9 +94,9 @@ class AsyncRunner(Runner):
                 done, _ = await asyncio.wait(inflight.keys(), return_when=asyncio.FIRST_COMPLETED)
                 for task in done:
                     inflight.pop(task)
-                    exc = task.exception()
-                    if exc is not None and (self.fail_fast or self.reraise):
-                        raise exc
+                    exception = task.exception()
+                    if exception is not None and (self.fail_fast or self.reraise):
+                        raise exception
 
             return self._finalize_run()
 

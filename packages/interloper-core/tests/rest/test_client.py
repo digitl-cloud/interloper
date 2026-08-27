@@ -25,7 +25,7 @@ class TestAsyncRESTClient:
             transport=httpx.MockTransport(handler),
         )
         async with client:
-            resp = await client.get("/things", params={"a": "1"})
+            response = await client.get("/things", params={"a": "1"})
 
-        assert resp.json() == {"ok": True}
+        assert response.json() == {"ok": True}
         assert seen == {"path": "/things", "token": "tok", "a": "1"}

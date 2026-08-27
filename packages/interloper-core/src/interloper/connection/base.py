@@ -24,7 +24,7 @@ class Connection(Resource):
             password: str
 
         # Loads USERNAME, PASSWORD from environment if not passed explicitly
-        conn = MyConnection()
+        connection = MyConnection()
 
     Connections that support OAuth subclass ``OAuthConnection`` (custom token
     shape) or ``RefreshTokenOAuthConnection`` (standard refresh-token trio);

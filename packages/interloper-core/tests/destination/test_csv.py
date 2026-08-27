@@ -32,24 +32,24 @@ class TestRoundtrip:
 
     def test_unpartitioned_roundtrip(self, tmp_path):
         dest = CSVDestination(id="csv", base_path=str(tmp_path))
-        ctx = IOContext(asset=plain_asset())
-        dest.write(ctx, [{"a": "1", "b": "x"}])
-        assert dest.read(ctx) == [{"a": "1", "b": "x"}]
+        context = IOContext(asset=plain_asset())
+        dest.write(context, [{"a": "1", "b": "x"}])
+        assert dest.read(context) == [{"a": "1", "b": "x"}]
 
     def test_schema_read_restores_types(self, tmp_path):
         dest = CSVDestination(id="csv", base_path=str(tmp_path))
-        ctx = IOContext(asset=plain_asset(), schema=RowSchema)
-        dest.write(ctx, [{"date": datetime.date(2024, 1, 1), "clicks": 3, "cost": 1.5, "name": None}])
-        rows = dest.read(ctx)
+        context = IOContext(asset=plain_asset(), schema=RowSchema)
+        dest.write(context, [{"date": datetime.date(2024, 1, 1), "clicks": 3, "cost": 1.5, "name": None}])
+        rows = dest.read(context)
         assert rows == [{"date": datetime.date(2024, 1, 1), "clicks": 3, "cost": 1.5, "name": None}]
 
     def test_dataframe_write_accepted(self, tmp_path):
         import pandas as pd
 
         dest = CSVDestination(id="csv", base_path=str(tmp_path))
-        ctx = IOContext(asset=plain_asset())
-        dest.write(ctx, pd.DataFrame([{"a": 1}]))
-        assert dest.read(ctx) == [{"a": "1"}]
+        context = IOContext(asset=plain_asset())
+        dest.write(context, pd.DataFrame([{"a": 1}]))
+        assert dest.read(context) == [{"a": "1"}]
 
 
 class TestWindowWrites:
@@ -80,6 +80,6 @@ class TestWindowWrites:
             {"date": "2024-01-02", "v": "b"},
             {"date": "2024-01-02", "v": "c"},
         ]
-        ctx = IOContext(asset=partitioned_asset(), partition_or_window=window)
-        dest.write(ctx, rows)
-        assert dest.partition_row_counts(ctx) == {"2024-01-01": 1, "2024-01-02": 2}
+        context = IOContext(asset=partitioned_asset(), partition_or_window=window)
+        dest.write(context, rows)
+        assert dest.partition_row_counts(context) == {"2024-01-01": 1, "2024-01-02": 2}

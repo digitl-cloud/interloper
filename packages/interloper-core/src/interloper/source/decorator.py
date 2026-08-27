@@ -164,22 +164,22 @@ def _build_source_from_fn(
     namespace["__qualname__"] = fn.__qualname__  # ty: ignore[unresolved-attribute]
 
     annotations: dict[str, Any] = {}
-    for attr in fields:
-        if attr in Source.model_fields:
-            annotations[attr] = Source.model_fields[attr].annotation
+    for field_name in fields:
+        if field_name in Source.model_fields:
+            annotations[field_name] = Source.model_fields[field_name].annotation
 
     # Extract config fields from function signature annotations.
     # Parameters with Field helpers (InputField, FetchField, etc.) become
     # Pydantic fields on the Source class, rendered as the config form.
-    sig = inspect.signature(fn)
+    signature = inspect.signature(fn)
     fn_annotations = fn.__annotations__ if hasattr(fn, "__annotations__") else {}
-    for param_name, param in sig.parameters.items():
-        if param_name in ("self", "context", "kwargs"):
+    for parameter_name, parameter in signature.parameters.items():
+        if parameter_name in ("self", "context", "kwargs"):
             continue
-        if param_name in fn_annotations:
-            annotations[param_name] = fn_annotations[param_name]
-            if param.default is not inspect.Parameter.empty:
-                namespace[param_name] = param.default
+        if parameter_name in fn_annotations:
+            annotations[parameter_name] = fn_annotations[parameter_name]
+            if parameter.default is not inspect.Parameter.empty:
+                namespace[parameter_name] = parameter.default
 
     if annotations:
         namespace["__annotations__"] = annotations

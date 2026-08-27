@@ -61,10 +61,10 @@ def _declared_classes() -> tuple[type[Component], ...]:
     for entry_point in entry_points(group=_ENTRY_POINT):
         loaded = entry_point.load()
         if isinstance(loaded, ModuleType):
-            for attr in dir(loaded):
-                obj = getattr(loaded, attr)
-                if isinstance(obj, type) and issubclass(obj, Component):
-                    classes.append(obj)
+            for attribute_name in dir(loaded):
+                member = getattr(loaded, attribute_name)
+                if isinstance(member, type) and issubclass(member, Component):
+                    classes.append(member)
         elif isinstance(loaded, type) and issubclass(loaded, Component):
             classes.append(loaded)
     return tuple(classes)
@@ -202,8 +202,8 @@ class Catalog(BaseModel):
         for path in paths:
             try:
                 loaded = import_from_path(path)
-            except (ImportError, AttributeError) as exc:
-                logger.warning("Failed to import component '%s': %s", path, exc)
+            except (ImportError, AttributeError) as exception:
+                logger.warning("Failed to import component '%s': %s", path, exception)
                 continue
             if isinstance(loaded, type) and issubclass(loaded, Component):
                 classes.append(loaded)

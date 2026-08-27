@@ -40,30 +40,30 @@ def import_from_path(path: str, target_type: type[T] | None = None) -> Any:
         ValueError: If *target_type* is given and the object does not match.
     """
     if ":" in path:
-        module_path, attr_chain = path.split(":", 1)
+        module_path, attribute_chain = path.split(":", 1)
     else:
-        module_path, _, attr_chain = path.rpartition(".")
+        module_path, _, attribute_chain = path.rpartition(".")
 
-    obj: Any = importlib.import_module(module_path)
-    for attr in attr_chain.split("."):
-        obj = getattr(obj, attr)
+    target: Any = importlib.import_module(module_path)
+    for attribute in attribute_chain.split("."):
+        target = getattr(target, attribute)
 
-    if target_type is not None and not isinstance(obj, target_type):
-        msg = f"Object at '{path}' is not a {target_type.__name__}"
-        raise ValueError(msg)
-    return obj
+    if target_type is not None and not isinstance(target, target_type):
+        message = f"Object at '{path}' is not a {target_type.__name__}"
+        raise ValueError(message)
+    return target
 
 
-def get_object_path(obj: Any) -> str:
+def get_object_path(target: Any) -> str:
     """Return the dotted import path for a class or function.
 
     Args:
-        obj: A class or function.
+        target: A class or function.
 
     Returns:
         Dotted path string like ``"module.submodule.ClassName"``.
     """
-    return f"{obj.__module__}.{obj.__name__}"
+    return f"{target.__module__}.{target.__name__}"
 
 
 def require_import(import_name: str, error_message: str) -> Callable[[F | C], F | C]:
@@ -81,9 +81,9 @@ def require_import(import_name: str, error_message: str) -> Callable[[F | C], F 
         A decorator that wraps the target class or function.
     """
 
-    def decorator(obj: F | C) -> F | C:
-        if isinstance(obj, type):
-            original_new = obj.__new__
+    def decorator(target: F | C) -> F | C:
+        if isinstance(target, type):
+            original_new = target.__new__
 
             def checked_new(cls: type[Any], *args: Any, **kwargs: Any) -> Any:
                 if importlib.util.find_spec(import_name) is None:
@@ -92,14 +92,14 @@ def require_import(import_name: str, error_message: str) -> Callable[[F | C], F 
                     return object.__new__(cls)
                 return original_new(cls, *args, **kwargs)
 
-            obj.__new__ = staticmethod(checked_new)  # ty: ignore[invalid-assignment]
-            return cast(C, obj)
+            target.__new__ = staticmethod(checked_new)  # ty: ignore[invalid-assignment]
+            return cast(C, target)
         else:
 
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 if importlib.util.find_spec(import_name) is None:
                     raise ImportError(error_message)
-                return obj(*args, **kwargs)
+                return target(*args, **kwargs)
 
             return cast(F, wrapper)
 

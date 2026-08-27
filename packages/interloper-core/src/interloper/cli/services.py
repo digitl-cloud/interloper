@@ -147,9 +147,9 @@ def run_services(
             )
 
     # -- Shutdown -------------------------------------------------------------
-    def signal_nuxt(sig: int) -> None:
+    def signal_nuxt(signal_number: int) -> None:
         if nuxt_process is not None:
-            _kill_process_group(nuxt_process, sig)
+            _kill_process_group(nuxt_process, signal_number)
 
     def shutdown_all(reason: str) -> None:
         if stop_event.is_set():
@@ -215,8 +215,8 @@ def run_services(
         logger.info("Starting Nuxt dev server from %s", source_dir())
 
     # -- Signal handling ------------------------------------------------------
-    def on_signal(sig: int, frame: object) -> None:
-        shutdown_all(f"signal {signal.Signals(sig).name}")
+    def on_signal(signal_number: int, frame: object) -> None:
+        shutdown_all(f"signal {signal.Signals(signal_number).name}")
 
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
@@ -278,7 +278,7 @@ def run_services(
 # -- Internals -----------------------------------------------------------------
 
 
-def _kill_process_group(process: subprocess.Popen[bytes], sig: int) -> None:
+def _kill_process_group(process: subprocess.Popen[bytes], signal_number: int) -> None:
     """Send a signal to a child's entire process group.
 
     The child must have been started with ``start_new_session=True`` so its
@@ -287,7 +287,7 @@ def _kill_process_group(process: subprocess.Popen[bytes], sig: int) -> None:
     if process.poll() is not None:
         return
     try:
-        os.killpg(process.pid, sig)
+        os.killpg(process.pid, signal_number)
     except ProcessLookupError:
         pass
 

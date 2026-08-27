@@ -40,11 +40,11 @@ class TestViews:
 
 
 class TestEntryPoints:
-    def _entry_point(self, name: str, obj: object) -> mock.Mock:
-        entry = mock.Mock()
-        entry.name = name
-        entry.load.return_value = obj
-        return entry
+    def _entry_point(self, name: str, loaded: object) -> mock.Mock:
+        entry_point = mock.Mock()
+        entry_point.name = name
+        entry_point.load.return_value = loaded
+        return entry_point
 
     def test_lazy_load_on_first_lookup(self):
         registry: Registry[str] = Registry("test.group")
@@ -66,12 +66,12 @@ class TestEntryPoints:
             assert registry.get("alpha") == "explicit"
 
     def test_adopt_transforms_loaded_entries(self):
-        registry: Registry[str] = Registry("test.group", adopt=lambda name, obj: (f"{name}!", obj.upper()))
+        registry: Registry[str] = Registry("test.group", adopt=lambda name, entry: (f"{name}!", entry.upper()))
         with mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "a")]):
             assert registry.get("alpha!") == "A"
 
     def test_adopt_errors_propagate(self):
-        def adopt(name: str, obj: object) -> tuple[str, str]:
+        def adopt(name: str, entry: object) -> tuple[str, str]:
             raise TypeError(f"bad entry: {name}")
 
         registry: Registry[str] = Registry("test.group", adopt=adopt)

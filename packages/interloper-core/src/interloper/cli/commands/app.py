@@ -80,7 +80,7 @@ def register(
     )
 
     app_parser.set_defaults(
-        func=_cmd_app,
+        handler=_cmd_app,
         requires=["interloper_db"],
         requires_when={
             "api": ["interloper_api"],

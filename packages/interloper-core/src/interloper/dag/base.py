@@ -130,12 +130,13 @@ class DAG:
 
             self.predecessors[asset.id] = []
 
-            for param_name, upstream_id in asset.dependencies.items():
+            for parameter_name, upstream_id in asset.dependencies.items():
                 if upstream_id not in self.asset_map:
-                    if param_name in asset.optional_requires:
+                    if parameter_name in asset.optional_requires:
                         continue
                     raise DependencyNotFoundError(
-                        f"Asset '{asset.key}' dep '{param_name}' points to id '{upstream_id}' which is not in the DAG."
+                        f"Asset '{asset.key}' dep '{parameter_name}' points to id '{upstream_id}' "
+                        f"which is not in the DAG."
                     )
 
                 self.predecessors[asset.id].append(upstream_id)
@@ -152,9 +153,9 @@ class DAG:
     def _check_requires(self) -> None:
         """Validate that wired dependencies match the requires contract.
 
-        For each ``(param_name, upstream_id)`` in ``asset.dependencies``, if
+        For each ``(parameter_name, upstream_id)`` in ``asset.dependencies``, if
         ``requires`` or ``optional_requires`` declares an expected key for
-        that param, the wired upstream's identity must match the declared
+        that parameter, the wired upstream's identity must match the declared
         key's resolution (bare keys expect an asset of the declarer's own
         source — see :meth:`~interloper.asset.base.AssetIdentity.resolve`).
 
@@ -167,11 +168,11 @@ class DAG:
             if not asset.materializable:
                 continue
             own_source_key = asset._source.key if asset._source is not None else None
-            for param_name, upstream_id in asset.dependencies.items():
+            for parameter_name, upstream_id in asset.dependencies.items():
                 if upstream_id not in self.asset_map:
                     continue  # Missing dependencies are caught in _build_graph
 
-                expected_key = asset.requires.get(param_name) or asset.optional_requires.get(param_name)
+                expected_key = asset.requires.get(parameter_name) or asset.optional_requires.get(parameter_name)
                 if not expected_key:
                     continue
 
@@ -179,7 +180,7 @@ class DAG:
                 upstream = self.asset_map[upstream_id]
                 if upstream.identity != expected:
                     raise DependencyContractError(
-                        f"Asset '{asset.key}' param '{param_name}' requires "
+                        f"Asset '{asset.key}' parameter '{parameter_name}' requires "
                         f"'{expected_key}' but is wired to '{upstream.identity}'."
                     )
 

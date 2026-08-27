@@ -126,8 +126,8 @@ def _build_asset_class(
     Returns:
         A dynamically created Asset subclass.
     """
-    fn_sig = inspect.signature(fn)
-    fn_params = list(fn_sig.parameters.keys())
+    fn_signature = inspect.signature(fn)
+    fn_params = list(fn_signature.parameters.keys())
     is_method = len(fn_params) > 0 and fn_params[0] == "self"
 
     is_async = inspect.iscoroutinefunction(fn)
@@ -135,8 +135,8 @@ def _build_asset_class(
     if is_method:
         # Method asset: signature already has `self`, keep as-is for
         # resource inference. The `data()` wrapper passes the source
-        # instance as the first positional arg.
-        data_sig = fn_sig
+        # instance as the first positional argument.
+        data_sig = fn_signature
 
         if is_async:
 
@@ -151,7 +151,7 @@ def _build_asset_class(
     else:
         # Standalone function asset: prepend `self` for bound method compat.
         self_param = inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)
-        data_sig = fn_sig.replace(parameters=[self_param, *fn_sig.parameters.values()])
+        data_sig = fn_signature.replace(parameters=[self_param, *fn_signature.parameters.values()])
 
         if is_async:
 
@@ -169,9 +169,9 @@ def _build_asset_class(
     namespace["__qualname__"] = fn.__qualname__
 
     annotations: dict[str, Any] = {}
-    for attr in fields:
-        if attr in Asset.model_fields:
-            annotations[attr] = Asset.model_fields[attr].annotation
+    for field_name in fields:
+        if field_name in Asset.model_fields:
+            annotations[field_name] = Asset.model_fields[field_name].annotation
     if annotations:
         namespace["__annotations__"] = annotations
 

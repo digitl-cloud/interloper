@@ -38,8 +38,8 @@ class TestOAuth2SyncClient:
         auth = OAuth2ClientCredentialsAuth("https://api.test", "cid", "secret")
         client = RESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(handler))
         with client:
-            resp = client.get("/data")
-        assert resp.json() == {"ok": True}
+            response = client.get("/data")
+        assert response.json() == {"ok": True}
         # The token exchange ran through this client's transport.
         assert [r.url.path for r in seen] == ["/oauth2/token", "/data"]
         assert auth.access_token == "tok-1"
@@ -51,8 +51,8 @@ class TestOAuth2AsyncClient:
         auth = OAuth2RefreshTokenAuth("https://api.test", "cid", "secret", refresh_token="rt-0")
         client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(handler))
         async with client:
-            resp = await client.get("/data")
-        assert resp.json() == {"ok": True}
+            response = await client.get("/data")
+        assert response.json() == {"ok": True}
         assert [r.url.path for r in seen] == ["/oauth2/token", "/data"]
 
     async def test_refreshes_on_401(self):
@@ -60,8 +60,8 @@ class TestOAuth2AsyncClient:
         auth = OAuth2ClientCredentialsAuth("https://api.test", "cid", "secret", access_token="stale")
         client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(handler))
         async with client:
-            resp = await client.get("/data")
-        assert resp.json() == {"ok": True}
+            response = await client.get("/data")
+        assert response.json() == {"ok": True}
         # stale bearer → 401 → token exchange → retry succeeds.
         assert [r.url.path for r in seen] == ["/data", "/oauth2/token", "/data"]
         assert auth.access_token == "tok-1"

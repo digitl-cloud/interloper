@@ -38,7 +38,7 @@ def plain_asset() -> list:  # noqa: D103
     return []
 
 
-def ctx(asset: il.Asset, scope=None) -> IOContext:  # noqa: D103
+def io_context(asset: il.Asset, scope=None) -> IOContext:  # noqa: D103
     return IOContext(asset=asset, partition_or_window=scope)
 
 
@@ -46,26 +46,26 @@ class TestWriteDispatch:
     """The three-way write dispatch with window splitting."""
 
     def test_unpartitioned_write_is_one_scope(self):
-        dest = RecordingScopes(id="d")
-        dest.write(ctx(plain_asset()), [{"a": 1}])
-        assert dest.calls == [("write", None, [{"a": 1}])]
+        destination = RecordingScopes(id="d")
+        destination.write(io_context(plain_asset()), [{"a": 1}])
+        assert destination.calls == [("write", None, [{"a": 1}])]
 
     def test_partition_write_passes_data_unsplit(self):
-        dest = RecordingScopes(id="d")
+        destination = RecordingScopes(id="d")
         rows = [{"date": "2024-01-01"}, {"date": "2024-01-02"}]
-        dest.write(ctx(partitioned_asset(), TimePartition(datetime.date(2024, 1, 1))), rows)
-        assert dest.calls == [("write", "2024-01-01", rows)]
+        destination.write(io_context(partitioned_asset(), TimePartition(datetime.date(2024, 1, 1))), rows)
+        assert destination.calls == [("write", "2024-01-01", rows)]
 
     def test_window_write_splits_per_partition(self):
-        dest = RecordingScopes(id="d")
+        destination = RecordingScopes(id="d")
         rows = [
             {"date": "2024-01-01", "v": 1},
             {"date": "2024-01-02", "v": 2},
             {"date": "2024-01-02", "v": 3},
         ]
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
-        dest.write(ctx(partitioned_asset(), window), rows)
-        by_scope = {scope: data for kind, scope, data in dest.calls}
+        destination.write(io_context(partitioned_asset(), window), rows)
+        by_scope = {scope: data for kind, scope, data in destination.calls}
         assert by_scope["2024-01-01"] == [{"date": "2024-01-01", "v": 1}]
         assert by_scope["2024-01-02"] == [{"date": "2024-01-02", "v": 2}, {"date": "2024-01-02", "v": 3}]
 
@@ -76,7 +76,7 @@ class TestWriteDispatch:
         def monthly(context: il.ExecutionContext) -> list:
             return []
 
-        dest = RecordingScopes(id="d")
+        destination = RecordingScopes(id="d")
         rows = [
             {"date": "2024-01-15", "v": 1},
             {"date": "2024-02-10", "v": 2},
@@ -85,43 +85,43 @@ class TestWriteDispatch:
         window = TimePartitionWindow(
             datetime.date(2024, 1, 1), datetime.date(2024, 2, 1), il.TimeGranularity.MONTH
         )
-        dest.write(ctx(monthly(), window), rows)
-        by_scope = {scope: data for kind, scope, data in dest.calls}
+        destination.write(io_context(monthly(), window), rows)
+        by_scope = {scope: data for kind, scope, data in destination.calls}
         assert by_scope["2024-01"] == [{"date": "2024-01-15", "v": 1}]
         assert by_scope["2024-02"] == [{"date": "2024-02-10", "v": 2}, {"date": "2024-02-20", "v": 3}]
 
     def test_window_write_splits_dataframes_natively(self):
         pd = pytest.importorskip("pandas")
 
-        dest = RecordingScopes(id="d")
+        destination = RecordingScopes(id="d")
         df = pd.DataFrame([{"date": "2024-01-01", "v": 1}, {"date": "2024-01-02", "v": 2}])
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
-        dest.write(ctx(partitioned_asset(), window), df)
-        for _, _, data in dest.calls:
+        destination.write(io_context(partitioned_asset(), window), df)
+        for _, _, data in destination.calls:
             assert isinstance(data, pd.DataFrame)
             assert len(data) == 1
 
     def test_window_write_passes_unsplittable_data_as_is(self):
-        dest = RecordingScopes(id="d")
+        destination = RecordingScopes(id="d")
         sentinel = object()
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 1))
-        dest.write(ctx(partitioned_asset(), window), sentinel)
-        assert dest.calls == [("write", "2024-01-01", sentinel)]
+        destination.write(io_context(partitioned_asset(), window), sentinel)
+        assert destination.calls == [("write", "2024-01-01", sentinel)]
 
 
 class TestReadDispatch:
     """The three-way read dispatch."""
 
     def test_unpartitioned_read(self):
-        assert RecordingScopes(id="d").read(ctx(plain_asset())) == {"scope": None}
+        assert RecordingScopes(id="d").read(io_context(plain_asset())) == {"scope": None}
 
     def test_partition_read(self):
-        result = RecordingScopes(id="d").read(ctx(partitioned_asset(), TimePartition(datetime.date(2024, 1, 2))))
+        result = RecordingScopes(id="d").read(io_context(partitioned_asset(), TimePartition(datetime.date(2024, 1, 2))))
         assert result == {"scope": "2024-01-02"}
 
     def test_window_read_returns_one_result_per_partition(self):
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
-        result = RecordingScopes(id="d").read(ctx(partitioned_asset(), window))
+        result = RecordingScopes(id="d").read(io_context(partitioned_asset(), window))
         assert {r["scope"] for r in result} == {"2024-01-01", "2024-01-02"}
 
 
@@ -133,6 +133,6 @@ class TestHookContract:
             pass
 
         with pytest.raises(NotImplementedError, match="_write_scope.*or override write"):
-            Bare(id="b").write(ctx(plain_asset()), [])
+            Bare(id="b").write(io_context(plain_asset()), [])
         with pytest.raises(NotImplementedError, match="_read_scope.*or override read"):
-            Bare(id="b").read(ctx(plain_asset()))
+            Bare(id="b").read(io_context(plain_asset()))

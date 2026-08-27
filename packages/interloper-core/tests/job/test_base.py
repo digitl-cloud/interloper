@@ -107,7 +107,7 @@ class FakeJobResource(il.Resource):
 class FakeResourceAsset(il.Asset):
     """Asset with a resource slot for job trickle tests."""
 
-    resource_types: ClassVar[dict[str, type[il.Resource]]] = {"conn": FakeJobResource}
+    resource_types: ClassVar[dict[str, type[il.Resource]]] = {"connection": FakeJobResource}
 
 
 class TestWorkloadDefaults:
@@ -125,17 +125,19 @@ class TestWorkloadDefaults:
         assert job.targets[0].destinations == [own]
 
     def test_resources_trickle_into_target_slots(self):
-        res = FakeJobResource(token="abc")
-        job = il.Job(targets=[FakeResourceAsset()], resources={"conn": res})
-        assert job.targets[0].resources["conn"] is res
+        resource = FakeJobResource(token="abc")
+        job = il.Job(targets=[FakeResourceAsset()], resources={"connection": resource})
+        assert job.targets[0].resources["connection"] is resource
 
     def test_resources_trickle_into_destination_slots_by_type(self):
         class FakeConnectedDestination(FakeJobDestination):
             resource_types: ClassVar[dict[str, type[il.Resource]]] = {"creds": FakeJobResource}
 
-        res = FakeJobResource(token="abc")
-        job = il.Job(targets=[FakeStandaloneAsset()], destinations=[FakeConnectedDestination()], resources={"any": res})
-        assert job.destinations[0].resources["creds"] is res
+        resource = FakeJobResource(token="abc")
+        job = il.Job(
+            targets=[FakeStandaloneAsset()], destinations=[FakeConnectedDestination()], resources={"any": resource}
+        )
+        assert job.destinations[0].resources["creds"] is resource
 
     def test_single_destination_coerced_to_list(self):
         dest = FakeJobDestination()

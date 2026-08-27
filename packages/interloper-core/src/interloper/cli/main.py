@@ -107,8 +107,8 @@ def main() -> None:
     init_telemetry(settings.otel)
 
     try:
-        if hasattr(args, "func"):
-            args.func(args)
+        if hasattr(args, "handler"):
+            args.handler(args)
         else:
             parser.parse_args([args.command, "--help"])
     finally:

@@ -43,7 +43,7 @@ class TestOAuthConnection:
     def test_custom_fields_mapping_injected(self):
         # A connection with its own field names maps them via OAuthConfig.fields;
         # the mapping is exposed verbatim for the form.
-        class FbConn(OAuthConnection):
+        class FacebookConnection(OAuthConnection):
             oauth: ClassVar[OAuthConfig] = OAuthConfig(
                 "facebook",
                 scope="ads_read",
@@ -54,7 +54,7 @@ class TestOAuthConnection:
             app_id: str = InputField("")
             app_secret: str = SecretField("")
 
-        definition = FbConn.definition()
+        definition = FacebookConnection.definition()
 
         assert definition.provider == "facebook"
         assert definition.config_schema["x-oauth"]["scope"] == "ads_read"
@@ -78,16 +78,16 @@ class TestOAuthConnection:
         # from INTERLOPER_<PROVIDER>_<SUFFIX> via this helper (see facebook_ads).
         monkeypatch.setenv("INTERLOPER_FACEBOOK_CLIENT_ID", "fb-id")
 
-        class FbConn(OAuthConnection):
+        class FacebookConnection(OAuthConnection):
             oauth: ClassVar[OAuthConfig] = OAuthConfig("facebook", fields={"client_id": "app_id"})
             model_config = SettingsConfigDict(env_prefix="fb_helper_test_")
 
             app_id: str = InputField("")
 
-        conn = FbConn()
+        connection = FacebookConnection()
 
-        assert conn.env_credential("CLIENT_ID") == "fb-id"
-        assert conn.env_credential("CLIENT_SECRET") is None
+        assert connection.env_credential("CLIENT_ID") == "fb-id"
+        assert connection.env_credential("CLIENT_SECRET") is None
 
 
 class TestRefreshTokenOAuthConnection:
@@ -117,27 +117,27 @@ class TestRefreshTokenOAuthConnection:
         monkeypatch.setenv("INTERLOPER_AMAZON_CLIENT_ID", "in-house-id")
         monkeypatch.setenv("INTERLOPER_AMAZON_CLIENT_SECRET", "in-house-secret")
 
-        class AmazonConn(RefreshTokenOAuthConnection):
+        class AmazonConnection(RefreshTokenOAuthConnection):
             oauth: ClassVar[OAuthConfig] = OAuthConfig("amazon")
             model_config = SettingsConfigDict(env_prefix="amazon_conn_test_")
 
-        conn = AmazonConn(refresh_token="rt")
+        connection = AmazonConnection(refresh_token="rt")
 
-        assert (conn.client_id, conn.client_secret) == ("in-house-id", "in-house-secret")
-        assert conn.refresh_token == "rt"
+        assert (connection.client_id, connection.client_secret) == ("in-house-id", "in-house-secret")
+        assert connection.refresh_token == "rt"
 
     def test_explicit_oauth_credentials_override_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("INTERLOPER_AMAZON_CLIENT_ID", "in-house-id")
         monkeypatch.setenv("INTERLOPER_AMAZON_CLIENT_SECRET", "in-house-secret")
 
-        class AmazonConn(RefreshTokenOAuthConnection):
+        class AmazonConnection(RefreshTokenOAuthConnection):
             oauth: ClassVar[OAuthConfig] = OAuthConfig("amazon")
             model_config = SettingsConfigDict(env_prefix="amazon_conn_test2_")
 
-        conn = AmazonConn(refresh_token="rt", client_id="my-id", client_secret="my-secret")
+        connection = AmazonConnection(refresh_token="rt", client_id="my-id", client_secret="my-secret")
 
         # A per-connection override always wins over the in-house env credentials.
-        assert (conn.client_id, conn.client_secret) == ("my-id", "my-secret")
+        assert (connection.client_id, connection.client_secret) == ("my-id", "my-secret")
 
 
 class TestConnectionCheck:
