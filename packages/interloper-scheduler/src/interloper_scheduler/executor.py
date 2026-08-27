@@ -9,6 +9,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
+from interloper.errors import format_exception
 from interloper.runner import ExecutionStatus, Runner
 from interloper_db import Store
 from interloper_db.models import Component, ComponentRelation, Run
@@ -114,7 +115,8 @@ class RunExecutor:
             logger.exception("Run %s failed: %s", run_id, e)
             try:
                 if org_id is not None:
-                    event = il.Event(type=il.EventType.RUN_FAILED, metadata={**run_metadata, "error": str(e)})
+                    metadata = {**run_metadata, "error": format_exception(e)}
+                    event = il.Event(type=il.EventType.RUN_FAILED, metadata=metadata)
                     self._store.save_event(event, org_id=org_id, run_id=run_id)
                 self._store.complete_run(run_id, success=False)
             except Exception:

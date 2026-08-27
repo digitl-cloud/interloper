@@ -13,6 +13,7 @@ from uuid import uuid4
 import interloper as il
 import pydantic
 import pytest
+from interloper.errors import HydrationError
 from interloper_assets.demo.source import DemoSource, demo_asset
 from sqlalchemy import Engine
 
@@ -184,3 +185,25 @@ class TestOpenVocabulary:
         assert isinstance(linker, FakeLinker)
         assert [type(linked).key for linked in linker.links] == ["demo_source"]
         assert linker.links[0].id == str(db_source.id)
+
+
+class TestHydrationErrorSanitisation:
+    """Reconstruction failures never echo the (decrypted) payload into the message."""
+
+    def test_load_failure_message_omits_input_values(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+
+        class Probe(pydantic.BaseModel):
+            app_secret: str
+
+        def raise_validation_error(spec):
+            Probe.model_validate({"token": "s3cret-value"})
+
+        monkeypatch.setattr(il.Component, "from_spec", raise_validation_error)
+        with pytest.raises(HydrationError) as exc_info:
+            store.load(db_source.id)
+
+        message = str(exc_info.value)
+        assert "Failed to hydrate source 'demo_source'" in message
+        assert "app_secret: Field required" in message
+        assert "s3cret-value" not in message
