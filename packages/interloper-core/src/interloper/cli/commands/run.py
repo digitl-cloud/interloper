@@ -158,14 +158,14 @@ def _cmd_run(args: argparse.Namespace) -> None:
     settings = AppSettings.get()
     is_container = os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true"
 
-    # -- Subscribe stderr event handler (for container event forwarding) ------
+    # -- Subscribe stderr event handler (for container event forwarding) -------
     stderr_handler = None
     if is_container:
         stderr_handler = StderrEventHandler()
         EventBus.subscribe(stderr_handler)
 
     try:
-        # -- Build the DAG ----------------------------------------------------
+        # -- Build the DAG -----------------------------------------------------
         if args.file is not None:
             if args.target:
                 raise SystemExit("Error: --file cannot be combined with positional targets.")

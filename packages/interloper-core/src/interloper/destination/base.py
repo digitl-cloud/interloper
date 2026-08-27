@@ -64,8 +64,8 @@ class Destination(Component):
         # Resolved resource map (includes annotation-declared slots, not just
         # ``__dict__``) so the DestinationDefinition's ``resources`` and its
         # FetchField pickers work for both declaration styles.
-        res_types: dict[str, type[Resource]] = cls.resource_types
-        validate_fetch_field_providers(cls, res_types)
+        resource_types: dict[str, type[Resource]] = cls.resource_types
+        validate_fetch_field_providers(cls, resource_types)
         return DestinationDefinition(
             kind=cls.kind,
             key=cls.key,

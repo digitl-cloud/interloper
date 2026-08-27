@@ -105,8 +105,6 @@ class Source(Component):
     # State
     destinations: list[Destination] = Field(default_factory=list)
     normalizer: Normalizer | None = Field(default=None)
-    # Optional for hydration only (older configs stored null); None behaves
-    # exactly like the AUTO default — neither overrides any asset.
     materialization_strategy: MaterializationStrategy | None = SelectField(
         default=MaterializationStrategy.AUTO,
         label="Materialization Strategy",
@@ -443,11 +441,9 @@ class Source(Component):
             ):
                 asset.materialization_strategy = self.materialization_strategy
 
-            # Trickle source resources down to assets by name, then by type
             self.trickle_resources(asset)
             self._resolve_deps(asset, siblings)
 
-        # Trickle source resources down to destinations
         for destination in self.destinations:
             self.trickle_resources(destination)
 
@@ -512,14 +508,11 @@ class Source(Component):
         Returns:
             A SourceDefinition with metadata and nested asset definitions.
         """
-        # Use the *resolved* resource map: it includes slots declared via typed
-        # annotations (``connection: XConnection``), not just those set in
-        # ``__dict__`` by the ``@source(resources=...)`` decorator. This is what
-        # ``Catalog.from_paths`` and the FetchField resolver read, so the
-        # SourceDefinition's ``resources`` (and the connection step / fetch
-        # fields the frontend builds from it) stay consistent for both styles.
-        res_types: dict[str, type[Resource]] = cls.resource_types
-        validate_fetch_field_providers(cls, res_types)
+        # Resolved resource map (includes annotation-declared slots, not just
+        # ``__dict__``) so the SourceDefinition's ``resources`` and its
+        # FetchField pickers work for both declaration styles.
+        resource_types: dict[str, type[Resource]] = cls.resource_types
+        validate_fetch_field_providers(cls, resource_types)
 
         return SourceDefinition(
             kind=cls.kind,
