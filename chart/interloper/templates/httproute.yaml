@@ -22,6 +22,20 @@ spec:
         - name: {{ include "interloper.fullname" . }}-api
           port: {{ .Values.api.service.port }}
     {{- end }}
+    {{- if .Values.mcp.enabled }}
+    # /mcp is the protocol endpoint; the well-known prefix carries the RFC
+    # 9728 protected-resource metadata the server publishes for it.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mcp
+        - path:
+            type: PathPrefix
+            value: /.well-known/oauth-protected-resource
+      backendRefs:
+        - name: {{ include "interloper.fullname" . }}-mcp
+          port: {{ .Values.mcp.service.port }}
+    {{- end }}
     {{- if .Values.frontend.enabled }}
     - matches:
         - path:
@@ -31,27 +45,4 @@ spec:
         - name: {{ include "interloper.fullname" . }}-frontend
           port: {{ .Values.frontend.service.port }}
     {{- end }}
-{{- if and .Values.mcp.enabled .Values.httpRoute.mcpHostnames }}
----
-# The MCP server rides its own hostname(s) rather than a path on the app's.
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: {{ include "interloper.fullname" . }}-mcp
-  labels:
-    {{- include "interloper.labels" . | nindent 4 }}
-spec:
-  parentRefs:
-    {{- toYaml .Values.httpRoute.parentRefs | nindent 4 }}
-  hostnames:
-    {{- toYaml .Values.httpRoute.mcpHostnames | nindent 4 }}
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: {{ include "interloper.fullname" . }}-mcp
-          port: {{ .Values.mcp.service.port }}
-{{- end }}
 {{- end }}

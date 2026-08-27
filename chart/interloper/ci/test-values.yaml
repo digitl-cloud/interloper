@@ -15,7 +15,7 @@ externalPostgres:
 secrets:
   postgresPassword: ci-test-password
 
-# Render the optional MCP workload and the HTTPRoutes so lint covers them
+# Render the optional MCP workload and the HTTPRoute so lint covers them
 # (disabled templates are skipped entirely).
 mcp:
   enabled: true
@@ -24,5 +24,3 @@ httpRoute:
   enabled: true
   parentRefs:
     - name: ci-gateway
-  mcpHostnames:
-    - mcp.example.com
