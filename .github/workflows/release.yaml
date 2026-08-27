@@ -78,27 +78,44 @@ jobs:
       - name: Pytest
         run: uv run pytest
 
+      # Runs PSR directly instead of python-semantic-release/python-semantic-release@v10:
+      # the action installs its dependencies unpinned at image build, and GitPython
+      # 3.1.60 removed Actor.name_email_regex, which crashes PSR's config load
+      # (python-semantic-release/python-semantic-release#1476). Restore the action
+      # once a PSR release ships the fix. The venv python provides the pip that the
+      # configured build_command bootstraps uv with.
       - name: Release
         id: release
-        uses: python-semantic-release/python-semantic-release@v10
-        with:
-          prerelease: ${{ inputs.release_type == 'release-candidate' }}
-          prerelease_token: rc
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          /usr/bin/python3 -m venv "$RUNNER_TEMP/psr"
+          "$RUNNER_TEMP/psr/bin/pip" install --quiet "python-semantic-release==10.6.1" "gitpython==3.1.59"
+          export PATH="$RUNNER_TEMP/psr/bin:$PATH"
+
+          git config user.name "Semantic Release"
+          git config user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+          flags=(--commit --tag --vcs-release --prerelease-token rc)
+          if [ "${{ inputs.release_type }}" = "release-candidate" ]; then
+            flags+=(--as-prerelease --no-changelog)
+          else
+            flags+=(--changelog)
+          fi
           # Force a bump level when the commit history alone wouldn't trigger a
-          # release (only chore/refactor since the last tag). Empty = let PSR
+          # release (only chore/refactor since the last tag). "auto" = let PSR
           # decide from the Conventional Commits, the normal path.
-          force: ${{ inputs.force != 'auto' && inputs.force || '' }}
-          # Runs the configured build_command (`uv lock`) so the release
-          # commit carries a lock file consistent with the stamped versions.
-          # The actual package build happens in the publish step below.
-          build: true
-          changelog: ${{ inputs.release_type == 'stable' }}
-          commit: true
-          tag: true
-          vcs_release: true
-          github_token: ${{ steps.app-token.outputs.token }}
-          git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-          git_committer_name: "Semantic Release"
+          if [ "${{ inputs.force }}" != "auto" ]; then
+            flags+=(--${{ inputs.force }})
+          fi
+
+          before=$(git rev-parse HEAD)
+          semantic-release -v version "${flags[@]}"
+          if [ "$(git rev-parse HEAD)" != "$before" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build & Publish
         if: steps.release.outputs.released == 'true'
