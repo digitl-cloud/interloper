@@ -50,40 +50,42 @@ class FieldSpec:
     fields: tuple[FieldSpec, ...] | None = None
     description: str | None = None
 
+    @classmethod
+    def from_annotation(cls, name: str, annotation: Any, description: str | None = None) -> FieldSpec:
+        """Build a FieldSpec from a field name, type annotation, and description.
 
-def _field_spec(name: str, annotation: Any, description: str | None = None) -> FieldSpec:
-    """Build a FieldSpec from a field name, type annotation, and description.
+        Returns:
+            The extracted spec, with ``Optional``/``list`` wrappers unwrapped.
+        """
+        nullable = False
 
-    Returns:
-        The extracted spec, with ``Optional``/``list`` wrappers unwrapped.
-    """
-    nullable = False
-
-    # Unwrap Optional / unions with None
-    if get_origin(annotation) in (Union, types.UnionType):
-        args = get_args(annotation)
-        non_none = [a for a in args if a is not type(None)]
-        nullable = len(non_none) < len(args)
-        annotation = non_none[0] if len(non_none) == 1 else Any
-
-    # Unwrap list[T] into a repeated field
-    repeated = False
-    if get_origin(annotation) is list:
-        repeated = True
-        inner = get_args(annotation)
-        annotation = inner[0] if inner else Any
+        # Unwrap Optional / unions with None
         if get_origin(annotation) in (Union, types.UnionType):
-            non_none = [a for a in get_args(annotation) if a is not type(None)]
+            args = get_args(annotation)
+            non_none = [a for a in args if a is not type(None)]
+            nullable = len(non_none) < len(args)
             annotation = non_none[0] if len(non_none) == 1 else Any
 
-    # Nested model -> sub-field specs
-    fields: tuple[FieldSpec, ...] | None = None
-    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-        fields = tuple(_field_spec(n, f.annotation, f.description) for n, f in annotation.model_fields.items())
+        # Unwrap list[T] into a repeated field
+        repeated = False
+        if get_origin(annotation) is list:
+            repeated = True
+            inner = get_args(annotation)
+            annotation = inner[0] if inner else Any
+            if get_origin(annotation) in (Union, types.UnionType):
+                non_none = [a for a in get_args(annotation) if a is not type(None)]
+                annotation = non_none[0] if len(non_none) == 1 else Any
 
-    return FieldSpec(
-        name=name, type=annotation, nullable=nullable, repeated=repeated, fields=fields, description=description
-    )
+        # Nested model -> sub-field specs
+        fields: tuple[FieldSpec, ...] | None = None
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            fields = tuple(
+                cls.from_annotation(n, f.annotation, f.description) for n, f in annotation.model_fields.items()
+            )
+
+        return FieldSpec(
+            name=name, type=annotation, nullable=nullable, repeated=repeated, fields=fields, description=description
+        )
 
 
 class Schema(Serializable):
@@ -122,7 +124,7 @@ class Schema(Serializable):
         """
         data_fields = cls._data_fields()
         return [
-            _field_spec(name, info.annotation, info.description)
+            FieldSpec.from_annotation(name, info.annotation, info.description)
             for name, info in cls.model_fields.items()
             if name in data_fields
         ]
@@ -189,7 +191,7 @@ class Schema(Serializable):
         # Build field definitions: (type | None, default_value)
         field_definitions: dict[str, Any] = {}
         for key, types_seen in key_types.items():
-            field_type = _resolve_field_type(types_seen)
+            field_type = cls._resolve_field_type(types_seen)
             field_definitions[key] = (field_type | None, None)
 
         return create_model(name, __base__=cls, **field_definitions)
@@ -300,6 +302,31 @@ class Schema(Serializable):
 
     # -- Internals -------------------------------------------------------------
 
+    @staticmethod
+    def _resolve_field_type(types_seen: set[type]) -> type:
+        """Resolve a set of observed Python types into a single Pydantic-compatible type.
+
+        Rules:
+        - Empty set (all values None) → ``Any``
+        - Single type → that type
+        - ``{int, float}`` → ``float`` (numeric widening)
+        - Multiple incompatible types → ``Any``
+
+        Returns:
+            The resolved Pydantic-compatible field type.
+        """
+        if not types_seen:
+            return Any
+
+        if len(types_seen) == 1:
+            return types_seen.pop()
+
+        # Numeric widening: int + float -> float
+        if types_seen == {int, float}:
+            return float
+
+        return Any
+
     @classmethod
     def _data_fields(cls) -> set[str]:
         """Return the names of the schema's data fields.
@@ -334,27 +361,3 @@ RECONCILERS: dict[type, Callable[[Any], Any]] = {
     str: _coerce_str_value,
 }
 
-
-def _resolve_field_type(types_seen: set[type]) -> type:
-    """Resolve a set of observed Python types into a single Pydantic-compatible type.
-
-    Rules:
-    - Empty set (all values None) → ``Any``
-    - Single type → that type
-    - ``{int, float}`` → ``float`` (numeric widening)
-    - Multiple incompatible types → ``Any``
-
-    Returns:
-        The resolved Pydantic-compatible field type.
-    """
-    if not types_seen:
-        return Any
-
-    if len(types_seen) == 1:
-        return types_seen.pop()
-
-    # Numeric widening: int + float -> float
-    if types_seen == {int, float}:
-        return float
-
-    return Any

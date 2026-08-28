@@ -32,6 +32,22 @@ class Partition(ABC):
         """Unique identifier derived from the partition value."""
         return str(self.value)
 
+    def slice(self, data: Any, column: str) -> Any:
+        """Return this partition's slice of *data*, selecting by id equality on *column*.
+
+        Data no registered representation recognizes passes through unchanged
+        since it cannot be split.
+
+        Returns:
+            The partition's slice of the data.
+        """
+        from interloper.representation import Representation
+
+        representation = Representation.of(data)
+        if not representation.matches(data):
+            return data
+        return representation.filter_eq(data, column, self.id)
+
 
 @dataclass(frozen=True)
 class PartitionWindow(ABC):

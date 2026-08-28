@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from interloper.events import ConsoleEventHandler, Event, EventType
-from interloper.events.console import EVENT_LOGGER_NAME, event_level
+from interloper.events.console import EVENT_LOGGER_NAME
 
 
 def test_events_become_log_records(caplog: pytest.LogCaptureFixture) -> None:
@@ -26,12 +26,12 @@ def test_events_become_log_records(caplog: pytest.LogCaptureFixture) -> None:
 
 def test_event_levels_map_to_logging_levels() -> None:
     """Failures are errors, cancellations warnings, lifecycle info, chatter debug."""
-    assert event_level(Event(type=EventType.ASSET_FAILED)) == logging.ERROR
-    assert event_level(Event(type=EventType.RUN_FAILED)) == logging.ERROR
-    assert event_level(Event(type=EventType.ASSET_CANCELED)) == logging.WARNING
-    assert event_level(Event(type=EventType.ASSET_STARTED)) == logging.INFO
-    assert event_level(Event(type=EventType.ASSET_QUEUED)) == logging.DEBUG
-    assert event_level(Event(type=EventType.DEST_WRITE_STARTED)) == logging.DEBUG
+    assert ConsoleEventHandler._level(Event(type=EventType.ASSET_FAILED)) == logging.ERROR
+    assert ConsoleEventHandler._level(Event(type=EventType.RUN_FAILED)) == logging.ERROR
+    assert ConsoleEventHandler._level(Event(type=EventType.ASSET_CANCELED)) == logging.WARNING
+    assert ConsoleEventHandler._level(Event(type=EventType.ASSET_STARTED)) == logging.INFO
+    assert ConsoleEventHandler._level(Event(type=EventType.ASSET_QUEUED)) == logging.DEBUG
+    assert ConsoleEventHandler._level(Event(type=EventType.DEST_WRITE_STARTED)) == logging.DEBUG
 
 
 def test_log_events_carry_their_authored_level(caplog: pytest.LogCaptureFixture) -> None:
@@ -48,7 +48,7 @@ def test_log_events_carry_their_authored_level(caplog: pytest.LogCaptureFixture)
 def test_log_event_with_unknown_level_defaults_to_info() -> None:
     """An unparsable level string falls back to INFO instead of crashing."""
     event = Event(type=EventType.LOG, metadata={"level": "NOT_A_LEVEL"})
-    assert event_level(event) == logging.INFO
+    assert ConsoleEventHandler._level(event) == logging.INFO
 
 
 def test_respects_logger_level(caplog: pytest.LogCaptureFixture) -> None:

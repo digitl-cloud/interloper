@@ -94,8 +94,7 @@ def register(
 def _cmd_app(args: argparse.Namespace) -> None:
     """Start the application services."""
     from interloper.catalog import Catalog
-    from interloper.cli.runtime import resolve_api_port
-    from interloper.cli.services import run_services
+    from interloper.cli.runtime import Services, resolve_api_port
     from interloper.settings import AppSettings
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -140,7 +139,7 @@ def _cmd_app(args: argparse.Namespace) -> None:
     catalog = Catalog.from_settings()
     store = Store.from_settings(catalog=catalog)
 
-    run_services(
+    Services(
         settings=settings,
         store=store,
         catalog=catalog,
@@ -150,4 +149,4 @@ def _cmd_app(args: argparse.Namespace) -> None:
         run_reaper=run_reaper,
         dev_mode=dev_mode,
         api_port=api_port,
-    )
+    ).run()

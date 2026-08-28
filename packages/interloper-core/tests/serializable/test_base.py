@@ -10,7 +10,7 @@ import pytest
 import interloper as il
 from interloper.errors import SpecError
 from interloper.normalizer import Normalizer
-from interloper.serializable import Serializable, Spec, dump_spec_value
+from interloper.serializable import Serializable, Spec
 from interloper.source.base import Source
 
 # -- Fixtures ------------------------------------------------------------------
@@ -200,7 +200,7 @@ class TestBuildClass:
         assert src.normalizer is override
 
 
-# -- dump_spec_value -----------------------------------------------------------
+# -- Spec.dump_value -----------------------------------------------------------
 
 
 class TestDumpSpecValue:
@@ -215,26 +215,26 @@ class TestDumpSpecValue:
 
     def test_normalizer_dumps_as_reconstructible_spec(self):
         n = Normalizer(snake_case_digits=True, column_overrides={"rawName": "raw_name"})
-        dumped = dump_spec_value(n)
+        dumped = Spec.dump_value(n)
         assert dumped["path"].endswith("Normalizer")
         assert dumped["init"]["snake_case_digits"] is True
 
     def test_normalizer_roundtrip_preserves_class_and_config(self):
         n = Normalizer(snake_case_digits=True, flatten_max_level=2)
-        dumped = dump_spec_value(n)
+        dumped = Spec.dump_value(n)
         rebuilt: Any = Spec(path=dumped["path"], init=dumped["init"]).reconstruct()
         assert type(rebuilt) is Normalizer
         assert rebuilt.snake_case_digits is True
         assert rebuilt.flatten_max_level == 2
 
     def test_scalars_and_containers_unchanged(self):
-        assert dump_spec_value([1, "a", {"k": 2}]) == [1, "a", {"k": 2}]
+        assert Spec.dump_value([1, "a", {"k": 2}]) == [1, "a", {"k": 2}]
 
     def test_component_dumps_as_spec(self):
         @il.asset
         def some_asset() -> list:
             return []
 
-        dumped = dump_spec_value(some_asset(id="a1"))
+        dumped = Spec.dump_value(some_asset(id="a1"))
         assert dumped["id"] == "a1"
         assert "path" in dumped

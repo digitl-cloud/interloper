@@ -14,7 +14,7 @@ from contextlib import contextmanager
 
 import interloper as il
 from interloper.events import Event, EventBus, EventType
-from interloper.runner.state import RunState, _asset_event_id
+from interloper.runner.state import RunState
 
 
 class _Asset(il.Asset):
@@ -47,12 +47,12 @@ def _state(run_id: str, asset_id: str) -> tuple[RunState, il.Asset]:
 
 def test_asset_event_id_is_deterministic() -> None:
     """Same triple → same id; any component differing → different id."""
-    base = _asset_event_id("run-1", "asset-1", EventType.ASSET_FAILED)
+    base = RunState._asset_event_id("run-1", "asset-1", EventType.ASSET_FAILED)
 
-    assert base == _asset_event_id("run-1", "asset-1", EventType.ASSET_FAILED)
-    assert base != _asset_event_id("run-2", "asset-1", EventType.ASSET_FAILED)
-    assert base != _asset_event_id("run-1", "asset-2", EventType.ASSET_FAILED)
-    assert base != _asset_event_id("run-1", "asset-1", EventType.ASSET_COMPLETED)
+    assert base == RunState._asset_event_id("run-1", "asset-1", EventType.ASSET_FAILED)
+    assert base != RunState._asset_event_id("run-2", "asset-1", EventType.ASSET_FAILED)
+    assert base != RunState._asset_event_id("run-1", "asset-2", EventType.ASSET_FAILED)
+    assert base != RunState._asset_event_id("run-1", "asset-1", EventType.ASSET_COMPLETED)
 
 
 # -- RunState stamps the deterministic id on what it emits ---------------------
@@ -66,7 +66,7 @@ def test_mark_asset_terminal_stamps_deterministic_id() -> None:
         state.mark_asset_failed(asset, "boom", tb="trace")
 
     failed = next(e for e in events if e.type == EventType.ASSET_FAILED)
-    assert failed.id == _asset_event_id("run-abc", "asset-xyz", EventType.ASSET_FAILED)
+    assert failed.id == RunState._asset_event_id("run-abc", "asset-xyz", EventType.ASSET_FAILED)
     assert failed.metadata["error"] == "boom"
 
     state2, asset2 = _state("run-abc", "asset-2")
@@ -74,7 +74,7 @@ def test_mark_asset_terminal_stamps_deterministic_id() -> None:
         state2.mark_asset_completed(asset2)
 
     completed = next(e for e in events if e.type == EventType.ASSET_COMPLETED)
-    assert completed.id == _asset_event_id("run-abc", "asset-2", EventType.ASSET_COMPLETED)
+    assert completed.id == RunState._asset_event_id("run-abc", "asset-2", EventType.ASSET_COMPLETED)
 
 
 def test_host_fallback_and_child_terminal_share_one_id() -> None:
@@ -106,4 +106,4 @@ def test_duplicate_asset_queued_collapses_to_one_id() -> None:
         child_state.start_run(None)
 
     queued_ids = {e.id for e in events if e.type == EventType.ASSET_QUEUED}
-    assert queued_ids == {_asset_event_id("run-q", "asset-q", EventType.ASSET_QUEUED)}
+    assert queued_ids == {RunState._asset_event_id("run-q", "asset-q", EventType.ASSET_QUEUED)}

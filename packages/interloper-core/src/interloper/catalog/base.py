@@ -45,83 +45,6 @@ logger = logging.getLogger(__name__)
 _ENTRY_POINT = "interloper.components"
 
 
-# -- Discovery -----------------------------------------------------------------
-
-
-def _declared_classes() -> tuple[type[Component], ...]:
-    """Component classes declared under ``interloper.components``.
-
-    Each entry names a component class directly, or a module whose public
-    attributes are scanned for component classes.
-
-    Returns:
-        Every declared component class.
-    """
-    classes: list[type[Component]] = []
-    for entry_point in entry_points(group=_ENTRY_POINT):
-        loaded = entry_point.load()
-        if isinstance(loaded, ModuleType):
-            for attribute_name in dir(loaded):
-                member = getattr(loaded, attribute_name)
-                if isinstance(member, type) and issubclass(member, Component):
-                    classes.append(member)
-        elif isinstance(loaded, type) and issubclass(loaded, Component):
-            classes.append(loaded)
-    return tuple(classes)
-
-
-def _definitions_from(components: Iterable[type[Component]]) -> dict[str, ComponentDefinition]:
-    """Build definitions from component classes.
-
-    Every class self-describes through ``definition()``; nothing is walked,
-    inferred, or registered — the catalog contains exactly what was
-    declared, and kinds must already be registered when it loads.
-
-    Returns:
-        Mapping from component key to definition.
-
-    Raises:
-        ConfigError: If a declared component's kind has no registered
-            anchor — declare it under the ``interloper.kinds`` group.
-    """
-    definitions: dict[str, ComponentDefinition] = {}
-    for component in components:
-        if not (isinstance(component, type) and issubclass(component, Component)):
-            continue
-        if component.kind not in KINDS:
-            raise ConfigError(
-                f"Component '{component.key}' declares kind '{component.kind}', which is not registered — "
-                "declare its anchor under the 'interloper.kinds' entry-point group"
-            )
-        definitions.setdefault(component.key, component.definition())
-    return definitions
-
-
-@cache
-def _declared_definitions() -> dict[str, ComponentDefinition]:
-    """Definitions of the declared universe (cached).
-
-    Returns:
-        Mapping from component key to definition.
-    """
-    return _definitions_from(_declared_classes())
-
-
-def _with_declared(definitions: dict[str, ComponentDefinition]) -> dict[str, ComponentDefinition]:
-    """Ensure the declared universe is present.
-
-    Every catalog contains every component the installed packages declare —
-    installation is the opt-in. Explicitly provided definitions win over
-    declared ones with the same key.
-
-    Returns:
-        The same mapping, with any missing declared definitions added.
-    """
-    for key, definition in _declared_definitions().items():
-        definitions.setdefault(key, definition)
-    return definitions
-
-
 class Catalog(BaseModel):
     """Catalog of all component definitions."""
 
@@ -208,7 +131,7 @@ class Catalog(BaseModel):
             if isinstance(loaded, type) and issubclass(loaded, Component):
                 classes.append(loaded)
 
-        return Catalog(components=_with_declared(_definitions_from(classes)))
+        return cls(components=cls._with_declared(cls._definitions_from(classes)))
 
     @classmethod
     def from_settings(cls) -> Catalog:
@@ -231,7 +154,7 @@ class Catalog(BaseModel):
         Returns:
             Catalog of all component definitions.
         """
-        return cls(components=_with_declared(_definitions_from(sources_or_assets)))
+        return cls(components=cls._with_declared(cls._definitions_from(sources_or_assets)))
 
     @classmethod
     def discover(cls) -> Catalog:
@@ -241,3 +164,78 @@ class Catalog(BaseModel):
             Catalog of every component declared by every installed package.
         """
         return cls.from_paths([])
+
+    # -- Discovery internals ---------------------------------------------------
+    @classmethod
+    def _declared_classes(cls) -> tuple[type[Component], ...]:
+        """Component classes declared under ``interloper.components``.
+
+        Each entry names a component class directly, or a module whose public
+        attributes are scanned for component classes.
+
+        Returns:
+            Every declared component class.
+        """
+        classes: list[type[Component]] = []
+        for entry_point in entry_points(group=_ENTRY_POINT):
+            loaded = entry_point.load()
+            if isinstance(loaded, ModuleType):
+                for attribute_name in dir(loaded):
+                    member = getattr(loaded, attribute_name)
+                    if isinstance(member, type) and issubclass(member, Component):
+                        classes.append(member)
+            elif isinstance(loaded, type) and issubclass(loaded, Component):
+                classes.append(loaded)
+        return tuple(classes)
+
+    @classmethod
+    def _definitions_from(cls, components: Iterable[type[Component]]) -> dict[str, ComponentDefinition]:
+        """Build definitions from component classes.
+
+        Every class self-describes through ``definition()``; nothing is walked,
+        inferred, or registered — the catalog contains exactly what was
+        declared, and kinds must already be registered when it loads.
+
+        Returns:
+            Mapping from component key to definition.
+
+        Raises:
+            ConfigError: If a declared component's kind has no registered
+                anchor — declare it under the ``interloper.kinds`` group.
+        """
+        definitions: dict[str, ComponentDefinition] = {}
+        for component in components:
+            if not (isinstance(component, type) and issubclass(component, Component)):
+                continue
+            if component.kind not in KINDS:
+                raise ConfigError(
+                    f"Component '{component.key}' declares kind '{component.kind}', which is not registered — "
+                    "declare its anchor under the 'interloper.kinds' entry-point group"
+                )
+            definitions.setdefault(component.key, component.definition())
+        return definitions
+
+    @classmethod
+    @cache
+    def _declared_definitions(cls) -> dict[str, ComponentDefinition]:
+        """Definitions of the declared universe (cached).
+
+        Returns:
+            Mapping from component key to definition.
+        """
+        return cls._definitions_from(cls._declared_classes())
+
+    @classmethod
+    def _with_declared(cls, definitions: dict[str, ComponentDefinition]) -> dict[str, ComponentDefinition]:
+        """Ensure the declared universe is present.
+
+        Every catalog contains every component the installed packages declare —
+        installation is the opt-in. Explicitly provided definitions win over
+        declared ones with the same key.
+
+        Returns:
+            The same mapping, with any missing declared definitions added.
+        """
+        for key, definition in cls._declared_definitions().items():
+            definitions.setdefault(key, definition)
+        return definitions

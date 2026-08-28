@@ -68,20 +68,6 @@ def select(response: httpx.Response, selector: DataSelector) -> Any:
 # -- Request helpers -----------------------------------------------------------
 
 
-def _with_param(request: httpx.Request, key: str, value: Any) -> None:
-    """Override a single query parameter on ``request`` in place."""
-    request.url = request.url.copy_set_param(key, str(value))
-
-
-def _clone_with_param(request: httpx.Request, key: str, value: Any) -> httpx.Request:
-    """Copy ``request`` with one query parameter overridden (for concurrent fan-out).
-
-    Returns:
-        A new request identical to ``request`` but with ``key=value``.
-    """
-    return httpx.Request(request.method, request.url.copy_set_param(key, str(value)), headers=request.headers)
-
-
 # -- Paginator protocols -------------------------------------------------------
 
 
@@ -107,6 +93,20 @@ class BasePaginator(ABC):
     @abstractmethod
     def has_next(self) -> bool:
         """Whether another page should be fetched after the last response."""
+
+    @staticmethod
+    def _with_param(request: httpx.Request, key: str, value: Any) -> None:
+        """Override a single query parameter on ``request`` in place."""
+        request.url = request.url.copy_set_param(key, str(value))
+
+    @staticmethod
+    def _clone_with_param(request: httpx.Request, key: str, value: Any) -> httpx.Request:
+        """Copy ``request`` with one query parameter overridden (for concurrent fan-out).
+
+        Returns:
+            A new request identical to ``request`` but with ``key=value``.
+        """
+        return httpx.Request(request.method, request.url.copy_set_param(key, str(value)), headers=request.headers)
 
 
 class RangePaginator(BasePaginator):
@@ -174,7 +174,7 @@ class PageNumberPaginator(RangePaginator):
         """Reset state and set the first page parameter."""
         self._page = self.base_page
         self._has_next = True
-        _with_param(request, self.page_param, self.base_page)
+        self._with_param(request, self.page_param, self.base_page)
 
     def _last_page(self, response: httpx.Response) -> int | None:
         total = _extract(response.json(), self.total_path, None) if self.total_path else None
@@ -192,7 +192,7 @@ class PageNumberPaginator(RangePaginator):
     def update_request(self, request: httpx.Request) -> None:
         """Advance to the next page number."""
         self._page += 1
-        _with_param(request, self.page_param, self._page)
+        self._with_param(request, self.page_param, self._page)
 
     @property
     def has_next(self) -> bool:
@@ -210,7 +210,7 @@ class PageNumberPaginator(RangePaginator):
         last = self._last_page(first_response)
         if last is None:
             return None  # unknown total → sequential fallback
-        return [_clone_with_param(base_request, self.page_param, p) for p in range(self.base_page + 1, last + 1)]
+        return [self._clone_with_param(base_request, self.page_param, p) for p in range(self.base_page + 1, last + 1)]
 
 
 class OffsetPaginator(RangePaginator):
@@ -249,8 +249,8 @@ class OffsetPaginator(RangePaginator):
         """Reset state and set the first offset + limit params."""
         self._offset = self.base_offset
         self._has_next = True
-        _with_param(request, self.limit_param, self.limit)
-        _with_param(request, self.offset_param, self.base_offset)
+        self._with_param(request, self.limit_param, self.limit)
+        self._with_param(request, self.offset_param, self.base_offset)
 
     def _last_offset(self, response: httpx.Response) -> int | None:
         total = _extract(response.json(), self.total_path, None) if self.total_path else None
@@ -268,7 +268,7 @@ class OffsetPaginator(RangePaginator):
     def update_request(self, request: httpx.Request) -> None:
         """Advance to the next offset."""
         self._offset += self.limit
-        _with_param(request, self.offset_param, self._offset)
+        self._with_param(request, self.offset_param, self._offset)
 
     @property
     def has_next(self) -> bool:
@@ -287,7 +287,7 @@ class OffsetPaginator(RangePaginator):
         if last is None:
             return None
         offsets = range(self.base_offset + self.limit, last, self.limit)
-        return [_clone_with_param(base_request, self.offset_param, o) for o in offsets]
+        return [self._clone_with_param(base_request, self.offset_param, o) for o in offsets]
 
 
 class HeaderLinkPaginator(BasePaginator):
@@ -353,7 +353,7 @@ class JSONCursorPaginator(BasePaginator):
     def update_request(self, request: httpx.Request) -> None:
         """Set the cursor query parameter for the next page."""
         assert self._cursor is not None
-        _with_param(request, self.cursor_param, self._cursor)
+        self._with_param(request, self.cursor_param, self._cursor)
 
     @property
     def has_next(self) -> bool:

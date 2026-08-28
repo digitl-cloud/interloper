@@ -33,55 +33,8 @@ class IgnoredDescriptor:
     """
 
 
-def dump_spec_value(value: Any) -> Any:
-    """Serialize a component field value for a :class:`Spec` init payload.
-
-    The wire format is uniform: **anything with class identity is
-    Serializable** and serializes via its own spec; lists and dicts are
-    walked; everything else must be a JSON-able scalar.
-
-    Returns:
-        A JSON-able value understood by ``Spec.reconstruct``.
-    """
-    from pydantic_core import to_jsonable_python
-
-    if isinstance(value, Serializable):
-        return value.to_spec().model_dump(mode="json")
-    if isinstance(value, (list, tuple)):
-        return [dump_spec_value(v) for v in value]
-    if isinstance(value, dict):
-        return {k: dump_spec_value(v) for k, v in value.items()}
-    return to_jsonable_python(value)
-
-
 # -- Specs ---------------------------------------------------------------------
 _ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-
-
-def _interpolate_env(value: Any, missing: set[str]) -> Any:
-    """Recursively substitute ``${VAR}`` placeholders in string values.
-
-    Unknown variables are collected into *missing* (and left in place) so
-    the caller can report them all at once.
-
-    Returns:
-        The value with all resolvable placeholders substituted.
-    """
-    if isinstance(value, str):
-
-        def sub(match: re.Match[str]) -> str:
-            name = match.group(1)
-            if name not in os.environ:
-                missing.add(name)
-                return match.group(0)
-            return os.environ[name]
-
-        return _ENV_VAR_RE.sub(sub, value)
-    if isinstance(value, dict):
-        return {k: _interpolate_env(v, missing) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_interpolate_env(v, missing) for v in value]
-    return value
 
 
 class Spec(BaseModel):
@@ -137,7 +90,7 @@ class Spec(BaseModel):
             raise SpecError(f"Spec file '{path}' must be a YAML mapping")
 
         missing: set[str] = set()
-        data = _interpolate_env(data, missing)
+        data = cls._interpolate_env(data, missing)
         if missing:
             raise SpecError(
                 f"Spec file '{path}' references undefined environment variable(s): {', '.join(sorted(missing))}"
@@ -147,6 +100,53 @@ class Spec(BaseModel):
             return cls.model_validate(data)
         except ValidationError as exception:
             raise SpecError(f"Invalid spec file '{path}': {exception}") from exception
+
+    @classmethod
+    def dump_value(cls, value: Any) -> Any:
+        """Serialize a component field value for a :class:`Spec` init payload.
+
+        The wire format is uniform: **anything with class identity is
+        Serializable** and serializes via its own spec; lists and dicts are
+        walked; everything else must be a JSON-able scalar.
+
+        Returns:
+            A JSON-able value understood by ``Spec.reconstruct``.
+        """
+        from pydantic_core import to_jsonable_python
+
+        if isinstance(value, Serializable):
+            return value.to_spec().model_dump(mode="json")
+        if isinstance(value, (list, tuple)):
+            return [cls.dump_value(v) for v in value]
+        if isinstance(value, dict):
+            return {k: cls.dump_value(v) for k, v in value.items()}
+        return to_jsonable_python(value)
+
+    @classmethod
+    def _interpolate_env(cls, value: Any, missing: set[str]) -> Any:
+        """Recursively substitute ``${VAR}`` placeholders in string values.
+
+        Unknown variables are collected into *missing* (and left in place) so
+        the caller can report them all at once.
+
+        Returns:
+            The value with all resolvable placeholders substituted.
+        """
+        if isinstance(value, str):
+
+            def sub(match: re.Match[str]) -> str:
+                name = match.group(1)
+                if name not in os.environ:
+                    missing.add(name)
+                    return match.group(0)
+                return os.environ[name]
+
+            return _ENV_VAR_RE.sub(sub, value)
+        if isinstance(value, dict):
+            return {k: cls._interpolate_env(v, missing) for k, v in value.items()}
+        if isinstance(value, list):
+            return [cls._interpolate_env(v, missing) for v in value]
+        return value
 
     def reconstruct(self, catalog: Catalog | None = None) -> Serializable:
         """Import the class and rebuild the instance, walking nested specs.
@@ -316,7 +316,7 @@ class Serializable(BaseModel):
                 # FieldInfo and silently drop the field's title, description
                 # and json_schema_extra (x-widget, x-info, …).
                 field_definitions: dict[str, Any] = {
-                    name: (info.annotation, info) for name, info in _override_defaults(result_cls, fields).items()
+                    name: (info.annotation, info) for name, info in cls._override_defaults(result_cls, fields).items()
                 }
                 result_cls = create_model(
                     decorated.__name__,
@@ -345,7 +345,7 @@ class Serializable(BaseModel):
             # Merged FieldInfos, not bare values: a bare `field = value` in
             # the namespace replaces the receiver's FieldInfo wholesale,
             # dropping title/description/json_schema_extra.
-            namespace.update(_override_defaults(cls, fields))
+            namespace.update(cls._override_defaults(cls, fields))
 
         namespace["__module__"] = decorated.__module__
         namespace["__qualname__"] = decorated.__qualname__
@@ -379,6 +379,22 @@ class Serializable(BaseModel):
         return cast("type[Self]", result_cls)
 
     # -- Identity --------------------------------------------------------------
+
+    @staticmethod
+    def _override_defaults(owner: type[BaseModel], overrides: dict[str, Any]) -> dict[str, FieldInfo]:
+        """Copy *owner*'s FieldInfos with new defaults, keeping all other metadata.
+
+        Returns:
+            Field name → copied FieldInfo carrying the override as its default.
+        """
+        infos: dict[str, FieldInfo] = {}
+        for name, value in overrides.items():
+            info = copy.deepcopy(owner.model_fields[name])
+            info.default = value
+            info.default_factory = None
+            infos[name] = info
+        return infos
+
     @classmethod
     def has_own_field(cls, field: str) -> bool:
         """Check if this class declares a non-None default for a field.
@@ -428,7 +444,7 @@ class Serializable(BaseModel):
             value = getattr(self, name)
             if value is None:
                 continue
-            init[name] = dump_spec_value(value)
+            init[name] = Spec.dump_value(value)
 
         return Spec(path=self.path(), init=init or None)
 
@@ -514,18 +530,4 @@ class Serializable(BaseModel):
         schema = strip_internal_fields(raw, extra=cls.internal_fields)
         return schema if schema.get("properties") else {}
 
-
-def _override_defaults(owner: type[BaseModel], overrides: dict[str, Any]) -> dict[str, FieldInfo]:
-    """Copy *owner*'s FieldInfos with new defaults, keeping all other metadata.
-
-    Returns:
-        Field name → copied FieldInfo carrying the override as its default.
-    """
-    infos: dict[str, FieldInfo] = {}
-    for name, value in overrides.items():
-        info = copy.deepcopy(owner.model_fields[name])
-        info.default = value
-        info.default_factory = None
-        infos[name] = info
-    return infos
 

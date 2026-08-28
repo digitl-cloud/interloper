@@ -22,7 +22,7 @@ from google.adk.tools.tool_context import ToolContext
 from interloper import KINDS
 from interloper.connection.base import Connection
 from interloper.errors import CatalogKeyError, ComponentDriftError, ConfigError, ConnectionCheckError, HydrationError
-from interloper.oauth import is_provider_configured
+from interloper.oauth import OAuthAppCredentials
 from interloper.resource.fields import is_fetch_field_provider
 from interloper.utils.concurrency import invoke
 from interloper_toolkit import collection as toolkit_collection
@@ -282,7 +282,7 @@ def request_connection_setup(
             "connection_key": connection_key,
             "name": name,
             "oauth": oauth is not None,
-            "oauth_available": is_provider_configured(oauth["provider"]) if oauth else False,
+            "oauth_available": OAuthAppCredentials.is_configured(oauth["provider"]) if oauth else False,
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from interloper.dag.base import DAG
     from interloper.partitioning.base import Partition, PartitionWindow
 
+
 # Fixed namespace for deterministic asset-event ids. A given asset-lifecycle
 # event is uniquely identified by ``(run_id, asset_id, event_type)``; deriving
 # the event id from that triple makes the *same* logical event collapse to a
@@ -22,22 +23,6 @@ if TYPE_CHECKING:
 # host bulk-emits ``asset_queued`` and the child re-emits it. Combined with the
 # idempotent (``ON CONFLICT (id) DO NOTHING``) ``save_event``, this dedups
 # without any cross-process coordination.
-_ASSET_EVENT_NS = uuid.UUID("a3f1c2d4-5b6e-4a7c-9d8f-0e1a2b3c4d5e")
-
-
-def _asset_event_id(run_id: str, asset_id: str, event_type: EventType) -> str:
-    """Derive a deterministic event id from a run/asset/type triple.
-
-    Both the host and the in-container child run this same code with the same
-    ``run_id`` (passed via ``--run-id``) and ``asset_id`` (carried in the
-    mini-DAG spec), so they compute identical ids and their events dedup.
-
-    Returns:
-        A stable UUID5 string for the event.
-    """
-    return str(uuid.uuid5(_ASSET_EVENT_NS, f"{run_id}:{asset_id}:{event_type.value}"))
-
-
 class RunState:
     """Tracks asset execution state and determines which assets are ready to run.
 
@@ -47,6 +32,8 @@ class RunState:
     All state mutations occur on the asyncio event loop's single thread,
     so no locking is required.
     """
+
+    _ASSET_EVENT_NS = uuid.UUID("a3f1c2d4-5b6e-4a7c-9d8f-0e1a2b3c4d5e")
 
     def __init__(
         self,
@@ -323,6 +310,20 @@ class RunState:
             meta["source_id"] = asset.source.id
         return meta
 
+    @staticmethod
+    def _asset_event_id(run_id: str, asset_id: str, event_type: EventType) -> str:
+        """Derive a deterministic event id from a run/asset/type triple.
+
+        Both the host and the in-container child run this same code with the
+        same ``run_id`` (passed via ``--run-id``) and ``asset_id`` (carried in
+        the mini-DAG spec), so they compute identical ids and their events
+        dedup.
+
+        Returns:
+            A stable UUID5 string for the event.
+        """
+        return str(uuid.uuid5(RunState._ASSET_EVENT_NS, f"{run_id}:{asset_id}:{event_type.value}"))
+
     def _emit_asset_event(self, event_type: EventType, metadata: dict[str, Any]) -> None:
         """Emit an asset-lifecycle event with a deterministic id.
 
@@ -333,7 +334,7 @@ class RunState:
         event = Event(
             type=event_type,
             metadata=metadata,
-            id=_asset_event_id(self.run_id, str(metadata["asset_id"]), event_type),
+            id=self._asset_event_id(self.run_id, str(metadata["asset_id"]), event_type),
         )
         EventBus.emit_event(event)
 

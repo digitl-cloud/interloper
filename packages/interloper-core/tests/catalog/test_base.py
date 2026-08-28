@@ -58,7 +58,6 @@ class TestKindContract:
     """Kinds are registered first; unknown kinds fail the catalog build."""
 
     def test_component_of_unregistered_kind_fails_loudly(self):
-        from interloper.catalog.base import _definitions_from
         from interloper.component import Component
         from interloper.errors import ConfigError
 
@@ -66,7 +65,7 @@ class TestKindContract:
             """Direct Component subclass: its auto-derived kind has no anchor."""
 
         with pytest.raises(ConfigError, match="kind 'fake_unregistered_kind'"):
-            _definitions_from([FakeUnregisteredKind])
+            Catalog._definitions_from([FakeUnregisteredKind])
 
 
 class TestVocabulary:

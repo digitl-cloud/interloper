@@ -7,8 +7,6 @@ from typing import Any
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.partitioning.time import TimePartition
-from interloper.representation import Representation
 
 
 class PartitionedDestination(Destination):
@@ -60,7 +58,7 @@ class PartitionedDestination(Destination):
             assert context.asset.partitioning
             column = context.asset.partitioning.column
             for partition in scope:
-                self._write_scope(context, partition, _partition_slice(data, column, partition))
+                self._write_scope(context, partition, partition.slice(data, column))
         else:
             assert isinstance(scope, Partition)
             self._write_scope(context, scope, data)
@@ -79,23 +77,3 @@ class PartitionedDestination(Destination):
             return [self._read_scope(context, partition) for partition in scope]
         assert isinstance(scope, Partition)
         return self._read_scope(context, scope)
-
-
-def _partition_slice(data: Any, column: str, partition: Partition) -> Any:
-    """Return the partition's slice of *data*.
-
-    A time partition selects by its half-open bounds, because rows may carry
-    values anywhere inside the period (a monthly partition whose rows hold
-    daily dates); any other partition selects by id equality. Data no
-    registered representation recognizes passes through unchanged since it
-    cannot be split.
-
-    Returns:
-        The partition's slice of the data.
-    """
-    rep = Representation.of(data)
-    if not rep.matches(data):
-        return data
-    if isinstance(partition, TimePartition):
-        return rep.filter_range(data, column, *partition.bounds)
-    return rep.filter_eq(data, column, partition.id)

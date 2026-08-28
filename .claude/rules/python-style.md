@@ -73,3 +73,26 @@ The house format for structuring a long module or class is the dash-padded divid
 - Titles are short capitalized noun phrases. Reuse the established vocabulary before inventing a synonym: `Construction`, `Identity`, `Serialization & resolution`, `Definition`, `Introspection`, `Reconfiguration`, `Public API`, `Internals`.
 - This is the only banner style — no `====`, `####`, or boxed variants.
 - Same restraint as rule 3's section labels: dividers earn their place in files and classes long enough to need a map. A class with a handful of methods doesn't get them.
+
+## 5. Modules live in packages
+
+Every concept gets a package (a directory with `__init__.py`), never a loose module file next to its siblings. Inside the package:
+
+- `base.py` holds the core logic the package is named for: package `asset` → `Asset` in `asset/base.py`, package `source` → `Source` in `source/base.py`.
+- Split ancillary logic into sibling modules whenever there is a real seam of responsibility (`decorator.py`, `context.py`, `fields.py`, `ref.py`) — one responsibility per module, split by seam, not by line count.
+- `__init__.py` re-exports the package's public surface with an explicit `__all__`. The package is the import surface: import from it, and reach into a submodule directly only within the package itself or to break an import cycle.
+
+## 6. Logic has an owner
+
+The default home for behavior is a method on the class whose data it reads or whose invariants it maintains. Before writing a module-level function, name its owner; if the owner is a class, the function is a method (private `_` method if internal). If the function's body mostly touches one class's fields, it belongs to that class — wherever it currently sits. Code that parses or builds an `X` is a constructor in disguise: `X.from_*(...)` classmethod, not a free function.
+
+A module-level function is the exception and must be one of:
+
+- the module's **public entry point** where the concept genuinely is a function: decorators (`@asset`, `@source`), field factories (`InputField`), CLI command wiring, procedural init over global state (`init_telemetry`)
+- a **pure, type-agnostic utility** — which lives in `utils/`, never at the bottom of a domain module
+- a **dispatch-table entry or callback** passed by contract (`RECONCILERS`, registry adopt hooks)
+- **forced to module level by the runtime**: pickled by a process pool, referenced by an entry point
+
+Never park logic in a `*Utils`/`*Helper` class or a bag of staticmethods — that's the junk drawer wearing a class.
+
+Accumulation is a signal, not a storage problem: when helpers multiply and share the same arguments, that argument cluster is a class waiting to be born — introduce the type instead of the third helper. The acceptance test is the glance: a module body reads as constants, one or a few classes, and almost nothing else.

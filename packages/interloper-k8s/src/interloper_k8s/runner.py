@@ -16,8 +16,7 @@ from typing import Any, cast
 
 from interloper.asset.base import Asset
 from interloper.errors import RunnerError, format_exception
-from interloper.events import EventBus, EventType
-from interloper.events.event import parse_event_from_log_line
+from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.runner.results import ExecutionStatus
@@ -423,7 +422,7 @@ class KubernetesRunner(SyncRunner):
                         if not line:
                             continue
                         try:
-                            event = parse_event_from_log_line(line)
+                            event = Event.from_log_line(line)
                             if event is not None:
                                 if event.type in _RUN_EVENTS:
                                     continue
@@ -436,7 +435,7 @@ class KubernetesRunner(SyncRunner):
                 buf = buf.rstrip()
                 if buf:
                     try:
-                        event = parse_event_from_log_line(buf)
+                        event = Event.from_log_line(buf)
                         if event is not None and event.type not in _RUN_EVENTS:
                             event_asset_id = event.metadata.get("asset_id")
                             if not event_asset_id or event_asset_id == target_asset_id:
