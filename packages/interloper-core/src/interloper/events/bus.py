@@ -43,7 +43,11 @@ class EventBus:
     _lock = threading.Lock()
 
     def __new__(cls) -> EventBus:  # noqa: PYI034
-        """Create or return the singleton instance (double-checked locking)."""
+        """Create or return the singleton instance (double-checked locking).
+
+        Returns:
+            The process-wide EventBus instance.
+        """
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -160,7 +164,11 @@ class EventBus:
     # -- Internals -------------------------------------------------------------
 
     def _enqueue(self, event: Event) -> None:
-        """Place an event on the internal queue for worker dispatch."""
+        """Place an event on the internal queue for worker dispatch.
+
+        Args:
+            event: The event to hand over to the background worker.
+        """
         self._queue.put(event)
 
     def _start_worker(self) -> None:

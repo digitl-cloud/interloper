@@ -59,6 +59,10 @@ class Runner(Serializable):
         ``settings.config``. Called on a subclass, the resolved runner must
         be of that subclass.
 
+        Args:
+            settings: Runner settings carrying the registry key (``type``) and
+                the keyword arguments to construct it with (``config``).
+
         Returns:
             The configured runner instance.
 
@@ -160,7 +164,16 @@ class Runner(Serializable):
         partition_or_window: Partition | PartitionWindow | None,
         metadata: dict[str, Any] | None,
     ) -> RunResult:
-        """Walk the DAG and return the result (implemented by subclasses)."""
+        """Walk the DAG and return the result (implemented by subclasses).
+
+        Args:
+            dag: The DAG to execute.
+            partition_or_window: Partition or window to scope the run.
+            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
+
+        Returns:
+            A RunResult summarizing the execution outcome.
+        """
 
     # -- Hooks -----------------------------------------------------------------
 
@@ -178,7 +191,13 @@ class Runner(Serializable):
         partition_or_window: Partition | PartitionWindow | None,
         metadata: dict[str, Any] | None,
     ) -> None:
-        """Initialize run state and start the run."""
+        """Initialize run state and start the run.
+
+        Args:
+            dag: The DAG to execute.
+            partition_or_window: Partition or window to scope the run.
+            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
+        """
         self._preflight_validation(dag, partition_or_window)
         self._state = RunState(dag, metadata=metadata)
         self.state.start_run(partition_or_window)
@@ -188,6 +207,11 @@ class Runner(Serializable):
         error: str | None = None,
     ) -> RunResult:
         """Finalize the run and return the result.
+
+        Args:
+            error: Run-level error message, set when the DAG walk itself
+                aborted. ``None`` means the walk finished, in which case the
+                run only fails if individual assets did.
 
         Returns:
             A RunResult summarizing the execution outcome.
@@ -212,6 +236,11 @@ class Runner(Serializable):
         Scope errors are raised here rather than left to the assets: a run
         whose scope no asset can serve should fail as a whole, instead of
         failing the offending assets while the rest of the DAG materializes.
+
+        Args:
+            dag: The DAG whose assets are validated against the run scope.
+            partition_or_window: Partition or window to scope the run.
+                ``None`` means an unpartitioned run.
 
         Raises:
             PartitionError: If partitioned assets are run without a partition,

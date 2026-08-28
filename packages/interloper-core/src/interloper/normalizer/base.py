@@ -121,6 +121,10 @@ class Normalizer(Serializable):
     def _coerce(self, data: Any) -> list[dict[str, Any]]:
         """Coerce arbitrary data to ``list[dict]`` (raises ``NormalizerError`` when unsupported).
 
+        Args:
+            data: Raw asset output (``dict``, ``list[dict]``, ``BaseModel``,
+                ``list[BaseModel]``, or a generator of those).
+
         Returns:
             The coerced list of row dicts.
         """
@@ -135,6 +139,13 @@ class Normalizer(Serializable):
         level: int = 0,
     ) -> dict[str, Any]:
         """Flatten nested dicts using separator-joined keys.
+
+        Args:
+            d: The dict to flatten.
+            parent_key: Key prefix accumulated from the enclosing levels; empty
+                at the top level.
+            level: Current nesting depth, compared against
+                ``flatten_max_level``; ``0`` at the top level.
 
         Returns:
             A flat dict with separator-joined keys.
@@ -151,6 +162,9 @@ class Normalizer(Serializable):
     @staticmethod
     def _fill_missing_keys(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Ensure every row has the same set of keys, filling gaps with ``None``.
+
+        Args:
+            rows: Rows to align; key insertion order is preserved across rows.
 
         Returns:
             Rows with a uniform set of keys.
@@ -170,6 +184,10 @@ class Normalizer(Serializable):
     @staticmethod
     def _drop_na_columns(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Drop columns where every value is ``None``.
+
+        Args:
+            rows: Rows to scan; a column is dropped only when it is ``None`` in
+                every row.
 
         Returns:
             Rows without all-null columns.

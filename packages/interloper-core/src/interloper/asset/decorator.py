@@ -67,6 +67,27 @@ def asset(
         def other(config: MyConfig, connection: MyConn) -> Any:
             return fetch_other()
 
+    Args:
+        fn: The function to turn into an asset, passed positionally when the
+            decorator is used bare. ``None`` in the parenthesised form, which
+            returns a decorator instead.
+        resources: Resource types keyed by ``data()`` parameter name. Explicit
+            declarations win over the types inferred from annotations.
+        destinations: Destination types the asset is allowed to write to.
+        schema: The asset's output schema. ``None`` leaves it undeclared, so
+            AUTO infers one at materialization.
+        partitioning: Partition config for the asset. ``None`` means unpartitioned.
+        requires: Mandatory upstream dependencies, keyed by ``data()`` parameter
+            name, valued by asset key (bare or qualified).
+        optional_requires: Same shape as ``requires``, but unresolved
+            dependencies pass ``None`` instead of failing.
+        tags: Catalog tags for the asset (e.g. ``["Report"]``).
+        key: Asset key. Defaults to the decorated function's name.
+        name: Human-readable display name. Defaults to a label built from the key.
+        icon: Icon identifier shown in the UI.
+        materialization_strategy: How the data is checked against the schema.
+        normalizer: Normalizer applied to the data before conform.
+
     Returns:
         An Asset subclass with the function as its ``data()`` method.
     """
@@ -122,6 +143,13 @@ def _build_asset_class(
 
     Explicit resource declarations from decorator kwargs are passed through.
     Annotation-based inference is handled by ``Asset.__init_subclass__``.
+
+    Args:
+        fn: The sync or async function (or method) backing the asset's ``data()``.
+        classvars: Class-level attributes to set on the generated subclass
+            (``key``, ``tags``, ``resource_types``, …).
+        fields: Pydantic field values to set on the generated subclass, annotated
+            from ``Asset.model_fields``.
 
     Returns:
         A dynamically created Asset subclass.

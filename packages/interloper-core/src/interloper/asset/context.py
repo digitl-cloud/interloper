@@ -144,6 +144,10 @@ class ExecutionContext:
     def _time_partitioning(self, accessor: str) -> TimePartitionConfig:
         """Return the asset's time partition config, or explain why there is none.
 
+        Args:
+            accessor: Name of the calling accessor, quoted back in the error
+                message (e.g. ``"window"``, ``"partition_date"``).
+
         Returns:
             The asset's ``TimePartitionConfig``.
 
@@ -163,6 +167,10 @@ class ExecutionContext:
 
     def _require_single_partition(self, accessor: str) -> Partition:
         """Return the single partition in scope, or explain why there is none.
+
+        Args:
+            accessor: Name of the calling accessor, quoted back in the error
+                message (e.g. ``"partition"``, ``"partition_date"``).
 
         Returns:
             The context's ``Partition``.

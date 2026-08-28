@@ -34,11 +34,22 @@ class CSVDestination(PartitionedDestination):
     base_path: str = ""
 
     def _asset_path(self, context: IOContext) -> Path:
-        """Return the base directory for an asset."""
+        """Return the base directory for an asset.
+
+        Args:
+            context: IO context whose asset supplies the dataset and table
+                segments of the path.
+        """
         return Path(self.base_path) / (context.asset.dataset or "") / context.asset.table
 
     def _scope_path(self, context: IOContext, partition: Partition | None) -> Path:
         """Return the data file path for a scope.
+
+        Args:
+            context: IO context whose asset supplies the dataset, table, and
+                partition column.
+            partition: The scope's partition, or ``None`` for the unpartitioned
+                whole.
 
         Returns:
             ``.../data.csv``, inside a ``{column}={id}`` subdirectory for
@@ -51,12 +62,26 @@ class CSVDestination(PartitionedDestination):
         return base / f"{context.asset.partitioning.column}={partition.id}" / "data.csv"
 
     def _write_scope(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Write one scope's data as CSV (converted to records through its representation)."""
+        """Write one scope's data as CSV (converted to records through its representation).
+
+        Args:
+            context: IO context whose asset supplies the dataset, table, and
+                partition column.
+            partition: The partition being written, or ``None`` for the
+                unpartitioned whole.
+            data: The scope's slice of the data, in its native representation.
+        """
         rows = Representation.of(data).to_records(data)
         self._write_csv(self._scope_path(context, partition), rows)
 
     def _read_scope(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:
         """Read one scope's CSV file.
+
+        Args:
+            context: IO context whose asset supplies the dataset, table, and
+                partition column, and whose ``schema`` types the rows back.
+            partition: The partition to read, or ``None`` for the unpartitioned
+                whole.
 
         Returns:
             Rows as a list of dicts (typed via the context schema when set).
@@ -64,7 +89,13 @@ class CSVDestination(PartitionedDestination):
         return self._read_csv(self._scope_path(context, partition), context)
 
     def _write_csv(self, file_path: Path, data: list[dict[str, Any]]) -> None:
-        """Write a list of row dicts to a CSV file."""
+        """Write a list of row dicts to a CSV file.
+
+        Args:
+            file_path: Destination file; parent directories are created as needed.
+            data: Rows to write; the first row's keys become the CSV headers.
+                An empty list writes an empty file.
+        """
         file_path.parent.mkdir(parents=True, exist_ok=True)
         if not data:
             file_path.write_text("")
@@ -81,6 +112,11 @@ class CSVDestination(PartitionedDestination):
         When the context carries a schema, rows are reconciled against it to
         restore types (CSV reads everything back as strings); empty strings
         are treated as ``None``.
+
+        Args:
+            file_path: CSV file to read.
+            context: IO context whose ``schema``, when not ``None``, types the
+                rows back.
 
         Returns:
             Rows as a list of dicts.
@@ -99,7 +135,12 @@ class CSVDestination(PartitionedDestination):
         return rows
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
-        """Return row counts grouped by partition by scanning CSV files on disk."""
+        """Return row counts grouped by partition by scanning CSV files on disk.
+
+        Args:
+            context: IO context whose asset supplies the dataset, table, and
+                partition column.
+        """
         assert context.asset.partitioning is not None
         column = context.asset.partitioning.column
         base = self._asset_path(context)

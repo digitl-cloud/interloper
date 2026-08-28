@@ -66,6 +66,15 @@ def connection(
     subclass body.  Since Connection extends ``BaseSettings``, fields can
     still be loaded from environment variables.
 
+    Args:
+        cls: The decorated class when used bare; ``None`` when called with
+            arguments, which returns the decorator instead.
+        key: Component key override (defaults to the derived class key).
+        name: Human-readable display name.
+        icon: Icon identifier (e.g. ``"logos:amazon"``).
+        tags: Catalog tags.
+        oauth: OAuth configuration; requires an ``OAuthConnection`` subclass.
+
     Returns:
         A Connection subclass.  Building it fails with a TypeError if
         ``oauth.fields`` maps token response keys to model fields the

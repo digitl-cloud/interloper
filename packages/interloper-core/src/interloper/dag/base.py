@@ -86,6 +86,11 @@ class DAG:
     def _build_graph(self, items: tuple[Asset | Source | type[Asset | Source], ...]) -> None:
         """Build the dependency graph from assets and sources.
 
+        Args:
+            items: The DAG's constructor arguments — Asset/Source instances or
+                classes; classes are instantiated and sources flattened into
+                their assets.
+
         Raises:
             DAGError: If the input is empty, contains duplicates, or has invalid types.
             DependencyNotFoundError: If a dependency is not found in the DAG.
@@ -272,6 +277,9 @@ class DAG:
     def get_predecessors(self, asset_id: str) -> list[str]:
         """Return upstream dependency ids for the given asset.
 
+        Args:
+            asset_id: Id of the asset to look up.
+
         Raises:
             AssetNotFoundError: If the asset id is not in the DAG.
         """
@@ -281,6 +289,9 @@ class DAG:
 
     def get_successors(self, asset_id: str) -> list[str]:
         """Return downstream dependent ids for the given asset.
+
+        Args:
+            asset_id: Id of the asset to look up.
 
         Raises:
             AssetNotFoundError: If the asset id is not in the DAG.
@@ -305,6 +316,10 @@ class DAG:
 
         Async code awaits :meth:`materialize_async` instead.
 
+        Args:
+            partition_or_window: Partition or PartitionWindow every asset in the
+                DAG is run for. ``None`` for an unpartitioned DAG.
+
         Returns:
             The result of the DAG execution.
         """
@@ -317,6 +332,10 @@ class DAG:
         partition_or_window: Partition | PartitionWindow | None = None,
     ) -> RunResult:
         """Execute all assets in dependency order using a default ``AsyncRunner``.
+
+        Args:
+            partition_or_window: Partition or PartitionWindow every asset in the
+                DAG is run for. ``None`` for an unpartitioned DAG.
 
         Returns:
             The result of the DAG execution.
@@ -436,6 +455,9 @@ class DAG:
 
         Parents are included but marked as non-materializable so only the
         target asset is actually executed.
+
+        Args:
+            asset_id: Id of the asset the mini-DAG is built around.
 
         Returns:
             A new DAG containing only the target asset and its parents.

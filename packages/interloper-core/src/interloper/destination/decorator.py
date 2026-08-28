@@ -65,6 +65,21 @@ def destination(
     from the class body and converted to ``ResourceRef`` descriptors.  They
     do **not** become Pydantic model fields.
 
+    Args:
+        cls: The class being decorated when used bare (``@destination``);
+            ``None`` when used with keyword arguments, in which case a
+            decorator is returned instead.
+        resources: Resource dependencies as name → Resource type, an
+            alternative to declaring them as class annotations.
+        key: Registry key for the destination; defaults to the base class's.
+        tags: Tags surfaced in the destination's definition.
+        name: Human-readable name; defaults to a label built from the class name.
+        icon: Icon identifier surfaced in the destination's definition.
+        read_representation: Name of the representation reads materialize into
+            (e.g. ``"rows"``, ``"dataframe"``).
+        materialization_strategy: Default write-time schema strategy, overridable
+            per configured destination.
+
     Returns:
         A Destination subclass.
     """

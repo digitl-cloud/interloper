@@ -26,10 +26,21 @@ class _Bounded(OrderedDict):
     """Mapping capped at ``cap`` entries; the oldest are evicted first."""
 
     def __init__(self, cap: int) -> None:
+        """Create an empty mapping with the given capacity.
+
+        Args:
+            cap: Maximum number of entries kept before eviction starts.
+        """
         super().__init__()
         self._cap = cap
 
     def __setitem__(self, key: Any, value: Any) -> None:
+        """Insert an entry, evicting the oldest ones once over capacity.
+
+        Args:
+            key: Mapping key; re-inserting an existing key keeps its original position.
+            value: Value to store.
+        """
         super().__setitem__(key, value)
         while len(self) > self._cap:
             self.popitem(last=False)
@@ -114,6 +125,12 @@ class OtelMetricsHandler:
             logger.debug("Failed to record metrics for event %s", event.type, exc_info=True)
 
     def _record(self, event: Event) -> None:
+        """Dispatch the event to the recorder for its subject.
+
+        Args:
+            event: The lifecycle event; types outside the run/asset/destination
+                taxonomies are ignored.
+        """
         if event.type is EventType.RUN_STARTED or event.type in self._RUN_STATUS:
             self._record_run(event)
         elif event.type is EventType.ASSET_STARTED or event.type in self._ASSET_STATUS:
@@ -122,6 +139,12 @@ class OtelMetricsHandler:
             self._record_destination_io(event)
 
     def _record_run(self, event: Event) -> None:
+        """Count a finished run and record its duration, or remember a start time.
+
+        Args:
+            event: A ``RUN_STARTED`` event (whose timestamp is stored) or a
+                terminal run event (which emits the metrics).
+        """
         key = ("run", str(event.metadata.get("run_id", "")))
         if event.type is EventType.RUN_STARTED:
             self._started[key] = event.timestamp
@@ -139,6 +162,12 @@ class OtelMetricsHandler:
             self._run_duration.record(seconds, attributes)
 
     def _record_asset(self, event: Event) -> None:
+        """Count a finished asset execution and record its duration, or remember a start time.
+
+        Args:
+            event: An ``ASSET_STARTED`` event (whose timestamp is stored) or a
+                terminal asset event (which emits the metrics).
+        """
         metadata = event.metadata
         key = ("asset", str(metadata.get("run_id", "")), str(metadata.get("asset_id", "")))
         if event.type is EventType.ASSET_STARTED:
@@ -154,6 +183,11 @@ class OtelMetricsHandler:
             self._asset_duration.record(seconds, attributes)
 
     def _record_destination_io(self, event: Event) -> None:
+        """Count one destination read/write, attributed by operation and outcome.
+
+        Args:
+            event: A terminal destination read or write event.
+        """
         operation, status = self._DEST_STATUS[event.type]
         attributes = {
             "operation": operation,
@@ -164,5 +198,15 @@ class OtelMetricsHandler:
         self._dest_io.add(1, attributes)
 
     def _elapsed(self, key: tuple[str, ...], *, until: dt.datetime) -> float | None:
+        """Consume a stored start time and return the seconds since it.
+
+        Args:
+            key: Bookkeeping key for the subject, as built by the recorder that stored it.
+            until: Timestamp of the terminal event to measure up to.
+
+        Returns:
+            Elapsed seconds, or ``None`` when no start time is held for the key
+            (never seen, or already evicted from the bounded store).
+        """
         started = self._started.pop(key, None)
         return None if started is None else (until - started).total_seconds()

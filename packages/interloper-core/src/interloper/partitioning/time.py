@@ -65,6 +65,9 @@ class TimeGranularity(str, Enum):
     def coerce(self, value: object) -> dt.date:
         """Coerce a raw value to this granularity's value type.
 
+        Args:
+            value: A raw period label: a ``date``, a ``datetime``, or an ISO-8601 string.
+
         Returns:
             A ``datetime`` for sub-daily granularities, a ``date`` otherwise.
         """
@@ -74,6 +77,9 @@ class TimeGranularity(str, Enum):
 
     def truncate(self, value: object) -> dt.date:
         """Reduce a value to the start of the period containing it.
+
+        Args:
+            value: Any value this granularity can coerce, at any offset inside the period.
 
         Returns:
             The period's first instant.
@@ -94,6 +100,10 @@ class TimeGranularity(str, Enum):
 
     def advance(self, value: object, periods: int) -> dt.date:
         """Shift a value by *periods* whole periods (negative goes back).
+
+        Args:
+            value: The starting value; truncated to its period before shifting.
+            periods: How many whole periods to shift by, negative to go back.
 
         Returns:
             The start of the resulting period.
@@ -118,6 +128,9 @@ class TimeGranularity(str, Enum):
         partition covering more (or less) than one row of a ``DATE`` column
         cannot be selected by equality.
 
+        Args:
+            value: Any value inside the period whose bounds to return.
+
         Returns:
             The period's start and its exclusive end.
         """
@@ -126,6 +139,10 @@ class TimeGranularity(str, Enum):
 
     def periods_between(self, start: object, end: object) -> int:
         """Return how many periods separate two values (``end`` minus ``start``).
+
+        Args:
+            start: The value the count starts from; truncated to its period.
+            end: The value the count runs to; truncated to its period.
 
         Returns:
             The number of steps from *start*'s period to *end*'s period.
@@ -155,6 +172,9 @@ class TimeGranularity(str, Enum):
         hive paths and object prefixes unchanged, and each shape names its
         granularity unambiguously (see :meth:`TimePartition.from_key`).
 
+        Args:
+            value: Any value inside the period the id names.
+
         Returns:
             The canonical id of the period containing *value*.
 
@@ -169,6 +189,9 @@ class TimeGranularity(str, Enum):
 
     def parse(self, key: str) -> dt.date:
         """Parse a partition id back into the period's start.
+
+        Args:
+            key: A partition id in this granularity's own format (see :attr:`key_format`).
 
         Returns:
             The period's first instant.
@@ -189,6 +212,11 @@ class TimeGranularity(str, Enum):
         return parsed if self is TimeGranularity.HOUR else parsed.date()
 
     def _no_id_format_message(self) -> str:
+        """Build the error message for a granularity that has no partition id format.
+
+        Returns:
+            The message, naming this granularity and the ones that do have an id format.
+        """
         supported = ", ".join(sorted(g.value for g in TimeGranularity if g.key_format is not None))
         return f"No partition id format is defined for {self.value!r} granularity. Supported: {supported}."
 
@@ -274,6 +302,9 @@ class TimePartition(Partition):
         ``2026-08-21`` / ``2026-08-21T13``), so the key alone carries the
         granularity: storage and transport need one string, not a pair.
 
+        Args:
+            key: A partition id in any declarable granularity's format.
+
         Returns:
             The partition the key names.
 
@@ -297,7 +328,11 @@ class TimePartition(Partition):
         object.__setattr__(self, "value", self.granularity.truncate(self.value))
 
     def __repr__(self) -> str:
-        """Return the ISO-formatted period start."""
+        """Return the ISO-formatted period start.
+
+        Returns:
+            The period start in ISO-8601 format.
+        """
         return self.value.isoformat()
 
     @property
@@ -316,6 +351,10 @@ class TimePartition(Partition):
         Rows may carry values anywhere inside the period (a monthly partition
         whose rows hold daily dates), so bounds select where id equality
         would not.
+
+        Args:
+            data: The table to slice, in any registered representation's type.
+            column: Name of the partition column to select on.
 
         Returns:
             The partition's slice of the data.
@@ -356,20 +395,36 @@ class TimePartitionWindow(PartitionWindow):
         yield from self.iter_partitions()
 
     def __str__(self) -> str:
-        """Return ``start:end`` in ISO format."""
+        """Return ``start:end`` in ISO format.
+
+        Returns:
+            Both bounds in ISO-8601 format, colon-separated.
+        """
         return f"{self.start.isoformat()}:{self.end.isoformat()}"
 
     def __repr__(self) -> str:
-        """Return ``start to end`` in ISO format."""
+        """Return ``start to end`` in ISO format.
+
+        Returns:
+            Both bounds in ISO-8601 format, separated by ``to``.
+        """
         return f"{self.start.isoformat()} to {self.end.isoformat()}"
 
     def iter_partitions(self) -> Generator[TimePartition, None, None]:
-        """Yield partitions from end to start (most recent first)."""
+        """Yield partitions from end to start (most recent first).
+
+        Yields:
+            Each ``TimePartition`` in the window, both bounds included.
+        """
         for value in self.granularity.period_range(self.start, self.end, reversed=True):
             yield TimePartition(value, self.granularity)
 
     def partition_count(self) -> int:
-        """Return the number of partitions in the window (inclusive)."""
+        """Return the number of partitions in the window (inclusive).
+
+        Returns:
+            The partition count, at least 1.
+        """
         return self.granularity.periods_between(self.start, self.end) + 1
 
     @classmethod

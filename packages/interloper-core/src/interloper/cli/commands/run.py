@@ -131,6 +131,11 @@ def register(
 def _cmd_run(args: argparse.Namespace) -> None:
     """Execute a DAG from either an inline spec or import paths.
 
+    Args:
+        args: Parsed CLI arguments, carrying the DAG input (``file``, ``format``,
+            ``target``), the partition flags, and the output controls
+            (``dry_run``, ``events``, ``quiet``, ``verbose``, ``run_id``).
+
     Raises:
         SystemExit: On invalid input, import failures, or non-zero
             execution status.
@@ -249,6 +254,10 @@ def _dag_from_paths(paths: list[str]) -> DAG:
     Source, Asset, or Destination.  The resolved items are passed to
     ``DAG(*items)``.
 
+    Args:
+        paths: Dotted import paths, each resolving to a Source, Asset, or
+            Destination class.
+
     Returns:
         A freshly-built DAG.
 
@@ -285,7 +294,14 @@ def _print_plan(
     runner_name: str,
     name: str,
 ) -> None:
-    """Print the resolved run plan to stdout without executing it."""
+    """Print the resolved run plan to stdout without executing it.
+
+    Args:
+        dag: The resolved DAG, printed as its topological generations.
+        partition: The partition or window to run for; ``None`` prints as ``(none)``.
+        runner_name: Class name of the configured runner.
+        name: Run name; omitted from the output when empty.
+    """
     materializable = [a for a in dag.assets if a.materializable]
     lines: list[str] = []
     if name:
@@ -305,6 +321,9 @@ def _resolve_partition(args: argparse.Namespace) -> Partition | PartitionWindow 
     The flags take partition keys, whose shape carries the granularity:
     ``2026`` (year), ``2026-08`` (month), ``2026-08-21`` (day),
     ``2026-08-21T13`` (hour). A window's two keys must share one shape.
+
+    Args:
+        args: Parsed CLI arguments, carrying ``date``, ``start_date`` and ``end_date``.
 
     Returns:
         ``TimePartition`` for ``--date``, ``TimePartitionWindow`` for

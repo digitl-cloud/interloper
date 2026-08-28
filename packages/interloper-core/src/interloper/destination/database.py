@@ -83,15 +83,33 @@ class DatabaseDestination(PartitionedDestination):
 
     @abstractmethod
     def _insert(self, table: str, schema: str | None, rows: list[dict[str, Any]]) -> None:
-        """Insert rows into the target table."""
+        """Insert rows into the target table.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+            rows: Rows to insert, each a column-name → value mapping.
+        """
 
     @abstractmethod
     def _delete_all(self, table: str, schema: str | None) -> None:
-        """Delete all rows from the target table."""
+        """Delete all rows from the target table.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+        """
 
     @abstractmethod
     def _delete_partition(self, table: str, schema: str | None, column: str, value: Any) -> None:
-        """Delete rows matching a single partition value."""
+        """Delete rows matching a single partition value.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+            column: Partition column to match on.
+            value: Partition value whose rows are deleted.
+        """
 
     @abstractmethod
     def _delete_partition_range(
@@ -102,11 +120,24 @@ class DatabaseDestination(PartitionedDestination):
         start: Any,
         end: Any,
     ) -> None:
-        """Delete rows whose *column* falls in ``[start, end)``."""
+        """Delete rows whose *column* falls in ``[start, end)``.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+            column: Partition column to match on.
+            start: Inclusive lower bound of the range.
+            end: Exclusive upper bound of the range.
+        """
 
     @abstractmethod
     def _select_all(self, table: str, schema: str | None) -> list[dict[str, Any]]:
-        """Select all rows from the target table."""
+        """Select all rows from the target table.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+        """
 
     @abstractmethod
     def _select_partition(
@@ -116,7 +147,14 @@ class DatabaseDestination(PartitionedDestination):
         column: str,
         value: Any,
     ) -> list[dict[str, Any]]:
-        """Select rows matching a single partition value."""
+        """Select rows matching a single partition value.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+            column: Partition column to match on.
+            value: Partition value whose rows are selected.
+        """
 
     @abstractmethod
     def _select_partition_range(
@@ -127,7 +165,15 @@ class DatabaseDestination(PartitionedDestination):
         start: Any,
         end: Any,
     ) -> list[dict[str, Any]]:
-        """Select rows whose *column* falls in ``[start, end)``."""
+        """Select rows whose *column* falls in ``[start, end)``.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+            column: Partition column to match on.
+            start: Inclusive lower bound of the range.
+            end: Exclusive upper bound of the range.
+        """
 
     # -- Introspection ---------------------------------------------------------
 
@@ -138,10 +184,21 @@ class DatabaseDestination(PartitionedDestination):
         schema: str | None,
         column: str,
     ) -> dict[str, int]:
-        """Return row counts grouped by the values of the given column."""
+        """Return row counts grouped by the values of the given column.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+            column: Column to group the counts by.
+        """
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
-        """Return row counts grouped by the asset's partition column."""
+        """Return row counts grouped by the asset's partition column.
+
+        Args:
+            context: IO context whose asset supplies the table, dataset, and
+                partition column.
+        """
         assert context.asset.partitioning is not None
         return self._count_by_partition(
             context.asset.table,
@@ -153,6 +210,9 @@ class DatabaseDestination(PartitionedDestination):
 
     def _from_rows(self, rows: list[dict[str, Any]]) -> Any:
         """Materialize database rows into the configured read representation.
+
+        Args:
+            rows: Rows read from the database, each a column-name → value mapping.
 
         Returns:
             Data in the ``read_representation`` format.
@@ -189,6 +249,11 @@ class DatabaseDestination(PartitionedDestination):
         slices.  With ``REPLACE``, matching rows are deleted before
         inserting; with ``APPEND``, rows are inserted without any prior
         deletion.
+
+        Args:
+            context: IO context carrying the target asset, the partition scope,
+                and the effective schema.
+            data: The data to write, in its native representation.
         """
         table = context.asset.table
         schema = context.asset.dataset or None
@@ -244,6 +309,11 @@ class DatabaseDestination(PartitionedDestination):
         validation lets through (e.g. ISO date strings against a DATE
         column). No-op when no effective schema was resolved.
 
+        Args:
+            data: The data about to be written, in its native representation.
+            context: IO context whose ``schema`` is the effective schema, or
+                ``None`` when none could be resolved.
+
         Returns:
             The data to write, coerced under ``RECONCILE``.
         """
@@ -262,6 +332,12 @@ class DatabaseDestination(PartitionedDestination):
         A time partition's rows may carry values anywhere inside the period
         (a monthly partition whose rows hold daily dates), so equality on the
         period start would miss them; the half-open bounds cannot.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+            column: Partition column to match on.
+            partition: The partition whose rows are deleted.
         """
         if isinstance(partition, TimePartition):
             start, end = partition.bounds
@@ -271,6 +347,11 @@ class DatabaseDestination(PartitionedDestination):
 
     def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
         """Load one scope from the database table.
+
+        Args:
+            context: IO context whose asset supplies the table, dataset, and
+                partition column.
+            partition: The partition to load, or ``None`` for the whole table.
 
         Returns:
             The scope's rows, materialized into the read representation.

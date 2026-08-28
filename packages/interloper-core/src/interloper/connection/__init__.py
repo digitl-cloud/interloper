@@ -1,3 +1,5 @@
+"""Connection: a resource holding connection and credential values, OAuth variants included."""
+
 from interloper.connection.base import (
     Connection,
     OAuthConnection,

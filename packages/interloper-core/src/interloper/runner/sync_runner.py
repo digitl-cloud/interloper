@@ -42,6 +42,11 @@ class SyncRunner(Runner):
     ) -> RunResult:
         """Offload the blocking DAG walk to a worker thread.
 
+        Args:
+            dag: The DAG to execute.
+            partition_or_window: Partition or window to scope the run.
+            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
+
         Returns:
             A RunResult summarizing the execution outcome.
         """
@@ -114,7 +119,11 @@ class SyncRunner(Runner):
     @property
     @abstractmethod
     def _capacity(self) -> int:
-        """Maximum number of concurrent assets this runner can execute."""
+        """Maximum number of concurrent assets this runner can execute.
+
+        Returns:
+            The concurrency ceiling used to throttle submissions.
+        """
 
     @abstractmethod
     def _submit_asset(
@@ -122,12 +131,25 @@ class SyncRunner(Runner):
         asset: Asset,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
-        """Submit an asset for execution and return a Future."""
+        """Submit an asset for execution and return a Future.
+
+        Args:
+            asset: The asset to execute.
+            partition_or_window: Partition or window to scope the run.
+
+        Returns:
+            A Future resolving when the asset's execution finishes.
+        """
 
     # -- Shared execution helpers ----------------------------------------------
 
     def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
-        """Process a completed future and update state."""
+        """Process a completed future and update state.
+
+        Args:
+            future: The finished future returned by ``_submit_asset``.
+            asset: The asset the future was submitted for.
+        """
         try:
             future.result()
         except Exception as e:
@@ -144,6 +166,10 @@ class SyncRunner(Runner):
         Called after an exception aborts the main loop so that every
         in-flight asset gets a proper FAILED or CANCELED event rather
         than being silently abandoned as 'running'.
+
+        Args:
+            inflight: Futures still in flight, mapped to the asset each was
+                submitted for. An empty mapping is a no-op.
         """
         if not inflight:
             return
@@ -176,6 +202,10 @@ class SyncRunner(Runner):
 
         The default assumes ``future.result()`` raises on failure
         (the same contract as the base ``_handle_completed``).
+
+        Args:
+            future: The finished future to interpret.
+            asset: The asset the future was submitted for.
         """
         try:
             future.result()

@@ -1,3 +1,5 @@
+"""Sources: components grouping assets with shared resources and destinations."""
+
 from interloper.source.base import Source, SourceDefinition
 from interloper.source.decorator import source
 

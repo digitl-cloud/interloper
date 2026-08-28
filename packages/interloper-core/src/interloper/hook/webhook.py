@@ -22,6 +22,9 @@ class WebhookHook(Hook):
         """POST the event payload to the configured URL.
 
         An error status from the receiver raises ``httpx.HTTPStatusError``.
+
+        Args:
+            context: The event context, serialized into the POST payload.
         """
         import httpx
 
@@ -30,6 +33,9 @@ class WebhookHook(Hook):
 
     def _payload(self, context: HookContext) -> dict[str, Any]:
         """Build the fixed event document.
+
+        Args:
+            context: The event context whose identity and metadata are sent.
 
         Returns:
             The JSON-able payload.

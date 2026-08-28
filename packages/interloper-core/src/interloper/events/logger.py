@@ -45,7 +45,13 @@ class EventLogger:
         self._source_id = source_id
 
     def _emit(self, level: int, message: str) -> None:
-        """Emit a ``LOG`` event with the given level and message."""
+        """Emit a ``LOG`` event with the given level and message.
+
+        Args:
+            level: Standard :mod:`logging` level constant, carried on the event
+                as its level name.
+            message: The log message.
+        """
         metadata: dict[str, Any] = {
             **self._metadata,
             "asset_key": self._asset_key,
@@ -59,17 +65,33 @@ class EventLogger:
         EventBus.emit(EventType.LOG, metadata=metadata)
 
     def debug(self, message: str) -> None:
-        """Emit a debug-level log event."""
+        """Emit a debug-level log event.
+
+        Args:
+            message: The log message.
+        """
         self._emit(logging.DEBUG, message)
 
     def info(self, message: str) -> None:
-        """Emit an info-level log event."""
+        """Emit an info-level log event.
+
+        Args:
+            message: The log message.
+        """
         self._emit(logging.INFO, message)
 
     def warning(self, message: str) -> None:
-        """Emit a warning-level log event."""
+        """Emit a warning-level log event.
+
+        Args:
+            message: The log message.
+        """
         self._emit(logging.WARNING, message)
 
     def error(self, message: str) -> None:
-        """Emit an error-level log event."""
+        """Emit an error-level log event.
+
+        Args:
+            message: The log message.
+        """
         self._emit(logging.ERROR, message)

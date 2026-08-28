@@ -46,11 +46,19 @@ class Registry(Generic[T]):
         self._load_lock = threading.RLock()
 
     def register(self, name: str, entry: T) -> None:
-        """Register *entry* under *name* (first-wins, idempotent)."""
+        """Register *entry* under *name* (first-wins, idempotent).
+
+        Args:
+            name: The registry key.
+            entry: The object to register; ignored when the name is taken.
+        """
         self._entries.setdefault(name, entry)
 
     def get(self, name: str) -> T | None:
         """Look up an entry by name.
+
+        Args:
+            name: The registry key.
 
         Returns:
             The registered object, or ``None`` if unknown.
@@ -60,6 +68,9 @@ class Registry(Generic[T]):
 
     def __getitem__(self, name: str) -> T:
         """Look up an entry by name, failing loudly.
+
+        Args:
+            name: The registry key.
 
         Returns:
             The registered object.
@@ -108,6 +119,9 @@ class Registry(Generic[T]):
 
     def __contains__(self, name: str) -> bool:
         """Check whether a name is registered.
+
+        Args:
+            name: The registry key.
 
         Returns:
             True when the name has an entry.

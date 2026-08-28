@@ -53,6 +53,14 @@ class Spec(BaseModel):
 
     @model_validator(mode="after")
     def _check_reference(self) -> Spec:
+        """Enforce that exactly one component reference is set.
+
+        Returns:
+            The validated spec, unchanged.
+
+        Raises:
+            ValueError: If neither or both of ``path`` and ``key`` are set.
+        """
         if bool(self.path) == bool(self.key):
             raise ValueError("exactly one of 'path' or 'key' must be set")
         return self
@@ -64,6 +72,10 @@ class Spec(BaseModel):
         ``${VAR}`` placeholders in any string value are replaced from the
         process environment at load time, so credentials never need to live
         in the file. Unresolved variables are a hard error.
+
+        Args:
+            path: Filesystem path to the YAML spec document, as a string or
+                ``Path``.
 
         Returns:
             The validated spec.
@@ -109,6 +121,10 @@ class Spec(BaseModel):
         Serializable** and serializes via its own spec; lists and dicts are
         walked; everything else must be a JSON-able scalar.
 
+        Args:
+            value: The field value to serialize — a ``Serializable``, a list
+                or dict of values to walk, or a JSON-able scalar.
+
         Returns:
             A JSON-able value understood by ``Spec.reconstruct``.
         """
@@ -128,6 +144,12 @@ class Spec(BaseModel):
 
         Unknown variables are collected into *missing* (and left in place) so
         the caller can report them all at once.
+
+        Args:
+            value: The loaded YAML value to walk — strings are substituted,
+                dicts and lists are recursed into, anything else passes through.
+            missing: Mutable accumulator that collects the names of environment
+                variables referenced but not defined.
 
         Returns:
             The value with all resolvable placeholders substituted.
@@ -204,7 +226,12 @@ class Serializable(BaseModel):
 
     # -- Construction ----------------------------------------------------------
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-derive ``key`` as the snake_cased class name unless declared."""
+        """Auto-derive ``key`` as the snake_cased class name unless declared.
+
+        Args:
+            **kwargs: Class-creation keyword arguments, forwarded untouched to
+                ``super().__init_subclass__``.
+        """
         super().__init_subclass__(**kwargs)
         if "key" not in cls.__dict__:
             cls.key = to_snake_case(cls.__name__)
@@ -221,6 +248,10 @@ class Serializable(BaseModel):
         where the subclass declares it. Rebuild the order from each class's
         own annotations, counting only occurrences that are actual fields
         on that class, so a ClassVar annotation no longer pins a position.
+
+        Args:
+            **kwargs: Class-creation keyword arguments, forwarded untouched to
+                ``super().__pydantic_init_subclass__``.
         """
         super().__pydantic_init_subclass__(**kwargs)
         fields = cls.__pydantic_fields__
@@ -245,6 +276,10 @@ class Serializable(BaseModel):
 
         Unknown kwargs are a loud error rather than pydantic's silent
         ``extra="ignore"`` drop — a misnamed field would otherwise vanish.
+
+        Args:
+            **data: Field values, keyed by field name. Every key must name a
+                field declared on the model.
 
         Raises:
             TypeError: If a kwarg matches no field.
@@ -384,6 +419,12 @@ class Serializable(BaseModel):
     def _override_defaults(owner: type[BaseModel], overrides: dict[str, Any]) -> dict[str, FieldInfo]:
         """Copy *owner*'s FieldInfos with new defaults, keeping all other metadata.
 
+        Args:
+            owner: The model whose ``model_fields`` supply the FieldInfo to copy;
+                every override key must name one of its fields.
+            overrides: Field name → new default value. Any ``default_factory``
+                on the copied FieldInfo is cleared so the value wins.
+
         Returns:
             Field name → copied FieldInfo carrying the override as its default.
         """
@@ -398,6 +439,9 @@ class Serializable(BaseModel):
     @classmethod
     def has_own_field(cls, field: str) -> bool:
         """Check if this class declares a non-None default for a field.
+
+        Args:
+            field: Name of the field to look up; an unknown name reads as False.
 
         Returns:
             True if the class defines a non-None default for the field.
@@ -456,6 +500,9 @@ class Serializable(BaseModel):
         ``module:Source.Asset``). Called on a subclass, the resolved class
         must be of that subclass — anything else raises ``TypeError``.
 
+        Args:
+            path: Dotted or composite import path to resolve.
+
         Returns:
             The resolved class.
         """
@@ -464,6 +511,11 @@ class Serializable(BaseModel):
     @classmethod
     def _resolve_import(cls, path: str, *, ref: str) -> type[Self]:
         """Import *path* and check the result against the receiving class.
+
+        Args:
+            path: Dotted or composite import path to import.
+            ref: The reference as the caller wrote it, quoted in the error
+                message — a catalog key, say, rather than the resolved path.
 
         Returns:
             The resolved class.
@@ -510,6 +562,12 @@ class Serializable(BaseModel):
         env interpolation) and reconstructs it, with the same
         subclass-scoped check as :meth:`from_spec` — invalid documents
         surface as ``SpecError``, mismatched kinds as ``TypeError``.
+
+        Args:
+            path: Filesystem path to the YAML spec document, as a string or
+                ``Path``.
+            catalog: Catalog used to resolve ``key`` references. Defaults to
+                the settings-configured catalog, built lazily.
 
         Returns:
             The reconstructed instance.

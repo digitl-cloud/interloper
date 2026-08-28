@@ -62,6 +62,10 @@ class Job(Component):
     def _coerce_destinations(cls, value: Any) -> Any:
         """Accept a single destination or ``None`` where a list is expected.
 
+        Args:
+            value: The raw field value: a single destination, a list or tuple of
+                them, or ``None``.
+
         Returns:
             The value as a list.
         """
@@ -70,7 +74,11 @@ class Job(Component):
         return value if isinstance(value, (list, tuple)) else [value]
 
     def model_post_init(self, context: Any) -> None:
-        """Cascade workload-level defaults down to targets and destinations."""
+        """Cascade workload-level defaults down to targets and destinations.
+
+        Args:
+            context: Pydantic's post-init context, forwarded to ``super()``.
+        """
         super().model_post_init(context)
         for target in self.targets:
             if not target.destinations and self.destinations:

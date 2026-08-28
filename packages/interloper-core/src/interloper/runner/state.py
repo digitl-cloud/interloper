@@ -106,7 +106,13 @@ class RunState:
     # -- Run lifecycle ---------------------------------------------------------
 
     def start_run(self, partition_or_window: Partition | PartitionWindow | None) -> None:
-        """Record the run start time and emit RUN_STARTED + ASSET_QUEUED events."""
+        """Record the run start time and emit RUN_STARTED + ASSET_QUEUED events.
+
+        Args:
+            partition_or_window: Partition or window the run is scoped to, or
+                ``None`` for an unpartitioned run. Stamped on every event this
+                state emits.
+        """
         self.partition_or_window = partition_or_window
         self.start_time = dt.datetime.now(dt.timezone.utc)
         self.end_time = None
@@ -137,6 +143,12 @@ class RunState:
         error: str | None = None,
     ) -> dict[str, AssetExecutionInfo]:
         """Record the run end time, emit a terminal event, and return asset executions.
+
+        Args:
+            status: Terminal status of the run; anything other than
+                ``COMPLETED`` emits ``RUN_FAILED``.
+            error: Run-level error message included in the terminal event, or
+                ``None`` when there is no specific error to report.
 
         Returns:
             A copy of the asset execution info dictionary.
@@ -196,7 +208,9 @@ class RunState:
 
         Args:
             asset: The asset that completed.
-            emit: Emit ``ASSET_COMPLETED`` on the EventBus.
+            emit: Emit ``ASSET_COMPLETED`` on the EventBus.  Set to
+                ``False`` for cross-process runners where the child
+                process emits the event itself.
         """
         self.asset_executions[asset.id].mark_completed()
         self._promote_dependents(asset.id)
@@ -215,7 +229,9 @@ class RunState:
 
         Args:
             asset: The asset that was canceled.
-            emit: Emit ``ASSET_CANCELED`` on the EventBus.
+            emit: Emit ``ASSET_CANCELED`` on the EventBus.  Set to
+                ``False`` for cross-process runners where the child
+                process emits the event itself.
         """
         self.asset_executions[asset.id].mark_canceled()
 
@@ -291,11 +307,21 @@ class RunState:
                 info.status = ExecutionStatus.READY
 
     def _assets_with_status(self, status: ExecutionStatus) -> list[Asset]:
-        """Return all assets matching the given execution status."""
+        """Return all assets matching the given execution status.
+
+        Args:
+            status: The execution status to filter on.
+
+        Returns:
+            Assets whose current status equals ``status``, in DAG order.
+        """
         return [asset for asset in self.dag.assets if self.asset_executions[asset.id].status == status]
 
     def _asset_event_metadata(self, asset: Asset) -> dict[str, Any]:
         """Build event metadata for an asset state transition.
+
+        Args:
+            asset: The asset the event is about.
 
         Returns:
             Dictionary of metadata keys for the event.
@@ -319,6 +345,11 @@ class RunState:
         the mini-DAG spec), so they compute identical ids and their events
         dedup.
 
+        Args:
+            run_id: Id of the run the event belongs to.
+            asset_id: Id of the asset the event is about.
+            event_type: The asset-lifecycle event type.
+
         Returns:
             A stable UUID5 string for the event.
         """
@@ -330,6 +361,11 @@ class RunState:
         The id is derived from ``(run_id, asset_id, event_type)`` so the same
         logical event dedups across producers (host fallback vs child, or the
         duplicate ``asset_queued``).  ``metadata`` must carry ``asset_id``.
+
+        Args:
+            event_type: The asset-lifecycle event type to emit.
+            metadata: Event metadata, as built by ``_asset_event_metadata``;
+                must carry an ``asset_id`` key.
         """
         event = Event(
             type=event_type,
@@ -339,7 +375,12 @@ class RunState:
         EventBus.emit_event(event)
 
     def _promote_dependents(self, completed_key: str) -> None:
-        """Promote queued successors to READY if all their predecessors are done."""
+        """Promote queued successors to READY if all their predecessors are done.
+
+        Args:
+            completed_key: Id of the asset that just completed, whose
+                successors are candidates for promotion.
+        """
         completed_keys = {
             k
             for k, info in self.asset_executions.items()
@@ -355,6 +396,10 @@ class RunState:
 
     def _propagate_failure(self, failed_key: str) -> list[str]:
         """Recursively mark all downstream dependents as CANCELED.
+
+        Args:
+            failed_key: Id of the asset that failed, whose transitive
+                successors are canceled.
 
         Returns:
             List of asset keys that were canceled.

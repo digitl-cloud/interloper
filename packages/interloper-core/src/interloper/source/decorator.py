@@ -63,6 +63,22 @@ def source(
 ) -> type[Source] | Callable[..., type[Source]]:
     """Create a Source subclass from a decorated class or function.
 
+    Args:
+        target: The decorated class or function when used bare; ``None`` when
+            used with arguments, in which case a decorator is returned.
+        resources: Resource slot name → Resource class, set as ``resource_types``.
+        destinations: Destination classes the source allows, set as
+            ``destination_types``.
+        tags: Catalog tags for the source.
+        key: Overrides the auto-derived snake_cased key.
+        name: Human-readable display name.
+        icon: Catalog icon identifier.
+        dataset: Default dataset for the source's assets.
+        default_destination_key: Destination key downstream assets read from.
+        materializable: Whether the source's assets execute.
+        normalizer: Default normalizer applied to the source's assets.
+        materialization_strategy: Default strategy for the source's assets.
+
     Returns:
         A Source subclass with discovered assets.
     """
@@ -129,6 +145,11 @@ def _build_source(
 ) -> type[Source]:
     """Route to class-based or function-based builder.
 
+    Args:
+        target: The decorated class or function.
+        classvars: Class-level attributes to stamp on the built class.
+        fields: Field default overrides for the built class.
+
     Returns:
         A dynamically created Source subclass.
     """
@@ -146,6 +167,12 @@ def _build_source_from_fn(
     """Build a Source subclass from a decorated function.
 
     Calls the function and expects it to return a list of ``type[Asset]``.
+
+    Args:
+        fn: The decorated function. Its annotated parameters become config
+            fields on the built class, and its return value supplies the assets.
+        classvars: Class-level attributes to stamp on the built class.
+        fields: Field default overrides for the built class.
 
     Returns:
         A dynamically created Source subclass.
@@ -206,6 +233,11 @@ def _build_source_from_class(
     Asset subclasses defined in the class body (via ``@asset`` on methods)
     are auto-collected by ``Source.__init_subclass__._collect_asset_types()``.
     Field annotations are handled by ``Source.build_class``.
+
+    Args:
+        cls: The decorated class.
+        classvars: Class-level attributes to stamp on the built class.
+        fields: Field default overrides for the built class.
 
     Returns:
         A dynamically created Source subclass.

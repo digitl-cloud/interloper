@@ -40,6 +40,12 @@ def schema(
     The decorated class's annotations and attributes become the Schema
     subclass body.
 
+    Args:
+        cls: The decorated class when used bare; ``None`` when used with
+            arguments, in which case a decorator is returned.
+        key: Overrides the auto-derived snake_cased key.
+        name: Human-readable display name.
+
     Returns:
         A Schema subclass.
     """

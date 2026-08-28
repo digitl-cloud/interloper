@@ -1,3 +1,5 @@
+"""Jobs: named, schedulable materialization workloads."""
+
 from interloper.job.base import Job, JobState
 from interloper.job.cron import CronJob
 

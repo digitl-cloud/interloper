@@ -36,6 +36,12 @@ class PartitionedDestination(Destination):
     def _write_scope(self, context: IOContext, partition: Partition | None, data: Any) -> None:
         """Store *data* for a single scope.
 
+        Args:
+            context: IO context carrying the target asset and the effective schema.
+            partition: The partition being stored, or ``None`` for the
+                unpartitioned whole.
+            data: The scope's slice of the data to store.
+
         Raises:
             NotImplementedError: Subclasses implement this or override ``write``.
         """
@@ -44,13 +50,24 @@ class PartitionedDestination(Destination):
     def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
         """Load a single scope.
 
+        Args:
+            context: IO context carrying the target asset and the effective schema.
+            partition: The partition to load, or ``None`` for the unpartitioned
+                whole.
+
         Raises:
             NotImplementedError: Subclasses implement this or override ``read``.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement _read_scope() or override read().")
 
     def write(self, context: IOContext, data: Any) -> None:
-        """Write data, splitting partition windows per partition."""
+        """Write data, splitting partition windows per partition.
+
+        Args:
+            context: IO context carrying the target asset, the partition scope,
+                and the effective schema.
+            data: The data to write, in its native representation.
+        """
         scope = context.partition_or_window
         if scope is None:
             self._write_scope(context, None, data)
@@ -65,6 +82,10 @@ class PartitionedDestination(Destination):
 
     def read(self, context: IOContext) -> Any:
         """Read data for the context's scope.
+
+        Args:
+            context: IO context carrying the target asset, the partition scope,
+                and the effective schema.
 
         Returns:
             The scope's data; partition windows return one result per

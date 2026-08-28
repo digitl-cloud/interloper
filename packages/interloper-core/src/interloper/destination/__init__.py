@@ -1,3 +1,5 @@
+"""Destinations: the IO components reading and writing asset data, and the built-in backends."""
+
 from interloper.destination.base import Destination, DestinationDefinition
 from interloper.destination.context import IOContext
 from interloper.destination.csv import CSVDestination

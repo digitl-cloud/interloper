@@ -13,6 +13,9 @@ from interloper.settings import AppSettings
 def _has_package(name: str) -> bool:
     """Check if a package is importable.
 
+    Args:
+        name: Importable module/package name (e.g. ``interloper_db``).
+
     Returns:
         True if the package can be imported.
     """
@@ -41,6 +44,10 @@ def _load_dotenv() -> None:
 
 def _enforce_requires(args: argparse.Namespace) -> None:
     """Validate command requirements declared by the parser.
+
+    Args:
+        args: Parsed CLI arguments, carrying the ``requires``, ``requires_any``,
+            and ``requires_when`` defaults set by the selected command.
 
     Raises:
         SystemExit: If required packages are not available.

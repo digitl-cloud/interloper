@@ -32,6 +32,12 @@ from interloper.utils.data import coerce_to_records
 def _adopt_representation(_name: str, loaded: Any) -> tuple[str, Representation]:
     """Instantiate a loaded representation entry and key it by its own ``key``.
 
+    Args:
+        _name: The entry-point name, ignored: a representation is keyed by its own ``key``, never by
+            the name the entry point happens to be declared under.
+        loaded: The loaded entry-point object: either a ``Representation`` class to instantiate or an
+            already-built instance.
+
     Returns:
         The ``(key, representation)`` pair.
     """
@@ -50,6 +56,10 @@ def iso_label(value: Any) -> str:
     text renderings use a space). Uniform ISO strings compare correctly as
     strings, including a date against a datetime: the date is a prefix, and a
     half-open range keeps prefix ordering exact at both bounds.
+
+    Args:
+        value: A time-partition column value: a ``date``, a ``datetime``, or anything renderable as
+            text (``None`` included, which renders as ``"None"``).
 
     Returns:
         The value as a comparable ISO-8601 string.
@@ -73,23 +83,45 @@ class Representation(ABC):
 
     @abstractmethod
     def matches(self, data: Any) -> bool:
-        """Return whether *data* is an instance of this representation."""
+        """Return whether *data* is an instance of this representation.
+
+        Args:
+            data: The object to test, of any type.
+        """
 
     @abstractmethod
     def to_records(self, data: Any) -> list[dict[str, Any]]:
-        """View *data* as ``list[dict]`` records (missing values as ``None``)."""
+        """View *data* as ``list[dict]`` records (missing values as ``None``).
+
+        Args:
+            data: The table to view, in this representation's own type.
+        """
 
     @abstractmethod
     def from_records(self, rows: list[dict[str, Any]]) -> Any:
-        """Materialize records into this representation."""
+        """Materialize records into this representation.
+
+        Args:
+            rows: The records to materialize, missing values given as ``None``.
+        """
 
     @abstractmethod
     def columns(self, data: Any) -> list[str]:
-        """Return the column names of *data* (empty when not discoverable)."""
+        """Return the column names of *data* (empty when not discoverable).
+
+        Args:
+            data: The table to inspect, in this representation's own type.
+        """
 
     @abstractmethod
     def filter_eq(self, data: Any, column: str, value: Any) -> Any:
-        """Return the subset of *data* whose *column* equals *value* (compared as strings)."""
+        """Return the subset of *data* whose *column* equals *value* (compared as strings).
+
+        Args:
+            data: The table to filter, in this representation's own type.
+            column: Name of the column to compare; rows missing it compare as ``None``.
+            value: The value each kept row's *column* must equal.
+        """
 
     @abstractmethod
     def filter_range(self, data: Any, column: str, start: Any, end: Any) -> Any:
@@ -99,6 +131,12 @@ class Representation(ABC):
         :func:`iso_label`): the scoping primitive for time partitions, whose
         rows may carry values anywhere inside the period rather than the
         period's start.
+
+        Args:
+            data: The table to filter, in this representation's own type.
+            column: Name of the column to compare; rows missing it compare as ``None``.
+            start: Inclusive lower bound of the range.
+            end: Exclusive upper bound of the range.
         """
 
     @property
@@ -113,6 +151,9 @@ class Representation(ABC):
         Non-rows representations are checked first; everything unmatched
         falls back to rows, whose record coercion rejects non-tabular data
         with a clear error.
+
+        Args:
+            data: The table whose representation to resolve, of any type.
 
         Returns:
             The representation for *data*.
@@ -131,6 +172,9 @@ class RowsRepresentation(Representation):
     def matches(self, data: Any) -> bool:
         """Return whether *data* is a list (of row dicts).
 
+        Args:
+            data: The object to test, of any type.
+
         Returns:
             ``True`` for lists.
         """
@@ -138,6 +182,9 @@ class RowsRepresentation(Representation):
 
     def to_records(self, data: Any) -> list[dict[str, Any]]:
         """Coerce dict / model / generator shapes to records.
+
+        Args:
+            data: The table to view, in this representation's own type.
 
         Returns:
             Data as a list of row dicts.
@@ -147,6 +194,9 @@ class RowsRepresentation(Representation):
     def from_records(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Records are already rows.
 
+        Args:
+            rows: The records to materialize, missing values given as ``None``.
+
         Returns:
             The rows unchanged.
         """
@@ -154,6 +204,9 @@ class RowsRepresentation(Representation):
 
     def columns(self, data: list[dict[str, Any]]) -> list[str]:
         """Return the keys of the first row.
+
+        Args:
+            data: The table to inspect, in this representation's own type.
 
         Returns:
             Column names, or ``[]`` when the shape is not discoverable.
@@ -165,6 +218,11 @@ class RowsRepresentation(Representation):
     def filter_eq(self, data: list[dict[str, Any]], column: str, value: Any) -> list[dict[str, Any]]:
         """Return the rows whose *column* equals *value* (compared as strings).
 
+        Args:
+            data: The table to filter, in this representation's own type.
+            column: Name of the column to compare; rows missing it compare as ``None``.
+            value: The value each kept row's *column* must equal.
+
         Returns:
             The matching rows.
         """
@@ -174,6 +232,12 @@ class RowsRepresentation(Representation):
         self, data: list[dict[str, Any]], column: str, start: Any, end: Any
     ) -> list[dict[str, Any]]:
         """Return the rows whose *column* falls in ``[start, end)``.
+
+        Args:
+            data: The table to filter, in this representation's own type.
+            column: Name of the column to compare; rows missing it compare as ``None``.
+            start: Inclusive lower bound of the range.
+            end: Exclusive upper bound of the range.
 
         Returns:
             The matching rows.

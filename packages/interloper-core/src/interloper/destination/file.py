@@ -23,6 +23,10 @@ class FileDestination(Destination):
     def _path(self, context: IOContext) -> Path:
         """Build the file path from the destination context.
 
+        Args:
+            context: Destination context whose asset supplies the dataset and
+                table segments of the path.
+
         Returns:
             The resolved path to the data file.
         """

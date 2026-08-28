@@ -124,6 +124,10 @@ class OAuthConnection(Connection):
         left unfilled stays ``None`` and fails the required check rather than
         passing as an empty string.
 
+        Args:
+            suffix: Credential field suffix — ``CLIENT_ID``, ``CLIENT_SECRET``
+                or ``REDIRECT_URI``; case-insensitive.
+
         Returns:
             The env credential value, or ``None``.
         """
@@ -138,6 +142,11 @@ class OAuthConnection(Connection):
         A ``mode="before"`` ``resolve_credentials`` validator uses this per field.
         Leaves the field absent when there is no value, so a required field fails
         with "Field required" rather than being satisfied by an empty value.
+
+        Args:
+            data: The raw pre-validation input, mutated in place.
+            field: Name of the model field to fill.
+            value: The value to place, or ``None`` when nothing was resolved.
         """
         if value and not data.get(field):
             data[field] = value
@@ -179,6 +188,10 @@ class RefreshTokenOAuthConnection(OAuthConnection):
 
         Runs before validation so the in-house app can satisfy these required
         fields when the caller omits them; an explicit value is left untouched.
+
+        Args:
+            data: The raw pre-validation input; only a ``dict`` is augmented,
+                anything else passes through untouched.
 
         Returns:
             The (possibly augmented) input data.

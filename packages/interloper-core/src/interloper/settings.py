@@ -73,6 +73,10 @@ class AuthSettings(BaseSettings):
     def _parse_comma_list(cls, value: Any) -> list[str]:
         """Accept a comma-separated string (env) or a list (YAML).
 
+        Args:
+            value: The raw value: a comma-separated string from env, or an
+                iterable of entries from YAML.
+
         Returns:
             Trimmed, lowercased entries with empties dropped and any leading
             ``@`` stripped (so ``@example.com`` and ``example.com`` both work).
@@ -290,6 +294,12 @@ class AppSettings(BaseSettings):
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Configure settings sources: init > env > yaml.
 
+        Args:
+            settings_cls: The settings class being built, passed to the YAML
+                source so it reads the class's own ``yaml_file`` config.
+            **kwargs: Pydantic's default sources, of which ``init_settings``
+                and ``env_settings`` are kept.
+
         Returns:
             Ordered tuple of settings sources.
         """
@@ -321,7 +331,11 @@ class AppSettings(BaseSettings):
 
     @classmethod
     def activate(cls, settings: AppSettings) -> None:
-        """Set active settings for the current CLI invocation."""
+        """Set active settings for the current CLI invocation.
+
+        Args:
+            settings: The settings every later ``get()`` returns until cleared.
+        """
         cls._active = settings
 
     @classmethod

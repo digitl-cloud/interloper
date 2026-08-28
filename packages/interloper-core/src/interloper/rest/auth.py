@@ -131,7 +131,12 @@ class OAuth2Auth(httpx.Auth):
         return httpx.Request("POST", url, data=self.auth_data, headers=self.auth_headers or {})
 
     def _store_token(self, response: httpx.Response) -> None:
-        """Persist the access/refresh tokens from a token-endpoint response."""
+        """Persist the access/refresh tokens from a token-endpoint response.
+
+        Args:
+            response: The token-endpoint response, whose JSON body carries
+                ``access_token`` and optionally a rotated ``refresh_token``.
+        """
         response.raise_for_status()
         token_data = response.json()
         self._access_token = token_data["access_token"]
@@ -144,6 +149,10 @@ class OAuth2Auth(httpx.Auth):
         Defining ``auth_flow`` (rather than ``sync_auth_flow``) lets httpx drive
         the same generator for sync and async clients: the yielded token request
         is executed by whichever client is active.
+
+        Args:
+            request: The request to authenticate; its ``Authorization`` header
+                is set in place, and reset after a 401-triggered refresh.
 
         Yields:
             The token request (when needed) and the authenticated request.

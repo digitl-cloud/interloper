@@ -92,7 +92,12 @@ def register(
 
 
 def _cmd_app(args: argparse.Namespace) -> None:
-    """Start the application services."""
+    """Start the application services.
+
+    Args:
+        args: Parsed CLI arguments; ``dev`` and ``no_create_tables`` are read here,
+            the service toggles having already been folded into settings.
+    """
     from interloper.catalog import Catalog
     from interloper.cli.runtime import Services, resolve_api_port
     from interloper.settings import AppSettings

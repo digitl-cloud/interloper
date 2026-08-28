@@ -60,7 +60,12 @@ class AssetExecutionInfo:
         self.end_time = dt.datetime.now(dt.timezone.utc)
 
     def mark_failed(self, error: str, tb: str | None = None) -> None:
-        """Transition to FAILED with an error message and optional traceback."""
+        """Transition to FAILED with an error message and optional traceback.
+
+        Args:
+            error: Error message describing the failure.
+            tb: Formatted traceback string, or ``None`` when unavailable.
+        """
         self.status = ExecutionStatus.FAILED
         self.end_time = dt.datetime.now(dt.timezone.utc)
         self.error = error

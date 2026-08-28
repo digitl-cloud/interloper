@@ -116,6 +116,11 @@ class AsyncRunner(Runner):
 
     @property
     def _capacity(self) -> int:
+        """Maximum number of concurrent assets this runner can execute.
+
+        Returns:
+            ``max_workers``, the size of the semaphore bounding execution.
+        """
         return self.max_workers
 
     def _submit_asset(
@@ -123,6 +128,16 @@ class AsyncRunner(Runner):
         asset: Asset,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> asyncio.Task[Any]:
+        """Schedule an asset as an asyncio task guarded by the semaphore.
+
+        Args:
+            asset: The asset to execute.
+            partition_or_window: Partition or window to scope the run.
+
+        Returns:
+            The created task, which acquires a concurrency slot before
+            materializing the asset.
+        """
         assert self._semaphore is not None
 
         sem = self._semaphore
@@ -141,6 +156,11 @@ class AsyncRunner(Runner):
         partition_or_window: Partition | PartitionWindow | None = None,
     ) -> Any:
         """Execute a single asset with state tracking.
+
+        Args:
+            asset: The asset to materialize.
+            partition_or_window: Partition or window to scope the run; narrowed
+                to the asset's own effective partition before materializing.
 
         Returns:
             The materialization result, or ``None`` if the asset failed and
@@ -178,6 +198,10 @@ class AsyncRunner(Runner):
         ``mark_asset_failed`` / ``mark_asset_completed``, so completed
         tasks are already handled.  We only need to cancel tasks that
         are still pending (e.g. waiting for the semaphore).
+
+        Args:
+            inflight: Tasks still in flight, mapped to the asset each was
+                created for. An empty mapping is a no-op.
         """
         if not inflight:
             return

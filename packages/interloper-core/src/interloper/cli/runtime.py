@@ -78,6 +78,12 @@ def resolve_api_port(
     In dev mode, when no explicit ``--port`` is provided, the API binds to a
     random free port to avoid clashing with Nuxt on ``settings.server.port``.
 
+    Args:
+        settings: Loaded AppSettings with CLI overrides applied.
+        run_api: Whether the API server is being started at all.
+        dev_mode: Whether the Nuxt dev server runs alongside the API.
+        explicit_port_arg: The raw ``--port`` value, or ``None`` when the flag was omitted.
+
     Returns:
         Effective API port for the API server.
     """
@@ -130,7 +136,19 @@ class Services:
         dev_mode: bool,
         api_port: int,
     ) -> None:
-        """Store the configuration; services are built when :meth:`run` starts."""
+        """Store the configuration; services are built when :meth:`run` starts.
+
+        Args:
+            settings: Loaded AppSettings with CLI overrides applied.
+            store: The Store instance.
+            catalog: Catalog instance.
+            run_api: Whether to start the API.
+            run_cron: Whether to start the cron controller.
+            run_worker: Whether to start the queue worker.
+            run_reaper: Whether to start the reaper (timed-out run cleanup).
+            dev_mode: Whether to run Nuxt in development mode.
+            api_port: Effective API port to bind.
+        """
         self.settings = settings
         self.store = store
         self.catalog = catalog
@@ -180,6 +198,7 @@ class Services:
     # -- Service construction ----------------------------------------------------
 
     def _build_api(self) -> None:
+        """Build the uvicorn API server, mounting the SPA outside dev mode."""
         import uvicorn
         from interloper_api import create_app
 
@@ -216,6 +235,7 @@ class Services:
         self._api_server = uvicorn.Server(uvi_config)
 
     def _build_cron(self) -> None:
+        """Build the cron and hook controllers."""
         # The hook evaluator rides the cron service: both are cluster singletons
         # that turn declarative component intent into runs/side effects.
         from interloper_scheduler import CronController, HookController
@@ -229,6 +249,7 @@ class Services:
         self._hook_controller = HookController(store=self.store)
 
     def _build_launcher_services(self) -> None:
+        """Build the launcher-backed services (queue worker and reaper) that are enabled."""
         # Both need a Launcher; build it once if either is enabled.
         from interloper_scheduler import Launcher
 
@@ -281,6 +302,7 @@ class Services:
     # -- Threads & lifecycle -------------------------------------------------------
 
     def _start_threads(self) -> None:
+        """Start one daemon thread per built service and log the resulting set."""
         if self._cron_controller:
             self._threads.append(threading.Thread(target=self._cron_controller.start, name="cron", daemon=True))
         if self._hook_controller:
@@ -302,6 +324,7 @@ class Services:
         logger.info("Started services: %s", services)
 
     def _run_nuxt_dev(self) -> None:
+        """Run the Nuxt dev server until it exits, shutting everything down if it dies first."""
         from interloper_app import source_dir
 
         if self._stop_event.is_set():
@@ -330,6 +353,7 @@ class Services:
             self._shutdown("nuxt dev server died")
 
     def _watch_parent(self) -> None:
+        """Shut down once this process is reparented, i.e. its original parent died."""
         # `make dev-up` runs us under make/uv. If that chain dies without
         # signaling us (terminal killed, agent session reaped), we get
         # reparented — shut down instead of running on as an orphan.
@@ -342,6 +366,7 @@ class Services:
     # -- Shutdown --------------------------------------------------------------
 
     def _install_signal_handlers(self) -> None:
+        """Route SIGINT, SIGTERM and (where available) SIGHUP into the graceful shutdown."""
         signal.signal(signal.SIGINT, self._on_signal)
         signal.signal(signal.SIGTERM, self._on_signal)
         if hasattr(signal, "SIGHUP"):
@@ -350,9 +375,20 @@ class Services:
             signal.signal(signal.SIGHUP, self._on_signal)
 
     def _on_signal(self, signal_number: int, frame: object) -> None:
+        """Start the shutdown, naming the received signal as its reason.
+
+        Args:
+            signal_number: The signal number delivered by the OS.
+            frame: The interrupted stack frame, as passed by ``signal.signal``; unused.
+        """
         self._shutdown(f"signal {signal.Signals(signal_number).name}")
 
     def _shutdown(self, reason: str) -> None:
+        """Signal every running service to stop (idempotent: later calls are ignored).
+
+        Args:
+            reason: Human-readable cause, logged with the shutdown notice.
+        """
         if self._stop_event.is_set():
             return
         logger.info("Shutting down (%s)...", reason)
@@ -370,6 +406,11 @@ class Services:
             self._api_server.should_exit = True
 
     def _signal_nuxt(self, signal_number: int) -> None:
+        """Signal the Nuxt process group, if a dev server was ever started.
+
+        Args:
+            signal_number: The signal to send (``SIGTERM`` to ask, ``SIGKILL`` to force).
+        """
         if self._nuxt_process is not None:
             self._kill_process_group(self._nuxt_process, signal_number)
 
@@ -381,6 +422,11 @@ class Services:
 
         The child must have been started with ``start_new_session=True`` so its
         pid is also its process-group id.
+
+        Args:
+            process: The child process whose group is signalled; already-exited
+                processes are skipped.
+            signal_number: The signal to send to the whole group.
         """
         if process.poll() is not None:
             return
@@ -396,6 +442,9 @@ class Services:
         Probes both loopback stacks: Nuxt dev binds only ``::1`` on macOS, so an
         IPv4-only probe misses it — and Nuxt's own port check doesn't, sending it
         to its silent fall-back-to-3000 path instead of our fail-fast.
+
+        Args:
+            port: TCP port to probe on loopback.
 
         Returns:
             True if a connection to the port succeeds on either loopback.
@@ -416,6 +465,10 @@ class Services:
 
         Uses ASGI middleware so that ``/api/*`` routes are handled by FastAPI
         first, and only unmatched non-API paths fall through to static files.
+
+        Args:
+            app: The FastAPI application to wrap with the fallback middleware.
+            directory: Path to the built SPA's static root, containing ``index.html``.
         """
         from pathlib import Path
 
@@ -431,9 +484,21 @@ class Services:
             """Serve static files for non-API paths, falling back to index.html for SPA routes."""
 
             def __init__(self, wrapped_app: ASGIApp) -> None:
+                """Wrap the downstream ASGI app.
+
+                Args:
+                    wrapped_app: The app to try first, i.e. FastAPI with its routes.
+                """
                 self.app = wrapped_app
 
             async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+                """Serve a static file, ``index.html``, or delegate to the wrapped app.
+
+                Args:
+                    scope: The ASGI connection scope.
+                    receive: The ASGI receive callable.
+                    send: The ASGI send callable.
+                """
                 if scope["type"] != "http" or scope["path"].startswith("/api"):
                     await self.app(scope, receive, send)
                     return
