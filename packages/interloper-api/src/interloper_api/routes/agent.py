@@ -103,24 +103,24 @@ class SessionResponse(BaseModel):
     last_update_time: float
     event_count: int
 
+    @classmethod
+    def from_session(cls, session: Any) -> SessionResponse:
+        """Convert an ADK Session to a response model.
 
-def _session_to_response(session: Any) -> SessionResponse:
-    """Convert an ADK Session to a response model.
+        Args:
+            session: The ADK Session object.
 
-    Args:
-        session: The ADK Session object.
-
-    Returns:
-        The response model.
-    """
-    return SessionResponse(
-        id=session.id,
-        user_id=session.user_id,
-        app_name=session.app_name,
-        state=session.state,
-        last_update_time=session.last_update_time,
-        event_count=len(session.events),
-    )
+        Returns:
+            The response model.
+        """
+        return cls(
+            id=session.id,
+            user_id=session.user_id,
+            app_name=session.app_name,
+            state=session.state,
+            last_update_time=session.last_update_time,
+            event_count=len(session.events),
+        )
 
 
 # -- Endpoints -----------------------------------------------------------------
@@ -154,7 +154,7 @@ async def create_session(
         user_id=str(user.id),
         state={"org_id": str(org_id)},
     )
-    return _session_to_response(session)
+    return SessionResponse.from_session(session)
 
 
 @router.get("/sessions")
@@ -175,7 +175,7 @@ async def list_sessions(
         user_id=str(user.id),
     )
     sessions = result.sessions if hasattr(result, "sessions") else result
-    return [_session_to_response(s) for s in sessions]
+    return [SessionResponse.from_session(s) for s in sessions]
 
 
 @router.get("/sessions/{session_id}")

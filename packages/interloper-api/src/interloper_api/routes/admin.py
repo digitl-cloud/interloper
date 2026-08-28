@@ -22,7 +22,7 @@ from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, RootModel, field_validator
 
 from interloper_api.dependencies import get_admin_config, get_quota_defaults, get_store, require_super_admin
-from interloper_api.email import send_invite_email
+from interloper_api.notifications import InvitationEmail
 
 logger = logging.getLogger(__name__)
 
@@ -321,6 +321,109 @@ class AdminConfigResponse(BaseModel):
     data: AdminDataConfig
     quotas: AdminQuotaLimits
 
+    @classmethod
+    def from_settings(cls, settings: Any, features: dict[str, bool], catalog: Any = None) -> AdminConfigResponse:
+        """Build the redacted instance-config snapshot served by ``GET /admin/config``.
+
+        Every exposed field is hand-picked here (allowlist, not blocklist), so new
+        settings fields default to *not exposed* and secrets only ever surface as
+        "configured" booleans. The catalog is reported from the hydrated ``Catalog``
+        (auto-discovered universe + configured extras), not ``settings.catalog``,
+        which only holds the explicitly configured import paths.
+
+        Args:
+            settings: The instance settings the snapshot reads from.
+            features: Optional-feature flags keyed by feature name.
+            catalog: The hydrated catalog to report, or ``None`` to report an empty
+                one (the snapshot is then built without catalog access).
+
+        Returns:
+            The snapshot, ready to serve as-is.
+        """
+        try:
+            version: str | None = metadata.version("interloper-api")
+        except metadata.PackageNotFoundError:
+            version = None
+
+        launcher_config = _filter_config(settings.launcher.config, _LAUNCHER_CONFIG_KEYS)
+        # The launcher forwards a nested runner config into the containers it
+        # launches — that's where the effective run concurrency lives on k8s/docker.
+        nested_runner_config = (settings.launcher.config or {}).get("runner_config")
+        if isinstance(nested_runner_config, dict):
+            launcher_config["runner_config"] = _filter_config(nested_runner_config, _RUNNER_CONFIG_KEYS)
+
+        runner_config = _filter_config(settings.runner.config, _RUNNER_CONFIG_KEYS)
+
+        return cls(
+            deployment=AdminDeploymentConfig(
+                version=version,
+                launcher=AdminLauncherConfig(
+                    type=settings.launcher.type,
+                    config=launcher_config,
+                    defaults={
+                        key: value
+                        for key, value in _launcher_defaults(settings.launcher.type).items()
+                        if key not in launcher_config
+                    },
+                ),
+                runner=AdminRunnerConfig(
+                    type=settings.runner.type,
+                    config=runner_config,
+                    defaults={
+                        key: value
+                        for key, value in _runner_defaults(settings.runner.type).items()
+                        if key not in runner_config
+                    },
+                ),
+                features=features,
+                agent_model=settings.agent.model if settings.agent.enabled else None,
+            ),
+            auth=AdminAuthConfig(
+                allowed_domains=settings.auth.allowed_domains,
+                super_admin_emails=settings.auth.super_admin_emails,
+                google_oauth_configured=bool(settings.auth.google_client_id and settings.auth.google_client_secret),
+                google_redirect_uri=settings.auth.google_redirect_uri,
+                session_expiry_days=settings.auth.session_expiry_days,
+                cookie_secure=settings.auth.cookie_secure,
+            ),
+            services=AdminServicesConfig(
+                cron=AdminCronConfig(
+                    enabled=settings.cron.enabled,
+                    reconcile_interval=settings.cron.reconcile_interval,
+                    batch_size=settings.cron.batch_size,
+                    max_execution_delay=settings.cron.max_execution_delay,
+                ),
+                worker=AdminWorkerConfig(
+                    enabled=settings.worker.enabled,
+                    poll_interval=settings.worker.poll_interval,
+                ),
+                reaper=AdminReaperConfig(
+                    enabled=settings.reaper.enabled,
+                    timeout=settings.reaper.timeout,
+                    poll_interval=settings.reaper.poll_interval,
+                ),
+                smtp=AdminSmtpConfig(
+                    enabled=settings.smtp.enabled,
+                    host=settings.smtp.host,
+                    from_addr=settings.smtp.from_addr,
+                ),
+                telemetry=AdminTelemetryConfig(
+                    enabled=settings.otel.enabled,
+                    protocol=settings.otel.protocol,
+                    endpoint_configured=bool(settings.otel.endpoint),
+                    traces=settings.otel.traces,
+                    metrics=settings.otel.metrics,
+                    sample_ratio=settings.otel.sample_ratio,
+                ),
+                mcp_external_url=settings.mcp.external_url,
+            ),
+            data=AdminDataConfig(
+                encryption_configured=bool(settings.secrets.encryption_key),
+                catalog=_catalog_by_kind(catalog) if catalog is not None else {},
+            ),
+            quotas=_quota_limits(settings.quota),
+        )
+
 
 # -- Config snapshot -----------------------------------------------------------
 
@@ -432,109 +535,6 @@ def _catalog_by_kind(catalog: Any) -> dict[str, list[str]]:
     for key, definition in catalog.components.items():
         by_kind.setdefault(definition.kind, []).append(key)
     return {kind: sorted(keys) for kind, keys in sorted(by_kind.items())}
-
-
-def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any = None) -> AdminConfigResponse:
-    """Build the redacted instance-config snapshot served by ``GET /admin/config``.
-
-    Every exposed field is hand-picked here (allowlist, not blocklist), so new
-    settings fields default to *not exposed* and secrets only ever surface as
-    "configured" booleans. The catalog is reported from the hydrated ``Catalog``
-    (auto-discovered universe + configured extras), not ``settings.catalog``,
-    which only holds the explicitly configured import paths.
-
-    Args:
-        settings: The instance settings the snapshot reads from.
-        features: Optional-feature flags keyed by feature name.
-        catalog: The hydrated catalog to report, or ``None`` to report an empty
-            one (the snapshot is then built without catalog access).
-
-    Returns:
-        The snapshot, ready to serve as-is.
-    """
-    try:
-        version: str | None = metadata.version("interloper-api")
-    except metadata.PackageNotFoundError:
-        version = None
-
-    launcher_config = _filter_config(settings.launcher.config, _LAUNCHER_CONFIG_KEYS)
-    # The launcher forwards a nested runner config into the containers it
-    # launches — that's where the effective run concurrency lives on k8s/docker.
-    nested_runner_config = (settings.launcher.config or {}).get("runner_config")
-    if isinstance(nested_runner_config, dict):
-        launcher_config["runner_config"] = _filter_config(nested_runner_config, _RUNNER_CONFIG_KEYS)
-
-    runner_config = _filter_config(settings.runner.config, _RUNNER_CONFIG_KEYS)
-
-    return AdminConfigResponse(
-        deployment=AdminDeploymentConfig(
-            version=version,
-            launcher=AdminLauncherConfig(
-                type=settings.launcher.type,
-                config=launcher_config,
-                defaults={
-                    key: value
-                    for key, value in _launcher_defaults(settings.launcher.type).items()
-                    if key not in launcher_config
-                },
-            ),
-            runner=AdminRunnerConfig(
-                type=settings.runner.type,
-                config=runner_config,
-                defaults={
-                    key: value
-                    for key, value in _runner_defaults(settings.runner.type).items()
-                    if key not in runner_config
-                },
-            ),
-            features=features,
-            agent_model=settings.agent.model if settings.agent.enabled else None,
-        ),
-        auth=AdminAuthConfig(
-            allowed_domains=settings.auth.allowed_domains,
-            super_admin_emails=settings.auth.super_admin_emails,
-            google_oauth_configured=bool(settings.auth.google_client_id and settings.auth.google_client_secret),
-            google_redirect_uri=settings.auth.google_redirect_uri,
-            session_expiry_days=settings.auth.session_expiry_days,
-            cookie_secure=settings.auth.cookie_secure,
-        ),
-        services=AdminServicesConfig(
-            cron=AdminCronConfig(
-                enabled=settings.cron.enabled,
-                reconcile_interval=settings.cron.reconcile_interval,
-                batch_size=settings.cron.batch_size,
-                max_execution_delay=settings.cron.max_execution_delay,
-            ),
-            worker=AdminWorkerConfig(
-                enabled=settings.worker.enabled,
-                poll_interval=settings.worker.poll_interval,
-            ),
-            reaper=AdminReaperConfig(
-                enabled=settings.reaper.enabled,
-                timeout=settings.reaper.timeout,
-                poll_interval=settings.reaper.poll_interval,
-            ),
-            smtp=AdminSmtpConfig(
-                enabled=settings.smtp.enabled,
-                host=settings.smtp.host,
-                from_addr=settings.smtp.from_addr,
-            ),
-            telemetry=AdminTelemetryConfig(
-                enabled=settings.otel.enabled,
-                protocol=settings.otel.protocol,
-                endpoint_configured=bool(settings.otel.endpoint),
-                traces=settings.otel.traces,
-                metrics=settings.otel.metrics,
-                sample_ratio=settings.otel.sample_ratio,
-            ),
-            mcp_external_url=settings.mcp.external_url,
-        ),
-        data=AdminDataConfig(
-            encryption_configured=bool(settings.secrets.encryption_key),
-            catalog=_catalog_by_kind(catalog) if catalog is not None else {},
-        ),
-        quotas=_quota_limits(settings.quota),
-    )
 
 
 # -- Helpers -------------------------------------------------------------------
@@ -652,13 +652,11 @@ def _send_invitation_email(
     invite_url = f"{base_url}/invite/{token}"
 
     try:
-        send_invite_email(
-            smtp_config=smtp_config,
-            to=email,
+        InvitationEmail(
             org_name=org_name,
             inviter_name=inviter_name,
             invite_url=invite_url,
-        )
+        ).send(smtp_config, email)
     except Exception:
         logger.exception("Failed to send invitation email to %s", email)
 

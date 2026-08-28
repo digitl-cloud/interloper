@@ -12,7 +12,7 @@ from interloper_db import Profile, Store
 from pydantic import BaseModel
 
 from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_admin, require_viewer
-from interloper_api.email import send_invite_email
+from interloper_api.notifications import InvitationEmail
 
 logger = logging.getLogger(__name__)
 
@@ -99,14 +99,12 @@ def _send_invitation_email(
     invite_url = f"{base_url}/invite/{token}"
 
     try:
-        send_invite_email(
-            smtp_config=smtp_config,
-            to=email,
+        InvitationEmail(
             org_name=org_name,
             inviter_name=inviter_name,
             invite_url=invite_url,
             logo_url=f"{base_url}/logo-email.png",
-        )
+        ).send(smtp_config, email)
     except Exception:
         logger.exception("Failed to send invitation email to %s", email)
 

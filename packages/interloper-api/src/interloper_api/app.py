@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from types import ModuleType
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
@@ -26,6 +27,7 @@ from interloper_api.routes import (
     auth,
     backfills,
     components,
+    health,
     oauth,
     organisations,
     runs,
@@ -35,6 +37,90 @@ from interloper_api.routes import (
 from interloper_api.routes import catalog as catalog_routes
 
 logger = logging.getLogger(__name__)
+
+#: Routers mounted under ``/api`` for every deployment. The agent router is
+#: absent by design: it is optional and mounted by :func:`_mount_agent`.
+_ROUTE_MODULES: tuple[ModuleType, ...] = (
+    auth,
+    organisations,
+    admin,
+    catalog_routes,
+    components,
+    runs,
+    backfills,
+    oauth,
+    tokens,
+    websocket,
+    health,
+)
+
+
+# -- Error handling ------------------------------------------------------------
+
+
+async def _not_found(_request: Request, exception: NotFoundError) -> JSONResponse:
+    """Render a missing store target as a plain 404.
+
+    Args:
+        _request: The incoming request, unused.
+        exception: The raised :class:`NotFoundError`.
+
+    Returns:
+        A 404 response carrying the exception message as ``detail``.
+    """
+    return JSONResponse(status_code=404, content={"detail": str(exception)})
+
+
+async def _component_drift(_request: Request, exception: ComponentDriftError) -> JSONResponse:
+    """Render catalog drift as a conflict rather than a 500.
+
+    Hydrating or running a drifted source/asset cannot succeed until the user
+    resolves the drift, so it surfaces as a clean 409 the UI can act on.
+
+    Args:
+        _request: The incoming request, unused.
+        exception: The raised :class:`ComponentDriftError`.
+
+    Returns:
+        A 409 response carrying the exception message as ``detail``.
+    """
+    return JSONResponse(status_code=409, content={"detail": str(exception)})
+
+
+async def _quota_exceeded(_request: Request, exception: QuotaExceededError) -> JSONResponse:
+    """Render store-level quota enforcement as a 429 with structured context.
+
+    Args:
+        _request: The incoming request, unused.
+        exception: The raised :class:`QuotaExceededError`.
+
+    Returns:
+        A 429 response whose ``detail`` carries the message plus the quota
+        name, its limit, and the amount already used.
+    """
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": {
+                "message": str(exception),
+                "quota": exception.quota,
+                "limit": exception.limit,
+                "used": exception.used,
+            }
+        },
+    )
+
+
+#: Framework errors that have an HTTP meaning, and the response each becomes.
+#: Anything absent here is a bug and stays a 500.
+_ERROR_HANDLERS: dict[type[Exception], Any] = {
+    NotFoundError: _not_found,
+    ComponentDriftError: _component_drift,
+    QuotaExceededError: _quota_exceeded,
+}
+
+
+# -- Application factory -------------------------------------------------------
 
 
 def create_app(
@@ -63,58 +149,8 @@ def create_app(
     """
     app = FastAPI(title="Interloper API", lifespan=websocket.realtime_lifespan, **kwargs)
 
-    @app.exception_handler(NotFoundError)
-    async def _not_found_handler(_request: Request, exception: NotFoundError) -> JSONResponse:
-        """Store mutations raise NotFoundError on missing targets — a plain 404.
-
-        Args:
-            _request: The incoming request, unused.
-            exception: The raised NotFoundError.
-
-        Returns:
-            A 404 response carrying the exception message as ``detail``.
-        """
-        return JSONResponse(status_code=404, content={"detail": str(exception)})
-
-    @app.exception_handler(ComponentDriftError)
-    async def _component_drift_handler(_request: Request, exception: ComponentDriftError) -> JSONResponse:
-        """A stored component whose catalog key has drifted is a conflict, not a 500.
-
-        Hydrating or running a drifted source/asset can't succeed until the
-        user resolves the drift, so surface it as a clean 409 the UI can act on.
-
-        Args:
-            _request: The incoming request, unused.
-            exception: The raised ComponentDriftError.
-
-        Returns:
-            A 409 response carrying the exception message as ``detail``.
-        """
-        return JSONResponse(status_code=409, content={"detail": str(exception)})
-
-    @app.exception_handler(QuotaExceededError)
-    async def _quota_exceeded_handler(_request: Request, exception: QuotaExceededError) -> JSONResponse:
-        """Store-level quota enforcement surfaces as 429 with structured context.
-
-        Args:
-            _request: The incoming request, unused.
-            exception: The raised QuotaExceededError.
-
-        Returns:
-            A 429 response whose ``detail`` carries the message plus the quota
-            name, its limit, and the amount already used.
-        """
-        return JSONResponse(
-            status_code=429,
-            content={
-                "detail": {
-                    "message": str(exception),
-                    "quota": exception.quota,
-                    "limit": exception.limit,
-                    "used": exception.used,
-                }
-            },
-        )
+    for error_type, handler in _ERROR_HANDLERS.items():
+        app.add_exception_handler(error_type, handler)
 
     if cors_origins:
         app.add_middleware(
@@ -125,57 +161,81 @@ def create_app(
             allow_headers=["*"],
         )
 
-    if store:
-        set_store(store)
-    if catalog:
-        set_catalog(catalog)
-    if settings:
-        set_auth_config(settings.auth)
-        set_smtp_config(settings.smtp)
-        set_quota_defaults(settings.quota)
-
     api = APIRouter(prefix="/api")
-    api.include_router(auth.router)
-    api.include_router(organisations.router)
-    api.include_router(admin.router)
-    api.include_router(catalog_routes.router)
-    api.include_router(components.router)
-    api.include_router(runs.router)
-    api.include_router(backfills.router)
-    api.include_router(oauth.router)
-    api.include_router(tokens.router)
-    api.include_router(websocket.router)
-
-    agent_available = False
-    if settings is None or settings.agent.enabled:
-        try:
-            from interloper_api.routes import agent as agent_routes
-
-            api.include_router(agent_routes.router)
-            agent_available = True
-        except ImportError:
-            logger.warning(
-                "Agent routes not mounted: the 'agent' extra is not installed "
-                "(install interloper-api[agent]); /agent endpoints will return 404."
-            )
-    else:
-        logger.info("Agent routes not mounted: disabled via settings.")
-    set_features({"agent": agent_available})
-
-    if settings:
-        set_admin_config(admin.build_config_snapshot(settings, features={"agent": agent_available}, catalog=catalog))
-
-    @api.get("/health")
-    def health() -> dict[str, str]:
-        """Report that the API process is up.
-
-        Returns:
-            ``{"status": "ok"}``.
-        """
-        return {"status": "ok"}
-
+    for module in _ROUTE_MODULES:
+        api.include_router(module.router)
+    agent_available = _mount_agent(api, settings)
     app.include_router(api)
+
+    # After mounting, so the feature flag and the config snapshot can record
+    # whether the agent actually mounted. Routes read state per request, never
+    # at mount time, so the order is safe.
+    _install_state(store, catalog, settings, agent_available=agent_available)
 
     oauth.log_provider_status()
 
     return app
+
+
+# -- Internals -----------------------------------------------------------------
+
+
+def _mount_agent(api: APIRouter, settings: Any | None) -> bool:
+    """Mount the optional agent routes, reporting whether they are available.
+
+    Args:
+        api: The ``/api`` router to mount onto.
+        settings: Full ``AppSettings``, or ``None`` to mount whenever the
+            extra is installed.
+
+    Returns:
+        True when the agent routes are mounted.
+    """
+    if settings is not None and not settings.agent.enabled:
+        logger.info("Agent routes not mounted: disabled via settings.")
+        return False
+
+    try:
+        from interloper_api.routes import agent as agent_routes
+    except ImportError:
+        logger.warning(
+            "Agent routes not mounted: the 'agent' extra is not installed "
+            "(install interloper-api[agent]); /agent endpoints will return 404."
+        )
+        return False
+
+    api.include_router(agent_routes.router)
+    return True
+
+
+def _install_state(
+    store: Store | None,
+    catalog: Catalog | None,
+    settings: Any | None,
+    *,
+    agent_available: bool,
+) -> None:
+    """Install the process-wide state the request dependencies read back.
+
+    Args:
+        store: The ``Store`` instance, or ``None`` to leave it unset.
+        catalog: Catalog instance, or ``None`` to leave it unset.
+        settings: Full ``AppSettings``, or ``None`` to install neither the
+            settings slices nor the admin config snapshot.
+        agent_available: Whether the agent routes mounted, recorded as a
+            feature flag and in the admin config snapshot.
+    """
+    if store:
+        set_store(store)
+    if catalog:
+        set_catalog(catalog)
+
+    set_features({"agent": agent_available})
+
+    if settings:
+        set_auth_config(settings.auth)
+        set_smtp_config(settings.smtp)
+        set_quota_defaults(settings.quota)
+        set_admin_config(
+            admin.AdminConfigResponse.from_settings(settings, features={"agent": agent_available}, catalog=catalog)
+        )

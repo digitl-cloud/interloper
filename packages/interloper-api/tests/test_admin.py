@@ -189,7 +189,7 @@ def test_non_super_admin_is_forbidden(store: FakeStore) -> None:
 
 
 def test_config_snapshot_redacts_secrets(fake_settings: SimpleNamespace) -> None:
-    snapshot = admin_module.build_config_snapshot(fake_settings, features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
     payload = snapshot.model_dump_json()
     secrets = (
         "oauth-secret", "smtp-secret", "pg-secret", "key-material",
@@ -206,7 +206,7 @@ def test_config_snapshot_redacts_secrets(fake_settings: SimpleNamespace) -> None
 
 
 def test_config_snapshot_allowlists_launcher_and_runner_config(fake_settings: SimpleNamespace) -> None:
-    snapshot = admin_module.build_config_snapshot(fake_settings, features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
     assert snapshot.deployment.launcher.config == {
         "image": "ghcr.io/x:1",
         "namespace": "prod",
@@ -222,7 +222,7 @@ def test_config_snapshot_allowlists_launcher_and_runner_config(fake_settings: Si
 
 def test_config_snapshot_surfaces_class_defaults_for_unset_config(fake_settings: SimpleNamespace) -> None:
     fake_settings.runner = SimpleNamespace(type="async", config={})
-    snapshot = admin_module.build_config_snapshot(fake_settings, features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
     assert snapshot.deployment.runner.defaults == {"max_workers": 4}
 
 
@@ -234,7 +234,7 @@ def test_config_snapshot_reports_hydrated_catalog_by_kind(fake_settings: SimpleN
             "bigquery": SimpleNamespace(kind="destination"),
         }
     )
-    snapshot = admin_module.build_config_snapshot(fake_settings, features={"agent": True}, catalog=catalog)
+    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True}, catalog=catalog)
     assert snapshot.data.catalog == {"destination": ["bigquery", "csv"], "source": ["demo"]}
 
 
@@ -245,7 +245,7 @@ def test_non_super_admin_cannot_read_config(store: FakeStore) -> None:
 
 def test_super_admin_reads_config(store: FakeStore, fake_settings: SimpleNamespace) -> None:
     client = _client(store, is_super_admin=True)
-    snapshot = admin_module.build_config_snapshot(fake_settings, features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
     client.app.dependency_overrides[get_admin_config] = lambda: snapshot
     resp = client.get("/admin/config")
     assert resp.status_code == 200

@@ -97,6 +97,31 @@ Never park logic in a `*Utils`/`*Helper` class or a bag of staticmethods — tha
 
 Accumulation is a signal, not a storage problem: when helpers multiply and share the same arguments, that argument cluster is a class waiting to be born — introduce the type instead of the third helper. The acceptance test is the glance: a module body reads as constants, one or a few classes, and almost nothing else.
 
+## 8. Constructors live on the type
+
+A function whose job is to build an `X` is a constructor, and belongs on `X` as a classmethod — never a free function named after the type it returns.
+
+```python
+# no — a constructor hiding as a module function
+def destination_response(destination: Component) -> DestinationResponse:
+    return DestinationResponse(id=destination.id, ...)
+
+# yes — the type owns the ways it can be built
+class DestinationResponse(BaseModel):
+    @classmethod
+    def from_destination(cls, destination: Component) -> DestinationResponse:
+        return cls(id=destination.id, ...)
+```
+
+The tell is a return annotation naming a type you own plus a body that ends in `return X(...)`. It covers every convert/build/render helper: response models built from database rows, specs parsed from files, domain objects assembled from settings.
+
+Name the classmethod `from_<source>` — after what it converts, not what it returns: `RunResponse.from_run(run)`, `DAG.from_paths(paths)`, `Event.from_log_line(line)`. When a type can be built several ways, the suffix is what tells them apart. Reserve a plain `build`/`make` prefix for the case where there is no single source to name.
+
+Two things are not constructors in disguise:
+
+- a **framework entry point** that happens to return a model — a FastAPI route handler is an endpoint, and its response type is incidental
+- construction of a type you do **not** own, where the classmethod cannot live on it; keep those as functions, close to the code that needs them
+
 ## 7. Docstrings are complete and uniform
 
 Every module, class, function, and method gets a Google-style docstring — private helpers, `__init__`, and dunders included. A docstring always carries **all** the sections that apply to its signature, no exceptions:
