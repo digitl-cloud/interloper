@@ -34,6 +34,8 @@ from interloper.errors import (
     format_exception,
 )
 from interloper.partitioning.time import TimeGranularity
+from interloper.telemetry import attributes
+from interloper.telemetry.tracer import tracer
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
@@ -268,6 +270,22 @@ class ComponentMixin(RelationMixin):
         Source-owned assets hydrate through their parent source and are
         extracted from it; jobs drift-check every target first. Fails closed
         on any catalog drift.
+
+        Returns:
+            The reconstructed framework component.
+
+        Raises:
+            NotFoundError: If the component is not found.
+            ComponentDriftError: If a catalog key no longer resolves.
+            HydrationError: If reconstruction fails.
+        """
+        with tracer().start_as_current_span(
+            "interloper.store.load", attributes={attributes.TARGET_ID: str(component_id)}
+        ):
+            return self._load(component_id)
+
+    def _load(self, component_id: UUID) -> il.Component:
+        """Hydrate a component row (the traced body of :meth:`load`).
 
         Returns:
             The reconstructed framework component.

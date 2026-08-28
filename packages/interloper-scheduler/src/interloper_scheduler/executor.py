@@ -11,8 +11,13 @@ from uuid import UUID
 import interloper as il
 from interloper.errors import format_exception
 from interloper.runner import ExecutionStatus, Runner
+from interloper.telemetry import attributes
+from interloper.telemetry.propagation import context_from_env, inject_metadata
+from interloper.telemetry.tracer import tracer
 from interloper_db import Store
 from interloper_db.models import Component, ComponentRelation, Run
+from opentelemetry.context import Context
+from opentelemetry.trace import Link, get_current_span
 from sqlmodel import Session, col, select
 
 logger = logging.getLogger(__name__)
@@ -89,22 +94,36 @@ class RunExecutor:
 
                 self._mark_running(session, db_run)
 
-            target = self._store.load(component_id)
-            assets = _target_assets(target)
-            if not assets:
-                logger.info("No sources or assets for run %s, marking success", run_id)
-                self._store.complete_run(run_id, success=True)
-                return True
+            # The run roots its own trace: dispatch and execution are
+            # asynchronous, so the dispatch span (the ``TRACEPARENT`` env in a
+            # launched container, the ambient launch span in-process) is
+            # linked, not parented. Injecting the root into the run metadata
+            # is what nests the runner span here — it prefers a metadata
+            # parent over the environment one it would inherit otherwise.
+            dispatch = get_current_span(context_from_env()).get_span_context()
+            with tracer().start_as_current_span(
+                "interloper.run.execute",
+                context=Context(),
+                links=[Link(dispatch)] if dispatch.is_valid else [],
+                attributes={attributes.RUN_ID: str(run_id)},
+            ):
+                inject_metadata(run_metadata)
 
-            self._resolve_upstream_deps(assets)
+                target = self._store.load(component_id)
+                assets = _target_assets(target)
+                if not assets:
+                    logger.info("No sources or assets for run %s, marking success", run_id)
+                    self._store.complete_run(run_id, success=True)
+                    return True
 
-            if retry_of:
-                self._skip_succeeded_assets(retry_of, assets)
+                self._resolve_upstream_deps(assets)
 
-            dag = il.DAG(*assets)
-            partition = il.TimePartition.from_key(partition_key) if partition_key else None
+                if retry_of:
+                    self._skip_succeeded_assets(retry_of, assets)
 
-            result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, metadata=run_metadata)
+                dag = il.DAG(*assets)
+                partition = il.TimePartition.from_key(partition_key) if partition_key else None
+                result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, metadata=run_metadata)
 
             success = result.status == ExecutionStatus.COMPLETED
             logger.info("Run %s completed: %s", run_id, result.status.name)

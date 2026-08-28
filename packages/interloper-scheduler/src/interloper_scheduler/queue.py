@@ -57,7 +57,8 @@ class QueueController(Controller):
                 return
             try:
                 logger.info("Launching run %s", run_id)
-                # Root of the run's trace; the launched run parents under it.
+                # Dispatch trace root; the launched run starts its own trace
+                # and links back to this span.
                 with tracer().start_as_current_span(
                     "interloper.launcher.launch",
                     attributes={
