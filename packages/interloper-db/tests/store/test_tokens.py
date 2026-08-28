@@ -22,7 +22,11 @@ from interloper_db.store.tokens import TOKEN_PREFIX_LEN
 
 @pytest.fixture
 def token_db() -> Iterator[Engine]:
-    """A fresh in-memory database with the auth + token tables, FKs enforced."""
+    """A fresh in-memory database with the auth + token tables, FKs enforced.
+
+    Yields:
+        The engine bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -45,13 +49,21 @@ def token_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def store(token_db: Engine) -> Store:
-    """A store over the in-memory database (no catalog needed for these)."""
+    """A store over the in-memory database (no catalog needed for these).
+
+    Returns:
+        A store with an empty catalog, reading and writing the fixture database.
+    """
     return Store(catalog=il.Catalog(components={}))
 
 
 @pytest.fixture
 def member(store: Store) -> tuple[Profile, Organisation]:
-    """A profile that is an admin member of a fresh organisation."""
+    """A profile that is an admin member of a fresh organisation.
+
+    Returns:
+        The profile and the organisation it was made admin of, in that order.
+    """
     profile = store.upsert_profile(google_id="g-user", email="user@example.com", name="User")
     org = store.create_organisation(name="Acme", creator_id=profile.id)
     return profile, org

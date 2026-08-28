@@ -41,11 +41,18 @@ def _ts(**kwargs: Any) -> Any:
 
     ``CURRENT_TIMESTAMP`` rather than ``now()`` so the tables also work on the
     in-memory SQLite databases the tests use (identical semantics on Postgres).
+
+    Args:
+        **kwargs: Extra keyword arguments forwarded to the SQLAlchemy
+            ``Column`` (``index``, ``nullable``, …).
+
+    Returns:
+        A SQLModel field descriptor for the column.
     """
     return SQLField(default=None, sa_column=Column(TZDateTime, server_default=text("CURRENT_TIMESTAMP"), **kwargs))
 
 
-# -- Auth & Organisation -----------------------------------------------------
+# -- Auth & Organisation -------------------------------------------------------
 
 
 class Profile(SQLModel, table=True):
@@ -217,6 +224,15 @@ class Component(SQLModel, table=True):
     ownership (asset → source, cascading on delete). ``config`` holds the
     spec, ``state`` holds operator-written runtime state, ``data`` holds the
     encrypted payload of secret-bearing kinds.
+
+    Two persistence details are load-bearing. ``id`` carries a Python-side
+    default on top of ``gen_random_uuid()`` so the store can wire relations to
+    a component before flush, and so inserts work on the SQLite test
+    databases. And ``children`` uses ``passive_deletes="all"`` rather than
+    ``True``: deletion is owned by the DB (``parent_id`` is ``ON DELETE
+    CASCADE``), and ``True`` still nulls ``parent_id`` on children that happen
+    to be loaded in the deleting session, detaching them from the cascade and
+    leaving orphaned asset rows.
     """
 
     __tablename__: ClassVar[str] = "components"
@@ -232,8 +248,6 @@ class Component(SQLModel, table=True):
         ),
     )
 
-    # Python-side default (not just gen_random_uuid()) so the store can wire
-    # relations to a component before flush, and inserts work on SQLite tests.
     id: UUID = SQLField(
         default_factory=uuid4,
         primary_key=True,
@@ -254,14 +268,12 @@ class Component(SQLModel, table=True):
     created_at: datetime | None = _ts()
     updated_at: datetime | None = _ts()
 
-    parent: Optional["Component"] = Relationship(  # noqa: UP045 — SQLModel can't resolve the union string form
+    # Spelled Optional[...] rather than "Component" | None: SQLModel cannot
+    # resolve the union string form at mapper-configuration time.
+    parent: Optional["Component"] = Relationship(
         back_populates="children",
         sa_relationship_kwargs={"remote_side": "Component.id"},
     )
-    # Deletion is owned by the DB (parent_id is ON DELETE CASCADE). "all" —
-    # not True — because True still nulls parent_id on children that happen
-    # to be loaded in the deleting session, detaching them from the cascade
-    # and leaving orphaned asset rows.
     children: list["Component"] = Relationship(
         back_populates="parent",
         sa_relationship_kwargs={"passive_deletes": "all"},
@@ -368,11 +380,15 @@ class Backfill(SQLModel, table=True):
     runs: list["Run"] = Relationship(back_populates="backfill")
 
 
-# -- Runs & Events ------------------------------------------------------------
+# -- Runs & Events -------------------------------------------------------------
 
 
 class Run(SQLModel, table=True):
-    """A single materialization attempt."""
+    """A single materialization attempt.
+
+    ``quota_reserved_at`` is set when a dispatch-time quota reservation was
+    taken; its month tells settlement which usage period to release.
+    """
 
     __tablename__: ClassVar[str] = "runs"
     __table_args__: ClassVar[tuple[Any, ...]] = (
@@ -399,8 +415,6 @@ class Run(SQLModel, table=True):
     )
     attempt: int = 1
     retry_scope: str | None = None
-    # Set when a dispatch-time quota reservation was taken; its month tells
-    # settlement which usage period to release.
     quota_reserved_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))

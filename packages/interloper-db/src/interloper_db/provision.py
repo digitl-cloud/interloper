@@ -22,7 +22,9 @@ def upgrade(engine: Engine | None = None, revision: str = "head") -> None:
     """
     from alembic import command
 
-    _eng = engine or get_engine()  # noqa: F841 — ensure engine is initialised
+    # Resolved for its side effect only: alembic's env.py reads the global
+    # engine singleton, not this value.
+    _eng = engine or get_engine()
     command.upgrade(_alembic_config(), revision)
 
 
@@ -35,9 +37,11 @@ def downgrade(engine: Engine | None = None, revision: str = "-1") -> None:
     """
     from alembic import command
 
-    _eng = engine or get_engine()  # noqa: F841 — ensure engine is initialised
-    cfg = _alembic_config()
-    command.downgrade(cfg, revision)
+    # Resolved for its side effect only: alembic's env.py reads the global
+    # engine singleton, not this value.
+    _eng = engine or get_engine()
+    alembic_config = _alembic_config()
+    command.downgrade(alembic_config, revision)
 
 
 def create_all(engine: Engine | None = None) -> None:
@@ -96,13 +100,13 @@ def ensure_database(dsn: str) -> None:
 
     maintenance_dsn = urlunparse(parsed._replace(path="/postgres"))
     engine = create_engine(maintenance_dsn, isolation_level="AUTOCOMMIT")
-    with engine.connect() as conn:
-        exists = conn.execute(
+    with engine.connect() as connection:
+        exists = connection.execute(
             text("SELECT 1 FROM pg_database WHERE datname = :name"),
             {"name": db_name},
         ).fetchone()
         if not exists:
-            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+            connection.execute(text(f'CREATE DATABASE "{db_name}"'))
     engine.dispose()
 
 
@@ -126,16 +130,15 @@ def drop_database(dsn: str) -> None:
 
     maintenance_dsn = urlunparse(parsed._replace(path="/postgres"))
     engine = create_engine(maintenance_dsn, isolation_level="AUTOCOMMIT")
-    with engine.connect() as conn:
-        # Terminate any active connections to the target database.
-        conn.execute(
+    with engine.connect() as connection:
+        connection.execute(
             text(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
                 "WHERE datname = :name AND pid <> pg_backend_pid()"
             ),
             {"name": db_name},
         )
-        conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
+        connection.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
     engine.dispose()
 
 
@@ -155,6 +158,6 @@ def _alembic_config() -> Config:
     from alembic.config import Config
 
     migrations_dir = Path(__file__).resolve().parent / "migrations"
-    cfg = Config()
-    cfg.set_main_option("script_location", str(migrations_dir))
-    return cfg
+    alembic_config = Config()
+    alembic_config.set_main_option("script_location", str(migrations_dir))
+    return alembic_config

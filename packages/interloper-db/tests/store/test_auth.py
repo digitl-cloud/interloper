@@ -36,7 +36,11 @@ from interloper_db.store import Store
 
 @pytest.fixture
 def auth_db() -> Iterator[Engine]:
-    """A fresh in-memory database with the auth tables, FKs enforced."""
+    """A fresh in-memory database with the auth tables, FKs enforced.
+
+    Yields:
+        The engine bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -63,7 +67,11 @@ def auth_db() -> Iterator[Engine]:
 
 @pytest.fixture
 def store(auth_db: Engine) -> Store:
-    """A store over the in-memory database (no catalog needed for these)."""
+    """A store over the in-memory database (no catalog needed for these).
+
+    Returns:
+        A store with an empty catalog, reading and writing the fixture database.
+    """
     return Store(catalog=il.Catalog(components={}))
 
 

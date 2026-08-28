@@ -8,6 +8,7 @@ reconstructed framework instances.
 
 from __future__ import annotations
 
+from typing import ClassVar
 from uuid import uuid4
 
 import interloper as il
@@ -25,7 +26,11 @@ _CATALOG = il.Catalog.from_assets([DemoSource, demo_asset])
 
 @pytest.fixture
 def store(component_db: Engine) -> Store:
-    """A store over the in-memory database with the demo catalog."""
+    """A store over the in-memory database with the demo catalog.
+
+    Returns:
+        A store carrying the demo catalog, reading and writing the fixture database.
+    """
     return Store(catalog=_CATALOG)
 
 
@@ -163,7 +168,9 @@ class TestJobRoundTrip:
 class FakeLinker(il.Component):
     """Test-only kind whose vocabulary the hydrator has never seen."""
 
-    relation_types = {"link": il.RelationDefinition(kinds=["source"], field="links")}
+    relation_types: ClassVar[dict[str, il.RelationDefinition]] = {
+        "link": il.RelationDefinition(kinds=["source"], field="links")
+    }
     links: list[il.Component] = pydantic.Field(default_factory=list)
 
 

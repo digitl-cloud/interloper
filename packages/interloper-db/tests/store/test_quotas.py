@@ -43,7 +43,11 @@ class _Store(RunMixin, QuotaMixin):
 
 @pytest.fixture
 def store() -> Iterator[_Store]:
-    """A quota-capable store over a fresh in-memory SQLite database."""
+    """A quota-capable store over a fresh in-memory SQLite database.
+
+    Yields:
+        The quota mixin bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -85,7 +89,7 @@ class TestPeriods:
         # 00:30 Berlin on July 1st is still June in UTC.
         berlin = timezone(dt.timedelta(hours=2))
         assert month_start(datetime(2026, 7, 1, 0, 30, tzinfo=berlin)) == dt.date(2026, 6, 1)
-        assert month_start(datetime(2026, 7, 1, 0, 30)) == dt.date(2026, 7, 1)  # naive = UTC
+        assert month_start(datetime(2026, 7, 1, 0, 30)) == dt.date(2026, 7, 1)  # noqa: DTZ001 — naive = UTC
 
     def test_next_month_start_rolls_the_year(self):
         assert next_month_start(dt.date(2026, 12, 1)) == dt.date(2027, 1, 1)
@@ -102,9 +106,8 @@ class TestIncrementUsage:
         assert _usage_rows(store) == {period: (2, 2)}
 
     def test_unknown_metric_rejected(self, store: _Store):
-        with Session(store._engine) as session:
-            with pytest.raises(ValueError, match="Unknown usage metric"):
-                increment_usage(session, _ORG_ID, "sucessful_runs", dt.date(2026, 8, 1), used=1)
+        with Session(store._engine) as session, pytest.raises(ValueError, match="Unknown usage metric"):
+            increment_usage(session, _ORG_ID, "sucessful_runs", dt.date(2026, 8, 1), used=1)
 
 
 class TestSettleRunUsage:
@@ -377,9 +380,8 @@ class TestRegistry:
         assert isinstance(runs, ConsumptionQuota) and runs.metric == METRIC_SUCCESSFUL_RUNS
 
     def test_unregistered_key_fails_loudly(self, store: _Store):
-        with Session(store._engine) as session:
-            with pytest.raises(KeyError, match="not registered"):
-                store.quotas.effective(session, _ORG_ID, "max_bananas")
+        with Session(store._engine) as session, pytest.raises(KeyError, match="not registered"):
+            store.quotas.effective(session, _ORG_ID, "max_bananas")
 
     def test_definition_is_abstract(self):
         """The base class cannot be instantiated — subclasses must implement check()."""

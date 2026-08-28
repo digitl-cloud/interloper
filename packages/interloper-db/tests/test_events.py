@@ -7,27 +7,27 @@ from uuid import UUID, uuid4
 
 import interloper as il
 
-from interloper_db.store.runs import _event_values, _sanitize_data, _sanitize_text
+from interloper_db.store.runs import RunMixin
 
 
 def test_sanitize_strips_nul_bytes() -> None:
     """NUL bytes (which Postgres text rejects) are removed."""
-    assert _sanitize_text("a\x00b\x00c") == "abc"
+    assert RunMixin._sanitize_text("a\x00b\x00c") == "abc"
 
 
 def test_sanitize_passes_through_none() -> None:
     """``None`` stays ``None``."""
-    assert _sanitize_text(None) is None
+    assert RunMixin._sanitize_text(None) is None
 
 
 def test_sanitize_keeps_normal_text() -> None:
     """Ordinary text is returned unchanged."""
-    assert _sanitize_text("hello world") == "hello world"
+    assert RunMixin._sanitize_text("hello world") == "hello world"
 
 
 def test_sanitize_truncates_oversized() -> None:
     """Oversized values are capped and marked as truncated."""
-    out = _sanitize_text("x" * 100, max_len=10)
+    out = RunMixin._sanitize_text("x" * 100, max_len=10)
     assert out is not None
     assert out.startswith("x" * 10)
     assert out.endswith("[truncated]")
@@ -38,30 +38,30 @@ def test_sanitize_truncates_oversized() -> None:
 
 
 def test_sanitize_data_passes_json_through() -> None:
-    assert _sanitize_data({"a": 1, "b": ["x", None]}) == {"a": 1, "b": ["x", None]}
+    assert RunMixin._sanitize_data({"a": 1, "b": ["x", None]}) == {"a": 1, "b": ["x", None]}
 
 
 def test_sanitize_data_empty_becomes_none() -> None:
-    assert _sanitize_data({}) is None
+    assert RunMixin._sanitize_data({}) is None
 
 
 def test_sanitize_data_coerces_non_json_values() -> None:
     """Non-JSON values go through ``str`` rather than failing the write."""
-    out = _sanitize_data({"when": dt.date(2026, 8, 5)})
+    out = RunMixin._sanitize_data({"when": dt.date(2026, 8, 5)})
     assert out == {"when": "2026-08-05"}
 
 
 def test_sanitize_data_strips_nul_escapes() -> None:
     """Postgres jsonb rejects NUL escapes just like text rejects NUL bytes."""
-    assert _sanitize_data({"k": "a\x00b"}) == {"k": "ab"}
+    assert RunMixin._sanitize_data({"k": "a\x00b"}) == {"k": "ab"}
 
 
 def test_sanitize_data_replaces_oversized_payloads() -> None:
-    assert _sanitize_data({"blob": "x" * 100_000}) == {"truncated": True}
+    assert RunMixin._sanitize_data({"blob": "x" * 100_000}) == {"truncated": True}
 
 
 def test_sanitize_data_drops_unencodable_payloads() -> None:
-    assert _sanitize_data({"nan": float("nan")}) is None
+    assert RunMixin._sanitize_data({"nan": float("nan")}) is None
 
 
 # -- _event_values ---------------------------------------------------------------
@@ -76,10 +76,12 @@ def _framework_event(metadata: dict[str, object]) -> il.Event:
 
 
 def test_event_values_maps_asset_metadata_onto_component_columns() -> None:
-    """The ``asset_id``/``asset_key`` keys core emitters use land on the
-    component columns with kind ``asset`` — core needs no schema knowledge."""
+    """The ``asset_id``/``asset_key`` keys core emitters use land on the component columns.
+
+    They land with kind ``asset`` — core needs no schema knowledge.
+    """
     asset_id = uuid4()
-    values = _event_values(
+    values = RunMixin._event_values(
         _framework_event({"asset_id": str(asset_id), "asset_key": "ads", "message": "done"}),
         org_id=uuid4(),
         run_id=None,
@@ -92,7 +94,7 @@ def test_event_values_maps_asset_metadata_onto_component_columns() -> None:
 
 def test_event_values_accepts_explicit_component_metadata() -> None:
     hook_id = uuid4()
-    values = _event_values(
+    values = RunMixin._event_values(
         _framework_event({"component_id": str(hook_id), "component_kind": "hook", "component_key": "slack"}),
         org_id=uuid4(),
         run_id=None,
@@ -104,7 +106,7 @@ def test_event_values_accepts_explicit_component_metadata() -> None:
 
 def test_event_values_spills_unpromoted_metadata_into_data() -> None:
     """Metadata without a structured column persists losslessly in ``data``."""
-    values = _event_values(
+    values = RunMixin._event_values(
         _framework_event(
             {
                 "asset_id": str(uuid4()),
@@ -122,9 +124,11 @@ def test_event_values_spills_unpromoted_metadata_into_data() -> None:
 
 
 def test_event_values_spills_demoted_scope_keys_into_data() -> None:
-    """backfill_id / partition_or_window have no column since 006 — they ride
-    in ``data``, and the None values producers emit unconditionally don't."""
-    values = _event_values(
+    """backfill_id / partition_or_window have no column since 006.
+
+    They ride in ``data``, and the None values producers emit unconditionally don't.
+    """
+    values = RunMixin._event_values(
         _framework_event(
             {
                 "backfill_id": "b0e0a72f-7e2f-49a8-bb3e-9adfa22a1eb3",
@@ -144,7 +148,7 @@ def test_event_values_spills_demoted_scope_keys_into_data() -> None:
 
 def test_event_values_without_component_or_extras() -> None:
     run_id = uuid4()
-    values = _event_values(_framework_event({"message": "run done"}), org_id=uuid4(), run_id=run_id)
+    values = RunMixin._event_values(_framework_event({"message": "run done"}), org_id=uuid4(), run_id=run_id)
     assert values["run_id"] == run_id
     assert values["component_id"] is None
     assert values["component_kind"] is None
@@ -153,5 +157,5 @@ def test_event_values_without_component_or_extras() -> None:
 
 def test_event_values_preserves_producer_assigned_id() -> None:
     event = _framework_event({})
-    values = _event_values(event, org_id=uuid4(), run_id=None)
+    values = RunMixin._event_values(event, org_id=uuid4(), run_id=None)
     assert values["id"] == UUID(event.id)
