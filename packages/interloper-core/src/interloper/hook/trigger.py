@@ -36,6 +36,10 @@ class TriggerHook(Hook):
     def fire(self, context: HookContext) -> None:
         """Trigger a run for every target.
 
+        Args:
+            context: The event context, whose ``trigger`` capability creates
+                the run for each target's component id.
+
         Raises:
             ConfigError: If the operator provided no trigger capability.
         """

@@ -44,6 +44,9 @@ def fetch_field_provider(fn: F) -> F:
             async def accounts(self) -> list[dict]:
                 ...
 
+    Args:
+        fn: The resource method to mark as an options provider.
+
     Returns:
         The same callable, stamped as a fetch provider.
     """
@@ -52,7 +55,11 @@ def fetch_field_provider(fn: F) -> F:
 
 
 def is_fetch_field_provider(candidate: Any) -> bool:
-    """Return whether *candidate* (a function or bound method) is a fetch provider."""
+    """Return whether *candidate* (a function or bound method) is a fetch provider.
+
+    Args:
+        candidate: The attribute to test; anything without the provider stamp is not one.
+    """
     return bool(getattr(candidate, FETCH_FIELD_PROVIDER_ATTR, False))
 
 
@@ -158,6 +165,11 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
       field whose value distinguishes instances of a component, driving the
       derived display name (:meth:`Component.instance_name`) and — for
       sources — the per-instance asset table names (:meth:`Source.asset_table`).
+
+    Args:
+        kwargs: The field factory's keyword arguments, mutated in place: the
+            presentation kwargs are popped out and ``title`` may be set.
+        widget: The ``x-widget`` hint naming the UI control to render.
 
     Returns:
         The extra dict with ``x-widget`` (and possibly ``x-info`` /

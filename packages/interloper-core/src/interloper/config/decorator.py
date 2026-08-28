@@ -52,6 +52,14 @@ def config(
     subclass body.  Since Config extends ``BaseSettings``, fields can
     still be loaded from environment variables.
 
+    Args:
+        cls: The decorated class when used bare; ``None`` when called with
+            arguments, which returns the decorator instead.
+        key: Component key override (defaults to the derived class key).
+        name: Human-readable display name.
+        icon: Icon identifier (e.g. ``"carbon:settings"``).
+        tags: Catalog tags.
+
     Returns:
         A Config subclass.
     """

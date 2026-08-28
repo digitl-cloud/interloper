@@ -57,7 +57,11 @@ class ConsoleEventHandler:
     """
 
     def __init__(self, json_lines: bool = False) -> None:
-        """Initialize the handler with its output mode."""
+        """Initialize the handler with its output mode.
+
+        Args:
+            json_lines: Emit raw JSON lines on stdout instead of log records.
+        """
         self.json_lines = json_lines
         self._logger = logging.getLogger(EVENT_LOGGER_NAME)
 

@@ -28,6 +28,14 @@ _initialized = False
 
 
 def _parse_headers(headers: str) -> dict[str, str] | None:
+    """Parse the configured OTLP headers into a mapping.
+
+    Args:
+        headers: Comma-separated ``key=value`` pairs; pairs without ``=`` are dropped.
+
+    Returns:
+        The parsed headers, or ``None`` when the setting is empty.
+    """
     if not headers:
         return None
     return dict(pair.split("=", 1) for pair in headers.split(",") if "=" in pair)
@@ -38,6 +46,10 @@ def _exporter_kwargs(settings: TelemetrySettings) -> dict[str, Any]:
 
     Unset fields are omitted so the SDK's native ``OTEL_EXPORTER_OTLP_*``
     environment variables still apply.
+
+    Args:
+        settings: The resolved telemetry settings; ``endpoint`` and ``headers``
+            are read here.
 
     Returns:
         Keyword arguments for the OTLP exporter constructors.

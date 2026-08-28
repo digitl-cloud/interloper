@@ -101,6 +101,11 @@ class OAuthProvider:
 def _adopt_provider(_name: str, loaded: Any) -> tuple[str, OAuthProvider]:
     """Instantiate a loaded provider entry and key it by its own ``key``.
 
+    Args:
+        _name: The entry-point name, ignored — the provider's own ``key`` wins.
+        loaded: The loaded entry point: an ``OAuthProvider`` or a class
+            constructing one.
+
     Returns:
         The ``(key, provider)`` pair.
     """
@@ -140,6 +145,11 @@ class OAuthAppCredentials:
         every consumer (token exchange, connection credential injection,
         availability checks) builds names through here.
 
+        Args:
+            key: Provider registry key (e.g. ``"amazon"``).
+            suffix: Credential field suffix — ``CLIENT_ID``, ``CLIENT_SECRET``
+                or ``REDIRECT_URI``; case-insensitive.
+
         Returns:
             The environment variable name.
         """
@@ -148,6 +158,9 @@ class OAuthAppCredentials:
     @classmethod
     def env_names(cls, key: str) -> dict[str, str]:
         """The environment variable carrying each credential field for provider ``key``.
+
+        Args:
+            key: Provider registry key (e.g. ``"amazon"``).
 
         Returns:
             ``{field: env_name}`` for the ``client_id`` / ``client_secret`` /
@@ -159,6 +172,9 @@ class OAuthAppCredentials:
     def is_configured(cls, key: str) -> bool:
         """Whether the in-house OAuth app credentials for ``key`` are set in the environment.
 
+        Args:
+            key: Provider registry key (e.g. ``"amazon"``).
+
         Returns:
             True only when the full credential trio is set — the provider is
             usable for sign-in.
@@ -168,6 +184,9 @@ class OAuthAppCredentials:
     @classmethod
     def from_env(cls, key: str) -> OAuthAppCredentials | None:
         """Resolve the trio for provider ``key`` from the environment.
+
+        Args:
+            key: Provider registry key (e.g. ``"amazon"``).
 
         Returns:
             The credentials, or ``None`` unless all three variables are set

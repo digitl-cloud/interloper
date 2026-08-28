@@ -78,6 +78,10 @@ def coerce_to_datetime(value: object) -> dt.datetime:
 def add_months(value: dt.date, months: int) -> dt.date:
     """Shift a date by *months*, clamping the day to the target month's length.
 
+    Args:
+        value: The date to shift.
+        months: Number of months to add; negative shifts backwards.
+
     Returns:
         The shifted date.
     """

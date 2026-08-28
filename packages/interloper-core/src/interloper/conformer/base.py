@@ -37,21 +37,40 @@ class Conformer(ABC):
     def prepare(self, data: Any) -> Any:
         """Canonicalize *data* into this conformer's representation.
 
+        Args:
+            data: Raw asset output, in whatever shape the asset returned.
+
         Raises:
             NormalizerError: If the data cannot be represented as a table.
         """
 
     @abstractmethod
     def validate(self, data: Any, schema: type[Schema], *, strict: bool = False) -> None:
-        """Validate *data* against *schema*; raise :class:`SchemaError` on mismatch."""
+        """Validate *data* against *schema*; raise :class:`SchemaError` on mismatch.
+
+        Args:
+            data: Data in this conformer's representation.
+            schema: The schema to validate against.
+            strict: When ``True``, columns absent from the schema are a
+                mismatch too; defaults to ``False``.
+        """
 
     @abstractmethod
     def reconcile(self, data: Any, schema: type[Schema]) -> Any:
-        """Align *data* to *schema* (drop extras, add missing) and coerce values."""
+        """Align *data* to *schema* (drop extras, add missing) and coerce values.
+
+        Args:
+            data: Data in this conformer's representation.
+            schema: The schema to align the data to.
+        """
 
     @abstractmethod
     def infer(self, data: Any) -> type[Schema]:
-        """Infer a Schema from *data*."""
+        """Infer a Schema from *data*.
+
+        Args:
+            data: Data in this conformer's representation.
+        """
 
 
 class RowsConformer(Conformer):
@@ -60,17 +79,32 @@ class RowsConformer(Conformer):
     def prepare(self, data: Any) -> list[dict[str, Any]]:
         """Coerce dict / model / generator shapes to records.
 
+        Args:
+            data: Raw asset output (``dict``, ``list[dict]``, ``BaseModel``,
+                ``list[BaseModel]``, or a generator of those).
+
         Returns:
             Data as a list of row dicts.
         """
         return coerce_to_records(data)
 
     def validate(self, data: list[dict[str, Any]], schema: type[Schema], *, strict: bool = False) -> None:
-        """Validate each row against the schema."""
+        """Validate each row against the schema.
+
+        Args:
+            data: Rows to validate.
+            schema: The schema to validate against.
+            strict: When ``True``, columns absent from the schema are a
+                mismatch too; defaults to ``False``.
+        """
         schema.validate_rows(data, strict=strict)
 
     def reconcile(self, data: list[dict[str, Any]], schema: type[Schema]) -> list[dict[str, Any]]:
         """Reconcile rows against the schema.
+
+        Args:
+            data: Rows to reconcile.
+            schema: The schema to align the rows to.
 
         Returns:
             Reconciled rows with columns aligned and values coerced.
@@ -79,6 +113,9 @@ class RowsConformer(Conformer):
 
     def infer(self, data: list[dict[str, Any]]) -> type[Schema]:
         """Infer a Schema by scanning row values.
+
+        Args:
+            data: Rows whose values are scanned to derive the field types.
 
         Returns:
             A dynamically created Schema subclass.

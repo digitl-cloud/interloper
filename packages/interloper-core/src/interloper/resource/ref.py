@@ -68,7 +68,12 @@ class ResourceRef(IgnoredDescriptor, Generic[T]):
         self.attr_name = ""
 
     def __set_name__(self, owner: type[Component], name: str) -> None:
-        """Register this resource slot on the owning class."""
+        """Register this resource slot on the owning class.
+
+        Args:
+            owner: The Component subclass the descriptor was defined on.
+            name: The attribute name it was bound to, used as the resource slot name.
+        """
         self.attr_name = name
 
         # Auto-populate resource_types on the owning class.
@@ -84,6 +89,11 @@ class ResourceRef(IgnoredDescriptor, Generic[T]):
     def __get__(self, instance: Any, owner: type) -> T: ...
     def __get__(self, instance: Any, owner: type | None = None) -> T | ResourceRef[T]:
         """Resolve the resource from the component's resources dict.
+
+        Args:
+            instance: The component the attribute is accessed on, or ``None``
+                for class-level access.
+            owner: The class the descriptor is defined on; unused.
 
         Returns:
             The resource instance, ``None`` if not set and not required,

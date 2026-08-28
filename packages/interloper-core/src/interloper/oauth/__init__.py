@@ -1,3 +1,5 @@
+"""OAuth provider specs, the provider registry, and in-house app credentials."""
+
 from interloper.oauth.base import (
     DEFAULT_TOKEN_PARAMS,
     PROVIDERS,

@@ -37,16 +37,35 @@ class AssetRef(IgnoredDescriptor):
     """
 
     def __init__(self, asset_cls: type[Asset]) -> None:
-        """Bind this descriptor to an asset class."""
+        """Bind this descriptor to an asset class.
+
+        Args:
+            asset_cls: The source-owned Asset subclass this descriptor exposes.
+        """
         self.asset_cls = asset_cls
         self.attr_name: str = ""
 
     def __set_name__(self, owner: type, name: str) -> None:
-        """Capture the attribute name this descriptor was installed under."""
+        """Capture the attribute name this descriptor was installed under.
+
+        Args:
+            owner: The class the descriptor is being installed on.
+            name: The attribute name it is bound to in that class body.
+        """
         self.attr_name = name
 
     def __get__(self, instance: Any, owner: type | None = None) -> Any:
         """Return the asset class at class access, the instance at instance access.
+
+        Args:
+            instance: The source instance the attribute was read from, or
+                ``None`` for class-level access.
+            owner: The class owning the descriptor. Unused; part of the
+                descriptor protocol. Defaults to ``None``.
+
+        Returns:
+            The asset class when *instance* is ``None``, else the live asset
+            instance owned by that source.
 
         Raises:
             AttributeError: If accessed on an instance whose ``assets`` list
@@ -126,6 +145,10 @@ class Source(Component):
     def _coerce_destinations(cls, value: Any) -> Any:
         """Accept a single destination or ``None`` where a list is expected.
 
+        Args:
+            value: The raw ``destinations`` input — ``None``, a single
+                destination, or an already-sequence of them.
+
         Returns:
             The value as a list.
         """
@@ -152,6 +175,10 @@ class Source(Component):
         ``asset_types`` and replace each class attribute with an
         :class:`AssetRef` descriptor that exposes the class at class
         level and the live instance at instance level.
+
+        Args:
+            **kwargs: Class-creation keyword arguments, forwarded untouched to
+                ``super().__init_subclass__``.
         """
         super().__init_subclass__(**kwargs)
         cls._collect_asset_types()
@@ -174,6 +201,10 @@ class Source(Component):
         This is what ``Source.to_spec()`` emits and what
         ``Spec.reconstruct()`` hands back in after the walker
         has resolved any nested component specs inside the overrides.
+
+        Args:
+            data: The raw model input. Anything that is not a dict, or whose
+                ``assets`` entry is not an override map, is returned untouched.
 
         Returns:
             The (possibly rewritten) input data.
@@ -206,7 +237,12 @@ class Source(Component):
         return relations
 
     def model_post_init(self, context: Any) -> None:
-        """Instantiate default asset types (if none were supplied) and resolve trickle-down fields."""
+        """Instantiate default asset types (if none were supplied) and resolve trickle-down fields.
+
+        Args:
+            context: Pydantic's post-init context, forwarded untouched to
+                ``super().model_post_init``.
+        """
         super().model_post_init(context)
         if not self.assets:
             self.assets = [cls() for cls in self.asset_types]
@@ -410,6 +446,9 @@ class Source(Component):
         asset. The return value is coerced to a valid identifier by
         :attr:`Asset.table`.
 
+        Args:
+            asset: The asset to name a table for; only its ``key`` is read.
+
         Returns:
             The physical table name for the asset.
         """
@@ -464,6 +503,10 @@ class Source(Component):
            :meth:`_collect_asset_types` still get ergonomic attribute
            access.
 
+        Args:
+            name: The attribute being looked up, read as an asset key.
+                Underscore-prefixed names are delegated to ``BaseModel``.
+
         Returns:
             The asset matching the given key.
 
@@ -487,6 +530,11 @@ class Source(Component):
 
         Pre-existing ``dependencies`` entries (e.g. hydrated from persisted
         relations) are never overwritten.
+
+        Args:
+            asset: The asset whose ``dependencies`` map is wired in place.
+            siblings: The source's assets keyed by asset key, including *asset*
+                itself — self-references are skipped.
         """
         for mapping in (asset.requires, asset.optional_requires):
             for parameter_name, required_qk in mapping.items():
@@ -540,7 +588,27 @@ class Source(Component):
         normalizer: Normalizer | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
     ) -> Self:
-        """Return a reconfigured copy of this source."""
+        """Return a reconfigured copy of this source.
+
+        Every parameter defaults to ``None``, meaning "leave as is".
+
+        Args:
+            resources: Resources to merge into the copy's resource map, keyed
+                by slot name; unlisted slots keep their current resource.
+            destinations: Replacement destinations, as a single destination or
+                a list. Replaces the current list wholesale.
+            dataset: Replacement dataset. Assets that inherited the source's
+                dataset are re-pointed; per-asset overrides are preserved.
+            default_destination_key: Replacement key of the destination
+                downstream assets read from.
+            materializable: Applied to every asset of the copy.
+            normalizer: Replacement normalizer for the source.
+            materialization_strategy: Replacement default strategy for the
+                source.
+
+        Returns:
+            A deep copy of this source carrying the overrides.
+        """
         copy = self.model_copy(deep=True)
         for a in copy.assets:
             a._source = copy

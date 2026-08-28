@@ -147,7 +147,13 @@ class InUseError(InterloperError):
     """
 
     def __init__(self, message: str, referrers: list[dict[str, str | None]] | None = None) -> None:
-        """Initialize with a user-facing message and the referencing records."""
+        """Initialize with a user-facing message and the referencing records.
+
+        Args:
+            message: User-facing explanation of the conflict.
+            referrers: The referencing records as ``{id, kind, key, name}``
+                mappings; ``None`` is stored as an empty list.
+        """
         super().__init__(message)
         self.referrers = referrers or []
 
@@ -160,7 +166,14 @@ class QuotaExceededError(InterloperError):
     """
 
     def __init__(self, message: str, *, quota: str, limit: int, used: int) -> None:
-        """Initialize with a user-facing message and the quota context."""
+        """Initialize with a user-facing message and the quota context.
+
+        Args:
+            message: User-facing explanation of the refusal.
+            quota: Name of the exceeded quota (e.g. ``"max_sources"``).
+            limit: The quota's limit.
+            used: Usage already counted against the limit.
+        """
         super().__init__(message)
         self.quota = quota
         self.limit = limit
@@ -215,6 +228,9 @@ def format_exception(exception: BaseException) -> str:
     embeds each error's ``input_value``, and for a sensitive model (e.g. a
     connection's decrypted payload) that would leak secrets into whatever
     carries the message. It collapses to field-and-reason lines instead.
+
+    Args:
+        exception: The exception to format; any ``BaseException``.
 
     Returns:
         ``"TypeName: message"``, or just ``"TypeName"`` when the message is empty.

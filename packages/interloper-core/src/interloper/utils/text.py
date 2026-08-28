@@ -22,6 +22,9 @@ _IDENTIFIER_INVALID = re.compile(r"[^a-z0-9_]+")
 def validate_key(key: str) -> None:
     """Validate that *key* starts with a letter and contains only letters, numbers, and underscores.
 
+    Args:
+        key: The key to validate.
+
     Raises:
         ValueError: If the key is invalid.
     """

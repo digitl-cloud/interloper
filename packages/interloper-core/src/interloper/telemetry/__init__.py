@@ -1,3 +1,5 @@
+"""OpenTelemetry setup, context propagation, and tracer/meter access."""
+
 from interloper.telemetry import attributes
 from interloper.telemetry.propagation import (
     child_process_env,

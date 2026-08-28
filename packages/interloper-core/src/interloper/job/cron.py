@@ -49,6 +49,9 @@ class CronJob(Job):
     def _known_iana_zone(cls, value: str) -> str:
         """Reject timezone names the runtime's zoneinfo database doesn't know.
 
+        Args:
+            value: The candidate IANA timezone name (e.g. ``"Europe/Berlin"``).
+
         Returns:
             The validated timezone name.
 

@@ -32,6 +32,10 @@ _KINDS_ENTRY_POINT = "interloper.kinds"
 def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
     """Resolve a loaded kinds entry to its ``(kind, anchor)`` pair.
 
+    Args:
+        name: The entry-point name, used only to name the offending entry in the error.
+        loaded: The loaded entry-point object, expected to be a ``Component`` class.
+
     Returns:
         The pair the registry stores.
 
@@ -168,6 +172,9 @@ class Component(Serializable):
         Annotations typed as ``Resource`` subclasses are automatically
         converted to ``ResourceRef`` descriptors, registering them in
         ``resource_types`` and providing typed attribute access.
+
+        Args:
+            **kwargs: Class-creation keyword arguments, passed through to ``super()``.
         """
         super().__init_subclass__(**kwargs)
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
@@ -183,6 +190,9 @@ class Component(Serializable):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """Validate that at most one config field is marked as the discriminator.
+
+        Args:
+            **kwargs: Class-creation keyword arguments, passed through to ``super()``.
 
         Raises:
             TypeError: If several fields carry ``discriminator=True``.
@@ -255,6 +265,9 @@ class Component(Serializable):
         (and a stale persisted config key surfaces as drift at load time,
         consistent with the fail-closed drift checks).
 
+        Args:
+            **data: Field values and resource-slot values, keyed by field or slot name.
+
         Raises:
             TypeError: If a kwarg matches no field or resource slot, or a
                 slot kwarg doesn't satisfy the slot's declared type.
@@ -286,7 +299,11 @@ class Component(Serializable):
         super().__init__(**data)
 
     def model_post_init(self, context: Any) -> None:
-        """Default ``id`` to a generated UUID if not provided."""
+        """Default ``id`` to a generated UUID if not provided.
+
+        Args:
+            context: The pydantic validation context, unused here.
+        """
         if not self.id:
             self.id = str(uuid.uuid4())
 
@@ -445,6 +462,11 @@ class Component(Serializable):
         Called on a subclass, the resolved class must be of that subclass
         (``Source.resolve_key("facebook_ads")``) — anything else raises
         ``TypeError``.
+
+        Args:
+            key: The catalog key naming the component class.
+            catalog: The catalog to look the key up in. Defaults to ``None``, which builds the
+                settings-configured catalog.
 
         Returns:
             The resolved class.

@@ -17,6 +17,10 @@ def coerce_to_records(data: Any) -> list[dict[str, Any]]:
     Supported types: ``dict``, ``list[dict]``, ``BaseModel``,
     ``list[BaseModel]``, ``Generator`` / ``Iterator``, ``None``.
 
+    Args:
+        data: The data to coerce; ``None`` yields an empty list, and
+            generators/iterators are consumed.
+
     Returns:
         The coerced list of row dicts.
 
@@ -64,6 +68,12 @@ def is_empty(data: Any) -> bool:
     sized containers (lists, dicts, ...) are empty when their length is zero.
     Anything else (e.g. a lazy generator we must not consume) is treated as
     non-empty.
+
+    Args:
+        data: The value to inspect; any type, never consumed.
+
+    Returns:
+        True only when the value is positively confirmed to carry no data.
     """
     if data is None:
         return True

@@ -1,3 +1,5 @@
+"""Hooks: components that react to what other components do."""
+
 from interloper.hook.base import HOOK_EVENT_TYPES, Hook, HookContext, HookState
 from interloper.hook.trigger import TriggerHook
 from interloper.hook.webhook import WebhookHook

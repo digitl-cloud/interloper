@@ -31,7 +31,11 @@ class Event:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def __str__(self) -> str:
-        """Return a human-readable summary line for logging."""
+        """Return a human-readable summary line for logging.
+
+        Returns:
+            A single line of ``time  TYPE  asset_key  message``.
+        """
         m = self.metadata
         ts = self.timestamp.strftime("%H:%M:%S.%f")[:-3]
         asset_key = m.get("asset_qualified_key") or m.get("asset_key") or "-"
@@ -68,6 +72,12 @@ class Event:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Event:
         """Deserialize an Event from a dict.
+
+        Args:
+            data: Flat mapping as produced by :meth:`to_dict` — ``type`` and
+                ``timestamp`` are required, ``event_id`` is optional (a fresh
+                id is generated when absent), and every other key becomes
+                metadata.
 
         Returns:
             The deserialized Event instance.
@@ -106,6 +116,9 @@ class Event:
     @classmethod
     def from_json(cls, json_str: str) -> Event:
         """Deserialize an Event from a JSON string.
+
+        Args:
+            json_str: JSON object as produced by :meth:`to_json`.
 
         Returns:
             The deserialized Event instance.

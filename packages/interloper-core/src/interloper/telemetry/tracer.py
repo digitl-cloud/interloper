@@ -15,6 +15,12 @@ from opentelemetry import metrics, trace
 
 
 def _version() -> str | None:
+    """Look up the installed ``interloper-core`` version.
+
+    Returns:
+        The version string, or ``None`` when the distribution is not installed
+        (e.g. a source tree on ``sys.path``).
+    """
     try:
         return importlib.metadata.version("interloper-core")
     except importlib.metadata.PackageNotFoundError:

@@ -1,3 +1,5 @@
+"""Interloper's public API: assets, sources, destinations, DAGs, and runners."""
+
 from interloper.asset import Asset, AssetDefinition, AssetIdentity, ExecutionContext, asset
 from interloper.catalog import Catalog
 from interloper.component import (

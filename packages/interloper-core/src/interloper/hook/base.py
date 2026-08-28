@@ -86,6 +86,10 @@ class Hook(Component):
 
         Subclasses must override this method.
 
+        Args:
+            context: What the hook knows about the event that triggered it —
+                its identity, metadata, and the operator-injected capabilities.
+
         Raises:
             NotImplementedError: If the subclass does not implement ``fire()``.
         """

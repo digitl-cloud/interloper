@@ -39,6 +39,9 @@ def _cmd_launch(args: argparse.Namespace) -> None:
     package, bad settings), the run is marked as failed in the DB so
     it doesn't stay stuck in ``dispatched`` status.
 
+    Args:
+        args: Parsed CLI arguments, carrying ``run_id`` (the UUID of the run to execute).
+
     Raises:
         SystemExit: On any failure.
     """

@@ -38,6 +38,10 @@ class Partition(ABC):
         Data no registered representation recognizes passes through unchanged
         since it cannot be split.
 
+        Args:
+            data: The table to slice, in any registered representation's type.
+            column: Name of the partition column to select on.
+
         Returns:
             The partition's slice of the data.
         """

@@ -123,6 +123,14 @@ class AsyncRESTClient(httpx.AsyncClient):
         )
 
     async def _send_checked(self, request: httpx.Request) -> httpx.Response:
+        """Send a request and raise on a non-success status.
+
+        Args:
+            request: The page request to send.
+
+        Returns:
+            The response, guaranteed to carry a success status.
+        """
         response = await self.send(request)
         response.raise_for_status()
         return response

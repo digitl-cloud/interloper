@@ -26,6 +26,13 @@ def _worker(
     Reconstructs the DAG from its serialized spec, looks up the target
     asset by ID, and materializes it.
 
+    Args:
+        asset_id: Id of the asset to materialize within the reconstructed DAG.
+        dag_spec: JSON-mode dump of the DAG spec to reconstruct.
+        partition_or_window: Partition or window to scope the run; ignored
+            (forced to ``None``) when the asset is not partitioned.
+        metadata: Run metadata, also carrying the parent span context.
+
     Returns:
         Tuple of ``(id, success, error_message, formatted_traceback)``.
     """
@@ -90,13 +97,20 @@ class MultiProcessRunner(SyncRunner):
 
     @property
     def _capacity(self) -> int:
+        """Maximum number of concurrent assets this runner can execute.
+
+        Returns:
+            ``max_workers``, the size of the process pool.
+        """
         return self.max_workers
 
     def _on_start(self) -> None:
+        """Create the process pool and serialize the DAG for the workers."""
         self._pool = ProcessPoolExecutor(max_workers=self.max_workers)
         self._dag_spec = self.state.dag.to_spec().model_dump(mode="json")
 
     def _on_end(self) -> None:
+        """Shut down the process pool and drop the per-run worker inputs."""
         if self._pool is not None:
             self._pool.shutdown(wait=True, cancel_futures=False)
             self._pool = None
@@ -109,6 +123,10 @@ class MultiProcessRunner(SyncRunner):
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
         """Submit asset for execution in a child process.
+
+        Args:
+            asset: The asset to execute.
+            partition_or_window: Partition or window to scope the run.
 
         Returns:
             A Future representing the worker result.
@@ -137,6 +155,10 @@ class MultiProcessRunner(SyncRunner):
         Unlike the base ``_handle_completed``, this interprets the
         ``(id, success, error_msg, tb)`` tuple returned by ``_worker``.
 
+        Args:
+            future: The finished future returned by ``_submit_asset``.
+            asset: The asset the future was submitted for.
+
         Raises:
             RunnerError: If the asset failed and ``fail_fast`` or ``reraise`` is set.
         """
@@ -158,7 +180,12 @@ class MultiProcessRunner(SyncRunner):
                 raise RunnerError(f"Asset '{asset.key}' failed: {error_msg}")
 
     def _handle_flushed(self, future: Future[Any], asset: Asset) -> None:
-        """Interpret the worker ``(id, success, error_msg, tb)`` tuple during flush."""
+        """Interpret the worker ``(id, success, error_msg, tb)`` tuple during flush.
+
+        Args:
+            future: The finished future to interpret.
+            asset: The asset the future was submitted for.
+        """
         try:
             _key, success, error_msg, tb = future.result()
         except Exception as e:  # noqa: BLE001

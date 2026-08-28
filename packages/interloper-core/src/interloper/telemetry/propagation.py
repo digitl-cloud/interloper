@@ -25,7 +25,12 @@ TRACESTATE_ENV = "TRACESTATE"
 
 
 def inject_metadata(metadata: dict[str, Any]) -> None:
-    """Write the current span context into a run metadata dict (in place)."""
+    """Write the current span context into a run metadata dict (in place).
+
+    Args:
+        metadata: Run metadata, mutated to carry a ``traceparent`` key; left
+            untouched when there is no active span.
+    """
     _propagator.inject(metadata)
 
 

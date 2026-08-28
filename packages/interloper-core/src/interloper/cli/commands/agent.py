@@ -42,7 +42,11 @@ def register(
 
 
 def _cmd_agent(args: argparse.Namespace) -> None:
-    """Start the ADK development UI for the interloper agent."""
+    """Start the ADK development UI for the interloper agent.
+
+    Args:
+        args: Parsed CLI arguments, carrying ``host`` and ``port`` for the UI server.
+    """
     from pathlib import Path
 
     import uvicorn

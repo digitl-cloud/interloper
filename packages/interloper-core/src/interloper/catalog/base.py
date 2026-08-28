@@ -151,6 +151,10 @@ class Catalog(BaseModel):
     def from_assets(cls, sources_or_assets: list[type[Source | Asset]]) -> Catalog:
         """Load catalog from a list of asset classes.
 
+        Args:
+            sources_or_assets: Source or asset classes to define, added to the
+                declared universe.
+
         Returns:
             Catalog of all component definitions.
         """
@@ -196,6 +200,10 @@ class Catalog(BaseModel):
         inferred, or registered — the catalog contains exactly what was
         declared, and kinds must already be registered when it loads.
 
+        Args:
+            components: The component classes to define; non-component entries
+                are skipped, and the first definition per key wins.
+
         Returns:
             Mapping from component key to definition.
 
@@ -232,6 +240,9 @@ class Catalog(BaseModel):
         Every catalog contains every component the installed packages declare —
         installation is the opt-in. Explicitly provided definitions win over
         declared ones with the same key.
+
+        Args:
+            definitions: The explicitly provided definitions, mutated in place.
 
         Returns:
             The same mapping, with any missing declared definitions added.

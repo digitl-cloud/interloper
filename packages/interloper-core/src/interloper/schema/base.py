@@ -54,6 +54,13 @@ class FieldSpec:
     def from_annotation(cls, name: str, annotation: Any, description: str | None = None) -> FieldSpec:
         """Build a FieldSpec from a field name, type annotation, and description.
 
+        Args:
+            name: Field name.
+            annotation: The declared type annotation, optionally wrapped in
+                ``T | None`` and/or ``list[T]``.
+            description: Human-readable field description, or ``None`` when the
+                field declares none. Defaults to ``None``.
+
         Returns:
             The extracted spec, with ``Optional``/``list`` wrappers unwrapped.
         """
@@ -312,6 +319,10 @@ class Schema(Serializable):
         - ``{int, float}`` → ``float`` (numeric widening)
         - Multiple incompatible types → ``Any``
 
+        Args:
+            types_seen: The distinct non-``None`` Python types observed for one
+                key across all rows. Consumed in place.
+
         Returns:
             The resolved Pydantic-compatible field type.
         """
@@ -334,6 +345,9 @@ class Schema(Serializable):
         Excludes any field declared by :class:`Schema` itself — framework
         plumbing must not appear in reconciled rows or count as schema
         columns.
+
+        Returns:
+            The subclass-declared field names, unordered.
         """
         return {name for name in cls.model_fields if name not in Schema.model_fields}
 
@@ -343,6 +357,9 @@ def _coerce_str_value(value: Any) -> Any:
 
     ``None`` passes through (nullability is pydantic's call), nested
     ``list``/``dict`` values are JSON-encoded, anything else is stringified.
+
+    Args:
+        value: The raw row value bound for a scalar ``str`` field.
 
     Returns:
         The coerced value.

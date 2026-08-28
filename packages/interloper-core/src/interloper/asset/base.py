@@ -67,6 +67,12 @@ class AssetIdentity(NamedTuple):
         A bare key is scoped to the declaring asset's own source, a
         qualified key names the source explicitly.
 
+        Args:
+            declared_key: The dependency key as written, bare (``"campaigns"``)
+                or qualified (``"facebook_ads.campaigns"``).
+            own_source_key: Key of the source declaring the dependency, used to
+                scope a bare key. ``None`` for a standalone asset.
+
         Returns:
             The expected identity; ``source_key`` is ``None`` for a bare key
             declared by a standalone asset.
@@ -187,6 +193,10 @@ class Asset(Component):
     def _validate_destinations(cls, value: Any) -> Any:
         """Accept a single destination or ``None`` where a list is expected.
 
+        Args:
+            value: The raw field value: a single destination, a list or tuple of
+                them, or ``None``.
+
         Returns:
             The value as a list.
         """
@@ -195,7 +205,12 @@ class Asset(Component):
         return value if isinstance(value, (list, tuple)) else [value]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Infer ``resource_types`` from ``data()`` type annotations."""
+        """Infer ``resource_types`` from ``data()`` type annotations.
+
+        Args:
+            **kwargs: Class-creation keyword arguments, forwarded to
+                ``super().__init_subclass__``.
+        """
         super().__init_subclass__(**kwargs)
         cls._infer_resource_types()
 
@@ -243,6 +258,10 @@ class Asset(Component):
         """Return the partition scope this asset actually consumes.
 
         Unpartitioned assets ignore any requested scope.
+
+        Args:
+            partition_or_window: The partition or partition window the run was
+                scoped to, or ``None`` when it was unscoped.
 
         Returns:
             The scope unchanged for partitioned assets, ``None`` otherwise.
@@ -363,7 +382,26 @@ class Asset(Component):
         normalizer: Normalizer | None = _UNSET,  # ty: ignore[invalid-parameter-default]
         dependencies: dict[str, str] | None = None,
     ) -> Self:
-        """Return a reconfigured copy of this asset."""
+        """Return a reconfigured copy of this asset.
+
+        Every argument defaults to ``None``, meaning "leave unchanged" — the one
+        exception is ``normalizer``, whose sentinel default lets an explicit
+        ``None`` clear the configured normalizer.
+
+        Args:
+            id: New component id for the copy.
+            resources: Resources merged over the asset's own, by name.
+            destinations: A single destination or a list of them, replacing the
+                asset's configured destinations.
+            dataset: Dataset (schema/namespace) the asset materializes into.
+            default_destination_key: When the asset has several destinations,
+                the one downstream assets read it from.
+            materializable: Whether the copy writes to destinations at all.
+            materialization_strategy: How the data is checked against the schema.
+            normalizer: Normalizer applied before conform; pass ``None`` to
+                explicitly clear it.
+            dependencies: Mapping of ``data()`` parameter name to upstream asset id.
+        """
         overrides: dict[str, Any] = {}
         if id is not None:
             overrides["id"] = id
@@ -533,6 +571,11 @@ class Asset(Component):
 
         Subclasses must override this method.
 
+        Args:
+            **kwargs: The resolved call arguments — the execution context,
+                declared resources, and upstream dependencies, keyed by the
+                parameter names of the overriding signature.
+
         Raises:
             NotImplementedError: If the subclass does not implement ``data()``.
         """
@@ -577,6 +620,12 @@ class Asset(Component):
         directly, declared resources are resolved by name, and all other
         parameters are treated as upstream dependencies loaded from
         destination via the DAG.
+
+        Args:
+            context: The execution context injected as the ``context`` parameter.
+            partition_or_window: Scope used when reading upstream dependencies.
+            dag: DAG the upstream assets are looked up in. ``None`` is allowed
+                only when every dependency is optional (those resolve to ``None``).
 
         Returns:
             Keyword arguments to pass to ``data()``.
@@ -634,7 +683,16 @@ class Asset(Component):
         metadata: dict[str, Any],
         result: Any,
     ) -> None:
-        """Write the execution result to all configured destinations."""
+        """Write the execution result to all configured destinations.
+
+        Args:
+            partition_or_window: Scope of the run, narrowed to what the asset
+                actually consumes before it reaches the destination.
+            metadata: Run-level metadata (e.g. run_id, backfill_id), carried
+                onto the emitted write events.
+            result: The normalized and conformed data to write. An empty result
+                is skipped with a warning.
+        """
         destinations = self._resolve_destinations()
         if not destinations:
             return
@@ -695,6 +753,13 @@ class Asset(Component):
     ) -> Any:
         """Read data from an upstream asset's first destination.
 
+        Args:
+            upstream_asset: The asset whose materialized data is read.
+            partition_or_window: Scope of the read, narrowed to what the
+                *upstream* asset consumes.
+            metadata: Run-level metadata (e.g. run_id, backfill_id), carried
+                onto the emitted read events.
+
         Returns:
             The data read from the upstream asset's destination.
 
@@ -754,6 +819,9 @@ class Asset(Component):
         runs whether or not a normalizer is configured, so a declared schema
         is always a checked contract.
 
+        Args:
+            result: The raw value returned by ``data()``.
+
         Returns:
             The normalized and conformed result.
         """
@@ -778,6 +846,10 @@ class Asset(Component):
         ``list[dict]``); non-tabular data without a schema passes through
         untouched. The effective schema (declared, or inferred under AUTO) is
         carried to destinations via ``IOContext.schema``.
+
+        Args:
+            result: The data to conform, already normalized when a normalizer
+                is configured.
 
         Returns:
             The conformed result.
@@ -844,6 +916,10 @@ class Asset(Component):
     ) -> None:
         """Validate partitioning constraints before execution.
 
+        Args:
+            partition_or_window: The scope the run was given. ``None`` means the
+                run was unscoped.
+
         Raises:
             PartitionError: If partitioning constraints are violated.
         """
@@ -874,6 +950,11 @@ class Asset(Component):
         the granularity, so anything else would reach the asset as a scope that
         cannot answer ``granularity`` or ``bounds`` — the contract
         ``context.partition`` rests on.
+
+        Args:
+            partitioning: The asset's declared time partition config.
+            partition_or_window: The scope the run was given. ``None`` short-circuits
+                the check — the missing-scope case is caught by the caller.
 
         Raises:
             PartitionError: If the scope is not a time partition, its
@@ -908,6 +989,10 @@ class Asset(Component):
 
     def _validate_destination(self, destination: Destination) -> None:
         """Validate that a destination is compatible with this asset's destination_types.
+
+        Args:
+            destination: The destination instance to check. Any destination is
+                accepted when the asset declares no ``destination_types``.
 
         Raises:
             DestinationError: If the destination type is not in destination_types.

@@ -38,7 +38,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _cmd_init(args: argparse.Namespace) -> None:
-    """Ensure database, create tables, and migrate. Idempotent and concurrent-safe."""
+    """Ensure database, create tables, and migrate. Idempotent and concurrent-safe.
+
+    Args:
+        args: Parsed CLI arguments; this subcommand takes none of its own.
+    """
     from interloper_db import create_all, ensure_database, init_engine
 
     from interloper.settings import AppSettings
@@ -55,7 +59,11 @@ def _cmd_init(args: argparse.Namespace) -> None:
 
 
 def _cmd_reset(args: argparse.Namespace) -> None:
-    """Drop the database entirely and recreate it from scratch."""
+    """Drop the database entirely and recreate it from scratch.
+
+    Args:
+        args: Parsed CLI arguments, carrying ``yes`` to skip the confirmation prompt.
+    """
     from interloper_db import create_all, ensure_database, init_engine
     from interloper_db.provision import drop_database
 
@@ -81,7 +89,11 @@ def _cmd_reset(args: argparse.Namespace) -> None:
 
 
 def _cmd_upgrade(args: argparse.Namespace) -> None:
-    """Run Alembic migrations."""
+    """Run Alembic migrations.
+
+    Args:
+        args: Parsed CLI arguments, carrying ``revision`` (the target, default ``head``).
+    """
     from interloper_db import init_engine, upgrade
 
     from interloper.settings import AppSettings
@@ -96,7 +108,11 @@ def _cmd_upgrade(args: argparse.Namespace) -> None:
 
 
 def _cmd_downgrade(args: argparse.Namespace) -> None:
-    """Downgrade Alembic migrations."""
+    """Downgrade Alembic migrations.
+
+    Args:
+        args: Parsed CLI arguments, carrying ``revision`` (the target, default ``-1``).
+    """
     from interloper_db import downgrade, init_engine
 
     from interloper.settings import AppSettings
