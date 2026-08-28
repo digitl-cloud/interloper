@@ -22,6 +22,9 @@ from interloper_api.dependencies import (
 router = APIRouter(prefix="/backfills", tags=["backfills"])
 
 
+# -- Request / response models -------------------------------------------------
+
+
 class BackfillCreateRequest(BaseModel):
     """Request body for queuing a backfill."""
 
@@ -49,6 +52,9 @@ class BackfillResponse(BaseModel):
     created_at: str | None = None
 
 
+# -- Helpers -------------------------------------------------------------------
+
+
 def _backfill_to_response(backfill: Backfill) -> BackfillResponse:
     """Convert a DB Backfill to a BackfillResponse.
 
@@ -74,6 +80,9 @@ def _backfill_to_response(backfill: Backfill) -> BackfillResponse:
     )
 
 
+# -- Endpoints -----------------------------------------------------------------
+
+
 @router.get("/")
 def list_backfills(
     active_only: bool = False,
@@ -81,7 +90,18 @@ def list_backfills(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> list[BackfillResponse]:
-    """List backfills for the current organisation."""
+    """List backfills for the current organisation.
+
+    Args:
+        active_only: Restrict the listing to backfills still ``"queued"`` or
+            ``"running"``.
+        user: The authenticated user, required to hold at least the ``viewer`` role.
+        org_id: The active organisation's UUID.
+        store: The Store instance.
+
+    Returns:
+        The organisation's backfills, as response models.
+    """
     if active_only:
         backfills = store.list_active_backfills(org_id)
     else:
@@ -95,7 +115,20 @@ def create_backfill(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> BackfillResponse:
-    """Queue a backfill for a job over a partition-key range."""
+    """Queue a backfill for a job over a partition-key range.
+
+    Args:
+        body: The target job, the inclusive partition-key range, and the
+            concurrency and fail-fast settings.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The queued backfill, as a response model.
+
+    Raises:
+        HTTPException: 400 if the store rejects the range or the settings.
+    """
     job = load_authorized(
         lambda i: store.get_component(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
     )
@@ -119,7 +152,19 @@ def get_backfill(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> BackfillResponse:
-    """Get a single backfill by ID. Authorized by membership in the backfill's org."""
+    """Get a single backfill by ID. Authorized by membership in the backfill's org.
+
+    Args:
+        backfill_id: The backfill UUID.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The backfill, as a response model.
+
+    Raises:
+        HTTPException: 404 if no such backfill exists.
+    """
     try:
         backfill = store.get_backfill(backfill_id)
     except NotFoundError:
@@ -134,7 +179,20 @@ def cancel_backfill(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> BackfillResponse:
-    """Cancel a backfill: pending and queued runs are canceled, in-flight runs drain."""
+    """Cancel a backfill: pending and queued runs are canceled, in-flight runs drain.
+
+    Args:
+        backfill_id: The backfill UUID.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The cancelled backfill, as a response model.
+
+    Raises:
+        HTTPException: 404 if no such backfill exists, 409 if it has already
+            reached a terminal state.
+    """
     try:
         backfill = store.get_backfill(backfill_id)
     except NotFoundError:

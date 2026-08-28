@@ -30,7 +30,7 @@ from interloper_api.routes import (
     organisations,
     runs,
     tokens,
-    ws,
+    websocket,
 )
 from interloper_api.routes import catalog as catalog_routes
 
@@ -61,28 +61,59 @@ def create_app(
     Returns:
         The configured FastAPI application.
     """
-    app = FastAPI(title="Interloper API", lifespan=ws.realtime_lifespan, **kwargs)
+    app = FastAPI(title="Interloper API", lifespan=websocket.realtime_lifespan, **kwargs)
 
     @app.exception_handler(NotFoundError)
-    async def _not_found_handler(_request: Request, exc: NotFoundError) -> JSONResponse:
-        """Store mutations raise NotFoundError on missing targets — a plain 404."""
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
+    async def _not_found_handler(_request: Request, exception: NotFoundError) -> JSONResponse:
+        """Store mutations raise NotFoundError on missing targets — a plain 404.
+
+        Args:
+            _request: The incoming request, unused.
+            exception: The raised NotFoundError.
+
+        Returns:
+            A 404 response carrying the exception message as ``detail``.
+        """
+        return JSONResponse(status_code=404, content={"detail": str(exception)})
 
     @app.exception_handler(ComponentDriftError)
-    async def _component_drift_handler(_request: Request, exc: ComponentDriftError) -> JSONResponse:
+    async def _component_drift_handler(_request: Request, exception: ComponentDriftError) -> JSONResponse:
         """A stored component whose catalog key has drifted is a conflict, not a 500.
 
         Hydrating or running a drifted source/asset can't succeed until the
         user resolves the drift, so surface it as a clean 409 the UI can act on.
+
+        Args:
+            _request: The incoming request, unused.
+            exception: The raised ComponentDriftError.
+
+        Returns:
+            A 409 response carrying the exception message as ``detail``.
         """
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        return JSONResponse(status_code=409, content={"detail": str(exception)})
 
     @app.exception_handler(QuotaExceededError)
-    async def _quota_exceeded_handler(_request: Request, exc: QuotaExceededError) -> JSONResponse:
-        """Store-level quota enforcement surfaces as 429 with structured context."""
+    async def _quota_exceeded_handler(_request: Request, exception: QuotaExceededError) -> JSONResponse:
+        """Store-level quota enforcement surfaces as 429 with structured context.
+
+        Args:
+            _request: The incoming request, unused.
+            exception: The raised QuotaExceededError.
+
+        Returns:
+            A 429 response whose ``detail`` carries the message plus the quota
+            name, its limit, and the amount already used.
+        """
         return JSONResponse(
             status_code=429,
-            content={"detail": {"message": str(exc), "quota": exc.quota, "limit": exc.limit, "used": exc.used}},
+            content={
+                "detail": {
+                    "message": str(exception),
+                    "quota": exception.quota,
+                    "limit": exception.limit,
+                    "used": exception.used,
+                }
+            },
         )
 
     if cors_origins:
@@ -113,7 +144,7 @@ def create_app(
     api.include_router(backfills.router)
     api.include_router(oauth.router)
     api.include_router(tokens.router)
-    api.include_router(ws.router)
+    api.include_router(websocket.router)
 
     agent_available = False
     if settings is None or settings.agent.enabled:
@@ -136,6 +167,11 @@ def create_app(
 
     @api.get("/health")
     def health() -> dict[str, str]:
+        """Report that the API process is up.
+
+        Returns:
+            ``{"status": "ok"}``.
+        """
         return {"status": "ok"}
 
     app.include_router(api)

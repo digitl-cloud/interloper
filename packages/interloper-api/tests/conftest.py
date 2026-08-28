@@ -9,8 +9,14 @@ import pytest
 
 @pytest.fixture
 def fake_settings() -> SimpleNamespace:
-    """AppSettings-shaped namespace covering every field ``create_app`` and the
-    config-snapshot builder read, with secrets planted to prove redaction."""
+    """AppSettings-shaped namespace for the app and config-snapshot builders.
+
+    Covers every field ``create_app`` and the config-snapshot builder read,
+    with secrets planted so redaction can be proven.
+
+    Returns:
+        The settings-shaped namespace.
+    """
     return SimpleNamespace(
         launcher=SimpleNamespace(
             type="kubernetes",

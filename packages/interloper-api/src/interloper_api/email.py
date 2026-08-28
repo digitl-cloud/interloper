@@ -20,7 +20,16 @@ _FONT_STACK = "-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 
 def render_invite_text(org_name: str, inviter_name: str, invite_url: str) -> str:
-    """Render the plain-text alternative of the invitation email."""
+    """Render the plain-text alternative of the invitation email.
+
+    Args:
+        org_name: Name of the organisation the recipient is invited to.
+        inviter_name: Display name of the person who sent the invite.
+        invite_url: Full URL to accept the invitation.
+
+    Returns:
+        The plain-text email body.
+    """
     return (
         f"{inviter_name} has invited you to join the {org_name} organisation on Interloper.\n\n"
         f"Accept the invitation:\n{invite_url}\n\n"
@@ -35,6 +44,16 @@ def render_invite_html(org_name: str, inviter_name: str, invite_url: str, logo_u
     The logo is a hosted PNG (``logo_url``), not an inline SVG: Gmail and
     Outlook strip ``<svg>`` and block ``data:`` URIs. The text wordmark stays
     next to it so the header still reads when images are blocked.
+
+    Args:
+        org_name: Name of the organisation the recipient is invited to.
+        inviter_name: Display name of the person who sent the invite.
+        invite_url: Full URL to accept the invitation.
+        logo_url: Absolute URL of the header logo image; the logo is omitted
+            when None.
+
+    Returns:
+        The HTML email body.
     """
     org = html.escape(org_name)
     inviter = html.escape(inviter_name)
@@ -125,29 +144,28 @@ def send_invite_email(
 
     Raises:
         RuntimeError: If SMTP is not configured.
-        smtplib.SMTPException: If sending fails.
     """
     if not smtp_config.enabled:
         raise RuntimeError("SMTP is not configured. Set smtp.host, smtp.user, and smtp.password.")
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"You've been invited to join {org_name} on Interloper"
-    msg["From"] = smtp_config.from_addr
-    msg["To"] = to
+    message = MIMEMultipart("alternative")
+    message["Subject"] = f"You've been invited to join {org_name} on Interloper"
+    message["From"] = smtp_config.from_addr
+    message["To"] = to
 
-    msg.attach(MIMEText(render_invite_text(org_name, inviter_name, invite_url), "plain"))
-    msg.attach(MIMEText(render_invite_html(org_name, inviter_name, invite_url, logo_url), "html"))
+    message.attach(MIMEText(render_invite_text(org_name, inviter_name, invite_url), "plain"))
+    message.attach(MIMEText(render_invite_html(org_name, inviter_name, invite_url, logo_url), "html"))
 
     logger.info("Sending invite email to %s", to)
 
     if smtp_config.port == 465:
         with smtplib.SMTP_SSL(smtp_config.host, smtp_config.port) as server:
             server.login(smtp_config.user, smtp_config.password)
-            server.sendmail(smtp_config.from_addr, to, msg.as_string())
+            server.sendmail(smtp_config.from_addr, to, message.as_string())
     else:
         with smtplib.SMTP(smtp_config.host, smtp_config.port) as server:
             server.starttls()
             server.login(smtp_config.user, smtp_config.password)
-            server.sendmail(smtp_config.from_addr, to, msg.as_string())
+            server.sendmail(smtp_config.from_addr, to, message.as_string())
 
     logger.info("Invite email sent to %s", to)

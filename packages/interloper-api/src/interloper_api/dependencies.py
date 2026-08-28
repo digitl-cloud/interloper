@@ -12,6 +12,8 @@ from interloper.errors import NotFoundError
 from interloper_db import Organisation, Profile, Store
 from interloper_db.models import AuthSession
 
+# -- Application state ---------------------------------------------------------
+
 _store: Store | None = None
 _catalog: Catalog | None = None
 _auth_config: Any | None = None
@@ -20,7 +22,6 @@ _features: dict[str, bool] = {}
 _admin_config: Any | None = None
 _quota_defaults: Any | None = None
 
-# Role hierarchy: admin > editor > viewer
 _ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
 
 
@@ -30,7 +31,7 @@ def set_store(store: Store) -> None:
     Args:
         store: The Store to use for all API operations.
     """
-    global _store  # noqa: PLW0603
+    global _store
     _store = store
 
 
@@ -40,7 +41,7 @@ def set_catalog(catalog: Catalog) -> None:
     Args:
         catalog: The Catalog instance.
     """
-    global _catalog  # noqa: PLW0603
+    global _catalog
     _catalog = catalog
 
 
@@ -50,7 +51,7 @@ def set_auth_config(auth_config: Any) -> None:
     Args:
         auth_config: The AuthConfig instance.
     """
-    global _auth_config  # noqa: PLW0603
+    global _auth_config
     _auth_config = auth_config
 
 
@@ -104,7 +105,7 @@ def set_smtp_config(smtp_config: Any) -> None:
     Args:
         smtp_config: The SmtpConfig instance.
     """
-    global _smtp_config  # noqa: PLW0603
+    global _smtp_config
     _smtp_config = smtp_config
 
 
@@ -123,7 +124,7 @@ def set_features(features: dict[str, bool]) -> None:
     Args:
         features: Feature name → availability.
     """
-    global _features  # noqa: PLW0603
+    global _features
     _features = features
 
 
@@ -142,7 +143,7 @@ def set_admin_config(config: Any) -> None:
     Args:
         config: The AdminConfigResponse snapshot.
     """
-    global _admin_config  # noqa: PLW0603
+    global _admin_config
     _admin_config = config
 
 
@@ -161,7 +162,7 @@ def set_quota_defaults(defaults: Any) -> None:
     Args:
         defaults: The QuotaSettings instance.
     """
-    global _quota_defaults  # noqa: PLW0603
+    global _quota_defaults
     _quota_defaults = defaults
 
 
@@ -174,7 +175,7 @@ def get_quota_defaults() -> Any:
     return _quota_defaults
 
 
-# -- Auth dependencies -------------------------------------------------------
+# -- Auth dependencies ---------------------------------------------------------
 
 
 def get_current_user(
@@ -278,7 +279,7 @@ def get_org_id(
     return org.id
 
 
-# -- RBAC dependencies -------------------------------------------------------
+# -- RBAC dependencies ---------------------------------------------------------
 
 
 def authorize_org_member(
@@ -389,11 +390,13 @@ def require_viewer(
 ) -> Profile:
     """Require at least ``viewer`` role. Any org member passes.
 
+    Args:
+        user: The authenticated user, resolved from the session cookie.
+        org_id: The active organisation UUID, resolved from the session.
+        store: The Store instance.
+
     Returns:
         The authenticated Profile.
-
-    Raises:
-        HTTPException: 401/403 on auth or role failure.
     """
     return _check_role("viewer", user, org_id, store)
 
@@ -405,11 +408,13 @@ def require_editor(
 ) -> Profile:
     """Require at least ``editor`` role.
 
+    Args:
+        user: The authenticated user, resolved from the session cookie.
+        org_id: The active organisation UUID, resolved from the session.
+        store: The Store instance.
+
     Returns:
         The authenticated Profile.
-
-    Raises:
-        HTTPException: 401/403 on auth or role failure.
     """
     return _check_role("editor", user, org_id, store)
 
@@ -421,11 +426,13 @@ def require_admin(
 ) -> Profile:
     """Require ``admin`` role.
 
+    Args:
+        user: The authenticated user, resolved from the session cookie.
+        org_id: The active organisation UUID, resolved from the session.
+        store: The Store instance.
+
     Returns:
         The authenticated Profile.
-
-    Raises:
-        HTTPException: 401/403 on auth or role failure.
     """
     return _check_role("admin", user, org_id, store)
 
@@ -437,6 +444,9 @@ def require_super_admin(
 
     Unlike the org-scoped role dependencies, this is not bound to the session's
     active organisation — it gates the cross-org admin surface.
+
+    Args:
+        user: The authenticated user, resolved from the session cookie.
 
     Returns:
         The authenticated Profile.

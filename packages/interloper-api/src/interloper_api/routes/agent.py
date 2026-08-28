@@ -40,8 +40,12 @@ _session_service: InMemorySessionService | None = None
 
 
 def _get_session_service() -> InMemorySessionService:
-    """Return the shared session service, creating it on first call."""
-    global _session_service  # noqa: PLW0603
+    """Return the shared session service, creating it on first call.
+
+    Returns:
+        The process-wide in-memory session service.
+    """
+    global _session_service
     if _session_service is None:
         _session_service = InMemorySessionService()
     return _session_service
@@ -56,8 +60,11 @@ def _get_runner(store: Store, catalog: Catalog) -> Runner:
     Args:
         store: The Store instance (from API dependencies).
         catalog: The Catalog instance (from API dependencies).
+
+    Returns:
+        The process-wide ADK Runner.
     """
-    global _runner  # noqa: PLW0603
+    global _runner
     if _runner is None:
         from interloper_agent.agent import root_agent
         from interloper_agent.context import set_catalog, set_store
@@ -98,7 +105,14 @@ class SessionResponse(BaseModel):
 
 
 def _session_to_response(session: Any) -> SessionResponse:
-    """Convert an ADK Session to a response model."""
+    """Convert an ADK Session to a response model.
+
+    Args:
+        session: The ADK Session object.
+
+    Returns:
+        The response model.
+    """
     return SessionResponse(
         id=session.id,
         user_id=session.user_id,
@@ -123,6 +137,15 @@ async def create_session(
 
     The authenticated user's ``org_id`` is injected into the ADK session
     state so agent tools are scoped to the correct organisation.
+
+    Args:
+        user: The authenticated user, required to hold at least the ``editor`` role.
+        org_id: The active organisation's UUID.
+        store: The Store instance.
+        catalog: The Catalog instance.
+
+    Returns:
+        The created session, as a response model.
     """
     _get_runner(store=store, catalog=catalog)
     session_service = _get_session_service()
@@ -138,7 +161,14 @@ async def create_session(
 async def list_sessions(
     user: Profile = Depends(require_viewer),
 ) -> list[SessionResponse]:
-    """List all agent sessions for the current user."""
+    """List all agent sessions for the current user.
+
+    Args:
+        user: The authenticated user, required to hold at least the ``viewer`` role.
+
+    Returns:
+        The user's agent sessions, as response models.
+    """
     session_service = _get_session_service()
     result = await session_service.list_sessions(
         app_name=APP_NAME,
@@ -156,6 +186,16 @@ async def get_session(
     """Get a session with its full event history.
 
     Returns the session object including all events (messages and tool calls).
+
+    Args:
+        session_id: The ADK session ID.
+        user: The authenticated user, required to hold at least the ``viewer`` role.
+
+    Returns:
+        The session serialized by the ADK's own model, as raw JSON.
+
+    Raises:
+        HTTPException: 404 if the user has no session with that ID.
     """
     session_service = _get_session_service()
     session = await session_service.get_session(
@@ -176,7 +216,18 @@ async def delete_session(
     session_id: str,
     user: Profile = Depends(require_editor),
 ) -> dict[str, str]:
-    """Delete an agent session."""
+    """Delete an agent session.
+
+    Args:
+        session_id: The ADK session ID.
+        user: The authenticated user, required to hold at least the ``editor`` role.
+
+    Returns:
+        A confirmation that the session was deleted.
+
+    Raises:
+        HTTPException: 404 if the user has no session with that ID.
+    """
     session_service = _get_session_service()
     session = await session_service.get_session(
         app_name=APP_NAME,
@@ -207,6 +258,16 @@ async def chat(
     Events with ``content.parts`` containing ``text`` are the agent's
     text responses. Events with ``function_call`` or ``function_response``
     parts represent tool invocations.
+
+    Args:
+        session_id: The ADK session ID to continue.
+        body: The chat message to send.
+        user: The authenticated user, required to hold at least the ``editor`` role.
+        store: The Store instance.
+        catalog: The Catalog instance.
+
+    Returns:
+        A ``text/event-stream`` response carrying the agent's events.
     """
     runner = _get_runner(store=store, catalog=catalog)
     user_id = str(user.id)

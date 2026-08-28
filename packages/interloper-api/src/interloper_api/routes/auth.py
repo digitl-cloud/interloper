@@ -23,12 +23,23 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+# -- Helpers -------------------------------------------------------------------
+
+
 def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
     """Decide whether a first-time login may create a profile.
 
     An empty ``allowed_domains`` keeps signup open (the default).
     Otherwise the email must be on an allowed domain, be a configured
     super-admin, or hold a pending invitation.
+
+    Args:
+        email: The Google-verified address of the account signing in.
+        auth_config: The resolved auth configuration.
+        store: The database store.
+
+    Returns:
+        True when a profile may be created for this address.
     """
     allowed_domains = auth_config.allowed_domains
     if not allowed_domains:
@@ -40,6 +51,9 @@ def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
     if email.rsplit("@", 1)[-1] in allowed_domains:
         return True
     return store.has_pending_invitation(email)
+
+
+# -- Login & session -----------------------------------------------------------
 
 
 class OrganisationResponse(BaseModel):
@@ -70,7 +84,20 @@ def google_login(
     redirect: str | None = None,
     auth_config: Any = Depends(get_auth_config),
 ) -> RedirectResponse:
-    """Redirect user to Google's OAuth consent screen."""
+    """Redirect user to Google's OAuth consent screen.
+
+    Args:
+        redirect: App-relative destination to return to once the login
+            completes; carried through Google as the ``state`` parameter and
+            defaulting to the app root.
+        auth_config: The resolved auth configuration.
+
+    Returns:
+        A redirect to Google's consent screen.
+
+    Raises:
+        HTTPException: 500 when no Google client id is configured.
+    """
     client_id = auth_config.google_client_id
     redirect_uri = auth_config.google_redirect_uri
 
@@ -98,7 +125,23 @@ def google_callback(
     store: Store = Depends(get_store),
     auth_config: Any = Depends(get_auth_config),
 ) -> RedirectResponse:
-    """Exchange Google authorization code for tokens, upsert profile, create session."""
+    """Exchange Google authorization code for tokens, upsert profile, create session.
+
+    Args:
+        code: The single-use authorization code handed back by Google.
+        state: The destination recorded at the start of the flow; honoured only
+            when it is app-relative, otherwise the app root is used.
+        store: The database store.
+        auth_config: The resolved auth configuration.
+
+    Returns:
+        A redirect to the post-login destination carrying the session cookie, or
+        a redirect back to the login page when signup is not allowed.
+
+    Raises:
+        HTTPException: 500 when Google OAuth is not configured, 401 when the code
+            exchange or the user-info lookup fails or comes back incomplete.
+    """
     client_id = auth_config.google_client_id
     client_secret = auth_config.google_client_secret
     redirect_uri = auth_config.google_redirect_uri
@@ -108,7 +151,6 @@ def google_callback(
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Google OAuth not configured")
 
-    # Exchange code for tokens
     token_resp = httpx.post(
         GOOGLE_TOKEN_URL,
         data={
@@ -127,7 +169,6 @@ def google_callback(
     if not access_token:
         raise HTTPException(status_code=401, detail="No access token in response")
 
-    # Fetch user info
     userinfo_resp = httpx.get(
         GOOGLE_USERINFO_URL,
         headers={"Authorization": f"Bearer {access_token}"},
@@ -149,7 +190,6 @@ def google_callback(
     if not store.get_profile_by_google_id(google_id) and not _signup_allowed(email, auth_config, store):
         return RedirectResponse(url="/login?error=signup_not_allowed", status_code=302)
 
-    # Upsert profile
     profile = store.upsert_profile(
         google_id=google_id,
         email=email,
@@ -185,7 +225,19 @@ def logout(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Delete all sessions for the current user and clear the cookie."""
+    """Delete all sessions for the current user and clear the cookie.
+
+    Every session is dropped, not just this one: a logout is expected to end
+    the user's other browsers too.
+
+    Args:
+        response: The outgoing response, used to clear the session cookie.
+        user: The authenticated caller.
+        store: The database store.
+
+    Returns:
+        A status acknowledgement.
+    """
     store.delete_user_sessions(user.id)
     response.delete_cookie("session_token", path="/")
     return {"status": "ok"}
@@ -196,7 +248,21 @@ def get_me(
     store: Store = Depends(get_store),
     session_token: str | None = Cookie(default=None),
 ) -> AuthUserResponse:
-    """Return the current user and their active organisation (if any)."""
+    """Return the current user and their active organisation (if any).
+
+    Args:
+        store: The database store.
+        session_token: The session cookie, absent when the caller is not
+            logged in.
+
+    Returns:
+        The caller's profile, their role in the active organisation (``viewer``
+        when there is none), and the enabled feature flags.
+
+    Raises:
+        HTTPException: 401 when the session cookie is missing, unknown, or
+            expired.
+    """
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -230,6 +296,9 @@ def get_me(
     )
 
 
+# -- Profile -------------------------------------------------------------------
+
+
 class UpdateMeRequest(BaseModel):
     """User-editable profile fields; omitted fields stay untouched.
 
@@ -257,7 +326,19 @@ def update_me(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> ProfileResponse:
-    """Update the current user's profile (display name, timezone)."""
+    """Update the current user's profile (display name, timezone).
+
+    Args:
+        body: The fields to change; omitted fields stay untouched.
+        user: The authenticated caller.
+        store: The database store.
+
+    Returns:
+        The profile as it stands after the update.
+
+    Raises:
+        HTTPException: 422 when the timezone is not a known IANA zone name.
+    """
     if body.timezone is not None:
         try:
             ZoneInfo(body.timezone)
@@ -266,6 +347,9 @@ def update_me(
 
     profile = store.update_profile(user.id, name=body.name, timezone=body.timezone)
     return ProfileResponse.model_validate(profile, from_attributes=True)
+
+
+# -- Organisation context ------------------------------------------------------
 
 
 class SwitchOrgRequest(BaseModel):
@@ -281,7 +365,21 @@ def switch_org(
     store: Store = Depends(get_store),
     session_token: str | None = Cookie(default=None),
 ) -> dict[str, str]:
-    """Switch the session's active organisation. User must be a member."""
+    """Switch the session's active organisation. User must be a member.
+
+    Args:
+        body: The organisation to make active.
+        user: The authenticated caller.
+        store: The database store.
+        session_token: The session cookie; the active organisation is stored on
+            the session, so without it there is nothing to record.
+
+    Returns:
+        A status acknowledgement.
+
+    Raises:
+        HTTPException: 403 when the caller is not a member of the organisation.
+    """
     role = store.get_user_role(user.id, body.organisation_id)
     if not role:
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
@@ -304,12 +402,26 @@ def accept_invite(
     store: Store = Depends(get_store),
     session_token: str | None = Cookie(default=None),
 ) -> dict[str, str]:
-    """Accept an organisation invitation using its token."""
+    """Accept an organisation invitation using its token.
+
+    Args:
+        body: The invitation token to redeem.
+        user: The authenticated caller, who becomes a member on success.
+        store: The database store.
+        session_token: The session cookie; when present, the joined organisation
+            also becomes the session's active one.
+
+    Returns:
+        A status acknowledgement.
+
+    Raises:
+        HTTPException: 400 when the invitation is unknown, already redeemed, or
+            expired.
+    """
     org = store.accept_invitation(body.token, user.id)
     if not org:
         raise HTTPException(status_code=400, detail="Invalid or expired invitation")
 
-    # Switch to the new org
     if session_token:
         store.set_session_org(session_token, org.id, user_id=user.id)
 

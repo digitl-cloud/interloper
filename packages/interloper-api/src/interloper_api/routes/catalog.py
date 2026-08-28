@@ -14,7 +14,14 @@ router = APIRouter(prefix="/catalog", tags=["catalog"], dependencies=[Depends(re
 
 @router.get("/")
 def list_catalog(catalog: Catalog = Depends(get_catalog)) -> dict[str, Any]:
-    """Return the full catalog."""
+    """Return the full catalog.
+
+    Args:
+        catalog: Injected catalog.
+
+    Returns:
+        Every catalog entry, serialised.
+    """
     return catalog.dump()
 
 
@@ -25,6 +32,12 @@ def list_resource_kinds(catalog: Catalog = Depends(get_catalog)) -> list[str]:
     A resource kind is any registered kind anchored under ``Resource``
     (currently ``connection`` and ``config``) — the kinds usable as
     slot bindings on other components.
+
+    Args:
+        catalog: Injected catalog.
+
+    Returns:
+        The resource kinds present in the catalog, sorted.
     """
     import interloper as il
 
@@ -45,6 +58,9 @@ def get_definition(key: str, catalog: Catalog = Depends(get_catalog)) -> dict[st
         key: The component key.
         catalog: Injected catalog.
 
+    Returns:
+        The component definition, serialised.
+
     Raises:
         HTTPException: If the key is not found.
     """
@@ -61,5 +77,8 @@ def list_by_kind(kind: str, catalog: Catalog = Depends(get_catalog)) -> dict[str
     Args:
         kind: The component kind to filter by.
         catalog: Injected catalog.
+
+    Returns:
+        The matching catalog entries, serialised and keyed by component key.
     """
     return {k: v.model_dump(mode="json") for k, v in catalog.components.items() if v.kind == kind}
