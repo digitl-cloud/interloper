@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.66.0 (2026-08-28)
+
+### Bug Fixes
+
+- Never echo pydantic input values into persisted error messages
+  ([`e87d0cb`](https://github.com/digitl-cloud/interloper/commit/e87d0cbfb57e8a6c9093de24a5005412d89bf730))
+
+### Features
+
+- **scheduler**: Runs root their own traces, linked to the dispatch span
+  ([`cacfd96`](https://github.com/digitl-cloud/interloper/commit/cacfd96fc770f2078e505e682bbcc727f2f91ef9))
+
+
 ## v0.65.1 (2026-08-27)
 
 ### Bug Fixes
