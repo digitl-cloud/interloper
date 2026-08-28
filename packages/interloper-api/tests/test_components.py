@@ -47,7 +47,11 @@ def connection_catalog() -> il.Catalog:
 
 @pytest.fixture
 def mock_graph(monkeypatch: pytest.MonkeyPatch):
-    """Patch the Facebook connection's httpx client with a mock transport."""
+    """Patch the Facebook connection's httpx client with a mock transport.
+
+    Returns:
+        The list the transport records each handled request into.
+    """
 
     def install(handler) -> None:
         real_client = httpx.AsyncClient

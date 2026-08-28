@@ -42,8 +42,27 @@ interloper-agent = { workspace = true }
 line-length = 120
 
 [tool.ruff.lint]
-extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+preview = true
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# FastAPI's whole dependency-injection surface is calls in argument defaults;
+# B008 exists for mutable defaults, which these are not.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Cookie",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Query",
+    "fastapi.Security",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"tests/**" = ["ANN", "F811"]
+"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "D107"]

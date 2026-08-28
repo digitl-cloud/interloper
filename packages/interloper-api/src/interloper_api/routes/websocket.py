@@ -24,43 +24,67 @@ from fastapi import APIRouter, Cookie, FastAPI, WebSocket, WebSocketDisconnect
 from interloper_api.dependencies import get_store
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["ws"])
+router = APIRouter(tags=["websocket"])
+
+
+# -- Connection manager --------------------------------------------------------
 
 
 class ConnectionManager:
     """Manages WebSocket connections grouped by organisation ID."""
 
     def __init__(self) -> None:
+        """Start with no registered connections."""
         self._connections: dict[str, set[WebSocket]] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, ws: WebSocket, org_id: str) -> None:
-        """Register a WebSocket for an org."""
+    async def connect(self, websocket: WebSocket, org_id: str) -> None:
+        """Register a WebSocket for an org.
+
+        Args:
+            websocket: The accepted WebSocket connection.
+            org_id: The organisation the connection belongs to.
+        """
         async with self._lock:
             if org_id not in self._connections:
                 self._connections[org_id] = set()
-            self._connections[org_id].add(ws)
+            self._connections[org_id].add(websocket)
 
-    async def disconnect(self, ws: WebSocket, org_id: str) -> None:
-        """Unregister a WebSocket."""
+    async def disconnect(self, websocket: WebSocket, org_id: str) -> None:
+        """Unregister a WebSocket.
+
+        Args:
+            websocket: The WebSocket connection to drop.
+            org_id: The organisation the connection belongs to.
+        """
         async with self._lock:
             if org_id in self._connections:
-                self._connections[org_id].discard(ws)
+                self._connections[org_id].discard(websocket)
                 if not self._connections[org_id]:
                     del self._connections[org_id]
 
     async def broadcast(self, org_id: str, message: dict[str, object]) -> None:
-        """Send a message to all connections for an org."""
+        """Send a message to all connections for an org.
+
+        Args:
+            org_id: The organisation whose connections receive the message.
+            message: The JSON-serializable payload to send.
+        """
         async with self._lock:
             connections = list(self._connections.get(org_id, []))
-        for ws in connections:
+        for websocket in connections:
             try:
-                await ws.send_json(message)
-            except Exception:
+                await websocket.send_json(message)
+            except Exception:  # noqa: BLE001, S110 — one dead peer must not fail the broadcast
+                # A client that vanished mid-broadcast is unremarkable: the
+                # socket's own disconnect handler unregisters it.
                 pass
 
 
 _manager = ConnectionManager()
+
+
+# -- NOTIFY listener -----------------------------------------------------------
 
 
 def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
@@ -72,19 +96,19 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
     """
     while True:
         try:
-            conn = psycopg2.connect(dsn)
-            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+            connection = psycopg2.connect(dsn)
+            connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
 
-            with conn.cursor() as cur:
-                cur.execute("LISTEN table_changes")
+            with connection.cursor() as cursor:
+                cursor.execute("LISTEN table_changes")
 
             logger.info("[Realtime] NOTIFY listener started")
 
             while True:
-                if _select.select([conn], [], [], 1.0):
-                    conn.poll()
-                    while conn.notifies:
-                        notify = conn.notifies.pop(0)
+                if _select.select([connection], [], [], 1.0):
+                    connection.poll()
+                    while connection.notifies:
+                        notify = connection.notifies.pop(0)
                         try:
                             payload = json.loads(notify.payload)
                             org_id = str(payload["org_id"])
@@ -98,7 +122,10 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
                             )
                         except (json.JSONDecodeError, KeyError) as e:
                             logger.warning("[Realtime] Invalid NOTIFY payload: %s", e)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
+            # This thread is the only realtime path; letting anything escape
+            # would end it for the life of the process, so every failure is
+            # logged and the connection retried instead.
             logger.error("[Realtime] NOTIFY listener error: %s, reconnecting in 5s...", e)
             import time
             time.sleep(5)
@@ -109,6 +136,12 @@ async def realtime_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Start the NOTIFY listener thread on app startup.
 
     Reads the DSN from the engine already initialized by ``init_engine()``.
+
+    Args:
+        app: The FastAPI application being started.
+
+    Yields:
+        None, once the listener thread is running.
     """
     from interloper_db import get_engine
 
@@ -127,38 +160,47 @@ async def realtime_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
 
+# -- Endpoints -----------------------------------------------------------------
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(
-    ws: WebSocket,
+    websocket: WebSocket,
     session_token: str | None = Cookie(default=None),
 ) -> None:
-    """Authenticate via session cookie, then stream table change events."""
+    """Authenticate via session cookie, then stream table change events.
+
+    Args:
+        websocket: The incoming WebSocket connection.
+        session_token: The session cookie value; None closes the connection as
+            unauthorized.
+    """
     store = get_store()
 
     if not session_token:
-        await ws.close(code=4001, reason="Unauthorized")
+        await websocket.close(code=4001, reason="Unauthorized")
         return
 
     result = store.resolve_session(session_token)
     if not result:
-        await ws.close(code=4001, reason="Unauthorized")
+        await websocket.close(code=4001, reason="Unauthorized")
         return
 
     _, session_row = result
     if not session_row.organisation_id:
-        await ws.close(code=4002, reason="No organisation selected")
+        await websocket.close(code=4002, reason="No organisation selected")
         return
 
     org_id = str(session_row.organisation_id)
     logger.info("[WS] Authenticated. org=%s — accepting connection", org_id)
 
-    await ws.accept()
-    await _manager.connect(ws, org_id)
+    await websocket.accept()
+    await _manager.connect(websocket, org_id)
 
     try:
         while True:
-            await ws.receive_text()
+            await websocket.receive_text()
     except WebSocketDisconnect:
         pass
     finally:
-        await _manager.disconnect(ws, org_id)
+        await _manager.disconnect(websocket, org_id)

@@ -31,18 +31,20 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 _ROLES = {"viewer", "editor", "admin"}
 
 
-# -- Response / Request models ------------------------------------------------
+# -- Request & response models -------------------------------------------------
 
 
 class AdminOrganisationResponse(BaseModel):
-    """Organisation summary with member count for the admin surface."""
+    """Organisation summary with member count for the admin surface.
+
+    Soft-deleted organisations stay listed, their retained history and ledger
+    still being attributable, but are no longer manageable.
+    """
 
     id: UUID
     name: str
     member_count: int
     created_at: datetime | None = None
-    #: Soft-deleted orgs stay listed (their retained history and ledger are
-    #: still attributable) but are no longer manageable.
     deleted_at: datetime | None = None
 
 
@@ -228,19 +230,23 @@ class AdminDataConfig(BaseModel):
     catalog: dict[str, list[str]]
 
 
-#: One set of quota limits, keyed by quota key; null means unlimited (or
-#: unset, for overrides). Derived from the ``QUOTAS`` registry rather than
-#: declared field-by-field, so registering a quota surfaces it here — and in
-#: the frontend, which already indexes these by key — with no code change.
+# One set of quota limits, keyed by quota key; null means unlimited (or unset,
+# for overrides). Derived from the ``QUOTAS`` registry rather than declared
+# field-by-field, so registering a quota surfaces it here — and in the frontend,
+# which already indexes these by key — with no code change.
 AdminQuotaLimits = dict[str, int | None]
 
 
 class AdminOrgQuotaStatus(BaseModel):
-    """One organisation's quota limits and current usage."""
+    """One organisation's quota limits and current usage.
+
+    Soft-deleted organisations keep their ledger visible but are read-only.
+    ``recomputed_successful_runs`` comes from the runs table rather than the
+    ledger, so a mismatch with ``successful_runs`` signals counter drift.
+    """
 
     id: UUID
     name: str
-    #: Soft-deleted orgs keep their ledger visible but are read-only.
     deleted_at: datetime | None = None
     limits: AdminQuotaLimits
     effective: AdminQuotaLimits
@@ -248,8 +254,6 @@ class AdminOrgQuotaStatus(BaseModel):
     max_assets_per_source: int
     successful_runs: int
     reserved_runs: int
-    #: Recomputed from the runs table; a mismatch with ``successful_runs``
-    #: (the ledger) signals counter drift.
     recomputed_successful_runs: int
 
 
@@ -281,6 +285,9 @@ class AdminQuotaUpdateRequest(RootModel[AdminQuotaLimits]):
     @classmethod
     def _known_keys_and_non_negative(cls, value: AdminQuotaLimits) -> AdminQuotaLimits:
         """Validate the payload against the quota registry.
+
+        Args:
+            value: The submitted overrides, keyed by quota key.
 
         Returns:
             The payload unchanged.
@@ -315,6 +322,9 @@ class AdminConfigResponse(BaseModel):
     quotas: AdminQuotaLimits
 
 
+# -- Config snapshot -----------------------------------------------------------
+
+
 # Non-secret launcher/runner config keys exposed on /admin/config. Anything not
 # listed (env injections, image_pull_secrets, credentials, …) stays server-side.
 _LAUNCHER_CONFIG_KEYS = frozenset(
@@ -345,7 +355,15 @@ _RUNNER_CONFIG_KEYS = frozenset(
 
 
 def _filter_config(config: dict[str, Any] | None, allowed: frozenset[str]) -> dict[str, Any]:
-    """Keep only allowlisted keys of a launcher/runner config dict."""
+    """Keep only allowlisted keys of a launcher/runner config dict.
+
+    Args:
+        config: The raw config dict, or ``None`` when nothing is configured.
+        allowed: The keys cleared for exposure on the admin surface.
+
+    Returns:
+        The config restricted to ``allowed``, empty when ``config`` is ``None``.
+    """
     return {key: value for key, value in (config or {}).items() if key in allowed}
 
 
@@ -356,6 +374,14 @@ def _launcher_defaults(launcher_type: str) -> dict[str, Any]:
     without this, an unset value reads as "missing" when a class default
     applies. Returns ``{}`` when the launcher package isn't installed here
     (e.g. an API-only image) — the view then simply shows no defaults.
+
+    Args:
+        launcher_type: The registered launcher key, as configured on the
+            instance (``k8s``, ``docker``, ``in_process``, …).
+
+    Returns:
+        Allowlisted parameter names mapped to their default value, skipping
+        parameters that default to ``None``.
     """
     try:
         from interloper_scheduler.launcher import LAUNCHERS
@@ -372,7 +398,15 @@ def _launcher_defaults(launcher_type: str) -> dict[str, Any]:
 
 
 def _runner_defaults(runner_type: str) -> dict[str, Any]:
-    """Allowlisted field defaults of the registered runner class (pydantic model)."""
+    """Allowlisted field defaults of the registered runner class (pydantic model).
+
+    Args:
+        runner_type: The registered runner key, as configured on the instance.
+
+    Returns:
+        Allowlisted field names mapped to their default value, empty when the
+        type is unregistered.
+    """
     from interloper.runner.base import RUNNERS
 
     runner_cls = RUNNERS.get(runner_type)
@@ -386,7 +420,14 @@ def _runner_defaults(runner_type: str) -> dict[str, Any]:
 
 
 def _catalog_by_kind(catalog: Any) -> dict[str, list[str]]:
-    """Group the hydrated catalog's component keys by kind, both sorted."""
+    """Group the hydrated catalog's component keys by kind, both sorted.
+
+    Args:
+        catalog: The hydrated catalog whose ``components`` are grouped.
+
+    Returns:
+        Component keys by kind, kinds and keys both sorted alphabetically.
+    """
     by_kind: dict[str, list[str]] = {}
     for key, definition in catalog.components.items():
         by_kind.setdefault(definition.kind, []).append(key)
@@ -401,6 +442,15 @@ def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any
     "configured" booleans. The catalog is reported from the hydrated ``Catalog``
     (auto-discovered universe + configured extras), not ``settings.catalog``,
     which only holds the explicitly configured import paths.
+
+    Args:
+        settings: The instance settings the snapshot reads from.
+        features: Optional-feature flags keyed by feature name.
+        catalog: The hydrated catalog to report, or ``None`` to report an empty
+            one (the snapshot is then built without catalog access).
+
+    Returns:
+        The snapshot, ready to serve as-is.
     """
     try:
         version: str | None = metadata.version("interloper-api")
@@ -487,29 +537,38 @@ def build_config_snapshot(settings: Any, features: dict[str, bool], catalog: Any
     )
 
 
-# -- Helpers ------------------------------------------------------------------
+# -- Helpers -------------------------------------------------------------------
 
 
 def _quota_limits(limits: Any) -> AdminQuotaLimits:
     """Map limits from a ``{key: limit}`` dict (store) or attributes (settings).
 
+    Args:
+        limits: A ``{key: limit}`` mapping, or an object carrying one attribute
+            per quota key.
+
     Returns:
         Every registered quota's limit, ``None`` where unset.
     """
     if isinstance(limits, dict):
-        return {key: limits.get(key) for key in QUOTAS.keys()}
-    return {key: getattr(limits, key, None) for key in QUOTAS.keys()}
+        return {key: limits.get(key) for key in QUOTAS}
+    return {key: getattr(limits, key, None) for key in QUOTAS}
 
 
 def _effective_limits(overrides: AdminQuotaLimits, defaults: AdminQuotaLimits) -> AdminQuotaLimits:
     """Per-org overrides win key-by-key over the global defaults.
+
+    Args:
+        overrides: One organisation's overrides; a key that is missing or set
+            to ``None`` falls through to the default.
+        defaults: The instance-wide limits.
 
     Returns:
         The effective limit of every registered quota.
     """
     return {
         key: override if (override := overrides.get(key)) is not None else defaults.get(key)
-        for key in QUOTAS.keys()
+        for key in QUOTAS
     }
 
 
@@ -521,14 +580,28 @@ def _quota_fields(defaults: AdminQuotaLimits) -> list[AdminQuotaField]:
     sorts its keys, so the admin surfaces list quotas alphabetically rather
     than in the order they happen to be registered.
 
+    Args:
+        defaults: The instance-wide limits, reported as each field's default.
+
     Returns:
         One descriptor per registered quota.
     """
-    return [AdminQuotaField(key=key, label=QUOTAS[key].label, default=defaults.get(key)) for key in QUOTAS.keys()]
+    return [AdminQuotaField(key=key, label=QUOTAS[key].label, default=defaults.get(key)) for key in QUOTAS]
 
 
 def _require_org(store: Store, org_id: UUID) -> Organisation:
-    """Fetch an organisation or raise 404."""
+    """Fetch an organisation or raise 404.
+
+    Args:
+        store: The database store backing the request.
+        org_id: The organisation to fetch.
+
+    Returns:
+        The organisation row.
+
+    Raises:
+        HTTPException: 404 when no organisation carries that id.
+    """
     org = store.get_organisation(org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organisation not found")
@@ -536,7 +609,17 @@ def _require_org(store: Store, org_id: UUID) -> Organisation:
 
 
 def _validate_role(role: str) -> str:
-    """Validate a role string or raise 400."""
+    """Validate a role string or raise 400.
+
+    Args:
+        role: The role name submitted by the caller.
+
+    Returns:
+        The role unchanged.
+
+    Raises:
+        HTTPException: 400 when the role is none of viewer, editor, admin.
+    """
     if role not in _ROLES:
         raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
     return role
@@ -548,7 +631,14 @@ def _send_invitation_email(
     org_name: str,
     inviter_name: str,
 ) -> None:
-    """Send the invitation email if SMTP is configured, never failing the request."""
+    """Send the invitation email if SMTP is configured, never failing the request.
+
+    Args:
+        request: The incoming request, whose base URL the invite link is built on.
+        invitation: The stored invitation, read for its recipient and token.
+        org_name: The organisation name shown to the recipient.
+        inviter_name: The display name of the super-admin who invited.
+    """
     from interloper_api.dependencies import get_smtp_config
 
     smtp_config = get_smtp_config()
@@ -581,13 +671,25 @@ def get_instance_config(
     user: Profile = Depends(require_super_admin),
     config: Any = Depends(get_admin_config),
 ) -> AdminConfigResponse:
-    """Read-only snapshot of the instance configuration (secrets redacted)."""
+    """Read-only snapshot of the instance configuration (secrets redacted).
+
+    Args:
+        user: The calling super-admin, resolved from the session.
+        config: The snapshot built at startup, ``None`` when the app could not
+            build one.
+
+    Returns:
+        The instance-config snapshot.
+
+    Raises:
+        HTTPException: 503 when no snapshot was built at startup.
+    """
     if config is None:
         raise HTTPException(status_code=503, detail="Instance configuration not available")
     return config
 
 
-# -- Quotas ---------------------------------------------------------------------
+# -- Quotas --------------------------------------------------------------------
 
 
 @router.get("/quotas")
@@ -596,7 +698,17 @@ def get_quotas(
     store: Store = Depends(get_store),
     quota_defaults: Any = Depends(get_quota_defaults),
 ) -> AdminQuotasResponse:
-    """Quota limits and current-period usage for every organisation."""
+    """Quota limits and current-period usage for every organisation.
+
+    Args:
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+        quota_defaults: The instance-wide quota defaults from settings.
+
+    Returns:
+        The current period start, the global defaults, the field descriptors,
+        and one status entry per organisation, soft-deleted ones included.
+    """
     defaults = _quota_limits(quota_defaults)
     period_start = store.current_period_start()
     overrides = store.list_quota_overrides()
@@ -635,8 +747,44 @@ def get_quotas(
     )
 
 
+@router.patch("/organisations/{org_id}/quota")
+def update_org_quota(
+    org_id: UUID,
+    body: AdminQuotaUpdateRequest,
+    user: Profile = Depends(require_super_admin),
+    store: Store = Depends(get_store),
+) -> AdminQuotaLimits:
+    """Set an organisation's quota overrides; omitted keys keep their value, null clears one.
+
+    Args:
+        org_id: The organisation whose overrides are written.
+        body: The overrides to apply. An omitted key keeps its current value; a
+            null clears the override, so the global default applies again.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The organisation's overrides after the write, ``None`` where unset.
+    """
+    _require_org(store, org_id)
+    overrides = store.set_quota(org_id, body.root)
+    return _quota_limits(overrides)
+
+
+# -- Activity ------------------------------------------------------------------
+
+
 def _activity_title(entry: dict[str, Any]) -> tuple[str, str | None]:
-    """Presentation strings for a derived activity entry."""
+    """Presentation strings for a derived activity entry.
+
+    Args:
+        entry: One raw activity record, read for its ``kind``, ``subject`` and
+            ``extra`` keys.
+
+    Returns:
+        The title and the detail line, the latter ``None`` when the entry
+        carries nothing beyond its title.
+    """
     kind, subject, extra = entry["kind"], entry["subject"], entry["extra"]
     if kind == "org_created":
         return "Organisation created", None
@@ -665,6 +813,14 @@ def get_organisation_activity(
     Composed from existing records (memberships, pending invitations,
     sources, run aggregates, the org row itself) — there is no audit
     trail, so actor attribution is limited to what those rows carry.
+
+    Args:
+        org_id: The organisation whose activity is derived.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The activity entries, newest first.
     """
     entries = []
     for entry in store.list_organisation_activity(org_id):
@@ -673,20 +829,7 @@ def get_organisation_activity(
     return entries
 
 
-@router.patch("/organisations/{org_id}/quota")
-def update_org_quota(
-    org_id: UUID,
-    body: AdminQuotaUpdateRequest,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
-) -> AdminQuotaLimits:
-    """Set an organisation's quota overrides; omitted keys keep their value, null clears one."""
-    _require_org(store, org_id)
-    overrides = store.set_quota(org_id, body.root)
-    return _quota_limits(overrides)
-
-
-# -- Users --------------------------------------------------------------------
+# -- Users ---------------------------------------------------------------------
 
 
 @router.get("/users")
@@ -694,7 +837,15 @@ def list_all_users(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> list[AdminUserResponse]:
-    """List every user profile with the organisations it belongs to."""
+    """List every user profile with the organisations it belongs to.
+
+    Args:
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        Every profile on the platform, each with its memberships.
+    """
     return [
         AdminUserResponse(
             id=profile.id,
@@ -715,14 +866,26 @@ def delete_user(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Delete a user entirely: profile, sessions, tokens, memberships, sent invitations."""
+    """Delete a user entirely: profile, sessions, tokens, memberships, sent invitations.
+
+    Args:
+        user_id: The profile to delete.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        ``{"status": "ok"}`` once the profile is gone.
+
+    Raises:
+        HTTPException: 400 when the caller targets their own account.
+    """
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account")
     store.delete_profile(user_id)
     return {"status": "ok"}
 
 
-# -- Organisations ------------------------------------------------------------
+# -- Organisations -------------------------------------------------------------
 
 
 @router.get("/organisations")
@@ -730,7 +893,15 @@ def list_all_organisations(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> list[AdminOrganisationResponse]:
-    """List every organisation with its member count, soft-deleted ones included."""
+    """List every organisation with its member count, soft-deleted ones included.
+
+    Args:
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        Every organisation, each with its member count.
+    """
     return [
         AdminOrganisationResponse(
             id=org.id,
@@ -749,7 +920,16 @@ def create_organisation(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> AdminOrganisationResponse:
-    """Create an organisation. The super-admin is not added as a member."""
+    """Create an organisation. The super-admin is not added as a member.
+
+    Args:
+        body: The new organisation's name.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The created organisation, whose member count is therefore zero.
+    """
     org = store.create_organisation(name=body.name)
     return AdminOrganisationResponse(
         id=org.id,
@@ -766,7 +946,17 @@ def update_organisation(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> AdminOrganisationResponse:
-    """Rename an organisation."""
+    """Rename an organisation.
+
+    Args:
+        org_id: The organisation to rename.
+        body: The new name.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The renamed organisation with its current member count.
+    """
     org = store.update_organisation(org_id, body.name)
     members = store.list_org_members(org_id)
     return AdminOrganisationResponse(
@@ -788,6 +978,18 @@ def delete_organisation(
 
     The body must repeat the exact name. Deleted organisations stay in the
     list (read-only) and read as missing everywhere else.
+
+    Args:
+        org_id: The organisation to soft-delete.
+        body: The confirmation, repeating the organisation's exact name.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        ``{"status": "ok"}`` once the organisation is soft-deleted.
+
+    Raises:
+        HTTPException: 400 when the confirmation name does not match.
     """
     org = _require_org(store, org_id)
     if body.name != org.name:
@@ -796,7 +998,7 @@ def delete_organisation(
     return {"status": "ok"}
 
 
-# -- Members ------------------------------------------------------------------
+# -- Members -------------------------------------------------------------------
 
 
 @router.get("/organisations/{org_id}/members")
@@ -805,7 +1007,16 @@ def list_members(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> list[MemberResponse]:
-    """List all members of any organisation."""
+    """List all members of any organisation.
+
+    Args:
+        org_id: The organisation whose members are listed.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        Every member of the organisation with its role.
+    """
     _require_org(store, org_id)
     members = store.list_org_members(org_id)
     return [
@@ -827,7 +1038,20 @@ def join_organisation(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> MemberResponse:
-    """Add the calling super-admin to any organisation — no invitation needed."""
+    """Add the calling super-admin to any organisation — no invitation needed.
+
+    Args:
+        org_id: The organisation to join.
+        body: The role to take, ``admin`` unless overridden.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The caller's new membership.
+
+    Raises:
+        HTTPException: 409 when the caller already belongs to the organisation.
+    """
     _require_org(store, org_id)
     _validate_role(body.role)
     if not store.add_org_member(org_id, user.id, body.role):
@@ -849,7 +1073,18 @@ def update_member_role(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Change a member's role in any organisation."""
+    """Change a member's role in any organisation.
+
+    Args:
+        org_id: The organisation the membership belongs to.
+        user_id: The member whose role changes.
+        body: The new role.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        ``{"status": "ok"}`` once the role is written.
+    """
     _validate_role(body.role)
     store.update_member_role(org_id, user_id, body.role)
     return {"status": "ok"}
@@ -862,12 +1097,22 @@ def remove_member(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Remove a member from any organisation."""
+    """Remove a member from any organisation.
+
+    Args:
+        org_id: The organisation the membership belongs to.
+        user_id: The member to remove.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        ``{"status": "ok"}`` once the membership is gone.
+    """
     store.remove_org_member(org_id, user_id)
     return {"status": "ok"}
 
 
-# -- Invitations --------------------------------------------------------------
+# -- Invitations ---------------------------------------------------------------
 
 
 @router.get("/organisations/{org_id}/invitations")
@@ -876,7 +1121,16 @@ def list_invitations(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> list[InvitationResponse]:
-    """List pending invitations for any organisation."""
+    """List pending invitations for any organisation.
+
+    Args:
+        org_id: The organisation whose invitations are listed.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The organisation's pending invitations.
+    """
     _require_org(store, org_id)
     return [
         InvitationResponse(
@@ -898,7 +1152,21 @@ def invite_member(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> InvitationResponse:
-    """Invite a user to any organisation by email."""
+    """Invite a user to any organisation by email.
+
+    The invitation is stored first and mailed best-effort: an unconfigured or
+    failing SMTP is logged, never surfaced, so the link stays redeemable.
+
+    Args:
+        org_id: The organisation to invite into.
+        body: The recipient email and the role granted on acceptance.
+        request: The incoming request, whose base URL the invite link is built on.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The created invitation.
+    """
     org = _require_org(store, org_id)
     _validate_role(body.role)
     invitation = store.create_invitation(
@@ -927,6 +1195,17 @@ def cancel_invitation(
     user: Profile = Depends(require_super_admin),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Cancel a pending invitation in any organisation."""
+    """Cancel a pending invitation in any organisation.
+
+    Args:
+        org_id: The organisation the invitation belongs to; it scopes the path
+            only, the invitation id alone identifying the row.
+        invitation_id: The invitation to cancel.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        ``{"status": "ok"}`` once the invitation is gone.
+    """
     store.delete_invitation(invitation_id)
     return {"status": "ok"}

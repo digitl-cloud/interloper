@@ -45,7 +45,7 @@ def log_provider_status() -> None:
     the one place a typo'd or forgotten variable surfaces.
     """
     active = []
-    for key in PROVIDERS.keys():
+    for key in PROVIDERS:
         names = OAuthAppCredentials.env_names(key)
         missing = [n for n in names.values() if not os.environ.get(n)]
         if not missing:
@@ -61,7 +61,7 @@ def log_provider_status() -> None:
 async def _exchange(
     client: httpx.AsyncClient,
     spec: OAuthProvider,
-    cfg: OAuthAppCredentials,
+    config: OAuthAppCredentials,
     code: str,
 ) -> dict[str, Any]:
     """Exchange an authorization code for tokens, driven by the provider spec.
@@ -69,7 +69,7 @@ async def _exchange(
     Args:
         client: The HTTP client to use.
         spec: The provider's token-exchange spec.
-        cfg: The in-house OAuth credentials.
+        config: The in-house OAuth credentials.
         code: The authorization code.
 
     Returns:
@@ -81,27 +81,27 @@ async def _exchange(
     logical_values = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": cfg.redirect_uri,
-        "client_id": cfg.client_id,
-        "client_secret": cfg.client_secret,
+        "redirect_uri": config.redirect_uri,
+        "client_id": config.client_id,
+        "client_secret": config.client_secret,
     }
     params = {wire: logical_values[logical] for logical, wire in spec.token_params.items()}
 
     headers: dict[str, str] = {}
     if spec.token_basic_auth:
-        creds = base64.b64encode(f"{cfg.client_id}:{cfg.client_secret}".encode()).decode()
+        creds = base64.b64encode(f"{config.client_id}:{config.client_secret}".encode()).decode()
         headers["Authorization"] = f"Basic {creds}"
 
     if spec.token_method == "get":
-        resp = await client.get(spec.token_url, params=params, headers=headers)
+        response = await client.get(spec.token_url, params=params, headers=headers)
     elif spec.token_encoding == "form":
         headers["Content-Type"] = "application/x-www-form-urlencoded"
-        resp = await client.post(spec.token_url, data=params, headers=headers)
+        response = await client.post(spec.token_url, data=params, headers=headers)
     else:
-        resp = await client.post(spec.token_url, json=params, headers=headers)
-    resp.raise_for_status()
+        response = await client.post(spec.token_url, json=params, headers=headers)
+    response.raise_for_status()
 
-    return resp.json()
+    return response.json()
 
 
 # -- Routes --------------------------------------------------------------------
@@ -131,6 +131,10 @@ def list_providers() -> list[ProviderInfo]:
     Only registered providers with ``CLIENT_ID``, ``CLIENT_SECRET``, and
     ``REDIRECT_URI`` environment variables set are included.  Metadata
     (auth_url, label, icon) comes from the provider registry.
+
+    Returns:
+        One entry per configured provider, carrying the public half of its
+        credentials (client id and redirect URI) and its display metadata.
     """
     return [
         ProviderInfo(
@@ -157,25 +161,38 @@ async def exchange_token(
     Returns only the provider's token response (e.g. ``refresh_token``); the
     in-house OAuth credentials are never included — connections resolve them
     from env at runtime.
+
+    Args:
+        provider: The registry key of the provider to exchange against.
+        body: The authorization code returned by the provider's consent screen.
+        _user: The authenticated caller; the route is gated on a session, the
+            identity itself is not used.
+
+    Returns:
+        The provider's raw token response.
+
+    Raises:
+        HTTPException: 400 when the provider is unknown or has no credentials
+            configured, 500 when the exchange itself fails.
     """
     spec = PROVIDERS.get(provider)
     if spec is None:
         raise HTTPException(status_code=400, detail=f"Unknown OAuth provider: {provider}")
 
-    cfg = OAuthAppCredentials.from_env(provider)
-    if cfg is None:
+    config = OAuthAppCredentials.from_env(provider)
+    if config is None:
         raise HTTPException(status_code=400, detail=f"OAuth provider {provider} is not configured")
 
     try:
         logger.info("Exchanging auth code for provider %s", provider)
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            result = await _exchange(client, spec, cfg, body.code)
+            result = await _exchange(client, spec, config, body.code)
         logger.info("Successfully exchanged auth code for provider %s", provider)
         return result
-    except httpx.HTTPStatusError as exc:
-        detail = exc.response.text
-        logger.error("Token exchange failed for %s: %s %s", provider, exc.response.status_code, detail)
+    except httpx.HTTPStatusError as exception:
+        detail = exception.response.text
+        logger.error("Token exchange failed for %s: %s %s", provider, exception.response.status_code, detail)
         raise HTTPException(status_code=500, detail=f"Failed to exchange auth code: {detail}")
-    except Exception as exc:
-        logger.error("Token exchange failed for %s: %s", provider, exc)
-        raise HTTPException(status_code=500, detail=f"Failed to exchange auth code: {exc}")
+    except Exception as exception:  # noqa: BLE001 - any provider failure becomes a 500
+        logger.error("Token exchange failed for %s: %s", provider, exception)
+        raise HTTPException(status_code=500, detail=f"Failed to exchange auth code: {exception}")

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/organisations", tags=["organisations"])
 
 
-# -- Response / Request models ------------------------------------------------
+# -- Response / Request models -------------------------------------------------
 
 
 class OrganisationResponse(BaseModel):
@@ -63,11 +63,15 @@ class InvitationResponse(BaseModel):
     expires_at: datetime
 
 
-# -- Helpers ------------------------------------------------------------------
+# -- Helpers -------------------------------------------------------------------
 
 
 def _get_smtp_config() -> Any | None:
-    """Return the SMTP config if available, without raising."""
+    """Return the SMTP config if available, without raising.
+
+    Returns:
+        The configured SMTP settings, or None when email is not set up.
+    """
     from interloper_api.dependencies import get_smtp_config
 
     return get_smtp_config()
@@ -107,7 +111,7 @@ def _send_invitation_email(
         logger.exception("Failed to send invitation email to %s", email)
 
 
-# -- Organisation CRUD -------------------------------------------------------
+# -- Organisation CRUD ---------------------------------------------------------
 
 
 @router.post("", status_code=201)
@@ -117,10 +121,20 @@ def create_organisation(
     store: Store = Depends(get_store),
     session_token: str | None = Cookie(default=None),
 ) -> OrganisationResponse:
-    """Create a new organisation. The creating user becomes its admin."""
+    """Create a new organisation. The creating user becomes its admin.
+
+    Args:
+        body: The name of the organisation to create.
+        user: The authenticated caller.
+        store: The database store.
+        session_token: The session cookie; when present, the new organisation
+            also becomes the session's active one.
+
+    Returns:
+        The created organisation.
+    """
     org = store.create_organisation(name=body.name, creator_id=user.id)
 
-    # Set as active org in session
     if session_token:
         store.set_session_org(session_token, org.id, user_id=user.id)
 
@@ -132,12 +146,20 @@ def list_organisations(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> list[OrganisationResponse]:
-    """List all organisations the user belongs to."""
+    """List all organisations the user belongs to.
+
+    Args:
+        user: The authenticated caller.
+        store: The database store.
+
+    Returns:
+        Every organisation the caller is a member of.
+    """
     orgs = store.list_user_organisations(user.id)
     return [OrganisationResponse.model_validate(o, from_attributes=True) for o in orgs]
 
 
-# -- Members ------------------------------------------------------------------
+# -- Members -------------------------------------------------------------------
 
 
 @router.get("/members")
@@ -146,7 +168,16 @@ def list_members(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> list[MemberResponse]:
-    """List all members of the current organisation."""
+    """List all members of the current organisation.
+
+    Args:
+        user: The authenticated caller, required to hold at least the viewer role.
+        org_id: The active organisation, resolved from the session.
+        store: The database store.
+
+    Returns:
+        Every member of the organisation with the role they hold in it.
+    """
     members = store.list_org_members(org_id)
     return [
         MemberResponse(
@@ -167,7 +198,20 @@ def remove_member(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Remove a member from the organisation. Requires admin role."""
+    """Remove a member from the organisation. Requires admin role.
+
+    Args:
+        user_id: The member to remove.
+        user: The authenticated caller, required to hold the admin role.
+        org_id: The active organisation, resolved from the session.
+        store: The database store.
+
+    Returns:
+        A status acknowledgement.
+
+    Raises:
+        HTTPException: 400 when the caller targets their own membership.
+    """
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
 
@@ -176,7 +220,7 @@ def remove_member(
     return {"status": "ok"}
 
 
-# -- Invitations --------------------------------------------------------------
+# -- Invitations ---------------------------------------------------------------
 
 
 @router.get("/invitations")
@@ -185,7 +229,16 @@ def list_invitations(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> list[InvitationResponse]:
-    """List pending invitations for the current organisation. Requires admin role."""
+    """List pending invitations for the current organisation. Requires admin role.
+
+    Args:
+        user: The authenticated caller, required to hold the admin role.
+        org_id: The active organisation, resolved from the session.
+        store: The database store.
+
+    Returns:
+        The invitations that are still outstanding for the organisation.
+    """
     invitations = store.list_invitations(org_id)
     return [
         InvitationResponse(
@@ -207,7 +260,21 @@ def invite_member(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> InvitationResponse:
-    """Invite a user to the organisation by email. Requires admin role."""
+    """Invite a user to the organisation by email. Requires admin role.
+
+    The invitation is created whether or not email is configured; a missing SMTP
+    config only means the recipient has to be handed the link by other means.
+
+    Args:
+        body: The address to invite and the role to grant on acceptance.
+        request: The incoming request, used to build the invite URL.
+        user: The authenticated caller, required to hold the admin role.
+        org_id: The active organisation, resolved from the session.
+        store: The database store.
+
+    Returns:
+        The created invitation.
+    """
     invitation = store.create_invitation(
         org_id=org_id,
         email=body.email.strip(),
@@ -215,7 +282,6 @@ def invite_member(
         invited_by=user.id,
     )
 
-    # Send invitation email if SMTP is configured
     smtp_config = _get_smtp_config()
     if smtp_config and smtp_config.enabled:
         org = store.get_organisation(org_id)
@@ -241,7 +307,21 @@ def cancel_invitation(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Cancel a pending invitation. Requires admin role."""
+    """Cancel a pending invitation. Requires admin role.
+
+    Args:
+        invitation_id: The invitation to cancel.
+        user: The authenticated caller, required to hold the admin role.
+        org_id: The active organisation, resolved from the session.
+        store: The database store.
+
+    Returns:
+        A status acknowledgement.
+
+    Raises:
+        HTTPException: 404 when the invitation does not exist or belongs to
+            another organisation.
+    """
     # The org-scoping guard: the id must belong to this organisation.
     invitations = store.list_invitations(org_id)
     if not any(inv.id == invitation_id for inv in invitations):
@@ -259,7 +339,25 @@ def resend_invitation(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> dict[str, str]:
-    """Resend an invitation (recreates with fresh expiry). Requires admin role."""
+    """Resend an invitation (recreates with fresh expiry). Requires admin role.
+
+    The old invitation is deleted and a new one issued, so the previously mailed
+    link stops working.
+
+    Args:
+        invitation_id: The invitation to reissue.
+        request: The incoming request, used to build the invite URL.
+        user: The authenticated caller, required to hold the admin role.
+        org_id: The active organisation, resolved from the session.
+        store: The database store.
+
+    Returns:
+        A status acknowledgement.
+
+    Raises:
+        HTTPException: 404 when the invitation does not exist or belongs to
+            another organisation.
+    """
     invitations = store.list_invitations(org_id)
     target = next((inv for inv in invitations if inv.id == invitation_id), None)
     if not target:
@@ -273,7 +371,6 @@ def resend_invitation(
         invited_by=user.id,
     )
 
-    # Send invitation email if SMTP is configured
     smtp_config = _get_smtp_config()
     if smtp_config and smtp_config.enabled:
         org = store.get_organisation(org_id)

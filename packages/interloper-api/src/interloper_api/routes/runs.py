@@ -30,6 +30,9 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 MAX_EVENTS_PAGE_SIZE = 1000
 
 
+# -- Request / response models -------------------------------------------------
+
+
 class RunResponse(BaseModel):
     """Response body for a run."""
 
@@ -89,6 +92,9 @@ class EventResponse(BaseModel):
     level: str | None
     data: dict[str, object] | None
     timestamp: str
+
+
+# -- Helpers -------------------------------------------------------------------
 
 
 def _run_to_response(run: Run) -> RunResponse:
@@ -166,6 +172,9 @@ def _event_to_response(event: Event) -> EventResponse:
     )
 
 
+# -- Endpoints -----------------------------------------------------------------
+
+
 @router.get("/")
 def list_runs(
     response: Response,
@@ -189,6 +198,22 @@ def list_runs(
 
     The total number of matching runs (ignoring ``limit``/``offset``) is
     returned in the ``X-Total-Count`` response header so clients can paginate.
+
+    Args:
+        response: The outgoing response, used to set ``X-Total-Count``.
+        component_id: Keep only runs of this component; None applies no filter.
+        backfill_id: Keep only runs belonging to this backfill; None applies no filter.
+        status: Keep only runs in this status; None applies no filter.
+        after: Start of the overlap window; None leaves it open-ended.
+        before: End of the overlap window; None leaves it open-ended.
+        limit: Maximum number of runs on the page.
+        offset: Number of matching runs to skip before the page starts.
+        user: The authenticated user, required to hold at least the ``viewer`` role.
+        org_id: The active organisation's UUID.
+        store: The Store instance.
+
+    Returns:
+        The matching page of runs, as response models.
     """
     total = store.count_runs(
         org_id, component_id=component_id, backfill_id=backfill_id, status=status, after=after, before=before
@@ -213,7 +238,20 @@ def create_run(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> RunResponse:
-    """Queue a single run targeting a runnable component (job, source, or asset)."""
+    """Queue a single run targeting a runnable component (job, source, or asset).
+
+    Args:
+        body: The component to run and the partition key to run it for.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The queued run, as a response model.
+
+    Raises:
+        HTTPException: 400 if the component's kind is not runnable, or if the
+            store rejects the run.
+    """
     target = load_authorized(store.get_component, body.component_id, user, store, label="Component", minimum="editor")
     if not KINDS[target.kind].runnable:
         raise HTTPException(status_code=400, detail=f"Components of kind '{target.kind}' cannot be run")
@@ -230,7 +268,16 @@ def get_run(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> RunResponse:
-    """Get a single run by ID. Authorized by membership in the run's org."""
+    """Get a single run by ID. Authorized by membership in the run's org.
+
+    Args:
+        run_id: The run UUID.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The run, as a response model.
+    """
     run = _load_authorized_run(run_id, user, store)
     return _run_to_response(run)
 
@@ -241,7 +288,16 @@ def list_asset_executions(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> list[AssetExecutionResponse]:
-    """List asset executions for a run."""
+    """List asset executions for a run.
+
+    Args:
+        run_id: The run UUID.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The run's asset executions, as response models.
+    """
     _load_authorized_run(run_id, user, store)
     rows = store.list_asset_executions(run_id)
     return [
@@ -271,6 +327,19 @@ def retry_run(
     Creates a new run linked to the original via ``retry_of``. With
     ``scope="all"`` the whole DAG re-runs; with ``scope="failed"`` only the
     previously failed/cancelled assets re-run.
+
+    Args:
+        run_id: The UUID of the run to retry.
+        body: The retry scope; None retries the whole DAG, as ``scope="all"`` does.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The queued status and the new run's ID.
+
+    Raises:
+        HTTPException: 404 if the run no longer exists, 409 if it is not in a
+            retryable state.
     """
     _load_authorized_run(run_id, user, store, minimum="editor")
     scope = body.scope if body else "all"
@@ -305,6 +374,21 @@ def list_run_events(
     ``X-Total-Count`` response header so clients can page through every event
     — including the terminal/outcome events (``asset_completed``,
     ``asset_failed``, ``run_failed``, …) that sort last.
+
+    Args:
+        run_id: The run UUID.
+        response: The outgoing response, used to set ``X-Total-Count``.
+        limit: Maximum number of events on the page, clamped to at least 1 and
+            at most ``MAX_EVENTS_PAGE_SIZE``.
+        offset: Number of matching events to skip, clamped to at least 0.
+        component_id: Keep only events emitted by these components; None applies
+            no filter.
+        event_type: Keep only events of these types; None applies no filter.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The matching page of events, oldest first, as response models.
     """
     _load_authorized_run(run_id, user, store)
     limit = max(1, min(limit, MAX_EVENTS_PAGE_SIZE))

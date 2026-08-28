@@ -20,7 +20,7 @@ from interloper_api.dependencies import get_current_user, get_org_id, get_store,
 router = APIRouter(prefix="/tokens", tags=["tokens"])
 
 
-# -- Response / Request models ------------------------------------------------
+# -- Response / Request models -------------------------------------------------
 
 
 class CreateTokenRequest(BaseModel):
@@ -64,6 +64,17 @@ def create_token(
     Any org member may mint one: the token conveys only the holder's own
     live role, so no escalation is possible. The raw token is returned
     exactly once and cannot be recovered afterwards.
+
+    Args:
+        body: The token name and its lifetime in days; a null lifetime mints a
+            token that never expires.
+        user: The authenticated caller, required to hold at least the viewer role.
+        org_id: The active organisation, resolved from the session.
+        store: The database store.
+
+    Returns:
+        The token metadata together with the raw token, the one and only time it
+        is disclosed.
     """
     expires_at = None
     if body.expires_in_days is not None:
@@ -89,7 +100,17 @@ def list_tokens(
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> list[TokenResponse]:
-    """List the caller's tokens in the active organisation."""
+    """List the caller's tokens in the active organisation.
+
+    Args:
+        user: The authenticated caller, required to hold at least the viewer role.
+        org_id: The active organisation, resolved from the session.
+        store: The database store.
+
+    Returns:
+        The caller's tokens, newest first, revoked and expired ones included,
+        as metadata only.
+    """
     rows = store.list_tokens(user.id, org_id)
     return [TokenResponse.model_validate(row, from_attributes=True) for row in rows]
 
@@ -105,6 +126,18 @@ def revoke_token(
     The owner may revoke their own tokens; an org admin may revoke any token
     scoped to their organisation. Missing and unauthorized get the same 404,
     so token IDs don't act as an existence oracle.
+
+    Args:
+        token_id: The token to revoke.
+        user: The authenticated caller.
+        store: The database store.
+
+    Returns:
+        A status acknowledgement.
+
+    Raises:
+        HTTPException: 404 when the token does not exist, or when the caller
+            neither owns it nor administers its organisation.
     """
     detail = f"Token {token_id} not found"
     row = store.get_token(token_id)
