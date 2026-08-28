@@ -96,3 +96,24 @@ A module-level function is the exception and must be one of:
 Never park logic in a `*Utils`/`*Helper` class or a bag of staticmethods — that's the junk drawer wearing a class.
 
 Accumulation is a signal, not a storage problem: when helpers multiply and share the same arguments, that argument cluster is a class waiting to be born — introduce the type instead of the third helper. The acceptance test is the glance: a module body reads as constants, one or a few classes, and almost nothing else.
+
+## 7. Docstrings are complete and uniform
+
+Every module, class, function, and method gets a Google-style docstring — private helpers, `__init__`, and dunders included. A docstring always carries **all** the sections that apply to its signature, no exceptions:
+
+- `Args:` whenever there are parameters (every parameter listed — D417 enforces completeness)
+- `Returns:` whenever a value is returned (DOC201)
+- `Yields:` for generators (DOC402)
+- `Raises:` for every exception raised (DOC501)
+
+Uniformity outranks brevity here: the reader must find the same structure on every function, so a short entry that mostly restates the parameter is still written — completeness is the point, and a missing section reads as an unfinished docstring, not as intentional minimalism. Sections must stay accurate (DOC202/403/502 guard extraneous entries); make each entry as informative as it can be — defaults, None semantics, units, shapes — rather than a bare re-noun when there is something to say.
+
+Mechanics, all verified against the linter:
+
+- `Args:` lists **every** parameter, `self`/`cls` excluded, `*args` and `**kwargs` included (written as `*args:` / `**kwargs:`). D417 rejects an omission, DOC102 rejects a name that is not a real parameter.
+- `Raises:` documents only exceptions raised by an explicit `raise` **in the function's own body**. DOC502 rejects one that comes from a callee (`response.raise_for_status()`, `model_validate()`), and a bare `raise` re-raise cannot be documented at all.
+- `@overload` stubs carry no docstring — the implementation holds it.
+- Functions nested inside another function body are exempt; the enclosing function's docstring covers them.
+- Note that the linter cannot catch a **missing** `Args:` section (ruff implements no such rule) — only an incomplete one. Writing the section is on you.
+
+The summary line still matters most: one line, imperative, stating the contract. Prose paragraphs between the summary and the sections carry the why and the caveats, same bar as rule 3.
