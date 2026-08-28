@@ -135,6 +135,66 @@ class ComponentResponse(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
 
+    @classmethod
+    def from_row(cls, 
+        row: Component,
+        store: Store,
+        *,
+        include_config: bool,
+        parent_key: str | None = None,
+        with_children: bool = True,
+    ) -> ComponentResponse:
+        """Convert a component row to its response model.
+
+        ``status`` is the catalog-resolution state (drift detection), derived from
+        the same resolver hydration uses. Secret kinds expose their decoded
+        payload as ``config`` only when *include_config* is set (detail responses).
+
+        Args:
+            row: The component row to convert.
+            store: The Store instance.
+            include_config: Whether a secret kind's decoded config is exposed.
+            parent_key: The parent source's key when the caller already knows it,
+                sparing a lazy load of ``row.parent`` for asset rows.
+            with_children: Whether the row's children are nested in the response.
+
+        Returns:
+            The response model.
+        """
+        if row.kind == "asset":
+            source_key = parent_key if parent_key is not None else (row.parent.key if row.parent else None)
+            status = store.asset_status(row.key, source_key=source_key)
+        else:
+            status = store.source_status(row.key)
+
+        config: dict[str, Any] | None = row.config
+        if KINDS[row.kind].sensitive:
+            config = store.decode_config(row) if include_config else None
+
+        return cls(
+            id=row.id,
+            org_id=row.org_id,
+            kind=row.kind,
+            key=row.key,
+            name=row.name,
+            status=status,
+            config=config,
+            state=row.state,
+            encrypted=row.encrypted,
+            parent_id=row.parent_id,
+            relations=_relations_of(row),
+            children=[
+                ComponentResponse.from_row(
+                    child, store, include_config=include_config, parent_key=row.key, with_children=False
+                )
+                for child in row.children
+            ]
+            if with_children
+            else [],
+            created_at=str(row.created_at) if row.created_at else None,
+            updated_at=str(row.updated_at) if row.updated_at else None,
+        )
+
 
 class PartitionRowCountItem(BaseModel):
     """A single partition row count entry."""
@@ -169,64 +229,6 @@ def _relations_of(row: Component) -> dict[str, list[RelationRef]]:
             RelationRef(dst_id=relation.dst_id, slot=relation.slot, dst_kind=relation.dst_kind)
         )
     return grouped
-
-
-def _to_response(
-    row: Component,
-    store: Store,
-    *,
-    include_config: bool,
-    parent_key: str | None = None,
-    with_children: bool = True,
-) -> ComponentResponse:
-    """Convert a component row to its response model.
-
-    ``status`` is the catalog-resolution state (drift detection), derived from
-    the same resolver hydration uses. Secret kinds expose their decoded
-    payload as ``config`` only when *include_config* is set (detail responses).
-
-    Args:
-        row: The component row to convert.
-        store: The Store instance.
-        include_config: Whether a secret kind's decoded config is exposed.
-        parent_key: The parent source's key when the caller already knows it,
-            sparing a lazy load of ``row.parent`` for asset rows.
-        with_children: Whether the row's children are nested in the response.
-
-    Returns:
-        The response model.
-    """
-    if row.kind == "asset":
-        source_key = parent_key if parent_key is not None else (row.parent.key if row.parent else None)
-        status = store.asset_status(row.key, source_key=source_key)
-    else:
-        status = store.source_status(row.key)
-
-    config: dict[str, Any] | None = row.config
-    if KINDS[row.kind].sensitive:
-        config = store.decode_config(row) if include_config else None
-
-    return ComponentResponse(
-        id=row.id,
-        org_id=row.org_id,
-        kind=row.kind,
-        key=row.key,
-        name=row.name,
-        status=status,
-        config=config,
-        state=row.state,
-        encrypted=row.encrypted,
-        parent_id=row.parent_id,
-        relations=_relations_of(row),
-        children=[
-            _to_response(child, store, include_config=include_config, parent_key=row.key, with_children=False)
-            for child in row.children
-        ]
-        if with_children
-        else [],
-        created_at=str(row.created_at) if row.created_at else None,
-        updated_at=str(row.updated_at) if row.updated_at else None,
-    )
 
 
 def _bindings(relations: dict[str, list[RelationEntry]] | None) -> dict[str, list[tuple[UUID, str]]] | None:
@@ -266,7 +268,7 @@ def list_components(
         The organisation's components, secret configs withheld.
     """
     rows = store.list_components(org_id, kinds=kind)
-    return [_to_response(row, store, include_config=False) for row in rows]
+    return [ComponentResponse.from_row(row, store, include_config=False) for row in rows]
 
 
 @router.get("/relations")
@@ -337,7 +339,7 @@ def create_component(
         raise HTTPException(status_code=400, detail=str(e))
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return _to_response(row, store, include_config=True)
+    return ComponentResponse.from_row(row, store, include_config=True)
 
 
 @router.get("/{component_id}")
@@ -357,7 +359,7 @@ def get_component(
         The component, with its config decoded.
     """
     row = load_authorized(store.get_component, component_id, user, store, label="Component")
-    return _to_response(row, store, include_config=True)
+    return ComponentResponse.from_row(row, store, include_config=True)
 
 
 @router.put("/{component_id}")
@@ -400,7 +402,7 @@ def update_component(
         raise HTTPException(status_code=404, detail=str(e))
     except InUseError as e:
         raise HTTPException(status_code=409, detail={"message": str(e), "used_by": e.referrers})
-    return _to_response(row, store, include_config=True)
+    return ComponentResponse.from_row(row, store, include_config=True)
 
 
 @router.delete("/{component_id}")
@@ -708,36 +710,36 @@ class CheckResponse(BaseModel):
     category: Literal["config", "auth", "network", "error"] | None = None
     errors: list[FieldError] = Field(default_factory=list)
 
+    @classmethod
+    def from_failure(cls, exception: Exception, key: str) -> CheckResponse:
+        """Map a live-check exception to its response.
 
-def _check_failure(exception: Exception, key: str) -> CheckResponse:
-    """Map a live-check exception to its response.
+        Full details are logged server-side only — provider errors may carry
+        URLs with tokens.
 
-    Full details are logged server-side only — provider errors may carry
-    URLs with tokens.
+        Args:
+            exception: The exception the live check raised.
+            key: The connection's catalog key, for the log line.
 
-    Args:
-        exception: The exception the live check raised.
-        key: The connection's catalog key, for the log line.
+        Returns:
+            The categorised failure response.
+        """
+        logger.error("Connection check failed for '%s': %s", key, exception)
 
-    Returns:
-        The categorised failure response.
-    """
-    logger.error("Connection check failed for '%s': %s", key, exception)
-
-    if isinstance(exception, ConnectionCheckError):
-        return CheckResponse(ok=False, live=True, category="error", message=str(exception))
-    if isinstance(exception, httpx.HTTPStatusError):
-        status = exception.response.status_code
-        if status in (401, 403):
-            return CheckResponse(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
-        return CheckResponse(
-            ok=False, live=True, category="error", message=f"The provider responded with HTTP {status}."
-        )
-    if isinstance(exception, (TimeoutError, httpx.TimeoutException)):
-        return CheckResponse(ok=False, live=True, category="network", message="The provider did not respond in time.")
-    if isinstance(exception, httpx.TransportError):
-        return CheckResponse(ok=False, live=True, category="network", message="The provider could not be reached.")
-    return CheckResponse(ok=False, live=True, category="error", message="The connection check failed unexpectedly.")
+        if isinstance(exception, ConnectionCheckError):
+            return cls(ok=False, live=True, category="error", message=str(exception))
+        if isinstance(exception, httpx.HTTPStatusError):
+            status = exception.response.status_code
+            if status in (401, 403):
+                return cls(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
+            return cls(
+                ok=False, live=True, category="error", message=f"The provider responded with HTTP {status}."
+            )
+        if isinstance(exception, (TimeoutError, httpx.TimeoutException)):
+            return cls(ok=False, live=True, category="network", message="The provider did not respond in time.")
+        if isinstance(exception, httpx.TransportError):
+            return cls(ok=False, live=True, category="network", message="The provider could not be reached.")
+        return cls(ok=False, live=True, category="error", message="The connection check failed unexpectedly.")
 
 
 @router.post("/check")
@@ -794,7 +796,7 @@ async def check_connection(
     try:
         ok = bool(await asyncio.wait_for(invoke(connection.check), timeout=CHECK_TIMEOUT))
     except Exception as exception:  # noqa: BLE001 — a failed check is a result, never a raise
-        return _check_failure(exception, body.component_key)
+        return CheckResponse.from_failure(exception, body.component_key)
     if not ok:
         return CheckResponse(ok=False, live=True, category="error", message="The connection check failed.")
     return CheckResponse(ok=True, live=True)

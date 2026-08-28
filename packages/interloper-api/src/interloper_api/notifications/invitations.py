@@ -1,10 +1,11 @@
-"""SMTP email utilities for sending invitation emails."""
+"""Organisation invitation email: what it says and how it is delivered."""
 
 from __future__ import annotations
 
 import html
 import logging
 import smtplib
+from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
@@ -19,53 +20,57 @@ logger = logging.getLogger(__name__)
 _FONT_STACK = "-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 
-def render_invite_text(org_name: str, inviter_name: str, invite_url: str) -> str:
-    """Render the plain-text alternative of the invitation email.
+@dataclass(frozen=True)
+class InvitationEmail:
+    """An invitation to join an organisation, renderable and sendable.
 
-    Args:
-        org_name: Name of the organisation the recipient is invited to.
-        inviter_name: Display name of the person who sent the invite.
-        invite_url: Full URL to accept the invitation.
-
-    Returns:
-        The plain-text email body.
-    """
-    return (
-        f"{inviter_name} has invited you to join the {org_name} organisation on Interloper.\n\n"
-        f"Accept the invitation:\n{invite_url}\n\n"
-        f"This invitation expires in {INVITATION_EXPIRY_DAYS} days. If you weren't expecting it,\n"
-        "you can safely ignore this email."
-    )
-
-
-def render_invite_html(org_name: str, inviter_name: str, invite_url: str, logo_url: str | None = None) -> str:
-    """Render the HTML body of the invitation email.
-
-    The logo is a hosted PNG (``logo_url``), not an inline SVG: Gmail and
-    Outlook strip ``<svg>`` and block ``data:`` URIs. The text wordmark stays
-    next to it so the header still reads when images are blocked.
-
-    Args:
+    Attributes:
         org_name: Name of the organisation the recipient is invited to.
         inviter_name: Display name of the person who sent the invite.
         invite_url: Full URL to accept the invitation.
         logo_url: Absolute URL of the header logo image; the logo is omitted
             when None.
-
-    Returns:
-        The HTML email body.
     """
-    org = html.escape(org_name)
-    inviter = html.escape(inviter_name)
-    url = html.escape(invite_url, quote=True)
-    logo = (
-        f'<img src="{html.escape(logo_url, quote=True)}" width="26" height="26" alt=""'
-        ' style="vertical-align: middle; margin-right: 10px;">'
-        if logo_url
-        else ""
-    )
 
-    return f"""\
+    org_name: str
+    inviter_name: str
+    invite_url: str
+    logo_url: str | None = None
+
+    def text(self) -> str:
+        """Render the plain-text alternative of the invitation email.
+
+        Returns:
+            The plain-text email body.
+        """
+        return (
+            f"{self.inviter_name} has invited you to join the {self.org_name} organisation on Interloper.\n\n"
+            f"Accept the invitation:\n{self.invite_url}\n\n"
+            f"This invitation expires in {INVITATION_EXPIRY_DAYS} days. If you weren't expecting it,\n"
+            "you can safely ignore this email."
+        )
+
+    def html(self) -> str:
+        """Render the HTML body of the invitation email.
+
+        The logo is a hosted PNG (``logo_url``), not an inline SVG: Gmail and
+        Outlook strip ``<svg>`` and block ``data:`` URIs. The text wordmark stays
+        next to it so the header still reads when images are blocked.
+
+        Returns:
+            The HTML email body.
+        """
+        org = html.escape(self.org_name)
+        inviter = html.escape(self.inviter_name)
+        url = html.escape(self.invite_url, quote=True)
+        logo = (
+            f'<img src="{html.escape(self.logo_url, quote=True)}" width="26" height="26" alt=""'
+            ' style="vertical-align: middle; margin-right: 10px;">'
+            if self.logo_url
+            else ""
+        )
+
+        return f"""\
 <!DOCTYPE html>
 <html>
 <body style="margin: 0; padding: 0; background: #fbfbfc;">
@@ -123,49 +128,37 @@ def render_invite_html(org_name: str, inviter_name: str, invite_url: str, logo_u
 </body>
 </html>"""
 
+    def send(self, smtp_config: Any, to: str) -> None:
+        """Deliver the invitation over SMTP.
 
-def send_invite_email(
-    smtp_config: Any,
-    to: str,
-    org_name: str,
-    inviter_name: str,
-    invite_url: str,
-    logo_url: str | None = None,
-) -> None:
-    """Send an organisation invitation email via SMTP.
+        Args:
+            smtp_config: SmtpConfig instance with host, port, user, password,
+                from_addr.
+            to: Recipient email address.
 
-    Args:
-        smtp_config: SmtpConfig instance with host, port, user, password, from_addr.
-        to: Recipient email address.
-        org_name: Name of the organisation.
-        inviter_name: Display name of the person who sent the invite.
-        invite_url: Full URL to accept the invitation.
-        logo_url: Absolute URL of the header logo image, if available.
+        Raises:
+            RuntimeError: If SMTP is not configured.
+        """
+        if not smtp_config.enabled:
+            raise RuntimeError("SMTP is not configured. Set smtp.host, smtp.user, and smtp.password.")
 
-    Raises:
-        RuntimeError: If SMTP is not configured.
-    """
-    if not smtp_config.enabled:
-        raise RuntimeError("SMTP is not configured. Set smtp.host, smtp.user, and smtp.password.")
+        message = MIMEMultipart("alternative")
+        message["Subject"] = f"You've been invited to join {self.org_name} on Interloper"
+        message["From"] = smtp_config.from_addr
+        message["To"] = to
+        message.attach(MIMEText(self.text(), "plain"))
+        message.attach(MIMEText(self.html(), "html"))
 
-    message = MIMEMultipart("alternative")
-    message["Subject"] = f"You've been invited to join {org_name} on Interloper"
-    message["From"] = smtp_config.from_addr
-    message["To"] = to
+        logger.info("Sending invite email to %s", to)
 
-    message.attach(MIMEText(render_invite_text(org_name, inviter_name, invite_url), "plain"))
-    message.attach(MIMEText(render_invite_html(org_name, inviter_name, invite_url, logo_url), "html"))
+        if smtp_config.port == 465:
+            with smtplib.SMTP_SSL(smtp_config.host, smtp_config.port) as server:
+                server.login(smtp_config.user, smtp_config.password)
+                server.sendmail(smtp_config.from_addr, to, message.as_string())
+        else:
+            with smtplib.SMTP(smtp_config.host, smtp_config.port) as server:
+                server.starttls()
+                server.login(smtp_config.user, smtp_config.password)
+                server.sendmail(smtp_config.from_addr, to, message.as_string())
 
-    logger.info("Sending invite email to %s", to)
-
-    if smtp_config.port == 465:
-        with smtplib.SMTP_SSL(smtp_config.host, smtp_config.port) as server:
-            server.login(smtp_config.user, smtp_config.password)
-            server.sendmail(smtp_config.from_addr, to, message.as_string())
-    else:
-        with smtplib.SMTP(smtp_config.host, smtp_config.port) as server:
-            server.starttls()
-            server.login(smtp_config.user, smtp_config.password)
-            server.sendmail(smtp_config.from_addr, to, message.as_string())
-
-    logger.info("Invite email sent to %s", to)
+        logger.info("Invite email sent to %s", to)

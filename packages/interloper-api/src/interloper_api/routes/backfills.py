@@ -51,33 +51,33 @@ class BackfillResponse(BaseModel):
     completed_at: str | None = None
     created_at: str | None = None
 
+    @classmethod
+    def from_backfill(cls, backfill: Backfill) -> BackfillResponse:
+        """Convert a DB Backfill to a BackfillResponse.
+
+        Args:
+            backfill: The DB Backfill row.
+
+        Returns:
+            The response model.
+        """
+        return cls(
+            id=backfill.id,
+            org_id=backfill.org_id,
+            component_id=backfill.component_id,
+            status=backfill.status,
+            start_key=backfill.start_key,
+            end_key=backfill.end_key,
+            concurrency=backfill.concurrency,
+            fail_fast=backfill.fail_fast,
+            partitions=backfill.partitions,
+            started_at=str(backfill.started_at) if backfill.started_at else None,
+            completed_at=str(backfill.completed_at) if backfill.completed_at else None,
+            created_at=str(backfill.created_at) if backfill.created_at else None,
+        )
+
 
 # -- Helpers -------------------------------------------------------------------
-
-
-def _backfill_to_response(backfill: Backfill) -> BackfillResponse:
-    """Convert a DB Backfill to a BackfillResponse.
-
-    Args:
-        backfill: The DB Backfill row.
-
-    Returns:
-        The response model.
-    """
-    return BackfillResponse(
-        id=backfill.id,
-        org_id=backfill.org_id,
-        component_id=backfill.component_id,
-        status=backfill.status,
-        start_key=backfill.start_key,
-        end_key=backfill.end_key,
-        concurrency=backfill.concurrency,
-        fail_fast=backfill.fail_fast,
-        partitions=backfill.partitions,
-        started_at=str(backfill.started_at) if backfill.started_at else None,
-        completed_at=str(backfill.completed_at) if backfill.completed_at else None,
-        created_at=str(backfill.created_at) if backfill.created_at else None,
-    )
 
 
 # -- Endpoints -----------------------------------------------------------------
@@ -106,7 +106,7 @@ def list_backfills(
         backfills = store.list_active_backfills(org_id)
     else:
         backfills = store.list_backfills(org_id)
-    return [_backfill_to_response(b) for b in backfills]
+    return [BackfillResponse.from_backfill(b) for b in backfills]
 
 
 @router.post("/", status_code=201)
@@ -143,7 +143,7 @@ def create_backfill(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return _backfill_to_response(backfill)
+    return BackfillResponse.from_backfill(backfill)
 
 
 @router.get("/{backfill_id}")
@@ -170,7 +170,7 @@ def get_backfill(
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
     authorize_org_member(user, backfill.org_id, store, detail=f"Backfill {backfill_id} not found")
-    return _backfill_to_response(backfill)
+    return BackfillResponse.from_backfill(backfill)
 
 
 @router.post("/{backfill_id}/cancel")
@@ -204,4 +204,4 @@ def cancel_backfill(
         backfill = store.cancel_backfill(backfill_id)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return _backfill_to_response(backfill)
+    return BackfillResponse.from_backfill(backfill)

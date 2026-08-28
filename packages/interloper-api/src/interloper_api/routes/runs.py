@@ -49,6 +49,31 @@ class RunResponse(BaseModel):
     completed_at: str | None = None
     created_at: str | None = None
 
+    @classmethod
+    def from_run(cls, run: Run) -> RunResponse:
+        """Convert a DB Run to a RunResponse.
+
+        Args:
+            run: The DB Run row.
+
+        Returns:
+            The response model.
+        """
+        return cls(
+            id=run.id,
+            org_id=run.org_id,
+            component_id=run.component_id,
+            backfill_id=run.backfill_id,
+            partition_key=run.partition_key,
+            status=run.status,
+            retry_of=run.retry_of,
+            attempt=run.attempt,
+            retry_scope=run.retry_scope,
+            started_at=str(run.started_at) if run.started_at else None,
+            completed_at=str(run.completed_at) if run.completed_at else None,
+            created_at=str(run.created_at) if run.created_at else None,
+        )
+
 
 class RunCreateRequest(BaseModel):
     """Request body for queuing a run targeting a runnable component."""
@@ -93,33 +118,34 @@ class EventResponse(BaseModel):
     data: dict[str, object] | None
     timestamp: str
 
+    @classmethod
+    def from_event(cls, event: Event) -> EventResponse:
+        """Convert a DB Event to an EventResponse.
+
+        Args:
+            event: The DB Event row.
+
+        Returns:
+            The response model.
+        """
+        return cls(
+            id=event.id,
+            org_id=event.org_id,
+            run_id=event.run_id,
+            event_type=event.event_type,
+            component_id=event.component_id,
+            component_kind=event.component_kind,
+            component_key=event.component_key,
+            error=event.error,
+            traceback=event.traceback,
+            message=event.message,
+            level=event.level,
+            data=event.data,
+            timestamp=str(event.timestamp),
+        )
+
 
 # -- Helpers -------------------------------------------------------------------
-
-
-def _run_to_response(run: Run) -> RunResponse:
-    """Convert a DB Run to a RunResponse.
-
-    Args:
-        run: The DB Run row.
-
-    Returns:
-        The response model.
-    """
-    return RunResponse(
-        id=run.id,
-        org_id=run.org_id,
-        component_id=run.component_id,
-        backfill_id=run.backfill_id,
-        partition_key=run.partition_key,
-        status=run.status,
-        retry_of=run.retry_of,
-        attempt=run.attempt,
-        retry_scope=run.retry_scope,
-        started_at=str(run.started_at) if run.started_at else None,
-        completed_at=str(run.completed_at) if run.completed_at else None,
-        created_at=str(run.created_at) if run.created_at else None,
-    )
 
 
 def _load_authorized_run(run_id: UUID, user: Profile, store: Store, *, minimum: str = "viewer") -> Run:
@@ -144,32 +170,6 @@ def _load_authorized_run(run_id: UUID, user: Profile, store: Store, *, minimum: 
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     authorize_org_member(user, run.org_id, store, minimum=minimum, detail=f"Run {run_id} not found")
     return run
-
-
-def _event_to_response(event: Event) -> EventResponse:
-    """Convert a DB Event to an EventResponse.
-
-    Args:
-        event: The DB Event row.
-
-    Returns:
-        The response model.
-    """
-    return EventResponse(
-        id=event.id,
-        org_id=event.org_id,
-        run_id=event.run_id,
-        event_type=event.event_type,
-        component_id=event.component_id,
-        component_kind=event.component_kind,
-        component_key=event.component_key,
-        error=event.error,
-        traceback=event.traceback,
-        message=event.message,
-        level=event.level,
-        data=event.data,
-        timestamp=str(event.timestamp),
-    )
 
 
 # -- Endpoints -----------------------------------------------------------------
@@ -229,7 +229,7 @@ def list_runs(
         limit=limit,
         offset=offset,
     )
-    return [_run_to_response(r) for r in runs]
+    return [RunResponse.from_run(r) for r in runs]
 
 
 @router.post("/", status_code=201)
@@ -259,7 +259,7 @@ def create_run(
         run = store.create_run(target.org_id, component_id=body.component_id, partition_key=body.partition_key)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return _run_to_response(run)
+    return RunResponse.from_run(run)
 
 
 @router.get("/{run_id}")
@@ -279,7 +279,7 @@ def get_run(
         The run, as a response model.
     """
     run = _load_authorized_run(run_id, user, store)
-    return _run_to_response(run)
+    return RunResponse.from_run(run)
 
 
 @router.get("/{run_id}/asset-executions")
@@ -398,4 +398,4 @@ def list_run_events(
     events = store.list_events(
         run_id=run_id, component_ids=component_id, event_types=event_type, limit=limit, offset=offset
     )
-    return [_event_to_response(e) for e in events]
+    return [EventResponse.from_event(e) for e in events]
