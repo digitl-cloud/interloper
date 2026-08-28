@@ -9,9 +9,6 @@ from interloper.oauth import (
     PROVIDERS,
     OAuthAppCredentials,
     OAuthProvider,
-    is_provider_configured,
-    provider_env_name,
-    provider_env_names,
     token_params,
 )
 
@@ -71,8 +68,8 @@ class TestAppCredentials:
     }
 
     def test_env_names_own_the_convention(self):
-        assert provider_env_name("acme", "client_id") == "INTERLOPER_ACME_CLIENT_ID"
-        assert provider_env_names("acme") == {
+        assert OAuthAppCredentials.env_name("acme", "client_id") == "INTERLOPER_ACME_CLIENT_ID"
+        assert OAuthAppCredentials.env_names("acme") == {
             "client_id": "INTERLOPER_ACME_CLIENT_ID",
             "client_secret": "INTERLOPER_ACME_CLIENT_SECRET",
             "redirect_uri": "INTERLOPER_ACME_REDIRECT_URI",
@@ -83,13 +80,13 @@ class TestAppCredentials:
             monkeypatch.setenv(name, value)
         creds = OAuthAppCredentials.from_env("acme")
         assert creds == OAuthAppCredentials(client_id="id", client_secret="secret", redirect_uri="https://cb")
-        assert is_provider_configured("acme")
+        assert OAuthAppCredentials.is_configured("acme")
 
     def test_partial_trio_resolves_to_nothing(self, monkeypatch):
         for name, value in list(self.TRIO.items())[:2]:
             monkeypatch.setenv(name, value)
         assert OAuthAppCredentials.from_env("acme") is None
-        assert not is_provider_configured("acme")
+        assert not OAuthAppCredentials.is_configured("acme")
 
     def test_empty_value_counts_as_unset(self, monkeypatch):
         for name, value in self.TRIO.items():
@@ -99,4 +96,4 @@ class TestAppCredentials:
 
     def test_unset_provider_is_not_configured(self):
         assert OAuthAppCredentials.from_env("acme") is None
-        assert not is_provider_configured("acme")
+        assert not OAuthAppCredentials.is_configured("acme")

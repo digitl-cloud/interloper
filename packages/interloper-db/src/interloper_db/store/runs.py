@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import NotFoundError
-from interloper.partitioning.time import TimePartition, TimePartitionWindow, period_range
+from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
@@ -590,7 +590,7 @@ class RunMixin(StoreBase):
             # is deliberately left alone: `list_runs` orders by `created_at`
             # desc, so reversing it would flip the runs list to oldest-first.
             first_queued = max(0, span - concurrency)
-            for index, value in enumerate(period_range(window.start, window.end, window.granularity)):
+            for index, value in enumerate(window.granularity.period_range(window.start, window.end)):
                 db_run = Run(
                     org_id=org_id,
                     component_id=component_id,

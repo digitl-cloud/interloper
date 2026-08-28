@@ -26,8 +26,7 @@ from docker.client import DockerClient
 from docker.models.containers import Container
 from interloper.asset.base import Asset
 from interloper.errors import RunnerError, format_exception
-from interloper.events import EventBus, EventType
-from interloper.events.event import parse_event_from_log_line
+from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.runner.sync_runner import SyncRunner
@@ -315,7 +314,7 @@ class DockerRunner(SyncRunner):
                         if not line:
                             continue
                         try:
-                            event = parse_event_from_log_line(line)
+                            event = Event.from_log_line(line)
                             if event is not None:
                                 if event.type in _RUN_EVENTS:
                                     continue

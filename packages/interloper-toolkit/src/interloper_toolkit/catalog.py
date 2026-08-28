@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from interloper.oauth import is_provider_configured
+from interloper.oauth import OAuthAppCredentials
 
 from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.models import (
@@ -111,7 +111,7 @@ def list_definitions(
                 entry.provider = defn.get("provider")
                 entry.required_fields = schema.get("required", [])
                 entry.oauth = oauth is not None
-                entry.oauth_available = is_provider_configured(oauth["provider"]) if oauth else False
+                entry.oauth_available = OAuthAppCredentials.is_configured(oauth["provider"]) if oauth else False
             results.append(entry)
 
         return DefinitionList(kind=kind, count=len(results), definitions=results)

@@ -11,101 +11,14 @@ length.
 
 from __future__ import annotations
 
-import calendar
 import datetime as dt
 from collections.abc import Generator, Iterator
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-
-# -- Date helpers --------------------------------------------------------------
-
-
-def coerce_to_date(value: object) -> dt.date:
-    """Coerce a partition value to a ``datetime.date``.
-
-    Accepts a ``date``, a ``datetime`` (its date part is used), or an ISO-8601
-    date string. Anything else raises ``TypeError``.
-
-    Args:
-        value: The partition value to coerce.
-
-    Returns:
-        The value as a ``datetime.date``.
-
-    Raises:
-        TypeError: If the value cannot be interpreted as a date.
-    """
-    # `datetime` is a subclass of `date`, so check it first.
-    if isinstance(value, dt.datetime):
-        return value.date()
-    if isinstance(value, dt.date):
-        return value
-    if isinstance(value, str):
-        try:
-            return dt.date.fromisoformat(value)
-        except ValueError as e:
-            raise TypeError(
-                f"Could not parse partition value {value!r} as a date: expected an ISO-8601 date string (YYYY-MM-DD)."
-            ) from e
-    raise TypeError(
-        f"Time partition value must be a `datetime.date` or an ISO-8601 date string, got {type(value).__name__}: "
-        f"{value!r}."
-    )
-
-
-def coerce_to_datetime(value: object) -> dt.datetime:
-    """Coerce a partition value to a ``datetime.datetime``.
-
-    Accepts a ``datetime``, a ``date`` (midnight is assumed), or an ISO-8601
-    datetime string. Anything else raises ``TypeError``.
-
-    Partition values are period *labels* in UTC, not instants: an aware
-    datetime is converted to UTC and stripped of its tzinfo, so ids, bounds
-    and comparisons never mix aware and naive values. This matches BigQuery,
-    whose time partitions are UTC-based.
-
-    Args:
-        value: The partition value to coerce.
-
-    Returns:
-        The value as a ``datetime.datetime``.
-
-    Raises:
-        TypeError: If the value cannot be interpreted as a datetime.
-    """
-    if isinstance(value, dt.datetime):
-        if value.tzinfo is not None:
-            return value.astimezone(dt.timezone.utc).replace(tzinfo=None)
-        return value
-    if isinstance(value, dt.date):
-        return dt.datetime(value.year, value.month, value.day)  # noqa: DTZ001 — a label, not an instant
-    if isinstance(value, str):
-        try:
-            return coerce_to_datetime(dt.datetime.fromisoformat(value))
-        except ValueError as e:
-            raise TypeError(
-                f"Could not parse partition value {value!r} as a datetime: expected an ISO-8601 datetime string."
-            ) from e
-    raise TypeError(
-        f"Sub-daily partition value must be a `datetime.datetime` or an ISO-8601 datetime string, got "
-        f"{type(value).__name__}: {value!r}."
-    )
-
-
-def _add_months(value: dt.date, months: int) -> dt.date:
-    """Shift a date by *months*, clamping the day to the target month's length.
-
-    Returns:
-        The shifted date.
-    """
-    total = (value.year * 12 + value.month - 1) + months
-    year, month = divmod(total, 12)
-    month += 1
-    day = min(value.day, calendar.monthrange(year, month)[1])
-    return value.replace(year=year, month=month, day=day)
-
+from interloper.utils import add_months, coerce_to_date, coerce_to_datetime
 
 # -- Granularity ---------------------------------------------------------------
 
@@ -193,10 +106,10 @@ class TimeGranularity(str, Enum):
         if self is TimeGranularity.WEEK:
             return start + dt.timedelta(weeks=periods)
         if self is TimeGranularity.MONTH:
-            return _add_months(start, periods)
+            return add_months(start, periods)
         if self is TimeGranularity.QUARTER:
-            return _add_months(start, 3 * periods)
-        return _add_months(start, 12 * periods)
+            return add_months(start, 3 * periods)
+        return add_months(start, 12 * periods)
 
     def bounds(self, value: object) -> tuple[dt.date, dt.date]:
         """Return the period's ``(start, end_exclusive)`` bounds.
@@ -279,6 +192,28 @@ class TimeGranularity(str, Enum):
         supported = ", ".join(sorted(g.value for g in TimeGranularity if g.key_format is not None))
         return f"No partition id format is defined for {self.value!r} granularity. Supported: {supported}."
 
+    def period_range(self, start: dt.date, end: dt.date, reversed: bool = False) -> Generator[dt.date, None, None]:
+        """Yield the start of each period from *start* to *end* inclusive.
+
+        Args:
+            start: Start of the range (truncated to this granularity).
+            end: End of the range (truncated to this granularity).
+            reversed: When True, yield periods from end to start.
+
+        Yields:
+            Each period's first instant.
+        """
+        first = self.truncate(start)
+        last = self.truncate(end)
+        if reversed:
+            while last >= first:
+                yield last
+                last = self.advance(last, -1)
+        else:
+            while first <= last:
+                yield first
+                first = self.advance(first, 1)
+
 
 SUPPORTED_GRANULARITIES = frozenset(
     {TimeGranularity.HOUR, TimeGranularity.DAY, TimeGranularity.MONTH, TimeGranularity.YEAR}
@@ -289,35 +224,6 @@ SUPPORTED_GRANULARITIES = frozenset(
 have no id format and cannot be declared — a partition id is a storage
 contract, and no destination needs those two.
 """
-
-
-def period_range(
-    start: dt.date,
-    end: dt.date,
-    granularity: TimeGranularity = TimeGranularity.DAY,
-    reversed: bool = False,
-) -> Generator[dt.date, None, None]:
-    """Yield the start of each period from *start* to *end* inclusive.
-
-    Args:
-        start: Start of the range (truncated to *granularity*).
-        end: End of the range (truncated to *granularity*).
-        granularity: The period length to step by.
-        reversed: When True, yield periods from end to start.
-
-    Yields:
-        Each period's first instant.
-    """
-    first = granularity.truncate(start)
-    last = granularity.truncate(end)
-    if reversed:
-        while last >= first:
-            yield last
-            last = granularity.advance(last, -1)
-    else:
-        while first <= last:
-            yield first
-            first = granularity.advance(first, 1)
 
 
 # -- Time partitions -----------------------------------------------------------
@@ -404,6 +310,23 @@ class TimePartition(Partition):
         """The partition's ``(start, end_exclusive)`` bounds."""
         return self.granularity.bounds(self.value)
 
+    def slice(self, data: Any, column: str) -> Any:
+        """Return this partition's slice of *data*, selecting by its half-open bounds.
+
+        Rows may carry values anywhere inside the period (a monthly partition
+        whose rows hold daily dates), so bounds select where id equality
+        would not.
+
+        Returns:
+            The partition's slice of the data.
+        """
+        from interloper.representation import Representation
+
+        representation = Representation.of(data)
+        if not representation.matches(data):
+            return data
+        return representation.filter_range(data, column, *self.bounds)
+
 
 @dataclass(frozen=True)
 class TimePartitionWindow(PartitionWindow):
@@ -442,7 +365,7 @@ class TimePartitionWindow(PartitionWindow):
 
     def iter_partitions(self) -> Generator[TimePartition, None, None]:
         """Yield partitions from end to start (most recent first)."""
-        for value in period_range(self.start, self.end, self.granularity, reversed=True):
+        for value in self.granularity.period_range(self.start, self.end, reversed=True):
             yield TimePartition(value, self.granularity)
 
     def partition_count(self) -> int:

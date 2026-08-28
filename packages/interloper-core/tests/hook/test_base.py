@@ -73,9 +73,9 @@ class TestDefinition:
         assert "targets" not in schema["properties"]
 
     def test_hooks_declared_in_every_catalog(self):
-        from interloper.catalog.base import _with_declared
+        from interloper.catalog import Catalog
 
-        components = _with_declared({})
+        components = Catalog._with_declared({})
         assert "trigger_hook" in components
         assert "webhook_hook" in components
 

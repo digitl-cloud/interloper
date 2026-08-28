@@ -28,7 +28,7 @@ class StderrEventHandler:
     Designed to be passed to :meth:`EventBus.subscribe` inside a
     container process.  The host-side runner's log-streaming thread
     recognises the prefix via
-    :func:`~interloper.events.event.parse_event_from_log_line` and
+    :meth:`~interloper.events.event.Event.from_log_line` and
     re-emits the event on the host EventBus.
     """
 

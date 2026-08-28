@@ -112,37 +112,37 @@ class Event:
         """
         return cls.from_dict(json.loads(json_str))
 
+    @classmethod
+    def from_log_line(cls, line: str) -> Event | None:
+        """Try to parse an :class:`Event` from a log line.
 
-def parse_event_from_log_line(line: str) -> Event | None:
-    """Try to parse an :class:`Event` from a log line.
+        Recognises two formats:
 
-    Recognises two formats:
+        1. **Prefixed** — ``@EVENT:{...}`` (written by
+           :class:`~interloper.events.StderrEventHandler`).
+        2. **Bare JSON** — ``{...}`` (legacy / testing convenience).
 
-    1. **Prefixed** — ``@EVENT:{...}`` (written by
-       :class:`~interloper.events.StderrEventHandler`).
-    2. **Bare JSON** — ``{...}`` (legacy / testing convenience).
+        Lines that match neither pattern, or whose JSON is malformed, are
+        silently ignored and ``None`` is returned.
 
-    Lines that match neither pattern, or whose JSON is malformed, are
-    silently ignored and ``None`` is returned.
+        Args:
+            line: A single log line (may include trailing newline).
 
-    Args:
-        line: A single log line (may include trailing newline).
+        Returns:
+            The parsed Event, or ``None`` if the line is not an event.
+        """
+        from interloper.events.stderr import EVENT_LINE_PREFIX
 
-    Returns:
-        The parsed Event, or ``None`` if the line is not an event.
-    """
-    from interloper.events.stderr import EVENT_LINE_PREFIX
+        line = line.strip()
+        if not line:
+            return None
 
-    line = line.strip()
-    if not line:
-        return None
+        if line.startswith(EVENT_LINE_PREFIX):
+            line = line[len(EVENT_LINE_PREFIX):]
+        elif not line.startswith("{"):
+            return None
 
-    if line.startswith(EVENT_LINE_PREFIX):
-        line = line[len(EVENT_LINE_PREFIX):]
-    elif not line.startswith("{"):
-        return None
-
-    try:
-        return Event.from_json(line)
-    except (json.JSONDecodeError, Exception):  # noqa: BLE001
-        return None
+        try:
+            return cls.from_json(line)
+        except (json.JSONDecodeError, Exception):  # noqa: BLE001
+            return None

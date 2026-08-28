@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from croniter import croniter
 from interloper.errors import ConfigError
-from interloper.partitioning.time import TimePartitionWindow, period_range
+from interloper.partitioning.time import TimePartitionWindow
 from interloper_db import Store, stamp_component_state
 from interloper_db.models import Backfill, Component, Run
 from sqlalchemy import or_
@@ -162,7 +162,7 @@ class CronController(Controller):
                     session.add(backfill)
                     session.flush()
 
-                    for value in period_range(window.start, window.end, window.granularity):
+                    for value in window.granularity.period_range(window.start, window.end):
                         run = Run(
                             component_id=job.id,
                             org_id=job.org_id,

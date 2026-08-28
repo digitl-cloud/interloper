@@ -38,53 +38,13 @@ _EVENT_LEVELS: dict[EventType, int] = {
 }
 
 
-def event_level(event: Event) -> int:
-    """Map an event to its logging level.
-
-    ``LOG`` events carry the level the asset author used (via
-    ``context.logger``); every other type has a fixed level from
-    ``_EVENT_LEVELS``, defaulting to ``INFO``.
-
-    Args:
-        event: The event to classify.
-
-    Returns:
-        A :mod:`logging` level constant.
-    """
-    if event.type is EventType.LOG:
-        level = logging.getLevelName(str(event.metadata.get("level", "INFO")))
-        return level if isinstance(level, int) else logging.INFO
-    return _EVENT_LEVELS.get(event.type, logging.INFO)
-
-
-def _format(event: Event) -> str:
-    """Render an event as a log message (without timestamp/level — the formatter adds those).
-
-    ``LOG`` events read as ``<asset>: <message>`` since their level already
-    travels on the record; lifecycle events keep the columnar
-    ``TYPE  asset  message`` form.
-
-    Args:
-        event: The event to render.
-
-    Returns:
-        The formatted message string.
-    """
-    m = event.metadata
-    asset_key = m.get("asset_qualified_key") or m.get("asset_key") or "-"
-    message = m.get("message") or m.get("error") or "-"
-    if event.type is EventType.LOG:
-        return f"{asset_key}: {message}"
-    return f"{event.type.value.upper():<16} {asset_key}  {message}"
-
-
 class ConsoleEventHandler:
     """Forward events to the logging stack (or raw JSON lines on stdout).
 
     Designed to be passed as a runner's ``on_event`` (which subscribes it to
     the :class:`~interloper.events.bus.EventBus` for the duration of the
     run).  In the default mode each event becomes a record on the
-    ``interloper.run`` logger — its level mapped via :func:`event_level`, its
+    ``interloper.run`` logger — its level mapped from the event type, its
     timestamp taken from the event itself (not delivery time) — so events
     and ordinary log lines share one format, stream, and verbosity knob.
 
@@ -112,10 +72,10 @@ class ConsoleEventHandler:
             sys.stdout.flush()
             return
 
-        level = event_level(event)
+        level = self._level(event)
         if not self._logger.isEnabledFor(level):
             return
-        record = logging.LogRecord(self._logger.name, level, "", 0, _format(event), None, None)
+        record = logging.LogRecord(self._logger.name, level, "", 0, self._format(event), None, None)
         # Stamp the record with the event's own time (delivery via the bus
         # worker lags slightly); %(asctime)s renders it in local time like
         # every other log line.
@@ -123,3 +83,43 @@ class ConsoleEventHandler:
         record.created = created
         record.msecs = (created - int(created)) * 1000
         self._logger.handle(record)
+
+    @staticmethod
+    def _level(event: Event) -> int:
+        """Map an event to its logging level.
+
+        ``LOG`` events carry the level the asset author used (via
+        ``context.logger``); every other type has a fixed level from
+        ``_EVENT_LEVELS``, defaulting to ``INFO``.
+
+        Args:
+            event: The event to classify.
+
+        Returns:
+            A :mod:`logging` level constant.
+        """
+        if event.type is EventType.LOG:
+            level = logging.getLevelName(str(event.metadata.get("level", "INFO")))
+            return level if isinstance(level, int) else logging.INFO
+        return _EVENT_LEVELS.get(event.type, logging.INFO)
+
+    @staticmethod
+    def _format(event: Event) -> str:
+        """Render an event as a log message (without timestamp/level — the formatter adds those).
+
+        ``LOG`` events read as ``<asset>: <message>`` since their level already
+        travels on the record; lifecycle events keep the columnar
+        ``TYPE  asset  message`` form.
+
+        Args:
+            event: The event to render.
+
+        Returns:
+            The formatted message string.
+        """
+        m = event.metadata
+        asset_key = m.get("asset_qualified_key") or m.get("asset_key") or "-"
+        message = m.get("message") or m.get("error") or "-"
+        if event.type is EventType.LOG:
+            return f"{asset_key}: {message}"
+        return f"{event.type.value.upper():<16} {asset_key}  {message}"

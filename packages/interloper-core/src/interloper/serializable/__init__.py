@@ -1,8 +1,7 @@
-from interloper.serializable.base import IgnoredDescriptor, Serializable, Spec, dump_spec_value
+from interloper.serializable.base import IgnoredDescriptor, Serializable, Spec
 
 __all__ = [
     "IgnoredDescriptor",
     "Serializable",
     "Spec",
-    "dump_spec_value",
 ]

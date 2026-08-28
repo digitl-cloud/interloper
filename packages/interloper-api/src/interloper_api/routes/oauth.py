@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from interloper.oauth import PROVIDERS, OAuthAppCredentials, OAuthProvider, provider_env_names
+from interloper.oauth import PROVIDERS, OAuthAppCredentials, OAuthProvider
 from interloper_db import Profile
 from pydantic import BaseModel
 
@@ -46,7 +46,7 @@ def log_provider_status() -> None:
     """
     active = []
     for key in PROVIDERS.keys():
-        names = provider_env_names(key)
+        names = OAuthAppCredentials.env_names(key)
         missing = [n for n in names.values() if not os.environ.get(n)]
         if not missing:
             active.append(key)

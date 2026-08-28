@@ -1,4 +1,4 @@
-"""Tests for interloper.cli.services."""
+"""Tests for ``interloper.cli.runtime``."""
 
 import os
 import signal
@@ -6,7 +6,7 @@ import socket
 import subprocess
 import time
 
-from interloper.cli.services import _kill_process_group, _port_in_use
+from interloper.cli.runtime import Services
 
 
 def test_port_in_use_detects_listener() -> None:
@@ -15,7 +15,7 @@ def test_port_in_use_detects_listener() -> None:
         server.bind(("127.0.0.1", 0))
         server.listen(1)
         port = server.getsockname()[1]
-        assert _port_in_use(port) is True
+        assert Services._port_in_use(port) is True
 
 
 def test_port_in_use_detects_ipv6_only_listener() -> None:
@@ -24,7 +24,7 @@ def test_port_in_use_detects_ipv6_only_listener() -> None:
         server.bind(("::1", 0))
         server.listen(1)
         port = server.getsockname()[1]
-        assert _port_in_use(port) is True
+        assert Services._port_in_use(port) is True
 
 
 def test_port_in_use_free_port() -> None:
@@ -32,7 +32,7 @@ def test_port_in_use_free_port() -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    assert _port_in_use(port) is False
+    assert Services._port_in_use(port) is False
 
 
 def test_kill_process_group_kills_children() -> None:
@@ -50,7 +50,7 @@ def test_kill_process_group_kills_children() -> None:
     assert proc.stdout is not None
     child_pid = int(proc.stdout.readline())
 
-    _kill_process_group(proc, signal.SIGKILL)
+    Services._kill_process_group(proc, signal.SIGKILL)
     proc.wait(timeout=5)
 
     deadline = time.monotonic() + 5
@@ -67,4 +67,4 @@ def test_kill_process_group_ignores_exited_process() -> None:
     """Killing an already-exited process is a no-op."""
     proc = subprocess.Popen(["/bin/sh", "-c", "exit 0"], start_new_session=True)
     proc.wait(timeout=5)
-    _kill_process_group(proc, signal.SIGTERM)
+    Services._kill_process_group(proc, signal.SIGTERM)

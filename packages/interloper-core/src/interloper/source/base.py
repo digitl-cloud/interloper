@@ -15,7 +15,7 @@ from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.resource import Resource
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
-from interloper.serializable import IgnoredDescriptor, Spec, dump_spec_value
+from interloper.serializable import IgnoredDescriptor, Spec
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label, validate_key
 
@@ -270,7 +270,7 @@ class Source(Component):
                 if overrides:
                     init["assets"] = overrides
                 continue
-            init[name] = dump_spec_value(value)
+            init[name] = Spec.dump_value(value)
 
         return Spec(path=self.path(), id=self.id, init=init or None)
 
