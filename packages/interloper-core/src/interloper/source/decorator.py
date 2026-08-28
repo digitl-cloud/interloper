@@ -22,7 +22,6 @@ _SOURCE_PARAMS: dict[str, tuple[str, str]] = {
     "icon": ("icon", "classvar"),
     "dataset": ("dataset", "field"),
     "default_destination_key": ("default_destination_key", "field"),
-    "materializable": ("materializable", "field"),
     "normalizer": ("normalizer", "field"),
     "materialization_strategy": ("materialization_strategy", "field"),
 }
@@ -41,7 +40,6 @@ def source(
     icon: str = ...,
     dataset: str = ...,
     default_destination_key: str = ...,
-    materializable: bool = ...,
     normalizer: Normalizer | None = ...,
     materialization_strategy: MaterializationStrategy = ...,
 ) -> Callable[[type | Callable[..., Any]], type[Source]]: ...
@@ -57,7 +55,6 @@ def source(
     icon: str | None = None,
     dataset: str | None = None,
     default_destination_key: str | None = None,
-    materializable: bool | None = None,
     normalizer: Normalizer | None = None,
     materialization_strategy: MaterializationStrategy | None = None,
 ) -> type[Source] | Callable[..., type[Source]]:
@@ -75,7 +72,6 @@ def source(
         icon: Catalog icon identifier.
         dataset: Default dataset for the source's assets.
         default_destination_key: Destination key downstream assets read from.
-        materializable: Whether the source's assets execute.
         normalizer: Default normalizer applied to the source's assets.
         materialization_strategy: Default strategy for the source's assets.
 
@@ -91,7 +87,6 @@ def source(
         "icon": icon,
         "dataset": dataset,
         "default_destination_key": default_destination_key,
-        "materializable": materializable,
         "normalizer": normalizer,
         "materialization_strategy": materialization_strategy,
     }
