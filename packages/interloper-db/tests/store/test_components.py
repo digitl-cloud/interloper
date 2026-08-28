@@ -435,6 +435,23 @@ class TestDerivedNames:
 
 
 
+class TestTelemetry:
+    """Hydration is traced where it happens."""
+
+    def test_load_emits_a_span_per_hydration(self, component_db: Engine, span_exporter):
+        from interloper_assets.demo.source import DemoSource
+
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = store.create_component(_ORG, kind="source", key="demo_source")
+
+        store.load(source.id)
+
+        spans = [s for s in span_exporter.get_finished_spans() if s.name == "interloper.store.load"]
+        assert len(spans) == 1
+        assert spans[0].attributes is not None
+        assert spans[0].attributes["interloper.target.id"] == str(source.id)
+
+
 class TestQuotaGates:
     """Capacity quotas gate source creation and the child-asset set size."""
 
