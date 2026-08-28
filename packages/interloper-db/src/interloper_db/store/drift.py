@@ -15,9 +15,26 @@ class DriftMixin(StoreBase):
     """
 
     def source_status(self, key: str) -> ComponentStatus:
-        """Resolution state of a stored source key against the catalog."""
+        """Resolution state of a stored source key against the catalog.
+
+        Args:
+            key: Stored source key to resolve.
+
+        Returns:
+            The key's status: ok, disabled, or missing.
+        """
         return source_status(self._catalog, key)
 
     def asset_status(self, key: str, *, source_key: str | None = None) -> ComponentStatus:
-        """Resolution state of a stored asset key against the catalog."""
+        """Resolution state of a stored asset key against the catalog.
+
+        Args:
+            key: Stored asset key to resolve.
+            source_key: Key of the owning source, whose status the asset's
+                cascades from. None (the default) resolves a standalone asset,
+                which is itself a catalog component.
+
+        Returns:
+            The key's status: ok, disabled, or missing.
+        """
         return asset_status(self._catalog, key, source_key=source_key)

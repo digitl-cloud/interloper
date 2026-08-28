@@ -32,12 +32,22 @@ SESSION_EXPIRY_DAYS = 30
 
 
 def _as_utc(ts: datetime) -> datetime:
-    """Treat naive timestamps as UTC (SQLite test databases drop the offset)."""
+    """Treat naive timestamps as UTC (SQLite test databases drop the offset).
+
+    Args:
+        ts: The timestamp read back from the database, aware or naive.
+
+    Returns:
+        An aware datetime; an already-aware *ts* is returned unchanged.
+    """
     return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
 
 
 def _hash_token(token: str) -> str:
     """Hash a raw session token the way it is stored (only hashes persist).
+
+    Args:
+        token: The raw token as presented by the client.
 
     Returns:
         The SHA-256 hex digest.
@@ -47,6 +57,11 @@ def _hash_token(token: str) -> str:
 
 def _get_membership(session: Session, user_id: UUID, org_id: UUID) -> UserOrganisation | None:
     """Fetch a user's membership row in an organisation.
+
+    Args:
+        session: Active database session.
+        user_id: Profile UUID of the candidate member.
+        org_id: Organisation UUID to look the membership up in.
 
     Returns:
         The membership, or ``None`` when the user is not a member.
@@ -67,7 +82,7 @@ class AuthMixin(StoreBase):
     while mutations raise :class:`NotFoundError` on a missing target.
     """
 
-    # -- Profiles -------------------------------------------------------------
+    # -- Profiles --------------------------------------------------------------
 
     def upsert_profile(
         self,
@@ -238,7 +253,7 @@ class AuthMixin(StoreBase):
         with self._session() as session:
             return session.exec(select(Profile).where(Profile.google_id == google_id)).first()
 
-    # -- Sessions -------------------------------------------------------------
+    # -- Sessions --------------------------------------------------------------
 
     def create_session(self, user_id: UUID, organisation_id: UUID | None = None) -> str:
         """Create a session and return the raw (unhashed) token.
@@ -331,7 +346,7 @@ class AuthMixin(StoreBase):
                 session.delete(db_session)
             session.commit()
 
-    # -- Organisations --------------------------------------------------------
+    # -- Organisations ---------------------------------------------------------
 
     def create_organisation(self, name: str, creator_id: UUID | None = None) -> Organisation:
         """Create an organisation, optionally making the creator an admin.
@@ -468,6 +483,11 @@ class AuthMixin(StoreBase):
         successful-run aggregates. There is no audit table, so events whose
         source rows are gone (accepted invitations' inviters, quota-change
         history) are not reconstructible and deliberately absent.
+
+        Args:
+            org_id: Organisation UUID.
+            limit: Maximum entries to return (default 20), applied after the
+                newest-first sort so the most recent activity always survives.
 
         Returns:
             Entries as ``{kind, when, subject, extra}`` dicts, ``when``

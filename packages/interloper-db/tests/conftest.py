@@ -20,7 +20,11 @@ from interloper_db.models import Component, ComponentRelation, Quota, Usage
 
 @pytest.fixture
 def component_db() -> Iterator[Engine]:
-    """A fresh in-memory database with the two component tables, FKs enforced."""
+    """A fresh in-memory database with the two component tables, FKs enforced.
+
+    Yields:
+        The engine bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},

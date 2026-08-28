@@ -23,6 +23,10 @@ class StoreBase:
     The one exception: a freshly *inserted* row that is returned gets one
     ``session.refresh()`` to load its server-generated columns (``id``,
     ``created_at``).
+
+    ``_quota_defaults`` holds QuotaSettings-shaped default limits; ``None``
+    means everything is unlimited and quota checks short-circuit without
+    touching the database.
     """
 
     _engine: Engine
@@ -30,8 +34,6 @@ class StoreBase:
     _hydrator: Hydrator
     _encrypt: Any
     _decrypt: Any
-    # QuotaSettings-shaped defaults for quota limits; None = everything
-    # unlimited (quota checks short-circuit without touching the DB).
     _quota_defaults: Any = None
 
     @property

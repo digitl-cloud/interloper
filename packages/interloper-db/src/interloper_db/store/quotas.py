@@ -47,6 +47,9 @@ QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH = "max_successful_runs_per_month"
 QUOTA_MAX_BACKFILL_PARTITIONS = "max_backfill_partitions"
 
 
+# -- Definition ----------------------------------------------------------------
+
+
 @dataclass(frozen=True)
 class QuotaDefinition(abc.ABC):
     """One per-organisation quota: its key, label, and check semantics.
@@ -56,18 +59,25 @@ class QuotaDefinition(abc.ABC):
     ``subject`` is caller-supplied context interpolated into the rejection
     message — the part only the call site knows (an entity label, the
     operation being attempted).
+
+    Subclasses that measure existing state set ``requires_lock`` so the limit
+    is resolved under the ``(org, key)`` row lock. Consumption checks leave it
+    false: their authoritative gate is the atomic ledger reservation, not the
+    check.
     """
 
     key: str
     label: str
     message: Callable[[int, int, str | None], str]
 
-    #: Capacity checks resolve the limit under the ``(org, key)`` row lock;
-    #: the consumption advisory check does not (its authoritative gate is
-    #: the atomic ledger reservation).
     requires_lock: ClassVar[bool] = False
 
     def __post_init__(self) -> None:
+        """Validate the identity every gate and rejection message depends on.
+
+        Raises:
+            ValueError: If the key or the label is empty.
+        """
         if not self.key or not self.label:
             raise ValueError("A quota definition needs a key and a label")
 
@@ -81,9 +91,31 @@ class QuotaDefinition(abc.ABC):
         used: int | None = None,
         subject: str | None = None,
     ) -> None:
-        """Raise :class:`QuotaExceededError` when the limit rejects the operation."""
+        """Raise :class:`QuotaExceededError` when the limit rejects the operation.
+
+        Args:
+            session: Open session the check reads through, inside the caller's
+                transaction.
+            org_id: Organisation the quota is enforced for.
+            limit: The effective limit, already resolved by the caller.
+            used: Usage stated by the call site, or None to let the definition
+                measure it (not every definition can).
+            subject: Context interpolated into the rejection message, or None
+                when the message needs none.
+        """
 
     def _reject(self, used: int, limit: int, subject: str | None) -> None:
+        """Refuse the operation with the definition's own message.
+
+        Args:
+            used: The usage figure that breached the limit.
+            limit: The effective limit that rejected the operation.
+            subject: Context interpolated into the message, or None when the
+                message needs none.
+
+        Raises:
+            QuotaExceededError: Always; the method exists to raise it.
+        """
         raise QuotaExceededError(self.message(used, limit, subject), quota=self.key, limit=limit, used=used)
 
 
@@ -110,6 +142,22 @@ class CapacityQuota(QuotaDefinition):
         used: int | None = None,
         subject: str | None = None,
     ) -> None:
+        """Admit the operation only if capacity stays within the limit.
+
+        Args:
+            session: Open session ``count`` measures through, inside the
+                caller's transaction.
+            org_id: Organisation the quota is enforced for.
+            limit: The effective limit, already resolved under the row lock.
+            used: The desired final amount, or None to measure the current
+                amount and admit one more.
+            subject: Context interpolated into the rejection message, or None
+                when the message needs none.
+
+        Raises:
+            ValueError: If ``used`` is omitted and the definition carries no
+                ``count`` callback.
+        """
         if used is None:
             if self.count is None:
                 raise ValueError(f"Quota '{self.key}' has no usage counter; pass used= to check it declaratively")
@@ -138,6 +186,20 @@ class BoundQuota(QuotaDefinition):
         used: int | None = None,
         subject: str | None = None,
     ) -> None:
+        """Admit the operation only if its magnitude stays within the limit.
+
+        Args:
+            session: Open session, unused: the comparison touches no state.
+            org_id: Organisation the quota is enforced for, unused for the
+                same reason.
+            limit: The effective limit, already resolved by the caller.
+            used: The operation's size; required, since nothing is measured.
+            subject: Context interpolated into the rejection message, or None
+                when the message needs none.
+
+        Raises:
+            ValueError: If ``used`` is omitted.
+        """
         if used is None:
             raise ValueError(f"Quota '{self.key}' bounds a single operation; pass used= with its size")
         if used > limit:
@@ -151,12 +213,26 @@ class ConsumptionQuota(QuotaDefinition):
     metric: str = ""
 
     def __post_init__(self) -> None:
+        """Validate the identity plus the ledger metric this quota charges under.
+
+        Raises:
+            ValueError: If the key, the label, or the metric is empty.
+        """
         super().__post_init__()
         if not self.metric:
             raise ValueError(f"Consumption quota '{self.key}' needs the ledger metric it charges under")
 
     def committed(self, session: Session, org_id: UUID) -> int:
-        """The org's committed usage this period: ledger ``used + reserved``."""
+        """The org's committed usage this period: ledger ``used + reserved``.
+
+        Args:
+            session: Open session the ledger row is read through, inside the
+                caller's transaction.
+            org_id: Organisation whose ledger row is read.
+
+        Returns:
+            The committed count, or 0 when the period has no ledger row yet.
+        """
         period_start = month_start(db_now(session))
         row = session.get(Usage, (org_id, self.metric, period_start))
         return (row.used + row.reserved) if row else 0
@@ -170,6 +246,18 @@ class ConsumptionQuota(QuotaDefinition):
         used: int | None = None,
         subject: str | None = None,
     ) -> None:
+        """Admit the operation only if committed usage is below the limit.
+
+        Args:
+            session: Open session the ledger is read through, inside the
+                caller's transaction.
+            org_id: Organisation the quota is enforced for.
+            limit: The effective limit, already resolved by the caller.
+            used: Committed usage stated by the call site, or None to read it
+                from the ledger.
+            subject: Context interpolated into the rejection message, or None
+                when the message needs none.
+        """
         committed = used if used is not None else self.committed(session, org_id)
         if committed >= limit:
             self._reject(committed, limit, subject)
@@ -179,6 +267,13 @@ class ConsumptionQuota(QuotaDefinition):
 
         A conditional upsert (``used + reserved < limit``), so concurrent
         reservers can never overshoot.
+
+        Args:
+            session: Open session the upsert runs through, inside the caller's
+                transaction.
+            org_id: Organisation the unit is reserved for.
+            limit: The effective limit the upsert is conditioned on; a limit of
+                zero or less admits nothing.
 
         Returns:
             The reservation timestamp (DB clock), or None when exhausted.
@@ -201,18 +296,29 @@ class ConsumptionQuota(QuotaDefinition):
         return now if result.rowcount == 1 else None  # ty: ignore[unresolved-attribute]
 
 
-#: Every quota, by key. Adding one is a registration plus its enforcement
-#: site — limits are stored one row per key, so there is no schema change.
-#: Code-registered (no entry-point group): enforcement is welded into the
-#: store, so quotas are not a plugin surface. Instance defaults live as
-#: same-named optional fields on ``QuotaSettings``.
+# -- Registry ------------------------------------------------------------------
+
+# Code-registered (no entry-point group): enforcement is welded into the store,
+# so quotas are not a plugin surface. Limits are stored one row per key, so
+# adding a quota is a registration plus its enforcement site, never a schema
+# change. Instance defaults live as same-named optional fields on
+# ``QuotaSettings``.
 QUOTAS: Registry[QuotaDefinition] = Registry()
+
+
+# -- Metering ------------------------------------------------------------------
 
 
 def month_start(moment: datetime) -> dt.date:
     """The first day of the UTC calendar month a moment falls in.
 
     Naive values are treated as UTC (SQLite round-trips columns naive).
+
+    Args:
+        moment: The instant to attribute, aware or naive.
+
+    Returns:
+        The first day of that UTC month, as a date.
     """
     if moment.tzinfo is not None:
         moment = moment.astimezone(timezone.utc)
@@ -220,7 +326,15 @@ def month_start(moment: datetime) -> dt.date:
 
 
 def next_month_start(period_start: dt.date) -> dt.date:
-    """The first day of the month after ``period_start``."""
+    """The first day of the month after ``period_start``.
+
+    Args:
+        period_start: The first day of a month, as produced by
+            :func:`month_start`.
+
+    Returns:
+        The first day of the following month, rolling the year over December.
+    """
     if period_start.month == 12:
         return dt.date(period_start.year + 1, 1, 1)
     return dt.date(period_start.year, period_start.month + 1, 1)
@@ -232,6 +346,13 @@ def db_now(session: Session) -> datetime:
     The DB clock is the single billing clock: completions are written by
     whatever process executes the run (for docker/k8s a child pod), whose
     wall clock is not trusted for month attribution.
+
+    Args:
+        session: Open session whose bind supplies the clock.
+
+    Returns:
+        The server time, always tz-aware (UTC is assumed when the dialect
+        returns a naive value).
     """
     value = session.scalar(sa_select(func.current_timestamp()))
     if isinstance(value, str):  # SQLite returns text
@@ -243,7 +364,15 @@ def db_now(session: Session) -> datetime:
 
 
 def _insert_fn(session: Session) -> Any:
-    """The dialect's upsert-capable insert constructor."""
+    """The dialect's upsert-capable insert constructor.
+
+    Args:
+        session: Open session whose bind selects the dialect.
+
+    Returns:
+        The postgresql insert constructor, or the sqlite one for every other
+        dialect.
+    """
     return pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
 
 
@@ -260,6 +389,19 @@ def increment_usage(
 
     Upsert-based so concurrent writers never lose an increment; part of the
     caller's transaction (the caller commits).
+
+    Args:
+        session: Open session the upsert runs through.
+        org_id: Organisation the counters belong to.
+        metric: Ledger metric being charged; must be one a registered
+            consumption quota declares.
+        period_start: First day of the UTC month the counters belong to.
+        used: Delta applied to ``used``, defaulting to no change.
+        reserved: Delta applied to ``reserved``, defaulting to no change;
+            negative releases a reservation.
+
+    Raises:
+        ValueError: If no registered quota charges under ``metric``.
     """
     if all(getattr(definition, "metric", None) != metric for definition in QUOTAS.values()):
         raise ValueError(f"Unknown usage metric: {metric}")
@@ -281,6 +423,12 @@ def settle_run_usage(session: Session, db_run: Run, *, success: bool) -> None:
     A successful run charges ``used`` in the month it completes (DB clock);
     a dispatch-time reservation is released in the month it was taken —
     those can differ across a month boundary.
+
+    Args:
+        session: Open session the ledger writes run through.
+        db_run: The completing run, read for its org and its
+            ``quota_reserved_at`` stamp (unset when nothing was reserved).
+        success: Whether the run succeeded; only successes are charged.
     """
     reserved_period = month_start(db_run.quota_reserved_at) if db_run.quota_reserved_at else None
     charge_period = month_start(db_now(session)) if success else None
@@ -294,11 +442,20 @@ def settle_run_usage(session: Session, db_run: Run, *, success: bool) -> None:
         increment_usage(session, db_run.org_id, METRIC_SUCCESSFUL_RUNS, reserved_period, reserved=-1)
 
 
-# -- Enforcement ----------------------------------------------------------------
+# -- Enforcement ---------------------------------------------------------------
 
 
 def _count_sources(session: Session, org_id: UUID) -> int:
-    """Current number of sources — the usage side of ``max_sources``."""
+    """Current number of sources — the usage side of ``max_sources``.
+
+    Args:
+        session: Open session the count runs through, inside the caller's
+            transaction.
+        org_id: Organisation whose sources are counted.
+
+    Returns:
+        The number of source components the organisation owns.
+    """
     return session.exec(
         select(func.count())
         .select_from(Component)
@@ -335,12 +492,20 @@ class QuotaService:
         With ``lock`` the ``(org, key)`` row is upserted (null-limit lock
         anchor) and held ``FOR UPDATE`` until the caller's transaction ends,
         serializing checks per organisation *and* key so independent quotas
-        never block each other.
+        never block each other. An unregistered key fails loudly with
+        ``KeyError`` before any database work.
 
-        Raises:
-            KeyError: If the key is not a registered quota.
+        Args:
+            session: Open session the override is read (and locked) through.
+            org_id: Organisation whose override is resolved.
+            key: Registered quota key to resolve.
+            lock: Whether to take the ``(org, key)`` row lock, defaulting to a
+                plain read.
+
+        Returns:
+            The effective limit, or None when the quota is unlimited.
         """
-        QUOTAS[key]  # loud failure on unregistered keys  # noqa: B018
+        QUOTAS[key]  # loud failure on unregistered keys
         if lock:
             table = Quota.__table__  # ty: ignore[unresolved-attribute]
             statement = (
@@ -374,6 +539,15 @@ class QuotaService:
         unlimited; capacity definitions re-resolve under the ``(org, key)``
         row lock before comparing. ``used`` and ``subject`` are forwarded to
         :meth:`QuotaDefinition.check`.
+
+        Args:
+            session: Open session the resolution and the check run through.
+            org_id: Organisation the quota is enforced for.
+            key: Registered quota key to enforce.
+            used: Usage stated by the call site, or None to let the definition
+                measure it.
+            subject: Context interpolated into the rejection message, or None
+                when the message needs none.
         """
         definition = QUOTAS[key]
         limit = self.effective(session, org_id, key)
@@ -389,6 +563,18 @@ class QuotaService:
         """The org's committed run usage this period: ``(used + reserved, limit)``.
 
         Limit None means unlimited (and the ledger is not read at all).
+
+        Args:
+            session: Open session the ledger is read through.
+            org_id: Organisation whose run usage is reported.
+
+        Returns:
+            The committed count paired with the effective limit; ``(0, None)``
+            while the quota is unlimited.
+
+        Raises:
+            TypeError: If the run quota key is registered as something other
+                than a consumption quota.
         """
         definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
         if not isinstance(definition, ConsumptionQuota):
@@ -405,8 +591,17 @@ class QuotaService:
         ``quota_reserved_at`` so settlement releases the right period.
         Unlimited orgs are admitted without touching the ledger.
 
+        Args:
+            session: Open session the reservation and the stamp are written
+                through, inside the caller's transaction.
+            db_run: The run being dispatched; stamped in place on success.
+
         Returns:
             True if the run may dispatch, False when the quota is exhausted.
+
+        Raises:
+            TypeError: If the run quota key is registered as something other
+                than a consumption quota.
         """
         definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
         if not isinstance(definition, ConsumptionQuota):
@@ -420,6 +615,9 @@ class QuotaService:
         db_run.quota_reserved_at = reserved_at
         session.add(db_run)
         return True
+
+
+# -- Registration --------------------------------------------------------------
 
 
 QUOTAS.register(
@@ -462,17 +660,35 @@ QUOTAS.register(
 )
 
 
+# -- Store API -----------------------------------------------------------------
+
+
 class QuotaMixin(StoreBase):
     """Store methods for quota limits and usage reads."""
 
+    # -- Limits ----------------------------------------------------------------
+
     def get_quota_overrides(self, org_id: UUID) -> dict[str, int]:
-        """The organisation's set overrides as ``{key: limit}`` (null rows excluded)."""
+        """The organisation's set overrides as ``{key: limit}`` (null rows excluded).
+
+        Args:
+            org_id: Organisation whose overrides are read.
+
+        Returns:
+            The set overrides; empty when the organisation runs on the
+            instance defaults alone.
+        """
         with self._session() as session:
             rows = session.exec(select(Quota).where(Quota.org_id == org_id)).all()
             return {row.key: row.limit for row in rows if row.limit is not None}
 
     def list_quota_overrides(self) -> dict[UUID, dict[str, int]]:
-        """Every organisation's set overrides, keyed by org id."""
+        """Every organisation's set overrides, keyed by org id.
+
+        Returns:
+            One ``{key: limit}`` mapping per organisation that has at least
+            one set override; organisations with none are absent.
+        """
         with self._session() as session:
             rows = session.exec(select(Quota)).all()
             overrides: dict[UUID, dict[str, int]] = {}
@@ -486,6 +702,11 @@ class QuotaMixin(StoreBase):
 
         ``None`` clears a key so it falls back to the global default (the
         row is kept as a null-limit lock anchor).
+
+        Args:
+            org_id: Organisation whose overrides are written.
+            limits: The keys to change, mapped to their new limit or to None
+                to clear the override.
 
         Returns:
             The organisation's overrides after the update.
@@ -509,8 +730,20 @@ class QuotaMixin(StoreBase):
             session.commit()
         return self.get_quota_overrides(org_id)
 
+    # -- Usage -----------------------------------------------------------------
+
     def list_usage(self, *, period_start: dt.date | None = None, org_id: UUID | None = None) -> list[Usage]:
-        """Usage ledger rows, optionally filtered by period and organisation."""
+        """Usage ledger rows, optionally filtered by period and organisation.
+
+        Args:
+            period_start: First day of the UTC month to restrict to, or None
+                for every period.
+            org_id: Organisation to restrict to, or None for every
+                organisation.
+
+        Returns:
+            The matching ledger rows, one per ``(org, metric, period)``.
+        """
         with self._session() as session:
             statement = select(Usage)
             if period_start is not None:
@@ -520,12 +753,21 @@ class QuotaMixin(StoreBase):
             return list(session.exec(statement).all())
 
     def current_period_start(self) -> dt.date:
-        """The current UTC calendar month, per the database clock."""
+        """The current UTC calendar month, per the database clock.
+
+        Returns:
+            The first day of the month usage is currently charged into.
+        """
         with self._session() as session:
             return month_start(db_now(session))
 
     def count_sources_by_org(self) -> dict[UUID, int]:
-        """Current number of sources per organisation."""
+        """Current number of sources per organisation.
+
+        Returns:
+            The source count keyed by org id; organisations with no sources
+            are absent.
+        """
         with self._session() as session:
             rows = session.exec(
                 select(Component.org_id, func.count())
@@ -535,7 +777,12 @@ class QuotaMixin(StoreBase):
             return dict(rows)
 
     def max_assets_per_source_by_org(self) -> dict[UUID, int]:
-        """The largest child-asset count of any single source, per organisation."""
+        """The largest child-asset count of any single source, per organisation.
+
+        Returns:
+            The peak per-source asset count keyed by org id; organisations
+            with no parented assets are absent.
+        """
         with self._session() as session:
             per_source = (
                 sa_select(col(Component.org_id).label("org_id"), func.count().label("n"))
@@ -552,6 +799,14 @@ class QuotaMixin(StoreBase):
 
         Counts on ``completed_at`` — the nearest column to the charge moment.
         Reconciliation compares this against ``usage.used``.
+
+        Args:
+            period_start: First day of the UTC month to recompute, whose
+                following month bounds the window.
+
+        Returns:
+            The successful-run count keyed by org id; organisations with none
+            are absent.
         """
         lower = datetime.combine(period_start, dt.time.min, tzinfo=timezone.utc)
         upper = datetime.combine(next_month_start(period_start), dt.time.min, tzinfo=timezone.utc)
@@ -572,6 +827,11 @@ class QuotaMixin(StoreBase):
         transient off-by-ones are possible (the two reads are separate
         queries, and charge months are DB-clock while ``completed_at`` is
         the executor's clock at the boundary).
+
+        Returns:
+            One ``{org_id, period_start, ledger, recomputed}`` entry per
+            drifting organisation, ordered by org id; empty when the ledger
+            agrees with the runs table.
         """
         period_start = self.current_period_start()
         recomputed = self.count_successful_runs_by_org(period_start)

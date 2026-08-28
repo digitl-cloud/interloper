@@ -26,7 +26,11 @@ _BASE_TS = datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc)
 
 @pytest.fixture
 def store() -> Iterator[RunMixin]:
-    """A RunMixin wired to a fresh in-memory SQLite database."""
+    """A RunMixin wired to a fresh in-memory SQLite database.
+
+    Yields:
+        The mixin bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -51,7 +55,11 @@ def _seed(events: list[Event]) -> None:
 
 
 def _make_events(n: int, *, run_id: UUID = _RUN_ID, start: int = 0, component_id: UUID | None = None) -> list[Event]:
-    """Build ``n`` events for a run, one second apart, oldest first."""
+    """Build ``n`` events for a run, one second apart, oldest first.
+
+    Returns:
+        The events in chronological order, the last one an ``asset_completed``.
+    """
     return [
         Event(
             id=uuid4(),
@@ -201,7 +209,11 @@ def test_asset_filter_accepts_multiple_assets(store: RunMixin) -> None:
 
 @pytest.fixture
 def run_store() -> Iterator[RunMixin]:
-    """A RunMixin over a database with runs, components, and usage tables."""
+    """A RunMixin over a database with runs, components, and usage tables.
+
+    Yields:
+        The mixin bound to that database, disposed once the test finishes.
+    """
     from interloper_db.models import Component, Run, Usage
 
     eng = engine_module.init_engine(

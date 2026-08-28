@@ -26,7 +26,11 @@ _ORG_ID = uuid4()
 
 @pytest.fixture
 def store() -> Iterator[RunMixin]:
-    """A RunMixin wired to a fresh in-memory SQLite database."""
+    """A RunMixin wired to a fresh in-memory SQLite database.
+
+    Yields:
+        The mixin bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -58,7 +62,11 @@ def _backfill(store: RunMixin, *, days: int = 4, concurrency: int = 2) -> Backfi
 
 
 def _mark_dispatched(store: RunMixin, backfill_id: UUID) -> UUID:
-    """Flip one queued run to dispatched, simulating a worker claim."""
+    """Flip one queued run to dispatched, simulating a worker claim.
+
+    Returns:
+        The id of the run that was flipped.
+    """
     with Session(store._engine) as session:
         run = session.exec(select(Run).where(Run.backfill_id == backfill_id, Run.status == "queued")).first()
         assert run is not None and run.id is not None
@@ -177,7 +185,11 @@ def _timed_run(
     completed_at: dt.datetime | None,
     org_id: UUID = _ORG_ID,
 ) -> UUID:
-    """Insert a run occupying a known interval."""
+    """Insert a run occupying a known interval.
+
+    Returns:
+        The id of the inserted run.
+    """
     with Session(store._engine) as session:
         run = Run(
             id=uuid4(),

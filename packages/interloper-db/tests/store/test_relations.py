@@ -19,7 +19,11 @@ _ORG = uuid4()
 
 @pytest.fixture
 def store(component_db: Engine) -> Store:
-    """A store over the in-memory database (no catalog needed for these)."""
+    """A store over the in-memory database (no catalog needed for these).
+
+    Returns:
+        A store with an empty catalog, reading and writing the fixture database.
+    """
     return Store(catalog=il.Catalog(components={}))
 
 

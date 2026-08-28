@@ -20,9 +20,9 @@ def init_engine(dsn: str | None = None, **kwargs: object) -> Engine:
         The SQLAlchemy engine.
 
     Raises:
-        ValueError: If no DSN is provided and ``DATABASE_URL`` is not set.
+        ConfigError: If no DSN is provided and ``DATABASE_URL`` is not set.
     """
-    global _engine  # noqa: PLW0603
+    global _engine
     dsn = dsn or os.getenv("DATABASE_URL")
     if not dsn:
         from interloper.errors import ConfigError

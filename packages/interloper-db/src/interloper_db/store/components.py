@@ -57,6 +57,7 @@ COMPONENT_LOAD_OPTIONS = [
     .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
 ]
 
+
 class ComponentMixin(RelationMixin):
     """Store methods for component CRUD and hydration, on the relation layer."""
 
@@ -91,6 +92,9 @@ class ComponentMixin(RelationMixin):
 
         Returns:
             The created component row, eager-loaded.
+
+        Raises:
+            ConfigError: If ``children`` is passed for a kind that has none.
         """
         with self._session() as session:
             if kind == "source":
@@ -108,23 +112,21 @@ class ComponentMixin(RelationMixin):
                 raise ConfigError(f"Components of kind '{kind}' have no children")
             self._sync_relations(session, db_component, relations)
             session.commit()
-            return load_component(session, db_component.id)
+            return self.load_component(session, db_component.id)
 
     def get_component(self, component_id: UUID, *, kind: str | None = None) -> Component:
         """Load a component row by ID with relations eager-loaded.
 
         Args:
             component_id: The component UUID.
-            kind: Optional kind assertion.
+            kind: Kind the row must have (``None`` accepts any kind); a
+                mismatch is reported as a missing row.
 
         Returns:
-            The component row.
-
-        Raises:
-            NotFoundError: If no row exists (or it has a different kind).
+            The component row, eager-loaded and safe to hand out detached.
         """
         with self._session() as session:
-            return load_component(session, component_id, kind=kind)
+            return self.load_component(session, component_id, kind=kind)
 
     def list_components(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
         """List an organisation's components, optionally filtered by kind.
@@ -163,11 +165,24 @@ class ComponentMixin(RelationMixin):
         list; omitting it leaves the current set as is. The machine-owned
         ``state`` column is never touched here.
 
+        Args:
+            component_id: The component UUID.
+            name: New user-facing label.
+            config: New instance configuration, replacing the stored one
+                wholesale. For secret kinds it is encrypted into the data
+                column.
+            encrypted: Secret kinds only — ``True``/``None`` (default) encrypt,
+                ``False`` opts into plaintext storage.
+            children: Source kinds only — the exact set of child asset keys to
+                keep enabled.
+            relations: ``{type: [(dst_id, slot), …]}`` — synced per type.
+
         Returns:
             The updated component row, eager-loaded.
 
         Raises:
             NotFoundError: If the component is not found.
+            ConfigError: If ``children`` is passed for a kind that has none.
         """
         with self._session() as session:
             db_component = session.get(Component, component_id)
@@ -186,7 +201,7 @@ class ComponentMixin(RelationMixin):
                 raise ConfigError(f"Components of kind '{db_component.kind}' have no children")
             self._sync_relations(session, db_component, relations)
             session.commit()
-            return load_component(session, component_id)
+            return self.load_component(session, component_id)
 
     def delete_component(self, component_id: UUID) -> None:
         """Delete a component. Children and out-bound relations cascade via FK.
@@ -196,6 +211,9 @@ class ComponentMixin(RelationMixin):
         block the deletion; orchestration pointers (a job's ``target``, a
         hook's ``watch``, optional dependency slots) detach — the relation
         row cascades away and the referrer keeps working with reduced scope.
+
+        Args:
+            component_id: The component UUID.
 
         Raises:
             NotFoundError: If the component is not found.
@@ -231,6 +249,14 @@ class ComponentMixin(RelationMixin):
         source's own asset dependencies) don't count, and a referrer that is
         a source-owned asset is reported as its parent source — the unit the
         user can act on.
+
+        Args:
+            session: Open session the deletion is being staged in.
+            db_component: The row about to be deleted.
+
+        Returns:
+            One ``{id, kind, key, name}`` dict per blocking referrer, sorted by
+            display name; empty when the deletion is unobstructed.
         """
         # Child ids via a bare SELECT, not the ORM relationship: loading the
         # children into the session that is about to delete their parent
@@ -242,7 +268,18 @@ class ComponentMixin(RelationMixin):
     def _blocking_referrers_into(
         self, session: Session, target_ids: set[UUID], subtree_ids: set[UUID]
     ) -> list[dict[str, str | None]]:
-        """Blocking referrers whose relations point into *target_ids* from outside *subtree_ids*."""
+        """Blocking referrers whose relations point into *target_ids* from outside *subtree_ids*.
+
+        Args:
+            session: Open session to query in.
+            target_ids: Component IDs whose in-bound relations are inspected.
+            subtree_ids: Component IDs that count as "inside" — relations
+                originating there are ignored.
+
+        Returns:
+            One ``{id, kind, key, name}`` dict per blocking referrer, sorted by
+            display name; empty when nothing blocks.
+        """
         rows = session.exec(
             select(ComponentRelation).where(
                 col(ComponentRelation.dst_id).in_(target_ids),
@@ -270,6 +307,9 @@ class ComponentMixin(RelationMixin):
         Source-owned assets hydrate through their parent source and are
         extracted from it; jobs drift-check every target first. Fails closed
         on any catalog drift.
+
+        Args:
+            component_id: The component UUID.
 
         Returns:
             The reconstructed framework component.
@@ -332,6 +372,11 @@ class ComponentMixin(RelationMixin):
         The parent source is the unit of reconstruction — loading it binds
         all its assets — and the child is picked out by key.
 
+        Args:
+            parent_id: UUID of the owning source component.
+            key: Catalog key of the asset to pick out of the source.
+            asset_id: UUID of the asset row, for the drift error message.
+
         Returns:
             The bound asset instance.
 
@@ -352,6 +397,12 @@ class ComponentMixin(RelationMixin):
 
         Source-owned assets resolve through their parent, so ``parent`` must
         be loaded (it is on rows returned by this mixin).
+
+        Args:
+            db_component: The row to resolve against the catalog.
+
+        Returns:
+            ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key.
         """
         if db_component.kind == "asset":
             source_key = db_component.parent.key if db_component.parent else None
@@ -361,8 +412,11 @@ class ComponentMixin(RelationMixin):
     def decode_config(self, db_component: Component) -> dict[str, Any]:
         """The component's config payload, decrypting secret kinds.
 
+        Args:
+            db_component: The row to read the payload from.
+
         Returns:
-            The decoded configuration dict.
+            The decoded configuration dict (empty when the row carries none).
         """
         if il.KINDS[db_component.kind].sensitive:
             return self._hydrator.decode_data(db_component)
@@ -371,7 +425,14 @@ class ComponentMixin(RelationMixin):
     # -- Kind semantics --------------------------------------------------------
 
     def _apply_config(self, db_component: Component, config: dict[str, Any] | None, encrypted: bool | None) -> None:
-        """Write the config payload onto the row, encrypting secret kinds."""
+        """Write the config payload onto the row, encrypting secret kinds.
+
+        Args:
+            db_component: The row to write onto.
+            config: The payload to store (``None`` stores an empty payload).
+            encrypted: Secret kinds only — ``True``/``None`` (default) encrypt,
+                ``False`` opts into plaintext storage.
+        """
         if il.KINDS[db_component.kind].sensitive:
             db_component.data, db_component.encrypted = self._encode_data(config or {}, encrypted)
             db_component.config = None
@@ -380,6 +441,11 @@ class ComponentMixin(RelationMixin):
 
     def _encode_data(self, data: dict[str, Any], encrypted: bool | None) -> tuple[bytes, bool]:
         """Serialise a secret payload and encrypt it according to ``encrypted``.
+
+        Args:
+            data: The payload to serialise.
+            encrypted: ``True``/``None`` (default) encrypt, ``False`` opts into
+                plaintext storage.
 
         Returns:
             A ``(blob, encrypted)`` tuple: the bytes to persist and whether
@@ -405,6 +471,10 @@ class ComponentMixin(RelationMixin):
     def _derived_name(self, db_component: Component, config: dict[str, Any] | None) -> str | None:
         """The display name the component class derives from *config*.
 
+        Args:
+            db_component: The row whose ``key`` and ``kind`` select the class.
+            config: The configuration to construct that class from.
+
         Returns:
             ``instance_name()`` of an instance constructed from the config, or
             ``None`` when the key doesn't resolve or the config can't construct
@@ -427,6 +497,12 @@ class ComponentMixin(RelationMixin):
         A name equal to the old config's derived default (or blank) is
         system-owned and follows along; anything else — including a rename in
         this same call — is user-owned and untouched.
+
+        Args:
+            db_component: The row, still carrying its old config and name.
+            new_config: The configuration about to replace the stored one.
+            explicit_rename: Whether the same update also sets ``name``, which
+                makes the name user-owned and stops it from following.
         """
         if explicit_rename:
             return
@@ -435,7 +511,15 @@ class ComponentMixin(RelationMixin):
             db_component.name = self._derived_name(db_component, new_config) or db_component.name
 
     def _current_config(self, db_component: Component) -> dict[str, Any] | None:
-        """The row's stored config payload, decoding secret kinds (``None`` when undecodable)."""
+        """The row's stored config payload, decoding secret kinds.
+
+        Args:
+            db_component: The row to read the payload from.
+
+        Returns:
+            The decoded configuration dict, or ``None`` when it can't be
+            decoded (no cipher configured, or a corrupt payload).
+        """
         try:
             return self.decode_config(db_component)
         except Exception:  # noqa: BLE001 — no cipher / corrupt payload: treat as underivable
@@ -453,6 +537,10 @@ class ComponentMixin(RelationMixin):
         the check is exact under any ``asset_table`` override. An instance
         whose config can't construct the class yet is skipped — it can't run
         either, and the check re-fires on every update.
+
+        Args:
+            session: Open session the source is being written in.
+            db_source: The source row being created or updated.
 
         Raises:
             ConfigError: If a same-key sibling in the org targets the same tables.
@@ -499,6 +587,17 @@ class ComponentMixin(RelationMixin):
         default and enables every asset the catalog class declares. Existing
         rows keep their IDs (and therefore their cross-source deps, event
         references, and per-asset overrides).
+
+        Args:
+            session: Open session the source is being written in.
+            db_source: The source row whose children are synced.
+            child_keys: The exact asset keys to keep enabled, or ``None`` to
+                enable every asset the catalog class declares.
+
+        Raises:
+            CatalogKeyError: If the source key does not resolve in the catalog.
+            ConfigError: If ``child_keys`` names assets the source doesn't declare.
+            InUseError: If a removed asset is referenced from outside the source.
         """
         source_cls = resolve_source_cls(self._catalog, db_source.key)
         if source_cls is None:
@@ -513,8 +612,6 @@ class ComponentMixin(RelationMixin):
             child.key: child
             for child in session.exec(select(Component).where(Component.parent_id == db_source.id)).all()
         }
-        # An explicit list is the exact child set; None (creation) is all
-        # catalog assets.
         target = set(child_keys) if child_keys is not None else all_keys
         self.quotas.check(
             session,
@@ -563,6 +660,11 @@ class ComponentMixin(RelationMixin):
         Idempotent over the full child set — assets enabled after their
         siblings still get the edges *into* them wired. Slots that already
         hold an edge are never touched, so manual bindings survive.
+
+        Args:
+            session: Open session the relations are added to.
+            source_cls: The catalog class declaring the dependencies.
+            children_by_key: The source's enabled child rows, keyed by asset key.
         """
         source_key = source_cls.key
         child_ids = [child.id for child in children_by_key.values()]
@@ -583,7 +685,6 @@ class ComponentMixin(RelationMixin):
             all_requires = {**asset_type.requires, **asset_type.optional_requires}
             for param_name, declared_key in all_requires.items():
                 expected = AssetIdentity.resolve(declared_key, own_source_key=source_key)
-                # Cross-source deps are never auto-wired; nor self-edges.
                 if expected.source_key != source_key or expected.asset_key == asset_key:
                     continue
                 if expected.asset_key not in children_by_key or (child.id, param_name) in bound:
@@ -591,7 +692,15 @@ class ComponentMixin(RelationMixin):
                 _add_relation(session, child, children_by_key[expected.asset_key], "dependency", param_name)
 
     def _row_status(self, session: Session, db_component: Component) -> ComponentStatus:
-        """Row drift status inside an open session (parent fetched on demand)."""
+        """Row drift status inside an open session (parent fetched on demand).
+
+        Args:
+            session: Open session used to fetch an owned asset's parent.
+            db_component: The row to resolve against the catalog.
+
+        Returns:
+            ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key.
+        """
         if db_component.kind == "asset" and db_component.parent_id is not None:
             parent = session.get(Component, db_component.parent_id)
             return asset_status(self._catalog, db_component.key, source_key=parent.key if parent else None)
@@ -605,6 +714,10 @@ class ComponentMixin(RelationMixin):
         catalog). A source target contributes the granularities of its
         partitioned assets; an owned-asset target is looked up inside its
         parent source's definition.
+
+        Args:
+            session: Open session to resolve the targets in.
+            job_id: UUID of the job component.
 
         Returns:
             The single granularity, or ``None`` when no partitioned target
@@ -633,6 +746,10 @@ class ComponentMixin(RelationMixin):
     def _target_partitionings(self, session: Session, target: Component) -> list[dict[str, Any]]:
         """The partitioning dicts of one target's partitioned assets.
 
+        Args:
+            session: Open session used to fetch an owned asset's parent.
+            target: The job target row (a source or an asset).
+
         Returns:
             One dict per partitioned asset the target resolves to; empty when
             the catalog key does not resolve (drift is the run path's problem,
@@ -654,7 +771,15 @@ class ComponentMixin(RelationMixin):
         return []
 
     def _check_job_targets(self, session: Session, db_job: Component) -> None:
-        """Fail closed when any job target's catalog key has drifted."""
+        """Fail closed when any job target's catalog key has drifted.
+
+        Args:
+            session: Open session to resolve the targets in.
+            db_job: The job row being hydrated.
+
+        Raises:
+            ComponentDriftError: If a target's catalog key is disabled or missing.
+        """
         targets = session.exec(
             select(ComponentRelation).where(ComponentRelation.src_id == db_job.id, ComponentRelation.type == "target")
         ).all()
@@ -669,24 +794,32 @@ class ComponentMixin(RelationMixin):
                     f"{target.kind} '{target.key}' ({target.id}) is {status.value}."
                 )
 
+    # -- Internals -------------------------------------------------------------
 
-# -- Session-level helpers (shared with tests and internal callers) ------------
+    @staticmethod
+    def load_component(session: Session, component_id: UUID, *, kind: str | None = None) -> Component:
+        """Fetch a component row with children and relations eager-loaded.
+
+        Args:
+            session: Open session to query in.
+            component_id: The component UUID.
+            kind: Kind the row must have (``None`` accepts any kind); a
+                mismatch is reported as a missing row.
+
+        Returns:
+            The component row, safe to hand out detached.
+
+        Raises:
+            NotFoundError: If no row exists, or it has a different kind.
+        """
+        statement = select(Component).where(Component.id == component_id).options(*COMPONENT_LOAD_OPTIONS)
+        db_component = session.exec(statement).first()
+        if not db_component or (kind is not None and db_component.kind != kind):
+            raise NotFoundError(f"{kind or 'component'} {component_id} not found".capitalize())
+        return db_component
 
 
-def load_component(session: Session, component_id: UUID, *, kind: str | None = None) -> Component:
-    """Fetch a component row with children and relations eager-loaded.
-
-    Returns:
-        The component row, safe to hand out detached.
-
-    Raises:
-        NotFoundError: If no row exists, or it has a different kind.
-    """
-    statement = select(Component).where(Component.id == component_id).options(*COMPONENT_LOAD_OPTIONS)
-    db_component = session.exec(statement).first()
-    if not db_component or (kind is not None and db_component.kind != kind):
-        raise NotFoundError(f"{kind or 'component'} {component_id} not found".capitalize())
-    return db_component
+# -- Component state -----------------------------------------------------------
 
 
 def stamp_component_state(db_component: Component, **fields: Any) -> None:
@@ -696,6 +829,11 @@ def stamp_component_state(db_component: Component, **fields: Any) -> None:
     lexicographic comparison in SQL stays chronological); the merged payload
     is validated against the kind's ``state_model`` — shape only, stored
     strings are never rewritten. The caller owns the session and commit.
+
+    Args:
+        db_component: The row to merge the state onto.
+        **fields: State fields to set, merged over the existing payload.
+            Datetime values are stored as timezone-aware ISO strings.
     """
     import datetime as dt
 

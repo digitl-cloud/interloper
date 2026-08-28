@@ -65,6 +65,9 @@ def _discovered_catalog() -> Catalog:
     Discovery imports every component declared via entry points, so the
     result is stable for the life of the process (entry points don't change
     at runtime) — matching the ``@cache`` on the underlying path scan.
+
+    Returns:
+        The discovered catalog, shared across all callers in the process.
     """
     return Catalog.discover()
 
@@ -76,21 +79,38 @@ def resolve_component_cls(catalog: Catalog, key: str) -> type[il.Component] | No
     catalog only holds keys whose classes imported cleanly at build time, but
     the import is still guarded so a stale definition degrades to ``None``
     rather than raising.
+
+    Args:
+        catalog: The catalog to resolve against.
+        key: The stored component key.
+
+    Returns:
+        The component class, or ``None`` if the key is absent from the catalog
+        or its import path no longer yields a ``Component`` subclass.
     """
     definition = catalog.get(key)
     if definition is None:
         return None
     try:
-        obj = import_from_path(definition.path)
+        imported = import_from_path(definition.path)
     except (ImportError, AttributeError):
         return None
-    return obj if isinstance(obj, type) and issubclass(obj, il.Component) else None
+    return imported if isinstance(imported, type) and issubclass(imported, il.Component) else None
 
 
 def resolve_source_cls(catalog: Catalog, key: str) -> type[il.Source] | None:
-    """Return the source class for *key*, or ``None`` if it does not resolve."""
-    obj = resolve_component_cls(catalog, key)
-    return obj if obj is not None and issubclass(obj, il.Source) else None
+    """Return the source class for *key*, or ``None`` if it does not resolve.
+
+    Args:
+        catalog: The catalog to resolve against.
+        key: The stored source key.
+
+    Returns:
+        The source class, or ``None`` if the key does not resolve to a
+        ``Source`` subclass.
+    """
+    imported = resolve_component_cls(catalog, key)
+    return imported if imported is not None and issubclass(imported, il.Source) else None
 
 
 def source_status(
@@ -106,6 +126,10 @@ def source_status(
         key: The stored source key.
         discovered: The discovered universe; defaults to the cached
             :func:`_discovered_catalog`. Injectable for testing.
+
+    Returns:
+        ``OK`` when the key is enabled here, ``DISABLED`` when it exists in
+        code but is not exposed, ``MISSING`` when it is gone from the code.
     """
     if key in catalog.components:
         return ComponentStatus.OK
@@ -135,13 +159,15 @@ def asset_status(
         key: The stored asset key.
         source_key: The owning source's key, or ``None`` for a standalone asset.
         discovered: The discovered universe; defaults to the cached one.
+
+    Returns:
+        The asset's status, cascaded from the owning source when there is one.
     """
     if source_key is None:
         return source_status(catalog, key, discovered=discovered)
 
     parent = source_status(catalog, source_key, discovered=discovered)
     if parent is not ComponentStatus.OK:
-        # A gone/not-exposed source drags its assets to the same state.
         return parent
 
     source_cls = resolve_source_cls(catalog, source_key)

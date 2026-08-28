@@ -90,6 +90,10 @@ class Hydrator:
         Returns:
             The decoded configuration dict, or ``{}`` if the row carries
             no data.
+
+        Raises:
+            HydrationError: If the row is marked ``encrypted`` but no decrypt
+                callable was configured, or if decryption fails.
         """
         if db_component.data is None:
             return {}
@@ -123,8 +127,16 @@ class Hydrator:
         ``assets`` override map, since the parent source is the unit of
         reconstruction.
 
+        Args:
+            session: Active DB session, used to read relations and children.
+            db_component: The component row whose init payload is built.
+
         Returns:
             A dict suitable for use as a ``Spec.init``.
+
+        Raises:
+            HydrationError: If the row carries a relation type its kind's
+                vocabulary does not declare.
         """
         if KINDS[db_component.kind].sensitive:
             init = self.decode_data(db_component)
@@ -132,11 +144,11 @@ class Hydrator:
             init = dict(db_component.config or {})
 
         vocabulary = self._catalog.vocabulary(db_component.kind, db_component.key)
-        for type_, rels in self._relations_by_type(session, db_component.id).items():
-            definition = vocabulary.get(type_)
+        for relation_type, rels in self._relations_by_type(session, db_component.id).items():
+            definition = vocabulary.get(relation_type)
             if definition is None:
                 raise HydrationError(
-                    f"Component {db_component.id} ({db_component.kind}) has '{type_}' relations, "
+                    f"Component {db_component.id} ({db_component.kind}) has '{relation_type}' relations, "
                     "which its kind's vocabulary does not declare"
                 )
             if definition.inline:
@@ -158,7 +170,16 @@ class Hydrator:
         return init
 
     def _relations_by_type(self, session: Session, src_id: UUID | None) -> dict[str, list[ComponentRelation]]:
-        """Group a component's outgoing relations by type, ordered stably."""
+        """Group a component's outgoing relations by type, ordered stably.
+
+        Args:
+            session: Active DB session used to read the relation rows.
+            src_id: The source component's id, or ``None`` for an unflushed row.
+
+        Returns:
+            A ``{type: relations}`` mapping ordered by ``(slot, dst_id)``, or
+            ``{}`` when ``src_id`` is ``None``.
+        """
         if src_id is None:
             return {}
         rows = session.exec(
@@ -172,7 +193,19 @@ class Hydrator:
         return grouped
 
     def _dst_spec(self, session: Session, rel: ComponentRelation) -> Spec:
-        """Build the spec of a relation's destination component."""
+        """Build the spec of a relation's destination component.
+
+        Args:
+            session: Active DB session used to load the destination row.
+            rel: The relation whose ``dst_id`` is resolved.
+
+        Returns:
+            The destination component's ``Spec``.
+
+        Raises:
+            HydrationError: If the relation points at a component row that
+                does not exist.
+        """
         db_dst = session.get(Component, rel.dst_id)
         if db_dst is None:  # defensive: FKs make this unreachable
             raise HydrationError(f"Relation {rel.src_id} -[{rel.type}]-> {rel.dst_id} points at a missing component")
@@ -185,6 +218,10 @@ class Hydrator:
         path (``module:Source.Asset``) comes from the parent source's
         definition, so an asset row referenced as a relation destination
         (a job target, a hook watch) builds a reconstructible spec.
+
+        Args:
+            session: Active DB session used to look up the parent source row.
+            db_component: The component row whose import path is resolved.
 
         Returns:
             The resolved import path.

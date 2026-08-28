@@ -41,7 +41,8 @@ def upgrade() -> None:
     for key in _LEGACY_COLUMNS:
         op.execute(
             sa.text(
-                f'INSERT INTO quotas_new (org_id, key, "limit") '  # noqa: S608 - keys are module constants
+                # Interpolated, not bound: the keys are module constants, never user input.
+                f'INSERT INTO quotas_new (org_id, key, "limit") '
                 f"SELECT org_id, '{key}', {key} FROM quotas WHERE {key} IS NOT NULL"
             )
         )

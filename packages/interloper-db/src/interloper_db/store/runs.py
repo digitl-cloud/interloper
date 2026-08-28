@@ -31,60 +31,9 @@ _MAX_EVENT_TEXT = 60_000
 """Defensive cap for free-text event fields (well under Postgres limits)."""
 
 
-def _sanitize_text(value: str | None, *, max_len: int = _MAX_EVENT_TEXT) -> str | None:
-    """Make a free-text event field safe to persist.
-
-    Postgres ``text`` columns cannot store NUL bytes (``0x00``) — a single
-    one makes the whole INSERT raise, which (because event persistence is
-    best-effort) would silently drop the event.  Strip NULs and cap the
-    length so an oversized traceback can't fail the write either.
-
-    Returns:
-        The cleaned string, or ``None`` if *value* is ``None``.
-    """
-    if value is None:
-        return None
-    cleaned = value.replace("\x00", "")
-    if len(cleaned) > max_len:
-        cleaned = cleaned[:max_len] + "…[truncated]"
-    return cleaned
-
-
-def _sanitize_data(meta: dict[str, Any]) -> dict[str, Any] | None:
-    """Make a metadata dict safe to persist as JSONB, best-effort.
-
-    Non-JSON values are coerced through ``str``; a dict that still can't be
-    encoded (circular refs, NaN) is dropped rather than failing the event
-    write. Postgres ``jsonb`` rejects NUL escapes the same way ``text``
-    rejects NUL bytes, so they are stripped from the encoded form; an
-    oversized payload is replaced by a marker so the write can't fail on
-    size either.
-
-    Returns:
-        The cleaned dict, or ``None`` when there is nothing worth storing.
-    """
-    if not meta:
-        return None
-    try:
-        encoded = json.dumps(meta, default=str, allow_nan=False)
-    except (TypeError, ValueError):
-        return None
-    if len(encoded) > _MAX_EVENT_TEXT:
-        return {"truncated": True}
-    if "\\u0000" in encoded:
-        encoded = encoded.replace("\\u0000", "")
-    return json.loads(encoded) or None
-
-
-#: Metadata keys whose content is already represented by a structured
-#: ``events`` column — everything else spills into the ``data`` JSONB
-#: column. ``asset_id``/``asset_key`` are the compat aliases core emitters
-#: use for the component columns; ``run_id`` is redundant with the
-#: ``save_event`` argument that fills the column.
 _PROMOTED_METADATA_KEYS = frozenset(
     {
         "run_id",
-        # Also arrives via run metadata; the column is authoritative.
         "org_id",
         "asset_id",
         "asset_key",
@@ -97,112 +46,19 @@ _PROMOTED_METADATA_KEYS = frozenset(
         "level",
     }
 )
+"""Metadata keys already represented by a structured ``events`` column.
 
-
-def _event_values(event: il.Event, org_id: UUID, run_id: UUID | None) -> dict[str, Any]:
-    """Map a framework event onto ``events`` column values.
-
-    The component reference comes from ``component_id``/``component_kind``/
-    ``component_key`` metadata; the ``asset_id``/``asset_key`` keys the asset
-    runners emit map onto the same columns (with kind ``"asset"``), so core
-    emitters need no knowledge of the persistence schema. Metadata not
-    covered by a structured column lands losslessly in ``data``.
-
-    Returns:
-        Column values for an ``events`` insert.
-    """
-    meta = event.metadata
-    try:
-        event_id = UUID(event.id)
-    except (ValueError, TypeError):
-        event_id = uuid4()
-
-    component_id = meta.get("component_id") or meta.get("asset_id")
-    component_kind = meta.get("component_kind") or ("asset" if meta.get("asset_id") else None)
-    component_key = meta.get("component_key") or meta.get("asset_key")
-
-    return {
-        "id": event_id,
-        "org_id": org_id,
-        "run_id": run_id,
-        "event_type": event.type.value,
-        "component_id": UUID(str(component_id)) if component_id else None,
-        "component_kind": _sanitize_text(component_kind),
-        "component_key": _sanitize_text(component_key),
-        "error": _sanitize_text(meta.get("error")),
-        "traceback": _sanitize_text(meta.get("traceback")),
-        "message": _sanitize_text(meta.get("message")),
-        "level": _sanitize_text(meta.get("level")),
-        # None values are the absence of a key, not payload — producers emit
-        # them unconditionally (backfill_id on non-backfill runs, …).
-        "data": _sanitize_data({k: v for k, v in meta.items() if k not in _PROMOTED_METADATA_KEYS and v is not None}),
-        "timestamp": event.timestamp,
-    }
-
-
-def _event_filters(
-    run_id: UUID | None,
-    org_id: UUID | None,
-    component_ids: Sequence[UUID] | None,
-    event_types: Sequence[str] | None,
-) -> list[Any]:
-    """The shared where-clauses of :meth:`RunMixin.list_events` / ``count_events``.
-
-    One builder for both so listing and counting can never disagree.
-
-    Returns:
-        Filter expressions for the given (optional) criteria.
-    """
-    filters: list[Any] = []
-    if run_id:
-        filters.append(Event.run_id == run_id)
-    if org_id:
-        filters.append(Event.org_id == org_id)
-    if component_ids:
-        filters.append(col(Event.component_id).in_(component_ids))
-    if event_types:
-        filters.append(col(Event.event_type).in_(event_types))
-    return filters
-
-
-def _run_filters(
-    org_id: UUID,
-    component_id: UUID | None,
-    backfill_id: UUID | None,
-    status: str | None,
-    after: datetime | None = None,
-    before: datetime | None = None,
-) -> list[Any]:
-    """The shared where-clauses of :meth:`RunMixin.list_runs` / ``count_runs``.
-
-    ``after``/``before`` select the runs whose execution *overlaps* the window
-    — a run occupies ``[started_at, completed_at)``, left open-ended while it
-    is still running. Runs that never started occupy no time and so fall
-    outside every window.
-
-    Returns:
-        Filter expressions for the given criteria.
-    """
-    filters: list[Any] = [Run.org_id == org_id]
-    if component_id:
-        filters.append(Run.component_id == component_id)
-    if backfill_id:
-        filters.append(Run.backfill_id == backfill_id)
-    if status:
-        filters.append(Run.status == status)
-    if after is not None:
-        filters.append(col(Run.completed_at).is_(None) | (col(Run.completed_at) >= after))
-    if before is not None:
-        filters.append(col(Run.started_at) <= before)
-    if after is not None and before is None:
-        # An `after` bound alone still means "ran at some point", so a
-        # never-started run must not slip through on the NULL completed_at.
-        filters.append(col(Run.started_at).is_not(None))
-    return filters
+Everything else spills into the ``data`` JSONB column. ``asset_id``/``asset_key``
+are the compat aliases core emitters use for the component columns; ``run_id`` and
+``org_id`` also arrive via run metadata, but the columns filled from
+:meth:`RunMixin.save_event`'s own arguments are the authoritative ones.
+"""
 
 
 class RunMixin(StoreBase):
     """Store methods for runs, events, and backfills."""
+
+    # -- Events ----------------------------------------------------------------
 
     def save_event(self, event: il.Event, org_id: UUID, run_id: UUID | None = None) -> Event:
         """Persist a framework event to the database, idempotently.
@@ -222,8 +78,12 @@ class RunMixin(StoreBase):
 
         Returns:
             The saved Event row.
+
+        Raises:
+            RuntimeError: If the row is gone right after the upsert, which only
+                a concurrent delete can cause.
         """
-        values = _event_values(event, org_id, run_id)
+        values = self._event_values(event, org_id, run_id)
 
         with self._session() as session:
             stmt = pg_insert(Event).values(**values).on_conflict_do_nothing(index_elements=["id"])
@@ -264,7 +124,7 @@ class RunMixin(StoreBase):
         with self._session() as session:
             statement = (
                 select(Event)
-                .where(*_event_filters(run_id, org_id, component_ids, event_types))
+                .where(*self._event_filters(run_id, org_id, component_ids, event_types))
                 .order_by(col(Event.timestamp).asc(), col(Event.id).asc())
                 .offset(offset)
                 .limit(limit)
@@ -294,7 +154,7 @@ class RunMixin(StoreBase):
             statement = (
                 select(func.count())
                 .select_from(Event)
-                .where(*_event_filters(run_id, org_id, component_ids, event_types))
+                .where(*self._event_filters(run_id, org_id, component_ids, event_types))
             )
             return session.exec(statement).one()
 
@@ -311,7 +171,7 @@ class RunMixin(StoreBase):
             statement = select(AssetExecution).where(AssetExecution.run_id == run_id)
             return list(session.exec(statement).all())
 
-    # -- Runs -----------------------------------------------------------------
+    # -- Runs ------------------------------------------------------------------
 
     def create_run(
         self,
@@ -326,13 +186,11 @@ class RunMixin(StoreBase):
             org_id: Organisation UUID.
             component_id: Optional target component UUID (any runnable kind).
             partition_key: Optional partition key (its shape carries the
-                granularity, e.g. ``2026-08-21`` or ``2026-08``).
+                granularity, e.g. ``2026-08-21`` or ``2026-08``). A key matching
+                no known shape is rejected by :meth:`TimePartition.from_key`.
 
         Returns:
             The created Run row.
-
-        Raises:
-            ValueError: If *partition_key* matches no known key shape.
         """
         if partition_key is not None:
             TimePartition.from_key(partition_key)
@@ -397,7 +255,7 @@ class RunMixin(StoreBase):
         with self._session() as session:
             statement = (
                 select(Run)
-                .where(*_run_filters(org_id, component_id, backfill_id, status, after, before))
+                .where(*self._run_filters(org_id, component_id, backfill_id, status, after, before))
                 .order_by(col(Run.created_at).desc())
                 .offset(offset)
                 .limit(limit)
@@ -431,7 +289,7 @@ class RunMixin(StoreBase):
             statement = (
                 select(func.count())
                 .select_from(Run)
-                .where(*_run_filters(org_id, component_id, backfill_id, status, after, before))
+                .where(*self._run_filters(org_id, component_id, backfill_id, status, after, before))
             )
             return session.exec(statement).one()
 
@@ -470,7 +328,7 @@ class RunMixin(StoreBase):
                     session.add(db_component)
 
             if db_run.backfill_id:
-                _advance_backfill(session, db_run.backfill_id, failed=not success)
+                self._advance_backfill(session, db_run.backfill_id, failed=not success)
 
             session.commit()
             return db_run
@@ -519,7 +377,7 @@ class RunMixin(StoreBase):
             session.refresh(db_run)
             return db_run
 
-    # -- Backfills ------------------------------------------------------------
+    # -- Backfills -------------------------------------------------------------
 
     def create_backfill(
         self,
@@ -682,6 +540,253 @@ class RunMixin(StoreBase):
             )
             return list(session.exec(statement).all())
 
+    # -- Internals -------------------------------------------------------------
+
+    @staticmethod
+    def _sanitize_text(value: str | None, *, max_len: int = _MAX_EVENT_TEXT) -> str | None:
+        """Make a free-text event field safe to persist.
+
+        Postgres ``text`` columns cannot store NUL bytes (``0x00``) — a single
+        one makes the whole INSERT raise, which (because event persistence is
+        best-effort) would silently drop the event.  Strip NULs and cap the
+        length so an oversized traceback can't fail the write either.
+
+        Args:
+            value: The raw field value, or ``None`` when the producer omitted it.
+            max_len: Maximum characters to keep before truncating, defaulting to
+                ``_MAX_EVENT_TEXT``. Longer values are cut and marked truncated.
+
+        Returns:
+            The cleaned string, or ``None`` if *value* is ``None``.
+        """
+        if value is None:
+            return None
+        cleaned = value.replace("\x00", "")
+        if len(cleaned) > max_len:
+            cleaned = cleaned[:max_len] + "…[truncated]"
+        return cleaned
+
+    @staticmethod
+    def _sanitize_data(metadata: dict[str, Any]) -> dict[str, Any] | None:
+        """Make a metadata dict safe to persist as JSONB, best-effort.
+
+        Non-JSON values are coerced through ``str``; a dict that still can't be
+        encoded (circular refs, NaN) is dropped rather than failing the event
+        write. Postgres ``jsonb`` rejects NUL escapes the same way ``text``
+        rejects NUL bytes, so they are stripped from the encoded form; an
+        oversized payload is replaced by a marker so the write can't fail on
+        size either.
+
+        Args:
+            metadata: The event metadata left over once the promoted keys are
+                stripped; an empty dict means there is nothing to store.
+
+        Returns:
+            The cleaned dict, or ``None`` when there is nothing worth storing.
+        """
+        if not metadata:
+            return None
+        try:
+            encoded = json.dumps(metadata, default=str, allow_nan=False)
+        except (TypeError, ValueError):
+            return None
+        if len(encoded) > _MAX_EVENT_TEXT:
+            return {"truncated": True}
+        if "\\u0000" in encoded:
+            encoded = encoded.replace("\\u0000", "")
+        return json.loads(encoded) or None
+
+    @staticmethod
+    def _event_values(event: il.Event, org_id: UUID, run_id: UUID | None) -> dict[str, Any]:
+        """Map a framework event onto ``events`` column values.
+
+        The component reference comes from ``component_id``/``component_kind``/
+        ``component_key`` metadata; the ``asset_id``/``asset_key`` keys the asset
+        runners emit map onto the same columns (with kind ``"asset"``), so core
+        emitters need no knowledge of the persistence schema. Metadata not
+        covered by a structured column lands losslessly in ``data``.
+
+        Args:
+            event: The framework Event to map. A non-UUID ``id`` is replaced by
+                a fresh one, which forfeits the upsert's idempotency.
+            org_id: Organisation UUID for the ``org_id`` column.
+            run_id: Run UUID for the ``run_id`` column, or ``None`` for an event
+                emitted outside any run.
+
+        Returns:
+            Column values for an ``events`` insert.
+        """
+        metadata = event.metadata
+        try:
+            event_id = UUID(event.id)
+        except (ValueError, TypeError):
+            event_id = uuid4()
+
+        component_id = metadata.get("component_id") or metadata.get("asset_id")
+        component_kind = metadata.get("component_kind") or ("asset" if metadata.get("asset_id") else None)
+        component_key = metadata.get("component_key") or metadata.get("asset_key")
+
+        return {
+            "id": event_id,
+            "org_id": org_id,
+            "run_id": run_id,
+            "event_type": event.type.value,
+            "component_id": UUID(str(component_id)) if component_id else None,
+            "component_kind": RunMixin._sanitize_text(component_kind),
+            "component_key": RunMixin._sanitize_text(component_key),
+            "error": RunMixin._sanitize_text(metadata.get("error")),
+            "traceback": RunMixin._sanitize_text(metadata.get("traceback")),
+            "message": RunMixin._sanitize_text(metadata.get("message")),
+            "level": RunMixin._sanitize_text(metadata.get("level")),
+            # None values are the absence of a key, not payload — producers emit
+            # them unconditionally (backfill_id on non-backfill runs, …).
+            "data": RunMixin._sanitize_data(
+                {k: v for k, v in metadata.items() if k not in _PROMOTED_METADATA_KEYS and v is not None}
+            ),
+            "timestamp": event.timestamp,
+        }
+
+    @staticmethod
+    def _event_filters(
+        run_id: UUID | None,
+        org_id: UUID | None,
+        component_ids: Sequence[UUID] | None,
+        event_types: Sequence[str] | None,
+    ) -> list[Any]:
+        """The shared where-clauses of :meth:`RunMixin.list_events` / ``count_events``.
+
+        One builder for both so listing and counting can never disagree.
+
+        Args:
+            run_id: Keep events of this run; ``None`` applies no run filter.
+            org_id: Keep events of this organisation; ``None`` applies no filter.
+            component_ids: Keep events of any of these components; ``None`` or
+                empty applies no filter.
+            event_types: Keep events of any of these types; ``None`` or empty
+                applies no filter.
+
+        Returns:
+            Filter expressions for the given (optional) criteria.
+        """
+        filters: list[Any] = []
+        if run_id:
+            filters.append(Event.run_id == run_id)
+        if org_id:
+            filters.append(Event.org_id == org_id)
+        if component_ids:
+            filters.append(col(Event.component_id).in_(component_ids))
+        if event_types:
+            filters.append(col(Event.event_type).in_(event_types))
+        return filters
+
+    @staticmethod
+    def _run_filters(
+        org_id: UUID,
+        component_id: UUID | None,
+        backfill_id: UUID | None,
+        status: str | None,
+        after: datetime | None = None,
+        before: datetime | None = None,
+    ) -> list[Any]:
+        """The shared where-clauses of :meth:`RunMixin.list_runs` / ``count_runs``.
+
+        ``after``/``before`` select the runs whose execution *overlaps* the window
+        — a run occupies ``[started_at, completed_at)``, left open-ended while it
+        is still running. Runs that never started occupy no time and so fall
+        outside every window.
+
+        Args:
+            org_id: Organisation whose runs are listed; always applied.
+            component_id: Keep runs targeting this component; ``None`` applies
+                no component filter.
+            backfill_id: Keep runs belonging to this backfill; ``None`` applies
+                no backfill filter.
+            status: Keep runs in this status; ``None`` applies no status filter.
+            after: Window start — keep runs still executing at or after this
+                instant. ``None`` leaves the window open-ended in the past.
+            before: Window end — keep runs that had started by this instant.
+                ``None`` leaves the window open-ended in the future.
+
+        Returns:
+            Filter expressions for the given criteria.
+        """
+        filters: list[Any] = [Run.org_id == org_id]
+        if component_id:
+            filters.append(Run.component_id == component_id)
+        if backfill_id:
+            filters.append(Run.backfill_id == backfill_id)
+        if status:
+            filters.append(Run.status == status)
+        if after is not None:
+            filters.append(col(Run.completed_at).is_(None) | (col(Run.completed_at) >= after))
+        if before is not None:
+            filters.append(col(Run.started_at) <= before)
+        if after is not None and before is None:
+            # An `after` bound alone still means "ran at some point", so a
+            # never-started run must not slip through on the NULL completed_at.
+            filters.append(col(Run.started_at).is_not(None))
+        return filters
+
+    @staticmethod
+    def _advance_backfill(session: Session, backfill_id: UUID, *, failed: bool) -> None:
+        """Advance a backfill after a run completes.
+
+        1. **Fail-fast**: if enabled and the run failed, cancel pending runs.
+        2. **Finalize**: if nothing in-flight or pending, mark complete.
+        3. **Advance**: promote next pending runs up to concurrency limit.
+
+        Args:
+            session: Active database session (caller commits).
+            backfill_id: The backfill UUID.
+            failed: Whether the completing run failed.
+        """
+        db_backfill = session.get(Backfill, backfill_id)
+        if not db_backfill or db_backfill.status not in ("running", "queued"):
+            return
+
+        if db_backfill.fail_fast and failed:
+            pending_runs = session.exec(
+                select(Run).where(Run.backfill_id == backfill_id, Run.status == "pending")
+            ).all()
+            for pending_run in pending_runs:
+                pending_run.status = "canceled"
+                session.add(pending_run)
+
+            db_backfill.status = "failed"
+            db_backfill.completed_at = datetime.now(timezone.utc)
+            session.add(db_backfill)
+            return
+
+        in_flight_count = len(
+            session.exec(
+                select(Run).where(
+                    Run.backfill_id == backfill_id,
+                    col(Run.status).in_(["queued", "running"]),
+                )
+            ).all()
+        )
+        # Newest partition first, matching create_backfill's initial dispatch. A
+        # backfill is single-granularity, so the string order is the time order.
+        pending_runs = session.exec(
+            select(Run)
+            .where(Run.backfill_id == backfill_id, Run.status == "pending")
+            .order_by(col(Run.partition_key).desc())
+        ).all()
+
+        if in_flight_count == 0 and len(pending_runs) == 0:
+            any_failed = session.exec(
+                select(Run).where(Run.backfill_id == backfill_id, Run.status == "failed")
+            ).first()
+            db_backfill.status = "failed" if any_failed else "success"
+            db_backfill.completed_at = datetime.now(timezone.utc)
+            session.add(db_backfill)
+            return
+
+        available_slots = max(0, db_backfill.concurrency - in_flight_count)
+        for pending_run in pending_runs[:available_slots]:
+            pending_run.status = "queued"
+            session.add(pending_run)
+
 
 def cancel_backfill_runs(session: Session, db_backfill: Backfill) -> None:
     """Cancel a backfill's not-yet-dispatched runs and terminalize it.
@@ -689,6 +794,11 @@ def cancel_backfill_runs(session: Session, db_backfill: Backfill) -> None:
     Part of the caller's transaction (the caller commits). ``skip_locked``
     leaves runs the worker is claiming right now to the worker — they are
     effectively dispatched and drain like any other in-flight run.
+
+    Args:
+        session: Active database session (the caller commits).
+        db_backfill: The backfill row to cancel, mutated in place along with
+            its pending and queued runs.
     """
     cancellable = session.exec(
         select(Run)
@@ -704,61 +814,3 @@ def cancel_backfill_runs(session: Session, db_backfill: Backfill) -> None:
     session.add(db_backfill)
 
 
-def _advance_backfill(session: Session, backfill_id: UUID, *, failed: bool) -> None:
-    """Advance a backfill after a run completes.
-
-    1. **Fail-fast**: if enabled and the run failed, cancel pending runs.
-    2. **Finalize**: if nothing in-flight or pending, mark complete.
-    3. **Advance**: promote next pending runs up to concurrency limit.
-
-    Args:
-        session: Active database session (caller commits).
-        backfill_id: The backfill UUID.
-        failed: Whether the completing run failed.
-    """
-    db_backfill = session.get(Backfill, backfill_id)
-    if not db_backfill or db_backfill.status not in ("running", "queued"):
-        return
-
-    if db_backfill.fail_fast and failed:
-        pending_runs = session.exec(
-            select(Run).where(Run.backfill_id == backfill_id, Run.status == "pending")
-        ).all()
-        for pending_run in pending_runs:
-            pending_run.status = "canceled"
-            session.add(pending_run)
-
-        db_backfill.status = "failed"
-        db_backfill.completed_at = datetime.now(timezone.utc)
-        session.add(db_backfill)
-        return
-
-    in_flight_count = len(
-        session.exec(
-            select(Run).where(
-                Run.backfill_id == backfill_id,
-                col(Run.status).in_(["queued", "running"]),
-            )
-        ).all()
-    )
-    # Newest partition first, matching create_backfill's initial dispatch. A
-    # backfill is single-granularity, so the string order is the time order.
-    pending_runs = session.exec(
-        select(Run)
-        .where(Run.backfill_id == backfill_id, Run.status == "pending")
-        .order_by(col(Run.partition_key).desc())
-    ).all()
-
-    if in_flight_count == 0 and len(pending_runs) == 0:
-        any_failed = session.exec(
-            select(Run).where(Run.backfill_id == backfill_id, Run.status == "failed")
-        ).first()
-        db_backfill.status = "failed" if any_failed else "success"
-        db_backfill.completed_at = datetime.now(timezone.utc)
-        session.add(db_backfill)
-        return
-
-    available_slots = max(0, db_backfill.concurrency - in_flight_count)
-    for pending_run in pending_runs[:available_slots]:
-        pending_run.status = "queued"
-        session.add(pending_run)
