@@ -10,7 +10,7 @@ who consumes it.
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from importlib.metadata import entry_points
 from typing import Any, Generic, TypeVar
 
@@ -116,6 +116,29 @@ class Registry(Generic[T]):
         """
         self._load()
         return tuple(sorted(self._entries.items()))
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate the registered names, in :meth:`keys` order.
+
+        Defined so iteration reads as a mapping's does. Without it, the
+        presence of :meth:`__getitem__` makes Python fall back to the legacy
+        sequence protocol and call ``__getitem__(0)``, which raises
+        ``KeyError`` — and linters then suggest ``for name in registry``
+        over the correct ``registry.keys()``.
+
+        Returns:
+            An iterator over the registered names, sorted.
+        """
+        return iter(self.keys())
+
+    def __len__(self) -> int:
+        """Count the registered entries.
+
+        Returns:
+            The number of entries, after any lazy load.
+        """
+        self._load()
+        return len(self._entries)
 
     def __contains__(self, name: str) -> bool:
         """Check whether a name is registered.

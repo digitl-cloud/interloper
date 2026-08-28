@@ -9,6 +9,22 @@ import pytest
 from interloper.registry import Registry
 
 
+def _entry_point(name: str, loaded: object) -> mock.Mock:
+    """Build a stub entry point that loads to *loaded*.
+
+    Args:
+        name: The entry-point name.
+        loaded: The object the entry point loads to.
+
+    Returns:
+        The stubbed entry point.
+    """
+    entry_point = mock.Mock()
+    entry_point.name = name
+    entry_point.load.return_value = loaded
+    return entry_point
+
+
 class TestRegister:
     def test_register_and_get(self):
         registry: Registry[str] = Registry()
@@ -37,6 +53,42 @@ class TestViews:
         assert registry.keys() == ("alpha", "beta")
         assert registry.values() == (1, 2)
         assert registry.items() == (("alpha", 1), ("beta", 2))
+
+
+class TestIteration:
+    def test_iterates_names_in_keys_order(self):
+        registry: Registry[int] = Registry()
+        registry.register("beta", 2)
+        registry.register("alpha", 1)
+        assert list(registry) == ["alpha", "beta"]
+        assert list(registry) == list(registry.keys())
+
+    def test_iteration_does_not_fall_back_to_the_sequence_protocol(self):
+        """Without ``__iter__``, ``__getitem__`` alone makes Python try ``registry[0]``."""
+        registry: Registry[str] = Registry()
+        registry.register("alpha", "A")
+        assert [name for name in registry] == ["alpha"]
+
+    def test_empty_registry_iterates_empty(self):
+        registry: Registry[str] = Registry()
+        assert list(registry) == []
+
+    def test_len_counts_entries(self):
+        registry: Registry[int] = Registry()
+        assert len(registry) == 0
+        registry.register("alpha", 1)
+        registry.register("beta", 2)
+        assert len(registry) == 2
+
+    def test_iteration_loads_the_entry_point_group(self):
+        registry: Registry[str] = Registry("test.group")
+        with mock.patch("interloper.registry.base.entry_points", return_value=[_entry_point("alpha", "A")]):
+            assert list(registry) == ["alpha"]
+
+    def test_len_loads_the_entry_point_group(self):
+        registry: Registry[str] = Registry("test.group")
+        with mock.patch("interloper.registry.base.entry_points", return_value=[_entry_point("alpha", "A")]):
+            assert len(registry) == 1
 
 
 class TestEntryPoints:
