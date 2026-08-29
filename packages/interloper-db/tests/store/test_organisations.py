@@ -68,9 +68,9 @@ class TestDeleteOrganisation:
         store.organisations.delete(org.id)
 
         # The org reads as missing everywhere but the row survives, stamped.
-        assert store.organisations.get(org.id) is None
-        retained = store.organisations.get(org.id, include_deleted=True)
-        assert retained is not None and retained.deleted_at is not None
+        with pytest.raises(NotFoundError):
+            store.organisations.get(org.id)
+        assert store.organisations.get(org.id, include_deleted=True).deleted_at is not None
         with SQLSession(auth_db) as session:
             # Sensitive payload is purged...
             for model in (Component, ComponentRelation):
@@ -96,7 +96,7 @@ class TestDeleteOrganisation:
         profile, auth_session = resolved
         assert auth_session.organisation_id is None
         assert profile.last_organisation_id is None
-        assert store.organisations.get(keeper.id) is not None
+        assert store.organisations.get(keeper.id).deleted_at is None
         assert store.organisations.member_role(admin.id, keeper.id) == "admin"
 
     def test_double_delete_reads_as_missing(self, store: Store):

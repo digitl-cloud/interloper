@@ -164,7 +164,7 @@ class OrganisationStore:
             session.add(db_organisation)
             commit(session)
 
-    def get(self, org_id: UUID, *, include_deleted: bool = False) -> Organisation | None:
+    def get(self, org_id: UUID, *, include_deleted: bool = False) -> Organisation:
         """Get an organisation by ID; soft-deleted orgs read as missing by default.
 
         Args:
@@ -172,12 +172,15 @@ class OrganisationStore:
             include_deleted: Also return soft-deleted organisations.
 
         Returns:
-            The Organisation or None.
+            The organisation row.
+
+        Raises:
+            NotFoundError: If no live organisation carries that id.
         """
         with session_scope(self._engine) as session:
             organisation = session.get(Organisation, org_id)
-            if organisation and organisation.deleted_at is not None and not include_deleted:
-                return None
+            if not organisation or (organisation.deleted_at is not None and not include_deleted):
+                raise NotFoundError(f"Organisation {org_id} not found")
             return organisation
 
     def list_activity(self, org_id: UUID, *, limit: int = 20) -> list[dict[str, Any]]:

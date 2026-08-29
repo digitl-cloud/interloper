@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.errors import NotFoundError
 
 from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
 from interloper_api.routes import tokens as tokens_module
@@ -65,7 +66,9 @@ class FakeStore:
         ]
 
     def _get_token(self, token_id: UUID):
-        return self.rows.get(token_id)
+        if token_id not in self.rows:
+            raise NotFoundError(f"Token {token_id} not found")
+        return self.rows[token_id]
 
     def _revoke_token(self, token_id: UUID):
         row = self.rows[token_id]

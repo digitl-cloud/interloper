@@ -535,7 +535,10 @@ def test_deleted_org_is_listed_but_not_manageable(store: FakeStore) -> None:
     """Soft-deleted orgs surface in the list (billing history) but 404 on management routes."""
     store.org.deleted_at = datetime.now(timezone.utc)
 
-    store.organisations.get = lambda org_id: None  # deleted orgs read as missing
+    def _deleted(org_id: UUID) -> None:
+        raise NotFoundError(f"Organisation {org_id} not found")
+
+    store.organisations.get = _deleted  # deleted orgs read as missing
     client = _client(store, is_super_admin=True)
 
     listed = client.get("/admin/organisations")

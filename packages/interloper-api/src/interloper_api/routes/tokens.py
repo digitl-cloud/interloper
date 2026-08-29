@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
 from pydantic import BaseModel, Field
 
@@ -140,9 +141,10 @@ def revoke_token(
             neither owns it nor administers its organisation.
     """
     detail = f"Token {token_id} not found"
-    row = store.tokens.get(token_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail=detail)
+    try:
+        row = store.tokens.get(token_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=detail) from None
 
     if row.user_id != user.id:
         role = store.organisations.member_role(user.id, row.organisation_id)

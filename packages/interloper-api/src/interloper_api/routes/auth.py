@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
@@ -11,6 +12,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
+from interloper.errors import NotFoundError
 from interloper_db import Organisation, Profile, Store
 from pydantic import BaseModel, Field
 
@@ -275,7 +277,10 @@ def get_me(
     role = "viewer"
 
     if session_row.organisation_id:
-        org = store.organisations.get(session_row.organisation_id)
+        # A session outliving its organisation still resolves: the caller is
+        # authenticated, just no longer scoped anywhere.
+        with suppress(NotFoundError):
+            org = store.organisations.get(session_row.organisation_id)
 
     if org and profile.id:
         user_role = store.organisations.member_role(profile.id, org.id)

@@ -41,12 +41,13 @@ class TestDeleteProfile:
 
         store.auth.delete_profile(admin.id)
 
-        assert store.auth.get_profile(admin.id) is None
+        with pytest.raises(NotFoundError):
+            store.auth.get_profile(admin.id)
         assert store.auth.resolve_session(session_token) is None
         assert not store.organisations.has_pending_invitation("new@example.com")
         assert store.organisations.member_role(admin.id, org.id) is None
         # Other users' data is untouched.
-        assert store.auth.get_profile(keeper.id) is not None
+        assert store.auth.get_profile(keeper.id).id == keeper.id
         assert store.auth.resolve_session(keeper_token) is not None
         assert store.organisations.member_role(keeper.id, org.id) == "viewer"
 

@@ -150,7 +150,8 @@ class ComponentStore:
         Args:
             component_id: The component UUID.
             kind: Kind the row must have (``None`` accepts any kind); a
-                mismatch is reported as a missing row.
+                mismatch raises ``NotFoundError`` like an absent row, so a
+                caller cannot learn that an id exists under another kind.
 
         Returns:
             The component row, eager-loaded and safe to hand out detached.

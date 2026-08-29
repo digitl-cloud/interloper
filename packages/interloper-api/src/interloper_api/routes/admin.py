@@ -17,7 +17,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from interloper_db import Organisation, Profile, Store
+from interloper_db import Profile, Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, RootModel, field_validator
 
@@ -589,25 +589,6 @@ def _quota_fields(defaults: AdminQuotaLimits) -> list[AdminQuotaField]:
     return [AdminQuotaField(key=key, label=QUOTAS[key].label, default=defaults.get(key)) for key in QUOTAS]
 
 
-def _require_org(store: Store, org_id: UUID) -> Organisation:
-    """Fetch an organisation or raise 404.
-
-    Args:
-        store: The database store backing the request.
-        org_id: The organisation to fetch.
-
-    Returns:
-        The organisation row.
-
-    Raises:
-        HTTPException: 404 when no organisation carries that id.
-    """
-    org = store.organisations.get(org_id)
-    if not org:
-        raise HTTPException(status_code=404, detail="Organisation not found")
-    return org
-
-
 def _validate_role(role: str) -> str:
     """Validate a role string or raise 400.
 
@@ -764,7 +745,7 @@ def update_org_quota(
     Returns:
         The organisation's overrides after the write, ``None`` where unset.
     """
-    _require_org(store, org_id)
+    store.organisations.get(org_id)  # 404 before touching anything else
     overrides = store.quotas.set_overrides(org_id, body.root)
     return _quota_limits(overrides)
 
@@ -989,7 +970,7 @@ def delete_organisation(
     Raises:
         HTTPException: 400 when the confirmation name does not match.
     """
-    org = _require_org(store, org_id)
+    org = store.organisations.get(org_id)
     if body.name != org.name:
         raise HTTPException(status_code=400, detail="Organisation name does not match")
     store.organisations.delete(org_id)
@@ -1015,7 +996,7 @@ def list_members(
     Returns:
         Every member of the organisation with its role.
     """
-    _require_org(store, org_id)
+    store.organisations.get(org_id)  # 404 before touching anything else
     members = store.organisations.list_members(org_id)
     return [
         MemberResponse(
@@ -1050,7 +1031,7 @@ def join_organisation(
     Raises:
         HTTPException: 409 when the caller already belongs to the organisation.
     """
-    _require_org(store, org_id)
+    store.organisations.get(org_id)  # 404 before touching anything else
     _validate_role(body.role)
     if not store.organisations.add_member(org_id, user.id, body.role):
         raise HTTPException(status_code=409, detail="Already a member of this organisation")
@@ -1129,7 +1110,7 @@ def list_invitations(
     Returns:
         The organisation's pending invitations.
     """
-    _require_org(store, org_id)
+    store.organisations.get(org_id)  # 404 before touching anything else
     return [
         InvitationResponse(
             id=inv.id,
@@ -1165,7 +1146,7 @@ def invite_member(
     Returns:
         The created invitation.
     """
-    org = _require_org(store, org_id)
+    org = store.organisations.get(org_id)
     _validate_role(body.role)
     invitation = store.organisations.create_invitation(
         org_id=org_id,
