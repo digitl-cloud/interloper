@@ -187,11 +187,12 @@ class TestRunQuota:
     def test_exhausted_org_skips_run_but_advances_schedule(self, store: Store) -> None:
         from types import SimpleNamespace
 
-        from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, db_now, increment_usage, month_start
+        from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 
         store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=1)
         with Session(store.engine) as session:
-            increment_usage(session, _ORG, METRIC_SUCCESSFUL_RUNS, month_start(db_now(session)), used=1)
+            ledger = UsageLedger(session)
+            ledger.increment(_ORG, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=1)
             session.commit()
 
         now = dt.datetime.now(dt.timezone.utc)

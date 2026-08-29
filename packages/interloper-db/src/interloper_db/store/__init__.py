@@ -32,7 +32,7 @@ from interloper_db.store.base import Store
 from interloper_db.store.components import ComponentStore
 from interloper_db.store.drift import DriftStore
 from interloper_db.store.events import EventStore
-from interloper_db.store.quotas import QuotaService
+from interloper_db.store.quotas import QuotaStore
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.runs import RunStore
 from interloper_db.store.tokens import TokenStore
@@ -42,7 +42,7 @@ __all__ = [
     "ComponentStore",
     "DriftStore",
     "EventStore",
-    "QuotaService",
+    "QuotaStore",
     "RelationStore",
     "RunStore",
     "Store",

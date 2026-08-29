@@ -195,7 +195,7 @@ class Services:
 
         logger.info("Shutdown complete.")
 
-    # -- Service construction ----------------------------------------------------
+    # -- Service construction --------------------------------------------------
 
     def _build_api(self) -> None:
         """Build the uvicorn API server, mounting the SPA outside dev mode."""
@@ -299,7 +299,7 @@ class Services:
         # Last resort if run() unwinds via an unhandled exception.
         atexit.register(self._signal_nuxt, signal.SIGKILL)
 
-    # -- Threads & lifecycle -------------------------------------------------------
+    # -- Threads & lifecycle ---------------------------------------------------
 
     def _start_threads(self) -> None:
         """Start one daemon thread per built service and log the resulting set."""
@@ -414,7 +414,7 @@ class Services:
         if self._nuxt_process is not None:
             self._kill_process_group(self._nuxt_process, signal_number)
 
-    # -- Internals ---------------------------------------------------------------
+    # -- Internals -------------------------------------------------------------
 
     @staticmethod
     def _kill_process_group(process: subprocess.Popen[bytes], signal_number: int) -> None:

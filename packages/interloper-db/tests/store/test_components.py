@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from typing import ClassVar
 from uuid import uuid4
 
 import interloper as il
 import pytest
 from interloper.errors import ConfigError, InUseError, NotFoundError
-from sqlalchemy import Engine
+from sqlalchemy import Engine, create_engine
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.store import Store
+from interloper_db.store.components import ComponentStore
 
 _ORG = uuid4()
 
@@ -510,3 +513,54 @@ class TestQuotaGates:
         store = self._store()
         for dataset in ("one", "two", "three"):
             store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": dataset})
+
+
+# -- Resource encoding ---------------------------------------------------------
+
+
+def _encoder(encrypt: Callable[[bytes], bytes] | None) -> ComponentStore:
+    """The component facet of a store carrying only the cipher under test.
+
+    Args:
+        encrypt: Cipher the store encrypts resources with, or None for an
+            instance with no encryption key configured.
+
+    Returns:
+        The facet whose ``_encode_data`` decides encryption. Its engine is
+        never connected to: encoding is pure.
+    """
+    store = Store(catalog=il.Catalog(components={}), engine=create_engine("sqlite://"), encrypt=encrypt)
+    return store.components
+
+
+def _fake_encrypt(data: bytes) -> bytes:
+    return b"ENC:" + data
+
+
+class TestResourceEncoding:
+    """``_encode_data`` is the single place that decides whether a blob is encrypted."""
+
+    def test_default_encrypts_when_key_is_configured(self) -> None:
+        raw, encrypted = _encoder(_fake_encrypt)._encode_data({"a": 1}, None)
+        assert encrypted is True
+        assert raw == b"ENC:" + json.dumps({"a": 1}).encode()
+
+    def test_default_without_key_raises(self) -> None:
+        # Fail closed: the default must never silently store a resource in plaintext.
+        with pytest.raises(ConfigError):
+            _encoder(None)._encode_data({"a": 1}, None)
+
+    def test_explicit_true_without_key_raises(self) -> None:
+        with pytest.raises(ConfigError):
+            _encoder(None)._encode_data({"a": 1}, True)
+
+    def test_explicit_false_stays_plaintext_even_with_key(self) -> None:
+        raw, encrypted = _encoder(_fake_encrypt)._encode_data({"a": 1}, False)
+        assert encrypted is False
+        assert raw == json.dumps({"a": 1}).encode()
+
+    def test_explicit_false_without_key_stays_plaintext(self) -> None:
+        # Opting out explicitly still works without a key (for non-secret resources).
+        raw, encrypted = _encoder(None)._encode_data({"a": 1}, False)
+        assert encrypted is False
+        assert raw == json.dumps({"a": 1}).encode()

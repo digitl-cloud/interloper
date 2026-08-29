@@ -17,7 +17,7 @@ from interloper_db.store.components import ComponentStore
 from interloper_db.store.drift import DriftStore
 from interloper_db.store.events import EventStore
 from interloper_db.store.hydration import Hydrator
-from interloper_db.store.quotas import QuotaService
+from interloper_db.store.quotas import QuotaStore
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.runs import RunStore
 from interloper_db.store.tokens import TokenStore
@@ -79,7 +79,7 @@ class Store:
         self.tokens = TokenStore(self._engine, self.auth)
         self.drift = DriftStore(catalog)
         self.relations = RelationStore(self._engine, catalog)
-        self.quotas = QuotaService(self._engine, lambda: self._quota_defaults)
+        self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
         self.events = EventStore(self._engine)
         self.runs = RunStore(self._engine, self.quotas)
         self.components = ComponentStore(
@@ -128,7 +128,7 @@ class Store:
         encrypt, decrypt = make_cipher(key)
         return cls(catalog=catalog, engine=engine, encrypt=encrypt, decrypt=decrypt, quota_defaults=settings.quota)
 
-    # -- Session policy ------------------------------------------------------------
+    # -- Session policy --------------------------------------------------------
 
     @property
     def engine(self) -> Engine:
