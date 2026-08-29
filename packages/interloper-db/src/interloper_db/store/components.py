@@ -43,10 +43,10 @@ from sqlmodel import Session, col, select
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
-from interloper_db.store.drift import ComponentStatus, asset_status, source_status
 from interloper_db.store.hydration import Hydrator
 from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES, QuotaStore
 from interloper_db.store.relations import Binding, RelationStore, _add_relation
+from interloper_db.store.status import ComponentStatus, asset_status, source_status
 
 # Eager-load set for rows returned to API consumers: the parent, children
 # with their relations, and two hops (component → destination → resources).
@@ -369,7 +369,7 @@ class ComponentStore:
                 raise NotFoundError(f"Component {component_id} not found")
             owned_asset = db_component.kind == "asset" and db_component.parent_id is not None
             if not owned_asset:
-                status = self._row_status(session, db_component)
+                status = self.status(db_component)
                 if status is not ComponentStatus.OK:
                     raise ComponentDriftError(
                         f"{db_component.kind.capitalize()} '{db_component.key}' ({db_component.id}) "
@@ -418,22 +418,28 @@ class ComponentStore:
             f"Asset '{key}' ({asset_id}) is no longer declared by source '{source.key}'; its catalog key has drifted."
         )
 
-    def status(self, db_component: Component) -> ComponentStatus:
-        """Catalog-resolution status of a component row (drift detection).
+    def status(self, db_component: Component, *, parent_key: str | None = None) -> ComponentStatus:
+        """Catalog-resolution status of a component row.
 
-        Source-owned assets resolve through their parent, so ``parent`` must
-        be loaded (it is on rows returned by this mixin).
+        A source-owned asset resolves through its parent, whose key is read a
+        row away unless the caller supplies it. A caller walking many children
+        of one source should pass *parent_key*: it already knows it, and the
+        lookup is then skipped per child.
 
         Args:
             db_component: The row to resolve against the catalog.
+            parent_key: The owning source's key when the caller already knows
+                it. Defaults to ``None``, which reads it from the database.
 
         Returns:
             ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key.
         """
-        if db_component.kind == "asset":
-            source_key = db_component.parent.key if db_component.parent else None
-            return asset_status(self._catalog, db_component.key, source_key=source_key)
-        return source_status(self._catalog, db_component.key)
+        if db_component.kind != "asset":
+            return source_status(self._catalog, db_component.key)
+        if parent_key is None and db_component.parent_id is not None:
+            with session_scope(self._engine) as session:
+                parent_key = db_component.parent_key(session)
+        return asset_status(self._catalog, db_component.key, source_key=parent_key)
 
     def decode_config(self, db_component: Component) -> dict[str, Any]:
         """The component's config payload, decrypting secret kinds.
@@ -758,21 +764,6 @@ class ComponentStore:
             raise ValueError(f"Job targets disagree on partition granularity ({names})")
         return next(iter(granularities), None)
 
-    def _row_status(self, session: Session, db_component: Component) -> ComponentStatus:
-        """Row drift status inside an open session (parent fetched on demand).
-
-        Args:
-            session: Open session used to fetch an owned asset's parent.
-            db_component: The row to resolve against the catalog.
-
-        Returns:
-            ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key.
-        """
-        if db_component.kind == "asset" and db_component.parent_id is not None:
-            parent = session.get(Component, db_component.parent_id)
-            return asset_status(self._catalog, db_component.key, source_key=parent.key if parent else None)
-        return source_status(self._catalog, db_component.key)
-
     def _target_partitionings(self, session: Session, target: Component) -> list[dict[str, Any]]:
         """The partitioning dicts of one target's partitioned assets.
 
@@ -813,7 +804,7 @@ class ComponentStore:
             target = session.get(Component, relation.dst_id)
             if target is None:
                 continue  # defensive: FKs make this unreachable
-            status = self._row_status(session, target)
+            status = self.status(target)
             if status is not ComponentStatus.OK:
                 raise ComponentDriftError(
                     f"Job '{db_job.name}' ({db_job.id}) cannot be hydrated: target "

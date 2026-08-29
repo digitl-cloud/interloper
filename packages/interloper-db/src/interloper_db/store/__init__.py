@@ -18,19 +18,17 @@ depends on the part it uses rather than on all of it:
 
 - ``store.auth`` — profiles, sessions, organisations, memberships, invitations
 - ``store.tokens`` — personal access tokens (programmatic/MCP access)
-- ``store.components`` — component CRUD and hydration, for every kind
+- ``store.components`` — component CRUD, hydration and catalog status, for every kind
 - ``store.relations`` — the vocabulary-checked edges between components
 - ``store.events`` — run events and asset executions
 - ``store.runs`` — runs and backfills
 - ``store.quotas`` — per-org limits, enforcement gates, the usage ledger
-- ``store.drift`` — catalog-resolution status for stored keys
 """
 
 from interloper_db.session import commit, session_scope, transaction
 from interloper_db.store.auth import AuthStore
 from interloper_db.store.base import Store
 from interloper_db.store.components import ComponentStore
-from interloper_db.store.drift import DriftStore
 from interloper_db.store.events import EventStore
 from interloper_db.store.quotas import QuotaStore
 from interloper_db.store.relations import RelationStore
@@ -40,7 +38,6 @@ from interloper_db.store.tokens import TokenStore
 __all__ = [
     "AuthStore",
     "ComponentStore",
-    "DriftStore",
     "EventStore",
     "QuotaStore",
     "RelationStore",

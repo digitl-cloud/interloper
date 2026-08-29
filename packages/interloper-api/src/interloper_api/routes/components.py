@@ -161,11 +161,7 @@ class ComponentResponse(BaseModel):
         Returns:
             The response model.
         """
-        if row.kind == "asset":
-            source_key = parent_key if parent_key is not None else (row.parent.key if row.parent else None)
-            status = store.drift.asset_status(row.key, source_key=source_key)
-        else:
-            status = store.drift.source_status(row.key)
+        status = store.components.status(row, parent_key=parent_key)
 
         config: dict[str, Any] | None = row.config
         if KINDS[row.kind].sensitive:

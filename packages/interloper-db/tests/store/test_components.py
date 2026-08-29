@@ -10,12 +10,14 @@ from uuid import uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConfigError, InUseError, NotFoundError
+from interloper_assets.demo.source import DemoSource
 from sqlalchemy import Engine, create_engine
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.store import Store
 from interloper_db.store.components import ComponentStore
+from interloper_db.store.status import ComponentStatus
 
 _ORG = uuid4()
 
@@ -513,6 +515,36 @@ class TestQuotaGates:
         store = self._store()
         for dataset in ("one", "two", "three"):
             store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": dataset})
+
+
+class TestStatus:
+    """A row's catalog status, resolved through its parent for a source-owned asset."""
+
+    @pytest.fixture
+    def demo_store(self, component_db: Engine) -> Store:
+        return Store(catalog=il.Catalog.from_assets([DemoSource]))
+
+    def test_live_source_is_ok(self, demo_store: Store):
+        row = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
+        assert demo_store.components.status(row) is ComponentStatus.OK
+
+    def test_owned_asset_resolves_through_its_parent(self, demo_store: Store):
+        # The child rows nested under a fetched source carry no loaded parent:
+        # resolving one has to reach a row away, not lazy-load a detached edge.
+        source = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
+        child = _child(demo_store.components.get(source.id), "a")
+        assert demo_store.components.status(child) is ComponentStatus.OK
+
+    def test_parent_key_spares_the_lookup(self, demo_store: Store):
+        source = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
+        child = _child(demo_store.components.get(source.id), "a")
+        assert demo_store.components.status(child, parent_key=DemoSource.key) is ComponentStatus.OK
+        # The hint is taken at face value; a wrong one resolves against it.
+        assert demo_store.components.status(child, parent_key="gone_source") is ComponentStatus.MISSING
+
+    def test_key_outside_the_catalog_is_missing(self, store: Store):
+        row = Component(org_id=_ORG, kind="source", key="gone_source")
+        assert store.components.status(row) is ComponentStatus.MISSING
 
 
 # -- Resource encoding ---------------------------------------------------------

@@ -19,7 +19,7 @@ from interloper_db.models import (
 )
 from interloper_db.provision import create_all, downgrade, ensure_database, upgrade
 from interloper_db.store import Store
-from interloper_db.store.drift import ComponentStatus
+from interloper_db.store.status import ComponentStatus
 
 __all__ = [
     "AssetExecution",

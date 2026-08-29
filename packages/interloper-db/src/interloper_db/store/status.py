@@ -1,9 +1,12 @@
-"""Drift: whether a stored component key still resolves against the catalog.
+"""Whether a stored component key still resolves against the catalog.
 
 A key that no longer resolves means the class was renamed, removed, or is
-shipped by a package this deployment does not install. Drift is reported as
-a value rather than raised, so the UI can show a stale component instead of
+shipped by a package this deployment does not install. That is reported as a
+value rather than raised, so the UI can show a stale component instead of
 failing to load the page.
+
+These resolve bare keys. The row-level question ("what is this component's
+status?") belongs to the component facet, which calls through to here.
 """
 
 from __future__ import annotations
@@ -92,45 +95,3 @@ def asset_status(
         return ComponentStatus.MISSING  # defensive: enabled said ok but the class did not resolve
     valid_keys = {asset_type.key for asset_type in source_cls.asset_types}
     return ComponentStatus.OK if key in valid_keys else ComponentStatus.MISSING
-
-
-class DriftStore:
-    """Store methods that surface catalog drift for persisted components.
-
-    Thin delegation to the pure resolver functions, passing the Store's
-    enabled ``_catalog`` so callers (API routes, hydration) never reach into
-    catalog internals.
-    """
-
-    def __init__(self, catalog: Catalog) -> None:
-        """Bind the facet to what it works through.
-
-        Args:
-            catalog: Catalog its component keys resolve against.
-        """
-        self._catalog = catalog
-
-    def source_status(self, key: str) -> ComponentStatus:
-        """Resolution state of a stored source key against the catalog.
-
-        Args:
-            key: Stored source key to resolve.
-
-        Returns:
-            The key's status: ok, disabled, or missing.
-        """
-        return source_status(self._catalog, key)
-
-    def asset_status(self, key: str, *, source_key: str | None = None) -> ComponentStatus:
-        """Resolution state of a stored asset key against the catalog.
-
-        Args:
-            key: Stored asset key to resolve.
-            source_key: Key of the owning source, whose status the asset's
-                cascades from. None (the default) resolves a standalone asset,
-                which is itself a catalog component.
-
-        Returns:
-            The key's status: ok, disabled, or missing.
-        """
-        return asset_status(self._catalog, key, source_key=source_key)
