@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from interloper.asset.base import AssetDefinition
 from interloper.catalog.base import Catalog
 from interloper.settings import AppSettings
 
@@ -68,6 +69,31 @@ class TestKindContract:
             Catalog._definitions_from([FakeUnregisteredKind])
 
 
+class TestSourceOwnedAssets:
+    """A source's assets are declared inside it, and resolve through parent_key."""
+
+    def test_asset_key_is_not_a_flat_entry(self):
+        assert Catalog.discover().get("a") is None
+
+    def test_parent_key_resolves_the_owning_declaration(self):
+        definition = Catalog.discover().get("a", parent_key="demo_source")
+        assert isinstance(definition, AssetDefinition)
+        # The composite path is the point: the flat key cannot name it.
+        assert definition.path == "interloper_assets.demo.source:DemoSource.a"
+        assert definition.partitioning is not None
+
+    def test_unknown_parent_falls_back_to_the_flat_lookup(self):
+        catalog = Catalog.discover()
+        assert catalog.get("a", parent_key="gone_source") is None
+        assert catalog.get("cron_job", parent_key="gone_source") is not None
+
+    def test_parent_that_does_not_declare_the_key_falls_back(self):
+        assert Catalog.discover().get("not_an_asset", parent_key="demo_source") is None
+
+    def test_non_source_parent_falls_back(self):
+        assert Catalog.discover().get("a", parent_key="cron_job") is None
+
+
 class TestVocabulary:
     """catalog.vocabulary: class definition first, anchor as drift fallback."""
 
@@ -84,3 +110,16 @@ class TestVocabulary:
         catalog = Catalog.discover()
         # 'cron_job' resolves, but as a job — a hook row with that key is drift.
         assert set(catalog.vocabulary("hook", "cron_job")) == {"watch", "resource"}
+
+    def test_source_owned_asset_resolves_through_its_parent(self):
+        catalog = Catalog.discover()
+        # The anchor knows assets have dependencies; only the source's own
+        # declaration knows which ones, and which of them are required.
+        assert catalog.vocabulary("asset", "e")["dependency"].slots == {}
+        slots = catalog.vocabulary("asset", "e", parent_key="demo_source")["dependency"].slots
+        assert {name: slot.key for name, slot in slots.items()} == {
+            "b": "demo_source.b",
+            "c": "demo_source.c",
+            "d": "demo_source.d",
+        }
+        assert all(slot.required for slot in slots.values())

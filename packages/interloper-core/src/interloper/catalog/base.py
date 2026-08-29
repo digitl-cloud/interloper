@@ -38,7 +38,7 @@ from interloper.asset.base import Asset
 from interloper.component import KINDS, Component, ComponentDefinition, RelationDefinition
 from interloper.errors import ConfigError
 from interloper.settings import AppSettings
-from interloper.source.base import Source
+from interloper.source.base import Source, SourceDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -52,35 +52,55 @@ class Catalog(BaseModel):
 
     # -- Lookup & export -------------------------------------------------------
 
-    def get(self, key: str, default: Any = None) -> ComponentDefinition | None:
+    def get(self, key: str, default: Any = None, *, parent_key: str | None = None) -> ComponentDefinition | None:
         """Look up a component definition by key.
+
+        The catalog is flat, but a source's assets are not in it: they are
+        declared inside their source and reachable only through
+        :attr:`SourceDefinition.assets`. Pass *parent_key* to resolve such an
+        asset the way its owner declares it — the concrete
+        :class:`AssetDefinition`, carrying the composite import path, the
+        partitioning and the dependency slots the flat key cannot name. A
+        parent that does not resolve, or does not declare the key, falls back
+        to the flat lookup.
 
         Args:
             key: The component key.
             default: Value to return if key is not found.
+            parent_key: Key of the owning source, for a source-owned asset.
+                Defaults to ``None``, a flat lookup.
 
         Returns:
             The component definition, or *default* if not found.
         """
+        if parent_key is not None:
+            parent = self.components.get(parent_key)
+            if isinstance(parent, SourceDefinition):
+                for asset in parent.assets:
+                    if asset.key == key:
+                        return asset
         return self.components.get(key, default)
 
-    def vocabulary(self, kind: str, key: str) -> dict[str, RelationDefinition]:
+    def vocabulary(self, kind: str, key: str, *, parent_key: str | None = None) -> dict[str, RelationDefinition]:
         """The relation vocabulary governing a persisted component row.
 
         The class definition is authoritative — a concrete class may extend
         its anchor's vocabulary (``TriggerHook`` adds ``target``). The
         kind's anchor is the fallback when the key does not resolve to a
-        matching definition (source-owned assets, drifted keys), keeping
-        validation fail-closed on the kind's shared minimum.
+        matching definition (drifted keys), keeping validation fail-closed on
+        the kind's shared minimum.
 
         Args:
             kind: The row's component kind.
             key: The row's catalog key.
+            parent_key: Key of the owning source, for a source-owned asset,
+                whose declaration carries the dependency slots. Defaults to
+                ``None``, a flat lookup.
 
         Returns:
             Relation type → definition.
         """
-        definition = self.get(key)
+        definition = self.get(key, parent_key=parent_key)
         if definition is not None and definition.kind == kind:
             return definition.relations
         return KINDS[kind].relation_types
@@ -163,6 +183,10 @@ class Catalog(BaseModel):
     @classmethod
     def discover(cls) -> Catalog:
         """Load the declared universe from ``interloper.components`` entry points.
+
+        Cheap to call repeatedly: entry points cannot change at runtime, so
+        the scan and the class imports behind it are cached for the process
+        and only the mapping is rebuilt.
 
         Returns:
             Catalog of every component declared by every installed package.
