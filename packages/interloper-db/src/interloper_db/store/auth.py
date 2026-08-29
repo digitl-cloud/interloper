@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
 from interloper.errors import NotFoundError
+from interloper.utils import assume_utc
 from sqlalchemy import Engine, delete, func, update
 from sqlmodel import Session, col, select
 
+from interloper_db.crypto import hash_token
 from interloper_db.models import (
     AuthSession,
     Component,
@@ -24,54 +25,11 @@ from interloper_db.models import (
     Run,
     UserOrganisation,
 )
-from interloper_db.store.session import commit, session_scope
+from interloper_db.session import commit, session_scope
 
 INVITATION_EXPIRY_DAYS = 7
 
 SESSION_EXPIRY_DAYS = 30
-
-
-def _as_utc(ts: datetime) -> datetime:
-    """Treat naive timestamps as UTC (SQLite test databases drop the offset).
-
-    Args:
-        ts: The timestamp read back from the database, aware or naive.
-
-    Returns:
-        An aware datetime; an already-aware *ts* is returned unchanged.
-    """
-    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
-
-
-def _hash_token(token: str) -> str:
-    """Hash a raw session token the way it is stored (only hashes persist).
-
-    Args:
-        token: The raw token as presented by the client.
-
-    Returns:
-        The SHA-256 hex digest.
-    """
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
-def _get_membership(session: Session, user_id: UUID, org_id: UUID) -> UserOrganisation | None:
-    """Fetch a user's membership row in an organisation.
-
-    Args:
-        session: Active database session.
-        user_id: Profile UUID of the candidate member.
-        org_id: Organisation UUID to look the membership up in.
-
-    Returns:
-        The membership, or ``None`` when the user is not a member.
-    """
-    return session.exec(
-        select(UserOrganisation).where(
-            UserOrganisation.user_id == user_id,
-            UserOrganisation.organisation_id == org_id,
-        )
-    ).first()
 
 
 class AuthStore:
@@ -274,7 +232,7 @@ class AuthStore:
             The raw session token (to be set as a cookie).
         """
         token = secrets.token_urlsafe(48)
-        token_hash = _hash_token(token)
+        token_hash = hash_token(token)
 
         with session_scope(self._engine) as session:
             db_session = AuthSession(
@@ -297,7 +255,7 @@ class AuthStore:
         Returns:
             ``(Profile, Session)`` if valid, else ``None``.
         """
-        token_hash = _hash_token(token)
+        token_hash = hash_token(token)
 
         with session_scope(self._engine) as session:
             statement = select(AuthSession).where(AuthSession.token_hash == token_hash)
@@ -305,7 +263,7 @@ class AuthStore:
             if not db_session:
                 return None
 
-            if _as_utc(db_session.expires_at) < datetime.now(timezone.utc):
+            if assume_utc(db_session.expires_at) < datetime.now(timezone.utc):
                 session.delete(db_session)
                 commit(session)
                 return None
@@ -324,7 +282,7 @@ class AuthStore:
             org_id: Organisation UUID to switch to.
             user_id: If provided, also update ``last_organisation_id`` on the profile.
         """
-        token_hash = _hash_token(token)
+        token_hash = hash_token(token)
 
         with session_scope(self._engine) as session:
             db_session = session.exec(
@@ -608,7 +566,7 @@ class AuthStore:
             The role string or None if not a member.
         """
         with session_scope(self._engine) as session:
-            membership = _get_membership(session, user_id, org_id)
+            membership = self._get_membership(session, user_id, org_id)
             return membership.role if membership else None
 
     def list_org_members(self, org_id: UUID) -> list[tuple[Profile, str]]:
@@ -644,7 +602,7 @@ class AuthStore:
             idempotency signal, not a missing target).
         """
         with session_scope(self._engine) as session:
-            if _get_membership(session, user_id, org_id):
+            if self._get_membership(session, user_id, org_id):
                 return False
             session.add(UserOrganisation(
                 user_id=user_id,
@@ -666,7 +624,7 @@ class AuthStore:
             NotFoundError: If the user is not a member.
         """
         with session_scope(self._engine) as session:
-            membership = _get_membership(session, user_id, org_id)
+            membership = self._get_membership(session, user_id, org_id)
             if not membership:
                 raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
             membership.role = role
@@ -684,7 +642,7 @@ class AuthStore:
             NotFoundError: If the user is not a member.
         """
         with session_scope(self._engine) as session:
-            membership = _get_membership(session, user_id, org_id)
+            membership = self._get_membership(session, user_id, org_id)
             if not membership:
                 raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
             session.delete(membership)
@@ -783,7 +741,7 @@ class AuthStore:
             db_invitations = session.exec(
                 select(Invitation).where(func.lower(Invitation.email) == email.lower())
             ).all()
-            return any(_as_utc(invitation.expires_at) > now for invitation in db_invitations)
+            return any(assume_utc(invitation.expires_at) > now for invitation in db_invitations)
 
     def accept_invitation(self, token: str, user_id: UUID) -> Organisation | None:
         """Accept an invitation: add user to org and delete the invitation.
@@ -802,12 +760,12 @@ class AuthStore:
             if not db_invitation:
                 return None
 
-            if _as_utc(db_invitation.expires_at) < datetime.now(timezone.utc):
+            if assume_utc(db_invitation.expires_at) < datetime.now(timezone.utc):
                 session.delete(db_invitation)
                 commit(session)
                 return None
 
-            if not _get_membership(session, user_id, db_invitation.organisation_id):
+            if not self._get_membership(session, user_id, db_invitation.organisation_id):
                 session.add(UserOrganisation(
                     user_id=user_id,
                     organisation_id=db_invitation.organisation_id,
@@ -818,3 +776,22 @@ class AuthStore:
             session.delete(db_invitation)
             commit(session)
             return db_organisation
+
+    @staticmethod
+    def _get_membership(session: Session, user_id: UUID, org_id: UUID) -> UserOrganisation | None:
+        """Fetch a user's membership row in an organisation.
+
+        Args:
+            session: Active database session.
+            user_id: Profile UUID of the candidate member.
+            org_id: Organisation UUID to look the membership up in.
+
+        Returns:
+            The membership, or ``None`` when the user is not a member.
+        """
+        return session.exec(
+            select(UserOrganisation).where(
+                UserOrganisation.user_id == user_id,
+                UserOrganisation.organisation_id == org_id,
+            )
+        ).first()

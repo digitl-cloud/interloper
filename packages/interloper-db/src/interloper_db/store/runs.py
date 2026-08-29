@@ -17,14 +17,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
 
 from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
-from interloper_db.store.components import stamp_component_state
+from interloper_db.session import commit, session_scope
 from interloper_db.store.quotas import (
     QUOTA_MAX_BACKFILL_PARTITIONS,
     QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
     QuotaService,
     settle_run_usage,
 )
-from interloper_db.store.session import commit, session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +334,7 @@ class RunStore:
             if db_run.component_id:
                 db_component = session.get(Component, db_run.component_id)
                 if db_component:
-                    stamp_component_state(db_component, last_run_at=db_run.completed_at)
+                    db_component.stamp_state(last_run_at=db_run.completed_at)
                     session.add(db_component)
 
             if db_run.backfill_id:

@@ -22,7 +22,7 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper_db import Store, stamp_component_state
+from interloper_db import Store
 from interloper_db.models import Component, ComponentRelation, Run
 from interloper_db.models import Event as EventRow
 from sqlmodel import Session, col, select
@@ -220,9 +220,7 @@ class HookController(Controller):
             run_id=run.id,
         )
 
-        stamp_component_state(
-            hook_row,
-            last_fired_at=dt.datetime.now(dt.timezone.utc),
+        hook_row.stamp_state(last_fired_at=dt.datetime.now(dt.timezone.utc),
             last_run_id=str(run.id),
         )
         session.add(hook_row)

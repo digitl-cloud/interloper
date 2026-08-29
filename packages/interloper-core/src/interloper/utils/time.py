@@ -90,3 +90,15 @@ def add_months(value: dt.date, months: int) -> dt.date:
     month += 1
     day = min(value.day, calendar.monthrange(year, month)[1])
     return value.replace(year=year, month=month, day=day)
+
+
+def assume_utc(value: dt.datetime) -> dt.datetime:
+    """Treat a naive timestamp as UTC, leaving an aware one alone.
+
+    Args:
+        value: The timestamp to normalise, aware or naive.
+
+    Returns:
+        An aware datetime; an already-aware *ts* is returned unchanged.
+    """
+    return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)

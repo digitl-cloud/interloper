@@ -11,14 +11,14 @@ from sqlalchemy import Engine
 from sqlmodel import Session
 
 from interloper_db.engine import engine_from_settings, get_engine
-from interloper_db.hydration import Hydrator
+from interloper_db.session import transaction
 from interloper_db.store.auth import AuthStore
 from interloper_db.store.components import ComponentStore
 from interloper_db.store.drift import DriftStore
+from interloper_db.store.hydration import Hydrator
 from interloper_db.store.quotas import QuotaService
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.runs import RunStore
-from interloper_db.store.session import transaction
 from interloper_db.store.tokens import TokenStore
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class Store:
         # Each facet is handed what it works through, so its dependencies read
         # off its constructor and nothing reaches back into the store.
         self.auth = AuthStore(self._engine)
-        self.tokens = TokenStore(self._engine)
+        self.tokens = TokenStore(self._engine, self.auth)
         self.drift = DriftStore(catalog)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaService(self._engine, lambda: self._quota_defaults)

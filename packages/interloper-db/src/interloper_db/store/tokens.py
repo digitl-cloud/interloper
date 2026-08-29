@@ -13,12 +13,14 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from interloper.errors import NotFoundError
+from interloper.utils import assume_utc
 from sqlalchemy import Engine
 from sqlmodel import select
 
+from interloper_db.crypto import hash_token
 from interloper_db.models import PersonalAccessToken, Profile
-from interloper_db.store.auth import _as_utc, _get_membership, _hash_token
-from interloper_db.store.session import commit, session_scope
+from interloper_db.session import commit, session_scope
+from interloper_db.store.auth import AuthStore
 
 TOKEN_PREFIX = "ilp_"
 
@@ -37,13 +39,15 @@ class TokenStore:
     target.
     """
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, auth: AuthStore) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
+            auth: Auth facet, for the membership a token's scope resolves against.
         """
         self._engine = engine
+        self._auth = auth
 
     def create(
         self,
@@ -72,7 +76,7 @@ class TokenStore:
                 organisation_id=organisation_id,
                 name=name,
                 token_prefix=raw[:TOKEN_PREFIX_LEN],
-                token_hash=_hash_token(raw),
+                token_hash=hash_token(raw),
                 expires_at=expires_at,
             )
             session.add(db_token)
@@ -92,7 +96,7 @@ class TokenStore:
             profile, or the holder no longer being a member of the token's
             organisation.
         """
-        token_hash = _hash_token(raw)
+        token_hash = hash_token(raw)
         now = datetime.now(timezone.utc)
 
         with session_scope(self._engine) as session:
@@ -104,19 +108,19 @@ class TokenStore:
 
             if db_token.revoked_at is not None:
                 return None
-            if db_token.expires_at is not None and _as_utc(db_token.expires_at) < now:
+            if db_token.expires_at is not None and assume_utc(db_token.expires_at) < now:
                 return None
 
             db_profile = session.get(Profile, db_token.user_id)
             if not db_profile:
                 return None
 
-            membership = _get_membership(session, db_token.user_id, db_token.organisation_id)
+            membership = self._auth._get_membership(session, db_token.user_id, db_token.organisation_id)
             if not membership:
                 return None
 
             last_used = db_token.last_used_at
-            if last_used is None or _as_utc(last_used) < now - timedelta(seconds=LAST_USED_THROTTLE_SECONDS):
+            if last_used is None or assume_utc(last_used) < now - timedelta(seconds=LAST_USED_THROTTLE_SECONDS):
                 db_token.last_used_at = now
                 session.add(db_token)
                 commit(session)
