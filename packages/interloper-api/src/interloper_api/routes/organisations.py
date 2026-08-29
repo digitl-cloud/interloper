@@ -282,9 +282,8 @@ def invite_member(
 
     smtp_config = _get_smtp_config()
     if smtp_config and smtp_config.enabled:
-        org = store.organisations.get(org_id)
-        org_name = org.name if org else "Unknown"
         inviter_name = user.name or user.email
+        org_name = store.organisations.get(org_id).name
         _send_invitation_email(request, smtp_config, invitation, org_name, inviter_name)
     else:
         logger.warning("SMTP not configured; invitation email to %s not sent", invitation.email)
@@ -371,9 +370,8 @@ def resend_invitation(
 
     smtp_config = _get_smtp_config()
     if smtp_config and smtp_config.enabled:
-        org = store.organisations.get(org_id)
-        org_name = org.name if org else "Unknown"
         inviter_name = user.name or user.email
+        org_name = store.organisations.get(org_id).name
         _send_invitation_email(request, smtp_config, new_invitation, org_name, inviter_name)
     else:
         logger.warning("SMTP not configured; invitation email to %s not sent", new_invitation.email)

@@ -136,17 +136,23 @@ class AuthStore:
             commit(session)
             return db_profile
 
-    def get_profile(self, user_id: UUID) -> Profile | None:
+    def get_profile(self, user_id: UUID) -> Profile:
         """Get a profile by ID.
 
         Args:
             user_id: Profile UUID.
 
         Returns:
-            The Profile or None.
+            The profile row.
+
+        Raises:
+            NotFoundError: If no profile carries that id.
         """
         with session_scope(self._engine) as session:
-            return session.get(Profile, user_id)
+            db_profile = session.get(Profile, user_id)
+            if not db_profile:
+                raise NotFoundError(f"Profile {user_id} not found")
+            return db_profile
 
     def list_all_profiles(self) -> list[tuple[Profile, list[Organisation]]]:
         """List every profile with the organisations it belongs to (super-admin only).

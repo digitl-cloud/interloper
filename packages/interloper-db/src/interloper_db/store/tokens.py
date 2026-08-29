@@ -142,17 +142,23 @@ class TokenStore:
             statement = statement.order_by(PersonalAccessToken.created_at.desc())  # ty: ignore[unresolved-attribute]
             return list(session.exec(statement).all())
 
-    def get(self, token_id: UUID) -> PersonalAccessToken | None:
+    def get(self, token_id: UUID) -> PersonalAccessToken:
         """Get a token row by ID.
 
         Args:
             token_id: Token UUID.
 
         Returns:
-            The row or ``None``.
+            The token row.
+
+        Raises:
+            NotFoundError: If no token carries that id.
         """
         with session_scope(self._engine) as session:
-            return session.get(PersonalAccessToken, token_id)
+            db_token = session.get(PersonalAccessToken, token_id)
+            if not db_token:
+                raise NotFoundError(f"Token {token_id} not found")
+            return db_token
 
     def revoke(self, token_id: UUID) -> PersonalAccessToken:
         """Revoke a token (soft delete — the row stays for audit).
