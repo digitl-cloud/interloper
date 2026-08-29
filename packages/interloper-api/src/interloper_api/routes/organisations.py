@@ -131,10 +131,10 @@ def create_organisation(
     Returns:
         The created organisation.
     """
-    org = store.create_organisation(name=body.name, creator_id=user.id)
+    org = store.auth.create_organisation(name=body.name, creator_id=user.id)
 
     if session_token:
-        store.set_session_org(session_token, org.id, user_id=user.id)
+        store.auth.set_session_org(session_token, org.id, user_id=user.id)
 
     return OrganisationResponse.model_validate(org, from_attributes=True)
 
@@ -153,7 +153,7 @@ def list_organisations(
     Returns:
         Every organisation the caller is a member of.
     """
-    orgs = store.list_user_organisations(user.id)
+    orgs = store.auth.list_user_organisations(user.id)
     return [OrganisationResponse.model_validate(o, from_attributes=True) for o in orgs]
 
 
@@ -176,7 +176,7 @@ def list_members(
     Returns:
         Every member of the organisation with the role they hold in it.
     """
-    members = store.list_org_members(org_id)
+    members = store.auth.list_org_members(org_id)
     return [
         MemberResponse(
             id=profile.id,
@@ -213,7 +213,7 @@ def remove_member(
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
 
-    store.remove_org_member(org_id, user_id)
+    store.auth.remove_org_member(org_id, user_id)
 
     return {"status": "ok"}
 
@@ -237,7 +237,7 @@ def list_invitations(
     Returns:
         The invitations that are still outstanding for the organisation.
     """
-    invitations = store.list_invitations(org_id)
+    invitations = store.auth.list_invitations(org_id)
     return [
         InvitationResponse(
             id=inv.id,
@@ -273,7 +273,7 @@ def invite_member(
     Returns:
         The created invitation.
     """
-    invitation = store.create_invitation(
+    invitation = store.auth.create_invitation(
         org_id=org_id,
         email=body.email.strip(),
         role=body.role,
@@ -282,7 +282,7 @@ def invite_member(
 
     smtp_config = _get_smtp_config()
     if smtp_config and smtp_config.enabled:
-        org = store.get_organisation(org_id)
+        org = store.auth.get_organisation(org_id)
         org_name = org.name if org else "Unknown"
         inviter_name = user.name or user.email
         _send_invitation_email(request, smtp_config, invitation, org_name, inviter_name)
@@ -321,10 +321,10 @@ def cancel_invitation(
             another organisation.
     """
     # The org-scoping guard: the id must belong to this organisation.
-    invitations = store.list_invitations(org_id)
+    invitations = store.auth.list_invitations(org_id)
     if not any(inv.id == invitation_id for inv in invitations):
         raise HTTPException(status_code=404, detail="Invitation not found")
-    store.delete_invitation(invitation_id)
+    store.auth.delete_invitation(invitation_id)
 
     return {"status": "ok"}
 
@@ -356,13 +356,13 @@ def resend_invitation(
         HTTPException: 404 when the invitation does not exist or belongs to
             another organisation.
     """
-    invitations = store.list_invitations(org_id)
+    invitations = store.auth.list_invitations(org_id)
     target = next((inv for inv in invitations if inv.id == invitation_id), None)
     if not target:
         raise HTTPException(status_code=404, detail="Invitation not found")
 
-    store.delete_invitation(invitation_id)
-    new_invitation = store.create_invitation(
+    store.auth.delete_invitation(invitation_id)
+    new_invitation = store.auth.create_invitation(
         org_id=org_id,
         email=target.email,
         role=target.role,
@@ -371,7 +371,7 @@ def resend_invitation(
 
     smtp_config = _get_smtp_config()
     if smtp_config and smtp_config.enabled:
-        org = store.get_organisation(org_id)
+        org = store.auth.get_organisation(org_id)
         org_name = org.name if org else "Unknown"
         inviter_name = user.name or user.email
         _send_invitation_email(request, smtp_config, new_invitation, org_name, inviter_name)

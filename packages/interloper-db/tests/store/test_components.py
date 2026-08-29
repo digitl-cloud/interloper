@@ -39,44 +39,44 @@ class TestCrud:
 
     def test_secret_kinds_encrypt_config_into_data(self, component_db: Engine):
         store = Store(catalog=il.Catalog(components={}), encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
-        row = store.create_component(_ORG, kind="connection", key="conn", name="C", config={"token": "s3cret"})
+        row = store.components.create(_ORG, kind="connection", key="conn", name="C", config={"token": "s3cret"})
         assert row.config is None
         assert row.encrypted is True
-        assert store.decode_config(row) == {"token": "s3cret"}
+        assert store.components.decode_config(row) == {"token": "s3cret"}
 
     def test_secret_kinds_fail_closed_without_cipher(self, store: Store):
         with pytest.raises(ConfigError):
-            store.create_component(_ORG, kind="connection", key="conn", config={"token": "s3cret"})
+            store.components.create(_ORG, kind="connection", key="conn", config={"token": "s3cret"})
 
     def test_children_rejected_for_childless_kinds(self, store: Store):
         with pytest.raises(ConfigError):
-            store.create_component(_ORG, kind="destination", key="dest", children=["a"])
+            store.components.create(_ORG, kind="destination", key="dest", children=["a"])
 
     def test_unknown_child_keys_rejected(self, component_db: Engine):
         from interloper_assets.demo.source import DemoSource
 
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         with pytest.raises(ConfigError, match=r"declares no asset\(s\) \['typo'\]"):
-            store.create_component(_ORG, kind="source", key="demo_source", children=["a", "typo"])
+            store.components.create(_ORG, kind="source", key="demo_source", children=["a", "typo"])
 
     def test_delete_refuses_source_owned_assets(self, store: Store, component_db: Engine):
-        job = store.create_component(_ORG, kind="job", key="cron_job")  # any parentable stand-in row
+        job = store.components.create(_ORG, kind="job", key="cron_job")  # any parentable stand-in row
         with Session(component_db) as session:
             child = Component(org_id=_ORG, kind="asset", key="a", parent_id=job.id)
             session.add(child)
             session.commit()
             child_id = child.id
         with pytest.raises(ValueError):
-            store.delete_component(child_id)
+            store.components.delete(child_id)
 
     def test_delete_source_removes_child_rows(self, component_db: Engine):
         from interloper_assets.demo.source import DemoSource
 
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        source = store.create_component(_ORG, kind="source", key="demo_source")
+        source = store.components.create(_ORG, kind="source", key="demo_source")
         assert source.children
 
-        store.delete_component(source.id)
+        store.components.delete(source.id)
 
         # The DB cascade must delete the children — a regression here leaves
         # them behind as orphaned parentless asset rows instead.
@@ -84,97 +84,101 @@ class TestCrud:
             assert session.exec(select(Component).where(Component.kind == "asset")).all() == []
 
     def test_delete_cascades_outbound_relations(self, store: Store):
-        job = store.create_component(_ORG, kind="job", key="cron_job", name="J")
-        asset = store.create_component(_ORG, kind="asset", key="a")
-        store.add_relation(job.id, type="target", dst_id=asset.id)
+        job = store.components.create(_ORG, kind="job", key="cron_job", name="J")
+        asset = store.components.create(_ORG, kind="asset", key="a")
+        store.relations.add(job.id, type="target", dst_id=asset.id)
 
-        store.delete_component(job.id)
-        assert store.list_relations(_ORG) == []
+        store.components.delete(job.id)
+        assert store.relations.list_all(_ORG) == []
 
     def test_list_filters_org_and_kinds(self, store: Store):
-        store.create_component(_ORG, kind="destination", key="mine")
-        store.create_component(_ORG, kind="asset", key="other_kind")
-        store.create_component(uuid4(), kind="destination", key="other_org")
+        store.components.create(_ORG, kind="destination", key="mine")
+        store.components.create(_ORG, kind="asset", key="other_kind")
+        store.components.create(uuid4(), kind="destination", key="other_org")
 
-        rows = store.list_components(_ORG, kinds=["destination"])
+        rows = store.components.list_all(_ORG, kinds=["destination"])
         assert [row.key for row in rows] == ["mine"]
-        assert {row.key for row in store.list_components(_ORG)} == {"mine", "other_kind"}
+        assert {row.key for row in store.components.list_all(_ORG)} == {"mine", "other_kind"}
 
     def test_get_component_checks_kind(self, store: Store):
-        dest = store.create_component(_ORG, kind="destination", key="dest")
-        assert store.get_component(dest.id, kind="destination").id == dest.id
+        dest = store.components.create(_ORG, kind="destination", key="dest")
+        assert store.components.get(dest.id, kind="destination").id == dest.id
         with pytest.raises(NotFoundError):
-            store.get_component(dest.id, kind="asset")
+            store.components.get(dest.id, kind="asset")
 
 
 class TestDeleteInUseGuard:
     """A relation destination cannot be deleted while external referrers exist."""
 
     def _connection(self, store: Store) -> Component:
-        return store.create_component(_ORG, kind="connection", key="conn", name="Conn", config={}, encrypted=False)
+        return store.components.create(_ORG, kind="connection", key="conn", name="Conn", config={}, encrypted=False)
 
     def test_bound_connection_blocks_delete_and_names_referrer(self, store: Store):
         conn = self._connection(store)
-        asset = store.create_component(_ORG, kind="asset", key="a", name="A", relations={"resource": [(conn.id, "c")]})
+        asset = store.components.create(_ORG, kind="asset", key="a", name="A", relations={"resource": [(conn.id, "c")]})
 
         with pytest.raises(InUseError) as excinfo:
-            store.delete_component(conn.id)
+            store.components.delete(conn.id)
         assert excinfo.value.referrers == [{"id": str(asset.id), "kind": "asset", "key": "a", "name": "A"}]
         assert "in use by A" in str(excinfo.value)
 
     def test_delete_succeeds_after_unbinding(self, store: Store):
         conn = self._connection(store)
-        asset = store.create_component(_ORG, kind="asset", key="a", relations={"resource": [(conn.id, "c")]})
+        asset = store.components.create(_ORG, kind="asset", key="a", relations={"resource": [(conn.id, "c")]})
 
-        store.remove_relation(asset.id, type="resource", dst_id=conn.id)
-        store.delete_component(conn.id)
+        store.relations.remove(asset.id, type="resource", dst_id=conn.id)
+        store.components.delete(conn.id)
         with pytest.raises(NotFoundError):
-            store.get_component(conn.id)
+            store.components.get(conn.id)
 
     def test_job_target_detaches(self, store: Store):
-        asset = store.create_component(_ORG, kind="asset", key="a")
-        job = store.create_component(_ORG, kind="job", key="cron_job", name="J", relations={"target": [(asset.id, "")]})
+        asset = store.components.create(_ORG, kind="asset", key="a")
+        job = store.components.create(
+            _ORG, kind="job", key="cron_job", name="J", relations={"target": [(asset.id, "")]}
+        )
 
-        store.delete_component(asset.id)
-        assert store.get_component(job.id).id == job.id
-        assert store.list_relations(_ORG) == []
+        store.components.delete(asset.id)
+        assert store.components.get(job.id).id == job.id
+        assert store.relations.list_all(_ORG) == []
 
     def test_hook_watch_detaches(self, store: Store):
-        asset = store.create_component(_ORG, kind="asset", key="a")
-        hook = store.create_component(_ORG, kind="hook", key="webhook", name="H", relations={"watch": [(asset.id, "")]})
+        asset = store.components.create(_ORG, kind="asset", key="a")
+        hook = store.components.create(
+            _ORG, kind="hook", key="webhook", name="H", relations={"watch": [(asset.id, "")]}
+        )
 
-        store.delete_component(asset.id)
-        assert store.get_component(hook.id).id == hook.id
-        assert store.list_relations(_ORG) == []
+        store.components.delete(asset.id)
+        assert store.components.get(hook.id).id == hook.id
+        assert store.relations.list_all(_ORG) == []
 
     def test_blocking_relation_wins_over_detaching(self, store: Store):
         conn = self._connection(store)
-        asset = store.create_component(_ORG, kind="asset", key="a", name="A", relations={"resource": [(conn.id, "c")]})
-        store.create_component(_ORG, kind="job", key="cron_job", relations={"target": [(asset.id, "")]})
+        asset = store.components.create(_ORG, kind="asset", key="a", name="A", relations={"resource": [(conn.id, "c")]})
+        store.components.create(_ORG, kind="job", key="cron_job", relations={"target": [(asset.id, "")]})
 
         # The asset both consumes the connection (blocks its deletion) and is
         # a job target (detachable) — deleting the asset succeeds, deleting
         # the connection does not.
         with pytest.raises(InUseError):
-            store.delete_component(conn.id)
-        store.delete_component(asset.id)
+            store.components.delete(conn.id)
+        store.components.delete(asset.id)
 
     def test_referrer_through_child_reports_parent(self, store: Store, component_db: Engine):
         conn = self._connection(store)
-        parent = store.create_component(_ORG, kind="job", key="cron_job", name="P")  # parentable stand-in
+        parent = store.components.create(_ORG, kind="job", key="cron_job", name="P")  # parentable stand-in
         with Session(component_db) as session:
             child = Component(org_id=_ORG, kind="asset", key="a", parent_id=parent.id)
             session.add(child)
             session.commit()
             child_id = child.id
-        store.add_relation(child_id, type="resource", dst_id=conn.id, slot="c")
+        store.relations.add(child_id, type="resource", dst_id=conn.id, slot="c")
 
         with pytest.raises(InUseError) as excinfo:
-            store.delete_component(conn.id)
+            store.components.delete(conn.id)
         assert [r["id"] for r in excinfo.value.referrers] == [str(parent.id)]
 
     def test_intra_subtree_relations_do_not_block(self, store: Store, component_db: Engine):
-        parent = store.create_component(_ORG, kind="job", key="cron_job", name="P")  # parentable stand-in
+        parent = store.components.create(_ORG, kind="job", key="cron_job", name="P")  # parentable stand-in
         with Session(component_db) as session:
             a = Component(org_id=_ORG, kind="asset", key="a", parent_id=parent.id)
             b = Component(org_id=_ORG, kind="asset", key="b", parent_id=parent.id)
@@ -182,11 +186,11 @@ class TestDeleteInUseGuard:
             session.add(b)
             session.commit()
             a_id, b_id = a.id, b.id
-        store.add_relation(b_id, type="dependency", dst_id=a_id, slot="a")
+        store.relations.add(b_id, type="dependency", dst_id=a_id, slot="a")
 
-        store.delete_component(parent.id)
+        store.components.delete(parent.id)
         with pytest.raises(NotFoundError):
-            store.get_component(parent.id)
+            store.components.get(parent.id)
 
 
 class GuardUpstream(il.Asset):
@@ -213,24 +217,24 @@ class TestDependencyDeleteSemantics:
         return Store(catalog=il.Catalog.from_assets([GuardUpstream, GuardRequired, GuardOptional]))
 
     def test_required_dependency_blocks(self, dep_store: Store):
-        up = dep_store.create_component(_ORG, kind="asset", key="guard_upstream", name="Up")
-        down = dep_store.create_component(
+        up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
+        down = dep_store.components.create(
             _ORG, kind="asset", key="guard_required", relations={"dependency": [(up.id, "up")]}
         )
 
         with pytest.raises(InUseError) as excinfo:
-            dep_store.delete_component(up.id)
+            dep_store.components.delete(up.id)
         assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
 
     def test_optional_dependency_detaches(self, dep_store: Store):
-        up = dep_store.create_component(_ORG, kind="asset", key="guard_upstream", name="Up")
-        down = dep_store.create_component(
+        up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
+        down = dep_store.components.create(
             _ORG, kind="asset", key="guard_optional", relations={"dependency": [(up.id, "up")]}
         )
 
-        dep_store.delete_component(up.id)
-        assert dep_store.get_component(down.id).id == down.id
-        assert dep_store.list_relations(_ORG) == []
+        dep_store.components.delete(up.id)
+        assert dep_store.components.get(down.id).id == down.id
+        assert dep_store.relations.list_all(_ORG) == []
 
 
 class WireUpSource(il.Source):
@@ -272,29 +276,29 @@ class TestIntraSourceWiring:
         return Store(catalog=il.Catalog.from_assets([DemoSource]))
 
     def test_full_dag_wired_on_create(self, demo_store: Store):
-        demo_store.create_component(_ORG, kind="source", key="demo_source")
-        edges = demo_store.list_relations(_ORG, type="dependency")
+        demo_store.components.create(_ORG, kind="source", key="demo_source")
+        edges = demo_store.relations.list_all(_ORG, type="dependency")
         assert len(edges) == 6  # b,c,d -> a and e -> b,c,d
 
     def test_children_enabled_later_get_inbound_edges(self, demo_store: Store):
-        source = demo_store.create_component(_ORG, kind="source", key="demo_source", children=["b", "e"])
-        assert [r.slot for r in demo_store.list_relations(_ORG, type="dependency")] == ["b"]  # only e -> b
+        source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
+        assert [r.slot for r in demo_store.relations.list_all(_ORG, type="dependency")] == ["b"]  # only e -> b
 
-        updated = demo_store.update_component(source.id, children=["a", "b", "e"])
-        edges = demo_store.list_relations(_ORG, type="dependency")
+        updated = demo_store.components.update(source.id, children=["a", "b", "e"])
+        edges = demo_store.relations.list_all(_ORG, type="dependency")
         by_slot = {r.slot: (r.src_id, r.dst_id) for r in edges}
         assert set(by_slot) == {"a", "b"}
         assert by_slot["a"] == (_child(updated, "b").id, _child(updated, "a").id)
 
     def test_wiring_is_idempotent(self, demo_store: Store):
-        source = demo_store.create_component(_ORG, kind="source", key="demo_source")
-        demo_store.update_component(source.id, name="renamed")
-        demo_store.update_component(source.id, children=["a", "b", "c", "d", "e"])
-        assert len(demo_store.list_relations(_ORG, type="dependency")) == 6
+        source = demo_store.components.create(_ORG, kind="source", key="demo_source")
+        demo_store.components.update(source.id, name="renamed")
+        demo_store.components.update(source.id, children=["a", "b", "c", "d", "e"])
+        assert len(demo_store.relations.list_all(_ORG, type="dependency")) == 6
 
     def test_update_without_children_leaves_child_set_untouched(self, demo_store: Store):
-        source = demo_store.create_component(_ORG, kind="source", key="demo_source", children=["b", "e"])
-        updated = demo_store.update_component(source.id, name="renamed")
+        source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
+        updated = demo_store.components.update(source.id, name="renamed")
         assert {child.key for child in updated.children} == {"b", "e"}
 
 
@@ -306,36 +310,36 @@ class TestChildRemovalGuard:
         return Store(catalog=il.Catalog.from_assets([WireUpSource, WireDownSource, WireDownOptionalSource]))
 
     def test_removing_child_with_required_external_dep_blocked(self, wire_store: Store):
-        up = wire_store.create_component(_ORG, kind="source", key="wire_up_source", name="Up")
-        down = wire_store.create_component(_ORG, kind="source", key="wire_down_source", name="Down")
-        wire_store.add_relation(
+        up = wire_store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
+        down = wire_store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
+        wire_store.relations.add(
             _child(down, "consumer").id, type="dependency", dst_id=_child(up, "rows").id, slot="rows"
         )
 
         with pytest.raises(InUseError) as excinfo:
-            wire_store.update_component(up.id, children=[])
+            wire_store.components.update(up.id, children=[])
         assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
-        assert wire_store.list_relations(_ORG, type="dependency") != []
+        assert wire_store.relations.list_all(_ORG, type="dependency") != []
 
     def test_removing_child_with_optional_external_dep_detaches(self, wire_store: Store):
-        up = wire_store.create_component(_ORG, kind="source", key="wire_up_source")
-        down = wire_store.create_component(_ORG, kind="source", key="wire_down_optional_source")
-        wire_store.add_relation(
+        up = wire_store.components.create(_ORG, kind="source", key="wire_up_source")
+        down = wire_store.components.create(_ORG, kind="source", key="wire_down_optional_source")
+        wire_store.relations.add(
             _child(down, "reader").id, type="dependency", dst_id=_child(up, "rows").id, slot="rows"
         )
 
-        updated = wire_store.update_component(up.id, children=[])
+        updated = wire_store.components.update(up.id, children=[])
         assert updated.children == []
-        assert wire_store.list_relations(_ORG, type="dependency") == []
+        assert wire_store.relations.list_all(_ORG, type="dependency") == []
 
     def test_intra_source_reshape_not_blocked(self, component_db: Engine):
         from interloper_assets.demo.source import DemoSource
 
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        source = store.create_component(_ORG, kind="source", key="demo_source")
-        updated = store.update_component(source.id, children=["a"])
+        source = store.components.create(_ORG, kind="source", key="demo_source")
+        updated = store.components.update(source.id, children=["a"])
         assert [child.key for child in updated.children] == ["a"]
-        assert store.list_relations(_ORG, type="dependency") == []
+        assert store.relations.list_all(_ORG, type="dependency") == []
 
 
 class DiscriminatedSource(il.Source):
@@ -357,42 +361,42 @@ class TestSourceCollisionGuard:
         return Store(catalog=il.Catalog.from_assets([DemoSource, DiscriminatedSource]))
 
     def test_same_alias_rejected(self, guard_store: Store):
-        guard_store.create_component(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
+        guard_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
         with pytest.raises(ConfigError, match="materializing to"):
-            guard_store.create_component(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
+            guard_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
 
     def test_distinct_alias_allowed(self, guard_store: Store):
-        guard_store.create_component(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
-        second = guard_store.create_component(
+        guard_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
+        second = guard_store.components.create(
             _ORG, kind="source", key="discriminated_source", config={"account_id": "2"}
         )
         assert second.id is not None
 
     def test_alias_compared_after_sanitization(self, guard_store: Store):
-        guard_store.create_component(_ORG, kind="source", key="discriminated_source", config={"account_id": "act-1"})
+        guard_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "act-1"})
         with pytest.raises(ConfigError, match="materializing to"):
-            guard_store.create_component(
+            guard_store.components.create(
                 _ORG, kind="source", key="discriminated_source", config={"account_id": "ACT_1"}
             )
 
     def test_undiscriminated_source_needs_distinct_dataset(self, guard_store: Store):
-        guard_store.create_component(_ORG, kind="source", key="demo_source")
+        guard_store.components.create(_ORG, kind="source", key="demo_source")
         with pytest.raises(ConfigError, match="materializing to"):
-            guard_store.create_component(_ORG, kind="source", key="demo_source")
-        second = guard_store.create_component(_ORG, kind="source", key="demo_source", config={"dataset": "other"})
+            guard_store.components.create(_ORG, kind="source", key="demo_source")
+        second = guard_store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "other"})
         assert second.id is not None
 
     def test_update_into_collision_rejected(self, guard_store: Store):
-        guard_store.create_component(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
-        second = guard_store.create_component(
+        guard_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
+        second = guard_store.components.create(
             _ORG, kind="source", key="discriminated_source", config={"account_id": "2"}
         )
         with pytest.raises(ConfigError, match="materializing to"):
-            guard_store.update_component(second.id, config={"account_id": "1"})
+            guard_store.components.update(second.id, config={"account_id": "1"})
 
     def test_other_org_does_not_collide(self, guard_store: Store):
-        guard_store.create_component(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
-        other = guard_store.create_component(
+        guard_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
+        other = guard_store.components.create(
             uuid4(), kind="source", key="discriminated_source", config={"account_id": "1"}
         )
         assert other.id is not None
@@ -406,37 +410,35 @@ class TestDerivedNames:
         return Store(catalog=il.Catalog.from_assets([DiscriminatedSource]))
 
     def test_blank_name_defaults_to_instance_name(self, name_store: Store):
-        row = name_store.create_component(
+        row = name_store.components.create(
             _ORG, kind="source", key="discriminated_source", config={"account_id": "1"}
         )
         assert row.name == "1"
 
     def test_explicit_name_wins(self, name_store: Store):
-        row = name_store.create_component(
+        row = name_store.components.create(
             _ORG, kind="source", key="discriminated_source", name="Mine", config={"account_id": "1"}
         )
         assert row.name == "Mine"
 
     def test_default_name_follows_config_change(self, name_store: Store):
-        row = name_store.create_component(
+        row = name_store.components.create(
             _ORG, kind="source", key="discriminated_source", config={"account_id": "1"}
         )
-        updated = name_store.update_component(row.id, config={"account_id": "2"})
+        updated = name_store.components.update(row.id, config={"account_id": "2"})
         assert updated.name == "2"
 
     def test_customized_name_untouched_by_config_change(self, name_store: Store):
-        row = name_store.create_component(
+        row = name_store.components.create(
             _ORG, kind="source", key="discriminated_source", config={"account_id": "1"}
         )
-        name_store.update_component(row.id, name="Mine")
-        updated = name_store.update_component(row.id, config={"account_id": "2"})
+        name_store.components.update(row.id, name="Mine")
+        updated = name_store.components.update(row.id, config={"account_id": "2"})
         assert updated.name == "Mine"
 
     def test_unresolvable_key_leaves_name_blank(self, store: Store):
-        row = store.create_component(_ORG, kind="destination", key="ghost")
+        row = store.components.create(_ORG, kind="destination", key="ghost")
         assert row.name is None
-
-
 
 
 class TestTelemetry:
@@ -446,9 +448,9 @@ class TestTelemetry:
         from interloper_assets.demo.source import DemoSource
 
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        source = store.create_component(_ORG, kind="source", key="demo_source")
+        source = store.components.create(_ORG, kind="source", key="demo_source")
 
-        store.load(source.id)
+        store.components.load(source.id)
 
         spans = [s for s in span_exporter.get_finished_spans() if s.name == "interloper.store.load"]
         assert len(spans) == 1
@@ -470,9 +472,9 @@ class TestQuotaGates:
         from interloper.errors import QuotaExceededError
 
         store = self._store(max_sources=1)
-        store.create_component(_ORG, kind="source", key="demo_source", children=["a"])
+        store.components.create(_ORG, kind="source", key="demo_source", children=["a"])
         with pytest.raises(QuotaExceededError) as excinfo:
-            store.create_component(_ORG, kind="source", key="demo_source", children=["a"])
+            store.components.create(_ORG, kind="source", key="demo_source", children=["a"])
         assert excinfo.value.quota == "max_sources"
         assert (excinfo.value.limit, excinfo.value.used) == (1, 1)
 
@@ -485,26 +487,26 @@ class TestQuotaGates:
         with Session(component_db) as session:
             session.add(Quota(org_id=_ORG, key="max_sources", limit=2))
             session.commit()
-        store.create_component(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "one"})
-        store.create_component(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "two"})
+        store.components.create(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "one"})
+        store.components.create(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "two"})
         with pytest.raises(QuotaExceededError):
-            store.create_component(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "3"})
+            store.components.create(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "3"})
 
     def test_asset_limit_blocks_large_child_set(self, component_db: Engine):
         from interloper.errors import QuotaExceededError
 
         store = self._store(max_assets_per_source=2)
-        source = store.create_component(_ORG, kind="source", key="demo_source", children=["a", "b"])
+        source = store.components.create(_ORG, kind="source", key="demo_source", children=["a", "b"])
         with pytest.raises(QuotaExceededError) as excinfo:
-            store.update_component(source.id, children=["a", "b", "c"])
+            store.components.update(source.id, children=["a", "b", "c"])
         assert excinfo.value.quota == "max_assets_per_source"
         # Creation with the full catalog set (children=None -> 5 assets) is also gated.
         with pytest.raises(QuotaExceededError):
-            store.create_component(_ORG, kind="source", key="demo_source", config={"dataset": "full"})
+            store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "full"})
         # Shrinking or staying within the limit is fine.
-        assert {c.key for c in store.update_component(source.id, children=["a"]).children} == {"a"}
+        assert {c.key for c in store.components.update(source.id, children=["a"]).children} == {"a"}
 
     def test_unconfigured_quotas_gate_nothing(self, component_db: Engine):
         store = self._store()
         for dataset in ("one", "two", "three"):
-            store.create_component(_ORG, kind="source", key="demo_source", config={"dataset": dataset})
+            store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": dataset})

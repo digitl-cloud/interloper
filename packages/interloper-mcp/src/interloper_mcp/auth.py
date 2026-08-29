@@ -39,7 +39,7 @@ class PatVerifier(TokenVerifier):
             token: The bearer token exactly as presented by the client.
         """
         # The store is synchronous — keep the event loop free.
-        result = await anyio.to_thread.run_sync(self._store.resolve_token, token)
+        result = await anyio.to_thread.run_sync(self._store.tokens.resolve, token)
         if result is None:
             return None
 

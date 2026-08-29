@@ -38,11 +38,11 @@ class TestSourceRoundTrip:
     """Sources with child assets, intra-source deps, and overrides."""
 
     def test_create_source_creates_children_and_intra_deps(self, store: Store):
-        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         assert db_source.kind == "source"
         assert sorted(child.key for child in db_source.children) == ["a", "b", "c", "d", "e"]
 
-        deps = store.list_relations(_ORG, type="dependency")
+        deps = store.relations.list_all(_ORG, type="dependency")
         by_child = {}
         children_by_id = {child.id: child.key for child in db_source.children}
         for rel in deps:
@@ -55,10 +55,10 @@ class TestSourceRoundTrip:
         }
 
     def test_load_hydrates_with_stable_ids_and_deps(self, store: Store):
-        db_source = store.create_component(
+        db_source = store.components.create(
             _ORG, kind="source", key="demo_source", name="Demo", config={"hello": "there"}
         )
-        source = store.load(db_source.id)
+        source = store.components.load(db_source.id)
 
         assert isinstance(source, DemoSource)
         assert source.id == str(db_source.id)
@@ -74,23 +74,23 @@ class TestSourceRoundTrip:
         }
 
     def test_source_owned_asset_loads_through_its_parent(self, store: Store):
-        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         child = next(child for child in db_source.children if child.key == "a")
-        store.update_component(child.id, config={"materializable": False})
+        store.components.update(child.id, config={"materializable": False})
 
-        asset = store.load(child.id)
+        asset = store.components.load(child.id)
         assert isinstance(asset, il.Asset)
         assert type(asset).key == "a"
         assert asset.materializable is False
 
     def test_children_selection_drops_rows_and_relations(self, store: Store):
-        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        store.update_component(db_source.id, children=["a", "b"])
+        db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.update(db_source.id, children=["a", "b"])
 
-        refreshed = store.get_component(db_source.id, kind="source")
+        refreshed = store.components.get(db_source.id, kind="source")
         assert sorted(child.key for child in refreshed.children) == ["a", "b"]
         # e (and its dependency relations) are gone; b keeps its dep on a.
-        remaining = store.list_relations(_ORG, type="dependency")
+        remaining = store.relations.list_all(_ORG, type="dependency")
         assert [rel.slot for rel in remaining] == ["a"]
 
 
@@ -98,8 +98,8 @@ class TestStandaloneAsset:
     """Standalone assets hydrate directly through the generic builder."""
 
     def test_create_and_load(self, store: Store):
-        db_asset = store.create_component(_ORG, kind="asset", key="demo_asset", config={"materializable": False})
-        asset = store.load(db_asset.id)
+        db_asset = store.components.create(_ORG, kind="asset", key="demo_asset", config={"materializable": False})
+        asset = store.components.load(db_asset.id)
         assert isinstance(asset, il.Asset)
         assert type(asset).key == "demo_asset"
         assert asset.id == str(db_asset.id)
@@ -110,8 +110,8 @@ class TestJobRoundTrip:
     """Jobs persist as components with target relations and hydrate to core Jobs."""
 
     def test_create_and_read_back(self, store: Store):
-        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        db_job = store.create_component(
+        db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        db_job = store.components.create(
             _ORG,
             kind="job",
             key="cron_job",
@@ -124,12 +124,12 @@ class TestJobRoundTrip:
         assert db_job.state is None
         assert [rel.dst_id for rel in db_job.out_relations] == [db_source.id]
 
-        assert [job.id for job in store.list_components(_ORG, kinds=["job"])] == [db_job.id]
+        assert [job.id for job in store.components.list_all(_ORG, kinds=["job"])] == [db_job.id]
 
     def test_load_hydrates_targets(self, store: Store):
-        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        db_asset = store.create_component(_ORG, kind="asset", key="demo_asset")
-        db_job = store.create_component(
+        db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        db_asset = store.components.create(_ORG, kind="asset", key="demo_asset")
+        db_job = store.components.create(
             _ORG,
             kind="job",
             key="cron_job",
@@ -138,14 +138,14 @@ class TestJobRoundTrip:
             relations={"target": [(db_source.id, ""), (db_asset.id, "")]},
         )
 
-        job = store.load(db_job.id)
+        job = store.components.load(db_job.id)
         assert isinstance(job, il.CronJob)
         assert job.cron == "0 6 * * *"
         assert {type(target).key for target in job.targets} == {"demo_source", "demo_asset"}
         assert {type(asset).key for asset in il.DAG(*job.targets).assets} == {"a", "b", "c", "d", "e", "demo_asset"}
 
     def test_update_preserves_state(self, store: Store):
-        db_job = store.create_component(_ORG, kind="job", key="cron_job", name="Job", config={"cron": "0 6 * * *"})
+        db_job = store.components.create(_ORG, kind="job", key="cron_job", name="Job", config={"cron": "0 6 * * *"})
 
         # Simulate the scheduler's targeted state write.
         from sqlmodel import Session
@@ -160,7 +160,7 @@ class TestJobRoundTrip:
             session.add(row)
             session.commit()
 
-        updated = store.update_component(db_job.id, name="Renamed", config={"cron": "0 7 * * *"})
+        updated = store.components.update(db_job.id, name="Renamed", config={"cron": "0 7 * * *"})
         assert updated.name == "Renamed"
         assert updated.state == {"next_run_at": "2026-07-07T06:00:00+00:00"}
 
@@ -183,12 +183,12 @@ class TestOpenVocabulary:
     def test_custom_relation_type_round_trips(self, store: Store):
         store._catalog.components["fake_linker"] = FakeLinker.definition()
 
-        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        db_linker = store.create_component(
+        db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        db_linker = store.components.create(
             _ORG, kind="fake_linker", key="fake_linker", name="L", relations={"link": [(db_source.id, "")]}
         )
 
-        linker = store.load(db_linker.id)
+        linker = store.components.load(db_linker.id)
         assert isinstance(linker, FakeLinker)
         assert [type(linked).key for linked in linker.links] == ["demo_source"]
         assert linker.links[0].id == str(db_source.id)
@@ -198,7 +198,7 @@ class TestHydrationErrorSanitisation:
     """Reconstruction failures never echo the (decrypted) payload into the message."""
 
     def test_load_failure_message_omits_input_values(self, store: Store, monkeypatch: pytest.MonkeyPatch):
-        db_source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
 
         class Probe(pydantic.BaseModel):
             app_secret: str
@@ -208,7 +208,7 @@ class TestHydrationErrorSanitisation:
 
         monkeypatch.setattr(il.Component, "from_spec", raise_validation_error)
         with pytest.raises(HydrationError) as exc_info:
-            store.load(db_source.id)
+            store.components.load(db_source.id)
 
         message = str(exc_info.value)
         assert "Failed to hydrate source 'demo_source'" in message

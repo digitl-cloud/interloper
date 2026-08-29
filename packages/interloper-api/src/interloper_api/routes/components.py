@@ -163,13 +163,13 @@ class ComponentResponse(BaseModel):
         """
         if row.kind == "asset":
             source_key = parent_key if parent_key is not None else (row.parent.key if row.parent else None)
-            status = store.asset_status(row.key, source_key=source_key)
+            status = store.drift.asset_status(row.key, source_key=source_key)
         else:
-            status = store.source_status(row.key)
+            status = store.drift.source_status(row.key)
 
         config: dict[str, Any] | None = row.config
         if KINDS[row.kind].sensitive:
-            config = store.decode_config(row) if include_config else None
+            config = store.components.decode_config(row) if include_config else None
 
         return cls(
             id=row.id,
@@ -267,7 +267,7 @@ def list_components(
     Returns:
         The organisation's components, secret configs withheld.
     """
-    rows = store.list_components(org_id, kinds=kind)
+    rows = store.components.list_all(org_id, kinds=kind)
     return [ComponentResponse.from_row(row, store, include_config=False) for row in rows]
 
 
@@ -297,7 +297,7 @@ def list_relations(
             slot=relation.slot,
             dst_kind=relation.dst_kind,
         )
-        for relation in store.list_relations(org_id, type=type)
+        for relation in store.relations.list_all(org_id, type=type)
     ]
 
 
@@ -325,7 +325,7 @@ def create_component(
             404 when a relation points at a component that does not exist.
     """
     try:
-        row = store.create_component(
+        row = store.components.create(
             org_id,
             kind=body.kind,
             key=body.key,
@@ -358,7 +358,7 @@ def get_component(
     Returns:
         The component, with its config decoded.
     """
-    row = load_authorized(store.get_component, component_id, user, store, label="Component")
+    row = load_authorized(store.components.get, component_id, user, store, label="Component")
     return ComponentResponse.from_row(row, store, include_config=True)
 
 
@@ -386,9 +386,9 @@ def update_component(
             409 when the update would break a binding another component
             depends on.
     """
-    load_authorized(store.get_component, component_id, user, store, label="Component", minimum="editor")
+    load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
     try:
-        row = store.update_component(
+        row = store.components.update(
             component_id,
             name=body.name,
             config=body.config,
@@ -425,9 +425,9 @@ def delete_component(
         HTTPException: 404 if the component is already gone, 409 while other
             components are bound to it, 400 if the store refuses the delete.
     """
-    load_authorized(store.get_component, component_id, user, store, label="Component", minimum="editor")
+    load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
     try:
-        store.delete_component(component_id)
+        store.components.delete(component_id)
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except InUseError as e:
@@ -462,14 +462,14 @@ def add_relation(
         HTTPException: 404 when the target is missing or belongs to another
             organisation, 400 when the relation is not allowed on this kind.
     """
-    source = load_authorized(store.get_component, component_id, user, store, label="Component", minimum="editor")
+    source = load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
     destination_row = load_authorized(
-        store.get_component, body.dst_id, user, store, label="Component", minimum="editor"
+        store.components.get, body.dst_id, user, store, label="Component", minimum="editor"
     )
     if destination_row.org_id != source.org_id:
         raise HTTPException(status_code=404, detail=f"Component {body.dst_id} not found")
     try:
-        relation = store.add_relation(component_id, type=body.type, dst_id=body.dst_id, slot=body.slot)
+        relation = store.relations.add(component_id, type=body.type, dst_id=body.dst_id, slot=body.slot)
     except ConfigError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except NotFoundError as e:
@@ -505,9 +505,9 @@ def remove_relation(
     Raises:
         HTTPException: 400 for a required dependency slot.
     """
-    load_authorized(store.get_component, component_id, user, store, label="Component", minimum="editor")
+    load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
     try:
-        store.remove_relation(component_id, type=type, dst_id=dst_id)
+        store.relations.remove(component_id, type=type, dst_id=dst_id)
     except ConfigError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -536,9 +536,9 @@ def get_partition_row_counts(
             catalog or holds no data yet, 400 if it is not partitioned or its
             destination cannot count partitions, 500 for anything else.
     """
-    load_authorized(store.get_component, component_id, user, store, label="Component")
+    load_authorized(store.components.get, component_id, user, store, label="Component")
     try:
-        il_asset = store.load(component_id)
+        il_asset = store.components.load(component_id)
     except (NotFoundError, ComponentDriftError) as e:
         raise HTTPException(status_code=404, detail=str(e))
 

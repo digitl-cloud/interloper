@@ -30,7 +30,7 @@ def list_components(
     try:
         if kind is None:
             counts: dict[str, int] = {}
-            for c in ctx.store.list_components(ctx.org_id):
+            for c in ctx.store.components.list_all(ctx.org_id):
                 counts[c.kind] = counts.get(c.kind, 0) + 1
             return ComponentCounts(
                 component_counts=counts,
@@ -40,7 +40,7 @@ def list_components(
             return ToolError(error=f"Unknown kind '{kind}'", valid_kinds=sorted(KINDS.keys()))
 
         results = []
-        for c in ctx.store.list_components(ctx.org_id, kinds=[kind]):
+        for c in ctx.store.components.list_all(ctx.org_id, kinds=[kind]):
             entry = ComponentSummary(
                 id=str(c.id),
                 key=c.key,

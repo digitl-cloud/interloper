@@ -51,7 +51,7 @@ def store() -> Iterator[Store]:
 
 
 def _job(store: Store, *, config: dict[str, Any], state: dict[str, Any] | None = None) -> UUID:
-    row = store.create_component(_ORG, kind="job", key="cron_job", name="J", config=config)
+    row = store.components.create(_ORG, kind="job", key="cron_job", name="J", config=config)
     if state is not None:
         with Session(store.engine) as session:
             db_job = session.get(Component, row.id)
@@ -252,9 +252,9 @@ def _catalog_store() -> Store:
 
 def _job_targeting(store: Store, *source_keys: str, config: dict[str, Any]) -> UUID:
     targets = [
-        store.create_component(_ORG, kind="source", key=key, name=key).id for key in source_keys
+        store.components.create(_ORG, kind="source", key=key, name=key).id for key in source_keys
     ]
-    row = store.create_component(
+    row = store.components.create(
         _ORG,
         kind="job",
         key="cron_job",

@@ -184,15 +184,16 @@ class TestDelete:
             {"id": str(uuid4()), "kind": "source", "key": "facebook_ads", "name": "FB"}
         ]
 
+        def _delete(component_id):
+            raise InUseError("Cannot delete connection 'C': in use by FB", referrers=referrers)
+
         class FakeStore:
-            def get_component(self, component_id):
-                return SimpleNamespace(id=component_id, org_id=org_id)
-
-            def get_user_role(self, user_id, org_id):
-                return "admin"
-
-            def delete_component(self, component_id):
-                raise InUseError("Cannot delete connection 'C': in use by FB", referrers=referrers)
+            def __init__(self):
+                self.auth = SimpleNamespace(get_user_role=lambda user_id, org_id: "admin")
+                self.components = SimpleNamespace(
+                    get=lambda component_id: SimpleNamespace(id=component_id, org_id=org_id),
+                    delete=_delete,
+                )
 
         app = FastAPI()
         app.include_router(components_module.router)

@@ -1,4 +1,4 @@
-"""Tests for the run/backfill lifecycle methods in ``RunMixin`` (``store/runs.py``).
+"""Tests for the run/backfill lifecycle methods in ``RunStore`` (``store/runs.py``).
 
 These run against an in-memory SQLite database (only the runs/backfills
 tables) so status transitions are exercised against real SQL.
@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from typing import Any
 from uuid import UUID, uuid4
 
+import interloper as il
 import pytest
 from interloper.errors import NotFoundError
 from sqlalchemy import event
@@ -19,41 +20,39 @@ from sqlmodel import Session, col, select
 
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Quota, Run, Usage
-from interloper_db.store.runs import RunMixin
+from interloper_db.store import Store
 
 _ORG_ID = uuid4()
 
 
 @pytest.fixture
-def store() -> Iterator[RunMixin]:
-    """A RunMixin wired to a fresh in-memory SQLite database.
+def store() -> Iterator[Store]:
+    """A store wired to a fresh in-memory SQLite database.
 
     Yields:
-        The mixin bound to that database, disposed once the test finishes.
+        The store bound to that database, disposed once the test finishes.
     """
-    eng = engine_module.init_engine(
+    engine = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
 
-    @event.listens_for(eng, "connect")
+    @event.listens_for(engine, "connect")
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Backfill, Run, Quota, Usage):
-        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
-        mixin = RunMixin()
-        mixin._engine = eng
-        yield mixin
+        yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:
-        eng.dispose()
+        engine.dispose()
         engine_module._engine = None
 
 
-def _backfill(store: RunMixin, *, days: int = 4, concurrency: int = 2) -> Backfill:
-    return store.create_backfill(
+def _backfill(store: Store, *, days: int = 4, concurrency: int = 2) -> Backfill:
+    return store.runs.create_backfill(
         _ORG_ID,
         start_key="2026-01-01",
         end_key=f"2026-01-{days:02d}",
@@ -61,13 +60,13 @@ def _backfill(store: RunMixin, *, days: int = 4, concurrency: int = 2) -> Backfi
     )
 
 
-def _mark_dispatched(store: RunMixin, backfill_id: UUID) -> UUID:
+def _mark_dispatched(store: Store, backfill_id: UUID) -> UUID:
     """Flip one queued run to dispatched, simulating a worker claim.
 
     Returns:
         The id of the run that was flipped.
     """
-    with Session(store._engine) as session:
+    with Session(store.engine) as session:
         run = session.exec(select(Run).where(Run.backfill_id == backfill_id, Run.status == "queued")).first()
         assert run is not None and run.id is not None
         run.status = "dispatched"
@@ -76,14 +75,14 @@ def _mark_dispatched(store: RunMixin, backfill_id: UUID) -> UUID:
         return run.id
 
 
-def _run_statuses(store: RunMixin, backfill_id: UUID) -> dict[UUID, str]:
-    with Session(store._engine) as session:
+def _run_statuses(store: Store, backfill_id: UUID) -> dict[UUID, str]:
+    with Session(store.engine) as session:
         runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
         return {run.id: run.status for run in runs if run.id}
 
 
-def _partition_statuses(store: RunMixin, backfill_id: UUID) -> dict[str, str]:
-    with Session(store._engine) as session:
+def _partition_statuses(store: Store, backfill_id: UUID) -> dict[str, str]:
+    with Session(store.engine) as session:
         runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
         return {run.partition_key: run.status for run in runs if run.partition_key}
 
@@ -91,7 +90,7 @@ def _partition_statuses(store: RunMixin, backfill_id: UUID) -> dict[str, str]:
 class TestCreateBackfill:
     """Dispatch order: newest partition first (ITLPR-120)."""
 
-    def test_the_newest_partitions_are_queued_first(self, store: RunMixin):
+    def test_the_newest_partitions_are_queued_first(self, store: Store):
         backfill = _backfill(store, days=4, concurrency=2)
 
         assert _partition_statuses(store, backfill.id) == {
@@ -101,27 +100,27 @@ class TestCreateBackfill:
             "2026-01-04": "queued",
         }
 
-    def test_promotion_walks_backwards(self, store: RunMixin):
+    def test_promotion_walks_backwards(self, store: Store):
         backfill = _backfill(store, days=4, concurrency=1)
         assert _partition_statuses(store, backfill.id)["2026-01-04"] == "queued"
 
         dispatched = _mark_dispatched(store, backfill.id)
-        store.complete_run(dispatched, success=True)
+        store.runs.complete(dispatched, success=True)
 
         statuses = _partition_statuses(store, backfill.id)
         assert statuses["2026-01-04"] == "success"
         assert statuses["2026-01-03"] == "queued"
         assert statuses["2026-01-02"] == "pending"
 
-    def test_concurrency_beyond_the_span_queues_everything(self, store: RunMixin):
+    def test_concurrency_beyond_the_span_queues_everything(self, store: Store):
         backfill = _backfill(store, days=2, concurrency=5)
         assert set(_partition_statuses(store, backfill.id).values()) == {"queued"}
 
-    def test_rows_are_still_created_oldest_first(self, store: RunMixin):
+    def test_rows_are_still_created_oldest_first(self, store: Store):
         # `list_runs` orders by created_at desc, so creation order decides how
         # the runs list reads: newest partition on top.
         backfill = _backfill(store, days=3, concurrency=1)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             runs = session.exec(
                 select(Run).where(Run.backfill_id == backfill.id).order_by(col(Run.created_at))
             ).all()
@@ -131,17 +130,17 @@ class TestCreateBackfill:
             "2026-01-03",
         ]
 
-    def test_inverted_range_is_rejected(self, store: RunMixin):
+    def test_inverted_range_is_rejected(self, store: Store):
         with pytest.raises(ValueError, match="ends before it starts"):
-            store.create_backfill(_ORG_ID, start_key="2026-01-05", end_key="2026-01-01")
+            store.runs.create_backfill(_ORG_ID, start_key="2026-01-05", end_key="2026-01-01")
 
 
 class TestCancelBackfill:
-    def test_cancels_pending_and_queued_runs_only(self, store: RunMixin):
+    def test_cancels_pending_and_queued_runs_only(self, store: Store):
         backfill = _backfill(store)  # 2 queued + 2 pending
         dispatched_id = _mark_dispatched(store, backfill.id)
 
-        canceled = store.cancel_backfill(backfill.id)
+        canceled = store.runs.cancel_backfill(backfill.id)
 
         assert canceled.status == "canceled"
         assert canceled.completed_at is not None
@@ -149,29 +148,29 @@ class TestCancelBackfill:
         assert statuses.pop(dispatched_id) == "dispatched"
         assert set(statuses.values()) == {"canceled"}
 
-    def test_late_completion_does_not_resurrect_canceled_backfill(self, store: RunMixin):
+    def test_late_completion_does_not_resurrect_canceled_backfill(self, store: Store):
         backfill = _backfill(store)
         dispatched_id = _mark_dispatched(store, backfill.id)
-        store.cancel_backfill(backfill.id)
+        store.runs.cancel_backfill(backfill.id)
 
-        completed = store.complete_run(dispatched_id, success=True)
+        completed = store.runs.complete(dispatched_id, success=True)
 
         assert completed.status == "success"
-        assert store.get_backfill(backfill.id).status == "canceled"
+        assert store.runs.get_backfill(backfill.id).status == "canceled"
         # The completion must not promote canceled runs back to queued.
         statuses = _run_statuses(store, backfill.id)
         statuses.pop(dispatched_id)
         assert set(statuses.values()) == {"canceled"}
 
-    def test_cancel_terminal_backfill_raises(self, store: RunMixin):
+    def test_cancel_terminal_backfill_raises(self, store: Store):
         backfill = _backfill(store)
-        store.cancel_backfill(backfill.id)
+        store.runs.cancel_backfill(backfill.id)
         with pytest.raises(ValueError, match="already canceled"):
-            store.cancel_backfill(backfill.id)
+            store.runs.cancel_backfill(backfill.id)
 
-    def test_cancel_missing_backfill_raises(self, store: RunMixin):
+    def test_cancel_missing_backfill_raises(self, store: Store):
         with pytest.raises(NotFoundError):
-            store.cancel_backfill(uuid4())
+            store.runs.cancel_backfill(uuid4())
 
 
 def _H(hours: int) -> dt.timedelta:
@@ -179,7 +178,7 @@ def _H(hours: int) -> dt.timedelta:
 
 
 def _timed_run(
-    store: RunMixin,
+    store: Store,
     *,
     started_at: dt.datetime | None,
     completed_at: dt.datetime | None,
@@ -190,7 +189,7 @@ def _timed_run(
     Returns:
         The id of the inserted run.
     """
-    with Session(store._engine) as session:
+    with Session(store.engine) as session:
         run = Run(
             id=uuid4(),
             org_id=org_id,
@@ -206,45 +205,45 @@ def _timed_run(
 class TestListRunsWindow:
     """`after`/`before` select runs whose execution overlaps the window."""
 
-    def test_overlapping_runs_only(self, store: RunMixin):
+    def test_overlapping_runs_only(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         before_window = _timed_run(store, started_at=base - _H(3), completed_at=base - _H(2))
         straddling_start = _timed_run(store, started_at=base - _H(2), completed_at=base + _H(1))
         inside = _timed_run(store, started_at=base + _H(2), completed_at=base + _H(3))
         after_window = _timed_run(store, started_at=base + _H(6), completed_at=base + _H(7))
 
-        found = store.list_runs(_ORG_ID, after=base, before=base + _H(4), limit=100)
+        found = store.runs.list_all(_ORG_ID, after=base, before=base + _H(4), limit=100)
 
         assert {r.id for r in found} == {straddling_start, inside}
         assert before_window not in {r.id for r in found}
         assert after_window not in {r.id for r in found}
 
-    def test_running_run_is_open_ended(self, store: RunMixin):
+    def test_running_run_is_open_ended(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         running = _timed_run(store, started_at=base - _H(5), completed_at=None)
 
-        found = store.list_runs(_ORG_ID, after=base, before=base + _H(1), limit=100)
+        found = store.runs.list_all(_ORG_ID, after=base, before=base + _H(1), limit=100)
 
         assert [r.id for r in found] == [running]
 
-    def test_never_started_runs_are_excluded(self, store: RunMixin):
+    def test_never_started_runs_are_excluded(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         _timed_run(store, started_at=None, completed_at=None)
 
-        assert store.list_runs(_ORG_ID, after=base, before=base + _H(1), limit=100) == []
-        assert store.list_runs(_ORG_ID, after=base, limit=100) == []
-        assert store.count_runs(_ORG_ID, after=base) == 0
+        assert store.runs.list_all(_ORG_ID, after=base, before=base + _H(1), limit=100) == []
+        assert store.runs.list_all(_ORG_ID, after=base, limit=100) == []
+        assert store.runs.count(_ORG_ID, after=base) == 0
 
-    def test_count_matches_the_same_window(self, store: RunMixin):
+    def test_count_matches_the_same_window(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         _timed_run(store, started_at=base + _H(1), completed_at=base + _H(2))
         _timed_run(store, started_at=base + _H(9), completed_at=base + _H(10))
 
-        assert store.count_runs(_ORG_ID, after=base, before=base + _H(4)) == 1
+        assert store.runs.count(_ORG_ID, after=base, before=base + _H(4)) == 1
 
-    def test_unbounded_listing_keeps_every_run(self, store: RunMixin):
+    def test_unbounded_listing_keeps_every_run(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         _timed_run(store, started_at=base, completed_at=base + _H(1))
         _timed_run(store, started_at=None, completed_at=None)
 
-        assert len(store.list_runs(_ORG_ID, limit=100)) == 2
+        assert len(store.runs.list_all(_ORG_ID, limit=100)) == 2

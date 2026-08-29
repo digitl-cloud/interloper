@@ -181,7 +181,7 @@ async def websocket_endpoint(
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
-    result = store.resolve_session(session_token)
+    result = store.auth.resolve_session(session_token)
     if not result:
         await websocket.close(code=4001, reason="Unauthorized")
         return

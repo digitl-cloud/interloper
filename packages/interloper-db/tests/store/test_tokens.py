@@ -64,8 +64,8 @@ def member(store: Store) -> tuple[Profile, Organisation]:
     Returns:
         The profile and the organisation it was made admin of, in that order.
     """
-    profile = store.upsert_profile(google_id="g-user", email="user@example.com", name="User")
-    org = store.create_organisation(name="Acme", creator_id=profile.id)
+    profile = store.auth.upsert_profile(google_id="g-user", email="user@example.com", name="User")
+    org = store.auth.create_organisation(name="Acme", creator_id=profile.id)
     return profile, org
 
 
@@ -73,7 +73,7 @@ class TestCreateToken:
     def test_create_returns_raw_and_stores_only_hash(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
 
-        row, raw = store.create_token(profile.id, org.id, name="laptop")
+        row, raw = store.tokens.create(profile.id, org.id, name="laptop")
 
         assert raw.startswith("ilp_")
         assert row.token_hash == hashlib.sha256(raw.encode()).hexdigest()
@@ -87,9 +87,9 @@ class TestCreateToken:
 class TestResolveToken:
     def test_resolve_returns_profile_and_live_role(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        _, raw = store.create_token(profile.id, org.id, name="t")
+        _, raw = store.tokens.create(profile.id, org.id, name="t")
 
-        resolved = store.resolve_token(raw)
+        resolved = store.tokens.resolve(raw)
 
         assert resolved is not None
         got_profile, got_token, role = resolved
@@ -99,52 +99,52 @@ class TestResolveToken:
 
     def test_role_change_reflected_on_next_resolve(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        _, raw = store.create_token(profile.id, org.id, name="t")
+        _, raw = store.tokens.create(profile.id, org.id, name="t")
 
-        store.update_member_role(org.id, profile.id, "viewer")
+        store.auth.update_member_role(org.id, profile.id, "viewer")
 
-        resolved = store.resolve_token(raw)
+        resolved = store.tokens.resolve(raw)
         assert resolved is not None
         assert resolved[2] == "viewer"
 
     def test_membership_removal_invalidates_token(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        _, raw = store.create_token(profile.id, org.id, name="t")
+        _, raw = store.tokens.create(profile.id, org.id, name="t")
 
-        store.remove_org_member(org.id, profile.id)
+        store.auth.remove_org_member(org.id, profile.id)
 
-        assert store.resolve_token(raw) is None
+        assert store.tokens.resolve(raw) is None
 
     def test_expired_token_resolves_to_none(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
         past = datetime.now(timezone.utc) - timedelta(seconds=1)
-        _, raw = store.create_token(profile.id, org.id, name="t", expires_at=past)
+        _, raw = store.tokens.create(profile.id, org.id, name="t", expires_at=past)
 
-        assert store.resolve_token(raw) is None
+        assert store.tokens.resolve(raw) is None
 
     def test_revoked_token_resolves_to_none(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        row, raw = store.create_token(profile.id, org.id, name="t")
+        row, raw = store.tokens.create(profile.id, org.id, name="t")
 
-        store.revoke_token(row.id)
+        store.tokens.revoke(row.id)
 
-        assert store.resolve_token(raw) is None
+        assert store.tokens.resolve(raw) is None
 
     def test_unknown_token_resolves_to_none(self, store: Store):
-        assert store.resolve_token("ilp_no-such-token") is None
+        assert store.tokens.resolve("ilp_no-such-token") is None
 
     def test_resolve_bumps_last_used_at_throttled(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        row, raw = store.create_token(profile.id, org.id, name="t")
+        row, raw = store.tokens.create(profile.id, org.id, name="t")
         assert row.last_used_at is None
 
-        first = store.resolve_token(raw)
+        first = store.tokens.resolve(raw)
         assert first is not None
         first_used = first[1].last_used_at
         assert first_used is not None
 
         # A second resolve within the throttle window must not move the stamp.
-        second = store.resolve_token(raw)
+        second = store.tokens.resolve(raw)
         assert second is not None
         assert second[1].last_used_at == first_used
 
@@ -152,23 +152,23 @@ class TestResolveToken:
 class TestListAndRevoke:
     def test_list_tokens_filters_by_org(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        other_org = store.create_organisation(name="Other", creator_id=profile.id)
-        store.create_token(profile.id, org.id, name="a")
-        store.create_token(profile.id, other_org.id, name="b")
+        other_org = store.auth.create_organisation(name="Other", creator_id=profile.id)
+        store.tokens.create(profile.id, org.id, name="a")
+        store.tokens.create(profile.id, other_org.id, name="b")
 
-        assert {t.name for t in store.list_tokens(profile.id)} == {"a", "b"}
-        assert {t.name for t in store.list_tokens(profile.id, org.id)} == {"a"}
+        assert {t.name for t in store.tokens.list_all(profile.id)} == {"a", "b"}
+        assert {t.name for t in store.tokens.list_all(profile.id, org.id)} == {"a"}
 
     def test_revoke_missing_token_raises(self, store: Store):
         with pytest.raises(NotFoundError):
-            store.revoke_token(uuid4())
+            store.tokens.revoke(uuid4())
 
     def test_revoke_is_idempotent(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        row, _ = store.create_token(profile.id, org.id, name="t")
+        row, _ = store.tokens.create(profile.id, org.id, name="t")
 
-        first = store.revoke_token(row.id)
-        second = store.revoke_token(row.id)
+        first = store.tokens.revoke(row.id)
+        second = store.tokens.revoke(row.id)
 
         assert first.revoked_at is not None
         assert second.revoked_at == first.revoked_at

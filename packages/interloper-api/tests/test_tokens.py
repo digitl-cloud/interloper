@@ -38,34 +38,41 @@ def _row(*, user_id: UUID = USER_ID, org_id: UUID = ORG_ID, name: str = "t") -> 
 
 
 class FakeStore:
-    """In-memory stand-in implementing only what the token routes call."""
+    """In-memory stand-in exposing only the store facets the token routes reach for."""
 
     def __init__(self) -> None:
         self.rows: dict[UUID, SimpleNamespace] = {}
         self.roles: dict[tuple[UUID, UUID], str] = {}
+        self.auth = SimpleNamespace(get_user_role=self._get_user_role)
+        self.tokens = SimpleNamespace(
+            create=self._create_token,
+            list_all=self._list_tokens,
+            get=self._get_token,
+            revoke=self._revoke_token,
+        )
 
-    def create_token(self, user_id: UUID, org_id: UUID, name: str, expires_at=None):
+    def _create_token(self, user_id: UUID, org_id: UUID, name: str, expires_at=None):
         row = _row(user_id=user_id, org_id=org_id, name=name)
         row.expires_at = expires_at
         self.rows[row.id] = row
         return row, "ilp_raw-secret-token"
 
-    def list_tokens(self, user_id: UUID, org_id: UUID | None = None):
+    def _list_tokens(self, user_id: UUID, org_id: UUID | None = None):
         return [
             r
             for r in self.rows.values()
             if r.user_id == user_id and (org_id is None or r.organisation_id == org_id)
         ]
 
-    def get_token(self, token_id: UUID):
+    def _get_token(self, token_id: UUID):
         return self.rows.get(token_id)
 
-    def revoke_token(self, token_id: UUID):
+    def _revoke_token(self, token_id: UUID):
         row = self.rows[token_id]
         row.revoked_at = datetime.now(timezone.utc)
         return row
 
-    def get_user_role(self, user_id: UUID, org_id: UUID):
+    def _get_user_role(self, user_id: UUID, org_id: UUID):
         return self.roles.get((user_id, org_id))
 
 

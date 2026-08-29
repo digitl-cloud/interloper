@@ -13,11 +13,12 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from interloper.errors import NotFoundError
+from sqlalchemy import Engine
 from sqlmodel import select
 
 from interloper_db.models import PersonalAccessToken, Profile
 from interloper_db.store.auth import _as_utc, _get_membership, _hash_token
-from interloper_db.store.base import StoreBase
+from interloper_db.store.session import commit, session_scope
 
 TOKEN_PREFIX = "ilp_"
 
@@ -28,7 +29,7 @@ TOKEN_PREFIX_LEN = 12
 LAST_USED_THROTTLE_SECONDS = 60
 
 
-class TokenMixin(StoreBase):
+class TokenStore:
     """Store methods for personal access tokens.
 
     Error contract (same as the other mixins): lookups return ``None`` when
@@ -36,7 +37,15 @@ class TokenMixin(StoreBase):
     target.
     """
 
-    def create_token(
+    def __init__(self, engine: Engine) -> None:
+        """Bind the facet to what it works through.
+
+        Args:
+            engine: Engine the facet opens its sessions on.
+        """
+        self._engine = engine
+
+    def create(
         self,
         user_id: UUID,
         organisation_id: UUID,
@@ -57,7 +66,7 @@ class TokenMixin(StoreBase):
         """
         raw = TOKEN_PREFIX + secrets.token_urlsafe(36)
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_token = PersonalAccessToken(
                 user_id=user_id,
                 organisation_id=organisation_id,
@@ -67,11 +76,11 @@ class TokenMixin(StoreBase):
                 expires_at=expires_at,
             )
             session.add(db_token)
-            session.commit()
+            commit(session)
             session.refresh(db_token)
             return db_token, raw
 
-    def resolve_token(self, raw: str) -> tuple[Profile, PersonalAccessToken, str] | None:
+    def resolve(self, raw: str) -> tuple[Profile, PersonalAccessToken, str] | None:
         """Resolve a raw token to its holder, row, and live org role.
 
         Args:
@@ -86,7 +95,7 @@ class TokenMixin(StoreBase):
         token_hash = _hash_token(raw)
         now = datetime.now(timezone.utc)
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_token = session.exec(
                 select(PersonalAccessToken).where(PersonalAccessToken.token_hash == token_hash)
             ).first()
@@ -110,12 +119,12 @@ class TokenMixin(StoreBase):
             if last_used is None or _as_utc(last_used) < now - timedelta(seconds=LAST_USED_THROTTLE_SECONDS):
                 db_token.last_used_at = now
                 session.add(db_token)
-                session.commit()
+                commit(session)
                 session.refresh(db_token)
 
             return db_profile, db_token, membership.role
 
-    def list_tokens(self, user_id: UUID, organisation_id: UUID | None = None) -> list[PersonalAccessToken]:
+    def list_all(self, user_id: UUID, organisation_id: UUID | None = None) -> list[PersonalAccessToken]:
         """List a user's tokens, optionally filtered to one organisation.
 
         Args:
@@ -126,14 +135,14 @@ class TokenMixin(StoreBase):
             Token rows, newest first. Rows carry only the display prefix and
             the hash — exposing neither raw secrets nor anything recoverable.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = select(PersonalAccessToken).where(PersonalAccessToken.user_id == user_id)
             if organisation_id is not None:
                 statement = statement.where(PersonalAccessToken.organisation_id == organisation_id)
             statement = statement.order_by(PersonalAccessToken.created_at.desc())  # ty: ignore[unresolved-attribute]
             return list(session.exec(statement).all())
 
-    def get_token(self, token_id: UUID) -> PersonalAccessToken | None:
+    def get(self, token_id: UUID) -> PersonalAccessToken | None:
         """Get a token row by ID.
 
         Args:
@@ -142,10 +151,10 @@ class TokenMixin(StoreBase):
         Returns:
             The row or ``None``.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             return session.get(PersonalAccessToken, token_id)
 
-    def revoke_token(self, token_id: UUID) -> PersonalAccessToken:
+    def revoke(self, token_id: UUID) -> PersonalAccessToken:
         """Revoke a token (soft delete — the row stays for audit).
 
         Args:
@@ -157,13 +166,13 @@ class TokenMixin(StoreBase):
         Raises:
             NotFoundError: If the token does not exist.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_token = session.get(PersonalAccessToken, token_id)
             if not db_token:
                 raise NotFoundError(f"Token {token_id} not found")
             if db_token.revoked_at is None:
                 db_token.revoked_at = datetime.now(timezone.utc)
                 session.add(db_token)
-                session.commit()
+                commit(session)
                 session.refresh(db_token)
             return db_token

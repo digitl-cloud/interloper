@@ -74,7 +74,7 @@ class QueueController(Controller):
                 # The same terminal path as any failed run: stamps the
                 # component state and advances the backfill, so a failed
                 # dispatch never wedges its backfill.
-                self._store.complete_run(run_id, success=False)
+                self._store.runs.complete(run_id, success=False)
 
     def _claim_next(self) -> UUID | None:
         """Claim the oldest queued run, reserve its quota slot, and mark it dispatched.
@@ -89,7 +89,7 @@ class QueueController(Controller):
             The claimed run id, or ``None`` when the queue is empty.
         """
         while True:
-            with Session(self._store.engine) as session:
+            with self._store.transaction() as session:
                 statement = (
                     select(Run)
                     .where(Run.status == "queued")
@@ -101,7 +101,7 @@ class QueueController(Controller):
                 if not run or not run.id:
                     return None
 
-                if self._store.quotas.try_reserve_run(session, run):
+                if self._store.quotas.try_reserve_run(run):
                     run.status = "dispatched"
                     session.add(run)
                     session.commit()

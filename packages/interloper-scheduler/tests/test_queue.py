@@ -60,8 +60,8 @@ def _statuses(store: Store) -> dict[UUID, str]:
 
 
 def test_tick_drains_the_queue(store: Store) -> None:
-    first = store.create_run(_ORG)
-    second = store.create_run(_ORG)
+    first = store.runs.create(_ORG)
+    second = store.runs.create(_ORG)
     launcher = _FakeLauncher()
 
     QueueController(launcher=launcher, store=store)._tick()
@@ -83,7 +83,7 @@ def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
     concurrency slot (promoting the pending sibling), and the backfill
     finalizes instead of sitting on "running" forever.
     """
-    backfill = store.create_backfill(
+    backfill = store.runs.create_backfill(
         _ORG,
         start_key="2026-01-01",
         end_key="2026-01-02",
@@ -92,13 +92,13 @@ def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
     QueueController(launcher=_FakeLauncher(fail=True), store=store)._tick()
 
     assert set(_statuses(store).values()) == {"failed"}
-    refreshed = store.get_backfill(backfill.id)
+    refreshed = store.runs.get_backfill(backfill.id)
     assert refreshed.status == "failed"
     assert refreshed.completed_at is not None
 
 
 def test_launch_emits_a_span_per_claimed_run(store: Store, span_exporter: Any) -> None:
-    store.create_run(_ORG)
+    store.runs.create(_ORG)
     launcher = _FakeLauncher()
 
     QueueController(launcher=launcher, store=store)._tick()
@@ -136,7 +136,7 @@ def test_dispatch_reserves_a_quota_slot(store: Store) -> None:
     from interloper_db.models import Usage
 
     store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=5)
-    run = store.create_run(_ORG)
+    run = store.runs.create(_ORG)
     launcher = _FakeLauncher()
 
     QueueController(launcher=launcher, store=store)._tick()
@@ -150,8 +150,8 @@ def test_dispatch_reserves_a_quota_slot(store: Store) -> None:
 
 
 def test_quota_denied_claim_cancels_instead_of_blocking(store: Store) -> None:
-    first = store.create_run(_ORG)
-    second = store.create_run(_ORG)
+    first = store.runs.create(_ORG)
+    second = store.runs.create(_ORG)
     _exhaust_quota(store)
     launcher = _FakeLauncher()
 
@@ -169,7 +169,7 @@ def test_quota_denied_claim_cancels_instead_of_blocking(store: Store) -> None:
 
 
 def test_quota_denied_backfill_run_cancels_the_whole_backfill(store: Store) -> None:
-    backfill = store.create_backfill(
+    backfill = store.runs.create_backfill(
         _ORG,
         start_key="2026-01-01",
         end_key="2026-01-03",
@@ -182,7 +182,7 @@ def test_quota_denied_backfill_run_cancels_the_whole_backfill(store: Store) -> N
 
     assert launcher.launched == []
     assert set(_statuses(store).values()) == {"canceled"}
-    refreshed = store.get_backfill(backfill.id)
+    refreshed = store.runs.get_backfill(backfill.id)
     assert refreshed.status == "canceled"
     assert refreshed.completed_at is not None
 
@@ -190,7 +190,7 @@ def test_quota_denied_backfill_run_cancels_the_whole_backfill(store: Store) -> N
 def test_unlimited_org_dispatches_without_touching_the_ledger(store: Store) -> None:
     from interloper_db.models import Usage
 
-    run = store.create_run(_ORG)
+    run = store.runs.create(_ORG)
     launcher = _FakeLauncher()
 
     QueueController(launcher=launcher, store=store)._tick()

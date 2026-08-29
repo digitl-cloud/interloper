@@ -34,14 +34,20 @@ class FakeStore:
         self.total = total
         self.list_calls: list[tuple] = []
         self.count_calls: list[tuple] = []
+        self.auth = SimpleNamespace(get_user_role=self._get_user_role)
+        self.runs = SimpleNamespace(
+            get=self._get_run,
+            count_events=self._count_events,
+            list_events=self._list_events,
+        )
 
-    def get_run(self, run_id: UUID):
+    def _get_run(self, run_id: UUID):
         return SimpleNamespace(id=run_id, org_id=_ORG_ID)
 
-    def get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
+    def _get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
         return "viewer"
 
-    def count_events(
+    def _count_events(
         self,
         *,
         run_id: UUID | None = None,
@@ -52,7 +58,7 @@ class FakeStore:
         self.count_calls.append((component_ids, event_types))
         return self.total
 
-    def list_events(
+    def _list_events(
         self,
         *,
         run_id: UUID | None = None,

@@ -45,22 +45,18 @@ class _FakeSession:
 
 
 class _FakeStore:
-    """Serves one hydrated asset and records completion."""
+    """Serves one hydrated asset and records completion, facet by facet."""
 
     engine = None  # the fake Session ignores it
 
     def __init__(self, asset: il.Asset) -> None:
         self._asset = asset
         self.completed: list[tuple[UUID, bool]] = []
-
-    def load(self, _component_id: UUID) -> il.Asset:
-        return self._asset
-
-    def complete_run(self, run_id: UUID, success: bool) -> None:
-        self.completed.append((run_id, success))
-
-    def save_event(self, event: Any, **_kwargs: Any) -> None:
-        pass
+        self.components = SimpleNamespace(load=lambda _component_id: self._asset)
+        self.runs = SimpleNamespace(
+            complete=lambda run_id, success: self.completed.append((run_id, success)),
+            save_event=lambda event, **_kwargs: None,
+        )
 
 
 @pytest.fixture

@@ -13,7 +13,7 @@ from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
-from interloper_db.store.runs import RunMixin
+from interloper_db.store.runs import RunStore
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -56,13 +56,13 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
     store = Store(catalog=il.Catalog(components={}))
 
     def sqlite_save_event(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
-        row = EventRow(**RunMixin._event_values(event, org_id, run_id))
+        row = EventRow(**RunStore._event_values(event, org_id, run_id))
         with Session(eng) as session:
             session.add(row)
             session.commit()
         return row
 
-    monkeypatch.setattr(store, "save_event", sqlite_save_event)
+    monkeypatch.setattr(store.runs, "save_event", sqlite_save_event)
     try:
         yield store
     finally:
@@ -71,7 +71,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
 
 def _dispatched_run(store: Store, *, age_seconds: int = 0) -> UUID:
-    run = store.create_run(_ORG)
+    run = store.runs.create(_ORG)
     assert run.id is not None
     with Session(store.engine) as session:
         db_run = session.get(Run, run.id)
@@ -84,7 +84,7 @@ def _dispatched_run(store: Store, *, age_seconds: int = 0) -> UUID:
 
 
 def _status(store: Store, run_id: UUID) -> str:
-    return store.get_run(run_id).status
+    return store.runs.get(run_id).status
 
 
 class TestLauncherTruth:
@@ -132,7 +132,7 @@ class TestTargetContext:
             session.add(target)
             session.commit()
             target_id = target.id
-        run = store.create_run(_ORG, component_id=target_id)
+        run = store.runs.create(_ORG, component_id=target_id)
         assert run.id is not None
         with Session(store.engine) as session:
             db_run = session.get(Run, run.id)

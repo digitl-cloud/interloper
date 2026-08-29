@@ -32,7 +32,7 @@ def run_history_summary(
     success rate, and average duration.
     """
     try:
-        runs = ctx.store.list_runs(
+        runs = ctx.store.runs.list_all(
             ctx.org_id,
             component_id=UUID(component_id) if component_id else None,
             limit=500,
@@ -79,7 +79,7 @@ def partition_coverage(
     """
     try:
         jid = UUID(component_id)
-        runs = ctx.store.list_runs(ctx.org_id, component_id=jid, limit=1000)
+        runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, limit=1000)
 
         start = datetime.date.fromisoformat(start_date)
         end = datetime.date.fromisoformat(end_date)
@@ -131,7 +131,7 @@ def freshness_check(ctx: ToolkitContext) -> FreshnessReport | ToolError:
     any that haven't succeeded in over 24 hours.
     """
     try:
-        jobs = ctx.store.list_components(ctx.org_id, kinds=["job"])
+        jobs = ctx.store.components.list_all(ctx.org_id, kinds=["job"])
         now = datetime.datetime.now(tz=datetime.timezone.utc)
 
         results = []
@@ -139,7 +139,7 @@ def freshness_check(ctx: ToolkitContext) -> FreshnessReport | ToolError:
             if not (job.config or {}).get("enabled", True):
                 continue
             component_id = job.id
-            runs = ctx.store.list_runs(ctx.org_id, component_id=component_id, status="success", limit=1)
+            runs = ctx.store.runs.list_all(ctx.org_id, component_id=component_id, status="success", limit=1)
             last_success = runs[0] if runs else None
 
             hours_since = None

@@ -39,7 +39,7 @@ def _fake_run(run_id: UUID, org_id: UUID = _ORG_ID) -> SimpleNamespace:
 
 
 class FakeStore:
-    """In-memory stand-in implementing only what the run routes call."""
+    """In-memory stand-in exposing only the store facets the run routes reach for."""
 
     def __init__(self) -> None:
         self.retry_calls: list[tuple[UUID, str]] = []
@@ -51,24 +51,32 @@ class FakeStore:
         self.role: str | None = "editor"
         #: Org owning every run this store returns.
         self.run_org_id: UUID = _ORG_ID
+        self.auth = SimpleNamespace(get_user_role=self._get_user_role)
+        self.runs = SimpleNamespace(
+            get=self._get_run,
+            list_all=self._list_runs,
+            count=self._count_runs,
+            retry=self._retry_run,
+        )
+        self.components = SimpleNamespace()
 
-    def get_run(self, run_id: UUID):
+    def _get_run(self, run_id: UUID):
         if self.raise_not_found:
             raise NotFoundError(f"Run {run_id} not found")
         return _fake_run(run_id, self.run_org_id)
 
-    def get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
+    def _get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
         return self.role
 
-    def list_runs(self, org_id: UUID, **kwargs):
+    def _list_runs(self, org_id: UUID, **kwargs):
         self.list_calls.append(kwargs)
         return []
 
-    def count_runs(self, org_id: UUID, **kwargs):
+    def _count_runs(self, org_id: UUID, **kwargs):
         self.count_calls.append(kwargs)
         return 0
 
-    def retry_run(self, run_id: UUID, *, scope: str = "all"):
+    def _retry_run(self, run_id: UUID, *, scope: str = "all"):
         self.retry_calls.append((run_id, scope))
         if self.raise_value_error is not None:
             raise ValueError(self.raise_value_error)
@@ -183,10 +191,8 @@ def test_quota_exceeded_maps_to_429(store: FakeStore) -> None:
     def _raise(org_id, **kwargs):
         raise QuotaExceededError("quota exhausted (3/3)", quota="max_successful_runs_per_month", limit=3, used=3)
 
-    store.get_component = lambda component_id: SimpleNamespace(  # ty: ignore[unresolved-attribute]
-        id=component_id, org_id=_ORG_ID, kind="job"
-    )
-    store.create_run = _raise  # ty: ignore[unresolved-attribute]
+    store.components.get = lambda component_id: SimpleNamespace(id=component_id, org_id=_ORG_ID, kind="job")
+    store.runs.create = _raise
     client = _client(store)
 
     @client.app.exception_handler(QuotaExceededError)  # mirrors create_app's handler

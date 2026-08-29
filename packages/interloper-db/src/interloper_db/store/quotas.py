@@ -30,14 +30,14 @@ from uuid import UUID
 
 from interloper.errors import QuotaExceededError
 from interloper.registry import Registry
-from sqlalchemy import func
+from sqlalchemy import Engine, func
 from sqlalchemy import select as sa_select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, col, select
 
 from interloper_db.models import Component, Quota, Run, Usage
-from interloper_db.store.base import StoreBase
+from interloper_db.store.session import commit, session_scope
 
 METRIC_SUCCESSFUL_RUNS = "successful_runs"
 
@@ -94,8 +94,7 @@ class QuotaDefinition(abc.ABC):
         """Raise :class:`QuotaExceededError` when the limit rejects the operation.
 
         Args:
-            session: Open session the check reads through, inside the caller's
-                transaction.
+            session: Open session the work is done through.
             org_id: Organisation the quota is enforced for.
             limit: The effective limit, already resolved by the caller.
             used: Usage stated by the call site, or None to let the definition
@@ -145,8 +144,7 @@ class CapacityQuota(QuotaDefinition):
         """Admit the operation only if capacity stays within the limit.
 
         Args:
-            session: Open session ``count`` measures through, inside the
-                caller's transaction.
+            session: Open session the work is done through.
             org_id: Organisation the quota is enforced for.
             limit: The effective limit, already resolved under the row lock.
             used: The desired final amount, or None to measure the current
@@ -189,7 +187,7 @@ class BoundQuota(QuotaDefinition):
         """Admit the operation only if its magnitude stays within the limit.
 
         Args:
-            session: Open session, unused: the comparison touches no state.
+            session: Open session the work is done through.
             org_id: Organisation the quota is enforced for, unused for the
                 same reason.
             limit: The effective limit, already resolved by the caller.
@@ -226,8 +224,7 @@ class ConsumptionQuota(QuotaDefinition):
         """The org's committed usage this period: ledger ``used + reserved``.
 
         Args:
-            session: Open session the ledger row is read through, inside the
-                caller's transaction.
+            session: Open session the work is done through.
             org_id: Organisation whose ledger row is read.
 
         Returns:
@@ -249,8 +246,7 @@ class ConsumptionQuota(QuotaDefinition):
         """Admit the operation only if committed usage is below the limit.
 
         Args:
-            session: Open session the ledger is read through, inside the
-                caller's transaction.
+            session: Open session the work is done through.
             org_id: Organisation the quota is enforced for.
             limit: The effective limit, already resolved by the caller.
             used: Committed usage stated by the call site, or None to read it
@@ -269,8 +265,7 @@ class ConsumptionQuota(QuotaDefinition):
         reservers can never overshoot.
 
         Args:
-            session: Open session the upsert runs through, inside the caller's
-                transaction.
+            session: Open session the work is done through.
             org_id: Organisation the unit is reserved for.
             limit: The effective limit the upsert is conditioned on; a limit of
                 zero or less admits nothing.
@@ -348,7 +343,7 @@ def db_now(session: Session) -> datetime:
     wall clock is not trusted for month attribution.
 
     Args:
-        session: Open session whose bind supplies the clock.
+    session: Open session the work is done through.
 
     Returns:
         The server time, always tz-aware (UTC is assumed when the dialect
@@ -367,7 +362,7 @@ def _insert_fn(session: Session) -> Any:
     """The dialect's upsert-capable insert constructor.
 
     Args:
-        session: Open session whose bind selects the dialect.
+    session: Open session the work is done through.
 
     Returns:
         The postgresql insert constructor, or the sqlite one for every other
@@ -391,7 +386,7 @@ def increment_usage(
     caller's transaction (the caller commits).
 
     Args:
-        session: Open session the upsert runs through.
+        session: Open session the work is done through.
         org_id: Organisation the counters belong to.
         metric: Ledger metric being charged; must be one a registered
             consumption quota declares.
@@ -425,7 +420,7 @@ def settle_run_usage(session: Session, db_run: Run, *, success: bool) -> None:
     those can differ across a month boundary.
 
     Args:
-        session: Open session the ledger writes run through.
+        session: Open session the work is done through.
         db_run: The completing run, read for its org and its
             ``quota_reserved_at`` stamp (unset when nothing was reserved).
         success: Whether the run succeeded; only successes are charged.
@@ -449,8 +444,7 @@ def _count_sources(session: Session, org_id: UUID) -> int:
     """Current number of sources — the usage side of ``max_sources``.
 
     Args:
-        session: Open session the count runs through, inside the caller's
-            transaction.
+        session: Open session the work is done through.
         org_id: Organisation whose sources are counted.
 
     Returns:
@@ -477,16 +471,20 @@ class QuotaService:
     creation-time checks are advisory fail-fasts.
     """
 
-    def __init__(self, defaults: Callable[[], Any]) -> None:
-        """Initialize the service.
+    def __init__(self, engine: Engine, defaults: Callable[[], Any]) -> None:
+        """Bind the facet to what it works through.
 
         Args:
-            defaults: Zero-arg provider of the QuotaSettings-shaped global
-                defaults (or None = everything unlimited).
+            engine: Engine the facet opens its sessions on.
+            defaults: Zero-arg provider of the instance-wide quota defaults,
+                read per call so late reconfiguration is visible.
         """
+        self._engine = engine
         self._defaults = defaults
 
-    def effective(self, session: Session, org_id: UUID, key: str, *, lock: bool = False) -> int | None:
+    # -- Limits ----------------------------------------------------------------
+
+    def effective(self, org_id: UUID, key: str, *, lock: bool = False) -> int | None:
         """Resolve a limit: org override wins over the global default; None = unlimited.
 
         With ``lock`` the ``(org, key)`` row is upserted (null-limit lock
@@ -496,7 +494,6 @@ class QuotaService:
         ``KeyError`` before any database work.
 
         Args:
-            session: Open session the override is read (and locked) through.
             org_id: Organisation whose override is resolved.
             key: Registered quota key to resolve.
             lock: Whether to take the ``(org, key)`` row lock, defaulting to a
@@ -505,28 +502,92 @@ class QuotaService:
         Returns:
             The effective limit, or None when the quota is unlimited.
         """
-        QUOTAS[key]  # loud failure on unregistered keys
-        if lock:
+        with session_scope(self._engine) as session:
+            QUOTAS[key]  # loud failure on unregistered keys
+            if lock:
+                table = Quota.__table__  # ty: ignore[unresolved-attribute]
+                statement = (
+                    _insert_fn(session)(table)
+                    .values(org_id=org_id, key=key)
+                    .on_conflict_do_nothing(index_elements=["org_id", "key"])
+                )
+                session.execute(statement)  # ty: ignore[deprecated]
+                override = session.exec(
+                    select(Quota).where(Quota.org_id == org_id, Quota.key == key).with_for_update()
+                ).first()
+            else:
+                override = session.get(Quota, (org_id, key))
+            value = override.limit if override else None
+            if value is None:
+                value = getattr(self._defaults(), key, None)
+            return value
+
+    def get_quota_overrides(self, org_id: UUID) -> dict[str, int]:
+        """The organisation's set overrides as ``{key: limit}`` (null rows excluded).
+
+        Args:
+            org_id: Organisation whose overrides are read.
+
+        Returns:
+            The set overrides; empty when the organisation runs on the
+            instance defaults alone.
+        """
+        with session_scope(self._engine) as session:
+            rows = session.exec(select(Quota).where(Quota.org_id == org_id)).all()
+            return {row.key: row.limit for row in rows if row.limit is not None}
+
+    def list_quota_overrides(self) -> dict[UUID, dict[str, int]]:
+        """Every organisation's set overrides, keyed by org id.
+
+        Returns:
+            One ``{key: limit}`` mapping per organisation that has at least
+            one set override; organisations with none are absent.
+        """
+        with session_scope(self._engine) as session:
+            rows = session.exec(select(Quota)).all()
+            overrides: dict[UUID, dict[str, int]] = {}
+            for row in rows:
+                if row.limit is not None:
+                    overrides.setdefault(row.org_id, {})[row.key] = row.limit
+            return overrides
+
+    def set_quota(self, org_id: UUID, limits: dict[str, int | None]) -> dict[str, int]:
+        """Set an organisation's quota overrides; only the given keys change.
+
+        ``None`` clears a key so it falls back to the global default (the
+        row is kept as a null-limit lock anchor).
+
+        Args:
+            org_id: Organisation whose overrides are written.
+            limits: The keys to change, mapped to their new limit or to None
+                to clear the override.
+
+        Returns:
+            The organisation's overrides after the update.
+
+        Raises:
+            ValueError: On an unknown quota key or a negative value.
+        """
+        with session_scope(self._engine) as session:
+            if unknown := {key for key in limits if key not in QUOTAS}:
+                raise ValueError(f"Unknown quota limit(s): {sorted(unknown)}")
+            if negative := {key for key, value in limits.items() if value is not None and value < 0}:
+                raise ValueError(f"Quota limit(s) must be >= 0: {sorted(negative)}")
             table = Quota.__table__  # ty: ignore[unresolved-attribute]
-            statement = (
-                _insert_fn(session)(table)
-                .values(org_id=org_id, key=key)
-                .on_conflict_do_nothing(index_elements=["org_id", "key"])
-            )
-            session.execute(statement)  # ty: ignore[deprecated]
-            override = session.exec(
-                select(Quota).where(Quota.org_id == org_id, Quota.key == key).with_for_update()
-            ).first()
-        else:
-            override = session.get(Quota, (org_id, key))
-        value = override.limit if override else None
-        if value is None:
-            value = getattr(self._defaults(), key, None)
-        return value
+            for key, value in limits.items():
+                statement = (
+                    _insert_fn(session)(table)
+                    .values(org_id=org_id, key=key, limit=value)
+                    .on_conflict_do_update(index_elements=["org_id", "key"], set_={"limit": value})
+                )
+                session.execute(statement)  # ty: ignore[deprecated]
+            commit(session)
+            return self.get_quota_overrides(org_id)
+
+        # -- Enforcement -----------------------------------------------------------
 
     def check(
         self,
-        session: Session,
         org_id: UUID,
         key: str,
         *,
@@ -541,7 +602,6 @@ class QuotaService:
         :meth:`QuotaDefinition.check`.
 
         Args:
-            session: Open session the resolution and the check run through.
             org_id: Organisation the quota is enforced for.
             key: Registered quota key to enforce.
             used: Usage stated by the call site, or None to let the definition
@@ -550,22 +610,22 @@ class QuotaService:
                 when the message needs none.
         """
         definition = QUOTAS[key]
-        limit = self.effective(session, org_id, key)
+        limit = self.effective(org_id, key)
         if limit is None:
             return
         if definition.requires_lock:
-            limit = self.effective(session, org_id, key, lock=True)
+            limit = self.effective(org_id, key, lock=True)
             if limit is None:
                 return
-        definition.check(session, org_id, limit, used=used, subject=subject)
+        with session_scope(self._engine) as session:
+            definition.check(session, org_id, limit, used=used, subject=subject)
 
-    def run_status(self, session: Session, org_id: UUID) -> tuple[int, int | None]:
+    def run_status(self, org_id: UUID) -> tuple[int, int | None]:
         """The org's committed run usage this period: ``(used + reserved, limit)``.
 
         Limit None means unlimited (and the ledger is not read at all).
 
         Args:
-            session: Open session the ledger is read through.
             org_id: Organisation whose run usage is reported.
 
         Returns:
@@ -576,15 +636,16 @@ class QuotaService:
             TypeError: If the run quota key is registered as something other
                 than a consumption quota.
         """
-        definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
-        if not isinstance(definition, ConsumptionQuota):
-            raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
-        limit = self.effective(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
-        if limit is None:
-            return 0, None
-        return definition.committed(session, org_id), limit
+        with session_scope(self._engine) as session:
+            definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
+            if not isinstance(definition, ConsumptionQuota):
+                raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
+            limit = self.effective(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
+            if limit is None:
+                return 0, None
+            return definition.committed(session, org_id), limit
 
-    def try_reserve_run(self, session: Session, db_run: Run) -> bool:
+    def try_reserve_run(self, db_run: Run) -> bool:
         """Atomically reserve a run-quota slot at dispatch time.
 
         The authoritative run gate: on success the run is stamped with
@@ -592,8 +653,6 @@ class QuotaService:
         Unlimited orgs are admitted without touching the ledger.
 
         Args:
-            session: Open session the reservation and the stamp are written
-                through, inside the caller's transaction.
             db_run: The run being dispatched; stamped in place on success.
 
         Returns:
@@ -603,18 +662,149 @@ class QuotaService:
             TypeError: If the run quota key is registered as something other
                 than a consumption quota.
         """
-        definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
-        if not isinstance(definition, ConsumptionQuota):
-            raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
-        limit = self.effective(session, db_run.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
-        if limit is None:
+        with session_scope(self._engine) as session:
+            definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
+            if not isinstance(definition, ConsumptionQuota):
+                raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
+            limit = self.effective(db_run.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
+            if limit is None:
+                return True
+            reserved_at = definition.reserve(session, db_run.org_id, limit)
+            if reserved_at is None:
+                return False
+            db_run.quota_reserved_at = reserved_at
+            session.add(db_run)
+            commit(session)
             return True
-        reserved_at = definition.reserve(session, db_run.org_id, limit)
-        if reserved_at is None:
-            return False
-        db_run.quota_reserved_at = reserved_at
-        session.add(db_run)
-        return True
+
+        # -- Usage -----------------------------------------------------------------
+
+    def list_usage(
+        self,
+        *,
+        period_start: dt.date | None = None,
+        org_id: UUID | None = None,
+    ) -> list[Usage]:
+        """Usage ledger rows, optionally filtered by period and organisation.
+
+        Args:
+            period_start: First day of the UTC month to restrict to, or None
+                for every period.
+            org_id: Organisation to restrict to, or None for every
+                organisation.
+
+        Returns:
+            The matching ledger rows, one per ``(org, metric, period)``.
+        """
+        with session_scope(self._engine) as session:
+            statement = select(Usage)
+            if period_start is not None:
+                statement = statement.where(Usage.period_start == period_start)
+            if org_id is not None:
+                statement = statement.where(Usage.org_id == org_id)
+            return list(session.exec(statement).all())
+
+    def current_period_start(self) -> dt.date:
+        """The current UTC calendar month, per the database clock.
+
+        Returns:
+            The first day of the month usage is currently charged into.
+        """
+        with session_scope(self._engine) as session:
+            return month_start(db_now(session))
+
+    def count_sources_by_org(self) -> dict[UUID, int]:
+        """Current number of sources per organisation.
+
+        Returns:
+            The source count keyed by org id; organisations with no sources
+            are absent.
+        """
+        with session_scope(self._engine) as session:
+            rows = session.exec(
+                select(Component.org_id, func.count())
+                .where(Component.kind == "source")
+                .group_by(Component.org_id)  # ty: ignore[invalid-argument-type]
+            ).all()
+            return dict(rows)
+
+    def max_assets_per_source_by_org(self) -> dict[UUID, int]:
+        """The largest child-asset count of any single source, per organisation.
+
+        Returns:
+            The peak per-source asset count keyed by org id; organisations
+            with no parented assets are absent.
+        """
+        with session_scope(self._engine) as session:
+            per_source = (
+                sa_select(col(Component.org_id).label("org_id"), func.count().label("n"))
+                .where(col(Component.kind) == "asset", col(Component.parent_id).is_not(None))
+                .group_by(col(Component.org_id), col(Component.parent_id))
+            ).subquery()
+            rows = session.execute(  # ty: ignore[deprecated]
+                sa_select(per_source.c.org_id, func.max(per_source.c.n)).group_by(per_source.c.org_id)
+            ).all()
+            return {org_id: count for org_id, count in rows}
+
+    def count_successful_runs_by_org(self, period_start: dt.date) -> dict[UUID, int]:
+        """Recompute the ledger's truth: successful runs completed in the period.
+
+        Counts on ``completed_at`` — the nearest column to the charge moment.
+        Reconciliation compares this against ``usage.used``.
+
+        Args:
+            period_start: First day of the UTC month to recompute, whose
+                following month bounds the window.
+
+        Returns:
+            The successful-run count keyed by org id; organisations with none
+            are absent.
+        """
+        with session_scope(self._engine) as session:
+            lower = datetime.combine(period_start, dt.time.min, tzinfo=timezone.utc)
+            upper = datetime.combine(next_month_start(period_start), dt.time.min, tzinfo=timezone.utc)
+            rows = session.exec(
+                select(Run.org_id, func.count())
+                .where(Run.status == "success", col(Run.completed_at) >= lower, col(Run.completed_at) < upper)
+                .group_by(Run.org_id)  # ty: ignore[invalid-argument-type]
+            ).all()
+            return dict(rows)
+
+    def reconcile_usage(self) -> list[dict[str, Any]]:
+        """Compare the current period's ledger against the runs table.
+
+        Returns one entry per organisation whose ``usage.used`` differs from
+        the recomputed successful-run count. Both sides move in the same
+        transaction on completion, so persistent drift is a bug signal;
+        transient off-by-ones are possible (the two reads are separate
+        queries, and charge months are DB-clock while ``completed_at`` is
+        the executor's clock at the boundary).
+
+        Returns:
+            One ``{org_id, period_start, ledger, recomputed}`` entry per
+            drifting organisation, ordered by org id; empty when the ledger
+            agrees with the runs table.
+        """
+        # Scoped, though the handle is unused: the three reads below join it, so
+        # the ledger and the runs table are compared at one point in time.
+        with session_scope(self._engine):
+            period_start = self.current_period_start()
+            recomputed = self.count_successful_runs_by_org(period_start)
+            ledger = {
+                row.org_id: row.used
+                for row in self.list_usage(period_start=period_start)
+                if row.metric == METRIC_SUCCESSFUL_RUNS
+            }
+            return [
+                {
+                    "org_id": org_id,
+                    "period_start": period_start,
+                    "ledger": ledger.get(org_id, 0),
+                    "recomputed": recomputed.get(org_id, 0),
+                }
+                for org_id in sorted(set(recomputed) | set(ledger), key=str)
+                if recomputed.get(org_id, 0) != ledger.get(org_id, 0)
+            ]
 
 
 # -- Registration --------------------------------------------------------------
@@ -658,195 +848,3 @@ QUOTAS.register(
         message=lambda used, limit, _subject: f"Backfill spans {used} partitions, exceeding the limit of {limit}",
     ),
 )
-
-
-# -- Store API -----------------------------------------------------------------
-
-
-class QuotaMixin(StoreBase):
-    """Store methods for quota limits and usage reads."""
-
-    # -- Limits ----------------------------------------------------------------
-
-    def get_quota_overrides(self, org_id: UUID) -> dict[str, int]:
-        """The organisation's set overrides as ``{key: limit}`` (null rows excluded).
-
-        Args:
-            org_id: Organisation whose overrides are read.
-
-        Returns:
-            The set overrides; empty when the organisation runs on the
-            instance defaults alone.
-        """
-        with self._session() as session:
-            rows = session.exec(select(Quota).where(Quota.org_id == org_id)).all()
-            return {row.key: row.limit for row in rows if row.limit is not None}
-
-    def list_quota_overrides(self) -> dict[UUID, dict[str, int]]:
-        """Every organisation's set overrides, keyed by org id.
-
-        Returns:
-            One ``{key: limit}`` mapping per organisation that has at least
-            one set override; organisations with none are absent.
-        """
-        with self._session() as session:
-            rows = session.exec(select(Quota)).all()
-            overrides: dict[UUID, dict[str, int]] = {}
-            for row in rows:
-                if row.limit is not None:
-                    overrides.setdefault(row.org_id, {})[row.key] = row.limit
-            return overrides
-
-    def set_quota(self, org_id: UUID, limits: dict[str, int | None]) -> dict[str, int]:
-        """Set an organisation's quota overrides; only the given keys change.
-
-        ``None`` clears a key so it falls back to the global default (the
-        row is kept as a null-limit lock anchor).
-
-        Args:
-            org_id: Organisation whose overrides are written.
-            limits: The keys to change, mapped to their new limit or to None
-                to clear the override.
-
-        Returns:
-            The organisation's overrides after the update.
-
-        Raises:
-            ValueError: On an unknown quota key or a negative value.
-        """
-        if unknown := {key for key in limits if key not in QUOTAS}:
-            raise ValueError(f"Unknown quota limit(s): {sorted(unknown)}")
-        if negative := {key for key, value in limits.items() if value is not None and value < 0}:
-            raise ValueError(f"Quota limit(s) must be >= 0: {sorted(negative)}")
-        table = Quota.__table__  # ty: ignore[unresolved-attribute]
-        with self._session() as session:
-            for key, value in limits.items():
-                statement = (
-                    _insert_fn(session)(table)
-                    .values(org_id=org_id, key=key, limit=value)
-                    .on_conflict_do_update(index_elements=["org_id", "key"], set_={"limit": value})
-                )
-                session.execute(statement)  # ty: ignore[deprecated]
-            session.commit()
-        return self.get_quota_overrides(org_id)
-
-    # -- Usage -----------------------------------------------------------------
-
-    def list_usage(self, *, period_start: dt.date | None = None, org_id: UUID | None = None) -> list[Usage]:
-        """Usage ledger rows, optionally filtered by period and organisation.
-
-        Args:
-            period_start: First day of the UTC month to restrict to, or None
-                for every period.
-            org_id: Organisation to restrict to, or None for every
-                organisation.
-
-        Returns:
-            The matching ledger rows, one per ``(org, metric, period)``.
-        """
-        with self._session() as session:
-            statement = select(Usage)
-            if period_start is not None:
-                statement = statement.where(Usage.period_start == period_start)
-            if org_id is not None:
-                statement = statement.where(Usage.org_id == org_id)
-            return list(session.exec(statement).all())
-
-    def current_period_start(self) -> dt.date:
-        """The current UTC calendar month, per the database clock.
-
-        Returns:
-            The first day of the month usage is currently charged into.
-        """
-        with self._session() as session:
-            return month_start(db_now(session))
-
-    def count_sources_by_org(self) -> dict[UUID, int]:
-        """Current number of sources per organisation.
-
-        Returns:
-            The source count keyed by org id; organisations with no sources
-            are absent.
-        """
-        with self._session() as session:
-            rows = session.exec(
-                select(Component.org_id, func.count())
-                .where(Component.kind == "source")
-                .group_by(Component.org_id)  # ty: ignore[invalid-argument-type]
-            ).all()
-            return dict(rows)
-
-    def max_assets_per_source_by_org(self) -> dict[UUID, int]:
-        """The largest child-asset count of any single source, per organisation.
-
-        Returns:
-            The peak per-source asset count keyed by org id; organisations
-            with no parented assets are absent.
-        """
-        with self._session() as session:
-            per_source = (
-                sa_select(col(Component.org_id).label("org_id"), func.count().label("n"))
-                .where(col(Component.kind) == "asset", col(Component.parent_id).is_not(None))
-                .group_by(col(Component.org_id), col(Component.parent_id))
-            ).subquery()
-            rows = session.execute(  # ty: ignore[deprecated]
-                sa_select(per_source.c.org_id, func.max(per_source.c.n)).group_by(per_source.c.org_id)
-            ).all()
-            return {org_id: count for org_id, count in rows}
-
-    def count_successful_runs_by_org(self, period_start: dt.date) -> dict[UUID, int]:
-        """Recompute the ledger's truth: successful runs completed in the period.
-
-        Counts on ``completed_at`` — the nearest column to the charge moment.
-        Reconciliation compares this against ``usage.used``.
-
-        Args:
-            period_start: First day of the UTC month to recompute, whose
-                following month bounds the window.
-
-        Returns:
-            The successful-run count keyed by org id; organisations with none
-            are absent.
-        """
-        lower = datetime.combine(period_start, dt.time.min, tzinfo=timezone.utc)
-        upper = datetime.combine(next_month_start(period_start), dt.time.min, tzinfo=timezone.utc)
-        with self._session() as session:
-            rows = session.exec(
-                select(Run.org_id, func.count())
-                .where(Run.status == "success", col(Run.completed_at) >= lower, col(Run.completed_at) < upper)
-                .group_by(Run.org_id)  # ty: ignore[invalid-argument-type]
-            ).all()
-            return dict(rows)
-
-    def reconcile_usage(self) -> list[dict[str, Any]]:
-        """Compare the current period's ledger against the runs table.
-
-        Returns one entry per organisation whose ``usage.used`` differs from
-        the recomputed successful-run count. Both sides move in the same
-        transaction on completion, so persistent drift is a bug signal;
-        transient off-by-ones are possible (the two reads are separate
-        queries, and charge months are DB-clock while ``completed_at`` is
-        the executor's clock at the boundary).
-
-        Returns:
-            One ``{org_id, period_start, ledger, recomputed}`` entry per
-            drifting organisation, ordered by org id; empty when the ledger
-            agrees with the runs table.
-        """
-        period_start = self.current_period_start()
-        recomputed = self.count_successful_runs_by_org(period_start)
-        ledger = {
-            row.org_id: row.used
-            for row in self.list_usage(period_start=period_start)
-            if row.metric == METRIC_SUCCESSFUL_RUNS
-        }
-        return [
-            {
-                "org_id": org_id,
-                "period_start": period_start,
-                "ledger": ledger.get(org_id, 0),
-                "recomputed": recomputed.get(org_id, 0),
-            }
-            for org_id in sorted(set(recomputed) | set(ledger), key=str)
-            if recomputed.get(org_id, 0) != ledger.get(org_id, 0)
-        ]

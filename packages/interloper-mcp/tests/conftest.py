@@ -76,9 +76,9 @@ def store(mcp_db: Engine, catalog: il.Catalog) -> Store:
 @pytest.fixture
 def seeded(store: Store) -> dict[str, Any]:
     """An org with one member, a valid PAT, one job component, and one run."""
-    profile = store.upsert_profile(google_id="g-user", email="user@example.com", name="User")
-    org = store.create_organisation(name="Acme", creator_id=profile.id)
-    _, raw_token = store.create_token(profile.id, org.id, name="test")
+    profile = store.auth.upsert_profile(google_id="g-user", email="user@example.com", name="User")
+    org = store.auth.create_organisation(name="Acme", creator_id=profile.id)
+    _, raw_token = store.tokens.create(profile.id, org.id, name="test")
 
     job = Component(org_id=org.id, kind="job", key="daily_sync", name="Daily sync", config={"enabled": True})
     run = Run(id=uuid4(), org_id=org.id, component_id=job.id, status="success")

@@ -68,7 +68,7 @@ def _resolve_stdio_org(store: Store, token: str, org_id: str) -> UUID:
         The organisation UUID to scope all tool calls to.
     """
     if token:
-        resolved = store.resolve_token(token)
+        resolved = store.tokens.resolve(token)
         if resolved is None:
             raise SystemExit("INTERLOPER_MCP_TOKEN is invalid, expired, or revoked")
         profile, pat, role = resolved

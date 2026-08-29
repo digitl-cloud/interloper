@@ -18,7 +18,7 @@ from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Component, ComponentRelation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
-from interloper_db.store.runs import RunMixin
+from interloper_db.store.runs import RunStore
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -48,14 +48,14 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
     store = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
 
     def sqlite_save_event(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
-        row = EventRow(**RunMixin._event_values(event, org_id, run_id))
+        row = EventRow(**RunStore._event_values(event, org_id, run_id))
         with Session(eng) as session:
             if session.get(EventRow, row.id) is None:
                 session.add(row)
                 session.commit()
         return row
 
-    monkeypatch.setattr(store, "save_event", sqlite_save_event)
+    monkeypatch.setattr(store.runs, "save_event", sqlite_save_event)
     try:
         yield store
     finally:
@@ -64,7 +64,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
 
 def _terminal_run(store: Store, component_id: UUID, *, status: str = "success") -> Run:
-    run = store.create_run(_ORG, component_id=component_id, partition_key="2026-07-06")
+    run = store.runs.create(_ORG, component_id=component_id, partition_key="2026-07-06")
     with Session(engine_module.get_engine()) as session:
         db_run = session.get(Run, run.id)
         assert db_run is not None
@@ -115,10 +115,10 @@ def _sweep(store: Store) -> HookController:
 
 class TestHookEvaluation:
     def test_trigger_hook_cascades_with_partition(self, store: Store):
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         leaf = next(c for c in source.children if c.key == "e")
         root = next(c for c in source.children if c.key == "a")
-        hook = store.create_component(
+        hook = store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="Cascade",
             config={"events": ["run_completed"]},
             relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},
@@ -141,10 +141,10 @@ class TestHookEvaluation:
             assert events[0].component_key == "trigger_hook"
 
     def test_claim_prevents_refiring(self, store: Store):
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         leaf = next(c for c in source.children if c.key == "e")
         root = next(c for c in source.children if c.key == "a")
-        store.create_component(
+        store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="Cascade",
             config={"events": ["run_completed"]},
             relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},
@@ -160,10 +160,10 @@ class TestHookEvaluation:
             assert len(session.exec(select(EventRow)).all()) == 1
 
     def test_event_type_mismatch_does_not_fire(self, store: Store):
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         leaf = next(c for c in source.children if c.key == "e")
         root = next(c for c in source.children if c.key == "a")
-        store.create_component(
+        store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="OnFailureOnly",
             config={"events": ["run_failed"]},
             relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},
@@ -187,9 +187,9 @@ class TestHookEvaluation:
 
         monkeypatch.setattr(httpx, "post", fake_post)
 
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         child = next(c for c in source.children if c.key == "a")
-        store.create_component(
+        store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="OnAnyAsset",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watch": [(source.id, "")]},
@@ -208,8 +208,8 @@ class TestHookEvaluation:
 
         monkeypatch.setattr(httpx, "post", boom)
 
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        store.create_component(
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_failed"], "url": "https://example.test/x"},
             relations={"watch": [(source.id, "")]},
@@ -227,9 +227,9 @@ class TestHookEvaluation:
             assert (hook_row.state or {}).get("last_run_id") == str(run.id)
 
     def test_self_targeting_trigger_is_refused(self, store: Store):
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         # Watches the source AND targets it: would loop forever without the guard.
-        store.create_component(
+        store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="Ouroboros",
             config={"events": ["run_completed"]},
             relations={"watch": [(source.id, "")], "target": [(source.id, "")]},
@@ -247,8 +247,8 @@ class TestHookEvaluation:
     def test_metadata_carries_component_identity(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         payloads = _capture_posts(monkeypatch)
 
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        store.create_component(
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watch": [(source.id, "")]},
@@ -266,13 +266,13 @@ class TestHookEvaluation:
     def test_metadata_falls_back_to_key_when_unnamed(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         payloads = _capture_posts(monkeypatch)
 
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        store.create_component(
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watch": [(source.id, "")]},
         )
-        # create_component always derives a name, so the nullable column is
+        # components.create always derives a name, so the nullable column is
         # the only way the fallback is reachable.
         with Session(engine_module.get_engine()) as session:
             row = session.get(Component, source.id)
@@ -289,8 +289,8 @@ class TestHookEvaluation:
     def test_failure_metadata_carries_the_run_error(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         payloads = _capture_posts(monkeypatch)
 
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        store.create_component(
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_failed"], "url": "https://example.test/n"},
             relations={"watch": [(source.id, "")]},
@@ -306,8 +306,8 @@ class TestHookEvaluation:
     def test_success_metadata_has_no_error(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         payloads = _capture_posts(monkeypatch)
 
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
-        store.create_component(
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watch": [(source.id, "")]},
@@ -319,13 +319,13 @@ class TestHookEvaluation:
         assert "error" not in payloads[0]["metadata"]
 
     def test_chain_to_unwatched_target_is_allowed(self, store: Store):
-        source = store.create_component(_ORG, kind="source", key="demo_source", name="Demo")
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         leaf = next(c for c in source.children if c.key == "e")
         root = next(c for c in source.children if c.key == "a")
         # Watches only the leaf asset; targets the root asset: no loop possible
         # through this hook (the triggered run never matches its watch set...
         # except via the shared parent — which is exactly what the guard checks).
-        store.create_component(
+        store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="Chain",
             config={"events": ["run_completed"]},
             relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},

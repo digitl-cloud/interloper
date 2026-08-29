@@ -38,7 +38,7 @@ def _fake_backfill(backfill_id: UUID, status: str = "running") -> SimpleNamespac
 
 
 class FakeStore:
-    """In-memory stand-in implementing only what the backfill routes call."""
+    """In-memory stand-in exposing only the store facets the backfill routes reach for."""
 
     def __init__(self) -> None:
         self.cancel_calls: list[UUID] = []
@@ -46,16 +46,19 @@ class FakeStore:
         self.raise_value_error: str | None = None
         #: Role the fake user holds in the backfill's org. None = not a member.
         self.role: str | None = "editor"
+        self.auth = SimpleNamespace(get_user_role=self._get_user_role)
+        self.runs = SimpleNamespace(get_backfill=self._get_backfill, cancel_backfill=self._cancel_backfill)
+        self.components = SimpleNamespace()
 
-    def get_backfill(self, backfill_id: UUID):
+    def _get_backfill(self, backfill_id: UUID):
         if self.raise_not_found:
             raise NotFoundError(f"Backfill {backfill_id} not found")
         return _fake_backfill(backfill_id)
 
-    def get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
+    def _get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
         return self.role
 
-    def cancel_backfill(self, backfill_id: UUID):
+    def _cancel_backfill(self, backfill_id: UUID):
         self.cancel_calls.append(backfill_id)
         if self.raise_value_error is not None:
             raise ValueError(self.raise_value_error)
@@ -125,8 +128,8 @@ def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
             used=31,
         )
 
-    store.get_component = lambda component_id, kind=None: _fake_backfill(component_id)  # ty: ignore[unresolved-attribute]
-    store.create_backfill = _raise  # ty: ignore[unresolved-attribute]
+    store.components.get = lambda component_id, kind=None: _fake_backfill(component_id)
+    store.runs.create_backfill = _raise
     client = _client(store)
 
     @client.app.exception_handler(QuotaExceededError)  # mirrors create_app's handler

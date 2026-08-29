@@ -22,7 +22,7 @@ from interloper_api.routes import admin as admin_module
 
 
 class FakeStore:
-    """In-memory stand-in implementing only the methods admin routes call."""
+    """In-memory stand-in exposing only the store facets the admin routes reach for."""
 
     def __init__(self) -> None:
         self.org = SimpleNamespace(id=uuid4(), name="Acme", created_at=datetime.now(timezone.utc), deleted_at=None)
@@ -37,15 +37,40 @@ class FakeStore:
         self.deleted_profiles: list[UUID] = []
         self.deleted_organisations: list[UUID] = []
         self.quota_updates: list[tuple[UUID, dict]] = []
+        self.auth = SimpleNamespace(
+            delete_profile=self._delete_profile,
+            delete_organisation=self._delete_organisation,
+            list_all_profiles=self._list_all_profiles,
+            list_all_organisations=self._list_all_organisations,
+            create_organisation=self._create_organisation,
+            update_organisation=self._update_organisation,
+            get_organisation=self._get_organisation,
+            list_org_members=self._list_org_members,
+            add_org_member=self._add_org_member,
+            update_member_role=self._update_member_role,
+            remove_org_member=self._remove_org_member,
+            list_invitations=self._list_invitations,
+            create_invitation=self._create_invitation,
+            delete_invitation=self._delete_invitation,
+        )
+        self.quotas = SimpleNamespace(
+            current_period_start=self._current_period_start,
+            list_quota_overrides=self._list_quota_overrides,
+            list_usage=self._list_usage,
+            count_sources_by_org=self._count_sources_by_org,
+            max_assets_per_source_by_org=self._max_assets_per_source_by_org,
+            count_successful_runs_by_org=self._count_successful_runs_by_org,
+            set_quota=self._set_quota,
+        )
 
-    def delete_profile(self, user_id: UUID) -> None:
+    def _delete_profile(self, user_id: UUID) -> None:
         self.deleted_profiles.append(user_id)
 
-    def delete_organisation(self, org_id: UUID) -> None:
+    def _delete_organisation(self, org_id: UUID) -> None:
         self.deleted_organisations.append(org_id)
 
     # -- users --
-    def list_all_profiles(self):
+    def _list_all_profiles(self):
         return [
             (
                 SimpleNamespace(
@@ -61,36 +86,36 @@ class FakeStore:
         ]
 
     # -- organisations --
-    def list_all_organisations(self):
+    def _list_all_organisations(self):
         return [(self.org, 1)]
 
-    def create_organisation(self, name: str, creator_id: UUID | None = None):
+    def _create_organisation(self, name: str, creator_id: UUID | None = None):
         return SimpleNamespace(id=uuid4(), name=name, created_at=datetime.now(timezone.utc))
 
-    def update_organisation(self, org_id: UUID, name: str):
+    def _update_organisation(self, org_id: UUID, name: str):
         return SimpleNamespace(id=org_id, name=name, created_at=self.org.created_at)
 
-    def get_organisation(self, org_id: UUID):
+    def _get_organisation(self, org_id: UUID):
         return self.org
 
     # -- members --
-    def list_org_members(self, org_id: UUID):
+    def _list_org_members(self, org_id: UUID):
         return [(self.member, "admin")]
 
-    def add_org_member(self, org_id: UUID, user_id: UUID, role: str) -> bool:
+    def _add_org_member(self, org_id: UUID, user_id: UUID, role: str) -> bool:
         if self.already_member:
             return False
         self.added_members.append((org_id, user_id, role))
         return True
 
-    def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
+    def _update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
         self.role_updates.append((org_id, user_id, role))
 
-    def remove_org_member(self, org_id: UUID, user_id: UUID) -> None:
+    def _remove_org_member(self, org_id: UUID, user_id: UUID) -> None:
         self.removed.append((org_id, user_id))
 
     # -- invitations --
-    def list_invitations(self, org_id: UUID):
+    def _list_invitations(self, org_id: UUID):
         return [
             SimpleNamespace(
                 id=uuid4(),
@@ -101,7 +126,7 @@ class FakeStore:
             )
         ]
 
-    def create_invitation(self, org_id: UUID, email: str, role: str, invited_by: UUID):
+    def _create_invitation(self, org_id: UUID, email: str, role: str, invited_by: UUID):
         self.created_invites.append({"org_id": org_id, "email": email, "role": role})
         return SimpleNamespace(
             id=uuid4(),
@@ -111,19 +136,19 @@ class FakeStore:
             expires_at=datetime.now(timezone.utc),
         )
 
-    def delete_invitation(self, invitation_id: UUID) -> None:
+    def _delete_invitation(self, invitation_id: UUID) -> None:
         pass
 
     # -- quotas --
-    def current_period_start(self):
+    def _current_period_start(self):
         import datetime as dt
 
         return dt.date(2026, 8, 1)
 
-    def list_quota_overrides(self):
+    def _list_quota_overrides(self):
         return {self.org.id: {"max_sources": 5}}
 
-    def list_usage(self, *, period_start=None, org_id=None):
+    def _list_usage(self, *, period_start=None, org_id=None):
         import datetime as dt
 
         return [
@@ -136,16 +161,16 @@ class FakeStore:
             )
         ]
 
-    def count_sources_by_org(self):
+    def _count_sources_by_org(self):
         return {self.org.id: 2}
 
-    def max_assets_per_source_by_org(self):
+    def _max_assets_per_source_by_org(self):
         return {self.org.id: 4}
 
-    def count_successful_runs_by_org(self, period_start):
+    def _count_successful_runs_by_org(self, period_start):
         return {self.org.id: 8}
 
-    def set_quota(self, org_id: UUID, limits: dict):
+    def _set_quota(self, org_id: UUID, limits: dict):
         self.quota_updates.append((org_id, limits))
         return {key: value for key, value in limits.items() if value is not None}
 
@@ -420,7 +445,7 @@ def test_update_member_role_rejects_invalid_role(store: FakeStore) -> None:
 def test_missing_member_maps_to_404() -> None:
     # Store mutations raise NotFoundError; the app-level handler turns it into 404.
     class RaisingStore(FakeStore):
-        def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
+        def _update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
             raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
 
     store = RaisingStore()
@@ -507,7 +532,7 @@ def test_update_quota_rejects_negative_limits(store: FakeStore) -> None:
 def test_deleted_org_is_listed_but_not_manageable(store: FakeStore) -> None:
     """Soft-deleted orgs surface in the list (billing history) but 404 on management routes."""
     store.org.deleted_at = datetime.now(timezone.utc)
-    store.get_organisation = lambda org_id: None  # ty: ignore[invalid-assignment]  (deleted orgs read as missing)
+    store.auth.get_organisation = lambda org_id: None  # deleted orgs read as missing
     client = _client(store, is_super_admin=True)
 
     listed = client.get("/admin/organisations")
@@ -532,7 +557,7 @@ def test_activity_feed_composes_titles(store: FakeStore) -> None:
         {"kind": "member_joined", "when": when, "subject": "Jonas", "extra": "editor"},
         {"kind": "org_created", "when": when, "subject": None, "extra": None},
     ]
-    store.list_organisation_activity = lambda org_id: store.activity  # ty: ignore[unresolved-attribute]
+    store.auth.list_organisation_activity = lambda org_id: store.activity  # ty: ignore[unresolved-attribute]
 
     resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{store.org.id}/activity")
     assert resp.status_code == 200

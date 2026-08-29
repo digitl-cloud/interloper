@@ -69,7 +69,7 @@ def _cmd_launch(args: argparse.Namespace) -> None:
     except Exception as e:
         logger.exception("Launch failed for run %s", args.run_id)
         try:
-            store.complete_run(args.run_id, success=False)
+            store.runs.complete(args.run_id, success=False)
         except Exception:
             logger.exception("Failed to mark run %s as failed in DB", args.run_id)
         raise SystemExit(1) from e

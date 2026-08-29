@@ -81,6 +81,7 @@ Every concept gets a package (a directory with `__init__.py`), never a loose mod
 - `base.py` holds the core logic the package is named for: package `asset` → `Asset` in `asset/base.py`, package `source` → `Source` in `source/base.py`.
 - Split ancillary logic into sibling modules whenever there is a real seam of responsibility (`decorator.py`, `context.py`, `fields.py`, `ref.py`) — one responsibility per module, split by seam, not by line count.
 - `__init__.py` re-exports the package's public surface with an explicit `__all__`. The package is the import surface: import from it, and reach into a submodule directly only within the package itself or to break an import cycle.
+- **`__init__.py` defines nothing.** It holds a module docstring, imports and `__all__` — no classes, no functions, no module-level state. A definition there has no module of its own to be found in, cannot be imported without pulling in every sibling re-export, and hides from the file layout: the package's own core class belongs in `base.py`, not in the file that re-exports it.
 
 ## 6. Logic has an owner
 

@@ -103,9 +103,9 @@ def list_backfills(
         The organisation's backfills, as response models.
     """
     if active_only:
-        backfills = store.list_active_backfills(org_id)
+        backfills = store.runs.list_active_backfills(org_id)
     else:
-        backfills = store.list_backfills(org_id)
+        backfills = store.runs.list_backfills(org_id)
     return [BackfillResponse.from_backfill(b) for b in backfills]
 
 
@@ -130,10 +130,10 @@ def create_backfill(
         HTTPException: 400 if the store rejects the range or the settings.
     """
     job = load_authorized(
-        lambda i: store.get_component(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
+        lambda i: store.components.get(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
     )
     try:
-        backfill = store.create_backfill(
+        backfill = store.runs.create_backfill(
             job.org_id,
             component_id=body.component_id,
             start_key=body.start_key,
@@ -166,7 +166,7 @@ def get_backfill(
         HTTPException: 404 if no such backfill exists.
     """
     try:
-        backfill = store.get_backfill(backfill_id)
+        backfill = store.runs.get_backfill(backfill_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
     authorize_org_member(user, backfill.org_id, store, detail=f"Backfill {backfill_id} not found")
@@ -194,14 +194,14 @@ def cancel_backfill(
             reached a terminal state.
     """
     try:
-        backfill = store.get_backfill(backfill_id)
+        backfill = store.runs.get_backfill(backfill_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
     authorize_org_member(
         user, backfill.org_id, store, minimum="editor", detail=f"Backfill {backfill_id} not found"
     )
     try:
-        backfill = store.cancel_backfill(backfill_id)
+        backfill = store.runs.cancel_backfill(backfill_id)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return BackfillResponse.from_backfill(backfill)

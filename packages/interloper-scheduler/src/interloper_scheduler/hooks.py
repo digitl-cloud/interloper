@@ -120,7 +120,7 @@ class HookController(Controller):
             if session.get(EventRow, UUID(claim)) is not None:
                 continue
 
-            hook = self._store.load(hook_row.id)
+            hook = self._store.components.load(hook_row.id)
             if not isinstance(hook, il.Hook) or not hook.enabled or event_type not in hook.events:
                 continue
 
@@ -204,7 +204,7 @@ class HookController(Controller):
             logger.exception("Hook '%s' failed for run %s: %s", hook_row.name, run.id, e)
 
         outcome = il.EventType.HOOK_FAILED if error else il.EventType.HOOK_FIRED
-        self._store.save_event(
+        self._store.runs.save_event(
             il.Event(
                 id=claim,
                 type=outcome,
@@ -250,4 +250,4 @@ class HookController(Controller):
                 f"Refusing to trigger component {component_id}: the hook watches it "
                 "(directly or via its parent), which would loop forever"
             )
-        self._store.create_run(run.org_id, component_id=UUID(component_id), partition_key=run.partition_key)
+        self._store.runs.create(run.org_id, component_id=UUID(component_id), partition_key=run.partition_key)
