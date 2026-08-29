@@ -17,7 +17,7 @@ from interloper_scheduler import executor as executor_module
 from interloper_scheduler.executor import RunExecutor, run_event_metadata
 
 
-class _FakeRunStore:
+class _FakeEventStore:
     """Returns canned asset_executions per run_id."""
 
     def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
@@ -28,12 +28,12 @@ class _FakeRunStore:
 
 
 class _FakeStore:
-    """Presents the ``runs`` facet the executor's retry walk reaches for."""
+    """Presents the ``events`` facet the executor's retry walk reaches for."""
 
     engine = None  # the fake Session ignores it
 
     def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
-        self.runs = _FakeRunStore(executions)
+        self.events = _FakeEventStore(executions)
 
 
 class _FakeSession:

@@ -116,8 +116,8 @@ def get_run_detail(ctx: ToolkitContext, run_id: str) -> RunDetail | ToolError:
     try:
         rid = UUID(run_id)
         run = ctx.store.runs.get(rid)
-        events = ctx.store.runs.list_events(run_id=rid)
-        asset_execs = ctx.store.runs.list_asset_executions(rid)
+        events = ctx.store.events.list_events(run_id=rid)
+        asset_execs = ctx.store.events.list_asset_executions(rid)
 
         return RunDetail(run=run, events=events, asset_executions=asset_execs)
     except Exception as e:
@@ -138,7 +138,7 @@ def list_failures(ctx: ToolkitContext, limit: int = 20) -> FailureList | ToolErr
         results = []
         for run in failed_runs:
             run_id = run.id
-            events = ctx.store.runs.list_events(run_id=run_id)
+            events = ctx.store.events.list_events(run_id=run_id)
             errors = [
                 RunErrorEvent(component_key=e.component_key, error=e.error, timestamp=e.timestamp)
                 for e in events

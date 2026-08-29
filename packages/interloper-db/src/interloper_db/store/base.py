@@ -15,6 +15,7 @@ from interloper_db.session import transaction
 from interloper_db.store.auth import AuthStore
 from interloper_db.store.components import ComponentStore
 from interloper_db.store.drift import DriftStore
+from interloper_db.store.events import EventStore
 from interloper_db.store.hydration import Hydrator
 from interloper_db.store.quotas import QuotaService
 from interloper_db.store.relations import RelationStore
@@ -40,7 +41,8 @@ class Store:
         tokens: Personal access tokens.
         relations: The vocabulary-checked edges between components.
         components: Component CRUD and hydration, for every kind.
-        runs: Runs, their events, and backfills.
+        events: Run events and the asset executions derived from them.
+        runs: Runs and backfills.
         drift: Whether a stored key still resolves against the catalog.
         quotas: Limit resolution, enforcement gates and the usage ledger.
     """
@@ -78,6 +80,7 @@ class Store:
         self.drift = DriftStore(catalog)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaService(self._engine, lambda: self._quota_defaults)
+        self.events = EventStore(self._engine)
         self.runs = RunStore(self._engine, self.quotas)
         self.components = ComponentStore(
             self._engine, catalog, self._hydrator, encrypt, self.quotas, self.relations
