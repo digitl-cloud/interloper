@@ -170,11 +170,11 @@ def _ensure_org(store: Store, admin_id: UUID) -> Organisation:
             session.expunge(existing)
 
     if existing is None:
-        return store.auth.create_organisation(name=ORG_NAME, creator_id=admin_id)
+        return store.organisations.create(name=ORG_NAME, creator_id=admin_id)
 
     # Org already there — make sure the admin is still a member.
     assert existing.id is not None  # persisted row always has a PK
-    if store.auth.get_user_role(admin_id, existing.id) is None:
+    if store.organisations.member_role(admin_id, existing.id) is None:
         with Session(get_engine()) as session:
             session.add(UserOrganisation(user_id=admin_id, organisation_id=existing.id, role="admin"))
             session.commit()

@@ -46,7 +46,7 @@ class FakeStore:
         self.raise_value_error: str | None = None
         #: Role the fake user holds in the backfill's org. None = not a member.
         self.role: str | None = "editor"
-        self.auth = SimpleNamespace(get_user_role=self._get_user_role)
+        self.organisations = SimpleNamespace(member_role=self._member_role)
         self.runs = SimpleNamespace(get_backfill=self._get_backfill, cancel_backfill=self._cancel_backfill)
         self.components = SimpleNamespace()
 
@@ -55,7 +55,7 @@ class FakeStore:
             raise NotFoundError(f"Backfill {backfill_id} not found")
         return _fake_backfill(backfill_id)
 
-    def _get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
+    def _member_role(self, user_id: UUID, org_id: UUID) -> str | None:
         return self.role
 
     def _cancel_backfill(self, backfill_id: UUID):

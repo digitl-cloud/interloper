@@ -43,7 +43,7 @@ class FakeStore:
     def __init__(self) -> None:
         self.rows: dict[UUID, SimpleNamespace] = {}
         self.roles: dict[tuple[UUID, UUID], str] = {}
-        self.auth = SimpleNamespace(get_user_role=self._get_user_role)
+        self.organisations = SimpleNamespace(member_role=self._member_role)
         self.tokens = SimpleNamespace(
             create=self._create_token,
             list_all=self._list_tokens,
@@ -72,7 +72,7 @@ class FakeStore:
         row.revoked_at = datetime.now(timezone.utc)
         return row
 
-    def _get_user_role(self, user_id: UUID, org_id: UUID):
+    def _member_role(self, user_id: UUID, org_id: UUID):
         return self.roles.get((user_id, org_id))
 
 

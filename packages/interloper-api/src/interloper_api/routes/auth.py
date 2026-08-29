@@ -50,7 +50,7 @@ def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
         return True
     if email.rsplit("@", 1)[-1] in allowed_domains:
         return True
-    return store.auth.has_pending_invitation(email)
+    return store.organisations.has_pending_invitation(email)
 
 
 # -- Login & session -----------------------------------------------------------
@@ -275,10 +275,10 @@ def get_me(
     role = "viewer"
 
     if session_row.organisation_id:
-        org = store.auth.get_organisation(session_row.organisation_id)
+        org = store.organisations.get(session_row.organisation_id)
 
     if org and profile.id:
-        user_role = store.auth.get_user_role(profile.id, org.id)
+        user_role = store.organisations.member_role(profile.id, org.id)
         if user_role:
             role = user_role
 
@@ -380,7 +380,7 @@ def switch_org(
     Raises:
         HTTPException: 403 when the caller is not a member of the organisation.
     """
-    role = store.auth.get_user_role(user.id, body.organisation_id)
+    role = store.organisations.member_role(user.id, body.organisation_id)
     if not role:
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
 
@@ -418,7 +418,7 @@ def accept_invite(
         HTTPException: 400 when the invitation is unknown, already redeemed, or
             expired.
     """
-    org = store.auth.accept_invitation(body.token, user.id)
+    org = store.organisations.accept_invitation(body.token, user.id)
     if not org:
         raise HTTPException(status_code=400, detail="Invalid or expired invitation")
 

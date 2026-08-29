@@ -189,7 +189,7 @@ class TestDelete:
 
         class FakeStore:
             def __init__(self):
-                self.auth = SimpleNamespace(get_user_role=lambda user_id, org_id: "admin")
+                self.organisations = SimpleNamespace(member_role=lambda user_id, org_id: "admin")
                 self.components = SimpleNamespace(
                     get=lambda component_id: SimpleNamespace(id=component_id, org_id=org_id),
                     delete=_delete,

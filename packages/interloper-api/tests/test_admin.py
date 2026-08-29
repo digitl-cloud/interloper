@@ -39,16 +39,18 @@ class FakeStore:
         self.quota_updates: list[tuple[UUID, dict]] = []
         self.auth = SimpleNamespace(
             delete_profile=self._delete_profile,
-            delete_organisation=self._delete_organisation,
             list_all_profiles=self._list_all_profiles,
-            list_all_organisations=self._list_all_organisations,
-            create_organisation=self._create_organisation,
-            update_organisation=self._update_organisation,
-            get_organisation=self._get_organisation,
-            list_org_members=self._list_org_members,
-            add_org_member=self._add_org_member,
+        )
+        self.organisations = SimpleNamespace(
+            delete=self._delete_organisation,
+            list_all=self._list_all_organisations,
+            create=self._create_organisation,
+            update=self._update_organisation,
+            get=self._get_organisation,
+            list_members=self._list_org_members,
+            add_member=self._add_org_member,
             update_member_role=self._update_member_role,
-            remove_org_member=self._remove_org_member,
+            remove_member=self._remove_org_member,
             list_invitations=self._list_invitations,
             create_invitation=self._create_invitation,
             delete_invitation=self._delete_invitation,
@@ -532,7 +534,7 @@ def test_update_quota_rejects_negative_limits(store: FakeStore) -> None:
 def test_deleted_org_is_listed_but_not_manageable(store: FakeStore) -> None:
     """Soft-deleted orgs surface in the list (billing history) but 404 on management routes."""
     store.org.deleted_at = datetime.now(timezone.utc)
-    store.auth.get_organisation = lambda org_id: None  # deleted orgs read as missing
+    store.organisations.get = lambda org_id: None  # deleted orgs read as missing
     client = _client(store, is_super_admin=True)
 
     listed = client.get("/admin/organisations")
@@ -557,7 +559,7 @@ def test_activity_feed_composes_titles(store: FakeStore) -> None:
         {"kind": "member_joined", "when": when, "subject": "Jonas", "extra": "editor"},
         {"kind": "org_created", "when": when, "subject": None, "extra": None},
     ]
-    store.auth.list_organisation_activity = lambda org_id: store.activity  # ty: ignore[unresolved-attribute]
+    store.organisations.list_activity = lambda org_id: store.activity  # ty: ignore[unresolved-attribute]
 
     resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{store.org.id}/activity")
     assert resp.status_code == 200

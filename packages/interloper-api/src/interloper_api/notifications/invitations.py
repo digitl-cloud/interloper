@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
-from interloper_db.store.auth import INVITATION_EXPIRY_DAYS
+from interloper_db.store.organisations import INVITATION_EXPIRY_DAYS
 
 logger = logging.getLogger(__name__)
 

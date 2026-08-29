@@ -51,7 +51,7 @@ class FakeStore:
         self.role: str | None = "editor"
         #: Org owning every run this store returns.
         self.run_org_id: UUID = _ORG_ID
-        self.auth = SimpleNamespace(get_user_role=self._get_user_role)
+        self.organisations = SimpleNamespace(member_role=self._member_role)
         self.runs = SimpleNamespace(
             get=self._get_run,
             list_all=self._list_runs,
@@ -65,7 +65,7 @@ class FakeStore:
             raise NotFoundError(f"Run {run_id} not found")
         return _fake_run(run_id, self.run_org_id)
 
-    def _get_user_role(self, user_id: UUID, org_id: UUID) -> str | None:
+    def _member_role(self, user_id: UUID, org_id: UUID) -> str | None:
         return self.role
 
     def _list_runs(self, org_id: UUID, **kwargs):

@@ -602,7 +602,7 @@ def _require_org(store: Store, org_id: UUID) -> Organisation:
     Raises:
         HTTPException: 404 when no organisation carries that id.
     """
-    org = store.auth.get_organisation(org_id)
+    org = store.organisations.get(org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organisation not found")
     return org
@@ -720,7 +720,7 @@ def get_quotas(
     recomputed = store.quotas.count_successful_runs_by_org(period_start)
 
     organisations = []
-    for org, _member_count in store.auth.list_all_organisations():
+    for org, _member_count in store.organisations.list_all():
         limits = _quota_limits(overrides.get(org.id, {}))
         org_usage = usage.get(org.id)
         organisations.append(
@@ -821,7 +821,7 @@ def get_organisation_activity(
         The activity entries, newest first.
     """
     entries = []
-    for entry in store.auth.list_organisation_activity(org_id):
+    for entry in store.organisations.list_activity(org_id):
         title, detail = _activity_title(entry)
         entries.append(AdminActivityEntry(kind=entry["kind"], when=entry["when"], title=title, detail=detail))
     return entries
@@ -908,7 +908,7 @@ def list_all_organisations(
             created_at=org.created_at,
             deleted_at=org.deleted_at,
         )
-        for org, count in store.auth.list_all_organisations()
+        for org, count in store.organisations.list_all()
     ]
 
 
@@ -928,7 +928,7 @@ def create_organisation(
     Returns:
         The created organisation, whose member count is therefore zero.
     """
-    org = store.auth.create_organisation(name=body.name)
+    org = store.organisations.create(name=body.name)
     return AdminOrganisationResponse(
         id=org.id,
         name=org.name,
@@ -955,8 +955,8 @@ def update_organisation(
     Returns:
         The renamed organisation with its current member count.
     """
-    org = store.auth.update_organisation(org_id, body.name)
-    members = store.auth.list_org_members(org_id)
+    org = store.organisations.update(org_id, body.name)
+    members = store.organisations.list_members(org_id)
     return AdminOrganisationResponse(
         id=org.id,
         name=org.name,
@@ -992,7 +992,7 @@ def delete_organisation(
     org = _require_org(store, org_id)
     if body.name != org.name:
         raise HTTPException(status_code=400, detail="Organisation name does not match")
-    store.auth.delete_organisation(org_id)
+    store.organisations.delete(org_id)
     return {"status": "ok"}
 
 
@@ -1016,7 +1016,7 @@ def list_members(
         Every member of the organisation with its role.
     """
     _require_org(store, org_id)
-    members = store.auth.list_org_members(org_id)
+    members = store.organisations.list_members(org_id)
     return [
         MemberResponse(
             id=profile.id,
@@ -1052,7 +1052,7 @@ def join_organisation(
     """
     _require_org(store, org_id)
     _validate_role(body.role)
-    if not store.auth.add_org_member(org_id, user.id, body.role):
+    if not store.organisations.add_member(org_id, user.id, body.role):
         raise HTTPException(status_code=409, detail="Already a member of this organisation")
     return MemberResponse(
         id=user.id,
@@ -1084,7 +1084,7 @@ def update_member_role(
         ``{"status": "ok"}`` once the role is written.
     """
     _validate_role(body.role)
-    store.auth.update_member_role(org_id, user_id, body.role)
+    store.organisations.update_member_role(org_id, user_id, body.role)
     return {"status": "ok"}
 
 
@@ -1106,7 +1106,7 @@ def remove_member(
     Returns:
         ``{"status": "ok"}`` once the membership is gone.
     """
-    store.auth.remove_org_member(org_id, user_id)
+    store.organisations.remove_member(org_id, user_id)
     return {"status": "ok"}
 
 
@@ -1138,7 +1138,7 @@ def list_invitations(
             created_at=inv.created_at,
             expires_at=inv.expires_at,
         )
-        for inv in store.auth.list_invitations(org_id)
+        for inv in store.organisations.list_invitations(org_id)
     ]
 
 
@@ -1167,7 +1167,7 @@ def invite_member(
     """
     org = _require_org(store, org_id)
     _validate_role(body.role)
-    invitation = store.auth.create_invitation(
+    invitation = store.organisations.create_invitation(
         org_id=org_id,
         email=body.email.strip(),
         role=body.role,
@@ -1205,5 +1205,5 @@ def cancel_invitation(
     Returns:
         ``{"status": "ok"}`` once the invitation is gone.
     """
-    store.auth.delete_invitation(invitation_id)
+    store.organisations.delete_invitation(invitation_id)
     return {"status": "ok"}
