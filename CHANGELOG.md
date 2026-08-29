@@ -2,6 +2,82 @@
 
 <!-- version list -->
 
+## v0.67.0 (2026-08-29)
+
+### Bug Fixes
+
+- **core**: Drop the broken materializable parameter from @source
+  ([`d7b0348`](https://github.com/digitl-cloud/interloper/commit/d7b0348689f4cdea8f6fabca29a605e7e01538bd))
+
+- **core**: Make Registry iterable
+  ([`357cca7`](https://github.com/digitl-cloud/interloper/commit/357cca7cd9b1e178a59f07bc4b2a49f3f6575deb))
+
+### Chores
+
+- Add python style rules for agent sessions
+  ([`340d159`](https://github.com/digitl-cloud/interloper/commit/340d159e657b0800117d2bb84f8e6f5a991d3703))
+
+- Require complete docstrings in the python style rules
+  ([`b545f68`](https://github.com/digitl-cloud/interloper/commit/b545f683e7818ac77cda2b080e734354535ace90))
+
+### Documentation
+
+- **core**: Document every parameter and package
+  ([`5e26e5e`](https://github.com/digitl-cloud/interloper/commit/5e26e5ece8743ea4ad801b040d19461dd92db41a))
+
+### Refactoring
+
+- **api**: Apply the python style rules
+  ([`edd255d`](https://github.com/digitl-cloud/interloper/commit/edd255d306033800c0ad0b0a9f61f845868b3d86))
+
+- **api**: Give the package root a shape
+  ([`b5ccf30`](https://github.com/digitl-cloud/interloper/commit/b5ccf30818aedad90aada9aef22074036b8294c6))
+
+- **catalog**: Resolve source-owned assets through their parent
+  ([`0659956`](https://github.com/digitl-cloud/interloper/commit/0659956e6ed12b60c933a1330a8d0a2c777ea9b9))
+
+- **core**: Give module-level logic owners
+  ([`70651e8`](https://github.com/digitl-cloud/interloper/commit/70651e8cce34d20e50f0195c4303d64d567d20cd))
+
+- **core**: Prune comments to the style rules
+  ([`f71401d`](https://github.com/digitl-cloud/interloper/commit/f71401d65cc9e9cda1a6b83dbfc3024997279ed3))
+
+- **core**: Spell out abbreviated names
+  ([`c5cd52c`](https://github.com/digitl-cloud/interloper/commit/c5cd52c92806fb71017cb5a10efb51f6d7c0662a))
+
+- **db**: Apply the python style rules
+  ([`e9d5df4`](https://github.com/digitl-cloud/interloper/commit/e9d5df465f113b108c33221a1a1b69efc4c95112))
+
+- **db**: Compose the Store from facets instead of mixins
+  ([`213d2b5`](https://github.com/digitl-cloud/interloper/commit/213d2b56e9fe5470c716702742d09d92202dc22e))
+
+- **db**: Fold component status into the component facet
+  ([`209a356`](https://github.com/digitl-cloud/interloper/commit/209a356b76dad58ccbdf020dcade22826d32cee3))
+
+- **db**: Give every keyed lookup the same answer for a missing row
+  ([`9ef1030`](https://github.com/digitl-cloud/interloper/commit/9ef1030e60ada91ba90b3f68b30c7b340d7505df))
+
+- **db**: Make the store facets read the same way
+  ([`7fe0905`](https://github.com/digitl-cloud/interloper/commit/7fe0905599be3e80ded8374acb311dd2435c36ec))
+
+- **db**: Name modules for what they own, not who needed them first
+  ([`fa9ed92`](https://github.com/digitl-cloud/interloper/commit/fa9ed921c5dfb9db86abea14740065bd00c90d01))
+
+- **db**: Split events out of the run store
+  ([`cdbd930`](https://github.com/digitl-cloud/interloper/commit/cdbd930f81b63330e12f9661791346ab53afb20a))
+
+- **db**: Split organisations out of the auth store
+  ([`0685612`](https://github.com/digitl-cloud/interloper/commit/0685612bd1b3aed46a2219675077280dff569ade))
+
+- **db**: Split the god modules into packages
+  ([`7efd0db`](https://github.com/digitl-cloud/interloper/commit/7efd0db44aef63c1ea1ff22cbd9fbd28479a3930))
+
+### Breaking Changes
+
+- **db**: `store.organisations.get`, `store.tokens.get` and `store.auth.get_profile` raise
+  `NotFoundError` instead of returning `None`.
+
+
 ## v0.66.0 (2026-08-28)
 
 ### Bug Fixes
