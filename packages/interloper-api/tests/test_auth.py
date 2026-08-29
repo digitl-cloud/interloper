@@ -31,11 +31,11 @@ class FakeStore:
         self.upserted = False
         self.auth = SimpleNamespace(
             get_profile_by_google_id=self._get_profile_by_google_id,
-            has_pending_invitation=self._has_pending_invitation,
             upsert_profile=self._upsert_profile,
             set_super_admin=self._set_super_admin,
             create_session=self._create_session,
         )
+        self.organisations = SimpleNamespace(has_pending_invitation=self._has_pending_invitation)
 
     def _get_profile_by_google_id(self, google_id: str) -> SimpleNamespace | None:
         return self.profile if self.exists else None

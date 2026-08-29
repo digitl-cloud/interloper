@@ -43,7 +43,7 @@ def authorize_org_member(
     Raises:
         HTTPException: 404 if not a member, 403 if the role is insufficient.
     """
-    role = store.auth.get_user_role(user.id, org_id)
+    role = store.organisations.member_role(user.id, org_id)
     if role is None:
         raise HTTPException(status_code=404, detail=detail)
     if _ROLE_RANK.get(role, -1) < _ROLE_RANK[minimum]:
@@ -109,7 +109,7 @@ def _check_role(
     Raises:
         HTTPException: 403 if insufficient permissions.
     """
-    role = store.auth.get_user_role(user.id, org_id)
+    role = store.organisations.member_role(user.id, org_id)
     if role is None:
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
     if _ROLE_RANK.get(role, -1) < _ROLE_RANK[minimum]:

@@ -16,6 +16,7 @@ from interloper_db.store.auth import AuthStore
 from interloper_db.store.components import ComponentStore
 from interloper_db.store.events import EventStore
 from interloper_db.store.hydration import Hydrator
+from interloper_db.store.organisations import OrganisationStore
 from interloper_db.store.quotas import QuotaStore
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.runs import RunStore
@@ -75,7 +76,8 @@ class Store:
         # Each facet is handed what it works through, so its dependencies read
         # off its constructor and nothing reaches back into the store.
         self.auth = AuthStore(self._engine)
-        self.tokens = TokenStore(self._engine, self.auth)
+        self.organisations = OrganisationStore(self._engine)
+        self.tokens = TokenStore(self._engine, self.organisations)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
         self.events = EventStore(self._engine)

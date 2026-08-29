@@ -91,7 +91,7 @@ def get_current_org(
     if not session_row.organisation_id:
         raise HTTPException(status_code=400, detail="No organisation selected")
 
-    org = store.auth.get_organisation(session_row.organisation_id)
+    org = store.organisations.get(session_row.organisation_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organisation not found")
 

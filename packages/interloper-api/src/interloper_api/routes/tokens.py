@@ -145,7 +145,7 @@ def revoke_token(
         raise HTTPException(status_code=404, detail=detail)
 
     if row.user_id != user.id:
-        role = store.auth.get_user_role(user.id, row.organisation_id)
+        role = store.organisations.member_role(user.id, row.organisation_id)
         if role != "admin":
             raise HTTPException(status_code=404, detail=detail)
 

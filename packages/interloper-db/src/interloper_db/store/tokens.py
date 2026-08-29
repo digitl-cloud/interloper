@@ -20,7 +20,7 @@ from sqlmodel import select
 from interloper_db.crypto import hash_token
 from interloper_db.models import PersonalAccessToken, Profile
 from interloper_db.session import commit, session_scope
-from interloper_db.store.auth import AuthStore
+from interloper_db.store.organisations import OrganisationStore
 
 TOKEN_PREFIX = "ilp_"
 
@@ -39,15 +39,16 @@ class TokenStore:
     target.
     """
 
-    def __init__(self, engine: Engine, auth: AuthStore) -> None:
+    def __init__(self, engine: Engine, organisations: OrganisationStore) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
-            auth: Auth facet, for the membership a token's scope resolves against.
+            organisations: Organisation facet, for the membership a token's
+                scope resolves against.
         """
         self._engine = engine
-        self._auth = auth
+        self._organisations = organisations
 
     def create(
         self,
@@ -115,8 +116,8 @@ class TokenStore:
             if not db_profile:
                 return None
 
-            membership = self._auth._get_membership(session, db_token.user_id, db_token.organisation_id)
-            if not membership:
+            role = self._organisations.member_role(db_token.user_id, db_token.organisation_id)
+            if role is None:
                 return None
 
             last_used = db_token.last_used_at
@@ -126,7 +127,7 @@ class TokenStore:
                 commit(session)
                 session.refresh(db_token)
 
-            return db_profile, db_token, membership.role
+            return db_profile, db_token, role
 
     def list_all(self, user_id: UUID, organisation_id: UUID | None = None) -> list[PersonalAccessToken]:
         """List a user's tokens, optionally filtered to one organisation.

@@ -65,7 +65,7 @@ def member(store: Store) -> tuple[Profile, Organisation]:
         The profile and the organisation it was made admin of, in that order.
     """
     profile = store.auth.upsert_profile(google_id="g-user", email="user@example.com", name="User")
-    org = store.auth.create_organisation(name="Acme", creator_id=profile.id)
+    org = store.organisations.create(name="Acme", creator_id=profile.id)
     return profile, org
 
 
@@ -101,7 +101,7 @@ class TestResolveToken:
         profile, org = member
         _, raw = store.tokens.create(profile.id, org.id, name="t")
 
-        store.auth.update_member_role(org.id, profile.id, "viewer")
+        store.organisations.update_member_role(org.id, profile.id, "viewer")
 
         resolved = store.tokens.resolve(raw)
         assert resolved is not None
@@ -111,7 +111,7 @@ class TestResolveToken:
         profile, org = member
         _, raw = store.tokens.create(profile.id, org.id, name="t")
 
-        store.auth.remove_org_member(org.id, profile.id)
+        store.organisations.remove_member(org.id, profile.id)
 
         assert store.tokens.resolve(raw) is None
 
@@ -152,7 +152,7 @@ class TestResolveToken:
 class TestListAndRevoke:
     def test_list_tokens_filters_by_org(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        other_org = store.auth.create_organisation(name="Other", creator_id=profile.id)
+        other_org = store.organisations.create(name="Other", creator_id=profile.id)
         store.tokens.create(profile.id, org.id, name="a")
         store.tokens.create(profile.id, other_org.id, name="b")
 

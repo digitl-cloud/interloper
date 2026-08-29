@@ -1,6 +1,6 @@
 """Tests for the invitation email rendering."""
 
-from interloper_db.store.auth import INVITATION_EXPIRY_DAYS
+from interloper_db.store.organisations import INVITATION_EXPIRY_DAYS
 
 from interloper_api.notifications import InvitationEmail
 
