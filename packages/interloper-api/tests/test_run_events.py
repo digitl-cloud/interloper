@@ -35,8 +35,8 @@ class FakeStore:
         self.list_calls: list[tuple] = []
         self.count_calls: list[tuple] = []
         self.auth = SimpleNamespace(get_user_role=self._get_user_role)
-        self.runs = SimpleNamespace(
-            get=self._get_run,
+        self.runs = SimpleNamespace(get=self._get_run)
+        self.events = SimpleNamespace(
             count_events=self._count_events,
             list_events=self._list_events,
         )

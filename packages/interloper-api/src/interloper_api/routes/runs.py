@@ -299,7 +299,7 @@ def list_asset_executions(
         The run's asset executions, as response models.
     """
     _load_authorized_run(run_id, user, store)
-    rows = store.runs.list_asset_executions(run_id)
+    rows = store.events.list_asset_executions(run_id)
     return [
         AssetExecutionResponse(
             run_id=row.run_id,
@@ -393,9 +393,9 @@ def list_run_events(
     _load_authorized_run(run_id, user, store)
     limit = max(1, min(limit, MAX_EVENTS_PAGE_SIZE))
     offset = max(0, offset)
-    total = store.runs.count_events(run_id=run_id, component_ids=component_id, event_types=event_type)
+    total = store.events.count_events(run_id=run_id, component_ids=component_id, event_types=event_type)
     response.headers["X-Total-Count"] = str(total)
-    events = store.runs.list_events(
+    events = store.events.list_events(
         run_id=run_id, component_ids=component_id, event_types=event_type, limit=limit, offset=offset
     )
     return [EventResponse.from_event(e) for e in events]

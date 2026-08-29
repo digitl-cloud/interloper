@@ -190,7 +190,7 @@ class Reaper(Controller):
                 type=il.EventType.RUN_FAILED,
                 metadata={**run_event_metadata(run, target), "error": error},
             )
-            self._store.runs.save_event(event, org_id=run.org_id, run_id=run.id)
+            self._store.events.save_event(event, org_id=run.org_id, run_id=run.id)
         except Exception:
             logger.exception("Failed to save RUN_FAILED event for run %s", run.id)
 
