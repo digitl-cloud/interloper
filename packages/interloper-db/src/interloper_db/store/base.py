@@ -14,7 +14,6 @@ from interloper_db.engine import engine_from_settings, get_engine
 from interloper_db.session import transaction
 from interloper_db.store.auth import AuthStore
 from interloper_db.store.components import ComponentStore
-from interloper_db.store.drift import DriftStore
 from interloper_db.store.events import EventStore
 from interloper_db.store.hydration import Hydrator
 from interloper_db.store.quotas import QuotaStore
@@ -77,7 +76,6 @@ class Store:
         # off its constructor and nothing reaches back into the store.
         self.auth = AuthStore(self._engine)
         self.tokens = TokenStore(self._engine, self.auth)
-        self.drift = DriftStore(catalog)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
         self.events = EventStore(self._engine)

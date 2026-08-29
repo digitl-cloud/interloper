@@ -1,7 +1,7 @@
 /**
  * Catalog-resolution state of a persisted component (source or asset).
  *
- * Mirrors `interloper_db.drift.ComponentStatus` on the backend, derived from
+ * Mirrors `interloper_db.store.status.ComponentStatus` on the backend, derived from
  * the same resolver hydration uses:
  *   - `ok`       — key resolves in the enabled catalog; live and runnable
  *   - `disabled` — key exists in code but is not exposed by this deployment
