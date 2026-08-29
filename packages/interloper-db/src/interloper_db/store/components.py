@@ -46,7 +46,7 @@ from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
 from interloper_db.store.drift import ComponentStatus, asset_status, source_status
 from interloper_db.store.hydration import Hydrator
-from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES, QuotaService
+from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES, QuotaStore
 from interloper_db.store.relations import Binding, RelationStore, _add_relation
 
 # Eager-load set for rows returned to API consumers: the parent, children
@@ -72,7 +72,7 @@ class ComponentStore:
         catalog: Catalog,
         hydrator: Hydrator,
         encrypt: Any,
-        quotas: QuotaService,
+        quotas: QuotaStore,
         relations: RelationStore,
     ) -> None:
         """Bind the facet to what it works through.

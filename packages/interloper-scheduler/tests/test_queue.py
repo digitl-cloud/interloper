@@ -122,11 +122,12 @@ def _exhaust_quota(store: Store, limit: int = 1) -> None:
     """Give the org a limit and a ledger already at it."""
     from types import SimpleNamespace
 
-    from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, db_now, increment_usage, month_start
+    from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 
     store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=limit)
     with Session(store.engine) as session:
-        increment_usage(session, _ORG, METRIC_SUCCESSFUL_RUNS, month_start(db_now(session)), used=limit)
+        ledger = UsageLedger(session)
+        ledger.increment(_ORG, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=limit)
         session.commit()
 
 

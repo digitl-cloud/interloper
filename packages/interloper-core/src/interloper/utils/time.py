@@ -102,3 +102,18 @@ def assume_utc(value: dt.datetime) -> dt.datetime:
         An aware datetime; an already-aware *ts* is returned unchanged.
     """
     return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+
+
+def month_start(value: dt.datetime) -> dt.date:
+    """The first day of the UTC calendar month a timestamp falls in.
+
+    Naive values are treated as UTC, so a timestamp read back from a database
+    that drops tzinfo attributes to the same month it was written in.
+
+    Args:
+        value: The timestamp to attribute, aware or naive.
+
+    Returns:
+        The first day of that UTC month, as a date.
+    """
+    return assume_utc(value).astimezone(dt.timezone.utc).date().replace(day=1)

@@ -4,7 +4,7 @@ import datetime as dt
 
 import pytest
 
-from interloper.utils import coerce_to_date, coerce_to_datetime
+from interloper.utils import add_months, assume_utc, coerce_to_date, coerce_to_datetime, month_start
 
 
 class TestCoerceToDate:
@@ -47,3 +47,32 @@ class TestCoerceToDatetime:
     def test_invalid_string_raises_type_error(self) -> None:
         with pytest.raises(TypeError, match="ISO-8601 datetime string"):
             coerce_to_datetime("not-a-datetime")
+
+
+class TestAssumeUtc:
+    def test_naive_is_labelled_utc(self) -> None:
+        assert assume_utc(dt.datetime(2026, 7, 1, 9, 30)).tzinfo is dt.timezone.utc  # noqa: DTZ001
+
+    def test_aware_is_left_alone(self) -> None:
+        berlin = dt.timezone(dt.timedelta(hours=2))
+        value = dt.datetime(2026, 7, 1, 9, 30, tzinfo=berlin)
+        assert assume_utc(value) is value
+
+
+class TestAddMonths:
+    def test_rolls_the_year(self) -> None:
+        assert add_months(dt.date(2026, 12, 1), 1) == dt.date(2027, 1, 1)
+        assert add_months(dt.date(2026, 1, 1), -1) == dt.date(2025, 12, 1)
+
+    def test_day_is_clamped_to_the_target_month(self) -> None:
+        assert add_months(dt.date(2026, 1, 31), 1) == dt.date(2026, 2, 28)
+
+
+class TestMonthStart:
+    def test_normalizes_to_utc(self) -> None:
+        # 00:30 in Berlin is still the previous month in UTC.
+        berlin = dt.timezone(dt.timedelta(hours=2))
+        assert month_start(dt.datetime(2026, 7, 1, 0, 30, tzinfo=berlin)) == dt.date(2026, 6, 1)
+
+    def test_naive_is_read_as_utc(self) -> None:
+        assert month_start(dt.datetime(2026, 7, 1, 0, 30)) == dt.date(2026, 7, 1)  # noqa: DTZ001

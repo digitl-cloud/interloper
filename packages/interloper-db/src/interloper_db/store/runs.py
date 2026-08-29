@@ -17,8 +17,8 @@ from interloper_db.session import commit, session_scope
 from interloper_db.store.quotas import (
     QUOTA_MAX_BACKFILL_PARTITIONS,
     QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
-    QuotaService,
-    settle_run_usage,
+    QuotaStore,
+    UsageLedger,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class RunStore:
     """Store methods for runs, events, and backfills."""
 
-    def __init__(self, engine: Engine, quotas: QuotaService) -> None:
+    def __init__(self, engine: Engine, quotas: QuotaStore) -> None:
         """Bind the facet to what it works through.
 
         Args:
@@ -187,7 +187,7 @@ class RunStore:
             db_run.completed_at = datetime.now(timezone.utc)
             session.add(db_run)
 
-            settle_run_usage(session, db_run, success=success)
+            UsageLedger(session).settle_run(db_run, success=success)
 
             if db_run.component_id:
                 db_component = session.get(Component, db_run.component_id)

@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Any
 
 from sqlalchemy import Engine
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session
 
 #: The session an enclosing ``Store.transaction`` owns, if any. Store methods
@@ -113,3 +116,19 @@ def session_scope(engine: Engine) -> Iterator[Session]:
     finally:
         _scope_depth.reset(depth)
         _open_session.reset(open_token)
+
+
+def dialect_insert(session: Session) -> Any:
+    """The upsert-capable ``INSERT`` constructor for a session's dialect.
+
+    ``on_conflict_do_update`` is dialect-specific, so every upsert in the store
+    goes through this rather than the generic ``insert``.
+
+    Args:
+        session: The session whose bind decides the dialect.
+
+    Returns:
+        The postgresql insert constructor, or the sqlite one for every other
+        dialect (the tests run on in-memory SQLite).
+    """
+    return postgresql_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
