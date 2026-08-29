@@ -26,7 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
-from interloper_db.store.session import commit, session_scope
+from interloper_db.session import commit, session_scope
 
 # One relation binding: (destination component id, slot). Slot is "" for
 # slotless relation types.

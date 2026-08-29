@@ -1,6 +1,5 @@
 """Interloper database persistence: SQLModel schema, engine, provisioning, and store."""
 
-from interloper_db.drift import ComponentStatus
 from interloper_db.engine import get_engine, init_engine
 from interloper_db.models import (
     AssetExecution,
@@ -20,7 +19,7 @@ from interloper_db.models import (
 )
 from interloper_db.provision import create_all, downgrade, ensure_database, upgrade
 from interloper_db.store import Store
-from interloper_db.store.components import stamp_component_state
+from interloper_db.store.drift import ComponentStatus
 
 __all__ = [
     "AssetExecution",
@@ -44,6 +43,5 @@ __all__ = [
     "ensure_database",
     "get_engine",
     "init_engine",
-    "stamp_component_state",
     "upgrade",
 ]

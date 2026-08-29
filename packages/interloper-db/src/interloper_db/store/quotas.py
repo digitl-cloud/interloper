@@ -37,7 +37,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, col, select
 
 from interloper_db.models import Component, Quota, Run, Usage
-from interloper_db.store.session import commit, session_scope
+from interloper_db.session import commit, session_scope
 
 METRIC_SUCCESSFUL_RUNS = "successful_runs"
 

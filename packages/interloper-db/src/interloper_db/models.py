@@ -24,6 +24,7 @@ from datetime import datetime
 from typing import Any, ClassVar, Optional
 from uuid import UUID, uuid4
 
+import interloper as il
 from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, LargeBinary, Relationship, SQLModel, text
@@ -290,6 +291,29 @@ class Component(SQLModel, table=True):
             "viewonly": True,
         },
     )
+
+    def stamp_state(self, **fields: Any) -> None:
+        """Merge machine-owned state fields onto a component row (spec untouched).
+
+        Datetimes are written in the canonical timezone-aware ISO form (so
+        lexicographic comparison in SQL stays chronological); the merged payload
+        is validated against the kind's ``state_model`` — shape only, stored
+        strings are never rewritten. The caller owns the session and commit.
+
+        Args:
+            self: The row to merge the state onto.
+            **fields: State fields to set, merged over the existing payload.
+                Datetime values are stored as timezone-aware ISO strings.
+        """
+        import datetime as dt
+
+        state = dict(self.state or {})
+        for key, value in fields.items():
+            state[key] = value.isoformat() if isinstance(value, dt.datetime) else value
+        model = il.KINDS[self.kind].state_model
+        if model is not None:
+            model.model_validate(state)
+        self.state = state
 
 
 class ComponentRelation(SQLModel, table=True):

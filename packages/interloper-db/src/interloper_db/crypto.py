@@ -52,3 +52,15 @@ def make_cipher(secret_key: str) -> tuple[Callable[[bytes], bytes], Callable[[by
         raise ValueError("Cannot build a cipher from an empty secret key")
     fernet = Fernet(derive_fernet_key(secret_key))
     return fernet.encrypt, fernet.decrypt
+
+
+def hash_token(token: str) -> str:
+    """Hash a raw session token the way it is stored (only hashes persist).
+
+    Args:
+        token: The raw token as presented by the client.
+
+    Returns:
+        The SHA-256 hex digest.
+    """
+    return hashlib.sha256(token.encode()).hexdigest()

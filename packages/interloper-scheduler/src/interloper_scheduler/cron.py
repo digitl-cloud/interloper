@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from croniter import croniter
 from interloper.errors import ConfigError
 from interloper.partitioning.time import TimePartitionWindow
-from interloper_db import Store, stamp_component_state
+from interloper_db import Store
 from interloper_db.models import Backfill, Component, Run
 from sqlalchemy import or_
 from sqlmodel import Session, select
@@ -236,7 +236,7 @@ class CronController(Controller):
     @staticmethod
     def _set_state(session: Session, job: Component, **timestamps: datetime) -> None:
         """Merge timestamps into the job's machine-owned state (spec untouched)."""
-        stamp_component_state(job, **timestamps)
+        job.stamp_state(**timestamps)
         session.add(job)
         session.flush()
 

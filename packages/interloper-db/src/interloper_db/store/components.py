@@ -41,12 +41,13 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
-from interloper_db.drift import ComponentStatus, asset_status, resolve_component_cls, resolve_source_cls, source_status
-from interloper_db.hydration import Hydrator
+from interloper_db.catalog import resolve_component_cls, resolve_source_cls
 from interloper_db.models import Component, ComponentRelation
+from interloper_db.session import commit, session_scope
+from interloper_db.store.drift import ComponentStatus, asset_status, source_status
+from interloper_db.store.hydration import Hydrator
 from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES, QuotaService
 from interloper_db.store.relations import Binding, RelationStore, _add_relation
-from interloper_db.store.session import commit, session_scope
 
 # Eager-load set for rows returned to API consumers: the parent, children
 # with their relations, and two hops (component → destination → resources).
@@ -845,27 +846,3 @@ class ComponentStore:
 
 
 # -- Component state -----------------------------------------------------------
-
-
-def stamp_component_state(db_component: Component, **fields: Any) -> None:
-    """Merge machine-owned state fields onto a component row (spec untouched).
-
-    Datetimes are written in the canonical timezone-aware ISO form (so
-    lexicographic comparison in SQL stays chronological); the merged payload
-    is validated against the kind's ``state_model`` — shape only, stored
-    strings are never rewritten. The caller owns the session and commit.
-
-    Args:
-        db_component: The row to merge the state onto.
-        **fields: State fields to set, merged over the existing payload.
-            Datetime values are stored as timezone-aware ISO strings.
-    """
-    import datetime as dt
-
-    state = dict(db_component.state or {})
-    for key, value in fields.items():
-        state[key] = value.isoformat() if isinstance(value, dt.datetime) else value
-    model = il.KINDS[db_component.kind].state_model
-    if model is not None:
-        model.model_validate(state)
-    db_component.state = state
