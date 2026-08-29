@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from interloper.errors import NotFoundError
-from sqlalchemy import delete, func, update
+from sqlalchemy import Engine, delete, func, update
 from sqlmodel import Session, col, select
 
 from interloper_db.models import (
@@ -24,7 +24,7 @@ from interloper_db.models import (
     Run,
     UserOrganisation,
 )
-from interloper_db.store.base import StoreBase
+from interloper_db.store.session import commit, session_scope
 
 INVITATION_EXPIRY_DAYS = 7
 
@@ -74,13 +74,21 @@ def _get_membership(session: Session, user_id: UUID, org_id: UUID) -> UserOrgani
     ).first()
 
 
-class AuthMixin(StoreBase):
+class AuthStore:
     """Store methods for authentication and organisation management.
 
     Error contract (same as the component/run mixins): lookups return
     ``None`` when the row is absent — soft probes, like ``Registry.get`` —
     while mutations raise :class:`NotFoundError` on a missing target.
     """
+
+    def __init__(self, engine: Engine) -> None:
+        """Bind the facet to what it works through.
+
+        Args:
+            engine: Engine the facet opens its sessions on.
+        """
+        self._engine = engine
 
     # -- Profiles --------------------------------------------------------------
 
@@ -104,7 +112,7 @@ class AuthMixin(StoreBase):
         Returns:
             The upserted Profile row.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = select(Profile).where(Profile.google_id == google_id)
             db_profile = session.exec(statement).first()
 
@@ -124,7 +132,7 @@ class AuthMixin(StoreBase):
                 )
                 session.add(db_profile)
 
-            session.commit()
+            commit(session)
             session.refresh(db_profile)
             return db_profile
 
@@ -142,7 +150,7 @@ class AuthMixin(StoreBase):
         Raises:
             NotFoundError: If the profile is not found.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_profile = session.get(Profile, user_id)
             if not db_profile:
                 raise NotFoundError(f"Profile {user_id} not found")
@@ -151,7 +159,7 @@ class AuthMixin(StoreBase):
             if timezone is not None:
                 db_profile.timezone = timezone
             session.add(db_profile)
-            session.commit()
+            commit(session)
             session.refresh(db_profile)
             return db_profile
 
@@ -168,13 +176,13 @@ class AuthMixin(StoreBase):
         Raises:
             NotFoundError: If the profile is not found.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_profile = session.get(Profile, user_id)
             if not db_profile:
                 raise NotFoundError(f"Profile {user_id} not found")
             db_profile.is_super_admin = is_super_admin
             session.add(db_profile)
-            session.commit()
+            commit(session)
             return db_profile
 
     def get_profile(self, user_id: UUID) -> Profile | None:
@@ -186,7 +194,7 @@ class AuthMixin(StoreBase):
         Returns:
             The Profile or None.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             return session.get(Profile, user_id)
 
     def list_all_profiles(self) -> list[tuple[Profile, list[Organisation]]]:
@@ -195,7 +203,7 @@ class AuthMixin(StoreBase):
         Returns:
             List of ``(Profile, organisations)`` tuples.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             profiles = session.exec(select(Profile)).all()
             memberships = session.exec(
                 select(UserOrganisation.user_id, Organisation).join(
@@ -220,7 +228,7 @@ class AuthMixin(StoreBase):
         Raises:
             NotFoundError: If the profile is not found.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_profile = session.get(Profile, user_id)
             if not db_profile:
                 raise NotFoundError(f"Profile {user_id} not found")
@@ -239,7 +247,7 @@ class AuthMixin(StoreBase):
                 session.delete(invitation)
 
             session.delete(db_profile)
-            session.commit()
+            commit(session)
 
     def get_profile_by_google_id(self, google_id: str) -> Profile | None:
         """Get a profile by Google OAuth subject identifier.
@@ -250,7 +258,7 @@ class AuthMixin(StoreBase):
         Returns:
             The Profile or None.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             return session.exec(select(Profile).where(Profile.google_id == google_id)).first()
 
     # -- Sessions --------------------------------------------------------------
@@ -268,7 +276,7 @@ class AuthMixin(StoreBase):
         token = secrets.token_urlsafe(48)
         token_hash = _hash_token(token)
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_session = AuthSession(
                 user_id=user_id,
                 organisation_id=organisation_id,
@@ -276,7 +284,7 @@ class AuthMixin(StoreBase):
                 expires_at=datetime.now(timezone.utc) + timedelta(days=SESSION_EXPIRY_DAYS),
             )
             session.add(db_session)
-            session.commit()
+            commit(session)
 
         return token
 
@@ -291,7 +299,7 @@ class AuthMixin(StoreBase):
         """
         token_hash = _hash_token(token)
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = select(AuthSession).where(AuthSession.token_hash == token_hash)
             db_session = session.exec(statement).first()
             if not db_session:
@@ -299,7 +307,7 @@ class AuthMixin(StoreBase):
 
             if _as_utc(db_session.expires_at) < datetime.now(timezone.utc):
                 session.delete(db_session)
-                session.commit()
+                commit(session)
                 return None
 
             db_profile = session.get(Profile, db_session.user_id)
@@ -318,7 +326,7 @@ class AuthMixin(StoreBase):
         """
         token_hash = _hash_token(token)
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_session = session.exec(
                 select(AuthSession).where(AuthSession.token_hash == token_hash)
             ).first()
@@ -332,7 +340,7 @@ class AuthMixin(StoreBase):
                     db_profile.last_organisation_id = org_id
                     session.add(db_profile)
 
-            session.commit()
+            commit(session)
 
     def delete_user_sessions(self, user_id: UUID) -> None:
         """Delete all sessions for a user.
@@ -340,11 +348,11 @@ class AuthMixin(StoreBase):
         Args:
             user_id: Profile UUID.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_sessions = session.exec(select(AuthSession).where(AuthSession.user_id == user_id)).all()
             for db_session in db_sessions:
                 session.delete(db_session)
-            session.commit()
+            commit(session)
 
     # -- Organisations ---------------------------------------------------------
 
@@ -360,7 +368,7 @@ class AuthMixin(StoreBase):
         Returns:
             The created Organisation row.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_organisation = Organisation(name=name)
             session.add(db_organisation)
             session.flush()
@@ -371,7 +379,7 @@ class AuthMixin(StoreBase):
                     organisation_id=db_organisation.id,
                     role="admin",
                 ))
-            session.commit()
+            commit(session)
             session.refresh(db_organisation)
             return db_organisation
 
@@ -388,13 +396,13 @@ class AuthMixin(StoreBase):
         Raises:
             NotFoundError: If the organisation is not found or deleted.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_organisation = session.get(Organisation, org_id)
             if not db_organisation or db_organisation.deleted_at is not None:
                 raise NotFoundError(f"Organisation {org_id} not found")
             db_organisation.name = name
             session.add(db_organisation)
-            session.commit()
+            commit(session)
             return db_organisation
 
     def list_all_organisations(self) -> list[tuple[Organisation, int]]:
@@ -403,7 +411,7 @@ class AuthMixin(StoreBase):
         Returns:
             List of ``(Organisation, member_count)`` tuples.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             organisations = session.exec(select(Organisation)).all()
             counts = dict(
                 session.exec(
@@ -435,7 +443,7 @@ class AuthMixin(StoreBase):
         Raises:
             NotFoundError: If the organisation is not found or already deleted.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_organisation = session.get(Organisation, org_id)
             if not db_organisation or db_organisation.deleted_at is not None:
                 raise NotFoundError(f"Organisation {org_id} not found")
@@ -457,7 +465,7 @@ class AuthMixin(StoreBase):
 
             db_organisation.deleted_at = datetime.now(timezone.utc)
             session.add(db_organisation)
-            session.commit()
+            commit(session)
 
     def get_organisation(self, org_id: UUID, *, include_deleted: bool = False) -> Organisation | None:
         """Get an organisation by ID; soft-deleted orgs read as missing by default.
@@ -469,7 +477,7 @@ class AuthMixin(StoreBase):
         Returns:
             The Organisation or None.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             organisation = session.get(Organisation, org_id)
             if organisation and organisation.deleted_at is not None and not include_deleted:
                 return None
@@ -503,7 +511,7 @@ class AuthMixin(StoreBase):
             return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
         entries: list[dict[str, Any]] = []
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             organisation = session.get(Organisation, org_id)
             if not organisation:
                 raise NotFoundError(f"Organisation {org_id} not found")
@@ -577,7 +585,7 @@ class AuthMixin(StoreBase):
         Returns:
             List of Organisation rows.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             memberships = session.exec(
                 select(UserOrganisation).where(UserOrganisation.user_id == user_id)
             ).all()
@@ -599,7 +607,7 @@ class AuthMixin(StoreBase):
         Returns:
             The role string or None if not a member.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             membership = _get_membership(session, user_id, org_id)
             return membership.role if membership else None
 
@@ -612,7 +620,7 @@ class AuthMixin(StoreBase):
         Returns:
             List of ``(Profile, role)`` tuples.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             memberships = session.exec(
                 select(UserOrganisation).where(UserOrganisation.organisation_id == org_id)
             ).all()
@@ -635,7 +643,7 @@ class AuthMixin(StoreBase):
             True if added, False if the user is already a member (an
             idempotency signal, not a missing target).
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             if _get_membership(session, user_id, org_id):
                 return False
             session.add(UserOrganisation(
@@ -643,7 +651,7 @@ class AuthMixin(StoreBase):
                 organisation_id=org_id,
                 role=role,
             ))
-            session.commit()
+            commit(session)
             return True
 
     def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
@@ -657,13 +665,13 @@ class AuthMixin(StoreBase):
         Raises:
             NotFoundError: If the user is not a member.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             membership = _get_membership(session, user_id, org_id)
             if not membership:
                 raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
             membership.role = role
             session.add(membership)
-            session.commit()
+            commit(session)
 
     def remove_org_member(self, org_id: UUID, user_id: UUID) -> None:
         """Remove a member from an organisation.
@@ -675,12 +683,12 @@ class AuthMixin(StoreBase):
         Raises:
             NotFoundError: If the user is not a member.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             membership = _get_membership(session, user_id, org_id)
             if not membership:
                 raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
             session.delete(membership)
-            session.commit()
+            commit(session)
 
     # -- Invitations -----------------------------------------------------------
 
@@ -704,7 +712,7 @@ class AuthMixin(StoreBase):
         """
         token = secrets.token_urlsafe(32)
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_invitation = Invitation(
                 organisation_id=org_id,
                 email=email,
@@ -714,7 +722,7 @@ class AuthMixin(StoreBase):
                 expires_at=datetime.now(timezone.utc) + timedelta(days=INVITATION_EXPIRY_DAYS),
             )
             session.add(db_invitation)
-            session.commit()
+            commit(session)
             session.refresh(db_invitation)
             return db_invitation
 
@@ -727,7 +735,7 @@ class AuthMixin(StoreBase):
         Returns:
             List of Invitation rows.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_invitations = session.exec(
                 select(Invitation).where(Invitation.organisation_id == org_id)
             ).all()
@@ -742,7 +750,7 @@ class AuthMixin(StoreBase):
         Returns:
             The Invitation or None.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             return session.exec(select(Invitation).where(Invitation.token == token)).first()
 
     def delete_invitation(self, invitation_id: UUID) -> None:
@@ -754,12 +762,12 @@ class AuthMixin(StoreBase):
         Raises:
             NotFoundError: If the invitation is not found.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_invitation = session.get(Invitation, invitation_id)
             if not db_invitation:
                 raise NotFoundError(f"Invitation {invitation_id} not found")
             session.delete(db_invitation)
-            session.commit()
+            commit(session)
 
     def has_pending_invitation(self, email: str) -> bool:
         """Check whether a non-expired invitation exists for an email.
@@ -771,7 +779,7 @@ class AuthMixin(StoreBase):
             True when at least one pending invitation has not expired.
         """
         now = datetime.now(timezone.utc)
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_invitations = session.exec(
                 select(Invitation).where(func.lower(Invitation.email) == email.lower())
             ).all()
@@ -787,7 +795,7 @@ class AuthMixin(StoreBase):
         Returns:
             The Organisation joined, or None if invalid/expired.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_invitation = session.exec(
                 select(Invitation).where(Invitation.token == token)
             ).first()
@@ -796,7 +804,7 @@ class AuthMixin(StoreBase):
 
             if _as_utc(db_invitation.expires_at) < datetime.now(timezone.utc):
                 session.delete(db_invitation)
-                session.commit()
+                commit(session)
                 return None
 
             if not _get_membership(session, user_id, db_invitation.organisation_id):
@@ -808,5 +816,5 @@ class AuthMixin(StoreBase):
 
             db_organisation = session.get(Organisation, db_invitation.organisation_id)
             session.delete(db_invitation)
-            session.commit()
+            commit(session)
             return db_organisation

@@ -30,7 +30,7 @@ def get_current_user(
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    result = store.resolve_session(session_token)
+    result = store.auth.resolve_session(session_token)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
@@ -57,7 +57,7 @@ def get_session_context(
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    result = store.resolve_session(session_token)
+    result = store.auth.resolve_session(session_token)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
@@ -83,7 +83,7 @@ def get_current_org(
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    result = store.resolve_session(session_token)
+    result = store.auth.resolve_session(session_token)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
@@ -91,7 +91,7 @@ def get_current_org(
     if not session_row.organisation_id:
         raise HTTPException(status_code=400, detail="No organisation selected")
 
-    org = store.get_organisation(session_row.organisation_id)
+    org = store.auth.get_organisation(session_row.organisation_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organisation not found")
 

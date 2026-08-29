@@ -50,7 +50,7 @@ def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
         return True
     if email.rsplit("@", 1)[-1] in allowed_domains:
         return True
-    return store.has_pending_invitation(email)
+    return store.auth.has_pending_invitation(email)
 
 
 # -- Login & session -----------------------------------------------------------
@@ -187,10 +187,10 @@ def google_callback(
 
     # Gate signup only: existing profiles always sign in, a first login must
     # pass the allowlist before a profile is created.
-    if not store.get_profile_by_google_id(google_id) and not _signup_allowed(email, auth_config, store):
+    if not store.auth.get_profile_by_google_id(google_id) and not _signup_allowed(email, auth_config, store):
         return RedirectResponse(url="/login?error=signup_not_allowed", status_code=302)
 
-    profile = store.upsert_profile(
+    profile = store.auth.upsert_profile(
         google_id=google_id,
         email=email,
         name=name,
@@ -200,10 +200,10 @@ def google_callback(
     # Bootstrap super-admins from settings. Promote-only: removing an email from
     # the list never demotes an existing super-admin.
     if not profile.is_super_admin and email.lower() in auth_config.super_admin_emails:
-        profile = store.set_super_admin(profile.id)
+        profile = store.auth.set_super_admin(profile.id)
 
     # Create session (no org context — frontend resolves org after login)
-    token = store.create_session(user_id=profile.id)
+    token = store.auth.create_session(user_id=profile.id)
 
     redirect_url = state if state and state.startswith("/") else "/"
     response = RedirectResponse(url=redirect_url, status_code=302)
@@ -238,7 +238,7 @@ def logout(
     Returns:
         A status acknowledgement.
     """
-    store.delete_user_sessions(user.id)
+    store.auth.delete_user_sessions(user.id)
     response.delete_cookie("session_token", path="/")
     return {"status": "ok"}
 
@@ -266,7 +266,7 @@ def get_me(
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    result = store.resolve_session(session_token)
+    result = store.auth.resolve_session(session_token)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
@@ -275,10 +275,10 @@ def get_me(
     role = "viewer"
 
     if session_row.organisation_id:
-        org = store.get_organisation(session_row.organisation_id)
+        org = store.auth.get_organisation(session_row.organisation_id)
 
     if org and profile.id:
-        user_role = store.get_user_role(profile.id, org.id)
+        user_role = store.auth.get_user_role(profile.id, org.id)
         if user_role:
             role = user_role
 
@@ -345,7 +345,7 @@ def update_me(
         except (KeyError, ValueError):
             raise HTTPException(status_code=422, detail=f"Unknown timezone {body.timezone!r}")
 
-    profile = store.update_profile(user.id, name=body.name, timezone=body.timezone)
+    profile = store.auth.update_profile(user.id, name=body.name, timezone=body.timezone)
     return ProfileResponse.model_validate(profile, from_attributes=True)
 
 
@@ -380,12 +380,12 @@ def switch_org(
     Raises:
         HTTPException: 403 when the caller is not a member of the organisation.
     """
-    role = store.get_user_role(user.id, body.organisation_id)
+    role = store.auth.get_user_role(user.id, body.organisation_id)
     if not role:
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
 
     if session_token:
-        store.set_session_org(session_token, body.organisation_id, user_id=user.id)
+        store.auth.set_session_org(session_token, body.organisation_id, user_id=user.id)
     return {"status": "ok"}
 
 
@@ -418,11 +418,11 @@ def accept_invite(
         HTTPException: 400 when the invitation is unknown, already redeemed, or
             expired.
     """
-    org = store.accept_invitation(body.token, user.id)
+    org = store.auth.accept_invitation(body.token, user.id)
     if not org:
         raise HTTPException(status_code=400, detail="Invalid or expired invitation")
 
     if session_token:
-        store.set_session_org(session_token, org.id, user_id=user.id)
+        store.auth.set_session_org(session_token, org.id, user_id=user.id)
 
     return {"status": "ok"}

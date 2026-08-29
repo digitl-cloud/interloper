@@ -19,24 +19,36 @@ from uuid import UUID
 
 import interloper as il
 from interloper.asset.base import AssetIdentity
+from interloper.catalog.base import Catalog
 from interloper.errors import ConfigError, NotFoundError
+from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
-from interloper_db.store.base import StoreBase
+from interloper_db.store.session import commit, session_scope
 
 # One relation binding: (destination component id, slot). Slot is "" for
 # slotless relation types.
 Binding = tuple[UUID, str]
 
 
-class RelationMixin(StoreBase):
+class RelationStore:
     """Store methods for validated relation reads and writes."""
+
+    def __init__(self, engine: Engine, catalog: Catalog) -> None:
+        """Bind the facet to what it works through.
+
+        Args:
+            engine: Engine the facet opens its sessions on.
+            catalog: Catalog its relation vocabulary resolves against.
+        """
+        self._engine = engine
+        self._catalog = catalog
 
     # -- Public API ------------------------------------------------------------
 
-    def list_relations(self, org_id: UUID, *, type: str | None = None) -> list[ComponentRelation]:
+    def list_all(self, org_id: UUID, *, type: str | None = None) -> list[ComponentRelation]:
         """List an organisation's component relations, optionally by type.
 
         Args:
@@ -47,13 +59,13 @@ class RelationMixin(StoreBase):
         Returns:
             The organisation's relation rows, in no guaranteed order.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = select(ComponentRelation).where(ComponentRelation.org_id == org_id)
             if type:
                 statement = statement.where(ComponentRelation.type == type)
             return list(session.exec(statement).all())
 
-    def add_relation(self, component_id: UUID, *, type: str, dst_id: UUID, slot: str = "") -> ComponentRelation:
+    def add(self, component_id: UUID, *, type: str, dst_id: UUID, slot: str = "") -> ComponentRelation:
         """Add one relation from a component.
 
         Slotted types upsert per slot: re-binding an already-bound slot
@@ -77,7 +89,7 @@ class RelationMixin(StoreBase):
             ConfigError: If the kind's vocabulary doesn't declare the type or
                 the slot, or the destination doesn't match the slot's shape.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             src = session.get(Component, component_id)
             if not src:
                 raise NotFoundError(f"Component {component_id} not found")
@@ -85,7 +97,7 @@ class RelationMixin(StoreBase):
             dst = self._resolve_dst(session, src, definition, type, slot, dst_id)
             relation = self._upsert_relation(session, src, dst, type, slot, per_slot=definition.slotted)
             try:
-                session.commit()
+                commit(session)
             except IntegrityError:
                 raise ConfigError(
                     f"Relation '{type}'{f' slot {slot!r}' if slot else ''} on '{src.key}' "
@@ -93,7 +105,7 @@ class RelationMixin(StoreBase):
                 )
             return relation
 
-    def remove_relation(self, component_id: UUID, *, type: str, dst_id: UUID) -> None:
+    def remove(self, component_id: UUID, *, type: str, dst_id: UUID) -> None:
         """Remove a component's relations of one type toward one destination.
 
         Args:
@@ -107,7 +119,7 @@ class RelationMixin(StoreBase):
                 refuses to unbind (a bound required dependency) — repoint
                 the slot or remove the dependent asset instead.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = select(ComponentRelation).where(
                 ComponentRelation.src_id == component_id,
                 ComponentRelation.type == type,
@@ -124,7 +136,7 @@ class RelationMixin(StoreBase):
                     )
             for relation in relations:
                 session.delete(relation)
-            session.commit()
+            commit(session)
 
     # -- Internals -------------------------------------------------------------
 

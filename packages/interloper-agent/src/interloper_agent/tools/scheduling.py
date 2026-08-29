@@ -40,8 +40,8 @@ def toggle_job(
     try:
         store = get_store()
         jid = UUID(component_id)
-        job = store.get_component(jid, kind="job")
-        updated = store.update_component(jid, config={**(job.config or {}), "enabled": enabled})
+        job = store.components.get(jid, kind="job")
+        updated = store.components.update(jid, config={**(job.config or {}), "enabled": enabled})
         action = "enabled" if enabled else "disabled"
         return {
             "status": "success",
@@ -89,7 +89,7 @@ def trigger_run(
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        run = store.create_run(org_id, component_id=UUID(component_id), partition_key=partition_key)
+        run = store.runs.create(org_id, component_id=UUID(component_id), partition_key=partition_key)
         return {
             "status": "success",
             "message": "Run queued successfully",
@@ -128,7 +128,7 @@ def trigger_backfill(
     try:
         org_id = get_org_id(tool_context)
         store = get_store()
-        backfill = store.create_backfill(
+        backfill = store.runs.create_backfill(
             org_id,
             component_id=UUID(component_id),
             start_key=start_key,
@@ -162,8 +162,8 @@ def toggle_asset(
     try:
         store = get_store()
         aid = UUID(asset_id)
-        asset = store.get_component(aid, kind="asset")
-        updated = store.update_component(aid, config={**(asset.config or {}), "materializable": materializable})
+        asset = store.components.get(aid, kind="asset")
+        updated = store.components.update(aid, config={**(asset.config or {}), "materializable": materializable})
         action = "enabled" if materializable else "disabled"
         return {
             "status": "success",

@@ -165,7 +165,7 @@ def _load_authorized_run(run_id: UUID, user: Profile, store: Store, *, minimum: 
             owning org, 403 if the role is insufficient.
     """
     try:
-        run = store.get_run(run_id)
+        run = store.runs.get(run_id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     authorize_org_member(user, run.org_id, store, minimum=minimum, detail=f"Run {run_id} not found")
@@ -215,11 +215,11 @@ def list_runs(
     Returns:
         The matching page of runs, as response models.
     """
-    total = store.count_runs(
+    total = store.runs.count(
         org_id, component_id=component_id, backfill_id=backfill_id, status=status, after=after, before=before
     )
     response.headers["X-Total-Count"] = str(total)
-    runs = store.list_runs(
+    runs = store.runs.list_all(
         org_id,
         component_id=component_id,
         backfill_id=backfill_id,
@@ -252,11 +252,11 @@ def create_run(
         HTTPException: 400 if the component's kind is not runnable, or if the
             store rejects the run.
     """
-    target = load_authorized(store.get_component, body.component_id, user, store, label="Component", minimum="editor")
+    target = load_authorized(store.components.get, body.component_id, user, store, label="Component", minimum="editor")
     if not KINDS[target.kind].runnable:
         raise HTTPException(status_code=400, detail=f"Components of kind '{target.kind}' cannot be run")
     try:
-        run = store.create_run(target.org_id, component_id=body.component_id, partition_key=body.partition_key)
+        run = store.runs.create(target.org_id, component_id=body.component_id, partition_key=body.partition_key)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return RunResponse.from_run(run)
@@ -299,7 +299,7 @@ def list_asset_executions(
         The run's asset executions, as response models.
     """
     _load_authorized_run(run_id, user, store)
-    rows = store.list_asset_executions(run_id)
+    rows = store.runs.list_asset_executions(run_id)
     return [
         AssetExecutionResponse(
             run_id=row.run_id,
@@ -344,7 +344,7 @@ def retry_run(
     _load_authorized_run(run_id, user, store, minimum="editor")
     scope = body.scope if body else "all"
     try:
-        run = store.retry_run(run_id, scope=scope)
+        run = store.runs.retry(run_id, scope=scope)
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     except ValueError as e:
@@ -393,9 +393,9 @@ def list_run_events(
     _load_authorized_run(run_id, user, store)
     limit = max(1, min(limit, MAX_EVENTS_PAGE_SIZE))
     offset = max(0, offset)
-    total = store.count_events(run_id=run_id, component_ids=component_id, event_types=event_type)
+    total = store.runs.count_events(run_id=run_id, component_ids=component_id, event_types=event_type)
     response.headers["X-Total-Count"] = str(total)
-    events = store.list_events(
+    events = store.runs.list_events(
         run_id=run_id, component_ids=component_id, event_types=event_type, limit=limit, offset=offset
     )
     return [EventResponse.from_event(e) for e in events]

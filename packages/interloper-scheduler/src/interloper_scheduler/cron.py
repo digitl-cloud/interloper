@@ -72,7 +72,7 @@ class CronController(Controller):
 
     def _tick(self) -> None:
         """Process a batch of due jobs in a single transaction."""
-        with Session(self._store.engine) as session:
+        with self._store.transaction() as session:
             now = datetime.now(timezone.utc)
 
             next_run_at = Component.state["next_run_at"].as_string()  # ty: ignore[not-subscriptable]
@@ -125,7 +125,7 @@ class CronController(Controller):
                 # Quota-exhausted orgs skip run creation but still advance
                 # next_run_at (committed with this session) — otherwise the
                 # blocked job would re-fire every tick forever.
-                committed, limit = self._store.quotas.run_status(session, job.org_id)
+                committed, limit = self._store.quotas.run_status(job.org_id)
                 if limit is not None and committed >= limit:
                     logger.warning(
                         "Skipping job '%s' - monthly successful-run quota exhausted (%d/%d) for org %s",
@@ -137,7 +137,7 @@ class CronController(Controller):
                     continue
 
                 # Create runs. The backfill is built inline rather than via
-                # Store.create_backfill: it must commit atomically with the
+                # Store.runs.create_backfill: it must commit atomically with the
                 # job's state advance (else a crash between the two would
                 # re-create it next tick), and cron top-ups queue every
                 # partition immediately instead of concurrency-gating. Because
@@ -214,7 +214,7 @@ class CronController(Controller):
         lookback = config.get("lookback", 1)
         if not lookback:
             return None
-        granularity = self._store.job_partition_granularity(session, job.id)
+        granularity = self._store.components.job_partition_granularity(session, job.id)
         if granularity is None:
             return None
         return TimePartitionWindow.lookback(

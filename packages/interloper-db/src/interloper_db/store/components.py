@@ -24,6 +24,7 @@ from uuid import UUID
 
 import interloper as il
 from interloper.asset.base import AssetIdentity
+from interloper.catalog.base import Catalog
 from interloper.errors import (
     CatalogKeyError,
     ComponentDriftError,
@@ -36,13 +37,16 @@ from interloper.errors import (
 from interloper.partitioning.time import TimeGranularity
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
+from sqlalchemy import Engine
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
 from interloper_db.drift import ComponentStatus, asset_status, resolve_component_cls, resolve_source_cls, source_status
+from interloper_db.hydration import Hydrator
 from interloper_db.models import Component, ComponentRelation
-from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES
-from interloper_db.store.relations import Binding, RelationMixin, _add_relation
+from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES, QuotaService
+from interloper_db.store.relations import Binding, RelationStore, _add_relation
+from interloper_db.store.session import commit, session_scope
 
 # Eager-load set for rows returned to API consumers: the parent, children
 # with their relations, and two hops (component → destination → resources).
@@ -58,12 +62,38 @@ COMPONENT_LOAD_OPTIONS = [
 ]
 
 
-class ComponentMixin(RelationMixin):
+class ComponentStore:
     """Store methods for component CRUD and hydration, on the relation layer."""
+
+    def __init__(
+        self,
+        engine: Engine,
+        catalog: Catalog,
+        hydrator: Hydrator,
+        encrypt: Any,
+        quotas: QuotaService,
+        relations: RelationStore,
+    ) -> None:
+        """Bind the facet to what it works through.
+
+        Args:
+            engine: Engine the facet opens its sessions on.
+            catalog: Catalog its component keys resolve against.
+            hydrator: Hydrator that turns rows back into framework objects.
+            encrypt: Callable that encrypts a resource payload, or None for plaintext.
+            quotas: Quota gates it enforces through.
+            relations: Relation facet it wires component edges through.
+        """
+        self._engine = engine
+        self._catalog = catalog
+        self._hydrator = hydrator
+        self._encrypt = encrypt
+        self._quotas = quotas
+        self._relations = relations
 
     # -- CRUD ------------------------------------------------------------------
 
-    def create_component(
+    def create(
         self,
         org_id: UUID,
         *,
@@ -96,9 +126,9 @@ class ComponentMixin(RelationMixin):
         Raises:
             ConfigError: If ``children`` is passed for a kind that has none.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             if kind == "source":
-                self.quotas.check(session, org_id, QUOTA_MAX_SOURCES)
+                self._quotas.check(org_id, QUOTA_MAX_SOURCES)
             db_component = Component(org_id=org_id, kind=kind, key=key, name=name)
             self._apply_config(db_component, config, encrypted)
             if name is None:
@@ -110,11 +140,11 @@ class ComponentMixin(RelationMixin):
                 self._ensure_children(session, db_component, children)
             elif children is not None:
                 raise ConfigError(f"Components of kind '{kind}' have no children")
-            self._sync_relations(session, db_component, relations)
-            session.commit()
+            self._relations._sync_relations(session, db_component, relations)
+            commit(session)
             return self.load_component(session, db_component.id)
 
-    def get_component(self, component_id: UUID, *, kind: str | None = None) -> Component:
+    def get(self, component_id: UUID, *, kind: str | None = None) -> Component:
         """Load a component row by ID with relations eager-loaded.
 
         Args:
@@ -125,10 +155,10 @@ class ComponentMixin(RelationMixin):
         Returns:
             The component row, eager-loaded and safe to hand out detached.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             return self.load_component(session, component_id, kind=kind)
 
-    def list_components(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
+    def list_all(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
         """List an organisation's components, optionally filtered by kind.
 
         Args:
@@ -138,7 +168,7 @@ class ComponentMixin(RelationMixin):
         Returns:
             Eager-loaded component rows, oldest first.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = (
                 select(Component)
                 .where(Component.org_id == org_id)
@@ -149,7 +179,7 @@ class ComponentMixin(RelationMixin):
                 statement = statement.where(col(Component.kind).in_(kinds))
             return list(session.exec(statement).all())
 
-    def update_component(
+    def update(
         self,
         component_id: UUID,
         *,
@@ -184,7 +214,7 @@ class ComponentMixin(RelationMixin):
             NotFoundError: If the component is not found.
             ConfigError: If ``children`` is passed for a kind that has none.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_component = session.get(Component, component_id)
             if not db_component:
                 raise NotFoundError(f"Component {component_id} not found")
@@ -199,11 +229,11 @@ class ComponentMixin(RelationMixin):
                     self._ensure_children(session, db_component, children)
             elif children is not None:
                 raise ConfigError(f"Components of kind '{db_component.kind}' have no children")
-            self._sync_relations(session, db_component, relations)
-            session.commit()
+            self._relations._sync_relations(session, db_component, relations)
+            commit(session)
             return self.load_component(session, component_id)
 
-    def delete_component(self, component_id: UUID) -> None:
+    def delete(self, component_id: UUID) -> None:
         """Delete a component. Children and out-bound relations cascade via FK.
 
         In-bound relations follow their declared ``on_delete`` semantics:
@@ -222,7 +252,7 @@ class ComponentMixin(RelationMixin):
             ValueError: If the component is source-owned (delete or update
                 the parent source instead).
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_component = session.get(Component, component_id)
             if not db_component:
                 raise NotFoundError(f"Component {component_id} not found")
@@ -231,12 +261,11 @@ class ComponentMixin(RelationMixin):
             if referrers := self._blocking_referrers(session, db_component):
                 names = ", ".join(str(r["name"] or r["key"]) for r in referrers)
                 raise InUseError(
-                    f"Cannot delete {db_component.kind} '{db_component.name or db_component.key}': "
-                    f"in use by {names}",
+                    f"Cannot delete {db_component.kind} '{db_component.name or db_component.key}': in use by {names}",
                     referrers=referrers,
                 )
             session.delete(db_component)
-            session.commit()
+            commit(session)
 
     def _blocking_referrers(self, session: Session, db_component: Component) -> list[dict[str, str | None]]:
         """Components outside a component's subtree whose relations into it block deletion.
@@ -289,7 +318,7 @@ class ComponentMixin(RelationMixin):
         referrers: dict[UUID, Component] = {}
         for relation in rows:
             src = session.get(Component, relation.src_id)
-            if src is None or self._relation_detaches(session, src, relation):
+            if src is None or self._relations._relation_detaches(session, src, relation):
                 continue
             if src.parent_id is not None and src.parent_id not in subtree_ids:
                 src = session.get(Component, src.parent_id) or src
@@ -306,7 +335,22 @@ class ComponentMixin(RelationMixin):
 
         Source-owned assets hydrate through their parent source and are
         extracted from it; jobs drift-check every target first. Fails closed
-        on any catalog drift.
+        on any catalog drift: see :meth:`_load` for what a missing row, a
+        drifted key or a failed reconstruction raises.
+
+        Args:
+            component_id: The component UUID.
+
+        Returns:
+            The reconstructed framework component.
+        """
+        with tracer().start_as_current_span(
+            "interloper.store.load", attributes={attributes.TARGET_ID: str(component_id)}
+        ):
+            return self._load(component_id)
+
+    def _load(self, component_id: UUID) -> il.Component:
+        """Hydrate a component row (the traced body of :meth:`load`).
 
         Args:
             component_id: The component UUID.
@@ -319,23 +363,7 @@ class ComponentMixin(RelationMixin):
             ComponentDriftError: If a catalog key no longer resolves.
             HydrationError: If reconstruction fails.
         """
-        with tracer().start_as_current_span(
-            "interloper.store.load", attributes={attributes.TARGET_ID: str(component_id)}
-        ):
-            return self._load(component_id)
-
-    def _load(self, component_id: UUID) -> il.Component:
-        """Hydrate a component row (the traced body of :meth:`load`).
-
-        Returns:
-            The reconstructed framework component.
-
-        Raises:
-            NotFoundError: If the component is not found.
-            ComponentDriftError: If a catalog key no longer resolves.
-            HydrationError: If reconstruction fails.
-        """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_component = session.get(Component, component_id)
             if not db_component:
                 raise NotFoundError(f"Component {component_id} not found")
@@ -362,8 +390,7 @@ class ComponentMixin(RelationMixin):
             # decrypted payload of sensitive kinds in its input_value dumps, and
             # this message is persisted into run events and shown in the UI.
             raise HydrationError(
-                f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): "
-                f"{format_exception(e)}"
+                f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): {format_exception(e)}"
             ) from e
 
     def _load_owned_asset(self, parent_id: UUID, key: str, asset_id: UUID) -> il.Asset:
@@ -388,11 +415,10 @@ class ComponentMixin(RelationMixin):
             if asset.key == key:
                 return asset
         raise ComponentDriftError(
-            f"Asset '{key}' ({asset_id}) is no longer declared "
-            f"by source '{source.key}'; its catalog key has drifted."
+            f"Asset '{key}' ({asset_id}) is no longer declared by source '{source.key}'; its catalog key has drifted."
         )
 
-    def component_status(self, db_component: Component) -> ComponentStatus:
+    def status(self, db_component: Component) -> ComponentStatus:
         """Catalog-resolution status of a component row (drift detection).
 
         Source-owned assets resolve through their parent, so ``parent`` must
@@ -613,8 +639,7 @@ class ComponentMixin(RelationMixin):
             for child in session.exec(select(Component).where(Component.parent_id == db_source.id)).all()
         }
         target = set(child_keys) if child_keys is not None else all_keys
-        self.quotas.check(
-            session,
+        self._quotas.check(
             db_source.org_id,
             QUOTA_MAX_ASSETS_PER_SOURCE,
             used=len(target),

@@ -24,25 +24,34 @@ CATALOG = {
 }
 
 
+class FakeComponentStore:
+    """Captures update calls; get returns the store's one row."""
+
+    def __init__(self, store: "FakeStore"):
+        self._store = store
+
+    def get(self, component_id: Any, *, kind: str | None = None) -> Any:
+        return self._store.component
+
+    def update(self, component_id: Any, **kwargs: Any) -> Any:
+        self._store.update_kwargs = kwargs
+        component = self._store.component
+        if kwargs.get("name") is not None:
+            component.name = kwargs["name"]
+        if kwargs.get("config") is not None:
+            component.config = kwargs["config"]
+        if kwargs.get("children") is not None:
+            component.children = [SimpleNamespace(key=k) for k in kwargs["children"]]
+        return component
+
+
 class FakeStore:
-    """Captures update_component calls; get_component returns the one row."""
+    """Presents the ``components`` facet the collection tools reach for."""
 
     def __init__(self, component: Any):
         self.component = component
         self.update_kwargs: dict[str, Any] | None = None
-
-    def get_component(self, component_id: Any, *, kind: str | None = None) -> Any:
-        return self.component
-
-    def update_component(self, component_id: Any, **kwargs: Any) -> Any:
-        self.update_kwargs = kwargs
-        if kwargs.get("name") is not None:
-            self.component.name = kwargs["name"]
-        if kwargs.get("config") is not None:
-            self.component.config = kwargs["config"]
-        if kwargs.get("children") is not None:
-            self.component.children = [SimpleNamespace(key=k) for k in kwargs["children"]]
-        return self.component
+        self.components = FakeComponentStore(self)
 
 
 def _component(**overrides: Any) -> Any:

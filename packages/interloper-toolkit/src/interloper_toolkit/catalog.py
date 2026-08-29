@@ -86,7 +86,7 @@ def list_definitions(
 
         collection_counts: dict[str, int] = {}
         if kind == "source":
-            for s in ctx.store.list_components(ctx.org_id, kinds=["source"]):
+            for s in ctx.store.components.list_all(ctx.org_id, kinds=["source"]):
                 collection_counts[s.key] = collection_counts.get(s.key, 0) + 1
 
         results = []

@@ -17,16 +17,23 @@ from interloper_scheduler import executor as executor_module
 from interloper_scheduler.executor import RunExecutor, run_event_metadata
 
 
-class _FakeStore:
+class _FakeRunStore:
     """Returns canned asset_executions per run_id."""
-
-    engine = None  # the fake Session ignores it
 
     def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
         self._executions = executions
 
     def list_asset_executions(self, run_id: UUID) -> list[SimpleNamespace]:
         return [SimpleNamespace(**row) for row in self._executions.get(run_id, [])]
+
+
+class _FakeStore:
+    """Presents the ``runs`` facet the executor's retry walk reaches for."""
+
+    engine = None  # the fake Session ignores it
+
+    def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
+        self.runs = _FakeRunStore(executions)
 
 
 class _FakeSession:

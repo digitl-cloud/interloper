@@ -21,7 +21,7 @@ from interloper_api.routes import auth as auth_module
 
 
 class FakeStore:
-    """In-memory stand-in implementing only the methods the callback calls."""
+    """In-memory stand-in exposing only the ``auth`` facet methods the callback calls."""
 
     def __init__(self, *, is_super_admin: bool = False, exists: bool = False, invited: bool = False) -> None:
         self.profile = SimpleNamespace(id=uuid4(), is_super_admin=is_super_admin)
@@ -29,23 +29,30 @@ class FakeStore:
         self.invited = invited
         self.promoted: list[UUID] = []
         self.upserted = False
+        self.auth = SimpleNamespace(
+            get_profile_by_google_id=self._get_profile_by_google_id,
+            has_pending_invitation=self._has_pending_invitation,
+            upsert_profile=self._upsert_profile,
+            set_super_admin=self._set_super_admin,
+            create_session=self._create_session,
+        )
 
-    def get_profile_by_google_id(self, google_id: str) -> SimpleNamespace | None:
+    def _get_profile_by_google_id(self, google_id: str) -> SimpleNamespace | None:
         return self.profile if self.exists else None
 
-    def has_pending_invitation(self, email: str) -> bool:
+    def _has_pending_invitation(self, email: str) -> bool:
         return self.invited
 
-    def upsert_profile(self, **kwargs) -> SimpleNamespace:
+    def _upsert_profile(self, **kwargs) -> SimpleNamespace:
         self.upserted = True
         return self.profile
 
-    def set_super_admin(self, user_id: UUID) -> SimpleNamespace:
+    def _set_super_admin(self, user_id: UUID) -> SimpleNamespace:
         self.promoted.append(user_id)
         self.profile.is_super_admin = True
         return self.profile
 
-    def create_session(self, user_id: UUID) -> str:
+    def _create_session(self, user_id: UUID) -> str:
         return "token"
 
 
@@ -165,7 +172,7 @@ def test_super_admin_email_can_sign_up() -> None:
 
 
 class FakeProfileStore:
-    """In-memory stand-in implementing only ``update_profile``."""
+    """In-memory stand-in exposing only ``auth.update_profile``."""
 
     def __init__(self) -> None:
         self.profile = SimpleNamespace(
@@ -175,8 +182,9 @@ class FakeProfileStore:
             avatar_url=None,
             timezone=None,
         )
+        self.auth = SimpleNamespace(update_profile=self._update_profile)
 
-    def update_profile(self, user_id: UUID, *, name: str | None = None, timezone: str | None = None):
+    def _update_profile(self, user_id: UUID, *, name: str | None = None, timezone: str | None = None):
         if name is not None:
             self.profile.name = name
         if timezone is not None:

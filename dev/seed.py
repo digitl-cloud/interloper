@@ -145,20 +145,20 @@ def _ensure_super_admin(store: Store) -> tuple[Profile, str]:
 
     if chosen is not None:
         assert chosen.id is not None
-        store.set_super_admin(chosen.id)
+        store.auth.set_super_admin(chosen.id)
         return chosen, "matched"
 
     # No profile with this email yet — create a synthetic placeholder. A real
     # Google login (matched on google_id) would otherwise create its own row;
     # re-run with INTERLOPER_DEV_USER_GOOGLE_ID, or log in then re-run.
     name = DEV_USER_EMAIL.split("@", 1)[0]
-    profile = store.upsert_profile(
+    profile = store.auth.upsert_profile(
         google_id=f"{SYNTHETIC_GOOGLE_ID_PREFIX}{DEV_USER_EMAIL}",
         email=DEV_USER_EMAIL,
         name=name,
     )
     assert profile.id is not None
-    store.set_super_admin(profile.id)
+    store.auth.set_super_admin(profile.id)
     return profile, "synthetic"
 
 
@@ -170,11 +170,11 @@ def _ensure_org(store: Store, admin_id: UUID) -> Organisation:
             session.expunge(existing)
 
     if existing is None:
-        return store.create_organisation(name=ORG_NAME, creator_id=admin_id)
+        return store.auth.create_organisation(name=ORG_NAME, creator_id=admin_id)
 
     # Org already there — make sure the admin is still a member.
     assert existing.id is not None  # persisted row always has a PK
-    if store.get_user_role(admin_id, existing.id) is None:
+    if store.auth.get_user_role(admin_id, existing.id) is None:
         with Session(get_engine()) as session:
             session.add(UserOrganisation(user_id=admin_id, organisation_id=existing.id, role="admin"))
             session.commit()
@@ -186,9 +186,9 @@ def _ensure_demo_source(store: Store, org_id: UUID) -> Component:
 
     Returns the seeded source with its assets eagerly loaded.
     """
-    sources = {source.key: source for source in store.list_components(org_id, kinds=["source"])}
+    sources = {source.key: source for source in store.components.list_all(org_id, kinds=["source"])}
     if DEMO_SOURCE_KEY not in sources:
-        return store.create_component(org_id, kind="source", key=DEMO_SOURCE_KEY, name=DEMO_SOURCE_NAME)
+        return store.components.create(org_id, kind="source", key=DEMO_SOURCE_KEY, name=DEMO_SOURCE_NAME)
     return sources[DEMO_SOURCE_KEY]
 
 
@@ -197,9 +197,9 @@ def _ensure_demo_job(store: Store, org_id: UUID, source_id: UUID) -> bool:
 
     Returns True if it created the job, False if one already existed.
     """
-    if any(job.name == DEMO_JOB_NAME for job in store.list_components(org_id, kinds=["job"])):
+    if any(job.name == DEMO_JOB_NAME for job in store.components.list_all(org_id, kinds=["job"])):
         return False
-    store.create_component(
+    store.components.create(
         org_id,
         kind="job",
         key="cron_job",

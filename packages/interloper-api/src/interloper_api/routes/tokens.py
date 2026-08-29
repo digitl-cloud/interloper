@@ -80,7 +80,7 @@ def create_token(
     if body.expires_in_days is not None:
         expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
 
-    row, raw = store.create_token(user.id, org_id, name=body.name, expires_at=expires_at)
+    row, raw = store.tokens.create(user.id, org_id, name=body.name, expires_at=expires_at)
     return CreatedTokenResponse(
         id=row.id,
         name=row.name,
@@ -111,7 +111,7 @@ def list_tokens(
         The caller's tokens, newest first, revoked and expired ones included,
         as metadata only.
     """
-    rows = store.list_tokens(user.id, org_id)
+    rows = store.tokens.list_all(user.id, org_id)
     return [TokenResponse.model_validate(row, from_attributes=True) for row in rows]
 
 
@@ -140,14 +140,14 @@ def revoke_token(
             neither owns it nor administers its organisation.
     """
     detail = f"Token {token_id} not found"
-    row = store.get_token(token_id)
+    row = store.tokens.get(token_id)
     if row is None:
         raise HTTPException(status_code=404, detail=detail)
 
     if row.user_id != user.id:
-        role = store.get_user_role(user.id, row.organisation_id)
+        role = store.auth.get_user_role(user.id, row.organisation_id)
         if role != "admin":
             raise HTTPException(status_code=404, detail=detail)
 
-    store.revoke_token(token_id)
+    store.tokens.revoke(token_id)
     return {"status": "revoked"}

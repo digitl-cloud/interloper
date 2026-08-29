@@ -83,7 +83,7 @@ def update_component(
         org_id = get_org_id(tool_context)
         store = get_store()
 
-        component = store.get_component(UUID(component_id))
+        component = store.components.get(UUID(component_id))
         if component.org_id != org_id:
             return {"status": "error", "error": f"Component '{component_id}' not found"}
         if name is None and config_updates is None and not asset_keys:
@@ -124,7 +124,7 @@ def update_component(
                 return error
 
         try:
-            row = store.update_component(component.id, name=name, config=config, children=children)
+            row = store.components.update(component.id, name=name, config=config, children=children)
         except (ConfigError, CatalogKeyError) as e:
             return {"status": "error", "error": str(e)}
 
@@ -198,7 +198,7 @@ def create_connections(
         created, failed = [], []
         for name, config in cleaned:
             try:
-                row = store.create_component(org_id, kind="connection", key=connection_key, name=name, config=config)
+                row = store.components.create(org_id, kind="connection", key=connection_key, name=name, config=config)
             except (ConfigError, CatalogKeyError) as e:
                 # str(e) may name required fields but never echoes values.
                 failed.append({"name": name, "error": str(e)})
@@ -258,7 +258,7 @@ def request_connection_setup(
             org_id = get_org_id(tool_context)
             existing = [
                 {"id": serialize(c.id), "name": c.name}
-                for c in get_store().list_components(org_id, kinds=["connection"])
+                for c in get_store().components.list_all(org_id, kinds=["connection"])
                 if c.key == connection_key
             ]
             if existing:
@@ -332,13 +332,13 @@ async def check_connection(connection_id: str, tool_context: ToolContext) -> dic
         org_id = get_org_id(tool_context)
         store = get_store()
 
-        component = store.get_component(UUID(connection_id), kind="connection")
+        component = store.components.get(UUID(connection_id), kind="connection")
         if component.org_id != org_id:
             return {"status": "error", "error": f"Connection '{connection_id}' not found"}
         info = {"id": connection_id, "name": component.name, "key": component.key}
 
         try:
-            conn = store.load(component.id)
+            conn = store.components.load(component.id)
         except ComponentDriftError as e:
             return {"status": "success", "connection": info, "ok": False, "live": False,
                     "category": "config", "message": str(e)}
@@ -426,11 +426,11 @@ async def resolve_source_field_options(
             }
         _, _, method_name = str(fetch.get("provider", "")).partition(".")
 
-        component = store.get_component(UUID(connection_id), kind="connection")
+        component = store.components.get(UUID(connection_id), kind="connection")
         if component.org_id != org_id:
             return {"status": "error", "error": f"Connection '{connection_id}' not found"}
         try:
-            conn = store.load(component.id)
+            conn = store.components.load(component.id)
         except (ComponentDriftError, HydrationError) as e:
             logger.error("Connection '%s' (%s) failed to load for resolve: %s", component.name, component.key, e)
             return {"status": "error", "error": "The connection could not be loaded — check it with check_connection."}
@@ -510,7 +510,7 @@ def _source_relations(
     slots = (((defn.get("relations") or {}).get("resource") or {}).get("slots")) or {}
     connection = None
     if connection_id is not None:
-        connection = store.get_component(UUID(connection_id), kind="connection")
+        connection = store.components.get(UUID(connection_id), kind="connection")
         if connection.org_id != org_id:
             return None, {"status": "error", "error": f"Connection '{connection_id}' not found"}
     resource_bindings: list[tuple[UUID, str]] = []
@@ -535,7 +535,7 @@ def _source_relations(
 
     destination_bindings: list[tuple[UUID, str]] = []
     for dest_id in destination_ids or []:
-        dest = store.get_component(UUID(dest_id), kind="destination")
+        dest = store.components.get(UUID(dest_id), kind="destination")
         if dest.org_id != org_id:
             return None, {"status": "error", "error": f"Destination '{dest_id}' not found"}
         destination_bindings.append((dest.id, ""))
@@ -599,7 +599,7 @@ def create_source(
         assert relations is not None
 
         try:
-            row = store.create_component(
+            row = store.components.create(
                 org_id,
                 kind="source",
                 key=source_key,
@@ -704,7 +704,7 @@ def create_sources(
         unresolved: list[str] = []
         for instance in cleaned:
             try:
-                row = store.create_component(
+                row = store.components.create(
                     org_id,
                     kind="source",
                     key=source_key,
@@ -767,7 +767,7 @@ def create_job(
 
         targets: list[tuple[UUID, str]] = []
         for source_id in target_source_ids:
-            source = store.get_component(UUID(source_id), kind="source")
+            source = store.components.get(UUID(source_id), kind="source")
             if source.org_id != org_id:
                 return {"status": "error", "error": f"Source '{source_id}' not found"}
             targets.append((source.id, ""))
@@ -775,7 +775,7 @@ def create_job(
             return {"status": "error", "error": "target_source_ids must name at least one source"}
 
         try:
-            row = store.create_component(
+            row = store.components.create(
                 org_id,
                 kind="job",
                 key="cron_job",

@@ -109,11 +109,11 @@ class RunExecutor:
             ):
                 inject_metadata(run_metadata)
 
-                target = self._store.load(component_id)
+                target = self._store.components.load(component_id)
                 assets = _target_assets(target)
                 if not assets:
                     logger.info("No sources or assets for run %s, marking success", run_id)
-                    self._store.complete_run(run_id, success=True)
+                    self._store.runs.complete(run_id, success=True)
                     return True
 
                 self._resolve_upstream_deps(assets)
@@ -127,7 +127,7 @@ class RunExecutor:
 
             success = result.status == ExecutionStatus.COMPLETED
             logger.info("Run %s completed: %s", run_id, result.status.name)
-            self._store.complete_run(run_id, success=success)
+            self._store.runs.complete(run_id, success=success)
             return success
 
         except Exception as e:
@@ -136,8 +136,8 @@ class RunExecutor:
                 if org_id is not None:
                     metadata = {**run_metadata, "error": format_exception(e)}
                     event = il.Event(type=il.EventType.RUN_FAILED, metadata=metadata)
-                    self._store.save_event(event, org_id=org_id, run_id=run_id)
-                self._store.complete_run(run_id, success=False)
+                    self._store.runs.save_event(event, org_id=org_id, run_id=run_id)
+                self._store.runs.complete(run_id, success=False)
             except Exception:
                 logger.exception("Failed to mark run %s as failed", run_id)
             return False
@@ -168,7 +168,7 @@ class RunExecutor:
         parent_id: UUID | None = retry_of
         with Session(self._store.engine) as session:
             while parent_id:
-                for row in self._store.list_asset_executions(parent_id):
+                for row in self._store.runs.list_asset_executions(parent_id):
                     # Closest ancestor wins: only record an asset the first time we see it.
                     statuses.setdefault(row.asset_id, row.status)
                 parent = session.get(Run, parent_id)
@@ -200,7 +200,7 @@ class RunExecutor:
                     if relation.dst_id not in visited:
                         visited.add(relation.dst_id)
                         next_frontier.append(relation.dst_id)
-                        upstream_asset = cast(il.Asset, self._store.load(relation.dst_id))
+                        upstream_asset = cast(il.Asset, self._store.components.load(relation.dst_id))
                         upstream_asset.materializable = False
                         assets.append(upstream_asset)
                 frontier = next_frontier
@@ -215,7 +215,7 @@ class RunExecutor:
         metadata: dict[str, Any],
     ) -> il.RunResult:
         def handle_event(event: il.Event) -> None:
-            self._store.save_event(event, org_id=org_id, run_id=run_id)
+            self._store.runs.save_event(event, org_id=org_id, run_id=run_id)
 
         # A fresh copy per execution: the runner template is shared across
         # runs, but run state and the event handler are per-run.

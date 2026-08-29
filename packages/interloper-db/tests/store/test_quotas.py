@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
+import interloper as il
 import pytest
 from interloper.errors import QuotaExceededError
 from sqlalchemy import event
@@ -17,6 +18,7 @@ from sqlmodel import Session, select
 
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Quota, Run, Usage
+from interloper_db.store import Store
 from interloper_db.store.quotas import (
     METRIC_SUCCESSFUL_RUNS,
     QUOTA_MAX_ASSETS_PER_SOURCE,
@@ -26,57 +28,49 @@ from interloper_db.store.quotas import (
     CapacityQuota,
     ConsumptionQuota,
     QuotaDefinition,
-    QuotaMixin,
     increment_usage,
     month_start,
     next_month_start,
     settle_run_usage,
 )
-from interloper_db.store.runs import RunMixin
 
 _ORG_ID = uuid4()
 
 
-class _Store(RunMixin, QuotaMixin):
-    """The run + quota slice of the full store, for integration tests."""
-
-
 @pytest.fixture
-def store() -> Iterator[_Store]:
-    """A quota-capable store over a fresh in-memory SQLite database.
+def store() -> Iterator[Store]:
+    """A store over a fresh in-memory SQLite database carrying the quota tables.
 
     Yields:
-        The quota mixin bound to that database, disposed once the test finishes.
+        The store bound to that database, disposed once the test finishes.
     """
-    eng = engine_module.init_engine(
+    engine = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
 
-    @event.listens_for(eng, "connect")
+    @event.listens_for(engine, "connect")
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Component, Backfill, Run, Quota, Usage):
-        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
-        mixin = _Store()
-        mixin._engine = eng
-        yield mixin
+        yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:
-        eng.dispose()
+        engine.dispose()
         engine_module._engine = None
 
 
-def _usage_rows(store: _Store) -> dict[dt.date, tuple[int, int]]:
-    with Session(store._engine) as session:
+def _usage_rows(store: Store) -> dict[dt.date, tuple[int, int]]:
+    with Session(store.engine) as session:
         rows = session.exec(select(Usage).where(Usage.org_id == _ORG_ID)).all()
         return {row.period_start: (row.used, row.reserved) for row in rows}
 
 
-def _run(store: _Store, *, quota_reserved_at: datetime | None = None) -> Run:
-    with Session(store._engine) as session:
+def _run(store: Store, *, quota_reserved_at: datetime | None = None) -> Run:
+    with Session(store.engine) as session:
         run = Run(id=uuid4(), org_id=_ORG_ID, status="running", quota_reserved_at=quota_reserved_at)
         session.add(run)
         session.commit()
@@ -97,57 +91,57 @@ class TestPeriods:
 
 
 class TestIncrementUsage:
-    def test_creates_then_increments(self, store: _Store):
+    def test_creates_then_increments(self, store: Store):
         period = dt.date(2026, 8, 1)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=1)
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=1, reserved=2)
             session.commit()
         assert _usage_rows(store) == {period: (2, 2)}
 
-    def test_unknown_metric_rejected(self, store: _Store):
-        with Session(store._engine) as session, pytest.raises(ValueError, match="Unknown usage metric"):
+    def test_unknown_metric_rejected(self, store: Store):
+        with Session(store.engine) as session, pytest.raises(ValueError, match="Unknown usage metric"):
             increment_usage(session, _ORG_ID, "sucessful_runs", dt.date(2026, 8, 1), used=1)
 
 
 class TestSettleRunUsage:
-    def test_success_without_reservation_charges_used(self, store: _Store):
+    def test_success_without_reservation_charges_used(self, store: Store):
         run = _run(store)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             settle_run_usage(session, run, success=True)
             session.commit()
         (counts,) = _usage_rows(store).values()
         assert counts == (1, 0)
 
-    def test_success_with_same_month_reservation_converts_it(self, store: _Store):
+    def test_success_with_same_month_reservation_converts_it(self, store: Store):
         now = datetime.now(timezone.utc)
         run = _run(store, quota_reserved_at=now)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, month_start(now), reserved=1)
             settle_run_usage(session, run, success=True)
             session.commit()
         assert _usage_rows(store) == {month_start(now): (1, 0)}
 
-    def test_failure_with_reservation_releases_it(self, store: _Store):
+    def test_failure_with_reservation_releases_it(self, store: Store):
         now = datetime.now(timezone.utc)
         run = _run(store, quota_reserved_at=now)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, month_start(now), reserved=1)
             settle_run_usage(session, run, success=False)
             session.commit()
         assert _usage_rows(store) == {month_start(now): (0, 0)}
 
-    def test_failure_without_reservation_is_a_no_op(self, store: _Store):
+    def test_failure_without_reservation_is_a_no_op(self, store: Store):
         run = _run(store)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             settle_run_usage(session, run, success=False)
             session.commit()
         assert _usage_rows(store) == {}
 
-    def test_cross_month_reservation_settles_both_periods(self, store: _Store):
+    def test_cross_month_reservation_settles_both_periods(self, store: Store):
         reserved_at = datetime(2026, 7, 31, 23, 59, tzinfo=timezone.utc)
         run = _run(store, quota_reserved_at=reserved_at)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, dt.date(2026, 7, 1), reserved=1)
             settle_run_usage(session, run, success=True)
             session.commit()
@@ -156,38 +150,38 @@ class TestSettleRunUsage:
         current = month_start(datetime.now(timezone.utc))
         assert rows[current] == (1, 0)  # charge lands in the completion month
 
-    def test_complete_run_charges_the_ledger(self, store: _Store):
+    def test_complete_run_charges_the_ledger(self, store: Store):
         run = _run(store)
-        completed = store.complete_run(run.id, success=True)
+        completed = store.runs.complete(run.id, success=True)
         assert completed.status == "success"
         (counts,) = _usage_rows(store).values()
         assert counts == (1, 0)
 
 
 class TestQuotaReads:
-    def test_get_and_list_overrides(self, store: _Store):
-        assert store.get_quota_overrides(_ORG_ID) == {}
-        with Session(store._engine) as session:
+    def test_get_and_list_overrides(self, store: Store):
+        assert store.quotas.get_quota_overrides(_ORG_ID) == {}
+        with Session(store.engine) as session:
             session.add(Quota(org_id=_ORG_ID, key="max_sources", limit=3))
             session.add(Quota(org_id=_ORG_ID, key="max_assets_per_source", limit=None))  # cleared/anchor row
             session.commit()
-        assert store.get_quota_overrides(_ORG_ID) == {"max_sources": 3}
-        assert store.list_quota_overrides() == {_ORG_ID: {"max_sources": 3}}
+        assert store.quotas.get_quota_overrides(_ORG_ID) == {"max_sources": 3}
+        assert store.quotas.list_quota_overrides() == {_ORG_ID: {"max_sources": 3}}
 
-    def test_list_usage_filters(self, store: _Store):
+    def test_list_usage_filters(self, store: Store):
         other_org = uuid4()
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, dt.date(2026, 7, 1), used=1)
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, dt.date(2026, 8, 1), used=2)
             increment_usage(session, other_org, METRIC_SUCCESSFUL_RUNS, dt.date(2026, 8, 1), used=3)
             session.commit()
-        august = store.list_usage(period_start=dt.date(2026, 8, 1))
+        august = store.quotas.list_usage(period_start=dt.date(2026, 8, 1))
         assert {(row.org_id, row.used) for row in august} == {(_ORG_ID, 2), (other_org, 3)}
-        assert [row.used for row in store.list_usage(org_id=_ORG_ID, period_start=dt.date(2026, 7, 1))] == [1]
+        assert [row.used for row in store.quotas.list_usage(org_id=_ORG_ID, period_start=dt.date(2026, 7, 1))] == [1]
 
-    def test_capacity_counts(self, store: _Store):
+    def test_capacity_counts(self, store: Store):
         other_org = uuid4()
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             big = Component(org_id=_ORG_ID, kind="source", key="s1")
             small = Component(org_id=_ORG_ID, kind="source", key="s2")
             other = Component(org_id=other_org, kind="source", key="s3")
@@ -198,22 +192,22 @@ class TestQuotaReads:
             session.add(Component(org_id=_ORG_ID, kind="asset", key="a", parent_id=small.id))
             session.commit()
 
-        assert store.count_sources_by_org() == {_ORG_ID: 2, other_org: 1}
-        assert store.max_assets_per_source_by_org() == {_ORG_ID: 3}
+        assert store.quotas.count_sources_by_org() == {_ORG_ID: 2, other_org: 1}
+        assert store.quotas.max_assets_per_source_by_org() == {_ORG_ID: 3}
 
-    def test_count_successful_runs_by_org(self, store: _Store):
+    def test_count_successful_runs_by_org(self, store: Store):
         period = dt.date(2026, 8, 1)
         inside = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
         outside = datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             session.add(Run(id=uuid4(), org_id=_ORG_ID, status="success", completed_at=inside))
             session.add(Run(id=uuid4(), org_id=_ORG_ID, status="success", completed_at=outside))
             session.add(Run(id=uuid4(), org_id=_ORG_ID, status="failed", completed_at=inside))
             session.commit()
-        assert store.count_successful_runs_by_org(period) == {_ORG_ID: 1}
+        assert store.quotas.count_successful_runs_by_org(period) == {_ORG_ID: 1}
 
-    def test_current_period_start_is_this_month(self, store: _Store):
-        assert store.current_period_start() == month_start(datetime.now(timezone.utc))
+    def test_current_period_start_is_this_month(self, store: Store):
+        assert store.quotas.current_period_start() == month_start(datetime.now(timezone.utc))
 
 
 # -- Enforcement ------------------------------------------------------------------
@@ -224,146 +218,146 @@ def _defaults(**limits: int | None) -> SimpleNamespace:
 
 
 class TestRunCreationGate:
-    def _exhaust(self, store: _Store, *, used: int = 0, reserved: int = 0) -> None:
-        with Session(store._engine) as session:
+    def _exhaust(self, store: Store, *, used: int = 0, reserved: int = 0) -> None:
+        with Session(store.engine) as session:
             period = month_start(datetime.now(timezone.utc))
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=used, reserved=reserved)
             session.commit()
 
-    def test_create_run_blocked_at_limit(self, store: _Store):
+    def test_create_run_blocked_at_limit(self, store: Store):
         store._quota_defaults = _defaults(max_successful_runs_per_month=2)
         self._exhaust(store, used=1, reserved=1)  # reserved counts against the limit
         with pytest.raises(QuotaExceededError) as excinfo:
-            store.create_run(_ORG_ID)
+            store.runs.create(_ORG_ID)
         assert excinfo.value.quota == "max_successful_runs_per_month"
         assert (excinfo.value.limit, excinfo.value.used) == (2, 2)
 
-    def test_create_run_allowed_below_limit(self, store: _Store):
+    def test_create_run_allowed_below_limit(self, store: Store):
         store._quota_defaults = _defaults(max_successful_runs_per_month=2)
         self._exhaust(store, used=1)
-        assert store.create_run(_ORG_ID).status == "queued"
+        assert store.runs.create(_ORG_ID).status == "queued"
 
-    def test_org_override_wins_over_default(self, store: _Store):
+    def test_org_override_wins_over_default(self, store: Store):
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             session.add(Quota(org_id=_ORG_ID, key="max_successful_runs_per_month", limit=3))
             session.commit()
         self._exhaust(store, used=2)
-        assert store.create_run(_ORG_ID).status == "queued"
+        assert store.runs.create(_ORG_ID).status == "queued"
 
-    def test_retry_blocked_at_limit(self, store: _Store):
-        run = store.create_run(_ORG_ID)
-        store.complete_run(run.id, success=False)
+    def test_retry_blocked_at_limit(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=False)
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         self._exhaust(store, used=1)
         with pytest.raises(QuotaExceededError, match="retry"):
-            store.retry_run(run.id)
+            store.runs.retry(run.id)
 
-    def test_backfill_blocked_at_limit(self, store: _Store):
+    def test_backfill_blocked_at_limit(self, store: Store):
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         self._exhaust(store, used=1)
         with pytest.raises(QuotaExceededError, match="backfill"):
-            store.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-02")
+            store.runs.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-02")
 
-    def test_backfill_span_override_wins(self, store: _Store):
+    def test_backfill_span_override_wins(self, store: Store):
         store._quota_defaults = _defaults(max_backfill_partitions=2)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             session.add(Quota(org_id=_ORG_ID, key="max_backfill_partitions", limit=3))
             session.commit()
-        backfill = store.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-03")
+        backfill = store.runs.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-03")
         assert backfill.partitions == 3
 
-    def test_backfill_span_cap(self, store: _Store):
+    def test_backfill_span_cap(self, store: Store):
         store._quota_defaults = _defaults(max_backfill_partitions=2)
         with pytest.raises(QuotaExceededError, match="exceeding the limit of 2"):
-            store.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-03")
-        backfill = store.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-02")
+            store.runs.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-03")
+        backfill = store.runs.create_backfill(_ORG_ID, start_key="2026-01-01", end_key="2026-01-02")
         assert backfill.partitions == 2
 
 
 class TestTryReserveRun:
-    def test_unlimited_admits_without_ledger(self, store: _Store):
-        run = _run(store)
-        with Session(store._engine) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            assert store.quotas.try_reserve_run(session, db_run) is True
-            session.commit()
-        assert _usage_rows(store) == {}
+    """The reservation joins the dispatching caller's unit of work when there is one."""
 
-    def test_reserves_and_stamps(self, store: _Store):
+    def test_reservation_is_durable_without_an_enclosing_transaction(self, store: Store):
+        """Called on its own the reservation must persist, not vanish at scope exit."""
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         run = _run(store)
-        with Session(store._engine) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            assert store.quotas.try_reserve_run(session, db_run) is True
-            session.commit()
+        assert store.quotas.try_reserve_run(run) is True
+        with Session(store.engine) as session:
+            reserved = session.get(Run, run.id)
+            assert reserved is not None and reserved.quota_reserved_at is not None
         (counts,) = _usage_rows(store).values()
         assert counts == (0, 1)
-        with Session(store._engine) as session:
+
+    def test_unlimited_admits_without_ledger(self, store: Store):
+        with store.transaction():
+            assert store.quotas.try_reserve_run(_run(store)) is True
+        assert _usage_rows(store) == {}
+
+    def test_reserves_and_stamps(self, store: Store):
+        store._quota_defaults = _defaults(max_successful_runs_per_month=1)
+        run = _run(store)
+        with store.transaction():
+            assert store.quotas.try_reserve_run(run) is True
+        (counts,) = _usage_rows(store).values()
+        assert counts == (0, 1)
+        with Session(store.engine) as session:
             reserved = session.get(Run, run.id)
             assert reserved is not None and reserved.quota_reserved_at is not None
 
-    def test_denies_when_exhausted(self, store: _Store):
-        with Session(store._engine) as session:
+    def test_denies_when_exhausted(self, store: Store):
+        with Session(store.engine) as session:
             period = month_start(datetime.now(timezone.utc))
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=1)
             session.commit()
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         run = _run(store)
-        with Session(store._engine) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            assert store.quotas.try_reserve_run(session, db_run) is False
-            session.commit()
+        with store.transaction():
+            assert store.quotas.try_reserve_run(run) is False
         (counts,) = _usage_rows(store).values()
         assert counts == (1, 0)
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             released = session.get(Run, run.id)
             assert released is not None and released.quota_reserved_at is None
 
-    def test_zero_limit_denies(self, store: _Store):
+    def test_zero_limit_denies(self, store: Store):
         store._quota_defaults = _defaults(max_successful_runs_per_month=0)
-        run = _run(store)
-        with Session(store._engine) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            assert store.quotas.try_reserve_run(session, db_run) is False
+        with store.transaction():
+            assert store.quotas.try_reserve_run(_run(store)) is False
 
 
 class TestReconcileUsage:
-    def test_reports_drift_both_ways(self, store: _Store):
+    def test_reports_drift_both_ways(self, store: Store):
         period = month_start(datetime.now(timezone.utc))
-        with Session(store._engine) as session:
+        with Session(store.engine) as session:
             increment_usage(session, _ORG_ID, METRIC_SUCCESSFUL_RUNS, period, used=5)
             session.commit()
-        drifts = store.reconcile_usage()
+        drifts = store.quotas.reconcile_usage()
         assert drifts == [{"org_id": _ORG_ID, "period_start": period, "ledger": 5, "recomputed": 0}]
 
-    def test_in_sync_reports_nothing(self, store: _Store):
+    def test_in_sync_reports_nothing(self, store: Store):
         run = _run(store)
-        store.complete_run(run.id, success=True)
-        assert store.reconcile_usage() == []
+        store.runs.complete(run.id, success=True)
+        assert store.quotas.reconcile_usage() == []
 
 
 class TestSetQuota:
-    def test_creates_then_partially_updates(self, store: _Store):
-        assert store.set_quota(_ORG_ID, {"max_sources": 5}) == {"max_sources": 5}
-        assert store.set_quota(_ORG_ID, {"max_successful_runs_per_month": 100}) == {
+    def test_creates_then_partially_updates(self, store: Store):
+        assert store.quotas.set_quota(_ORG_ID, {"max_sources": 5}) == {"max_sources": 5}
+        assert store.quotas.set_quota(_ORG_ID, {"max_successful_runs_per_month": 100}) == {
             "max_sources": 5,
             "max_successful_runs_per_month": 100,
         }
 
-    def test_none_clears_an_override(self, store: _Store):
-        store.set_quota(_ORG_ID, {"max_sources": 5})
-        assert store.set_quota(_ORG_ID, {"max_sources": None}) == {}
+    def test_none_clears_an_override(self, store: Store):
+        store.quotas.set_quota(_ORG_ID, {"max_sources": 5})
+        assert store.quotas.set_quota(_ORG_ID, {"max_sources": None}) == {}
 
-    def test_rejects_unknown_and_negative(self, store: _Store):
+    def test_rejects_unknown_and_negative(self, store: Store):
         with pytest.raises(ValueError, match="Unknown quota limit"):
-            store.set_quota(_ORG_ID, {"max_bananas": 1})
+            store.quotas.set_quota(_ORG_ID, {"max_bananas": 1})
         with pytest.raises(ValueError, match=">= 0"):
-            store.set_quota(_ORG_ID, {"max_sources": -1})
+            store.quotas.set_quota(_ORG_ID, {"max_sources": -1})
 
 
 class TestRegistry:
@@ -379,9 +373,9 @@ class TestRegistry:
         runs = QUOTAS["max_successful_runs_per_month"]
         assert isinstance(runs, ConsumptionQuota) and runs.metric == METRIC_SUCCESSFUL_RUNS
 
-    def test_unregistered_key_fails_loudly(self, store: _Store):
-        with Session(store._engine) as session, pytest.raises(KeyError, match="not registered"):
-            store.quotas.effective(session, _ORG_ID, "max_bananas")
+    def test_unregistered_key_fails_loudly(self, store: Store):
+        with pytest.raises(KeyError, match="not registered"):
+            store.quotas.effective(_ORG_ID, "max_bananas")
 
     def test_definition_is_abstract(self):
         """The base class cannot be instantiated — subclasses must implement check()."""

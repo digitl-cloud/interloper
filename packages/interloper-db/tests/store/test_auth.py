@@ -77,12 +77,14 @@ def store(auth_db: Engine) -> Store:
 
 class TestAcceptInvitation:
     def test_accept_adds_membership_and_returns_usable_org(self, store: Store):
-        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
-        invitee = store.upsert_profile(google_id="g-invitee", email="new@example.com", name="New")
-        org = store.create_organisation(name="Acme", creator_id=admin.id)
-        invitation = store.create_invitation(org_id=org.id, email=invitee.email, role="member", invited_by=admin.id)
+        admin = store.auth.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        invitee = store.auth.upsert_profile(google_id="g-invitee", email="new@example.com", name="New")
+        org = store.auth.create_organisation(name="Acme", creator_id=admin.id)
+        invitation = store.auth.create_invitation(
+            org_id=org.id, email=invitee.email, role="member", invited_by=admin.id
+        )
 
-        joined = store.accept_invitation(invitation.token, invitee.id)
+        joined = store.auth.accept_invitation(invitation.token, invitee.id)
 
         assert joined is not None
         # Attributes must be loaded on the detached instance (regression:
@@ -90,25 +92,25 @@ class TestAcceptInvitation:
         # DetachedInstanceError).
         assert joined.id == org.id
         assert joined.name == "Acme"
-        assert store.get_user_role(invitee.id, org.id) == "member"
-        assert store.get_invitation_by_token(invitation.token) is None
+        assert store.auth.get_user_role(invitee.id, org.id) == "member"
+        assert store.auth.get_invitation_by_token(invitation.token) is None
 
     def test_accept_invalid_token_returns_none(self, store: Store):
-        invitee = store.upsert_profile(google_id="g-invitee", email="new@example.com", name="New")
+        invitee = store.auth.upsert_profile(google_id="g-invitee", email="new@example.com", name="New")
 
-        assert store.accept_invitation("no-such-token", invitee.id) is None
+        assert store.auth.accept_invitation("no-such-token", invitee.id) is None
 
 
 class TestListAllProfiles:
     def test_lists_profiles_with_their_organisations(self, store: Store):
-        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
-        loner = store.upsert_profile(google_id="g-loner", email="loner@example.com", name="Loner")
-        org_a = store.create_organisation(name="Acme", creator_id=admin.id)
-        org_b = store.create_organisation(name="Beta", creator_id=admin.id)
-        store.add_org_member(org_a.id, admin.id, "admin")
-        store.add_org_member(org_b.id, admin.id, "admin")
+        admin = store.auth.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        loner = store.auth.upsert_profile(google_id="g-loner", email="loner@example.com", name="Loner")
+        org_a = store.auth.create_organisation(name="Acme", creator_id=admin.id)
+        org_b = store.auth.create_organisation(name="Beta", creator_id=admin.id)
+        store.auth.add_org_member(org_a.id, admin.id, "admin")
+        store.auth.add_org_member(org_b.id, admin.id, "admin")
 
-        orgs = {profile.id: organisations for profile, organisations in store.list_all_profiles()}
+        orgs = {profile.id: organisations for profile, organisations in store.auth.list_all_profiles()}
 
         assert sorted(org.name for org in orgs[admin.id]) == ["Acme", "Beta"]
         assert orgs[loner.id] == []
@@ -136,14 +138,14 @@ class TestDeleteOrganisation:
         session.commit()
 
     def test_purges_payload_but_keeps_the_ledger(self, store: Store, auth_db: Engine):
-        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
-        org = store.create_organisation(name="Doomed", creator_id=admin.id)
-        keeper = store.create_organisation(name="Keeper", creator_id=admin.id)
-        store.add_org_member(org.id, admin.id, "admin")
-        store.add_org_member(keeper.id, admin.id, "admin")
-        store.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
-        store.create_token(user_id=admin.id, organisation_id=org.id, name="laptop")
-        session_token = store.create_session(user_id=admin.id, organisation_id=org.id)
+        admin = store.auth.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        org = store.auth.create_organisation(name="Doomed", creator_id=admin.id)
+        keeper = store.auth.create_organisation(name="Keeper", creator_id=admin.id)
+        store.auth.add_org_member(org.id, admin.id, "admin")
+        store.auth.add_org_member(keeper.id, admin.id, "admin")
+        store.auth.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
+        store.tokens.create(user_id=admin.id, organisation_id=org.id, name="laptop")
+        session_token = store.auth.create_session(user_id=admin.id, organisation_id=org.id)
         with SQLSession(auth_db) as session:
             self._seed_org_data(session, org.id)
             db_admin = session.get(Profile, admin.id)
@@ -152,11 +154,11 @@ class TestDeleteOrganisation:
             session.add(db_admin)
             session.commit()
 
-        store.delete_organisation(org.id)
+        store.auth.delete_organisation(org.id)
 
         # The org reads as missing everywhere but the row survives, stamped.
-        assert store.get_organisation(org.id) is None
-        retained = store.get_organisation(org.id, include_deleted=True)
+        assert store.auth.get_organisation(org.id) is None
+        retained = store.auth.get_organisation(org.id, include_deleted=True)
         assert retained is not None and retained.deleted_at is not None
         with SQLSession(auth_db) as session:
             # Sensitive payload is purged...
@@ -178,81 +180,81 @@ class TestDeleteOrganisation:
             assert session.exec(select(Backfill).where(Backfill.org_id == org.id)).first() is not None
             assert session.exec(select(Event).where(Event.org_id == org.id)).first() is not None
         # The user, their session, and the other organisation survive; org refs are cleared.
-        resolved = store.resolve_session(session_token)
+        resolved = store.auth.resolve_session(session_token)
         assert resolved is not None
         profile, auth_session = resolved
         assert auth_session.organisation_id is None
         assert profile.last_organisation_id is None
-        assert store.get_organisation(keeper.id) is not None
-        assert store.get_user_role(admin.id, keeper.id) == "admin"
+        assert store.auth.get_organisation(keeper.id) is not None
+        assert store.auth.get_user_role(admin.id, keeper.id) == "admin"
 
     def test_double_delete_reads_as_missing(self, store: Store):
-        org = store.create_organisation(name="Once")
-        store.delete_organisation(org.id)
+        org = store.auth.create_organisation(name="Once")
+        store.auth.delete_organisation(org.id)
         with pytest.raises(NotFoundError):
-            store.delete_organisation(org.id)
+            store.auth.delete_organisation(org.id)
         with pytest.raises(NotFoundError):
-            store.update_organisation(org.id, "Renamed")
+            store.auth.update_organisation(org.id, "Renamed")
 
     def test_missing_organisation_raises(self, store: Store):
         with pytest.raises(NotFoundError):
-            store.delete_organisation(uuid4())
+            store.auth.delete_organisation(uuid4())
 
 
 class TestDeleteProfile:
     def test_deletes_profile_and_everything_anchored_to_it(self, store: Store):
-        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
-        keeper = store.upsert_profile(google_id="g-keeper", email="keeper@example.com", name="Keeper")
-        org = store.create_organisation(name="Acme", creator_id=admin.id)
-        store.add_org_member(org.id, admin.id, "admin")
-        store.add_org_member(org.id, keeper.id, "viewer")
-        session_token = store.create_session(user_id=admin.id)
-        keeper_token = store.create_session(user_id=keeper.id)
-        store.create_token(user_id=admin.id, organisation_id=org.id, name="laptop")
-        store.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
+        admin = store.auth.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        keeper = store.auth.upsert_profile(google_id="g-keeper", email="keeper@example.com", name="Keeper")
+        org = store.auth.create_organisation(name="Acme", creator_id=admin.id)
+        store.auth.add_org_member(org.id, admin.id, "admin")
+        store.auth.add_org_member(org.id, keeper.id, "viewer")
+        session_token = store.auth.create_session(user_id=admin.id)
+        keeper_token = store.auth.create_session(user_id=keeper.id)
+        store.tokens.create(user_id=admin.id, organisation_id=org.id, name="laptop")
+        store.auth.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
 
-        store.delete_profile(admin.id)
+        store.auth.delete_profile(admin.id)
 
-        assert store.get_profile(admin.id) is None
-        assert store.resolve_session(session_token) is None
-        assert not store.has_pending_invitation("new@example.com")
-        assert store.get_user_role(admin.id, org.id) is None
+        assert store.auth.get_profile(admin.id) is None
+        assert store.auth.resolve_session(session_token) is None
+        assert not store.auth.has_pending_invitation("new@example.com")
+        assert store.auth.get_user_role(admin.id, org.id) is None
         # Other users' data is untouched.
-        assert store.get_profile(keeper.id) is not None
-        assert store.resolve_session(keeper_token) is not None
-        assert store.get_user_role(keeper.id, org.id) == "viewer"
+        assert store.auth.get_profile(keeper.id) is not None
+        assert store.auth.resolve_session(keeper_token) is not None
+        assert store.auth.get_user_role(keeper.id, org.id) == "viewer"
 
     def test_missing_profile_raises(self, store: Store):
         with pytest.raises(NotFoundError):
-            store.delete_profile(uuid4())
+            store.auth.delete_profile(uuid4())
 
 
 class TestGetProfileByGoogleId:
     def test_returns_matching_profile(self, store: Store):
-        profile = store.upsert_profile(google_id="g-1", email="user@example.com", name="User")
+        profile = store.auth.upsert_profile(google_id="g-1", email="user@example.com", name="User")
 
-        found = store.get_profile_by_google_id("g-1")
+        found = store.auth.get_profile_by_google_id("g-1")
 
         assert found is not None
         assert found.id == profile.id
 
     def test_returns_none_when_absent(self, store: Store):
-        assert store.get_profile_by_google_id("g-missing") is None
+        assert store.auth.get_profile_by_google_id("g-missing") is None
 
 
 class TestHasPendingInvitation:
     def _invite(self, store: Store, email: str) -> Invitation:
-        admin = store.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
-        org = store.create_organisation(name="Acme", creator_id=admin.id)
-        return store.create_invitation(org_id=org.id, email=email, role="member", invited_by=admin.id)
+        admin = store.auth.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
+        org = store.auth.create_organisation(name="Acme", creator_id=admin.id)
+        return store.auth.create_invitation(org_id=org.id, email=email, role="member", invited_by=admin.id)
 
     def test_pending_invitation_matches_case_insensitively(self, store: Store):
         self._invite(store, "New@Example.com")
 
-        assert store.has_pending_invitation("new@example.com")
+        assert store.auth.has_pending_invitation("new@example.com")
 
     def test_no_invitation_returns_false(self, store: Store):
-        assert not store.has_pending_invitation("nobody@example.com")
+        assert not store.auth.has_pending_invitation("nobody@example.com")
 
     def test_expired_invitation_returns_false(self, store: Store, auth_db: Engine):
         invitation = self._invite(store, "new@example.com")
@@ -264,15 +266,15 @@ class TestHasPendingInvitation:
             session.add(db_invitation)
             session.commit()
 
-        assert not store.has_pending_invitation("new@example.com")
+        assert not store.auth.has_pending_invitation("new@example.com")
 
 
 class TestOrganisationActivity:
     def test_composes_and_sorts_the_derived_feed(self, store: Store, auth_db: Engine):
-        admin = store.upsert_profile(google_id="g-act", email="act@example.com", name="Act Min")
-        org = store.create_organisation(name="Busy", creator_id=admin.id)
-        store.add_org_member(org.id, admin.id, "admin")
-        store.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
+        admin = store.auth.upsert_profile(google_id="g-act", email="act@example.com", name="Act Min")
+        org = store.auth.create_organisation(name="Busy", creator_id=admin.id)
+        store.auth.add_org_member(org.id, admin.id, "admin")
+        store.auth.create_invitation(org_id=org.id, email="new@example.com", role="viewer", invited_by=admin.id)
         with SQLSession(auth_db) as session:
             session.add(Component(org_id=org.id, kind="source", key="bing_ads", name="Bing"))
             session.add(
@@ -294,7 +296,7 @@ class TestOrganisationActivity:
             session.add(Run(id=uuid4(), org_id=org.id, status="failed"))
             session.commit()
 
-        entries = store.list_organisation_activity(org.id)
+        entries = store.auth.list_organisation_activity(org.id)
 
         kinds = [entry["kind"] for entry in entries]
         assert set(kinds) == {"org_created", "member_joined", "invitation_sent", "source_added", "runs_completed"}
@@ -309,43 +311,43 @@ class TestOrganisationActivity:
         assert runs["subject"] == "2"  # only the successful runs, aggregated per day
 
     def test_limit_caps_the_feed(self, store: Store):
-        admin = store.upsert_profile(google_id="g-cap", email="cap@example.com", name="Cap")
-        org = store.create_organisation(name="Capped", creator_id=admin.id)
-        store.add_org_member(org.id, admin.id, "admin")
-        assert len(store.list_organisation_activity(org.id, limit=1)) == 1
+        admin = store.auth.upsert_profile(google_id="g-cap", email="cap@example.com", name="Cap")
+        org = store.auth.create_organisation(name="Capped", creator_id=admin.id)
+        store.auth.add_org_member(org.id, admin.id, "admin")
+        assert len(store.auth.list_organisation_activity(org.id, limit=1)) == 1
 
     def test_unknown_org_raises(self, store: Store):
         with pytest.raises(NotFoundError):
-            store.list_organisation_activity(uuid4())
+            store.auth.list_organisation_activity(uuid4())
 
 
 class TestUpdateProfile:
     def test_updates_name_and_timezone_independently(self, store: Store):
-        profile = store.upsert_profile(google_id="g-upd", email="upd@example.com", name="Google Name")
+        profile = store.auth.upsert_profile(google_id="g-upd", email="upd@example.com", name="Google Name")
 
-        renamed = store.update_profile(profile.id, name="Custom Name")
+        renamed = store.auth.update_profile(profile.id, name="Custom Name")
         assert renamed.name == "Custom Name"
         assert renamed.timezone is None
 
-        zoned = store.update_profile(profile.id, timezone="Europe/Berlin")
+        zoned = store.auth.update_profile(profile.id, timezone="Europe/Berlin")
         assert zoned.name == "Custom Name"
         assert zoned.timezone == "Europe/Berlin"
 
     def test_missing_profile_raises(self, store: Store):
         with pytest.raises(NotFoundError):
-            store.update_profile(uuid4(), name="Ghost")
+            store.auth.update_profile(uuid4(), name="Ghost")
 
     def test_user_set_name_survives_login_upsert(self, store: Store):
-        profile = store.upsert_profile(google_id="g-keep", email="keep@example.com", name="Google Name")
-        store.update_profile(profile.id, name="Custom Name")
+        profile = store.auth.upsert_profile(google_id="g-keep", email="keep@example.com", name="Google Name")
+        store.auth.update_profile(profile.id, name="Custom Name")
 
-        relogged = store.upsert_profile(google_id="g-keep", email="keep@example.com", name="Google Name")
+        relogged = store.auth.upsert_profile(google_id="g-keep", email="keep@example.com", name="Google Name")
 
         assert relogged.name == "Custom Name"
 
     def test_login_upsert_fills_an_empty_name(self, store: Store):
-        store.upsert_profile(google_id="g-fill", email="fill@example.com")
+        store.auth.upsert_profile(google_id="g-fill", email="fill@example.com")
 
-        filled = store.upsert_profile(google_id="g-fill", email="fill@example.com", name="Google Name")
+        filled = store.auth.upsert_profile(google_id="g-fill", email="fill@example.com", name="Google Name")
 
         assert filled.name == "Google Name"

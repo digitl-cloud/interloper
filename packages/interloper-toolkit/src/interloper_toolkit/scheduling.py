@@ -32,7 +32,7 @@ def list_jobs(ctx: ToolkitContext) -> JobList | ToolError:
     last_run_at, and next_run_at.
     """
     try:
-        jobs = ctx.store.list_components(ctx.org_id, kinds=["job"])
+        jobs = ctx.store.components.list_all(ctx.org_id, kinds=["job"])
         return JobList(count=len(jobs), jobs=jobs)
     except Exception as e:
         return ToolError(error=str(e))
@@ -48,8 +48,8 @@ def get_job_health(ctx: ToolkitContext, component_id: str) -> JobHealth | ToolEr
     """
     try:
         jid = UUID(component_id)
-        job = ctx.store.get_component(jid, kind="job")
-        runs = ctx.store.list_runs(ctx.org_id, component_id=jid, limit=20)
+        job = ctx.store.components.get(jid, kind="job")
+        runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, limit=20)
 
         total = len(runs)
         success = sum(1 for r in runs if r.status == "success")
@@ -94,7 +94,7 @@ def list_recent_runs(
         limit: Maximum number of runs to return (default 20).
     """
     try:
-        runs = ctx.store.list_runs(
+        runs = ctx.store.runs.list_all(
             ctx.org_id,
             component_id=UUID(component_id) if component_id else None,
             status=status,
@@ -115,9 +115,9 @@ def get_run_detail(ctx: ToolkitContext, run_id: str) -> RunDetail | ToolError:
     """
     try:
         rid = UUID(run_id)
-        run = ctx.store.get_run(rid)
-        events = ctx.store.list_events(run_id=rid)
-        asset_execs = ctx.store.list_asset_executions(rid)
+        run = ctx.store.runs.get(rid)
+        events = ctx.store.runs.list_events(run_id=rid)
+        asset_execs = ctx.store.runs.list_asset_executions(rid)
 
         return RunDetail(run=run, events=events, asset_executions=asset_execs)
     except Exception as e:
@@ -133,12 +133,12 @@ def list_failures(ctx: ToolkitContext, limit: int = 20) -> FailureList | ToolErr
     Returns failed runs along with the error messages from their events.
     """
     try:
-        failed_runs = ctx.store.list_runs(ctx.org_id, status="failed", limit=limit)
+        failed_runs = ctx.store.runs.list_all(ctx.org_id, status="failed", limit=limit)
 
         results = []
         for run in failed_runs:
             run_id = run.id
-            events = ctx.store.list_events(run_id=run_id)
+            events = ctx.store.runs.list_events(run_id=run_id)
             errors = [
                 RunErrorEvent(component_key=e.component_key, error=e.error, timestamp=e.timestamp)
                 for e in events
@@ -164,9 +164,9 @@ def list_backfills(ctx: ToolkitContext, active_only: bool = True) -> BackfillLis
     """
     try:
         if active_only:
-            backfills = ctx.store.list_active_backfills(ctx.org_id)
+            backfills = ctx.store.runs.list_active_backfills(ctx.org_id)
         else:
-            backfills = ctx.store.list_backfills(ctx.org_id)
+            backfills = ctx.store.runs.list_backfills(ctx.org_id)
         return BackfillList(count=len(backfills), backfills=backfills)
     except Exception as e:
         return ToolError(error=str(e))

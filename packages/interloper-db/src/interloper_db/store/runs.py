@@ -12,18 +12,19 @@ from uuid import UUID, uuid4
 import interloper as il
 from interloper.errors import NotFoundError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
-from sqlalchemy import func
+from sqlalchemy import Engine, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
 
 from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
-from interloper_db.store.base import StoreBase
 from interloper_db.store.components import stamp_component_state
 from interloper_db.store.quotas import (
     QUOTA_MAX_BACKFILL_PARTITIONS,
     QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
+    QuotaService,
     settle_run_usage,
 )
+from interloper_db.store.session import commit, session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +52,22 @@ _PROMOTED_METADATA_KEYS = frozenset(
 Everything else spills into the ``data`` JSONB column. ``asset_id``/``asset_key``
 are the compat aliases core emitters use for the component columns; ``run_id`` and
 ``org_id`` also arrive via run metadata, but the columns filled from
-:meth:`RunMixin.save_event`'s own arguments are the authoritative ones.
+:meth:`RunStore.save_event`'s own arguments are the authoritative ones.
 """
 
 
-class RunMixin(StoreBase):
+class RunStore:
     """Store methods for runs, events, and backfills."""
+
+    def __init__(self, engine: Engine, quotas: QuotaService) -> None:
+        """Bind the facet to what it works through.
+
+        Args:
+            engine: Engine the facet opens its sessions on.
+            quotas: Quota gates it enforces through.
+        """
+        self._engine = engine
+        self._quotas = quotas
 
     # -- Events ----------------------------------------------------------------
 
@@ -85,10 +96,10 @@ class RunMixin(StoreBase):
         """
         values = self._event_values(event, org_id, run_id)
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             stmt = pg_insert(Event).values(**values).on_conflict_do_nothing(index_elements=["id"])
             session.execute(stmt)  # ty: ignore[deprecated]
-            session.commit()
+            commit(session)
             saved = session.get(Event, values["id"])
             if saved is None:  # pragma: no cover - only if the row was concurrently deleted
                 raise RuntimeError(f"Event {values['id']} missing immediately after upsert")
@@ -121,7 +132,7 @@ class RunMixin(StoreBase):
         Returns:
             List of Event rows.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = (
                 select(Event)
                 .where(*self._event_filters(run_id, org_id, component_ids, event_types))
@@ -150,7 +161,7 @@ class RunMixin(StoreBase):
         Returns:
             Total number of matching events (ignoring limit/offset).
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = (
                 select(func.count())
                 .select_from(Event)
@@ -167,13 +178,13 @@ class RunMixin(StoreBase):
         Returns:
             One read-model row per asset touched by the run.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = select(AssetExecution).where(AssetExecution.run_id == run_id)
             return list(session.exec(statement).all())
 
     # -- Runs ------------------------------------------------------------------
 
-    def create_run(
+    def create(
         self,
         org_id: UUID,
         *,
@@ -194,8 +205,8 @@ class RunMixin(StoreBase):
         """
         if partition_key is not None:
             TimePartition.from_key(partition_key)
-        with self._session() as session:
-            self.quotas.check(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
+        with session_scope(self._engine) as session:
+            self._quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
             db_run = Run(
                 org_id=org_id,
                 component_id=component_id,
@@ -203,11 +214,11 @@ class RunMixin(StoreBase):
                 status="queued",
             )
             session.add(db_run)
-            session.commit()
+            commit(session)
             session.refresh(db_run)
             return db_run
 
-    def get_run(self, run_id: UUID) -> Run:
+    def get(self, run_id: UUID) -> Run:
         """Load a run by ID.
 
         Args:
@@ -219,13 +230,13 @@ class RunMixin(StoreBase):
         Raises:
             NotFoundError: If the run is not found.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_run = session.get(Run, run_id)
             if not db_run:
                 raise NotFoundError(f"Run {run_id} not found")
             return db_run
 
-    def list_runs(
+    def list_all(
         self,
         org_id: UUID,
         *,
@@ -252,7 +263,7 @@ class RunMixin(StoreBase):
         Returns:
             List of Run rows.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = (
                 select(Run)
                 .where(*self._run_filters(org_id, component_id, backfill_id, status, after, before))
@@ -262,7 +273,7 @@ class RunMixin(StoreBase):
             )
             return list(session.exec(statement).all())
 
-    def count_runs(
+    def count(
         self,
         org_id: UUID,
         *,
@@ -285,7 +296,7 @@ class RunMixin(StoreBase):
         Returns:
             Total number of matching runs (ignoring limit/offset).
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = (
                 select(func.count())
                 .select_from(Run)
@@ -293,7 +304,7 @@ class RunMixin(StoreBase):
             )
             return session.exec(statement).one()
 
-    def complete_run(self, run_id: UUID, *, success: bool) -> Run:
+    def complete(self, run_id: UUID, *, success: bool) -> Run:
         """Mark a run as completed and advance its backfill if applicable.
 
         Also stamps ``last_run_at`` on the target component's machine-owned
@@ -310,7 +321,7 @@ class RunMixin(StoreBase):
         Raises:
             NotFoundError: If the run is not found.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_run = session.get(Run, run_id)
             if not db_run:
                 raise NotFoundError(f"Run {run_id} not found")
@@ -330,10 +341,10 @@ class RunMixin(StoreBase):
             if db_run.backfill_id:
                 self._advance_backfill(session, db_run.backfill_id, failed=not success)
 
-            session.commit()
+            commit(session)
             return db_run
 
-    def retry_run(self, run_id: UUID, *, scope: str = "all") -> Run:
+    def retry(self, run_id: UUID, *, scope: str = "all") -> Run:
         """Queue a new run that retries a failed one.
 
         Each retry is a fresh ``Run`` row linked to its predecessor via
@@ -355,14 +366,14 @@ class RunMixin(StoreBase):
         if scope not in ("all", "failed"):
             raise ValueError(f"Invalid retry scope: {scope!r} (expected 'all' or 'failed')")
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             src = session.get(Run, run_id)
             if not src:
                 raise NotFoundError(f"Run {run_id} not found")
             if src.status != "failed":
                 raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
 
-            self.quotas.check(session, src.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="retry")
+            self._quotas.check(src.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="retry")
             db_run = Run(
                 org_id=src.org_id,
                 component_id=src.component_id,
@@ -373,7 +384,7 @@ class RunMixin(StoreBase):
                 retry_scope=scope,
             )
             session.add(db_run)
-            session.commit()
+            commit(session)
             session.refresh(db_run)
             return db_run
 
@@ -424,11 +435,11 @@ class RunMixin(StoreBase):
         window = TimePartitionWindow(start.value, end.value, start.granularity)
         span = window.partition_count()
 
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             # Cron top-ups (a job's `lookback` window) are deliberately not
             # bounded here — they never pass through this method.
-            self.quotas.check(session, org_id, QUOTA_MAX_BACKFILL_PARTITIONS, used=span)
-            self.quotas.check(session, org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="backfill")
+            self._quotas.check(org_id, QUOTA_MAX_BACKFILL_PARTITIONS, used=span)
+            self._quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="backfill")
             db_backfill = Backfill(
                 org_id=org_id,
                 component_id=component_id,
@@ -460,7 +471,7 @@ class RunMixin(StoreBase):
 
             db_backfill.partitions = span
             session.add(db_backfill)
-            session.commit()
+            commit(session)
             session.refresh(db_backfill)
             return db_backfill
 
@@ -481,7 +492,7 @@ class RunMixin(StoreBase):
             NotFoundError: If the backfill is not found.
             ValueError: If the backfill is already terminal.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_backfill = session.get(Backfill, backfill_id)
             if not db_backfill:
                 raise NotFoundError(f"Backfill {backfill_id} not found")
@@ -489,7 +500,7 @@ class RunMixin(StoreBase):
                 raise ValueError(f"Backfill {backfill_id} is already {db_backfill.status}")
 
             cancel_backfill_runs(session, db_backfill)
-            session.commit()
+            commit(session)
             session.refresh(db_backfill)
             return db_backfill
 
@@ -505,7 +516,7 @@ class RunMixin(StoreBase):
         Raises:
             NotFoundError: If the backfill is not found.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             db_backfill = session.get(Backfill, backfill_id)
             if not db_backfill:
                 raise NotFoundError(f"Backfill {backfill_id} not found")
@@ -520,7 +531,7 @@ class RunMixin(StoreBase):
         Returns:
             List of Backfill rows.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = select(Backfill).where(Backfill.org_id == org_id).order_by(col(Backfill.created_at).desc())
             return list(session.exec(statement).all())
 
@@ -533,7 +544,7 @@ class RunMixin(StoreBase):
         Returns:
             List of Backfill rows with status ``"running"`` or ``"queued"``.
         """
-        with self._session() as session:
+        with session_scope(self._engine) as session:
             statement = select(Backfill).where(
                 Backfill.org_id == org_id,
                 col(Backfill.status).in_(["running", "queued"]),
@@ -632,15 +643,15 @@ class RunMixin(StoreBase):
             "run_id": run_id,
             "event_type": event.type.value,
             "component_id": UUID(str(component_id)) if component_id else None,
-            "component_kind": RunMixin._sanitize_text(component_kind),
-            "component_key": RunMixin._sanitize_text(component_key),
-            "error": RunMixin._sanitize_text(metadata.get("error")),
-            "traceback": RunMixin._sanitize_text(metadata.get("traceback")),
-            "message": RunMixin._sanitize_text(metadata.get("message")),
-            "level": RunMixin._sanitize_text(metadata.get("level")),
+            "component_kind": RunStore._sanitize_text(component_kind),
+            "component_key": RunStore._sanitize_text(component_key),
+            "error": RunStore._sanitize_text(metadata.get("error")),
+            "traceback": RunStore._sanitize_text(metadata.get("traceback")),
+            "message": RunStore._sanitize_text(metadata.get("message")),
+            "level": RunStore._sanitize_text(metadata.get("level")),
             # None values are the absence of a key, not payload — producers emit
             # them unconditionally (backfill_id on non-backfill runs, …).
-            "data": RunMixin._sanitize_data(
+            "data": RunStore._sanitize_data(
                 {k: v for k, v in metadata.items() if k not in _PROMOTED_METADATA_KEYS and v is not None}
             ),
             "timestamp": event.timestamp,
@@ -653,7 +664,7 @@ class RunMixin(StoreBase):
         component_ids: Sequence[UUID] | None,
         event_types: Sequence[str] | None,
     ) -> list[Any]:
-        """The shared where-clauses of :meth:`RunMixin.list_events` / ``count_events``.
+        """The shared where-clauses of :meth:`RunStore.list_events` / ``count_events``.
 
         One builder for both so listing and counting can never disagree.
 
@@ -688,7 +699,7 @@ class RunMixin(StoreBase):
         after: datetime | None = None,
         before: datetime | None = None,
     ) -> list[Any]:
-        """The shared where-clauses of :meth:`RunMixin.list_runs` / ``count_runs``.
+        """The shared where-clauses of :meth:`RunStore.list_runs` / ``count_runs``.
 
         ``after``/``before`` select the runs whose execution *overlaps* the window
         — a run occupies ``[started_at, completed_at)``, left open-ended while it

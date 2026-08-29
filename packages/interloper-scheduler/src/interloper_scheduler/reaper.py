@@ -100,7 +100,7 @@ class Reaper(Controller):
         persists across cycles is a bug in the charging path.
         """
         try:
-            drifts = self._store.reconcile_usage()
+            drifts = self._store.quotas.reconcile_usage()
         except Exception:
             logger.exception("Usage reconciliation failed")
             return
@@ -190,11 +190,11 @@ class Reaper(Controller):
                 type=il.EventType.RUN_FAILED,
                 metadata={**run_event_metadata(run, target), "error": error},
             )
-            self._store.save_event(event, org_id=run.org_id, run_id=run.id)
+            self._store.runs.save_event(event, org_id=run.org_id, run_id=run.id)
         except Exception:
             logger.exception("Failed to save RUN_FAILED event for run %s", run.id)
 
         try:
-            self._store.complete_run(run.id, success=False)
+            self._store.runs.complete(run.id, success=False)
         except Exception:
             logger.exception("Failed to mark run %s as failed", run.id)
