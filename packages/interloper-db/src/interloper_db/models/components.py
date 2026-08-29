@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, UniqueConstraint
-from sqlmodel import Column, LargeBinary, Relationship, SQLModel, text
+from sqlmodel import Column, LargeBinary, Relationship, Session, SQLModel, text
 from sqlmodel import Field as SQLField
 
 from interloper_db.models.columns import PortableJSON, timestamp_column
@@ -85,6 +85,23 @@ class Component(SQLModel, table=True):
             "viewonly": True,
         },
     )
+
+    def parent_key(self, session: Session) -> str | None:
+        """The owning source's catalog key, for a source-owned asset.
+
+        Assets owned by a source are not flat catalog entries: resolving one
+        needs the key of the source that declares it, which lives a row away.
+
+        Args:
+            session: Open session the parent row is read through.
+
+        Returns:
+            The parent's catalog key, or ``None`` for a row with no parent.
+        """
+        if self.parent_id is None:
+            return None
+        parent = session.get(Component, self.parent_id)
+        return parent.key if parent else None
 
     def stamp_state(self, **fields: Any) -> None:
         """Merge machine-owned state fields onto a component row (spec untouched).

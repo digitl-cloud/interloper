@@ -322,26 +322,16 @@ class RelationStore:
     def _relation_vocabulary(self, session: Session, db_source: Component) -> dict[str, il.RelationDefinition]:
         """A referrer row's relation vocabulary, slots included.
 
-        Source-owned assets are not top-level catalog entries: their concrete
-        definition (which carries the dependency slots' ``required`` flags)
-        comes from the parent source's definition. Everything else resolves
-        through the catalog with the kind's anchor as drift fallback.
-
         Args:
             session: Open session the parent row is loaded through.
             db_source: Referrer row whose vocabulary is resolved.
 
         Returns:
-            The declared relation definitions keyed by relation type. Empty
-            when nothing resolves.
+            The declared relation definitions keyed by relation type, from the
+            owning source's declaration for a source-owned asset. Empty when
+            nothing resolves.
         """
-        if db_source.kind == "asset" and db_source.parent_id is not None:
-            parent = session.get(Component, db_source.parent_id)
-            parent_definition = self._catalog.get(parent.key) if parent else None
-            for asset_definition in getattr(parent_definition, "assets", []):
-                if asset_definition.key == db_source.key:
-                    return asset_definition.relations
-        return self._catalog.vocabulary(db_source.kind, db_source.key)
+        return self._catalog.vocabulary(db_source.kind, db_source.key, parent_key=db_source.parent_key(session))
 
     def _relation_detaches(self, session: Session, db_source: Component, relation: ComponentRelation) -> bool:
         """Whether a relation detaches (rather than blocks) when its destination is deleted.

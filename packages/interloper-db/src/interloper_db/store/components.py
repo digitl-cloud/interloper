@@ -41,7 +41,6 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
-from interloper_db.catalog import resolve_component_cls, resolve_source_cls
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
 from interloper_db.store.drift import ComponentStatus, asset_status, source_status
@@ -507,8 +506,11 @@ class ComponentStore:
             ``None`` when the key doesn't resolve or the config can't construct
             the class.
         """
-        cls = resolve_component_cls(self._catalog, db_component.key)
-        if cls is None or cls.kind != db_component.kind:
+        try:
+            cls = il.Component.resolve_key(db_component.key, self._catalog)
+        except (CatalogKeyError, ImportError, AttributeError, TypeError):
+            return None  # stale key: nothing to derive a name from
+        if cls.kind != db_component.kind:
             return None
         try:
             instance = cls(**(config or {}))
@@ -572,8 +574,9 @@ class ComponentStore:
         Raises:
             ConfigError: If a same-key sibling in the org targets the same tables.
         """
-        source_cls = resolve_source_cls(self._catalog, db_source.key)
-        if source_cls is None:
+        try:
+            source_cls = il.Source.resolve_key(db_source.key, self._catalog)
+        except (CatalogKeyError, ImportError, AttributeError, TypeError):
             return  # drifted key: nothing to derive a target from
 
         def targets(config: dict[str, Any] | None) -> set[tuple[str, str]] | None:
@@ -626,9 +629,10 @@ class ComponentStore:
             ConfigError: If ``child_keys`` names assets the source doesn't declare.
             InUseError: If a removed asset is referenced from outside the source.
         """
-        source_cls = resolve_source_cls(self._catalog, db_source.key)
-        if source_cls is None:
-            raise CatalogKeyError(f"Unknown source key: {db_source.key}")
+        try:
+            source_cls = il.Source.resolve_key(db_source.key, self._catalog)
+        except (CatalogKeyError, ImportError, AttributeError, TypeError) as error:
+            raise CatalogKeyError(f"Unknown source key: {db_source.key}") from error
         all_keys = {asset_type.key for asset_type in source_cls.asset_types}
         if child_keys is not None and (unknown := set(child_keys) - all_keys):
             raise ConfigError(
@@ -717,21 +721,6 @@ class ComponentStore:
                     continue
                 _add_relation(session, child, children_by_key[expected.asset_key], "dependency", param_name)
 
-    def _row_status(self, session: Session, db_component: Component) -> ComponentStatus:
-        """Row drift status inside an open session (parent fetched on demand).
-
-        Args:
-            session: Open session used to fetch an owned asset's parent.
-            db_component: The row to resolve against the catalog.
-
-        Returns:
-            ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key.
-        """
-        if db_component.kind == "asset" and db_component.parent_id is not None:
-            parent = session.get(Component, db_component.parent_id)
-            return asset_status(self._catalog, db_component.key, source_key=parent.key if parent else None)
-        return source_status(self._catalog, db_component.key)
-
     def job_partition_granularity(self, session: Session, job_id: UUID) -> TimeGranularity | None:
         """Resolve the granularity a job's partitioned targets share.
 
@@ -769,6 +758,21 @@ class ComponentStore:
             raise ValueError(f"Job targets disagree on partition granularity ({names})")
         return next(iter(granularities), None)
 
+    def _row_status(self, session: Session, db_component: Component) -> ComponentStatus:
+        """Row drift status inside an open session (parent fetched on demand).
+
+        Args:
+            session: Open session used to fetch an owned asset's parent.
+            db_component: The row to resolve against the catalog.
+
+        Returns:
+            ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key.
+        """
+        if db_component.kind == "asset" and db_component.parent_id is not None:
+            parent = session.get(Component, db_component.parent_id)
+            return asset_status(self._catalog, db_component.key, source_key=parent.key if parent else None)
+        return source_status(self._catalog, db_component.key)
+
     def _target_partitionings(self, session: Session, target: Component) -> list[dict[str, Any]]:
         """The partitioning dicts of one target's partitioned assets.
 
@@ -782,17 +786,13 @@ class ComponentStore:
             not the scheduler's).
         """
         if target.kind == "source":
-            defn = self._catalog.get(target.key)
-            assets = getattr(defn, "assets", None) or []
-            return [a.partitioning for a in assets if a.partitioning is not None]
+            definition = self._catalog.get(target.key)
+            if not isinstance(definition, il.SourceDefinition):
+                return []
+            return [asset.partitioning for asset in definition.assets if asset.partitioning is not None]
         if target.kind == "asset":
-            if target.parent_id is not None:
-                parent = session.get(Component, target.parent_id)
-                defn = self._catalog.get(parent.key) if parent else None
-                assets = getattr(defn, "assets", None) or []
-                return [a.partitioning for a in assets if a.key == target.key and a.partitioning is not None]
-            defn = self._catalog.get(target.key)
-            partitioning = getattr(defn, "partitioning", None)
+            definition = self._catalog.get(target.key, parent_key=target.parent_key(session))
+            partitioning = definition.partitioning if isinstance(definition, il.AssetDefinition) else None
             return [partitioning] if partitioning is not None else []
         return []
 
@@ -843,6 +843,3 @@ class ComponentStore:
         if not db_component or (kind is not None and db_component.kind != kind):
             raise NotFoundError(f"{kind or 'component'} {component_id} not found".capitalize())
         return db_component
-
-
-# -- Component state -----------------------------------------------------------

@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from enum import Enum
 
+import interloper as il
 from interloper.catalog.base import Catalog
-
-from interloper_db.catalog import _discovered_catalog, resolve_source_cls
+from interloper.errors import CatalogKeyError
 
 
 class ComponentStatus(str, Enum):
@@ -39,8 +39,8 @@ def source_status(
     Args:
         catalog: The enabled catalog (what this deployment exposes).
         key: The stored source key.
-        discovered: The discovered universe; defaults to the cached
-            :func:`_discovered_catalog`. Injectable for testing.
+        discovered: The discovered universe; defaults to the full
+            installed component set. Injectable for testing.
 
     Returns:
         ``OK`` when the key is enabled here, ``DISABLED`` when it exists in
@@ -48,7 +48,7 @@ def source_status(
     """
     if key in catalog.components:
         return ComponentStatus.OK
-    discovered = discovered if discovered is not None else _discovered_catalog()
+    discovered = discovered if discovered is not None else Catalog.discover()
     if key in discovered.components:
         return ComponentStatus.DISABLED
     return ComponentStatus.MISSING
@@ -73,7 +73,8 @@ def asset_status(
         catalog: The enabled catalog.
         key: The stored asset key.
         source_key: The owning source's key, or ``None`` for a standalone asset.
-        discovered: The discovered universe; defaults to the cached one.
+        discovered: The discovered universe; defaults to the full
+            installed component set.
 
     Returns:
         The asset's status, cascaded from the owning source when there is one.
@@ -85,9 +86,10 @@ def asset_status(
     if parent is not ComponentStatus.OK:
         return parent
 
-    source_cls = resolve_source_cls(catalog, source_key)
-    if source_cls is None:  # defensive: enabled said ok but the import failed
-        return ComponentStatus.MISSING
+    try:
+        source_cls = il.Source.resolve_key(source_key, catalog)
+    except (CatalogKeyError, ImportError, AttributeError, TypeError):
+        return ComponentStatus.MISSING  # defensive: enabled said ok but the class did not resolve
     valid_keys = {asset_type.key for asset_type in source_cls.asset_types}
     return ComponentStatus.OK if key in valid_keys else ComponentStatus.MISSING
 

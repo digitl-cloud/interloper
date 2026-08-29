@@ -618,6 +618,40 @@ class TestCatalogKeySpecs:
         assert isinstance(instance, FakeResource)
 
 
+class TestKeyResolution:
+    """``resolve_key`` raises rather than returning None; a stale key fails loudly."""
+
+    def test_resolves_the_class(self):
+        from interloper.catalog import Catalog
+
+        catalog = Catalog(components={"fake_resource": FakeResource.definition()})
+        assert Component.resolve_key("fake_resource", catalog) is FakeResource
+
+    def test_absent_key_raises(self):
+        from interloper.catalog import Catalog
+        from interloper.errors import CatalogKeyError
+
+        with pytest.raises(CatalogKeyError, match="Unknown catalog key 'gone'"):
+            Component.resolve_key("gone", Catalog(components={}))
+
+    def test_subclass_receiver_rejects_another_kind(self):
+        from interloper.catalog import Catalog
+
+        catalog = Catalog(components={"fake_resource": FakeResource.definition()})
+        with pytest.raises(TypeError, match="does not resolve to a Source class"):
+            il.Source.resolve_key("fake_resource", catalog)
+
+    def test_unimportable_path_raises(self):
+        from interloper.catalog import Catalog
+
+        # A key that outlived its class: the catalog entry survives in a
+        # persisted row, the module it names no longer has the attribute.
+        definition = FakeResource.definition().model_copy(update={"path": "interloper.resource.base.Gone"})
+        catalog = Catalog(components={"fake_resource": definition})
+        with pytest.raises(AttributeError):
+            Component.resolve_key("fake_resource", catalog)
+
+
 class TestStrictInitKwargs:
     """Unknown init kwargs fail loudly instead of being silently dropped."""
 
