@@ -1,6 +1,6 @@
 """Tests for the hook evaluator (``interloper_scheduler.hooks``).
 
-SQLite stands in for Postgres; ``save_event`` (a pg-dialect upsert) is
+SQLite stands in for Postgres; ``EventStore.save`` (a pg-dialect upsert) is
 replaced with a plain insert so the claim-dedup reads work.
 """
 
@@ -31,7 +31,7 @@ _PAST = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
 
 @pytest.fixture
 def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
-    """A store over an in-memory database, with a SQLite-friendly save_event."""
+    """A store over an in-memory database, with a SQLite-friendly ``save``."""
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -47,7 +47,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
     store = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
 
-    def sqlite_save_event(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
+    def sqlite_save(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
         row = EventRow(**EventStore._event_values(event, org_id, run_id))
         with Session(eng) as session:
             if session.get(EventRow, row.id) is None:
@@ -55,7 +55,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
                 session.commit()
         return row
 
-    monkeypatch.setattr(store.events, "save_event", sqlite_save_event)
+    monkeypatch.setattr(store.events, "save", sqlite_save)
     try:
         yield store
     finally:

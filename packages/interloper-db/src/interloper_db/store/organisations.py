@@ -41,12 +41,7 @@ INVITATION_EXPIRY_DAYS = 7
 
 
 class OrganisationStore:
-    """Store methods for organisations, their members, and their invitations.
-
-    Error contract (same as the other facets): lookups return ``None`` when
-    the row is absent, mutations raise :class:`NotFoundError` on a missing
-    target.
-    """
+    """Store methods for organisations, their members, and their invitations."""
 
     def __init__(self, engine: Engine) -> None:
         """Bind the facet to what it works through.

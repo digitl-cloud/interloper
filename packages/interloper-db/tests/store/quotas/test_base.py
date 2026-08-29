@@ -27,13 +27,13 @@ def _defaults(**limits: int | None) -> SimpleNamespace:
 
 class TestQuotaReads:
     def test_get_and_list_overrides(self, store: Store, org_id: UUID):
-        assert store.quotas.get_quota_overrides(org_id) == {}
+        assert store.quotas.get_overrides(org_id) == {}
         with Session(store.engine) as session:
             session.add(Quota(org_id=org_id, key="max_sources", limit=3))
             session.add(Quota(org_id=org_id, key="max_assets_per_source", limit=None))  # cleared/anchor row
             session.commit()
-        assert store.quotas.get_quota_overrides(org_id) == {"max_sources": 3}
-        assert store.quotas.list_quota_overrides() == {org_id: {"max_sources": 3}}
+        assert store.quotas.get_overrides(org_id) == {"max_sources": 3}
+        assert store.quotas.list_overrides() == {org_id: {"max_sources": 3}}
 
     def test_list_usage_filters(self, store: Store, org_id: UUID):
         other_org = uuid4()
@@ -208,18 +208,18 @@ class TestReconcileUsage:
 
 class TestSetQuota:
     def test_creates_then_partially_updates(self, store: Store, org_id: UUID):
-        assert store.quotas.set_quota(org_id, {"max_sources": 5}) == {"max_sources": 5}
-        assert store.quotas.set_quota(org_id, {"max_successful_runs_per_month": 100}) == {
+        assert store.quotas.set_overrides(org_id, {"max_sources": 5}) == {"max_sources": 5}
+        assert store.quotas.set_overrides(org_id, {"max_successful_runs_per_month": 100}) == {
             "max_sources": 5,
             "max_successful_runs_per_month": 100,
         }
 
     def test_none_clears_an_override(self, store: Store, org_id: UUID):
-        store.quotas.set_quota(org_id, {"max_sources": 5})
-        assert store.quotas.set_quota(org_id, {"max_sources": None}) == {}
+        store.quotas.set_overrides(org_id, {"max_sources": 5})
+        assert store.quotas.set_overrides(org_id, {"max_sources": None}) == {}
 
     def test_rejects_unknown_and_negative(self, store: Store, org_id: UUID):
         with pytest.raises(ValueError, match="Unknown quota limit"):
-            store.quotas.set_quota(org_id, {"max_bananas": 1})
+            store.quotas.set_overrides(org_id, {"max_bananas": 1})
         with pytest.raises(ValueError, match=">= 0"):
-            store.quotas.set_quota(org_id, {"max_sources": -1})
+            store.quotas.set_overrides(org_id, {"max_sources": -1})

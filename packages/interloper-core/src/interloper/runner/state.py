@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 # single row when it is produced more than once — e.g. a child container emits
 # its own ``asset_failed`` and the host also authors one as a fallback, or the
 # host bulk-emits ``asset_queued`` and the child re-emits it. Combined with the
-# idempotent (``ON CONFLICT (id) DO NOTHING``) ``save_event``, this dedups
+# idempotent (``ON CONFLICT (id) DO NOTHING``) event save, this dedups
 # without any cross-process coordination.
 class RunState:
     """Tracks asset execution state and determines which assets are ready to run.

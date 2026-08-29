@@ -47,7 +47,7 @@ _PROMOTED_METADATA_KEYS = frozenset(
 Everything else spills into the ``data`` JSONB column. ``asset_id``/``asset_key``
 are the compat aliases core emitters use for the component columns; ``run_id`` and
 ``org_id`` also arrive via run metadata, but the columns filled from
-:meth:`EventStore.save_event`'s own arguments are the authoritative ones.
+:meth:`EventStore.save`'s own arguments are the authoritative ones.
 """
 
 
@@ -62,7 +62,9 @@ class EventStore:
         """
         self._engine = engine
 
-    def save_event(self, event: il.Event, org_id: UUID, run_id: UUID | None = None) -> Event:
+    # -- Events ----------------------------------------------------------------
+
+    def save(self, event: il.Event, org_id: UUID, run_id: UUID | None = None) -> Event:
         """Persist a framework event to the database, idempotently.
 
         The event's producer-assigned ``id`` becomes the row primary key
@@ -96,7 +98,7 @@ class EventStore:
                 raise RuntimeError(f"Event {values['id']} missing immediately after upsert")
             return saved
 
-    def list_events(
+    def list_all(
         self,
         *,
         run_id: UUID | None = None,
@@ -133,7 +135,7 @@ class EventStore:
             )
             return list(session.exec(statement).all())
 
-    def count_events(
+    def count(
         self,
         *,
         run_id: UUID | None = None,
@@ -141,7 +143,7 @@ class EventStore:
         component_ids: Sequence[UUID] | None = None,
         event_types: Sequence[str] | None = None,
     ) -> int:
-        """Count events matching the same filters as :meth:`list_events`.
+        """Count events matching the same filters as :meth:`list_all`.
 
         Args:
             run_id: Optional run filter.
@@ -160,6 +162,8 @@ class EventStore:
             )
             return session.exec(statement).one()
 
+    # -- Asset executions ------------------------------------------------------
+
     def list_asset_executions(self, run_id: UUID) -> list[AssetExecution]:
         """List a run's asset executions from the ``asset_executions`` view.
 
@@ -172,6 +176,8 @@ class EventStore:
         with session_scope(self._engine) as session:
             statement = select(AssetExecution).where(AssetExecution.run_id == run_id)
             return list(session.exec(statement).all())
+
+    # -- Internals -------------------------------------------------------------
 
     @staticmethod
     def _sanitize_text(value: str | None, *, max_len: int = _MAX_EVENT_TEXT) -> str | None:
@@ -284,7 +290,7 @@ class EventStore:
         component_ids: Sequence[UUID] | None,
         event_types: Sequence[str] | None,
     ) -> list[Any]:
-        """The shared where-clauses of :meth:`EventStore.list_events` / ``count_events``.
+        """The shared where-clauses of :meth:`EventStore.list_all` / ``count``.
 
         One builder for both so listing and counting can never disagree.
 

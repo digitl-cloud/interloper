@@ -204,7 +204,7 @@ class HookController(Controller):
             logger.exception("Hook '%s' failed for run %s: %s", hook_row.name, run.id, e)
 
         outcome = il.EventType.HOOK_FAILED if error else il.EventType.HOOK_FIRED
-        self._store.events.save_event(
+        self._store.events.save(
             il.Event(
                 id=claim,
                 type=outcome,

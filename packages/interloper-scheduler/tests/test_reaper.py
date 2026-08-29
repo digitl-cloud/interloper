@@ -39,7 +39,7 @@ class _FakeLauncher(Launcher):
 
 @pytest.fixture
 def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
-    """A store over an in-memory database, with a SQLite-friendly save_event."""
+    """A store over an in-memory database, with a SQLite-friendly ``save``."""
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -55,14 +55,14 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
     store = Store(catalog=il.Catalog(components={}))
 
-    def sqlite_save_event(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
+    def sqlite_save(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
         row = EventRow(**EventStore._event_values(event, org_id, run_id))
         with Session(eng) as session:
             session.add(row)
             session.commit()
         return row
 
-    monkeypatch.setattr(store.events, "save_event", sqlite_save_event)
+    monkeypatch.setattr(store.events, "save", sqlite_save)
     try:
         yield store
     finally:

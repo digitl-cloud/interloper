@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class RunStore:
-    """Store methods for runs, events, and backfills."""
+    """Store methods for runs and the backfills that batch them."""
 
     def __init__(self, engine: Engine, quotas: QuotaStore) -> None:
         """Bind the facet to what it works through.
@@ -36,8 +36,6 @@ class RunStore:
         """
         self._engine = engine
         self._quotas = quotas
-
-    # -- Events ----------------------------------------------------------------
 
     # -- Runs ------------------------------------------------------------------
 

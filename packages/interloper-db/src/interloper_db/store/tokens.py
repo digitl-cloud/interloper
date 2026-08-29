@@ -32,12 +32,7 @@ LAST_USED_THROTTLE_SECONDS = 60
 
 
 class TokenStore:
-    """Store methods for personal access tokens.
-
-    Error contract (same as the other mixins): lookups return ``None`` when
-    the row is absent, mutations raise :class:`NotFoundError` on a missing
-    target.
-    """
+    """Store methods for personal access tokens."""
 
     def __init__(self, engine: Engine, organisations: OrganisationStore) -> None:
         """Bind the facet to what it works through.

@@ -34,7 +34,7 @@ class TestRegistry:
 
     def test_unregistered_key_fails_loudly(self, store: Store, org_id: UUID):
         with pytest.raises(KeyError, match="not registered"):
-            store.quotas.effective(org_id, "max_bananas")
+            store.quotas.effective_limit(org_id, "max_bananas")
 
     def test_definition_is_abstract(self):
         """The base class cannot be instantiated — subclasses must implement check()."""

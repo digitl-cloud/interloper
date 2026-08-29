@@ -42,7 +42,7 @@ class QuotaDefinition(abc.ABC):
     """One per-organisation quota: its key, label, and check semantics.
 
     Subclasses own how usage is measured and compared; the
-    :class:`~interloper_db.store.quotas.base.QuotaStore` only resolves the effective limit and delegates.
+    :class:`QuotaStore` only resolves the effective limit and delegates.
     ``subject`` is caller-supplied context interpolated into the rejection
     message — the part only the call site knows (an entity label, the
     operation being attempted).
