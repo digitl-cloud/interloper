@@ -37,8 +37,8 @@ class FakeStore:
         self.organisations = SimpleNamespace(member_role=self._member_role)
         self.runs = SimpleNamespace(get=self._get_run)
         self.events = SimpleNamespace(
-            count_events=self._count_events,
-            list_events=self._list_events,
+            count=self._count_events,
+            list_all=self._list_events,
         )
 
     def _get_run(self, run_id: UUID):

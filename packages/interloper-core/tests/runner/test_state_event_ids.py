@@ -83,7 +83,7 @@ def test_host_fallback_and_child_terminal_share_one_id() -> None:
     Simulates the cross-process topology: the child container and the host run
     the same ``RunState`` code with the same ``run_id`` and ``asset_id``. Both
     author ``asset_failed``; because the ids are equal, the idempotent
-    ``save_event`` upsert keeps a single row instead of orphaning or doubling.
+    the event upsert keeps a single row instead of orphaning or doubling.
     """
     child_state, child_asset = _state("run-shared", "asset-shared")
     host_state, host_asset = _state("run-shared", "asset-shared")

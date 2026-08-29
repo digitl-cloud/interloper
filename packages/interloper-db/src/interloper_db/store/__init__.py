@@ -24,6 +24,11 @@ depends on the part it uses rather than on all of it:
 - ``store.events`` — run events and asset executions
 - ``store.runs`` — runs and backfills
 - ``store.quotas`` — per-org limits, enforcement gates, the usage ledger
+
+Every facet keeps the same error contract: a mutation raises
+:class:`~interloper.errors.NotFoundError` when its target row is absent, and
+one that is deliberately idempotent (clearing a session's org, re-adding an
+existing member) says so in its own docstring.
 """
 
 from interloper_db.session import commit, session_scope, transaction

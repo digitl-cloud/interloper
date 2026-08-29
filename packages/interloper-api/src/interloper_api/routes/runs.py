@@ -393,9 +393,9 @@ def list_run_events(
     _load_authorized_run(run_id, user, store)
     limit = max(1, min(limit, MAX_EVENTS_PAGE_SIZE))
     offset = max(0, offset)
-    total = store.events.count_events(run_id=run_id, component_ids=component_id, event_types=event_type)
+    total = store.events.count(run_id=run_id, component_ids=component_id, event_types=event_type)
     response.headers["X-Total-Count"] = str(total)
-    events = store.events.list_events(
+    events = store.events.list_all(
         run_id=run_id, component_ids=component_id, event_types=event_type, limit=limit, offset=offset
     )
     return [EventResponse.from_event(e) for e in events]

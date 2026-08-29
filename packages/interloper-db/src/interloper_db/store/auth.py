@@ -31,12 +31,7 @@ SESSION_EXPIRY_DAYS = 30
 
 
 class AuthStore:
-    """Store methods for profiles and the sessions authenticating them.
-
-    Error contract (same as the other facets): lookups return ``None`` when
-    the row is absent — soft probes, like ``Registry.get`` — while mutations
-    raise :class:`NotFoundError` on a missing target.
-    """
+    """Store methods for profiles and the sessions authenticating them."""
 
     def __init__(self, engine: Engine) -> None:
         """Bind the facet to what it works through.

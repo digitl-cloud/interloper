@@ -50,7 +50,7 @@ class QuotaStore:
 
     # -- Limits ----------------------------------------------------------------
 
-    def effective(self, org_id: UUID, key: str, *, lock: bool = False) -> int | None:
+    def effective_limit(self, org_id: UUID, key: str, *, lock: bool = False) -> int | None:
         """Resolve a limit: org override wins over the global default; None = unlimited.
 
         With ``lock`` the ``(org, key)`` row is upserted (null-limit lock
@@ -88,7 +88,7 @@ class QuotaStore:
                 value = getattr(self._defaults(), key, None)
             return value
 
-    def get_quota_overrides(self, org_id: UUID) -> dict[str, int]:
+    def get_overrides(self, org_id: UUID) -> dict[str, int]:
         """The organisation's set overrides as ``{key: limit}`` (null rows excluded).
 
         Args:
@@ -102,7 +102,7 @@ class QuotaStore:
             rows = session.exec(select(Quota).where(Quota.org_id == org_id)).all()
             return {row.key: row.limit for row in rows if row.limit is not None}
 
-    def list_quota_overrides(self) -> dict[UUID, dict[str, int]]:
+    def list_overrides(self) -> dict[UUID, dict[str, int]]:
         """Every organisation's set overrides, keyed by org id.
 
         Returns:
@@ -117,7 +117,7 @@ class QuotaStore:
                     overrides.setdefault(row.org_id, {})[row.key] = row.limit
             return overrides
 
-    def set_quota(self, org_id: UUID, limits: dict[str, int | None]) -> dict[str, int]:
+    def set_overrides(self, org_id: UUID, limits: dict[str, int | None]) -> dict[str, int]:
         """Set an organisation's quota overrides; only the given keys change.
 
         ``None`` clears a key so it falls back to the global default (the
@@ -148,7 +148,7 @@ class QuotaStore:
                 )
                 session.execute(statement)  # ty: ignore[deprecated]
             commit(session)
-            return self.get_quota_overrides(org_id)
+            return self.get_overrides(org_id)
 
     # -- Enforcement -----------------------------------------------------------
 
@@ -176,11 +176,11 @@ class QuotaStore:
                 when the message needs none.
         """
         definition = QUOTAS[key]
-        limit = self.effective(org_id, key)
+        limit = self.effective_limit(org_id, key)
         if limit is None:
             return
         if definition.requires_lock:
-            limit = self.effective(org_id, key, lock=True)
+            limit = self.effective_limit(org_id, key, lock=True)
             if limit is None:
                 return
         with session_scope(self._engine) as session:
@@ -206,7 +206,7 @@ class QuotaStore:
             definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
             if not isinstance(definition, ConsumptionQuota):
                 raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
-            limit = self.effective(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
+            limit = self.effective_limit(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
             if limit is None:
                 return 0, None
             return definition.committed(session, org_id), limit
@@ -232,7 +232,7 @@ class QuotaStore:
             definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
             if not isinstance(definition, ConsumptionQuota):
                 raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
-            limit = self.effective(db_run.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
+            limit = self.effective_limit(db_run.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
             if limit is None:
                 return True
             reserved_at = definition.reserve(session, db_run.org_id, limit)

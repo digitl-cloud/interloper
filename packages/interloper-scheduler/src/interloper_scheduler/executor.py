@@ -136,7 +136,7 @@ class RunExecutor:
                 if org_id is not None:
                     metadata = {**run_metadata, "error": format_exception(e)}
                     event = il.Event(type=il.EventType.RUN_FAILED, metadata=metadata)
-                    self._store.events.save_event(event, org_id=org_id, run_id=run_id)
+                    self._store.events.save(event, org_id=org_id, run_id=run_id)
                 self._store.runs.complete(run_id, success=False)
             except Exception:
                 logger.exception("Failed to mark run %s as failed", run_id)
@@ -215,7 +215,7 @@ class RunExecutor:
         metadata: dict[str, Any],
     ) -> il.RunResult:
         def handle_event(event: il.Event) -> None:
-            self._store.events.save_event(event, org_id=org_id, run_id=run_id)
+            self._store.events.save(event, org_id=org_id, run_id=run_id)
 
         # A fresh copy per execution: the runner template is shared across
         # runs, but run state and the event handler are per-run.

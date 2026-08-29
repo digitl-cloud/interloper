@@ -57,12 +57,12 @@ class FakeStore:
         )
         self.quotas = SimpleNamespace(
             current_period_start=self._current_period_start,
-            list_quota_overrides=self._list_quota_overrides,
+            list_overrides=self._list_quota_overrides,
             list_usage=self._list_usage,
             count_sources_by_org=self._count_sources_by_org,
             max_assets_per_source_by_org=self._max_assets_per_source_by_org,
             count_successful_runs_by_org=self._count_successful_runs_by_org,
-            set_quota=self._set_quota,
+            set_overrides=self._set_quota,
         )
 
     def _delete_profile(self, user_id: UUID) -> None:
@@ -534,6 +534,7 @@ def test_update_quota_rejects_negative_limits(store: FakeStore) -> None:
 def test_deleted_org_is_listed_but_not_manageable(store: FakeStore) -> None:
     """Soft-deleted orgs surface in the list (billing history) but 404 on management routes."""
     store.org.deleted_at = datetime.now(timezone.utc)
+
     store.organisations.get = lambda org_id: None  # deleted orgs read as missing
     client = _client(store, is_super_admin=True)
 

@@ -709,7 +709,7 @@ def get_quotas(
     """
     defaults = _quota_limits(quota_defaults)
     period_start = store.quotas.current_period_start()
-    overrides = store.quotas.list_quota_overrides()
+    overrides = store.quotas.list_overrides()
     usage = {
         row.org_id: row
         for row in store.quotas.list_usage(period_start=period_start)
@@ -765,7 +765,7 @@ def update_org_quota(
         The organisation's overrides after the write, ``None`` where unset.
     """
     _require_org(store, org_id)
-    overrides = store.quotas.set_quota(org_id, body.root)
+    overrides = store.quotas.set_overrides(org_id, body.root)
     return _quota_limits(overrides)
 
 

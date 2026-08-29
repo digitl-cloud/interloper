@@ -63,7 +63,7 @@ COMPONENT_LOAD_OPTIONS = [
 
 
 class ComponentStore:
-    """Store methods for component CRUD and hydration, on the relation layer."""
+    """Store methods for component CRUD, hydration and catalog status."""
 
     def __init__(
         self,
@@ -142,7 +142,7 @@ class ComponentStore:
                 raise ConfigError(f"Components of kind '{kind}' have no children")
             self._relations._sync_relations(session, db_component, relations)
             commit(session)
-            return self.load_component(session, db_component.id)
+            return self._load_component(session, db_component.id)
 
     def get(self, component_id: UUID, *, kind: str | None = None) -> Component:
         """Load a component row by ID with relations eager-loaded.
@@ -156,7 +156,7 @@ class ComponentStore:
             The component row, eager-loaded and safe to hand out detached.
         """
         with session_scope(self._engine) as session:
-            return self.load_component(session, component_id, kind=kind)
+            return self._load_component(session, component_id, kind=kind)
 
     def list_all(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
         """List an organisation's components, optionally filtered by kind.
@@ -231,7 +231,7 @@ class ComponentStore:
                 raise ConfigError(f"Components of kind '{db_component.kind}' have no children")
             self._relations._sync_relations(session, db_component, relations)
             commit(session)
-            return self.load_component(session, component_id)
+            return self._load_component(session, component_id)
 
     def delete(self, component_id: UUID) -> None:
         """Delete a component. Children and out-bound relations cascade via FK.
@@ -814,7 +814,7 @@ class ComponentStore:
     # -- Internals -------------------------------------------------------------
 
     @staticmethod
-    def load_component(session: Session, component_id: UUID, *, kind: str | None = None) -> Component:
+    def _load_component(session: Session, component_id: UUID, *, kind: str | None = None) -> Component:
         """Fetch a component row with children and relations eager-loaded.
 
         Args:
