@@ -103,3 +103,20 @@ class TestSettleRunUsage:
         assert completed.status == "success"
         (counts,) = usage_rows().values()
         assert counts == (1, 0)
+
+
+class TestNonBillableRunExemption:
+    """Settlement skips a run recorded as non-billable, success or not."""
+
+    def test_settle_charges_nothing_on_success(
+        self,
+        store: Store,
+        usage_rows: UsageRows,
+        make_run: RunFactory,
+    ):
+        run = make_run(billable=False)
+        with Session(store.engine) as session:
+            UsageLedger(session).settle_run(run, success=True)
+            session.commit()
+
+        assert usage_rows() == {}

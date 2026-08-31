@@ -222,11 +222,11 @@ def _cmd_run(args: argparse.Namespace) -> None:
         if args.run_id:
             metadata["run_id"] = args.run_id
 
-        materializable = [a for a in dag.assets if a.materializable]
+        materializable = [a for a in dag.operations if a.materializable]
         logger.info(
             "Running DAG with %d materializable asset(s) (%d total) using %s",
             len(materializable),
-            len(dag.assets),
+            len(dag.operations),
             type(runner).__name__,
         )
 
@@ -302,13 +302,13 @@ def _print_plan(
         runner_name: Class name of the configured runner.
         name: Run name; omitted from the output when empty.
     """
-    materializable = [a for a in dag.assets if a.materializable]
+    materializable = [a for a in dag.operations if a.materializable]
     lines: list[str] = []
     if name:
         lines.append(f"Run:       {name}")
     lines.append(f"Runner:    {runner_name}")
     lines.append(f"Partition: {partition if partition is not None else '(none)'}")
-    lines.append(f"Assets:    {len(materializable)} materializable / {len(dag.assets)} total")
+    lines.append(f"Assets:    {len(materializable)} materializable / {len(dag.operations)} total")
     lines.append("")
     for level, generation in enumerate(dag.topological_generations(), start=1):
         lines.append(f"  {level}. {', '.join(asset.qualified_key for asset in generation)}")

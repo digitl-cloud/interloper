@@ -9,8 +9,8 @@ from typing import Any
 
 from pydantic import PrivateAttr
 
-from interloper.asset.base import Asset
 from interloper.errors import RunnerError, format_exception
+from interloper.operation.base import Operation, OperationContext, OperationResult
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.sync_runner import SyncRunner
 
@@ -20,21 +20,22 @@ def _worker(
     dag_spec: dict[str, Any],
     partition_or_window: Partition | PartitionWindow | None,
     metadata: dict[str, Any],
-) -> tuple[str, bool, str | None, str | None]:
-    """Execute a single asset in a worker process.
+) -> tuple[str, bool, str | None, str | None, dict[str, Any]]:
+    """Execute a single operation in a worker process.
 
     Reconstructs the DAG from its serialized spec, looks up the target
-    asset by ID, and materializes it.
+    node by ID, and executes it. The operation's effects travel back as a
+    plain dict so the parent process can record them on the execution info.
 
     Args:
-        asset_id: Id of the asset to materialize within the reconstructed DAG.
+        asset_id: Id of the node to execute within the reconstructed DAG.
         dag_spec: JSON-mode dump of the DAG spec to reconstruct.
-        partition_or_window: Partition or window to scope the run; ignored
-            (forced to ``None``) when the asset is not partitioned.
+        partition_or_window: Partition or window to scope the run; narrowed
+            to the node's own effective partition.
         metadata: Run metadata, also carrying the parent span context.
 
     Returns:
-        Tuple of ``(id, success, error_message, formatted_traceback)``.
+        Tuple of ``(id, success, error_message, formatted_traceback, effects)``.
     """
     from opentelemetry import context as otel_context
 
@@ -48,28 +49,32 @@ def _worker(
     context = extract_metadata(metadata)
     token = otel_context.attach(context) if context is not None else None
 
+    operation: Operation | None = None
     try:
         dag = DAGSpec(**dag_spec).reconstruct()
-        asset = dag.asset_map[asset_id]
-
-        if asset.partitioning is None:
-            partition_or_window = None
-
-        asyncio.run(
-            asset.materialize_async(
-                partition_or_window=partition_or_window,
-                dag=dag,
-                metadata=metadata,
+        operation = dag.operation_map[asset_id]
+        result = asyncio.run(
+            operation.execute(
+                OperationContext(
+                    partition_or_window=operation.effective_partition(partition_or_window),
+                    dag=dag,
+                    metadata=metadata,
+                )
             )
         )
     except Exception as e:  # noqa: BLE001
-        return (asset_id, False, format_exception(e), traceback.format_exc())
+        if operation is None:
+            return (asset_id, False, format_exception(e), traceback.format_exc(), {})
+        failed = operation.failure(e)
+        tb = traceback.format_exc() if type(operation).capture_traceback else None
+        effects = {"config": failed.config, "state": failed.state}
+        return (asset_id, False, failed.error or format_exception(e), tb, effects)
     finally:
         if token is not None:
             otel_context.detach(token)
         # Pool workers are reused; exit hooks may never run.
         force_flush()
-    return (asset_id, True, None, None)
+    return (asset_id, True, None, None, {"config": result.config, "state": result.state})
 
 
 class MultiProcessRunner(SyncRunner):
@@ -92,7 +97,7 @@ class MultiProcessRunner(SyncRunner):
     reraise: bool = False
 
     _pool: ProcessPoolExecutor | None = PrivateAttr(default=None)
-    _futures: dict[Future[Any], Asset] = PrivateAttr(default_factory=dict)
+    _futures: dict[Future[Any], Operation] = PrivateAttr(default_factory=dict)
     _dag_spec: dict[str, Any] | None = PrivateAttr(default=None)
 
     @property
@@ -119,7 +124,7 @@ class MultiProcessRunner(SyncRunner):
 
     def _submit_asset(
         self,
-        asset: Asset,
+        asset: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
         """Submit asset for execution in a child process.
@@ -149,11 +154,12 @@ class MultiProcessRunner(SyncRunner):
         self._futures[future] = asset
         return future
 
-    def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
+    def _handle_completed(self, future: Future[Any], asset: Operation) -> None:
         """Process a completed future from a worker process.
 
         Unlike the base ``_handle_completed``, this interprets the
-        ``(id, success, error_msg, tb)`` tuple returned by ``_worker``.
+        ``(id, success, error_msg, tb, effects)`` tuple returned by
+        ``_worker``.
 
         Args:
             future: The finished future returned by ``_submit_asset``.
@@ -165,7 +171,7 @@ class MultiProcessRunner(SyncRunner):
         self._futures.pop(future, None)
 
         try:
-            _key, success, error_msg, tb = future.result()
+            _key, success, error_msg, tb, effects = future.result()
         except Exception as e:
             self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
             if self.fail_fast or self.reraise:
@@ -173,26 +179,30 @@ class MultiProcessRunner(SyncRunner):
             return
 
         if success:
-            self.state.mark_asset_completed(asset)
+            self.state.mark_asset_completed(asset, effects=OperationResult(**effects))
         else:
-            self.state.mark_asset_failed(asset, error_msg or "Unknown error", tb=tb)
+            self.state.mark_asset_failed(
+                asset, error_msg or "Unknown error", tb=tb, effects=OperationResult(error=error_msg, **effects)
+            )
             if self.fail_fast or self.reraise:
                 raise RunnerError(f"Asset '{asset.key}' failed: {error_msg}")
 
-    def _handle_flushed(self, future: Future[Any], asset: Asset) -> None:
-        """Interpret the worker ``(id, success, error_msg, tb)`` tuple during flush.
+    def _handle_flushed(self, future: Future[Any], asset: Operation) -> None:
+        """Interpret the worker ``(id, success, error_msg, tb, effects)`` tuple during flush.
 
         Args:
             future: The finished future to interpret.
             asset: The asset the future was submitted for.
         """
         try:
-            _key, success, error_msg, tb = future.result()
+            _key, success, error_msg, tb, effects = future.result()
         except Exception as e:  # noqa: BLE001
             self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
             return
 
         if success:
-            self.state.mark_asset_completed(asset)
+            self.state.mark_asset_completed(asset, effects=OperationResult(**effects))
         else:
-            self.state.mark_asset_failed(asset, error_msg or "Unknown error", tb=tb)
+            self.state.mark_asset_failed(
+                asset, error_msg or "Unknown error", tb=tb, effects=OperationResult(error=error_msg, **effects)
+            )

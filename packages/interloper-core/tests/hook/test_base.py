@@ -33,7 +33,7 @@ class TestDefinition:
         assert il.Hook.kind == "hook"
         assert "hook" in il.KINDS
         assert il.KINDS.get("hook") is il.Hook
-        assert il.KINDS["hook"].runnable is False
+        assert not issubclass(il.KINDS["hook"], il.Operation)
         assert il.KINDS["hook"].sensitive is False
 
     def test_vocabulary(self):

@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import PrivateAttr
 
-from interloper.asset.base import Asset
 from interloper.errors import RunnerError, format_exception
+from interloper.operation.base import Operation, OperationContext
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
@@ -67,7 +67,7 @@ class AsyncRunner(Runner):
             RunnerError: If a deadlock or invalid DAG state is detected.
         """
         self._init_run(dag, partition_or_window, metadata)
-        inflight: dict[asyncio.Task[Any], Asset] = {}
+        inflight: dict[asyncio.Task[Any], Operation] = {}
 
         try:
             self._on_start()
@@ -125,7 +125,7 @@ class AsyncRunner(Runner):
 
     def _submit_asset(
         self,
-        asset: Asset,
+        asset: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> asyncio.Task[Any]:
         """Schedule an asset as an asyncio task guarded by the semaphore.
@@ -152,18 +152,23 @@ class AsyncRunner(Runner):
 
     async def _execute_asset(
         self,
-        asset: Asset,
+        asset: Operation,
         partition_or_window: Partition | PartitionWindow | None = None,
     ) -> Any:
-        """Execute a single asset with state tracking.
+        """Execute a single operation with state tracking.
+
+        On failure the operation's own :meth:`~Operation.failure` hook
+        curates the recorded message and effects, and the traceback is
+        attached only when the operation's class allows it — operations
+        whose raw errors embed secrets opt out.
 
         Args:
-            asset: The asset to materialize.
+            asset: The operation to execute.
             partition_or_window: Partition or window to scope the run; narrowed
-                to the asset's own effective partition before materializing.
+                to the operation's own effective partition before executing.
 
         Returns:
-            The materialization result, or ``None`` if the asset failed and
+            The execution's effects, or ``None`` if the operation failed and
             ``reraise`` is False.
         """
         self.state.mark_asset_running(asset)
@@ -172,22 +177,25 @@ class AsyncRunner(Runner):
         span_attrs = attributes.from_metadata(
             asset._event_metadata(self.state.metadata, effective_partition)
         )
+        context = OperationContext(
+            partition_or_window=effective_partition,
+            dag=self.state.dag,
+            metadata=self.state.metadata,
+        )
         try:
             with tracer().start_as_current_span("interloper.asset.materialize", attributes=span_attrs):
-                result = await asset.materialize_async(
-                    partition_or_window=effective_partition,
-                    dag=self.state.dag,
-                    metadata=self.state.metadata,
-                )
-            self.state.mark_asset_completed(asset)
+                result = await asset.execute(context)
+            self.state.mark_asset_completed(asset, effects=result)
         except Exception as e:
-            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
+            failed = asset.failure(e)
+            tb = traceback.format_exc() if type(asset).capture_traceback else None
+            self.state.mark_asset_failed(asset, failed.error or format_exception(e), tb=tb, effects=failed)
             if self.reraise or self.fail_fast:
                 raise
             return None
         return result
 
-    async def _flush(self, inflight: dict[asyncio.Task[Any], Asset]) -> None:
+    async def _flush(self, inflight: dict[asyncio.Task[Any], Operation]) -> None:
         """Wait for all in-flight tasks and emit terminal events.
 
         Called after an exception aborts the main loop so that every

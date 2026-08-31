@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -19,10 +19,30 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col, select
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, Quota, Run, Usage
 from interloper_db.store import Store
 
 _ORG_ID = uuid4()
+
+
+class FakePlumbing(il.Component, il.Operation):
+    """Test-only kind whose operation is platform plumbing (non-billable)."""
+
+    billable: ClassVar[bool] = False
+
+    async def execute(self, context: il.OperationContext) -> il.OperationResult:
+        """Do nothing.
+
+        Args:
+            context: The platform-provided execution context, unused.
+
+        Returns:
+            An effectless success.
+        """
+        return il.OperationResult()
+
+
+il.KINDS.register(FakePlumbing.kind, FakePlumbing.anchor())
 
 
 @pytest.fixture
@@ -42,7 +62,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Backfill, Run, Quota, Usage):
+    for model in (Backfill, Component, Run, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
@@ -85,6 +105,47 @@ def _partition_statuses(store: Store, backfill_id: UUID) -> dict[str, str]:
     with Session(store.engine) as session:
         runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
         return {run.partition_key: run.status for run in runs if run.partition_key}
+
+
+def _component(store: Store, kind: str) -> UUID:
+    with Session(store.engine) as session:
+        row = Component(id=uuid4(), org_id=_ORG_ID, kind=kind, key=kind, name=kind)
+        session.add(row)
+        session.commit()
+        assert row.id is not None
+        return row.id
+
+
+class TestRunTargetOperations:
+    """Run creation validates the target's operation and records billability."""
+
+    def test_kind_without_operation_is_rejected(self, store: Store):
+        target = _component(store, kind="destination")
+        with pytest.raises(ValueError, match="cannot be run"):
+            store.runs.create(_ORG_ID, component_id=target)
+
+    def test_missing_component_is_rejected(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.runs.create(_ORG_ID, component_id=uuid4())
+
+    def test_billable_recorded_from_the_operation(self, store: Store):
+        target = _component(store, kind="fake_plumbing")
+        run = store.runs.create(_ORG_ID, component_id=target)
+        assert run.billable is False
+
+    def test_retry_copies_the_record(self, store: Store):
+        target = _component(store, kind="fake_plumbing")
+        run = store.runs.create(_ORG_ID, component_id=target)
+        store.runs.complete(run.id, success=False)
+
+        retry = store.runs.retry(run.id)
+
+        assert retry.billable is False
+
+    def test_backfill_rejects_a_kind_with_no_workload(self, store: Store):
+        target = _component(store, kind="destination")
+        with pytest.raises(ValueError, match="cannot be run"):
+            store.runs.create_backfill(_ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-02")
 
 
 class TestCreateBackfill:

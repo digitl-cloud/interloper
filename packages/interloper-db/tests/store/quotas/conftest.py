@@ -87,12 +87,19 @@ def make_run(store: Store, org_id: UUID) -> Callable[..., Run]:
         org_id: Organisation the run belongs to.
 
     Returns:
-        A factory taking an optional ``quota_reserved_at`` stamp.
+        A factory taking an optional ``quota_reserved_at`` stamp and the
+        run's ``billable`` record.
     """
 
-    def create(*, quota_reserved_at: datetime | None = None) -> Run:
+    def create(*, quota_reserved_at: datetime | None = None, billable: bool = True) -> Run:
         with Session(store.engine) as session:
-            run = Run(id=uuid4(), org_id=org_id, status="running", quota_reserved_at=quota_reserved_at)
+            run = Run(
+                id=uuid4(),
+                org_id=org_id,
+                status="running",
+                quota_reserved_at=quota_reserved_at,
+                billable=billable,
+            )
             session.add(run)
             session.commit()
             session.refresh(run)

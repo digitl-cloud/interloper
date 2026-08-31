@@ -161,13 +161,16 @@ class UsageLedger:
 
         A successful run charges ``used`` in the month it completes (DB clock);
         a dispatch-time reservation is released in the month it was taken —
-        those can differ across a month boundary.
+        those can differ across a month boundary. A non-billable run settles
+        nothing: it rides the run pipeline for execution only.
 
         Args:
             db_run: The completing run, read for its org and its
                 ``quota_reserved_at`` stamp (unset when nothing was reserved).
             success: Whether the run succeeded; only successes are charged.
         """
+        if not db_run.billable:
+            return
         reserved_period = month_start(db_run.quota_reserved_at) if db_run.quota_reserved_at else None
         charge_period = self.current_period() if success else None
 

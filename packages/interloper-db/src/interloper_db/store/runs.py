@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+import interloper as il
 from interloper.errors import NotFoundError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from sqlalchemy import Engine, func
@@ -48,9 +49,14 @@ class RunStore:
     ) -> Run:
         """Create a single queued run.
 
+        The target's kind must declare a workload (its anchor subclasses
+        ``Workload``); the run records the workload's billability, and a
+        non-billable run skips the run quota entirely.
+
         Args:
             org_id: Organisation UUID.
-            component_id: Optional target component UUID (any runnable kind).
+            component_id: Optional target component UUID (any kind whose
+                anchor declares a workload).
             partition_key: Optional partition key (its shape carries the
                 granularity, e.g. ``2026-08-21`` or ``2026-08``). A key matching
                 no known shape is rejected by :meth:`TimePartition.from_key`.
@@ -61,17 +67,48 @@ class RunStore:
         if partition_key is not None:
             TimePartition.from_key(partition_key)
         with session_scope(self._engine) as session:
-            self._quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
+            billable = True
+            if component_id is not None:
+                _, anchor = self._target_anchor(session, component_id)
+                billable = anchor.billable
+            if billable:
+                self._quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
             db_run = Run(
                 org_id=org_id,
                 component_id=component_id,
                 partition_key=partition_key,
                 status="queued",
+                billable=billable,
             )
             session.add(db_run)
             commit(session)
             session.refresh(db_run)
             return db_run
+
+    @staticmethod
+    def _target_anchor(session: Session, component_id: UUID) -> tuple[str, type[il.Workload]]:
+        """Resolve a run target's kind anchor, requiring it to declare a workload.
+
+        Args:
+            session: Open session the component row is read through.
+            component_id: The target component UUID.
+
+        Returns:
+            The target's kind and its anchor class, narrowed to the
+            workload contract.
+
+        Raises:
+            NotFoundError: If the component does not exist.
+            ValueError: If the kind's anchor declares no workload.
+        """
+        db_component = session.get(Component, component_id)
+        if not db_component:
+            raise NotFoundError(f"Component {component_id} not found")
+        anchor = il.KINDS[db_component.kind]
+        if not issubclass(anchor, il.Workload):
+            # A caller mistake, not a type bug: routes map ValueError to 400.
+            raise ValueError(f"Components of kind '{db_component.kind}' cannot be run")  # noqa: TRY004
+        return db_component.kind, anchor
 
     def get(self, run_id: UUID) -> Run:
         """Load a run by ID.
@@ -228,7 +265,8 @@ class RunStore:
             if src.status != "failed":
                 raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
 
-            self._quotas.check(src.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="retry")
+            if src.billable:
+                self._quotas.check(src.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="retry")
             db_run = Run(
                 org_id=src.org_id,
                 component_id=src.component_id,
@@ -237,6 +275,7 @@ class RunStore:
                 retry_of=run_id,
                 attempt=src.attempt + 1,
                 retry_scope=scope,
+                billable=src.billable,
             )
             session.add(db_run)
             commit(session)
@@ -291,6 +330,8 @@ class RunStore:
         span = window.partition_count()
 
         with session_scope(self._engine) as session:
+            if component_id is not None:
+                self._target_anchor(session, component_id)
             # Cron top-ups (a job's `lookback` window) are deliberately not
             # bounded here — they never pass through this method.
             self._quotas.check(org_id, QUOTA_MAX_BACKFILL_PARTITIONS, used=span)

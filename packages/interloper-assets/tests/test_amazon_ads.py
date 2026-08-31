@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
+from interloper.asset import Asset
 from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
 from interloper.representation import Representation
@@ -58,7 +59,8 @@ class TestSpecRoundtrip:
         # Exactly what the k8s runner ships to the child pod.
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
         child_dag = DAGSpec(**spec_json).reconstruct()
-        child_asset = next(a for a in child_dag.assets if type(a).key == "products_campaigns_stats")
+        child_asset = next(a for a in child_dag.operations if type(a).key == "products_campaigns_stats")
+        assert isinstance(child_asset, Asset)
 
         normalizer = child_asset.normalizer
         assert isinstance(normalizer, DataFrameNormalizer)
@@ -75,7 +77,8 @@ class TestSpecRoundtrip:
         asset = next(a for a in src.assets if type(a).key == "products_campaigns_stats")
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
         child_dag = DAGSpec(**spec_json).reconstruct()
-        child_asset = next(a for a in child_dag.assets if type(a).key == "products_campaigns_stats")
+        child_asset = next(a for a in child_dag.operations if type(a).key == "products_campaigns_stats")
+        assert isinstance(child_asset, Asset)
 
         # One row with every requested report column, as Amazon returns them.
         # All schema fields are required-nullable, so None is valid everywhere.

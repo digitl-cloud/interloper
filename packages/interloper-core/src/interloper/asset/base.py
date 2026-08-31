@@ -6,7 +6,8 @@ import asyncio
 import inspect
 import traceback
 import warnings
-from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, cast
 
 from pydantic import Field, PrivateAttr, field_validator
 from typing_extensions import Self
@@ -15,9 +16,16 @@ from interloper.asset.context import ExecutionContext
 from interloper.component import Component, ComponentDefinition, RelationDefinition, RelationSlot
 from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
-from interloper.errors import AssetError, NormalizerError, PartitionError, format_exception
+from interloper.errors import (
+    AssetError,
+    DependencyContractError,
+    NormalizerError,
+    PartitionError,
+    format_exception,
+)
 from interloper.events import EventBus, EventType
 from interloper.normalizer import MaterializationStrategy, Normalizer
+from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.partitioning import (
     Partition,
     PartitionConfig,
@@ -46,6 +54,8 @@ _UNSET = object()
 
 
 warnings.filterwarnings("ignore", message='Field name "schema" in "AssetDefinition"')
+# Deliberate: Asset refines the Operation node protocol's plain defaults into real fields.
+warnings.filterwarnings("ignore", message='Field name "(materializable|dependencies)" in "Asset"')
 
 
 class AssetIdentity(NamedTuple):
@@ -128,7 +138,7 @@ class AssetDefinition(ComponentDefinition):
         return str(AssetIdentity(self.source_key or None, self.key))
 
 
-class Asset(Component):
+class Asset(Component, Operation):
     """A data-producing component.
 
     Subclass and implement ``data()`` to define an asset::
@@ -162,7 +172,6 @@ class Asset(Component):
     requires: ClassVar[dict[str, str]] = {}
     optional_requires: ClassVar[dict[str, str]] = {}
     tags: ClassVar[list[str]] = []
-    runnable: ClassVar[bool] = True
 
     _source_type: ClassVar[type[Source] | None] = None
 
@@ -251,22 +260,6 @@ class Asset(Component):
     def source(self) -> Source | None:
         """The source this asset belongs to, if any."""
         return self._source
-
-    def effective_partition(
-        self, partition_or_window: Partition | PartitionWindow | None
-    ) -> Partition | PartitionWindow | None:
-        """Return the partition scope this asset actually consumes.
-
-        Unpartitioned assets ignore any requested scope.
-
-        Args:
-            partition_or_window: The partition or partition window the run was
-                scoped to, or ``None`` when it was unscoped.
-
-        Returns:
-            The scope unchanged for partitioned assets, ``None`` otherwise.
-        """
-        return partition_or_window if self.partitioning is not None else None
 
     @property
     def identity(self) -> AssetIdentity:
@@ -424,6 +417,55 @@ class Asset(Component):
         return self.model_copy(update=overrides)
 
     # -- Execution -------------------------------------------------------------
+
+    async def execute(self, context: OperationContext) -> OperationResult:
+        """Materialize this asset: the asset's operation.
+
+        The runner-facing adapter over :meth:`materialize_async`; the manual
+        entry points (:meth:`run`, :meth:`materialize`) stay the authoring
+        API.
+
+        Args:
+            context: The facts this execution is scoped to.
+
+        Returns:
+            An effectless result — a materialization's effects are its
+            destination writes and the events it emits.
+        """
+        await self.materialize_async(context.partition_or_window, context.dag, context.metadata)
+        return OperationResult()
+
+    def validate_dependencies(self, nodes: Mapping[str, Operation]) -> None:
+        """Check the wired dependencies against the ``requires`` contract.
+
+        For each ``(parameter_name, upstream_id)`` in ``dependencies``, if
+        ``requires`` or ``optional_requires`` declares an expected key for
+        that parameter, the wired upstream's identity must match the declared
+        key's resolution (bare keys expect an asset of this asset's own
+        source — see :meth:`AssetIdentity.resolve`). Upstream ids absent from
+        *nodes* are ignored here: graph construction already rejected the
+        non-optional ones.
+
+        Args:
+            nodes: Every node in the DAG, keyed by id.
+
+        Raises:
+            DependencyContractError: If any wired dep violates its contract.
+        """
+        own_source_key = self._source.key if self._source is not None else None
+        for parameter_name, upstream_id in self.dependencies.items():
+            if upstream_id not in nodes:
+                continue
+            expected_key = self.requires.get(parameter_name) or self.optional_requires.get(parameter_name)
+            if not expected_key:
+                continue
+            expected = AssetIdentity.resolve(expected_key, own_source_key=own_source_key)
+            upstream = cast(Asset, nodes[upstream_id])
+            if upstream.identity != expected:
+                raise DependencyContractError(
+                    f"Asset '{self.key}' parameter '{parameter_name}' requires "
+                    f"'{expected_key}' but is wired to '{upstream.identity}'."
+                )
 
     def run(
         self,
@@ -662,7 +704,7 @@ class Asset(Component):
                     )
 
                 upstream_id = self.dependencies[parameter_name]
-                upstream_asset = dag.asset_map[upstream_id]
+                upstream_asset = cast(Asset, dag.operation_map[upstream_id])
                 if parameter_name in optional_names:
                     try:
                         kwargs[parameter_name] = await self._destination_read(

@@ -596,3 +596,47 @@ class TestResourceEncoding:
         raw, encrypted = _encoder(None)._encode_data({"a": 1}, False)
         assert encrypted is False
         assert raw == json.dumps({"a": 1}).encode()
+
+
+class TestConfigWriteBack:
+    """merge_config: the write-back primitive for operation config effects."""
+
+    def test_merge_into_encrypted_payload(self, component_db: Engine):
+        store = Store(catalog=il.Catalog(components={}), encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
+        row = store.components.create(
+            _ORG, kind="connection", key="conn", name="C", config={"token": "old", "region": "eu"}
+        )
+
+        updated = store.components.merge_config(row.id, {"token": "new"})
+
+        assert updated.encrypted is True
+        assert updated.config is None
+        assert store.components.decode_config(updated) == {"token": "new", "region": "eu"}
+
+    def test_merge_preserves_plaintext_opt_in(self, store: Store):
+        row = store.components.create(_ORG, kind="connection", key="conn", name="C", config={}, encrypted=False)
+
+        updated = store.components.merge_config(row.id, {"token": "new"})
+
+        assert updated.encrypted is False
+        assert store.components.decode_config(updated) == {"token": "new"}
+
+    def test_merge_missing_component(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.components.merge_config(uuid4(), {"token": "new"})
+
+
+class TestStampState:
+    def test_stamps_iso_timestamps(self, store: Store):
+        import datetime as dt
+
+        row = store.components.create(_ORG, kind="connection", key="conn", name="C", config={}, encrypted=False)
+        moment = dt.datetime(2026, 8, 27, 12, 0, tzinfo=dt.timezone.utc)
+
+        updated = store.components.stamp_state(row.id, refreshed_at=moment, error=None)
+
+        assert updated.state == {"refreshed_at": "2026-08-27T12:00:00+00:00", "error": None}
+
+    def test_stamp_missing_component(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.components.stamp_state(uuid4(), refreshed_at=None)

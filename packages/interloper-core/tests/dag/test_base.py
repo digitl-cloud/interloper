@@ -256,44 +256,44 @@ class TestConstruction:
     def test_single_asset_instance(self):
         asset = FakeAsset()
         dag = DAG(asset)
-        assert dag.assets == [asset]
-        assert dag.asset_map == {asset.id: asset}
+        assert dag.operations == [asset]
+        assert dag.operation_map == {asset.id: asset}
 
     def test_multiple_asset_instances(self):
         a = FakeAsset()
         b = FakeOtherAsset()
         dag = DAG(a, b)
-        assert len(dag.assets) == 2
-        assert set(dag.asset_map) == {a.id, b.id}
+        assert len(dag.operations) == 2
+        assert set(dag.operation_map) == {a.id, b.id}
 
     def test_accepts_asset_class_and_instantiates_it(self):
         dag = DAG(FakeAsset)
-        assert len(dag.assets) == 1
-        assert isinstance(dag.assets[0], FakeAsset)
+        assert len(dag.operations) == 1
+        assert isinstance(dag.operations[0], FakeAsset)
 
     def test_accepts_source_instance_and_flattens_its_assets(self):
         source = FakeSource()
         dag = DAG(source)
-        assert len(dag.assets) == len(source.assets)
-        assert {type(a).key for a in dag.assets} == {"fake_first", "fake_second"}
+        assert len(dag.operations) == len(source.operations())
+        assert {type(a).key for a in dag.operations} == {"fake_first", "fake_second"}
 
     def test_accepts_source_class_and_flattens_its_assets(self):
         dag = DAG(FakeSource)
-        assert len(dag.assets) == 2
+        assert len(dag.operations) == 2
 
     def test_accepts_mixed_assets_and_sources(self):
         standalone = FakeAsset()
         source = FakeSource()
         dag = DAG(standalone, source)
-        assert len(dag.assets) == 1 + len(source.assets)
+        assert len(dag.operations) == 1 + len(source.operations())
 
     def test_complex_dag_has_all_assets(self, dag: il.DAG):
-        assert len(dag.assets) == 7
-        assert {type(asset).key for asset in dag.assets} == {"a", "b", "c", "d", "e", "f", "g"}
+        assert len(dag.operations) == 7
+        assert {type(asset).key for asset in dag.operations} == {"a", "b", "c", "d", "e", "f", "g"}
 
     def test_double_source_dag_flattens_both_sources(self, double_source_dag: il.DAG):
-        assert len(double_source_dag.assets) == 4
-        keys = [type(asset).key for asset in double_source_dag.assets]
+        assert len(double_source_dag.operations) == 4
+        keys = [type(asset).key for asset in double_source_dag.operations]
         assert keys.count("a") == 2
         assert keys.count("b") == 2
 
@@ -320,8 +320,8 @@ class TestGraph:
         a = FakeAsset()
         b = FakeOtherAsset()
         dag = DAG(a, b)
-        assert dag.asset_map[a.id] is a
-        assert dag.asset_map[b.id] is b
+        assert dag.operation_map[a.id] is a
+        assert dag.operation_map[b.id] is b
 
     def test_successors_initialized_empty_for_all_assets(self):
         a = FakeAsset()
@@ -338,7 +338,7 @@ class TestGraph:
         assert dag.successors[upstream.id] == [downstream.id]
 
     def test_complex_dag_predecessors_match_topology(self, dag: il.DAG):
-        by_key = {type(asset).key: asset for asset in dag.assets}
+        by_key = {type(asset).key: asset for asset in dag.operations}
 
         # L0 roots
         assert dag.predecessors[by_key["a"].id] == []
@@ -356,7 +356,7 @@ class TestGraph:
         assert set(dag.predecessors[by_key["g"].id]) == {by_key["e"].id, by_key["f"].id}
 
     def test_complex_dag_successors_match_topology(self, dag: il.DAG):
-        by_key = {type(asset).key: asset for asset in dag.assets}
+        by_key = {type(asset).key: asset for asset in dag.operations}
 
         assert set(dag.successors[by_key["a"].id]) == {by_key["c"].id, by_key["d"].id}
         assert dag.successors[by_key["b"].id] == [by_key["e"].id]
@@ -383,7 +383,7 @@ class TestGraph:
     def test_missing_optional_dep_is_tolerated(self):
         asset = FakeAssetOptionallyRequiringFake(dependencies={"upstream": "nonexistent-id"})
         dag = DAG(asset)
-        assert asset.id in dag.asset_map
+        assert asset.id in dag.operation_map
         assert dag.predecessors[asset.id] == []
 
 
@@ -419,7 +419,7 @@ class TestValidation:
     def test_partitioned_depending_on_non_partitioned_is_allowed(self, dag_mixed: il.DAG):
         # ``dag_mixed`` fixture already built the DAG without error; presence
         # of all four assets proves construction + validation passed.
-        assert len(dag_mixed.assets) == 4
+        assert len(dag_mixed.operations) == 4
 
 
 # -- Traversal -----------------------------------------------------------------
@@ -533,8 +533,8 @@ class TestMiniDag:
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
-        assert len(mini.assets) == 2
-        keys = {type(asset).key for asset in mini.assets}
+        assert len(mini.operations) == 2
+        keys = {type(asset).key for asset in mini.operations}
         assert keys == {"fake_asset", "fake_other_asset"}
 
     def test_mini_dag_marks_parents_non_materializable(self):
@@ -543,8 +543,8 @@ class TestMiniDag:
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
-        target = next(asset for asset in mini.assets if type(asset).key == "fake_other_asset")
-        parent = next(asset for asset in mini.assets if type(asset).key == "fake_asset")
+        target = next(asset for asset in mini.operations if type(asset).key == "fake_other_asset")
+        parent = next(asset for asset in mini.operations if type(asset).key == "fake_asset")
         assert target.materializable is True
         assert parent.materializable is False
 
@@ -552,8 +552,8 @@ class TestMiniDag:
         a = FakeAsset()
         dag = DAG(a)
         mini = dag.mini_dag(a.id)
-        assert len(mini.assets) == 1
-        assert mini.assets[0].materializable is True
+        assert len(mini.operations) == 1
+        assert mini.operations[0].materializable is True
 
     def test_mini_dag_raises_for_unknown_id(self):
         dag = DAG(FakeAsset())
@@ -561,15 +561,15 @@ class TestMiniDag:
             dag.mini_dag("nonexistent")
 
     def test_mini_dag_for_deep_target_in_complex_dag(self, dag: il.DAG):
-        by_key = {type(asset).key: asset for asset in dag.assets}
+        by_key = {type(asset).key: asset for asset in dag.operations}
 
         mini = dag.mini_dag(by_key["e"].id)
         # ``e`` has direct parents ``b`` and ``c`` only; ``mini_dag`` is shallow.
-        assert {type(asset).key for asset in mini.assets} == {"b", "c", "e"}
+        assert {type(asset).key for asset in mini.operations} == {"b", "c", "e"}
 
-        target = next(asset for asset in mini.assets if type(asset).key == "e")
+        target = next(asset for asset in mini.operations if type(asset).key == "e")
         assert target.materializable is True
-        for asset in mini.assets:
+        for asset in mini.operations:
             if type(asset).key != "e":
                 assert asset.materializable is False
 
@@ -596,15 +596,15 @@ class TestSerialization:
     def test_plain_roundtrip_preserves_asset_classes(self):
         dag = DAG(FakeAsset(), FakeOtherAsset())
         restored = DAG.from_spec(dag.to_spec())
-        assert len(restored.assets) == 2
-        assert {type(asset).__name__ for asset in restored.assets} == {"FakeAsset", "FakeOtherAsset"}
+        assert len(restored.operations) == 2
+        assert {type(asset).__name__ for asset in restored.operations} == {"FakeAsset", "FakeOtherAsset"}
 
     def test_roundtrip_preserves_instance_ids(self):
         a = FakeAsset()
         b = FakeOtherAsset()
         dag = DAG(a, b)
         restored = DAG.from_spec(dag.to_spec())
-        assert {asset.id for asset in restored.assets} == {a.id, b.id}
+        assert {asset.id for asset in restored.operations} == {a.id, b.id}
 
     def test_roundtrip_preserves_predecessor_wiring(self):
         upstream = FakeAsset()
@@ -619,7 +619,7 @@ class TestSerialization:
     def test_roundtrip_complex_dag_preserves_topology(self, dag: il.DAG):
         restored = DAG.from_spec(dag.to_spec())
 
-        assert len(restored.assets) == len(dag.assets)
+        assert len(restored.operations) == len(dag.operations)
         assert restored.topological_generations() != []
 
         # Every original predecessor edge survives.
@@ -636,16 +636,16 @@ class TestSerialization:
         json_str = dag.to_spec().model_dump_json()
         reloaded = DAGSpec.model_validate_json(json_str).reconstruct()
 
-        assert len(reloaded.assets) == 2
-        downstream_restored = next(a for a in reloaded.assets if type(a).key == "fake_other_asset")
-        upstream_restored = next(a for a in reloaded.assets if type(a).key == "fake_asset")
+        assert len(reloaded.operations) == 2
+        downstream_restored = next(a for a in reloaded.operations if type(a).key == "fake_other_asset")
+        upstream_restored = next(a for a in reloaded.operations if type(a).key == "fake_asset")
         assert downstream_restored.dependencies["upstream"] == upstream_restored.id
 
     def test_roundtrip_preserves_source_owned_assets(self):
         dag = DAG(FakeSource())
         restored = DAG.from_spec(dag.to_spec())
-        assert len(restored.assets) == len(dag.assets)
-        assert {type(a).key for a in restored.assets} == {type(a).key for a in dag.assets}
+        assert len(restored.operations) == len(dag.operations)
+        assert {type(a).key for a in restored.operations} == {type(a).key for a in dag.operations}
 
     def test_roundtrip_preserves_mini_dag_shape(self):
         a = FakeAsset()
@@ -654,38 +654,39 @@ class TestSerialization:
         mini = dag.mini_dag(b.id)
 
         restored = DAG.from_spec(mini.to_spec())
-        assert len(restored.assets) == 2
-        assert [asset.materializable for asset in restored.assets] == [asset.materializable for asset in mini.assets]
+        assert len(restored.operations) == 2
+        restored_flags = [asset.materializable for asset in restored.operations]
+        assert restored_flags == [asset.materializable for asset in mini.operations]
 
     def test_roundtrip_source_mini_dag_preserves_materializable(self):
         """Mini-DAG from a source: only the target asset is materializable."""
         source = FakeSource()
         dag = DAG(source)
-        by_key = {type(a).key: a for a in dag.assets}
+        by_key = {type(a).key: a for a in dag.operations}
         # fake_second depends on fake_first; mini_dag for fake_second
         # should mark fake_first as non-materializable.
         mini = dag.mini_dag(by_key["fake_second"].id)
 
         restored = DAG.from_spec(mini.to_spec())
-        restored_by_key = {type(a).key: a for a in restored.assets}
+        restored_by_key = {type(a).key: a for a in restored.operations}
 
-        assert len(restored.assets) == 2
+        assert len(restored.operations) == 2
         assert restored_by_key["fake_second"].materializable is True
         assert restored_by_key["fake_first"].materializable is False
 
     def test_roundtrip_source_mini_dag_excludes_unrelated_assets(self):
         """Mini-DAG from a source should not include assets that aren't in the subgraph."""
         dag = DAG(FakeComplexSource())
-        by_key = {type(a).key: a for a in dag.assets}
+        by_key = {type(a).key: a for a in dag.operations}
         # ``c`` depends on ``a`` only — the mini-DAG should have ``a`` and ``c``,
         # NOT ``b``, ``d``, ``e``, ``f``, ``g``.
         mini = dag.mini_dag(by_key["c"].id)
 
         restored = DAG.from_spec(mini.to_spec())
-        restored_keys = {type(a).key for a in restored.assets}
+        restored_keys = {type(a).key for a in restored.operations}
 
         assert restored_keys == {"a", "c"}
-        for asset in restored.assets:
+        for asset in restored.operations:
             if type(asset).key == "c":
                 assert asset.materializable is True
             else:
@@ -693,10 +694,10 @@ class TestSerialization:
 
     def test_roundtrip_source_mini_dag_only_one_materializable(self, dag: il.DAG):
         """Every mini-DAG round-trip should have exactly one materializable asset."""
-        for asset in dag.assets:
+        for asset in dag.operations:
             mini = dag.mini_dag(asset.id)
             restored = DAG.from_spec(mini.to_spec())
-            materializable = [a for a in restored.assets if a.materializable]
+            materializable = [a for a in restored.operations if a.materializable]
             assert len(materializable) == 1, (
                 f"mini_dag for '{type(asset).key}' has {len(materializable)} "
                 f"materializable assets after round-trip, expected 1"
@@ -733,7 +734,7 @@ class TestFromSpec:
         catalog = il.Catalog.from_assets([FakeAsset])
         spec = DAGSpec(items=[Spec(key="fake_asset")])
         dag = DAG.from_spec(spec, catalog)
-        assert [type(a).key for a in dag.assets] == ["fake_asset"]
+        assert [type(a).key for a in dag.operations] == ["fake_asset"]
 
 
 class TestFromSpecFile:
@@ -747,7 +748,7 @@ class TestFromSpecFile:
         file.write_text(yaml.safe_dump(job.to_spec().model_dump(mode="json", exclude_none=True)))
 
         dag = il.DAG.from_spec_file(file)
-        assert [type(a).key for a in dag.assets] == ["fake_asset"]
+        assert [type(a).key for a in dag.operations] == ["fake_asset"]
 
     def test_non_runnable_spec_rejected(self, tmp_path):
         from interloper.errors import DAGError

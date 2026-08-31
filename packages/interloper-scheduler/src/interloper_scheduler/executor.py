@@ -1,4 +1,13 @@
-"""Run executor: loads a run from DB, builds the DAG, and executes it."""
+"""Run executor: the envelope that assembles a run's operations and drives the runner.
+
+The executor owns the run lifecycle — load, mark running, trace, terminal
+status, failure event — and the platform side of graph assembly: flattening
+the hydrated target workload into its operations, joining upstream
+dependencies from the store as non-materializable context, and skipping the
+retry lineage's prior successes. The runner executes the operations; their
+returned effects (config and state fields) are applied generically to each
+operation's component row after the run.
+"""
 
 from __future__ import annotations
 
@@ -15,10 +24,10 @@ from interloper.telemetry import attributes
 from interloper.telemetry.propagation import context_from_env, inject_metadata
 from interloper.telemetry.tracer import tracer
 from interloper_db import Store
-from interloper_db.models import Component, ComponentRelation, Run
+from interloper_db.models import Component, Run
 from opentelemetry.context import Context
 from opentelemetry.trace import Link, get_current_span
-from sqlmodel import Session, col, select
+from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +38,12 @@ def run_event_metadata(run: Run, target: Component | None) -> dict[str, Any]:
     The runner spreads this dict into every event it emits, and the
     ``target_*`` keys have no structured ``events`` column — they land in
     each event's ``data``, making events self-describing for telemetry
-    (which job/source/asset the run materialized, under what name at the
-    time) without a join through ``runs``.
+    (which component the run executed, under what name at the time)
+    without a join through ``runs``.
+
+    Args:
+        run: The run the metadata describes.
+        target: The run's target component row, when it still exists.
 
     Returns:
         The metadata dict.
@@ -51,7 +64,7 @@ def run_event_metadata(run: Run, target: Component | None) -> dict[str, Any]:
 
 
 class RunExecutor:
-    """Executes a run: loads from DB, builds the DAG, runs it, tracks events.
+    """Executes a run: loads from DB, assembles the operations, runs them.
 
     Uses the ``Store`` for hydration so all reconstruction goes through
     the standard framework path.
@@ -62,6 +75,13 @@ class RunExecutor:
         store: Store | None = None,
         runner: Runner | None = None,
     ) -> None:
+        """Initialize the executor.
+
+        Args:
+            store: The Store. Defaults to the settings-configured one.
+            runner: Runner template, copied per run. Defaults to an
+                ``AsyncRunner``.
+        """
         self._store = store or Store.from_settings()
         self._runner = runner or il.AsyncRunner()
 
@@ -70,6 +90,9 @@ class RunExecutor:
 
         Synchronous DB orchestration around the async DAG run; the async
         boundary lives in :meth:`_run_dag` where the engine is actually driven.
+
+        Args:
+            run_id: The run to execute.
 
         Returns:
             ``True`` if the run completed successfully, ``False`` otherwise.
@@ -110,21 +133,27 @@ class RunExecutor:
                 inject_metadata(run_metadata)
 
                 target = self._store.components.load(component_id)
-                assets = _target_assets(target)
-                if not assets:
-                    logger.info("No sources or assets for run %s, marking success", run_id)
+                if not isinstance(target, il.Workload):
+                    raise ValueError(f"Component kind '{type(target).kind}' declares no workload")
+
+                operations = target.operations()
+                if not operations:
+                    logger.info("No operations for run %s, marking success", run_id)
                     self._store.runs.complete(run_id, success=True)
                     return True
 
-                self._resolve_upstream_deps(assets)
-
+                self._resolve_upstream(operations)
                 if retry_of:
-                    self._skip_succeeded_assets(retry_of, assets)
+                    successes = self._prior_successes(retry_of)
+                    for operation in operations:
+                        if UUID(operation.id) in successes:
+                            operation.materializable = False
 
-                dag = il.DAG(*assets)
+                dag = il.DAG(*operations)
                 partition = il.TimePartition.from_key(partition_key) if partition_key else None
                 result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, metadata=run_metadata)
 
+            self._apply_effects(result)
             success = result.status == ExecutionStatus.COMPLETED
             logger.info("Run %s completed: %s", run_id, result.status.name)
             self._store.runs.complete(run_id, success=success)
@@ -146,64 +175,89 @@ class RunExecutor:
 
     @staticmethod
     def _mark_running(session: Session, db_run: Run) -> None:
+        """Flip the run to ``running`` and stamp its start time.
+
+        Args:
+            session: Open session the write joins.
+            db_run: The run row to mark.
+        """
         db_run.status = "running"
         db_run.started_at = dt.datetime.now(dt.timezone.utc)
         session.add(db_run)
         session.commit()
 
-    def _skip_succeeded_assets(self, retry_of: UUID, assets: list[il.Asset]) -> None:
-        """Mark assets that already succeeded in the retry lineage as non-materializable.
+    def _resolve_upstream(self, operations: list[il.Operation]) -> None:
+        """Add transitive upstream dependencies to *operations* as non-materializable.
 
-        For a ``"failed"``-scope retry, assets that completed successfully in an
+        Platform-side graph assembly: hydrated nodes carry their dependencies
+        as row ids, so the walk loads each unseen id from the store and
+        follows the dependencies it declares in turn. Joined upstream nodes
+        are read from their destinations, never recomputed.
+
+        Args:
+            operations: The nodes to walk from, extended in place.
+        """
+        visited = {operation.id for operation in operations}
+        frontier = list(operations)
+        while frontier:
+            next_frontier: list[il.Operation] = []
+            for operation in frontier:
+                for dependency_id in operation.dependencies.values():
+                    if dependency_id in visited:
+                        continue
+                    visited.add(dependency_id)
+                    upstream = cast(il.Asset, self._store.components.load(UUID(dependency_id)))
+                    upstream.materializable = False
+                    operations.append(upstream)
+                    next_frontier.append(upstream)
+            frontier = next_frontier
+
+    def _prior_successes(self, retry_of: UUID) -> set[UUID]:
+        """Node row ids that already succeeded in the retry lineage.
+
+        For a ``"failed"``-scope retry, nodes that completed successfully in an
         earlier attempt are read from their destination instead of recomputed;
-        only the previously failed/cancelled assets re-execute. Successes are
+        only the previously failed/cancelled nodes re-execute. Successes are
         resolved by walking the ``retry_of`` chain back to the root attempt so
-        that assets skipped by an intermediate failed-only retry (which emit no
+        that nodes skipped by an intermediate failed-only retry (which emit no
         events) still carry their earlier success forward. Statuses are matched
-        by asset row id, never by key — a run can span many assets sharing one
+        by node row id, never by key — a run can span many assets sharing one
         key (e.g. an ``ads_stats`` per account), and one success must not skip
         the others.
+
+        Args:
+            retry_of: The retried run, the walk's starting point.
+
+        Returns:
+            The successful node row ids.
         """
         statuses: dict[UUID, str] = {}
         parent_id: UUID | None = retry_of
         with Session(self._store.engine) as session:
             while parent_id:
                 for row in self._store.events.list_asset_executions(parent_id):
-                    # Closest ancestor wins: only record an asset the first time we see it.
+                    # Closest ancestor wins: only record a node the first time we see it.
                     statuses.setdefault(row.asset_id, row.status)
                 parent = session.get(Run, parent_id)
                 parent_id = parent.retry_of if parent else None
 
-        success_ids = {asset_id for asset_id, status in statuses.items() if status == "success"}
-        for asset in assets:
-            if UUID(asset.id) in success_ids:
-                asset.materializable = False
+        return {asset_id for asset_id, status in statuses.items() if status == "success"}
 
-    def _resolve_upstream_deps(self, assets: list[il.Asset]) -> None:
-        """Add transitive upstream deps to *assets* as non-materializable.
+    def _apply_effects(self, result: il.RunResult) -> None:
+        """Persist the executed operations' effects onto their component rows.
 
-        Hydrated assets carry their row id, so the dependency relations are
-        walked directly from the ids already in hand.
+        Args:
+            result: The run result whose per-node execution infos carry the
+                effects; nodes without effects are untouched.
         """
-        visited = {UUID(asset.id) for asset in assets}
-        frontier = list(visited)
-        with Session(self._store.engine) as session:
-            while frontier:
-                dependencies = session.exec(
-                    select(ComponentRelation).where(
-                        col(ComponentRelation.src_id).in_(frontier),
-                        ComponentRelation.type == "dependency",
-                    )
-                ).all()
-                next_frontier: list[UUID] = []
-                for relation in dependencies:
-                    if relation.dst_id not in visited:
-                        visited.add(relation.dst_id)
-                        next_frontier.append(relation.dst_id)
-                        upstream_asset = cast(il.Asset, self._store.components.load(relation.dst_id))
-                        upstream_asset.materializable = False
-                        assets.append(upstream_asset)
-                frontier = next_frontier
+        for info in result.asset_executions.values():
+            effects = info.effects
+            if effects is None:
+                continue
+            if effects.config:
+                self._store.components.merge_config(UUID(info.asset_id), effects.config)
+            if effects.state:
+                self._store.components.stamp_state(UUID(info.asset_id), **effects.state)
 
     def _run_dag(
         self,
@@ -214,6 +268,19 @@ class RunExecutor:
         run_id: UUID,
         metadata: dict[str, Any],
     ) -> il.RunResult:
+        """Drive the DAG through a per-run copy of the runner template.
+
+        Args:
+            dag: The assembled operation graph.
+            partition: The run's partition scope, when partitioned.
+            org_id: Organisation the run's events belong to.
+            run_id: The run the events attach to.
+            metadata: Run-level metadata spread into every event.
+
+        Returns:
+            The runner's result.
+        """
+
         def handle_event(event: il.Event) -> None:
             self._store.events.save(event, org_id=org_id, run_id=run_id)
 
@@ -221,21 +288,3 @@ class RunExecutor:
         # runs, but run state and the event handler are per-run.
         runner = self._runner.model_copy(update={"on_event": handle_event})
         return asyncio.run(runner.run(dag, partition, metadata=metadata))
-
-
-def _target_assets(component: il.Component) -> list[il.Asset]:
-    """Flatten a run's hydrated target component into the assets to materialize.
-
-    A job contributes its targets' assets, a source its own assets, and an
-    asset itself — any runnable component resolves to a DAG-able list.
-    """
-    if isinstance(component, il.Job):
-        assets: list[il.Asset] = []
-        for target in component.targets:
-            assets.extend(target.assets if isinstance(target, il.Source) else [target])
-        return assets
-    if isinstance(component, il.Source):
-        return list(component.assets)
-    if isinstance(component, il.Asset):
-        return [component]
-    raise ValueError(f"Component kind '{type(component).kind}' is not runnable")

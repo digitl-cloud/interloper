@@ -13,6 +13,7 @@ from interloper.asset.base import AssetDefinition, AssetIdentity
 from interloper.component import Component, ComponentDefinition, RelationDefinition
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
+from interloper.operation import Operation, Workload
 from interloper.resource import Resource
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
 from interloper.serializable import IgnoredDescriptor, Spec
@@ -94,7 +95,7 @@ class SourceDefinition(ComponentDefinition):
     assets: list[AssetDefinition] = Field(default_factory=list)
 
 
-class Source(Component):
+class Source(Component, Workload):
     """A grouping component that holds assets with shared resources and destinations.
 
     Define a source by subclassing and setting class attributes::
@@ -114,7 +115,6 @@ class Source(Component):
     destination_types: ClassVar[list[type[Destination]]] = []
     asset_types: ClassVar[list[type[Asset]]] = []
     tags: ClassVar[list[str]] = []
-    runnable: ClassVar[bool] = True
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
         "destination": RelationDefinition(kinds=["destination"], field="destinations"),
@@ -311,6 +311,14 @@ class Source(Component):
         return Spec(path=self.path(), id=self.id, init=init or None)
 
     # -- Assets ----------------------------------------------------------------
+
+    def operations(self) -> list[Operation]:
+        """The source's own assets: the operations a run on it executes.
+
+        Returns:
+            The assets this source holds.
+        """
+        return list(self.assets)
 
     @classmethod
     def _collect_asset_types(cls) -> None:

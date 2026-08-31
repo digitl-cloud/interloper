@@ -148,7 +148,6 @@ class Component(Serializable):
     resource_types: ClassVar[dict[str, type[Resource]]] = {}
     relation_types: ClassVar[dict[str, RelationDefinition]] = {}
     sensitive: ClassVar[bool] = False
-    runnable: ClassVar[bool] = False
     state_model: ClassVar[type[BaseModel] | None] = None
 
     id: str = Field(default="")

@@ -12,6 +12,7 @@ import json
 from typing import Any
 
 import pytest
+from interloper.asset import Asset
 from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
 from interloper.representation import Representation
@@ -150,7 +151,8 @@ class TestSpecRoundtrip:
         asset = next(a for a in src.assets if type(a).key == _ASSET_KEY)
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
         child_dag = DAGSpec(**spec_json).reconstruct()
-        child_asset = next(a for a in child_dag.assets if type(a).key == _ASSET_KEY)
+        child_asset = next(a for a in child_dag.operations if type(a).key == _ASSET_KEY)
+        assert isinstance(child_asset, Asset)
 
         normalizer = child_asset.normalizer
         assert isinstance(normalizer, DisplayVideo360Normalizer)

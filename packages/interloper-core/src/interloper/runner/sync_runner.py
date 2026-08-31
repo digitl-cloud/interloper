@@ -8,8 +8,8 @@ from abc import abstractmethod
 from concurrent.futures import FIRST_COMPLETED, Future, wait
 from typing import TYPE_CHECKING, Any
 
-from interloper.asset.base import Asset
 from interloper.errors import RunnerError, format_exception
+from interloper.operation.base import Operation, OperationResult
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
@@ -72,7 +72,7 @@ class SyncRunner(Runner):
             RunnerError: If a deadlock or invalid DAG state is detected.
         """
         self._init_run(dag, partition_or_window, metadata)
-        inflight: dict[Future[Any], Asset] = {}
+        inflight: dict[Future[Any], Operation] = {}
 
         try:
             self._on_start()
@@ -128,7 +128,7 @@ class SyncRunner(Runner):
     @abstractmethod
     def _submit_asset(
         self,
-        asset: Asset,
+        asset: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
         """Submit an asset for execution and return a Future.
@@ -143,7 +143,7 @@ class SyncRunner(Runner):
 
     # -- Shared execution helpers ----------------------------------------------
 
-    def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
+    def _handle_completed(self, future: Future[Any], asset: Operation) -> None:
         """Process a completed future and update state.
 
         Args:
@@ -151,16 +151,16 @@ class SyncRunner(Runner):
             asset: The asset the future was submitted for.
         """
         try:
-            future.result()
+            result = future.result()
         except Exception as e:
             self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
             if self.fail_fast or self.reraise:
                 raise
             return
 
-        self.state.mark_asset_completed(asset)
+        self.state.mark_asset_completed(asset, effects=result if isinstance(result, OperationResult) else None)
 
-    def _flush(self, inflight: dict[Future[Any], Asset]) -> None:
+    def _flush(self, inflight: dict[Future[Any], Operation]) -> None:
         """Wait for all in-flight futures and emit terminal events.
 
         Called after an exception aborts the main loop so that every
@@ -192,7 +192,7 @@ class SyncRunner(Runner):
                 continue
             self._handle_flushed(future, asset)
 
-    def _handle_flushed(self, future: Future[Any], asset: Asset) -> None:
+    def _handle_flushed(self, future: Future[Any], asset: Operation) -> None:
         """Process a completed future during flush.
 
         Subclasses that return structured results from their futures
@@ -208,7 +208,7 @@ class SyncRunner(Runner):
             asset: The asset the future was submitted for.
         """
         try:
-            future.result()
-            self.state.mark_asset_completed(asset)
+            result = future.result()
+            self.state.mark_asset_completed(asset, effects=result if isinstance(result, OperationResult) else None)
         except Exception as e:  # noqa: BLE001
             self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())

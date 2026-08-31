@@ -215,9 +215,14 @@ class TestKinds:
         for kind in ("source", "asset", "destination", "resource", "connection", "config", "job"):
             assert kind in il.KINDS
 
-    def test_runnable_kinds(self):
-        for kind, expected in (("job", True), ("source", True), ("asset", True), ("connection", False)):
-            assert il.KINDS[kind].runnable is expected
+    def test_workload_kinds(self):
+        for kind in ("job", "source", "asset"):
+            assert issubclass(il.KINDS[kind], il.Workload)
+        assert issubclass(il.KINDS["asset"], il.Operation)
+        for kind in ("job", "source"):
+            assert not issubclass(il.KINDS[kind], il.Operation)
+        for kind in ("connection", "destination"):
+            assert not issubclass(il.KINDS[kind], il.Workload)
 
     def test_sensitive_follows_the_resource_subtree(self):
         assert il.KINDS["connection"].sensitive is True

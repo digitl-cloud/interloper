@@ -191,6 +191,29 @@ class TestTryReserveRun:
             assert store.quotas.try_reserve_run(make_run()) is False
 
 
+class TestNonBillableRunExemption:
+    """A run recorded as non-billable is platform plumbing, never gated."""
+
+    def test_reserve_admits_past_an_exhausted_quota(
+        self,
+        store: Store,
+        org_id: UUID,
+        make_run: RunFactory,
+    ):
+        with Session(store.engine) as session:
+            ledger = UsageLedger(session)
+            ledger.increment(org_id, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=1)
+            session.commit()
+        store._quota_defaults = _defaults(max_successful_runs_per_month=1)
+        run = make_run(billable=False)
+
+        assert store.quotas.try_reserve_run(run) is True
+        # Admitted without taking a slot, so settlement has nothing to release.
+        with Session(store.engine) as session:
+            reserved = session.get(Run, run.id)
+            assert reserved is not None and reserved.quota_reserved_at is None
+
+
 class TestReconcileUsage:
     def test_reports_drift_both_ways(self, store: Store, org_id: UUID):
         period = month_start(datetime.now(timezone.utc))

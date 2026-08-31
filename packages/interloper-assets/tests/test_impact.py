@@ -69,7 +69,7 @@ class TestSpecRoundtripAndReconcile:
         asset = next(a for a in src.assets if type(a).key == key)
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
         child_dag = DAGSpec(**spec_json).reconstruct()
-        return next(a for a in child_dag.assets if type(a).key == key)
+        return next(a for a in child_dag.operations if type(a).key == key)
 
     def test_actions_record_conforms_after_roundtrip(self):
         child = self._child("actions")
