@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from interloper.asset.base import Asset
 from interloper.component.base import Component, RelationDefinition
 from interloper.destination import Destination
+from interloper.operation import Operation, Workload
 from interloper.source.base import Source
 
 
@@ -24,7 +25,7 @@ class JobState(BaseModel):
     last_run_at: str | None = None
 
 
-class Job(Component):
+class Job(Component, Workload):
     """A materialization workload: the anchor of the ``job`` kind.
 
     A job declares *what* to materialize (``targets``); concrete job classes
@@ -41,7 +42,6 @@ class Job(Component):
     """
 
     icon: ClassVar[str] = "carbon:event-schedule"
-    runnable: ClassVar[bool] = True
     relation_types: ClassVar[dict[str, RelationDefinition]] = {
         # A target is an orchestration pointer, not an input: deleting it just
         # shrinks the job's scope, so it detaches rather than blocking.
@@ -72,6 +72,14 @@ class Job(Component):
         if value is None:
             return []
         return value if isinstance(value, (list, tuple)) else [value]
+
+    def operations(self) -> list[Operation]:
+        """The targets' operations, flattened.
+
+        Returns:
+            Every operation the job's targets provide.
+        """
+        return [operation for target in self.targets for operation in target.operations()]
 
     def model_post_init(self, context: Any) -> None:
         """Cascade workload-level defaults down to targets and destinations.

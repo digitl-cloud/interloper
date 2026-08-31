@@ -27,6 +27,7 @@ from interloper.hook import HOOK_EVENT_TYPES, Hook, HookContext, HookState, Trig
 from interloper.job import CronJob, Job, JobState
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.oauth import OAuthConfig, OAuthProvider
+from interloper.operation import Operation, OperationContext, OperationResult, Workload
 from interloper.partitioning import (
     Partition,
     PartitionConfig,
@@ -121,6 +122,9 @@ __all__ = [
     "OAuthConnection",
     "OAuthProvider",
     "OffsetPaginator",
+    "Operation",
+    "OperationContext",
+    "OperationResult",
     "PageNumberPaginator",
     "Partition",
     "PartitionConfig",
@@ -154,6 +158,7 @@ __all__ = [
     "TimezoneField",
     "TriggerHook",
     "WebhookHook",
+    "Workload",
     "asset",
     "bounded_gather",
     "config",

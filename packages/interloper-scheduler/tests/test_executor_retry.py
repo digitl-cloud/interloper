@@ -1,4 +1,4 @@
-"""Unit tests for ``RunExecutor`` retry skip logic.
+"""Unit tests for ``RunExecutor``'s retry lineage walk.
 
 These avoid a live database by faking the store's asset-execution lookups and
 the lineage-walk session, so they stay pure unit tests.
@@ -56,14 +56,7 @@ def _patch_session(monkeypatch: pytest.MonkeyPatch, runs: dict[UUID, Any]) -> No
     monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(runs))
 
 
-class _Asset:
-    def __init__(self, asset_id: UUID, key: str = "a") -> None:
-        self.id = str(asset_id)
-        self.key = key
-        self.materializable = True
-
-
-def test_succeeded_assets_are_marked_non_materializable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_succeeded_assets_are_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     parent_id = uuid4()
     id_a, id_b = uuid4(), uuid4()
     store = _FakeStore(
@@ -72,12 +65,9 @@ def test_succeeded_assets_are_marked_non_materializable(monkeypatch: pytest.Monk
     _patch_session(monkeypatch, {parent_id: SimpleNamespace(retry_of=None)})
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
-    asset_a, asset_b = _Asset(id_a), _Asset(id_b)
 
-    executor._skip_succeeded_assets(parent_id, [asset_a, asset_b])  # ty: ignore[invalid-argument-type]
-
-    assert asset_a.materializable is False  # succeeded → skipped
-    assert asset_b.materializable is True  # failed → re-runs
+    # succeeded → skipped; failed → re-runs
+    assert executor._prior_successes(parent_id) == {id_a}
 
 
 def test_statuses_match_by_asset_id_not_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,11 +87,8 @@ def test_statuses_match_by_asset_id_not_key(monkeypatch: pytest.MonkeyPatch) -> 
     _patch_session(monkeypatch, {parent_id: SimpleNamespace(retry_of=None)})
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
-    assets = [_Asset(id_a, key="ads_stats"), _Asset(id_b, key="ads_stats"), _Asset(id_c, key="ads_stats")]
 
-    executor._skip_succeeded_assets(parent_id, assets)  # ty: ignore[invalid-argument-type]
-
-    assert [a.materializable for a in assets] == [False, True, True]
+    assert executor._prior_successes(parent_id) == {id_a}
 
 
 def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -123,12 +110,8 @@ def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.Mo
     )
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
-    asset_a, asset_b = _Asset(id_a), _Asset(id_b)
 
-    executor._skip_succeeded_assets(mid_id, [asset_a, asset_b])  # ty: ignore[invalid-argument-type]
-
-    assert asset_a.materializable is False
-    assert asset_b.materializable is True
+    assert executor._prior_successes(mid_id) == {id_a}
 
 
 def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -149,11 +132,8 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
-    asset = _Asset(id_a)
 
-    executor._skip_succeeded_assets(mid_id, [asset])  # ty: ignore[invalid-argument-type]
-
-    assert asset.materializable is False
+    assert executor._prior_successes(mid_id) == {id_a}
 
 
 # -- run_event_metadata ----------------------------------------------------------

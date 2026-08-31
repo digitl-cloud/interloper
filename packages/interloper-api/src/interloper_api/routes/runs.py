@@ -7,7 +7,6 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from interloper.component import KINDS
 from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
 from interloper_db.models import Event, Run
@@ -238,7 +237,7 @@ def create_run(
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> RunResponse:
-    """Queue a single run targeting a runnable component (job, source, or asset).
+    """Queue a single run targeting a component whose kind declares an operation.
 
     Args:
         body: The component to run and the partition key to run it for.
@@ -249,12 +248,10 @@ def create_run(
         The queued run, as a response model.
 
     Raises:
-        HTTPException: 400 if the component's kind is not runnable, or if the
-            store rejects the run.
+        HTTPException: 400 if the store rejects the run (a kind with no
+            operation, or an invalid partition key).
     """
     target = load_authorized(store.components.get, body.component_id, user, store, label="Component", minimum="editor")
-    if not KINDS[target.kind].runnable:
-        raise HTTPException(status_code=400, detail=f"Components of kind '{target.kind}' cannot be run")
     try:
         run = store.runs.create(target.org_id, component_id=body.component_id, partition_key=body.partition_key)
     except ValueError as e:

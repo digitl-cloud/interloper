@@ -455,6 +455,54 @@ class ComponentStore:
             return self._hydrator.decode_data(db_component)
         return dict(db_component.config or {})
 
+    def merge_config(self, component_id: UUID, fields: dict[str, Any]) -> Component:
+        """Merge fields into a component's stored config payload.
+
+        The write-back primitive for operation config effects (e.g. a
+        machine-renewed credential): merges into the decoded payload and
+        re-applies it through the same encryption path as create/update,
+        preserving the row's plaintext opt-in. Everything else about the
+        row (name, relations, state) is untouched.
+
+        Args:
+            component_id: The component UUID.
+            fields: Config fields to merge over the stored payload.
+
+        Returns:
+            The updated component row.
+        """
+        with session_scope(self._engine) as session:
+            db_component = self._load_component(session, component_id)
+            payload = {**self.decode_config(db_component), **fields}
+            encrypted = db_component.encrypted if il.KINDS[db_component.kind].sensitive else None
+            self._apply_config(db_component, payload, encrypted)
+            session.add(db_component)
+            commit(session)
+            session.refresh(db_component)
+            return db_component
+
+    def stamp_state(self, component_id: UUID, **fields: Any) -> Component:
+        """Merge machine-owned state fields onto a component row, by id.
+
+        The session-owning counterpart to :meth:`Component.stamp_state`, for
+        callers that hold an id rather than a row (the run executor applying
+        operation state effects).
+
+        Args:
+            component_id: The component UUID.
+            **fields: State fields to set, merged over the existing payload.
+
+        Returns:
+            The updated component row.
+        """
+        with session_scope(self._engine) as session:
+            db_component = self._load_component(session, component_id)
+            db_component.stamp_state(**fields)
+            session.add(db_component)
+            commit(session)
+            session.refresh(db_component)
+            return db_component
+
     # -- Kind semantics --------------------------------------------------------
 
     def _apply_config(self, db_component: Component, config: dict[str, Any] | None, encrypted: bool | None) -> None:

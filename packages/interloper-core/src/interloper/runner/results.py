@@ -5,9 +5,12 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from interloper.partitioning.base import Partition, PartitionWindow
+
+if TYPE_CHECKING:
+    from interloper.operation.base import OperationResult
 
 
 class ExecutionStatus(str, Enum):
@@ -32,7 +35,14 @@ _TERMINAL_STATUSES = frozenset({
 
 @dataclass
 class AssetExecutionInfo:
-    """Execution information for a single asset."""
+    """Execution information for a single asset.
+
+    ``effects`` carries the executed operation's
+    :class:`~interloper.operation.base.OperationResult` — the config and
+    state fields the platform envelope persists after the run. ``None``
+    until the node reaches a terminal state, and for skipped or canceled
+    nodes, which never executed.
+    """
 
     asset_id: str
     asset_key: str
@@ -41,6 +51,7 @@ class AssetExecutionInfo:
     end_time: dt.datetime | None = None
     error: str | None = None
     traceback: str | None = None
+    effects: OperationResult | None = None
 
     @property
     def execution_time(self) -> float | None:

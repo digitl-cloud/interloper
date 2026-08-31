@@ -1,4 +1,4 @@
-"""Materialisation runs, the backfills that batch them, and the events they emit."""
+"""Operation runs, the backfills that batch them, and the events they emit."""
 
 from datetime import datetime
 from typing import Any, ClassVar
@@ -40,10 +40,13 @@ class Backfill(SQLModel, table=True):
 
 
 class Run(SQLModel, table=True):
-    """A single materialization attempt.
+    """A single execution of a component's operation.
 
     ``quota_reserved_at`` is set when a dispatch-time quota reservation was
     taken; its month tells settlement which usage period to release.
+    ``billable`` records the operation's declaration at creation time, so
+    quota decisions survive the component (``component_id`` nulls on
+    deletion and runs are kept as history).
     """
 
     __tablename__: ClassVar[str] = "runs"
@@ -71,6 +74,7 @@ class Run(SQLModel, table=True):
     )
     attempt: int = 1
     retry_scope: str | None = None
+    billable: bool = True
     quota_reserved_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))

@@ -216,7 +216,8 @@ class QuotaStore:
 
         The authoritative run gate: on success the run is stamped with
         ``quota_reserved_at`` so settlement releases the right period.
-        Unlimited orgs are admitted without touching the ledger.
+        Unlimited orgs are admitted without touching the ledger, and so are
+        non-billable runs: platform plumbing is never billed at either end.
 
         Args:
             db_run: The run being dispatched; stamped in place on success.
@@ -228,6 +229,8 @@ class QuotaStore:
             TypeError: If the run quota key is registered as something other
                 than a consumption quota.
         """
+        if not db_run.billable:
+            return True
         with session_scope(self._engine) as session:
             definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
             if not isinstance(definition, ConsumptionQuota):

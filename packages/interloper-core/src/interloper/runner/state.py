@@ -10,8 +10,8 @@ from interloper.events import Event, EventBus, EventType
 from interloper.runner.results import AssetExecutionInfo, ExecutionStatus
 
 if TYPE_CHECKING:
-    from interloper.asset.base import Asset
     from interloper.dag.base import DAG
+    from interloper.operation.base import Operation, OperationResult
     from interloper.partitioning.base import Partition, PartitionWindow
 
 
@@ -79,27 +79,27 @@ class RunState:
         return None
 
     @property
-    def queued_assets(self) -> list[Asset]:
+    def queued_assets(self) -> list[Operation]:
         """List of assets waiting to be scheduled."""
         return self._assets_with_status(ExecutionStatus.QUEUED)
 
     @property
-    def ready_assets(self) -> list[Asset]:
+    def ready_assets(self) -> list[Operation]:
         """List of assets whose dependencies are met and can be executed."""
         return self._assets_with_status(ExecutionStatus.READY)
 
     @property
-    def running_assets(self) -> list[Asset]:
+    def running_assets(self) -> list[Operation]:
         """List of assets currently being executed."""
         return self._assets_with_status(ExecutionStatus.RUNNING)
 
     @property
-    def completed_assets(self) -> list[Asset]:
+    def completed_assets(self) -> list[Operation]:
         """List of assets that completed successfully."""
         return self._assets_with_status(ExecutionStatus.COMPLETED)
 
     @property
-    def failed_assets(self) -> list[Asset]:
+    def failed_assets(self) -> list[Operation]:
         """List of assets that failed."""
         return self._assets_with_status(ExecutionStatus.FAILED)
 
@@ -122,11 +122,11 @@ class RunState:
             metadata={
                 **self.metadata,
                 "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
-                "message": f"Run started ({len(self.dag.assets)} assets)",
+                "message": f"Run started ({len(self.dag.operations)} assets)",
             },
         )
 
-        for asset in self.dag.assets:
+        for asset in self.dag.operations:
             info = self.asset_executions[asset.id]
             if info.status in (ExecutionStatus.QUEUED, ExecutionStatus.READY):
                 self._emit_asset_event(
@@ -157,7 +157,7 @@ class RunState:
 
         event_type = EventType.RUN_COMPLETED if status == ExecutionStatus.COMPLETED else EventType.RUN_FAILED
         if status == ExecutionStatus.COMPLETED:
-            message = f"Run completed ({len(self.completed_assets)}/{len(self.dag.assets)} succeeded)"
+            message = f"Run completed ({len(self.completed_assets)}/{len(self.dag.operations)} succeeded)"
         else:
             message = f"Run failed: {error}" if error else "Run failed"
 
@@ -183,7 +183,7 @@ class RunState:
 
     # -- Asset state transitions -----------------------------------------------
 
-    def mark_asset_running(self, asset: Asset, *, emit: bool = True) -> None:
+    def mark_asset_running(self, asset: Operation, *, emit: bool = True) -> None:
         """Transition an asset to RUNNING.
 
         Args:
@@ -203,7 +203,9 @@ class RunState:
                 },
             )
 
-    def mark_asset_completed(self, asset: Asset, *, emit: bool = True) -> None:
+    def mark_asset_completed(
+        self, asset: Operation, *, emit: bool = True, effects: OperationResult | None = None
+    ) -> None:
         """Transition an asset to COMPLETED and promote ready dependents.
 
         Args:
@@ -211,8 +213,11 @@ class RunState:
             emit: Emit ``ASSET_COMPLETED`` on the EventBus.  Set to
                 ``False`` for cross-process runners where the child
                 process emits the event itself.
+            effects: The operation's returned effects, recorded on the
+                execution info for the platform to persist.
         """
         self.asset_executions[asset.id].mark_completed()
+        self.asset_executions[asset.id].effects = effects
         self._promote_dependents(asset.id)
 
         if emit:
@@ -224,7 +229,7 @@ class RunState:
                 },
             )
 
-    def mark_asset_canceled(self, asset: Asset, *, emit: bool = True) -> None:
+    def mark_asset_canceled(self, asset: Operation, *, emit: bool = True) -> None:
         """Transition an asset to CANCELED.
 
         Args:
@@ -246,11 +251,12 @@ class RunState:
 
     def mark_asset_failed(
         self,
-        asset: Asset,
+        asset: Operation,
         error: str,
         tb: str | None = None,
         *,
         emit: bool = True,
+        effects: OperationResult | None = None,
     ) -> None:
         """Transition an asset to FAILED and cancel downstream dependents.
 
@@ -261,8 +267,11 @@ class RunState:
             emit: Emit ``ASSET_FAILED`` and ``ASSET_CANCELED`` events on
                 the EventBus.  Set to ``False`` for cross-process runners
                 where the child process emits the events itself.
+            effects: The operation's failure effects, recorded on the
+                execution info for the platform to persist.
         """
         self.asset_executions[asset.id].mark_failed(error, tb=tb)
+        self.asset_executions[asset.id].effects = effects
         canceled = self._propagate_failure(asset.id)
 
         if emit:
@@ -276,12 +285,12 @@ class RunState:
             self._emit_asset_event(EventType.ASSET_FAILED, metadata)
 
             for key in canceled:
-                canceled_asset = self.dag.asset_map[key]
+                canceled_asset = self.dag.operation_map[key]
                 self._emit_asset_event(
                     EventType.ASSET_CANCELED,
                     {
                         **self._asset_event_metadata(canceled_asset),
-                        "message": f"Asset '{type(self.dag.asset_map[key]).key}' canceled (upstream failure)",
+                        "message": f"Asset '{type(self.dag.operation_map[key]).key}' canceled (upstream failure)",
                     },
                 )
 
@@ -289,7 +298,7 @@ class RunState:
 
     def _initialize_assets(self) -> None:
         """Initialize all assets as QUEUED, then promote root assets to READY."""
-        for asset in self.dag.assets:
+        for asset in self.dag.operations:
             status = ExecutionStatus.SKIPPED if not asset.materializable else ExecutionStatus.QUEUED
             self.asset_executions[asset.id] = AssetExecutionInfo(
                 asset_id=asset.id,
@@ -298,7 +307,7 @@ class RunState:
             )
 
         # Promote assets whose predecessors are all skipped (or empty)
-        for asset in self.dag.assets:
+        for asset in self.dag.operations:
             info = self.asset_executions[asset.id]
             if info.status != ExecutionStatus.QUEUED:
                 continue
@@ -306,7 +315,7 @@ class RunState:
             if all(self.asset_executions[p].status == ExecutionStatus.SKIPPED for p in preds):
                 info.status = ExecutionStatus.READY
 
-    def _assets_with_status(self, status: ExecutionStatus) -> list[Asset]:
+    def _assets_with_status(self, status: ExecutionStatus) -> list[Operation]:
         """Return all assets matching the given execution status.
 
         Args:
@@ -315,9 +324,9 @@ class RunState:
         Returns:
             Assets whose current status equals ``status``, in DAG order.
         """
-        return [asset for asset in self.dag.assets if self.asset_executions[asset.id].status == status]
+        return [asset for asset in self.dag.operations if self.asset_executions[asset.id].status == status]
 
-    def _asset_event_metadata(self, asset: Asset) -> dict[str, Any]:
+    def _asset_event_metadata(self, asset: Operation) -> dict[str, Any]:
         """Build event metadata for an asset state transition.
 
         Args:

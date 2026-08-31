@@ -249,9 +249,9 @@ class Runner(Serializable):
         """
         if partition_or_window is None:
             partitioned = sorted(
-                asset.key
-                for asset in dag.assets
-                if asset.materializable and asset.partitioning is not None
+                operation.key
+                for operation in dag.operations
+                if operation.materializable and operation.partitioning is not None
             )
             if partitioned:
                 raise PartitionError(
@@ -262,9 +262,11 @@ class Runner(Serializable):
 
         if isinstance(partition_or_window, PartitionWindow):
             unsupported = [
-                asset.key
-                for asset in dag.assets
-                if asset.materializable and asset.partitioning is not None and not asset.partitioning.allow_window
+                operation.key
+                for operation in dag.operations
+                if operation.materializable
+                and operation.partitioning is not None
+                and not operation.partitioning.allow_window
             ]
             if unsupported:
                 raise PartitionError(
@@ -272,6 +274,6 @@ class Runner(Serializable):
                     f"Unsupported assets: {sorted(unsupported)}."
                 )
 
-        for asset in dag.assets:
-            if asset.materializable and isinstance(asset.partitioning, TimePartitionConfig):
-                asset._validate_time_partitioning(asset.partitioning, partition_or_window)
+        for operation in dag.operations:
+            if operation.materializable and isinstance(operation.partitioning, TimePartitionConfig):
+                operation._validate_time_partitioning(operation.partitioning, partition_or_window)
