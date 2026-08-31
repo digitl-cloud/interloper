@@ -4,6 +4,7 @@ from interloper_scheduler.hooks import HookController
 from interloper_scheduler.launcher import LAUNCHERS, InProcessLauncher, Launcher
 from interloper_scheduler.queue import QueueController
 from interloper_scheduler.reaper import Reaper
+from interloper_scheduler.renewal import RenewalController
 
 __all__ = [
     "CronController",
@@ -11,6 +12,7 @@ __all__ = [
     "InProcessLauncher",
     "Launcher",
     "QueueController",
+    "RenewalController",
     "Reaper",
     "RunExecutor",
     "LAUNCHERS",

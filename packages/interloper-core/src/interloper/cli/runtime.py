@@ -164,6 +164,7 @@ class Services:
         self._api_server: Any = None
         self._cron_controller: Any = None
         self._hook_controller: Any = None
+        self._renewal_controller: Any = None
         self._queue_controller: Any = None
         self._reaper: Any = None
         self._nuxt_process: subprocess.Popen[bytes] | None = None
@@ -235,10 +236,11 @@ class Services:
         self._api_server = uvicorn.Server(uvi_config)
 
     def _build_cron(self) -> None:
-        """Build the cron and hook controllers."""
-        # The hook evaluator rides the cron service: both are cluster singletons
-        # that turn declarative component intent into runs/side effects.
-        from interloper_scheduler import CronController, HookController
+        """Build the cron, hook and renewal controllers."""
+        # Hook evaluation and credential renewal ride the cron service: all
+        # three are cluster singletons that turn declarative component intent
+        # into runs/side effects.
+        from interloper_scheduler import CronController, HookController, RenewalController
 
         self._cron_controller = CronController(
             store=self.store,
@@ -247,6 +249,13 @@ class Services:
             batch_size=self.settings.cron.batch_size,
         )
         self._hook_controller = HookController(store=self.store)
+        if self.settings.renewal.enabled:
+            self._renewal_controller = RenewalController(
+                catalog=self.catalog,
+                store=self.store,
+                reconcile_interval=self.settings.renewal.reconcile_interval,
+                batch_size=self.settings.renewal.batch_size,
+            )
 
     def _build_launcher_services(self) -> None:
         """Build the launcher-backed services (queue worker and reaper) that are enabled."""
@@ -307,6 +316,8 @@ class Services:
             self._threads.append(threading.Thread(target=self._cron_controller.start, name="cron", daemon=True))
         if self._hook_controller:
             self._threads.append(threading.Thread(target=self._hook_controller.start, name="hooks", daemon=True))
+        if self._renewal_controller:
+            self._threads.append(threading.Thread(target=self._renewal_controller.start, name="renewal", daemon=True))
         if self._queue_controller:
             self._threads.append(threading.Thread(target=self._queue_controller.start, name="worker", daemon=True))
         if self._reaper:
@@ -398,6 +409,8 @@ class Services:
             self._cron_controller.stop()
         if self._hook_controller:
             self._hook_controller.stop()
+        if self._renewal_controller:
+            self._renewal_controller.stop()
         if self._queue_controller:
             self._queue_controller.stop()
         if self._reaper:

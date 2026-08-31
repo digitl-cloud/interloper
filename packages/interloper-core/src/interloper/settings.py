@@ -232,6 +232,16 @@ class TelemetrySettings(BaseSettings):
     metric_export_interval: int = 60
 
 
+class RenewalSettings(BaseSettings):
+    """Renewal controller settings (connection credential renewal; singleton)."""
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RENEWAL_")
+
+    enabled: bool = True
+    reconcile_interval: int = 60
+    batch_size: int = 50
+
+
 class ReaperSettings(BaseSettings):
     """Reaper settings (timed-out run cleanup; singleton)."""
 
@@ -271,6 +281,7 @@ class AppSettings(BaseSettings):
     auth: AuthSettings = Field(default_factory=AuthSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     cron: CronSettings = Field(default_factory=CronSettings)
+    renewal: RenewalSettings = Field(default_factory=RenewalSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     mcp: McpSettings = Field(default_factory=McpSettings)

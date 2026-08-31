@@ -42,7 +42,10 @@ componentsStore.fetchAll()
 componentsStore.fetchRelations()
 watch(kind, () => componentsStore.fetchAll([kind.value]))
 
-const columns: TableColumn<ComponentRecord>[] = [
+// State columns (e.g. a connection's renewal timestamps) come from the
+// kind's state schema; every definition of a kind shares its anchor's state
+// model, so the first one stands in for them all.
+const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     { accessorKey: 'name', header: 'Name' },
     {
         accessorKey: 'key',
@@ -52,12 +55,13 @@ const columns: TableColumn<ComponentRecord>[] = [
             typeName(row.original.key),
         ]),
     },
+    ...stateSchemaColumns(definitions.value[0]),
     {
         accessorKey: 'created_at',
         header: 'Created',
         accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '-',
     },
-]
+])
 
 const toast = useToast()
 

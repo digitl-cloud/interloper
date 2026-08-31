@@ -1,12 +1,15 @@
 """Tests for Connection, OAuthConnection and RefreshTokenOAuthConnection."""
 
+import datetime as dt
 from typing import ClassVar
 
+import httpx
 import pytest
 from pydantic_settings import SettingsConfigDict
 
-from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuthConnection
+from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuthConnection, Renewal
 from interloper.oauth import OAuthConfig
+from interloper.operation import OperationContext
 from interloper.resource import InputField, SecretField
 from interloper.utils.concurrency import invoke
 
@@ -179,3 +182,174 @@ class TestConnectionCheck:
                 return True
 
         assert Checked.definition().checkable is True
+
+
+def _mock_transport(monkeypatch: pytest.MonkeyPatch, handler) -> None:
+    """Route the AsyncClient the generic renew constructs through a mock transport."""
+    real = httpx.AsyncClient
+
+    def factory(**kwargs):
+        kwargs.pop("timeout", None)
+        kwargs.pop("follow_redirects", None)
+        return real(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
+
+
+class TestConnectionRenewal:
+    def test_base_renew_not_implemented(self):
+        class Plain(Connection):
+            host: str = "localhost"
+
+        assert Plain.renewable() is False
+        definition = Plain.definition()
+        assert definition.renewable is False
+        # An inert toggle is dropped from the form schema.
+        assert "auto_renew" not in definition.config_schema.get("properties", {})
+        with pytest.raises(NotImplementedError):
+            Plain().renew()
+
+    def test_renew_override_advertises_renewable(self):
+        class Renewed(Connection):
+            def renew(self) -> Renewal:
+                return Renewal()
+
+        assert Renewed.renewable() is True
+        definition = Renewed.definition()
+        assert definition.renewable is True
+        assert "auto_renew" in definition.config_schema["properties"]
+        assert Renewed().auto_renew is True
+
+    async def test_generic_refresh_grant_rotates(self, monkeypatch: pytest.MonkeyPatch):
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(
+                200, json={"access_token": "a", "refresh_token": "NEW", "refresh_token_expires_in": 1000}
+            )
+
+        _mock_transport(monkeypatch, handler)
+
+        class LinkedinConn(RefreshTokenOAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("linkedin")
+            model_config = SettingsConfigDict(env_prefix="linkedin_conn_renew_")
+
+        conn = LinkedinConn(client_id="cid", client_secret="cs", refresh_token="OLD")
+        renewal = await conn.renew()
+
+        assert renewal.fields == {"refresh_token": "NEW"}
+        assert renewal.expires_in == 1000
+        (request,) = requests
+        assert str(request.url) == "https://www.linkedin.com/oauth/v2/accessToken"
+        body = request.content.decode()
+        assert "grant_type=refresh_token" in body
+        assert "refresh_token=OLD" in body
+
+    async def test_generic_refresh_grant_without_rotation(self, monkeypatch: pytest.MonkeyPatch):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"access_token": "a", "refresh_token": "OLD"})
+
+        _mock_transport(monkeypatch, handler)
+
+        class LinkedinConn(RefreshTokenOAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("linkedin")
+            model_config = SettingsConfigDict(env_prefix="linkedin_conn_norot_")
+
+        renewal = await LinkedinConn(client_id="cid", client_secret="cs", refresh_token="OLD").renew()
+
+        assert renewal.fields == {}
+        assert renewal.expires_in is None
+
+    async def test_generic_refresh_grant_basic_auth(self, monkeypatch: pytest.MonkeyPatch):
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(200, json={"access_token": "a"})
+
+        _mock_transport(monkeypatch, handler)
+
+        class PinterestConn(RefreshTokenOAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("pinterest")
+            model_config = SettingsConfigDict(env_prefix="pinterest_conn_renew_")
+
+        await PinterestConn(client_id="cid", client_secret="cs", refresh_token="OLD").renew()
+
+        (request,) = requests
+        assert request.headers["Authorization"].startswith("Basic ")
+
+
+class TestRenewalFailureMessage:
+    def test_http_status_error_hides_the_url(self):
+        # Token exchanges carry credentials as query params; the URL must not
+        # survive into the persisted message.
+        request = httpx.Request("GET", "https://provider/exchange?client_secret=SECRET")
+        error = httpx.HTTPStatusError("boom", request=request, response=httpx.Response(400, request=request))
+
+        message = Connection.renewal_failure_message(error)
+
+        assert message == "The provider rejected the renewal (HTTP 400)."
+        assert "SECRET" not in message
+
+    def test_network_errors_collapse_to_category(self):
+        assert Connection.renewal_failure_message(httpx.ConnectTimeout("t")) == "The renewal timed out."
+        assert Connection.renewal_failure_message(httpx.ConnectError("c")) == "Network error during renewal."
+
+    def test_other_errors_format_through_format_exception(self):
+        assert Connection.renewal_failure_message(ValueError("boom")) == "ValueError: boom"
+
+
+class TestConnectionOperation:
+    """The operation template over ``renew``: effects in, effects out."""
+
+    def test_renewal_runs_are_not_billable(self):
+        assert Connection.billable is False
+
+    def test_renewal_failures_never_attach_tracebacks(self):
+        # Raw provider errors embed credentials in URLs; the runner keeps
+        # the traceback out of the failure event for this operation.
+        assert Connection.capture_traceback is False
+
+    async def test_execute_returns_rotation_and_schedule_effects(self, monkeypatch: pytest.MonkeyPatch):
+        class Renewed(Connection):
+            def renew(self) -> Renewal:
+                return Renewal(fields={"refresh_token": "NEW"}, expires_in=7200)
+
+        result = await Renewed().execute(OperationContext())
+
+        assert result.error is None
+        assert result.config == {"refresh_token": "NEW"}
+        assert result.state["last_renewal_error"] is None
+        due = dt.datetime.fromisoformat(result.state["next_renewal_at"])
+        # expires_in/2 with the reported 7200s validity.
+        assert dt.timedelta(minutes=55) < due - dt.datetime.now(dt.timezone.utc) < dt.timedelta(minutes=65)
+
+    async def test_execute_falls_back_to_the_class_interval(self):
+        class Renewed(Connection):
+            renewal_interval: ClassVar[dt.timedelta] = dt.timedelta(hours=6)
+
+            def renew(self) -> Renewal:
+                return Renewal()
+
+        result = await Renewed().execute(OperationContext())
+
+        assert result.config == {}
+        due = dt.datetime.fromisoformat(result.state["next_renewal_at"])
+        assert dt.timedelta(hours=5) < due - dt.datetime.now(dt.timezone.utc) <= dt.timedelta(hours=6)
+
+    def test_failure_stamps_the_curated_message_and_a_retry_slot(self):
+        class Renewed(Connection):
+            def renew(self) -> Renewal:
+                return Renewal()
+
+        request = httpx.Request("GET", "https://provider/exchange?client_secret=SECRET")
+        error = httpx.HTTPStatusError("boom", request=request, response=httpx.Response(400, request=request))
+
+        failure = Renewed().failure(error)
+
+        assert failure.error == "The provider rejected the renewal (HTTP 400)."
+        assert failure.state["last_renewal_error"] == failure.error
+        assert "SECRET" not in str(failure.state)
+        retry_at = dt.datetime.fromisoformat(failure.state["next_renewal_at"])
+        assert retry_at > dt.datetime.now(dt.timezone.utc)

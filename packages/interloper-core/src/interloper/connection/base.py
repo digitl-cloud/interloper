@@ -2,16 +2,63 @@
 
 from __future__ import annotations
 
+import asyncio
+import datetime as dt
 import os
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
-from pydantic import model_validator
+import httpx
+from pydantic import BaseModel, Field, model_validator
 
-from interloper.oauth import OAuthAppCredentials, OAuthConfig
+from interloper.errors import format_exception
+from interloper.oauth import PROVIDERS, OAuthAppCredentials, OAuthConfig
+from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.resource import InputField, Resource, ResourceDefinition, SecretField
+from interloper.utils.concurrency import invoke
+
+#: Hard cap on one credential exchange — a renewal must never hold a run pod hostage.
+_RENEWAL_TIMEOUT = 60
+
+#: How long after a failed renewal the connection becomes due again.
+_RENEWAL_RETRY_INTERVAL = dt.timedelta(hours=1)
 
 
-class Connection(Resource):
+class ConnectionState(BaseModel):
+    """Machine-owned connection state (see ``Component.state_model``).
+
+    Written by the renewal pipeline: the renewal controller stamps a
+    provisional ``next_renewal_at`` when it enqueues a renewal run, and the
+    run overwrites it with the real next due time on completion. Timestamps
+    are canonical timezone-aware ISO-8601 strings, compared lexicographically
+    in SQL like ``JobState``'s. ``last_run_at`` is stamped by run completion
+    on every run's component — plumbing, hidden from state columns.
+    """
+
+    next_renewal_at: str | None = Field(default=None, title="Next renewal")
+    last_renewed_at: str | None = Field(default=None, title="Last renewed")
+    last_renewal_error: str | None = Field(default=None, title="Renewal error")
+    last_run_at: str | None = Field(default=None, json_schema_extra={"x-hidden": True})
+
+
+class Renewal(BaseModel):
+    """The outcome of a successful :meth:`Connection.renew`.
+
+    ``fields`` maps connection field names to their renewed values — the
+    platform persists them into the stored (encrypted) config, so a rotated
+    or re-issued credential replaces the aging one. Empty means the renewal
+    succeeded but nothing needs persisting (a pure keep-alive).
+
+    ``expires_in`` is the renewed credential's validity in seconds when the
+    provider reports one; the platform schedules the next renewal from it
+    (with a safety margin), falling back to the class's
+    ``renewal_interval`` when absent.
+    """
+
+    fields: dict[str, str] = Field(default_factory=dict)
+    expires_in: int | None = None
+
+
+class Connection(Resource, Operation):
     """A resource for database/service connection credentials.
 
     Like every ``Resource``, connection values can be loaded from
@@ -33,6 +80,16 @@ class Connection(Resource):
 
     kind: ClassVar[str] = "connection"
     tags: ClassVar[list[str]] = []
+    state_model: ClassVar[type[BaseModel] | None] = ConnectionState
+    billable: ClassVar[bool] = False
+    capture_traceback: ClassVar[bool] = False
+    renewal_interval: ClassVar[dt.timedelta] = dt.timedelta(days=1)
+
+    auto_renew: bool = Field(
+        default=True,
+        title="Automatic renewal",
+        description="Renew this connection's credentials on a schedule",
+    )
 
     def check(self) -> bool:
         """Verify this connection with a lightweight authenticated call.
@@ -60,15 +117,123 @@ class Connection(Resource):
         """
         return cls.check is not Connection.check
 
+    def renew(self) -> Renewal:
+        """Renew this connection's credentials before they age out.
+
+        Override in a subclass (sync or ``async``) to exchange the stored
+        credential for a fresh one — a refresh-token grant, a long-lived
+        token extension, whatever the provider's mechanism is. Same
+        execution contract as :meth:`check`: lightweight HTTP (``httpx``),
+        never a heavy provider SDK.
+
+        The renewal pipeline persists the returned :class:`Renewal.fields`
+        into the stored config and schedules the next renewal; a raised
+        exception marks the renewal failed (surfaced on the connection's
+        state), typically meaning the credential is dead and a human must
+        re-consent.
+        """
+        raise NotImplementedError
+
     @classmethod
-    def definition(cls) -> ResourceDefinition:
-        """Advertise :meth:`check` support so UIs can offer a test step.
+    def renewable(cls) -> bool:
+        """Whether this connection class implements :meth:`renew`.
 
         Returns:
-            The resource definition with ``checkable`` set.
+            True when the class overrides the base hook.
+        """
+        return cls.renew is not Connection.renew
+
+    @staticmethod
+    def renewal_failure_message(error: Exception) -> str:
+        """Describe a failed renewal in terms that are safe to persist.
+
+        Provider token exchanges carry credentials in URLs and bodies, and
+        httpx error strings embed the request URL — so raw messages must
+        never reach the connection's state or the run's error event.
+        HTTP-layer failures collapse to their category; anything else formats
+        through :func:`~interloper.errors.format_exception` (which already
+        strips pydantic input values).
+
+        Args:
+            error: The exception :meth:`renew` raised.
+
+        Returns:
+            A short, curated message.
+        """
+        if isinstance(error, httpx.HTTPStatusError):
+            return f"The provider rejected the renewal (HTTP {error.response.status_code})."
+        if isinstance(error, (httpx.TimeoutException, TimeoutError, asyncio.TimeoutError)):
+            return "The renewal timed out."
+        if isinstance(error, httpx.TransportError):
+            return "Network error during renewal."
+        return format_exception(error)
+
+    async def execute(self, context: OperationContext) -> OperationResult:
+        """Renew this connection's credentials: the connection's operation.
+
+        The template over :meth:`renew`: caps the exchange at
+        ``_RENEWAL_TIMEOUT``, returns any rotated credential fields as
+        config effects, and stamps the next due time — half the reported
+        validity when the provider gives one (floored at 15 minutes), the
+        class's ``renewal_interval`` otherwise.
+
+        Args:
+            context: The facts this execution is scoped to, unused — a
+                renewal needs nothing beyond the connection itself.
+
+        Returns:
+            The renewal's effects.
+        """
+        renewal = cast(Renewal, await asyncio.wait_for(invoke(self.renew), timeout=_RENEWAL_TIMEOUT))
+        now = dt.datetime.now(dt.timezone.utc)
+        if renewal.expires_in:
+            due = now + max(dt.timedelta(seconds=renewal.expires_in / 2), dt.timedelta(minutes=15))
+        else:
+            due = now + type(self).renewal_interval
+        return OperationResult(
+            config=dict(renewal.fields),
+            state={
+                "next_renewal_at": due.isoformat(),
+                "last_renewed_at": now.isoformat(),
+                "last_renewal_error": None,
+            },
+        )
+
+    def failure(self, error: Exception) -> OperationResult:
+        """Describe a failed renewal: a curated message plus a retry slot.
+
+        The message comes from :meth:`renewal_failure_message`, so raw
+        provider errors (which embed credentials in URLs) never reach the
+        connection's state or the run's failure event; the retry slot makes
+        the connection due again without waiting a full interval.
+
+        Args:
+            error: The exception :meth:`execute` raised.
+
+        Returns:
+            A failed result stamping the curated error and the retry slot.
+        """
+        message = self.renewal_failure_message(error)
+        retry_at = dt.datetime.now(dt.timezone.utc) + _RENEWAL_RETRY_INTERVAL
+        return OperationResult(
+            error=message,
+            state={"next_renewal_at": retry_at.isoformat(), "last_renewal_error": message},
+        )
+
+    @classmethod
+    def definition(cls) -> ResourceDefinition:
+        """Advertise :meth:`check` / :meth:`renew` support so UIs can offer them.
+
+        Returns:
+            The resource definition with ``checkable`` and ``renewable`` set.
+            ``auto_renew`` is dropped from the config schema when the class
+            has nothing to renew — the toggle would be inert.
         """
         definition = super().definition()
         definition.checkable = cls.checkable()
+        definition.renewable = cls.renewable()
+        if not definition.renewable:
+            definition.config_schema.get("properties", {}).pop("auto_renew", None)
         return definition
 
 
@@ -200,3 +365,47 @@ class RefreshTokenOAuthConnection(OAuthConnection):
             cls.resolve_field(data, "client_id", cls.env_credential("CLIENT_ID"))
             cls.resolve_field(data, "client_secret", cls.env_credential("CLIENT_SECRET"))
         return data
+
+    async def renew(self) -> Renewal:
+        """Exercise the refresh-token grant against the provider's token endpoint.
+
+        One implementation covers every standard-trio connection: the request
+        shape (endpoint, encoding, basic auth) comes from the registered
+        :class:`~interloper.oauth.base.OAuthProvider`, exactly like the
+        sign-in code exchange. Renewing keeps inactivity-expiring refresh
+        tokens alive, persists a rotated one when the provider issues it, and
+        surfaces a dead credential as a failure instead of a later run error.
+
+        Subclasses whose provider has no refresh grant (e.g. the Facebook
+        family, whose ``refresh_token`` field holds a long-lived access
+        token) must override this with the provider's own renewal exchange.
+
+        Returns:
+            The rotated ``refresh_token`` when one was issued, and the
+            refresh token's own validity when the provider reports it
+            (``refresh_token_expires_in`` — ``expires_in`` describes the
+            access token, which is not stored).
+        """
+        if not isinstance(self.oauth, OAuthConfig):
+            raise NotImplementedError(f"{type(self).__name__} declares no OAuth config to renew against")
+        spec = PROVIDERS[self.oauth.provider]
+
+        params = {
+            "grant_type": "refresh_token",
+            "refresh_token": self.refresh_token,
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+        }
+        auth = (self.client_id, self.client_secret) if spec.token_basic_auth else None
+
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True, auth=auth) as client:
+            if spec.token_encoding == "form":
+                response = await client.post(spec.token_url, data=params)
+            else:
+                response = await client.post(spec.token_url, json=params)
+        response.raise_for_status()
+        data = response.json()
+
+        rotated = data.get("refresh_token")
+        fields = {"refresh_token": rotated} if rotated and rotated != self.refresh_token else {}
+        return Renewal(fields=fields, expires_in=data.get("refresh_token_expires_in"))
