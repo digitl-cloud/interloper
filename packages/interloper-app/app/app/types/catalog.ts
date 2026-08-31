@@ -104,14 +104,16 @@ function humanizeKey(key: string): string {
     return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
-/** Columns for a definition's `state_schema` properties. `_at` keys are datetimes. */
+/** Columns for a definition's `state_schema` properties. `_at` keys are datetimes; `x-hidden` fields are plumbing. */
 export function stateColumns(defn: ComponentDefinition): StateColumn[] {
     const properties = (defn.state_schema?.properties ?? {}) as Record<string, JsonSchemaProperty>
-    return Object.entries(properties).map(([key, prop]) => ({
-        key,
-        label: prop.title ?? humanizeKey(key),
-        format: key.endsWith('_at') ? 'datetime' as const : 'text' as const,
-    }))
+    return Object.entries(properties)
+        .filter(([, prop]) => !(prop as Record<string, unknown>)['x-hidden'])
+        .map(([key, prop]) => ({
+            key,
+            label: prop.title ?? humanizeKey(key),
+            format: key.endsWith('_at') ? 'datetime' as const : 'text' as const,
+        }))
 }
 
 // ─── Qualified keys ──────────────────────────────────────────────────

@@ -10,7 +10,14 @@ from interloper.component import (
     RelationSlot,
 )
 from interloper.config import Config, config
-from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuthConnection, connection
+from interloper.connection import (
+    Connection,
+    ConnectionState,
+    OAuthConnection,
+    RefreshTokenOAuthConnection,
+    Renewal,
+    connection,
+)
 from interloper.dag import DAG
 from interloper.destination import (
     CSVDestination,
@@ -89,6 +96,7 @@ __all__ = [
     "ComponentDefinition",
     "Config",
     "Connection",
+    "ConnectionState",
     "CronField",
     "CronJob",
     "Destination",
@@ -136,6 +144,7 @@ __all__ = [
     "Registry",
     "RelationDefinition",
     "RelationSlot",
+    "Renewal",
     "Resource",
     "ResourceDefinition",
     "ResourceRef",

@@ -1,5 +1,6 @@
 from functools import cached_property
 
+import httpx
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -82,3 +83,29 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
         """
         await self.accounts()
         return True
+
+    async def renew(self) -> il.Renewal:
+        """Exchange the long-lived access token for a fresh one.
+
+        Facebook has no refresh-token grant (the ``refresh_token`` field
+        holds a long-lived access token): renewal is the
+        ``fb_exchange_token`` grant, which issues a new long-lived token
+        as long as the current one is still valid.
+
+        Returns:
+            The fresh token (into ``refresh_token``) and its validity when
+            reported.
+        """
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{constants.BASE_URL}/oauth/access_token",
+                params={
+                    "grant_type": "fb_exchange_token",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "fb_exchange_token": self.refresh_token,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+        return il.Renewal(fields={"refresh_token": data["access_token"]}, expires_in=data.get("expires_in"))

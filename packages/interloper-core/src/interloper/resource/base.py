@@ -19,6 +19,7 @@ class ResourceDefinition(ComponentDefinition):
 
     provider: str | None = None
     checkable: bool = False
+    renewable: bool = False
 
 
 class Resource(BaseSettings, Component):
