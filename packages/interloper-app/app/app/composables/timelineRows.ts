@@ -87,6 +87,8 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
 
     return computed(() => {
         const barsByTarget = new Map<string, TimelineBar[]>()
+        // Run-carried identity, for target kinds the components store doesn't hold.
+        const targetNames = new Map<string, string>()
         const orphaned: TimelineBar[] = []
 
         for (const run of toValue(runs)) {
@@ -98,14 +100,15 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
                 ...interval,
                 detail: run.partition_key ?? undefined,
             }
-            const target = run.component_id && componentsStore.byId(run.component_id) ? run.component_id : null
-            if (!target) {
+            if (!run.component_id) {
                 orphaned.push(bar)
                 continue
             }
-            const existing = barsByTarget.get(target)
+            const name = run.component_name ?? run.component_key
+            if (name && !targetNames.has(run.component_id)) targetNames.set(run.component_id, name)
+            const existing = barsByTarget.get(run.component_id)
             if (existing) existing.push(bar)
-            else barsByTarget.set(target, [bar])
+            else barsByTarget.set(run.component_id, [bar])
         }
 
         const jobs = componentsStore.byKind('job')
@@ -122,14 +125,16 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
         const adHocRows: TimelineRow[] = []
         for (const [id, bars] of barsByTarget) {
             if (jobIds.has(id)) continue
-            const component = componentsStore.byId(id)!
-            const names = component.kind === 'asset' ? assetDisplayName.value.get(id) : undefined
+            const component = componentsStore.byId(id)
+            const names = component?.kind === 'asset' ? assetDisplayName.value.get(id) : undefined
             adHocRows.push({
                 id,
-                name: names?.label ?? component.name ?? component.key,
-                icon: component.kind === 'asset'
+                name: names?.label ?? component?.name ?? component?.key ?? targetNames.get(id) ?? id.slice(0, 8),
+                icon: component?.kind === 'asset'
                     ? assetIcon.value.get(id) ?? DEFAULT_ICON
-                    : componentIcon(component.key),
+                    : component
+                        ? componentIcon(component.key)
+                        : DEFAULT_ICON,
                 bars,
             })
         }

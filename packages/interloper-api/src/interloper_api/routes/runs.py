@@ -33,11 +33,21 @@ MAX_EVENTS_PAGE_SIZE = 1000
 
 
 class RunResponse(BaseModel):
-    """Response body for a run."""
+    """Response body for a run.
+
+    The target component's identity is resolved server-side (the row is
+    eagerly joined), so clients never need a second lookup — including for
+    target kinds they do not know about. All three ``component_*`` identity
+    fields are ``None`` exactly when the target was deleted
+    (``component_id`` nulls on deletion).
+    """
 
     id: UUID
     org_id: UUID
     component_id: UUID | None
+    component_kind: str | None = None
+    component_key: str | None = None
+    component_name: str | None = None
     backfill_id: UUID | None
     partition_key: str | None
     status: str
@@ -53,7 +63,7 @@ class RunResponse(BaseModel):
         """Convert a DB Run to a RunResponse.
 
         Args:
-            run: The DB Run row.
+            run: The DB Run row, with its ``target`` relationship loaded.
 
         Returns:
             The response model.
@@ -62,6 +72,9 @@ class RunResponse(BaseModel):
             id=run.id,
             org_id=run.org_id,
             component_id=run.component_id,
+            component_kind=run.target.kind if run.target else None,
+            component_key=run.target.key if run.target else None,
+            component_name=run.target.name if run.target else None,
             backfill_id=run.backfill_id,
             partition_key=run.partition_key,
             status=run.status,

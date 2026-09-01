@@ -13,14 +13,8 @@ const statusFilter = defineModel<string | null>('statusFilter', { default: null 
 
 const stats = useRunStats(toRef(props, 'run'), toRef(props, 'executions'))
 
-const componentsStore = useComponentsStore()
-
-/** Run target (job, source, or asset), resolved from the components store. */
-const targetName = computed(() => {
-    if (!props.run.component_id) return 'Deleted'
-    const target = componentsStore.byId(props.run.component_id)
-    return target ? (target.name ?? target.key) : 'Deleted'
-})
+/** Run target (any workload kind), resolved server-side on the run itself. */
+const targetName = computed(() => targetLabel(props.run))
 
 /** Toggle a status filter; empty buckets aren't selectable (nothing to show). */
 function toggleStatus(bucket: RunStatusBucket) {

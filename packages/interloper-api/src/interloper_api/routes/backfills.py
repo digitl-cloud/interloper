@@ -36,11 +36,19 @@ class BackfillCreateRequest(BaseModel):
 
 
 class BackfillResponse(BaseModel):
-    """Response body for a backfill."""
+    """Response body for a backfill.
+
+    The target component's identity is resolved server-side, same contract
+    as ``RunResponse``: the ``component_*`` identity fields are ``None``
+    exactly when the target was deleted.
+    """
 
     id: UUID
     org_id: UUID
     component_id: UUID | None
+    component_kind: str | None = None
+    component_key: str | None = None
+    component_name: str | None = None
     status: str
     start_key: str
     end_key: str
@@ -56,7 +64,7 @@ class BackfillResponse(BaseModel):
         """Convert a DB Backfill to a BackfillResponse.
 
         Args:
-            backfill: The DB Backfill row.
+            backfill: The DB Backfill row, with its ``target`` relationship loaded.
 
         Returns:
             The response model.
@@ -65,6 +73,9 @@ class BackfillResponse(BaseModel):
             id=backfill.id,
             org_id=backfill.org_id,
             component_id=backfill.component_id,
+            component_kind=backfill.target.kind if backfill.target else None,
+            component_key=backfill.target.key if backfill.target else None,
+            component_name=backfill.target.name if backfill.target else None,
             status=backfill.status,
             start_key=backfill.start_key,
             end_key=backfill.end_key,

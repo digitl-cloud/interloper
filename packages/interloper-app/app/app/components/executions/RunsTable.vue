@@ -7,29 +7,11 @@ const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const runsStore = useRunsStore()
-const componentsStore = useComponentsStore()
 const { runs, loading, total, pageIndex, pageSize } = storeToRefs(runsStore)
 
-/** Reactive map so cell render functions pick up changes. Targets can be jobs, sources, or assets. */
-const targetNameMap = computed(() => {
-    const map = new Map<string, string>()
-    for (const component of componentsStore.components) {
-        map.set(component.id, component.name ?? component.key)
-        for (const child of component.children) map.set(child.id, child.name ?? child.key)
-    }
-    return map
-})
-
 onMounted(async () => {
-    await Promise.all([
-        !loading.value ? runsStore.fetch() : Promise.resolve(),
-        componentsStore.fetchAll(['job', 'source', 'asset']),
-    ])
+    if (!loading.value) await runsStore.fetch()
 })
-
-function targetName(run: Run): string {
-    return targetNameMap.value.get(run.component_id ?? '') ?? 'Deleted'
-}
 
 const columns: TableColumn<Run>[] = [
     {
@@ -42,7 +24,7 @@ const columns: TableColumn<Run>[] = [
         header: 'Target',
         cell: ({ row }) => {
             const run = row.original as Run
-            return h(EntityBadge, { label: targetName(run) })
+            return h(EntityBadge, { label: targetLabel(run) })
         },
     },
     {

@@ -133,6 +133,42 @@ class TestRunTargetOperations:
         run = store.runs.create(_ORG_ID, component_id=target)
         assert run.billable is False
 
+
+class TestTargetResolution:
+    """Runs carry their target component, eagerly joined and deletion-aware."""
+
+    def test_target_is_loaded_with_the_run(self, store: Store):
+        target = _component(store, kind="job")
+        created = store.runs.create(_ORG_ID, component_id=target)
+
+        # Accessed after the store call returns (its session is closed), so
+        # this only works if the join is eager.
+        run = store.runs.get(created.id)
+        assert run.target is not None
+        assert (run.target.kind, run.target.key, run.target.name) == ("job", "job", "job")
+
+        listed = store.runs.list_all(_ORG_ID)
+        assert [r.target.key for r in listed if r.target] == ["job"]
+
+    def test_deleted_target_resolves_to_none(self, store: Store):
+        target = _component(store, kind="job")
+        created = store.runs.create(_ORG_ID, component_id=target)
+
+        # Mirror the FK's ON DELETE SET NULL by hand — SQLite does not
+        # enforce it without the foreign_keys pragma.
+        with Session(store.engine) as session:
+            run_row = session.get(Run, created.id)
+            component = session.get(Component, target)
+            assert run_row is not None and component is not None
+            run_row.component_id = None
+            session.add(run_row)
+            session.delete(component)
+            session.commit()
+
+        run = store.runs.get(created.id)
+        assert run.component_id is None
+        assert run.target is None
+
     def test_retry_copies_the_record(self, store: Store):
         target = _component(store, kind="fake_plumbing")
         run = store.runs.create(_ORG_ID, component_id=target)
