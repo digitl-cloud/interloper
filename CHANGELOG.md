@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.69.1 (2026-09-01)
+
+### Bug Fixes
+
+- **db**: Keep the run target join out of locking queries
+  ([`f9ed48f`](https://github.com/digitl-cloud/interloper/commit/f9ed48f5c064ad4f62a004a701e8b7a3bf4a5ece))
+
+
 ## v0.69.0 (2026-09-01)
 
 ### Bug Fixes
