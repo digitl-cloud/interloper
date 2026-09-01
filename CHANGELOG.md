@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.71.0 (2026-09-01)
+
+### Features
+
+- **app**: Renewal controls on the connection table
+  ([`bb437a4`](https://github.com/digitl-cloud/interloper/commit/bb437a41a557029061fbae09344fc0cd250ee78c))
+
+- **app**: Type icons on run and backfill target badges
+  ([`eb07a82`](https://github.com/digitl-cloud/interloper/commit/eb07a824f707f5aee326f1fca1a10cc569768f36))
+
+
 ## v0.70.0 (2026-09-01)
 
 ### Bug Fixes
