@@ -21,6 +21,7 @@ CRITEO = OAuthProvider(
     key="criteo",
     auth_url="https://consent.criteo.com/request",
     token_url="https://api.criteo.com/oauth2/token",
+    token_encoding="form",
 )
 
 FACEBOOK = OAuthProvider(
