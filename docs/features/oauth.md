@@ -79,11 +79,38 @@ ACME = il.OAuthProvider(
     label="ACME",
     icon="icon:acme",
     token_encoding="form",   # "json" (default) or "form"
-    token_method="post",     # "post" (default) or "get"
 )
 ```
 
-`OAuthProvider.token_params` controls the logical→wire parameter names of the exchange request;
-the `token_params(*omit, **rename)` helper builds it from sensible defaults when a provider uses
-non-standard names (TikTok, for instance, renames `code` to `auth_code` and `client_id` to
-`app_id`).
+The base class speaks plain RFC 6749: the authorization-code and refresh-token
+grants are POSTs to `token_url` with the standard parameters, and `token_encoding` is the one
+knob a plain instance may set. A provider whose dialect deviates — a different method,
+parameter names, an extra parameter, another grant entirely — subclasses and overrides the
+request builders instead:
+
+```py
+import httpx
+
+
+class AcmeProvider(il.OAuthProvider):
+    def refresh_token_request(self, *, client_id, client_secret, refresh_token, scope=None):
+        """ACME requires the scope on refresh grants."""
+        return self._token_request({
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": scope or "",
+        })
+```
+
+The overridable surface is `authorization_code_request`, `refresh_token_request`, and
+`parse_refresh_token_response` — the sign-in exchange and connection renewal both send
+whatever the provider builds, so a quirk lives in exactly one place. Connection renewal is
+derived from these declarations: a connection whose provider has a refresh flow and whose
+`fields` mapping covers the credential roles renews with no renewal code at all (a provider
+without one — TikTok's tokens never expire — sets `supports_refresh = False` and its
+connections derive as non-renewable). The built-ins show the
+patterns: TikTok renames the exchange parameters, Facebook renews through its
+`fb_exchange_token` grant, Microsoft adds the scope to refresh grants, Pinterest adds a
+Basic `Authorization` header.

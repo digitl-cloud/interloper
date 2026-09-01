@@ -33,7 +33,7 @@ from interloper.events import Event, EventBus, EventType
 from interloper.hook import HOOK_EVENT_TYPES, Hook, HookContext, HookState, TriggerHook, WebhookHook
 from interloper.job import CronJob, Job, JobState
 from interloper.normalizer import MaterializationStrategy, Normalizer
-from interloper.oauth import OAuthConfig, OAuthProvider
+from interloper.oauth import OAuthConfig, OAuthProvider, RefreshTokenResponse
 from interloper.operation import Operation, OperationContext, OperationResult, Workload
 from interloper.partitioning import (
     Partition,
@@ -141,6 +141,7 @@ __all__ = [
     "RESTClient",
     "RangePaginator",
     "RefreshTokenOAuthConnection",
+    "RefreshTokenResponse",
     "Registry",
     "RelationDefinition",
     "RelationSlot",

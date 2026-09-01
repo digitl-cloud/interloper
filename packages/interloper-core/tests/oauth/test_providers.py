@@ -1,28 +1,59 @@
-"""Tests for the built-in OAuth provider specs."""
+"""Tests for the built-in provider dialects (``interloper.oauth.providers``)."""
 
-from interloper.oauth import providers
+import json
+import urllib.parse
+
+from interloper.oauth import PROVIDERS, RefreshTokenResponse
 
 
-class TestBuiltinProviders:
-    def test_labels(self):
-        assert providers.LINKEDIN.label == "LinkedIn"
-        assert providers.TIKTOK.label == "TikTok"
-        assert providers.AMAZON.label == "Amazon"
+class TestFacebookDialect:
+    """GET token requests; renewal is the ``fb_exchange_token`` grant."""
 
-    def test_facebook_exchanges_via_get_without_grant_type(self):
-        assert providers.FACEBOOK.token_method == "get"
-        assert "grant_type" not in providers.FACEBOOK.token_params
+    def test_authorization_code_grant_is_a_get_without_grant_type(self):
+        request = PROVIDERS["facebook"].authorization_code_request(
+            code="the-code", redirect_uri="https://cb", client_id="cid", client_secret="cs"
+        )
+        assert request.method == "GET"
+        params = dict(urllib.parse.parse_qsl(request.url.query.decode()))
+        assert params == {"code": "the-code", "redirect_uri": "https://cb", "client_id": "cid", "client_secret": "cs"}
 
-    def test_tiktok_renames_and_omits_params(self):
-        assert providers.TIKTOK.token_params == {
-            "code": "auth_code",
-            "client_id": "app_id",
-            "client_secret": "secret",
+    def test_renewal_is_the_fb_exchange_token_grant(self):
+        request = PROVIDERS["facebook"].refresh_token_request(
+            client_id="app-id", client_secret="app-secret", refresh_token="LONG-LIVED"
+        )
+        assert request.method == "GET"
+        params = dict(urllib.parse.parse_qsl(request.url.query.decode()))
+        assert params == {
+            "grant_type": "fb_exchange_token",
+            "client_id": "app-id",
+            "client_secret": "app-secret",
+            "fb_exchange_token": "LONG-LIVED",
         }
 
-    def test_pinterest_uses_basic_auth(self):
-        assert providers.PINTEREST.token_basic_auth is True
+    def test_fresh_token_arrives_as_access_token(self):
+        parsed = PROVIDERS["facebook"].parse_refresh_token_response({"access_token": "FRESH", "expires_in": 5183944})
+        assert parsed == RefreshTokenResponse(refresh_token="FRESH", expires_in=5183944)
 
-    def test_form_encoded_providers(self):
-        for spec in (providers.LINKEDIN, providers.MICROSOFT, providers.PINTEREST, providers.SNAPCHAT):
-            assert spec.token_encoding == "form"
+
+class TestPinterestDialect:
+    """Client credentials also ride a Basic Authorization header."""
+
+    def test_both_grants_carry_the_basic_header(self):
+        exchange = PROVIDERS["pinterest"].authorization_code_request(
+            code="the-code", redirect_uri="https://cb", client_id="cid", client_secret="cs"
+        )
+        refresh = PROVIDERS["pinterest"].refresh_token_request(client_id="cid", client_secret="cs", refresh_token="OLD")
+        for request in (exchange, refresh):
+            assert request.headers["Authorization"].startswith("Basic ")
+            assert urllib.parse.parse_qs(request.content.decode())["client_id"] == ["cid"]
+
+
+class TestTikTokDialect:
+    """Bespoke parameter names, no ``grant_type`` or ``redirect_uri``."""
+
+    def test_authorization_code_grant_renames_the_parameters(self):
+        request = PROVIDERS["tiktok"].authorization_code_request(
+            code="the-code", redirect_uri="https://cb", client_id="cid", client_secret="cs"
+        )
+        assert request.method == "POST"
+        assert json.loads(request.content) == {"app_id": "cid", "secret": "cs", "auth_code": "the-code"}

@@ -1,15 +1,16 @@
-"""Tests for the OAuth provider registry."""
+"""Tests for the OAuth provider base dialect and the provider registry."""
 
+import json
+import urllib.parse
 from typing import ClassVar
 
 import pytest
 
 from interloper.oauth import (
-    DEFAULT_TOKEN_PARAMS,
     PROVIDERS,
     OAuthAppCredentials,
     OAuthProvider,
-    token_params,
+    RefreshTokenResponse,
 )
 
 
@@ -49,13 +50,52 @@ class TestOAuthProvider:
         spec = OAuthProvider(key="acme", auth_url="https://a", token_url="https://t", label="ACME Corp")
         assert spec.label == "ACME Corp"
 
-    def test_default_token_params(self):
-        spec = OAuthProvider(key="acme", auth_url="https://a", token_url="https://t")
-        assert spec.token_params == DEFAULT_TOKEN_PARAMS
 
-    def test_token_params_helper_omits_and_renames(self):
-        params = token_params("grant_type", "redirect_uri", code="auth_code")
-        assert params == {"code": "auth_code", "client_id": "client_id", "client_secret": "client_secret"}
+class TestTokenFlows:
+    """The base dialect: plain RFC 6749 requests, parameterized only by encoding."""
+
+    SPEC: ClassVar[OAuthProvider] = OAuthProvider(key="acme", auth_url="https://a", token_url="https://t/token")
+
+    def test_authorization_code_grant_is_rfc_shaped(self):
+        request = self.SPEC.authorization_code_request(
+            code="the-code", redirect_uri="https://cb", client_id="cid", client_secret="cs"
+        )
+        assert (request.method, str(request.url)) == ("POST", "https://t/token")
+        assert json.loads(request.content) == {
+            "grant_type": "authorization_code",
+            "code": "the-code",
+            "redirect_uri": "https://cb",
+            "client_id": "cid",
+            "client_secret": "cs",
+        }
+
+    def test_form_encoding_knob(self):
+        spec = OAuthProvider(key="acme", auth_url="https://a", token_url="https://t/token", token_encoding="form")
+        request = spec.authorization_code_request(
+            code="the-code", redirect_uri="https://cb", client_id="cid", client_secret="cs"
+        )
+        assert request.headers["Content-Type"] == "application/x-www-form-urlencoded"
+        assert urllib.parse.parse_qs(request.content.decode())["code"] == ["the-code"]
+
+    def test_refresh_grant_omits_scope(self):
+        request = self.SPEC.refresh_token_request(
+            client_id="cid", client_secret="cs", refresh_token="OLD", scope="a b"
+        )
+        assert json.loads(request.content) == {
+            "grant_type": "refresh_token",
+            "refresh_token": "OLD",
+            "client_id": "cid",
+            "client_secret": "cs",
+        }
+
+    def test_parse_refresh_reads_the_rfc_shape(self):
+        parsed = self.SPEC.parse_refresh_token_response(
+            {"access_token": "a", "refresh_token": "NEW", "refresh_token_expires_in": 1000, "expires_in": 60}
+        )
+        assert parsed == RefreshTokenResponse(refresh_token="NEW", expires_in=1000)
+
+    def test_parse_refresh_without_rotation(self):
+        assert self.SPEC.parse_refresh_token_response({"access_token": "a"}) == RefreshTokenResponse()
 
 
 class TestAppCredentials:
