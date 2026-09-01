@@ -118,7 +118,12 @@ class ComponentUpdateRequest(BaseModel):
 
 
 class ComponentResponse(BaseModel):
-    """Response body for a component of any kind."""
+    """Response body for a component of any kind.
+
+    ``auto_renew`` surfaces a connection's renewal toggle even in list
+    responses, where a secret kind's ``config`` stays undisclosed — the
+    toggle is operational metadata, not a credential.
+    """
 
     id: UUID
     org_id: UUID
@@ -129,6 +134,7 @@ class ComponentResponse(BaseModel):
     config: dict[str, Any] | None = None
     state: dict[str, Any] | None = None
     encrypted: bool = False
+    auto_renew: bool | None = None
     parent_id: UUID | None = None
     relations: dict[str, list[RelationRef]] = {}
     children: list[ComponentResponse] = []
@@ -167,6 +173,10 @@ class ComponentResponse(BaseModel):
         if KINDS[row.kind].sensitive:
             config = store.components.decode_config(row) if include_config else None
 
+        auto_renew: bool | None = None
+        if row.kind == "connection":
+            auto_renew = bool((config or store.components.decode_config(row)).get("auto_renew", True))
+
         return cls(
             id=row.id,
             org_id=row.org_id,
@@ -177,6 +187,7 @@ class ComponentResponse(BaseModel):
             config=config,
             state=row.state,
             encrypted=row.encrypted,
+            auto_renew=auto_renew,
             parent_id=row.parent_id,
             relations=_relations_of(row),
             children=[

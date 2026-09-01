@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import httpx
@@ -14,6 +15,7 @@ from interloper.errors import InUseError
 from interloper_assets.facebook_ads import connection as fb_connection
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.source import FacebookAds
+from interloper_db import Component, Store
 
 from interloper_api.dependencies import get_catalog, get_current_user, get_store, require_viewer
 from interloper_api.routes import components as components_module
@@ -204,3 +206,53 @@ class TestDelete:
 
         assert resp.status_code == 409
         assert resp.json()["detail"]["used_by"] == referrers
+
+
+class TestComponentResponseAutoRenew:
+    """The renewal toggle surfaces even when the secret config does not."""
+
+    @staticmethod
+    def _row(kind: str, config: dict | None = None) -> Component:
+        return cast(Component, SimpleNamespace(
+            id=uuid4(),
+            org_id=uuid4(),
+            kind=kind,
+            key="k",
+            name=None,
+            config=config,
+            state=None,
+            encrypted=kind == "connection",
+            parent_id=None,
+            out_relations=[],
+            children=[],
+            created_at=None,
+            updated_at=None,
+        ))
+
+    @staticmethod
+    def _store(decoded: dict) -> Store:
+        components = SimpleNamespace(
+            status=lambda row, parent_key=None: "ok",
+            decode_config=lambda row: decoded,
+        )
+        return cast(Store, SimpleNamespace(components=components))
+
+    def test_connection_list_response_defaults_the_toggle_on(self):
+        response = components_module.ComponentResponse.from_row(
+            self._row("connection"), self._store({"api_key": "SECRET"}), include_config=False
+        )
+        assert response.config is None
+        assert response.auto_renew is True
+
+    def test_disabled_toggle_survives_the_undisclosed_config(self):
+        response = components_module.ComponentResponse.from_row(
+            self._row("connection"), self._store({"auto_renew": False}), include_config=False
+        )
+        assert response.config is None
+        assert response.auto_renew is False
+
+    def test_other_kinds_carry_no_toggle(self):
+        response = components_module.ComponentResponse.from_row(
+            self._row("job", config={"enabled": True}), self._store({}), include_config=False
+        )
+        assert response.auto_renew is None

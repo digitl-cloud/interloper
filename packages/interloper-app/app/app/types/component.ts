@@ -38,6 +38,8 @@ export interface ComponentRecord {
     /** Runtime state, e.g. job {next_run_at, last_run_at}. */
     state: Record<string, any> | null
     encrypted: boolean
+    /** Connection renewal toggle, surfaced even when the secret config is not (null for other kinds). */
+    auto_renew: boolean | null
     /** Owning source id for source-owned assets. */
     parent_id: string | null
     relations: Record<string, RelationRef[]>
