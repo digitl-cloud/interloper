@@ -141,14 +141,29 @@ class TestTargetResolution:
         target = _component(store, kind="job")
         created = store.runs.create(_ORG_ID, component_id=target)
 
-        # Accessed after the store call returns (its session is closed), so
-        # this only works if the join is eager.
+        # Every access below happens after the store call returned (its
+        # session is closed), so it only works if each path loaded the
+        # relationship — create by touching it, get/list by eager join.
+        assert created.target is not None and created.target.key == "job"
+
         run = store.runs.get(created.id)
         assert run.target is not None
         assert (run.target.kind, run.target.key, run.target.name) == ("job", "job", "job")
 
         listed = store.runs.list_all(_ORG_ID)
         assert [r.target.key for r in listed if r.target] == ["job"]
+
+    def test_target_is_loaded_with_the_backfill(self, store: Store):
+        target = _component(store, kind="job")
+        created = store.runs.create_backfill(
+            _ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-02"
+        )
+
+        assert created.target is not None and created.target.key == "job"
+        assert [b.target.key for b in store.runs.list_backfills(_ORG_ID) if b.target] == ["job"]
+        assert store.runs.get_backfill(created.id).target is not None
+        canceled = store.runs.cancel_backfill(created.id)
+        assert canceled.target is not None
 
     def test_deleted_target_resolves_to_none(self, store: Store):
         target = _component(store, kind="job")

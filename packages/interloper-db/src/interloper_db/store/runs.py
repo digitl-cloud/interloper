@@ -11,6 +11,7 @@ import interloper as il
 from interloper.errors import NotFoundError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from sqlalchemy import Engine, func
+from sqlalchemy.orm import joinedload
 from sqlmodel import Session, col, select
 
 from interloper_db.models import Backfill, Component, Run
@@ -23,6 +24,13 @@ from interloper_db.store.quotas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Reader queries eagerly join the target so its identity survives the session.
+# Deliberately not mapped on the relationship itself: locking queries (the
+# queue claim, backfill cancelation) select these tables with FOR UPDATE,
+# which rejects outer joins.
+RUN_LOAD_OPTIONS = (joinedload(Run.target),)  # ty: ignore[invalid-argument-type]
+BACKFILL_LOAD_OPTIONS = (joinedload(Backfill.target),)  # ty: ignore[invalid-argument-type]
 
 
 class RunStore:
@@ -83,6 +91,7 @@ class RunStore:
             session.add(db_run)
             commit(session)
             session.refresh(db_run)
+            _ = db_run.target  # load before the session closes; readers reach it detached
             return db_run
 
     @staticmethod
@@ -123,7 +132,7 @@ class RunStore:
             NotFoundError: If the run is not found.
         """
         with session_scope(self._engine) as session:
-            db_run = session.get(Run, run_id)
+            db_run = session.get(Run, run_id, options=RUN_LOAD_OPTIONS)
             if not db_run:
                 raise NotFoundError(f"Run {run_id} not found")
             return db_run
@@ -162,6 +171,7 @@ class RunStore:
                 .order_by(col(Run.created_at).desc())
                 .offset(offset)
                 .limit(limit)
+                .options(*RUN_LOAD_OPTIONS)
             )
             return list(session.exec(statement).all())
 
@@ -280,6 +290,7 @@ class RunStore:
             session.add(db_run)
             commit(session)
             session.refresh(db_run)
+            _ = db_run.target  # load before the session closes; readers reach it detached
             return db_run
 
     # -- Backfills -------------------------------------------------------------
@@ -369,6 +380,7 @@ class RunStore:
             session.add(db_backfill)
             commit(session)
             session.refresh(db_backfill)
+            _ = db_backfill.target  # load before the session closes; readers reach it detached
             return db_backfill
 
     def cancel_backfill(self, backfill_id: UUID) -> Backfill:
@@ -398,6 +410,7 @@ class RunStore:
             cancel_backfill_runs(session, db_backfill)
             commit(session)
             session.refresh(db_backfill)
+            _ = db_backfill.target  # load before the session closes; readers reach it detached
             return db_backfill
 
     def get_backfill(self, backfill_id: UUID) -> Backfill:
@@ -413,7 +426,7 @@ class RunStore:
             NotFoundError: If the backfill is not found.
         """
         with session_scope(self._engine) as session:
-            db_backfill = session.get(Backfill, backfill_id)
+            db_backfill = session.get(Backfill, backfill_id, options=BACKFILL_LOAD_OPTIONS)
             if not db_backfill:
                 raise NotFoundError(f"Backfill {backfill_id} not found")
             return db_backfill
@@ -428,7 +441,12 @@ class RunStore:
             List of Backfill rows.
         """
         with session_scope(self._engine) as session:
-            statement = select(Backfill).where(Backfill.org_id == org_id).order_by(col(Backfill.created_at).desc())
+            statement = (
+                select(Backfill)
+                .where(Backfill.org_id == org_id)
+                .order_by(col(Backfill.created_at).desc())
+                .options(*BACKFILL_LOAD_OPTIONS)
+            )
             return list(session.exec(statement).all())
 
     def list_active_backfills(self, org_id: UUID) -> list[Backfill]:
@@ -441,9 +459,13 @@ class RunStore:
             List of Backfill rows with status ``"running"`` or ``"queued"``.
         """
         with session_scope(self._engine) as session:
-            statement = select(Backfill).where(
-                Backfill.org_id == org_id,
-                col(Backfill.status).in_(["running", "queued"]),
+            statement = (
+                select(Backfill)
+                .where(
+                    Backfill.org_id == org_id,
+                    col(Backfill.status).in_(["running", "queued"]),
+                )
+                .options(*BACKFILL_LOAD_OPTIONS)
             )
             return list(session.exec(statement).all())
 
