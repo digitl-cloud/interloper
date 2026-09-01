@@ -2,7 +2,10 @@ import type { Run } from '~/types/run'
 import type { Backfill } from '~/types/backfill'
 
 /** A record carrying a server-resolved target (runs, backfills). */
-type Targeted = Pick<Run | Backfill, 'component_id' | 'component_key' | 'component_name'>
+type Targeted = Pick<Run | Backfill, 'component_id' | 'component_kind' | 'component_key' | 'component_name'>
+
+const JOB_ICON = 'i-lucide-calendar-clock'
+const DELETED_ICON = 'i-lucide-circle-slash'
 
 /**
  * Display label for a run/backfill target.
@@ -15,4 +18,15 @@ type Targeted = Pick<Run | Backfill, 'component_id' | 'component_key' | 'compone
 export function targetLabel(record: Targeted): string {
     if (!record.component_id) return 'Deleted'
     return record.component_name ?? record.component_key ?? '…'
+}
+
+/**
+ * Icon for a run/backfill target: the timeline's job glyph for jobs, the
+ * catalog's brand icon for everything else, the deleted marker when the
+ * target is gone.
+ */
+export function targetIcon(record: Targeted): string {
+    if (!record.component_id) return DELETED_ICON
+    if (record.component_kind === 'job') return JOB_ICON
+    return record.component_key ? componentIcon(record.component_key) : 'i-lucide-box'
 }
