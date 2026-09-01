@@ -69,5 +69,6 @@ class Resource(BaseSettings, Component):
             description=cls.__doc__ or "",
             tags=list(getattr(cls, "tags", [])),
             config_schema=cls.config_schema(),
+            state_schema=cls.state_model.model_json_schema() if cls.state_model else {},
             relations=cls.relation_definitions(),
         )
