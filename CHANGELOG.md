@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v0.68.0 (2026-09-01)
+
+### Bug Fixes
+
+- **core**: Stop dropping state_schema from resource definitions
+  ([`11be46f`](https://github.com/digitl-cloud/interloper/commit/11be46f77084a85962babc566404cf0f64497bec))
+
+### Features
+
+- Renew connection credentials on a schedule
+  ([`79d81c5`](https://github.com/digitl-cloud/interloper/commit/79d81c5a7c54c0f3a6a76d41aca3583503a2888e))
+
+- Speak operations end to end
+  ([`7397fe4`](https://github.com/digitl-cloud/interloper/commit/7397fe4e9b5cccfc60f0b00a9ea5e98543e35d05))
+
+- **core**: Model runs as workloads of operations
+  ([`efdc60f`](https://github.com/digitl-cloud/interloper/commit/efdc60fa5afddd5ad4a6b3e65205d3a3b95e1598))
+
+### Breaking Changes
+
+- `RunResult.asset_executions`/`AssetExecutionInfo`, `RunState.mark_asset_*`, the `ASSET_*`
+  lifecycle and `ASSET_EXEC_*` event types, the `asset_executions` view and the
+  `/runs/{id}/asset-executions` endpoint are gone; historical events are rewritten to the new
+  vocabulary.
+
+
 ## v0.67.0 (2026-08-29)
 
 ### Bug Fixes
