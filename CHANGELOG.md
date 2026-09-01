@@ -2,6 +2,26 @@
 
 <!-- version list -->
 
+## v0.70.0 (2026-09-01)
+
+### Bug Fixes
+
+- **core**: Send the OAuth scope on Microsoft refresh grants
+  ([`b25173f`](https://github.com/digitl-cloud/interloper/commit/b25173f291af8562b6f437eac56afc3a2fb830e9))
+
+### Refactoring
+
+- **core**: Providers own their OAuth token flows
+  ([`38a2949`](https://github.com/digitl-cloud/interloper/commit/38a29494ab022926db2dbf720616532437cc8d8b))
+
+### Breaking Changes
+
+- **core**: OAuthProvider drops token_method, token_params, and token_basic_auth (with
+  DEFAULT_TOKEN_PARAMS and the token_params helper); third-party providers express those as
+  request-builder overrides. OAuthConnection.renewable() derives from the provider and field mapping
+  instead of requiring a renew override.
+
+
 ## v0.69.1 (2026-09-01)
 
 ### Bug Fixes
