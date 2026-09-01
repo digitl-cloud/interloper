@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.69.0 (2026-09-01)
+
+### Bug Fixes
+
+- **core**: Abort fail-fast walks through state, not exceptions
+  ([`ab07112`](https://github.com/digitl-cloud/interloper/commit/ab07112ac594b4731cfcc086b3579038f7c4cb93))
+
+- **core**: Criteo's token endpoint is form-encoded
+  ([`5cf8e98`](https://github.com/digitl-cloud/interloper/commit/5cf8e984303eea1a90743ebff371922c234fb0cf))
+
+### Features
+
+- **api**: Resolve run and backfill targets server-side
+  ([`7145b3b`](https://github.com/digitl-cloud/interloper/commit/7145b3beffc015e950b7b892660d0135ffa4698f))
+
+
 ## v0.68.0 (2026-09-01)
 
 ### Bug Fixes
