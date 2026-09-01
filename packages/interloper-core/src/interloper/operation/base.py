@@ -108,6 +108,7 @@ class Operation(Workload):
 
     if TYPE_CHECKING:
         id: str
+        kind: ClassVar[str]
         key: ClassVar[str]
         materializable: bool
         dependencies: dict[str, str]
@@ -196,8 +197,9 @@ class Operation(Workload):
         """
         return {
             **metadata,
-            "asset_id": self.id,
-            "asset_key": self.key,
+            "component_id": self.id,
+            "component_kind": self.kind,
+            "component_key": self.key,
             "partition_or_window": str(partition_or_window) if partition_or_window else None,
         }
 

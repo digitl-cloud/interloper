@@ -21,7 +21,7 @@ from sqlalchemy import Engine
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import col, func, select
 
-from interloper_db.models import AssetExecution, Event
+from interloper_db.models import Event, Execution
 from interloper_db.session import commit, session_scope
 
 _MAX_EVENT_TEXT = 60_000
@@ -31,8 +31,6 @@ _PROMOTED_METADATA_KEYS = frozenset(
     {
         "run_id",
         "org_id",
-        "asset_id",
-        "asset_key",
         "component_id",
         "component_kind",
         "component_key",
@@ -44,15 +42,14 @@ _PROMOTED_METADATA_KEYS = frozenset(
 )
 """Metadata keys promoted to their own columns rather than spilled into ``data``.
 
-Everything else spills into the ``data`` JSONB column. ``asset_id``/``asset_key``
-are the compat aliases core emitters use for the component columns; ``run_id`` and
-``org_id`` also arrive via run metadata, but the columns filled from
+Everything else spills into the ``data`` JSONB column. ``run_id`` and ``org_id``
+also arrive via run metadata, but the columns filled from
 :meth:`EventStore.save`'s own arguments are the authoritative ones.
 """
 
 
 class EventStore:
-    """Run events and the asset executions derived from them."""
+    """Run events and the operation executions derived from them."""
 
     def __init__(self, engine: Engine) -> None:
         """Bind the facet to what it works through.
@@ -162,19 +159,19 @@ class EventStore:
             )
             return session.exec(statement).one()
 
-    # -- Asset executions ------------------------------------------------------
+    # -- Executions --------------------------------------------------------------
 
-    def list_asset_executions(self, run_id: UUID) -> list[AssetExecution]:
-        """List a run's asset executions from the ``asset_executions`` view.
+    def list_executions(self, run_id: UUID) -> list[Execution]:
+        """List a run's operation executions from the ``executions`` view.
 
         Args:
             run_id: The run UUID.
 
         Returns:
-            One read-model row per asset touched by the run.
+            One read-model row per operation touched by the run.
         """
         with session_scope(self._engine) as session:
-            statement = select(AssetExecution).where(AssetExecution.run_id == run_id)
+            statement = select(Execution).where(Execution.run_id == run_id)
             return list(session.exec(statement).all())
 
     # -- Internals -------------------------------------------------------------
@@ -238,10 +235,9 @@ class EventStore:
         """Map a framework event onto ``events`` column values.
 
         The component reference comes from ``component_id``/``component_kind``/
-        ``component_key`` metadata; the ``asset_id``/``asset_key`` keys the asset
-        runners emit map onto the same columns (with kind ``"asset"``), so core
-        emitters need no knowledge of the persistence schema. Metadata not
-        covered by a structured column lands losslessly in ``data``.
+        ``component_key`` metadata — the identity keys every core emitter
+        stamps. Metadata not covered by a structured column lands losslessly
+        in ``data``.
 
         Args:
             event: The framework Event to map. A non-UUID ``id`` is replaced by
@@ -259,9 +255,9 @@ class EventStore:
         except (ValueError, TypeError):
             event_id = uuid4()
 
-        component_id = metadata.get("component_id") or metadata.get("asset_id")
-        component_kind = metadata.get("component_kind") or ("asset" if metadata.get("asset_id") else None)
-        component_key = metadata.get("component_key") or metadata.get("asset_key")
+        component_id = metadata.get("component_id")
+        component_kind = metadata.get("component_kind")
+        component_key = metadata.get("component_key")
 
         return {
             "id": event_id,

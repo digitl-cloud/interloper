@@ -24,7 +24,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from interloper_db.models import AssetExecution, Backfill, Component, Event, Run
+from interloper_db.models import Backfill, Component, Event, Execution, Run
 from pydantic import BaseModel
 
 
@@ -300,12 +300,12 @@ class RunList(BaseModel):
 
 
 class RunDetail(BaseModel):
-    """One run with its event timeline and per-asset execution summary."""
+    """One run with its event timeline and per-operation execution summary."""
 
     status: Literal["success"] = "success"
     run: Run
     events: list[Event]
-    asset_executions: list[AssetExecution]
+    executions: list[Execution]
 
 
 class RunErrorEvent(BaseModel):

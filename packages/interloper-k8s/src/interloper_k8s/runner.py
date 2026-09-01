@@ -14,9 +14,9 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, cast
 
-from interloper.asset.base import Asset
 from interloper.errors import RunnerError, format_exception
 from interloper.events import Event, EventBus, EventType
+from interloper.operation import Operation
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.runner.results import ExecutionStatus
@@ -103,20 +103,20 @@ class KubernetesRunner(SyncRunner):
             self._poll_pool = None
         self._job_map.clear()
 
-    def _submit_asset(
+    def _submit_operation(
         self,
-        asset: Asset,
+        operation: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
         """Launch an asset as a Kubernetes Job and return a polling Future."""
         if self._poll_pool is None or self._batch_v1 is None:
             raise RunnerError("Kubernetes client not initialized")
 
-        mini_dag = self.state.dag.mini_dag(asset.id)
+        mini_dag = self.state.dag.mini_dag(operation.id)
         dag_spec = mini_dag.to_spec().model_dump(mode="json")
 
         cmd = self._build_command(dag_spec, partition_or_window, self.state.run_id)
-        job_name = self._build_job_name(asset)
+        job_name = self._build_job_name(operation)
         env = self._build_env()
         resources = self._build_resources()
         tolerations = self._build_tolerations()
@@ -149,18 +149,18 @@ class KubernetesRunner(SyncRunner):
                 name=job_name,
                 namespace=self.namespace,
                 labels={
-                    "interloper.asset_id": asset.id,
+                    "interloper.component_id": operation.id,
                     "interloper.run_id": self.state.run_id,
                 },
                 annotations={
-                    "interloper.asset_id": asset.id,
+                    "interloper.component_id": operation.id,
                 },
             ),
             spec=client.V1JobSpec(
                 template=client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels={
-                            "interloper.asset_id": asset.id,
+                            "interloper.component_id": operation.id,
                             "interloper.run_id": self.state.run_id,
                         }
                     ),
@@ -171,17 +171,17 @@ class KubernetesRunner(SyncRunner):
             ),
         )
 
-        self.state.mark_asset_running(asset, emit=False)
+        self.state.mark_running(operation, emit=False)
 
         try:
             self._batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
         except Exception as e:
-            self.state.mark_asset_failed(asset, format_exception(e))
+            self.state.mark_failed(operation, format_exception(e))
             done: Future[None] = Future()
             done.set_result(None)
             return done
 
-        self._start_log_streaming(job_name, target_asset_id=asset.id)
+        self._start_log_streaming(job_name, target_component_id=operation.id)
 
         future = self._poll_pool.submit(self._poll_job, job_name)
         self._job_map[future] = job_name
@@ -205,7 +205,7 @@ class KubernetesRunner(SyncRunner):
             except Exception:  # noqa: BLE001, S110
                 pass
 
-    def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
+    def _handle_completed(self, future: Future[Any], operation: Operation) -> None:
         """Process a completed job future and author the terminal event.
 
         The host authors the terminal event itself (``emit=True``) from the
@@ -231,24 +231,24 @@ class KubernetesRunner(SyncRunner):
         if job_name is not None:
             self._stop_job_log_streaming(job_name, timeout=5.0)
 
-        info = self.state.asset_executions.get(asset.id)
+        info = self.state.executions.get(operation.id)
         if info and info.is_terminal:
             # Child streamed its own terminal. If it failed, fail-fast must
             # still abort the run — with the child's error as the cause.
             if info.status == ExecutionStatus.FAILED and (self.fail_fast or self.reraise):
-                raise RunnerError(f"Asset '{type(asset).key}' failed: {info.error}")
+                raise RunnerError(f"Asset '{type(operation).key}' failed: {info.error}")
             return
 
         try:
             future.result()
         except Exception as e:
-            self.state.mark_asset_failed(asset, format_exception(e), emit=True)
+            self.state.mark_failed(operation, format_exception(e), emit=True)
             if self.fail_fast or self.reraise:
-                raise RunnerError(f"Asset '{type(asset).key}' failed: {e}") from e
+                raise RunnerError(f"Asset '{type(operation).key}' failed: {e}") from e
         else:
-            self.state.mark_asset_completed(asset, emit=True)
+            self.state.mark_completed(operation, emit=True)
 
-    def _handle_flushed_future(self, future: Future[Any], asset: Asset) -> None:
+    def _handle_flushed_future(self, future: Future[Any], operation: Operation) -> None:
         """Clean up job after flush, authoring the terminal event.
 
         Same host-authored-terminal contract as :meth:`_handle_completed`
@@ -259,14 +259,14 @@ class KubernetesRunner(SyncRunner):
         if job_name is not None:
             self._stop_job_log_streaming(job_name)
 
-        info = self.state.asset_executions.get(asset.id)
+        info = self.state.executions.get(operation.id)
         if not (info and info.is_terminal):
             try:
                 future.result()
             except Exception as e:  # noqa: BLE001
-                self.state.mark_asset_failed(asset, format_exception(e), emit=True)
+                self.state.mark_failed(operation, format_exception(e), emit=True)
             else:
-                self.state.mark_asset_completed(asset, emit=True)
+                self.state.mark_completed(operation, emit=True)
 
     # -- Job polling -----------------------------------------------------------
 
@@ -344,10 +344,10 @@ class KubernetesRunner(SyncRunner):
             limits=self.resources.get("limits"),
         )
 
-    def _build_job_name(self, asset: Asset) -> str:
+    def _build_job_name(self, operation: Operation) -> str:
         """Build the name for the Kubernetes job (max 63 chars)."""
-        # return f"interloper-run-{self.state.run_id[:8]}-{to_slug_case(type(asset).key)}"[:63]
-        return f"interloper-run-{self.state.run_id[:8]}-{asset.id[:8]}"[:63]
+        # return f"interloper-run-{self.state.run_id[:8]}-{to_slug_case(type(operation).key)}"[:63]
+        return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}"[:63]
 
     def _build_tolerations(self) -> list[client.V1Toleration]:
         """Build tolerations for pod scheduling."""
@@ -361,7 +361,7 @@ class KubernetesRunner(SyncRunner):
             for t in self.tolerations
         ]
 
-    def _start_log_streaming(self, job_name: str, *, target_asset_id: str) -> None:
+    def _start_log_streaming(self, job_name: str, *, target_component_id: str) -> None:
         """Stream events from a K8s pod's logs to the host EventBus.
 
         Only events for the **target asset** are forwarded.
@@ -370,7 +370,7 @@ class KubernetesRunner(SyncRunner):
 
         Args:
             job_name: The K8s Job name to stream logs from.
-            target_asset_id: Only forward events with this ``asset_id``.
+            target_component_id: Only forward events with this ``asset_id``.
         """
         if self._core_v1 is None:
             return
@@ -426,8 +426,8 @@ class KubernetesRunner(SyncRunner):
                             if event is not None:
                                 if event.type in _RUN_EVENTS:
                                     continue
-                                event_asset_id = event.metadata.get("asset_id")
-                                if event_asset_id and event_asset_id != target_asset_id:
+                                event_component_id = event.metadata.get("component_id")
+                                if event_component_id and event_component_id != target_component_id:
                                     continue
                                 EventBus.emit_event(event)
                         except Exception:  # noqa: BLE001, S110
@@ -437,8 +437,8 @@ class KubernetesRunner(SyncRunner):
                     try:
                         event = Event.from_log_line(buf)
                         if event is not None and event.type not in _RUN_EVENTS:
-                            event_asset_id = event.metadata.get("asset_id")
-                            if not event_asset_id or event_asset_id == target_asset_id:
+                            event_component_id = event.metadata.get("component_id")
+                            if not event_component_id or event_component_id == target_component_id:
                                 EventBus.emit_event(event)
                     except Exception:  # noqa: BLE001, S110
                         pass

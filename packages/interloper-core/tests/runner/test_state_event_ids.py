@@ -47,34 +47,34 @@ def _state(run_id: str, asset_id: str) -> tuple[RunState, il.Asset]:
 
 def test_asset_event_id_is_deterministic() -> None:
     """Same triple → same id; any component differing → different id."""
-    base = RunState._asset_event_id("run-1", "asset-1", EventType.ASSET_FAILED)
+    base = RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
 
-    assert base == RunState._asset_event_id("run-1", "asset-1", EventType.ASSET_FAILED)
-    assert base != RunState._asset_event_id("run-2", "asset-1", EventType.ASSET_FAILED)
-    assert base != RunState._asset_event_id("run-1", "asset-2", EventType.ASSET_FAILED)
-    assert base != RunState._asset_event_id("run-1", "asset-1", EventType.ASSET_COMPLETED)
+    assert base == RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
+    assert base != RunState._operation_event_id("run-2", "asset-1", EventType.OPERATION_FAILED)
+    assert base != RunState._operation_event_id("run-1", "asset-2", EventType.OPERATION_FAILED)
+    assert base != RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_COMPLETED)
 
 
 # -- RunState stamps the deterministic id on what it emits ---------------------
 
 
 def test_mark_asset_terminal_stamps_deterministic_id() -> None:
-    """``mark_asset_failed`` / ``mark_asset_completed`` carry the derived id."""
+    """``mark_failed`` / ``mark_completed`` carry the derived id."""
     state, asset = _state("run-abc", "asset-xyz")
 
     with _capture() as events:
-        state.mark_asset_failed(asset, "boom", tb="trace")
+        state.mark_failed(asset, "boom", tb="trace")
 
-    failed = next(e for e in events if e.type == EventType.ASSET_FAILED)
-    assert failed.id == RunState._asset_event_id("run-abc", "asset-xyz", EventType.ASSET_FAILED)
+    failed = next(e for e in events if e.type == EventType.OPERATION_FAILED)
+    assert failed.id == RunState._operation_event_id("run-abc", "asset-xyz", EventType.OPERATION_FAILED)
     assert failed.metadata["error"] == "boom"
 
     state2, asset2 = _state("run-abc", "asset-2")
     with _capture() as events:
-        state2.mark_asset_completed(asset2)
+        state2.mark_completed(asset2)
 
-    completed = next(e for e in events if e.type == EventType.ASSET_COMPLETED)
-    assert completed.id == RunState._asset_event_id("run-abc", "asset-2", EventType.ASSET_COMPLETED)
+    completed = next(e for e in events if e.type == EventType.OPERATION_COMPLETED)
+    assert completed.id == RunState._operation_event_id("run-abc", "asset-2", EventType.OPERATION_COMPLETED)
 
 
 def test_host_fallback_and_child_terminal_share_one_id() -> None:
@@ -89,10 +89,10 @@ def test_host_fallback_and_child_terminal_share_one_id() -> None:
     host_state, host_asset = _state("run-shared", "asset-shared")
 
     with _capture() as events:
-        child_state.mark_asset_failed(child_asset, "child error")  # child's own terminal
-        host_state.mark_asset_failed(host_asset, "Job foo failed")  # host fallback
+        child_state.mark_failed(child_asset, "child error")  # child's own terminal
+        host_state.mark_failed(host_asset, "Job foo failed")  # host fallback
 
-    failed_ids = {e.id for e in events if e.type == EventType.ASSET_FAILED}
+    failed_ids = {e.id for e in events if e.type == EventType.OPERATION_FAILED}
     assert len(failed_ids) == 1
 
 
@@ -105,5 +105,5 @@ def test_duplicate_asset_queued_collapses_to_one_id() -> None:
         host_state.start_run(None)
         child_state.start_run(None)
 
-    queued_ids = {e.id for e in events if e.type == EventType.ASSET_QUEUED}
-    assert queued_ids == {RunState._asset_event_id("run-q", "asset-q", EventType.ASSET_QUEUED)}
+    queued_ids = {e.id for e in events if e.type == EventType.OPERATION_QUEUED}
+    assert queued_ids == {RunState._operation_event_id("run-q", "asset-q", EventType.OPERATION_QUEUED)}

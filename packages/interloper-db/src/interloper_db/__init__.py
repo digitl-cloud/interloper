@@ -2,12 +2,12 @@
 
 from interloper_db.engine import get_engine, init_engine
 from interloper_db.models import (
-    AssetExecution,
     AuthSession,
     Backfill,
     Component,
     ComponentRelation,
     Event,
+    Execution,
     Invitation,
     Organisation,
     PersonalAccessToken,
@@ -22,13 +22,13 @@ from interloper_db.store import Store
 from interloper_db.store.status import ComponentStatus
 
 __all__ = [
-    "AssetExecution",
     "AuthSession",
     "Backfill",
     "Component",
     "ComponentRelation",
     "ComponentStatus",
     "Event",
+    "Execution",
     "Invitation",
     "Organisation",
     "PersonalAccessToken",

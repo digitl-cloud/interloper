@@ -30,7 +30,7 @@ class SyncRunner(Runner):
     These runners are inherently blocking (they poll futures / Jobs), so the
     async-native :meth:`~interloper.runner.base.Runner.run` contract is
     satisfied by offloading the blocking DAG walk to a worker thread. Subclasses
-    implement ``_submit_asset`` to submit work to their executor and
+    implement ``_submit_operation`` to submit work to their executor and
     ``_handle_completed`` to interpret what the future returned.
     """
 
@@ -58,7 +58,7 @@ class SyncRunner(Runner):
         partition_or_window: Partition | PartitionWindow | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> RunResult:
-        """Materialize the DAG by dynamically scheduling ready assets.
+        """Execute the DAG by dynamically scheduling ready operations.
 
         Args:
             dag: The DAG to execute.
@@ -78,27 +78,26 @@ class SyncRunner(Runner):
             self._on_start()
 
             while not self.state.is_run_complete():
-                submitted_ids = {asset.id for asset in inflight.values()}
-                ready_assets = self.state.ready_assets
+                submitted_ids = {operation.id for operation in inflight.values()}
 
-                for asset in ready_assets:
+                for operation in self.state.ready_operations:
                     if len(inflight) >= self._capacity:
                         break
-                    if asset.id in submitted_ids:
+                    if operation.id in submitted_ids:
                         continue
-                    handle = self._submit_asset(asset, partition_or_window)
-                    inflight[handle] = asset
+                    handle = self._submit_operation(operation, partition_or_window)
+                    inflight[handle] = operation
 
                 if not inflight:
                     raise RunnerError(
-                        "No assets ready but execution not complete. "
+                        "No operations ready but execution not complete. "
                         "This indicates a circular dependency or invalid DAG state."
                     )
 
                 done, _ = wait(inflight.keys(), return_when=FIRST_COMPLETED)
                 for future in done:
-                    asset = inflight.pop(future)
-                    self._handle_completed(future, asset)
+                    operation = inflight.pop(future)
+                    self._handle_completed(future, operation)
 
             return self._finalize_run()
 
@@ -119,80 +118,80 @@ class SyncRunner(Runner):
     @property
     @abstractmethod
     def _capacity(self) -> int:
-        """Maximum number of concurrent assets this runner can execute.
+        """Maximum number of concurrent operations this runner can execute.
 
         Returns:
             The concurrency ceiling used to throttle submissions.
         """
 
     @abstractmethod
-    def _submit_asset(
+    def _submit_operation(
         self,
-        asset: Operation,
+        operation: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
-        """Submit an asset for execution and return a Future.
+        """Submit an operation for execution and return a Future.
 
         Args:
-            asset: The asset to execute.
+            operation: The operation to execute.
             partition_or_window: Partition or window to scope the run.
 
         Returns:
-            A Future resolving when the asset's execution finishes.
+            A Future resolving when the operation's execution finishes.
         """
 
     # -- Shared execution helpers ----------------------------------------------
 
-    def _handle_completed(self, future: Future[Any], asset: Operation) -> None:
+    def _handle_completed(self, future: Future[Any], operation: Operation) -> None:
         """Process a completed future and update state.
 
         Args:
-            future: The finished future returned by ``_submit_asset``.
-            asset: The asset the future was submitted for.
+            future: The finished future returned by ``_submit_operation``.
+            operation: The operation the future was submitted for.
         """
         try:
             result = future.result()
         except Exception as e:
-            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
+            self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc())
             if self.fail_fast or self.reraise:
                 raise
             return
 
-        self.state.mark_asset_completed(asset, effects=result if isinstance(result, OperationResult) else None)
+        self.state.mark_completed(operation, effects=result if isinstance(result, OperationResult) else None)
 
     def _flush(self, inflight: dict[Future[Any], Operation]) -> None:
         """Wait for all in-flight futures and emit terminal events.
 
         Called after an exception aborts the main loop so that every
-        in-flight asset gets a proper FAILED or CANCELED event rather
+        in-flight operation gets a proper FAILED or CANCELED event rather
         than being silently abandoned as 'running'.
 
         Args:
-            inflight: Futures still in flight, mapped to the asset each was
-                submitted for. An empty mapping is a no-op.
+            inflight: Futures still in flight, mapped to the operation each
+                was submitted for. An empty mapping is a no-op.
         """
         if not inflight:
             return
 
         if self.fail_fast:
-            for future, asset in inflight.items():
+            for future, operation in inflight.items():
                 future.cancel()
-                info = self.state.asset_executions.get(asset.id)
+                info = self.state.executions.get(operation.id)
                 if info and not info.is_terminal:
-                    self.state.mark_asset_canceled(asset)
+                    self.state.mark_canceled(operation)
             return
 
         # Let running tasks finish naturally and record their outcomes.
         done, _ = wait(inflight.keys())
 
         for future in done:
-            asset = inflight[future]
-            info = self.state.asset_executions.get(asset.id)
+            operation = inflight[future]
+            info = self.state.executions.get(operation.id)
             if info and info.is_terminal:
                 continue
-            self._handle_flushed(future, asset)
+            self._handle_flushed(future, operation)
 
-    def _handle_flushed(self, future: Future[Any], asset: Operation) -> None:
+    def _handle_flushed(self, future: Future[Any], operation: Operation) -> None:
         """Process a completed future during flush.
 
         Subclasses that return structured results from their futures
@@ -205,10 +204,10 @@ class SyncRunner(Runner):
 
         Args:
             future: The finished future to interpret.
-            asset: The asset the future was submitted for.
+            operation: The operation the future was submitted for.
         """
         try:
             result = future.result()
-            self.state.mark_asset_completed(asset, effects=result if isinstance(result, OperationResult) else None)
+            self.state.mark_completed(operation, effects=result if isinstance(result, OperationResult) else None)
         except Exception as e:  # noqa: BLE001
-            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
+            self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc())

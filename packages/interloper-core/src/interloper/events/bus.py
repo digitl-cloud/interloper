@@ -35,7 +35,7 @@ class EventBus:
     implementation detail::
 
         EventBus.subscribe(my_handler)
-        EventBus.emit(EventType.ASSET_EXEC_STARTED)
+        EventBus.emit(EventType.ASSET_DATA_STARTED)
         EventBus.flush()
     """
 

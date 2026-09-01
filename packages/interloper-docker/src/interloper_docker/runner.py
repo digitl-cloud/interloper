@@ -24,9 +24,9 @@ from typing import Any
 import docker
 from docker.client import DockerClient
 from docker.models.containers import Container
-from interloper.asset.base import Asset
 from interloper.errors import RunnerError, format_exception
 from interloper.events import Event, EventBus, EventType
+from interloper.operation import Operation
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.runner.sync_runner import SyncRunner
@@ -109,9 +109,9 @@ class DockerRunner(SyncRunner):
             self._poll_pool = None
         self._container_map.clear()
 
-    def _submit_asset(
+    def _submit_operation(
         self,
-        asset: Asset,
+        operation: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
         """Launch an asset in a Docker container and return a polling Future.
@@ -122,16 +122,16 @@ class DockerRunner(SyncRunner):
         if self._poll_pool is None:
             raise RunnerError("Poll pool not initialized")
 
-        mini_dag = self.state.dag.mini_dag(asset.id)
+        mini_dag = self.state.dag.mini_dag(operation.id)
         dag_spec = mini_dag.to_spec().model_dump(mode="json")
 
         cmd = self._build_command(dag_spec, partition_or_window, self.state.run_id)
-        name = self._build_name(asset)
+        name = self._build_name(operation)
         env = self._build_env()
         volumes = self._build_volumes()
 
         # emit=False: the container emits ASSET_STARTED via stderr
-        self.state.mark_asset_running(asset, emit=False)
+        self.state.mark_running(operation, emit=False)
 
         try:
             container = self._docker.containers.run(
@@ -140,7 +140,7 @@ class DockerRunner(SyncRunner):
                 command=cmd,
                 environment=env,
                 volumes=volumes if volumes else None,
-                labels={"interloper.asset_id": asset.id},
+                labels={"interloper.component_id": operation.id},
                 remove=False,
                 detach=True,
                 stdout=True,
@@ -148,18 +148,18 @@ class DockerRunner(SyncRunner):
             )
         except Exception as e:
             # Container never started — emit from the host
-            self.state.mark_asset_failed(asset, format_exception(e))
+            self.state.mark_failed(operation, format_exception(e))
             done: Future[None] = Future()
             done.set_result(None)
             return done
 
-        self._start_log_streaming(container, target_asset_id=asset.id)
+        self._start_log_streaming(container, target_component_id=operation.id)
 
         future = self._poll_pool.submit(self._poll_container, container)
         self._container_map[future] = container
         return future
 
-    def _handle_completed(self, future: Future[Any], asset: Asset) -> None:
+    def _handle_completed(self, future: Future[Any], operation: Operation) -> None:
         """Process a completed container future and author the terminal event.
 
         The host authors the terminal event itself (``emit=True``) from the
@@ -169,22 +169,22 @@ class DockerRunner(SyncRunner):
         dedups away (``ON CONFLICT DO NOTHING``); if the child died without
         reporting one, the host's event is the only terminal, so the asset no
         longer orphans as ``running``.  Assets already terminal (e.g. marked
-        failed during ``_submit_asset``) are skipped.
+        failed during ``_submit_operation``) are skipped.
         """
         container = self._container_map.pop(future, None)
         if container is not None:
             self._stop_container_log_streaming(container)
 
-        info = self.state.asset_executions.get(asset.id)
+        info = self.state.executions.get(operation.id)
         if not (info and info.is_terminal):
             try:
                 future.result()
             except Exception as e:
-                self.state.mark_asset_failed(asset, format_exception(e), emit=True)
+                self.state.mark_failed(operation, format_exception(e), emit=True)
                 if self.fail_fast or self.reraise:
                     raise
             else:
-                self.state.mark_asset_completed(asset, emit=True)
+                self.state.mark_completed(operation, emit=True)
 
         if container is not None and self.auto_remove:
             try:
@@ -192,7 +192,7 @@ class DockerRunner(SyncRunner):
             except Exception:  # noqa: BLE001, S110
                 pass
 
-    def _handle_flushed_future(self, future: Future[Any], asset: Asset) -> None:
+    def _handle_flushed_future(self, future: Future[Any], operation: Operation) -> None:
         """Clean up container after flush, authoring the terminal event.
 
         Same host-authored-terminal contract as :meth:`_handle_completed`
@@ -203,14 +203,14 @@ class DockerRunner(SyncRunner):
         if container is not None:
             self._stop_container_log_streaming(container)
 
-        info = self.state.asset_executions.get(asset.id)
+        info = self.state.executions.get(operation.id)
         if not (info and info.is_terminal):
             try:
                 future.result()
             except Exception as e:  # noqa: BLE001
-                self.state.mark_asset_failed(asset, format_exception(e), emit=True)
+                self.state.mark_failed(operation, format_exception(e), emit=True)
             else:
-                self.state.mark_asset_completed(asset, emit=True)
+                self.state.mark_completed(operation, emit=True)
 
         if container is not None and self.auto_remove:
             try:
@@ -282,13 +282,13 @@ class DockerRunner(SyncRunner):
                 volumes[parts[0]] = {"bind": parts[1], "mode": "rw"}
         return volumes
 
-    def _build_name(self, asset: Asset) -> str:
+    def _build_name(self, operation: Operation) -> str:
         """Build the name for the container."""
-        return f"interloper_run_{self.state.run_id[:8]}_{asset.id[:8]}"
+        return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}"
 
     # -- Real-time event streaming (stderr) ------------------------------------
 
-    def _start_log_streaming(self, container: Container, *, target_asset_id: str) -> None:
+    def _start_log_streaming(self, container: Container, *, target_component_id: str) -> None:
         """Stream events from the container's stderr to the host EventBus.
 
         Only events belonging to the **target asset** are forwarded.
@@ -297,7 +297,7 @@ class DockerRunner(SyncRunner):
 
         Args:
             container: The Docker container to stream from.
-            target_asset_id: Only forward events with this ``asset_id``.
+            target_component_id: Only forward events with this ``asset_id``.
         """
         cid = (container.id or "???")[:12]
 
@@ -318,8 +318,8 @@ class DockerRunner(SyncRunner):
                             if event is not None:
                                 if event.type in _RUN_EVENTS:
                                     continue
-                                event_asset_id = event.metadata.get("asset_id")
-                                if event_asset_id and event_asset_id != target_asset_id:
+                                event_component_id = event.metadata.get("component_id")
+                                if event_component_id and event_component_id != target_component_id:
                                     continue
                                 EventBus.emit_event(event)
                                 continue

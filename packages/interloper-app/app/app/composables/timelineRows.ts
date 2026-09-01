@@ -1,5 +1,5 @@
 import type { ComputedRef, MaybeRefOrGetter } from 'vue'
-import type { AssetExecution, ExecutionStatus } from '~/types/asset_execution'
+import type { Execution, ExecutionStatus } from '~/types/execution'
 import type { Run } from '~/types/run'
 import type { TimelineBar, TimelineRow } from '~/types/timeline'
 
@@ -46,8 +46,8 @@ function bounds(
 }
 
 /** One row per asset execution of a single run, ordered as its timeline reads best. */
-export function useAssetExecutionRows(
-    executions: MaybeRefOrGetter<AssetExecution[]>,
+export function useExecutionRows(
+    executions: MaybeRefOrGetter<Execution[]>,
 ): ComputedRef<TimelineRow[]> {
     const assetDisplayName = useAssetDisplayName()
     const assetIcon = useAssetIcon()
@@ -55,14 +55,14 @@ export function useAssetExecutionRows(
     return computed(() => toValue(executions)
         .map((execution) => {
             const interval = bounds(execution.status, execution.started_at, execution.completed_at)
-            const names = execution.asset_id ? assetDisplayName.value.get(execution.asset_id) : undefined
+            const names = execution.component_id ? assetDisplayName.value.get(execution.component_id) : undefined
             return {
-                id: execution.asset_id,
-                name: names?.label ?? execution.asset_key,
-                icon: (execution.asset_id ? assetIcon.value.get(execution.asset_id) : undefined) ?? DEFAULT_ICON,
+                id: execution.component_id,
+                name: names?.label ?? execution.component_key,
+                icon: (execution.component_id ? assetIcon.value.get(execution.component_id) : undefined) ?? DEFAULT_ICON,
                 status: execution.status,
                 bars: interval
-                    ? [{ id: `${execution.run_id}:${execution.asset_key}`, status: execution.status, ...interval }]
+                    ? [{ id: `${execution.run_id}:${execution.component_key}`, status: execution.status, ...interval }]
                     : [],
             }
         })

@@ -34,16 +34,16 @@ class Event:
         """Return a human-readable summary line for logging.
 
         Returns:
-            A single line of ``time  TYPE  asset_key  message``.
+            A single line of ``time  TYPE  component_key  message``.
         """
         m = self.metadata
         ts = self.timestamp.strftime("%H:%M:%S.%f")[:-3]
-        asset_key = m.get("asset_qualified_key") or m.get("asset_key") or "-"
+        component_key = m.get("qualified_key") or m.get("component_key") or "-"
         message = m.get("message") or m.get("error") or "-"
         label = self.type.value.upper()
         if self.type is EventType.LOG and m.get("level"):
             label = f"LOG.{m['level']}"
-        return f"{ts}  {label:<30}  {asset_key}  {message}"
+        return f"{ts}  {label:<30}  {component_key}  {message}"
 
     # -- Serialization ---------------------------------------------------------
 

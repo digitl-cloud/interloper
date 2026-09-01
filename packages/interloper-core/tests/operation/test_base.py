@@ -109,7 +109,7 @@ class TestRunnerDrivesOperations:
         result = await il.AsyncRunner(on_event=events.append).run(il.DAG(operation))
 
         assert result.status is ExecutionStatus.COMPLETED
-        info = result.asset_executions[operation.id]
+        info = result.executions[operation.id]
         assert info.effects == OperationResult(config={"token": "NEW"}, state={"refreshed": True})
         assert {event.type for event in events} >= {il.EventType.RUN_STARTED, il.EventType.RUN_COMPLETED}
 
@@ -120,7 +120,7 @@ class TestRunnerDrivesOperations:
         result = await il.AsyncRunner(on_event=events.append, fail_fast=False).run(il.DAG(operation))
 
         assert result.status is ExecutionStatus.FAILED
-        info = result.asset_executions[operation.id]
+        info = result.executions[operation.id]
         assert info.error == "curated"
         assert info.traceback is None
         assert info.effects == OperationResult(error="curated", state={"failed": True})
@@ -138,8 +138,8 @@ class TestRunnerDrivesOperations:
         result = await il.AsyncRunner().run(il.DAG(asset, operation))
 
         assert result.status is ExecutionStatus.COMPLETED
-        assert result.asset_executions[asset.id].effects == OperationResult()
-        effects = result.asset_executions[operation.id].effects
+        assert result.executions[asset.id].effects == OperationResult()
+        effects = result.executions[operation.id].effects
         assert effects is not None and effects.config == {"token": "NEW"}
 
 

@@ -23,11 +23,11 @@ The runner is the one configured in ``AppSettings.runner`` (top-level
 ``runner`` key in ``interloper.yaml`` or ``INTERLOPER_RUNNER_*``
 environment variables); the partition comes from the CLI date flags.
 
-``--dry-run`` validates and prints the resolved plan (assets grouped by
+``--dry-run`` validates and prints the resolved plan (operations grouped by
 execution generation, runner, partition) without materializing anything —
 useful for checking a curated set of workload files.
 
-During execution, run/asset lifecycle events and ``context.logger``
+During execution, run/operation lifecycle events and ``context.logger``
 messages flow through the standard logging stack (via
 :class:`~interloper.events.console.ConsoleEventHandler`), sharing one
 format and stream with regular log lines.  Verbosity is the logging
@@ -222,9 +222,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
         if args.run_id:
             metadata["run_id"] = args.run_id
 
-        materializable = [a for a in dag.operations if a.materializable]
+        materializable = [operation for operation in dag.operations if operation.materializable]
         logger.info(
-            "Running DAG with %d materializable asset(s) (%d total) using %s",
+            "Running DAG with %d materializable operation(s) (%d total) using %s",
             len(materializable),
             len(dag.operations),
             type(runner).__name__,
@@ -302,16 +302,16 @@ def _print_plan(
         runner_name: Class name of the configured runner.
         name: Run name; omitted from the output when empty.
     """
-    materializable = [a for a in dag.operations if a.materializable]
+    materializable = [operation for operation in dag.operations if operation.materializable]
     lines: list[str] = []
     if name:
         lines.append(f"Run:       {name}")
     lines.append(f"Runner:    {runner_name}")
     lines.append(f"Partition: {partition if partition is not None else '(none)'}")
-    lines.append(f"Assets:    {len(materializable)} materializable / {len(dag.operations)} total")
+    lines.append(f"Operations: {len(materializable)} materializable / {len(dag.operations)} total")
     lines.append("")
     for level, generation in enumerate(dag.topological_generations(), start=1):
-        lines.append(f"  {level}. {', '.join(asset.qualified_key for asset in generation)}")
+        lines.append(f"  {level}. {', '.join(operation.qualified_key for operation in generation)}")
     print("\n".join(lines))
 
 

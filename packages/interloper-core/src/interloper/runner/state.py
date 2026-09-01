@@ -1,4 +1,4 @@
-"""Run state tracking and dynamic asset scheduling."""
+"""Run state tracking and dynamic operation scheduling."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from interloper.events import Event, EventBus, EventType
-from interloper.runner.results import AssetExecutionInfo, ExecutionStatus
+from interloper.runner.results import ExecutionInfo, ExecutionStatus
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
@@ -15,25 +15,25 @@ if TYPE_CHECKING:
     from interloper.partitioning.base import Partition, PartitionWindow
 
 
-# Fixed namespace for deterministic asset-event ids. A given asset-lifecycle
-# event is uniquely identified by ``(run_id, asset_id, event_type)``; deriving
-# the event id from that triple makes the *same* logical event collapse to a
-# single row when it is produced more than once — e.g. a child container emits
-# its own ``asset_failed`` and the host also authors one as a fallback, or the
-# host bulk-emits ``asset_queued`` and the child re-emits it. Combined with the
-# idempotent (``ON CONFLICT (id) DO NOTHING``) event save, this dedups
-# without any cross-process coordination.
+# Fixed namespace for deterministic operation-event ids. A given lifecycle
+# event is uniquely identified by ``(run_id, component_id, event_type)``;
+# deriving the event id from that triple makes the *same* logical event
+# collapse to a single row when it is produced more than once — e.g. a child
+# container emits its own ``operation_failed`` and the host also authors one
+# as a fallback, or the host bulk-emits ``operation_queued`` and the child
+# re-emits it. Combined with the idempotent (``ON CONFLICT (id) DO NOTHING``)
+# event save, this dedups without any cross-process coordination.
 class RunState:
-    """Tracks asset execution state and determines which assets are ready to run.
+    """Tracks operation execution state and decides which operations are ready.
 
-    Used by runners to dynamically schedule assets based on dependency
+    Used by runners to dynamically schedule operations based on dependency
     completion rather than static DAG levels.
 
     All state mutations occur on the asyncio event loop's single thread,
     so no locking is required.
     """
 
-    _ASSET_EVENT_NS = uuid.UUID("a3f1c2d4-5b6e-4a7c-9d8f-0e1a2b3c4d5e")
+    _OPERATION_EVENT_NS = uuid.UUID("a3f1c2d4-5b6e-4a7c-9d8f-0e1a2b3c4d5e")
 
     def __init__(
         self,
@@ -52,12 +52,12 @@ class RunState:
         if "run_id" not in self.metadata:
             self.metadata["run_id"] = str(uuid.uuid4())
 
-        self.asset_executions: dict[str, AssetExecutionInfo] = {}
+        self.executions: dict[str, ExecutionInfo] = {}
         self.partition_or_window: Partition | PartitionWindow | None = None
         self.start_time: dt.datetime | None = None
         self.end_time: dt.datetime | None = None
 
-        self._initialize_assets()
+        self._initialize_operations()
 
     # -- Properties ------------------------------------------------------------
 
@@ -79,34 +79,34 @@ class RunState:
         return None
 
     @property
-    def queued_assets(self) -> list[Operation]:
-        """List of assets waiting to be scheduled."""
-        return self._assets_with_status(ExecutionStatus.QUEUED)
+    def queued_operations(self) -> list[Operation]:
+        """List of operations waiting to be scheduled."""
+        return self._operations_with_status(ExecutionStatus.QUEUED)
 
     @property
-    def ready_assets(self) -> list[Operation]:
-        """List of assets whose dependencies are met and can be executed."""
-        return self._assets_with_status(ExecutionStatus.READY)
+    def ready_operations(self) -> list[Operation]:
+        """List of operations whose dependencies are met and can be executed."""
+        return self._operations_with_status(ExecutionStatus.READY)
 
     @property
-    def running_assets(self) -> list[Operation]:
-        """List of assets currently being executed."""
-        return self._assets_with_status(ExecutionStatus.RUNNING)
+    def running_operations(self) -> list[Operation]:
+        """List of operations currently being executed."""
+        return self._operations_with_status(ExecutionStatus.RUNNING)
 
     @property
-    def completed_assets(self) -> list[Operation]:
-        """List of assets that completed successfully."""
-        return self._assets_with_status(ExecutionStatus.COMPLETED)
+    def completed_operations(self) -> list[Operation]:
+        """List of operations that completed successfully."""
+        return self._operations_with_status(ExecutionStatus.COMPLETED)
 
     @property
-    def failed_assets(self) -> list[Operation]:
-        """List of assets that failed."""
-        return self._assets_with_status(ExecutionStatus.FAILED)
+    def failed_operations(self) -> list[Operation]:
+        """List of operations that failed."""
+        return self._operations_with_status(ExecutionStatus.FAILED)
 
     # -- Run lifecycle ---------------------------------------------------------
 
     def start_run(self, partition_or_window: Partition | PartitionWindow | None) -> None:
-        """Record the run start time and emit RUN_STARTED + ASSET_QUEUED events.
+        """Record the run start time and emit RUN_STARTED + OPERATION_QUEUED events.
 
         Args:
             partition_or_window: Partition or window the run is scoped to, or
@@ -122,18 +122,18 @@ class RunState:
             metadata={
                 **self.metadata,
                 "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
-                "message": f"Run started ({len(self.dag.operations)} assets)",
+                "message": f"Run started ({len(self.dag.operations)} operations)",
             },
         )
 
-        for asset in self.dag.operations:
-            info = self.asset_executions[asset.id]
+        for operation in self.dag.operations:
+            info = self.executions[operation.id]
             if info.status in (ExecutionStatus.QUEUED, ExecutionStatus.READY):
-                self._emit_asset_event(
-                    EventType.ASSET_QUEUED,
+                self._emit_operation_event(
+                    EventType.OPERATION_QUEUED,
                     {
-                        **self._asset_event_metadata(asset),
-                        "message": f"Asset '{asset.key}' queued",
+                        **self._operation_event_metadata(operation),
+                        "message": f"Operation '{operation.key}' queued",
                     },
                 )
 
@@ -141,8 +141,8 @@ class RunState:
         self,
         status: ExecutionStatus,
         error: str | None = None,
-    ) -> dict[str, AssetExecutionInfo]:
-        """Record the run end time, emit a terminal event, and return asset executions.
+    ) -> dict[str, ExecutionInfo]:
+        """Record the run end time, emit a terminal event, and return the executions.
 
         Args:
             status: Terminal status of the run; anything other than
@@ -151,13 +151,13 @@ class RunState:
                 ``None`` when there is no specific error to report.
 
         Returns:
-            A copy of the asset execution info dictionary.
+            A copy of the execution info dictionary.
         """
         self.end_time = dt.datetime.now(dt.timezone.utc)
 
         event_type = EventType.RUN_COMPLETED if status == ExecutionStatus.COMPLETED else EventType.RUN_FAILED
         if status == ExecutionStatus.COMPLETED:
-            message = f"Run completed ({len(self.completed_assets)}/{len(self.dag.operations)} succeeded)"
+            message = f"Run completed ({len(self.completed_operations)}/{len(self.dag.operations)} succeeded)"
         else:
             message = f"Run failed: {error}" if error else "Run failed"
 
@@ -171,215 +171,219 @@ class RunState:
             },
         )
 
-        return self.asset_executions.copy()
+        return self.executions.copy()
 
     def is_run_complete(self) -> bool:
-        """Check whether every asset has reached a terminal state.
+        """Check whether every operation has reached a terminal state.
 
         Returns:
-            True if all assets are completed, failed, canceled, or skipped.
+            True if all operations are completed, failed, canceled, or skipped.
         """
-        return all(info.is_terminal for info in self.asset_executions.values())
+        return all(info.is_terminal for info in self.executions.values())
 
-    # -- Asset state transitions -----------------------------------------------
+    # -- Operation state transitions ---------------------------------------------
 
-    def mark_asset_running(self, asset: Operation, *, emit: bool = True) -> None:
-        """Transition an asset to RUNNING.
+    def mark_running(self, operation: Operation, *, emit: bool = True) -> None:
+        """Transition an operation to RUNNING.
 
         Args:
-            asset: The asset that started.
-            emit: Emit ``ASSET_STARTED`` on the EventBus.  Set to
+            operation: The operation that started.
+            emit: Emit ``OPERATION_STARTED`` on the EventBus.  Set to
                 ``False`` for cross-process runners where the child
                 process emits the event itself.
         """
-        self.asset_executions[asset.id].mark_running()
+        self.executions[operation.id].mark_running()
 
         if emit:
-            self._emit_asset_event(
-                EventType.ASSET_STARTED,
+            self._emit_operation_event(
+                EventType.OPERATION_STARTED,
                 {
-                    **self._asset_event_metadata(asset),
-                    "message": f"Asset '{asset.key}' started",
+                    **self._operation_event_metadata(operation),
+                    "message": f"Operation '{operation.key}' started",
                 },
             )
 
-    def mark_asset_completed(
-        self, asset: Operation, *, emit: bool = True, effects: OperationResult | None = None
+    def mark_completed(
+        self, operation: Operation, *, emit: bool = True, effects: OperationResult | None = None
     ) -> None:
-        """Transition an asset to COMPLETED and promote ready dependents.
+        """Transition an operation to COMPLETED and promote ready dependents.
 
         Args:
-            asset: The asset that completed.
-            emit: Emit ``ASSET_COMPLETED`` on the EventBus.  Set to
+            operation: The operation that completed.
+            emit: Emit ``OPERATION_COMPLETED`` on the EventBus.  Set to
                 ``False`` for cross-process runners where the child
                 process emits the event itself.
             effects: The operation's returned effects, recorded on the
                 execution info for the platform to persist.
         """
-        self.asset_executions[asset.id].mark_completed()
-        self.asset_executions[asset.id].effects = effects
-        self._promote_dependents(asset.id)
+        self.executions[operation.id].mark_completed()
+        self.executions[operation.id].effects = effects
+        self._promote_dependents(operation.id)
 
         if emit:
-            self._emit_asset_event(
-                EventType.ASSET_COMPLETED,
+            self._emit_operation_event(
+                EventType.OPERATION_COMPLETED,
                 {
-                    **self._asset_event_metadata(asset),
-                    "message": f"Asset '{asset.key}' completed",
+                    **self._operation_event_metadata(operation),
+                    "message": f"Operation '{operation.key}' completed",
                 },
             )
 
-    def mark_asset_canceled(self, asset: Operation, *, emit: bool = True) -> None:
-        """Transition an asset to CANCELED.
+    def mark_canceled(self, operation: Operation, *, emit: bool = True) -> None:
+        """Transition an operation to CANCELED.
 
         Args:
-            asset: The asset that was canceled.
-            emit: Emit ``ASSET_CANCELED`` on the EventBus.  Set to
+            operation: The operation that was canceled.
+            emit: Emit ``OPERATION_CANCELED`` on the EventBus.  Set to
                 ``False`` for cross-process runners where the child
                 process emits the event itself.
         """
-        self.asset_executions[asset.id].mark_canceled()
+        self.executions[operation.id].mark_canceled()
 
         if emit:
-            self._emit_asset_event(
-                EventType.ASSET_CANCELED,
+            self._emit_operation_event(
+                EventType.OPERATION_CANCELED,
                 {
-                    **self._asset_event_metadata(asset),
-                    "message": f"Asset '{asset.key}' canceled",
+                    **self._operation_event_metadata(operation),
+                    "message": f"Operation '{operation.key}' canceled",
                 },
             )
 
-    def mark_asset_failed(
+    def mark_failed(
         self,
-        asset: Operation,
+        operation: Operation,
         error: str,
         tb: str | None = None,
         *,
         emit: bool = True,
         effects: OperationResult | None = None,
     ) -> None:
-        """Transition an asset to FAILED and cancel downstream dependents.
+        """Transition an operation to FAILED and cancel downstream dependents.
 
         Args:
-            asset: The asset that failed.
+            operation: The operation that failed.
             error: Error message describing the failure.
             tb: Optional formatted traceback string.
-            emit: Emit ``ASSET_FAILED`` and ``ASSET_CANCELED`` events on
-                the EventBus.  Set to ``False`` for cross-process runners
+            emit: Emit ``OPERATION_FAILED`` and ``OPERATION_CANCELED`` events
+                on the EventBus.  Set to ``False`` for cross-process runners
                 where the child process emits the events itself.
             effects: The operation's failure effects, recorded on the
                 execution info for the platform to persist.
         """
-        self.asset_executions[asset.id].mark_failed(error, tb=tb)
-        self.asset_executions[asset.id].effects = effects
-        canceled = self._propagate_failure(asset.id)
+        self.executions[operation.id].mark_failed(error, tb=tb)
+        self.executions[operation.id].effects = effects
+        canceled = self._propagate_failure(operation.id)
 
         if emit:
             metadata: dict[str, Any] = {
-                **self._asset_event_metadata(asset),
+                **self._operation_event_metadata(operation),
                 "error": error,
-                "message": f"Asset '{asset.key}' failed: {error}",
+                "message": f"Operation '{operation.key}' failed: {error}",
             }
             if tb:
                 metadata["traceback"] = tb
-            self._emit_asset_event(EventType.ASSET_FAILED, metadata)
+            self._emit_operation_event(EventType.OPERATION_FAILED, metadata)
 
             for key in canceled:
-                canceled_asset = self.dag.operation_map[key]
-                self._emit_asset_event(
-                    EventType.ASSET_CANCELED,
+                canceled_operation = self.dag.operation_map[key]
+                self._emit_operation_event(
+                    EventType.OPERATION_CANCELED,
                     {
-                        **self._asset_event_metadata(canceled_asset),
-                        "message": f"Asset '{type(self.dag.operation_map[key]).key}' canceled (upstream failure)",
+                        **self._operation_event_metadata(canceled_operation),
+                        "message": (
+                            f"Operation '{type(self.dag.operation_map[key]).key}' canceled (upstream failure)"
+                        ),
                     },
                 )
 
     # -- Internals -------------------------------------------------------------
 
-    def _initialize_assets(self) -> None:
-        """Initialize all assets as QUEUED, then promote root assets to READY."""
-        for asset in self.dag.operations:
-            status = ExecutionStatus.SKIPPED if not asset.materializable else ExecutionStatus.QUEUED
-            self.asset_executions[asset.id] = AssetExecutionInfo(
-                asset_id=asset.id,
-                asset_key=asset.key,
+    def _initialize_operations(self) -> None:
+        """Initialize all operations as QUEUED, then promote root operations to READY."""
+        for operation in self.dag.operations:
+            status = ExecutionStatus.SKIPPED if not operation.materializable else ExecutionStatus.QUEUED
+            self.executions[operation.id] = ExecutionInfo(
+                component_id=operation.id,
+                component_key=operation.key,
                 status=status,
             )
 
-        # Promote assets whose predecessors are all skipped (or empty)
-        for asset in self.dag.operations:
-            info = self.asset_executions[asset.id]
+        # Promote operations whose predecessors are all skipped (or empty)
+        for operation in self.dag.operations:
+            info = self.executions[operation.id]
             if info.status != ExecutionStatus.QUEUED:
                 continue
-            preds = self.dag.predecessors.get(asset.id, [])
-            if all(self.asset_executions[p].status == ExecutionStatus.SKIPPED for p in preds):
+            preds = self.dag.predecessors.get(operation.id, [])
+            if all(self.executions[p].status == ExecutionStatus.SKIPPED for p in preds):
                 info.status = ExecutionStatus.READY
 
-    def _assets_with_status(self, status: ExecutionStatus) -> list[Operation]:
-        """Return all assets matching the given execution status.
+    def _operations_with_status(self, status: ExecutionStatus) -> list[Operation]:
+        """Return all operations matching the given execution status.
 
         Args:
             status: The execution status to filter on.
 
         Returns:
-            Assets whose current status equals ``status``, in DAG order.
+            Operations whose current status equals ``status``, in DAG order.
         """
-        return [asset for asset in self.dag.operations if self.asset_executions[asset.id].status == status]
+        return [operation for operation in self.dag.operations if self.executions[operation.id].status == status]
 
-    def _asset_event_metadata(self, asset: Operation) -> dict[str, Any]:
-        """Build event metadata for an asset state transition.
+    def _operation_event_metadata(self, operation: Operation) -> dict[str, Any]:
+        """Build event metadata for an operation state transition.
 
         Args:
-            asset: The asset the event is about.
+            operation: The operation the event is about.
 
         Returns:
             Dictionary of metadata keys for the event.
         """
         meta: dict[str, Any] = {
             **self.metadata,
-            "asset_id": asset.id,
-            "asset_key": asset.key,
+            "component_id": operation.id,
+            "component_kind": operation.kind,
+            "component_key": operation.key,
             "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
         }
-        if asset.source is not None:
-            meta["source_id"] = asset.source.id
+        if operation.source is not None:
+            meta["source_id"] = operation.source.id
         return meta
 
     @staticmethod
-    def _asset_event_id(run_id: str, asset_id: str, event_type: EventType) -> str:
-        """Derive a deterministic event id from a run/asset/type triple.
+    def _operation_event_id(run_id: str, component_id: str, event_type: EventType) -> str:
+        """Derive a deterministic event id from a run/component/type triple.
 
         Both the host and the in-container child run this same code with the
-        same ``run_id`` (passed via ``--run-id``) and ``asset_id`` (carried in
-        the mini-DAG spec), so they compute identical ids and their events
+        same ``run_id`` (passed via ``--run-id``) and ``component_id`` (carried
+        in the mini-DAG spec), so they compute identical ids and their events
         dedup.
 
         Args:
             run_id: Id of the run the event belongs to.
-            asset_id: Id of the asset the event is about.
-            event_type: The asset-lifecycle event type.
+            component_id: Id of the operation the event is about.
+            event_type: The operation-lifecycle event type.
 
         Returns:
             A stable UUID5 string for the event.
         """
-        return str(uuid.uuid5(RunState._ASSET_EVENT_NS, f"{run_id}:{asset_id}:{event_type.value}"))
+        return str(uuid.uuid5(RunState._OPERATION_EVENT_NS, f"{run_id}:{component_id}:{event_type.value}"))
 
-    def _emit_asset_event(self, event_type: EventType, metadata: dict[str, Any]) -> None:
-        """Emit an asset-lifecycle event with a deterministic id.
+    def _emit_operation_event(self, event_type: EventType, metadata: dict[str, Any]) -> None:
+        """Emit an operation-lifecycle event with a deterministic id.
 
-        The id is derived from ``(run_id, asset_id, event_type)`` so the same
-        logical event dedups across producers (host fallback vs child, or the
-        duplicate ``asset_queued``).  ``metadata`` must carry ``asset_id``.
+        The id is derived from ``(run_id, component_id, event_type)`` so the
+        same logical event dedups across producers (host fallback vs child, or
+        the duplicate ``operation_queued``).  ``metadata`` must carry
+        ``component_id``.
 
         Args:
-            event_type: The asset-lifecycle event type to emit.
-            metadata: Event metadata, as built by ``_asset_event_metadata``;
-                must carry an ``asset_id`` key.
+            event_type: The operation-lifecycle event type to emit.
+            metadata: Event metadata, as built by ``_operation_event_metadata``;
+                must carry a ``component_id`` key.
         """
         event = Event(
             type=event_type,
             metadata=metadata,
-            id=self._asset_event_id(self.run_id, str(metadata["asset_id"]), event_type),
+            id=self._operation_event_id(self.run_id, str(metadata["component_id"]), event_type),
         )
         EventBus.emit_event(event)
 
@@ -387,16 +391,16 @@ class RunState:
         """Promote queued successors to READY if all their predecessors are done.
 
         Args:
-            completed_key: Id of the asset that just completed, whose
+            completed_key: Id of the operation that just completed, whose
                 successors are candidates for promotion.
         """
         completed_keys = {
             k
-            for k, info in self.asset_executions.items()
+            for k, info in self.executions.items()
             if info.status in (ExecutionStatus.COMPLETED, ExecutionStatus.SKIPPED)
         }
         for successor_key in self.dag.successors.get(completed_key, []):
-            info = self.asset_executions[successor_key]
+            info = self.executions[successor_key]
             if info.status != ExecutionStatus.QUEUED:
                 continue
             preds = self.dag.predecessors.get(successor_key, [])
@@ -407,15 +411,15 @@ class RunState:
         """Recursively mark all downstream dependents as CANCELED.
 
         Args:
-            failed_key: Id of the asset that failed, whose transitive
+            failed_key: Id of the operation that failed, whose transitive
                 successors are canceled.
 
         Returns:
-            List of asset keys that were canceled.
+            List of operation ids that were canceled.
         """
         canceled: list[str] = []
         for successor_key in self.dag.successors.get(failed_key, []):
-            info = self.asset_executions[successor_key]
+            info = self.executions[successor_key]
             if info.is_terminal:
                 continue
             info.mark_canceled()

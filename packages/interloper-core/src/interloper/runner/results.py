@@ -1,4 +1,4 @@
-"""Result types for asset and DAG execution."""
+"""Result types for operation and DAG execution."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class ExecutionStatus(str, Enum):
-    """Execution status for assets and runs."""
+    """Execution status for operations and runs."""
 
     QUEUED = "queued"
     READY = "ready"
@@ -34,8 +34,8 @@ _TERMINAL_STATUSES = frozenset({
 
 
 @dataclass
-class AssetExecutionInfo:
-    """Execution information for a single asset.
+class ExecutionInfo:
+    """Execution information for a single operation.
 
     ``effects`` carries the executed operation's
     :class:`~interloper.operation.base.OperationResult` — the config and
@@ -44,8 +44,8 @@ class AssetExecutionInfo:
     nodes, which never executed.
     """
 
-    asset_id: str
-    asset_key: str
+    component_id: str
+    component_key: str
     status: ExecutionStatus
     start_time: dt.datetime | None = None
     end_time: dt.datetime | None = None
@@ -103,8 +103,8 @@ class AssetExecutionInfo:
             A dict representation of this execution info.
         """
         return {
-            "asset_id": self.asset_id,
-            "asset_key": self.asset_key,
+            "component_id": self.component_id,
+            "component_key": self.component_key,
             "status": self.status.value,
             "start_time": self.start_time.isoformat() if self.start_time else None,
             "end_time": self.end_time.isoformat() if self.end_time else None,
@@ -120,23 +120,23 @@ class RunResult:
 
     partition_or_window: Partition | PartitionWindow | None = None
     status: ExecutionStatus = ExecutionStatus.COMPLETED
-    asset_executions: dict[str, AssetExecutionInfo] = field(default_factory=dict)
+    executions: dict[str, ExecutionInfo] = field(default_factory=dict)
     execution_time: float = 0.0
 
     @property
-    def completed_assets(self) -> list[str]:
-        """List of asset keys that completed successfully."""
-        return [k for k, v in self.asset_executions.items() if v.status == ExecutionStatus.COMPLETED]
+    def completed_ids(self) -> list[str]:
+        """Ids of the operations that completed successfully."""
+        return [k for k, v in self.executions.items() if v.status == ExecutionStatus.COMPLETED]
 
     @property
-    def failed_assets(self) -> list[str]:
-        """List of asset keys that failed."""
-        return [k for k, v in self.asset_executions.items() if v.status == ExecutionStatus.FAILED]
+    def failed_ids(self) -> list[str]:
+        """Ids of the operations that failed."""
+        return [k for k, v in self.executions.items() if v.status == ExecutionStatus.FAILED]
 
     @property
-    def canceled_assets(self) -> list[str]:
-        """List of asset keys that were canceled (downstream of a failure)."""
-        return [k for k, v in self.asset_executions.items() if v.status == ExecutionStatus.CANCELED]
+    def canceled_ids(self) -> list[str]:
+        """Ids of the operations that were canceled (downstream of a failure)."""
+        return [k for k, v in self.executions.items() if v.status == ExecutionStatus.CANCELED]
 
     def __str__(self) -> str:
         """Human-friendly summary string.
@@ -152,9 +152,9 @@ class RunResult:
         else:
             identifier = f"partition={self.partition_or_window}"
 
-        completed_count = len(self.completed_assets)
-        failed_count = len(self.failed_assets)
-        canceled_count = len(self.canceled_assets)
+        completed_count = len(self.completed_ids)
+        failed_count = len(self.failed_ids)
+        canceled_count = len(self.canceled_ids)
 
         parts: list[str] = [
             f"status={self.status.value}",
@@ -166,15 +166,15 @@ class RunResult:
         ]
 
         if failed_count > 0:
-            failed_preview = ", ".join(self.failed_assets[:5])
+            failed_preview = ", ".join(self.failed_ids[:5])
             if failed_count > 5:
                 failed_preview += f" +{failed_count - 5} more"
-            parts.append(f"failed_assets=[{failed_preview}]")
+            parts.append(f"failed=[{failed_preview}]")
 
         if canceled_count > 0:
-            canceled_preview = ", ".join(self.canceled_assets[:5])
+            canceled_preview = ", ".join(self.canceled_ids[:5])
             if canceled_count > 5:
                 canceled_preview += f" +{canceled_count - 5} more"
-            parts.append(f"canceled_assets=[{canceled_preview}]")
+            parts.append(f"canceled=[{canceled_preview}]")
 
         return "RunResult(" + ", ".join(parts) + ")"

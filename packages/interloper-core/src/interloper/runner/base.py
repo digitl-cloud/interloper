@@ -150,7 +150,7 @@ class Runner(Serializable):
                 result = await self._run(dag, partition_or_window, metadata)
                 # Runners swallow asset failures into the result; surface them.
                 if result.status is ExecutionStatus.FAILED:
-                    span.set_status(StatusCode.ERROR, f"{len(result.failed_assets)} asset(s) failed")
+                    span.set_status(StatusCode.ERROR, f"{len(result.failed_ids)} operation(s) failed")
                 return result
         finally:
             if handler is not None:
@@ -211,18 +211,18 @@ class Runner(Serializable):
         Args:
             error: Run-level error message, set when the DAG walk itself
                 aborted. ``None`` means the walk finished, in which case the
-                run only fails if individual assets did.
+                run only fails if individual operations did.
 
         Returns:
             A RunResult summarizing the execution outcome.
         """
-        status = ExecutionStatus.FAILED if (self.state.failed_assets or error) else ExecutionStatus.COMPLETED
-        asset_executions = self.state.end_run(status, error)
+        status = ExecutionStatus.FAILED if (self.state.failed_operations or error) else ExecutionStatus.COMPLETED
+        executions = self.state.end_run(status, error)
 
         return RunResult(
             partition_or_window=self.state.partition_or_window,
             status=status,
-            asset_executions=asset_executions,
+            executions=executions,
             execution_time=self.state.elapsed_time or 0,
         )
 
@@ -233,19 +233,19 @@ class Runner(Serializable):
     ) -> None:
         """Run preflight validations before execution begins.
 
-        Scope errors are raised here rather than left to the assets: a run
-        whose scope no asset can serve should fail as a whole, instead of
-        failing the offending assets while the rest of the DAG materializes.
+        Scope errors are raised here rather than left to the operations: a run
+        whose scope no operation can serve should fail as a whole, instead of
+        failing the offending operations while the rest of the DAG executes.
 
         Args:
-            dag: The DAG whose assets are validated against the run scope.
+            dag: The DAG whose operations are validated against the run scope.
             partition_or_window: Partition or window to scope the run.
                 ``None`` means an unpartitioned run.
 
         Raises:
-            PartitionError: If partitioned assets are run without a partition,
-                a windowed run includes assets that do not support windows, or
-                the scope disagrees with an asset's time partitioning.
+            PartitionError: If partitioned operations are run without a partition,
+                a windowed run includes operations that do not support windows, or
+                the scope disagrees with an operation's time partitioning.
         """
         if partition_or_window is None:
             partitioned = sorted(
@@ -256,7 +256,7 @@ class Runner(Serializable):
             if partitioned:
                 raise PartitionError(
                     "This run requires a partition or partition window. "
-                    f"Partitioned assets: {partitioned}."
+                    f"Partitioned operations: {partitioned}."
                 )
             return
 
@@ -270,8 +270,8 @@ class Runner(Serializable):
             ]
             if unsupported:
                 raise PartitionError(
-                    "Windowed runs require all partitioned assets to set allow_window=True. "
-                    f"Unsupported assets: {sorted(unsupported)}."
+                    "Windowed runs require all partitioned operations to set allow_window=True. "
+                    f"Unsupported operations: {sorted(unsupported)}."
                 )
 
         for operation in dag.operations:

@@ -6,15 +6,16 @@ from typing import Any
 
 RUN_ID = "interloper.run.id"
 BACKFILL_ID = "interloper.backfill.id"
-ASSET_ID = "interloper.asset.id"
-ASSET_KEY = "interloper.asset.key"
-ASSET_QUALIFIED_KEY = "interloper.asset.qualified_key"
+COMPONENT_ID = "interloper.component.id"
+COMPONENT_KIND = "interloper.component.kind"
+COMPONENT_KEY = "interloper.component.key"
+COMPONENT_QUALIFIED_KEY = "interloper.component.qualified_key"
 SOURCE_ID = "interloper.source.id"
 PARTITION = "interloper.partition"
 DESTINATION_KEY = "interloper.destination.key"
 UPSTREAM_KEY = "interloper.upstream.key"
 RESOURCE_NAME = "interloper.resource.name"
-DAG_ASSET_COUNT = "interloper.dag.asset_count"
+DAG_OPERATION_COUNT = "interloper.dag.operation_count"
 DAG_SPEC_ITEMS = "interloper.dag.spec_items"
 RUNNER_TYPE = "interloper.runner.type"
 LAUNCHER_TYPE = "interloper.launcher.type"
@@ -24,13 +25,14 @@ TARGET_KIND = "interloper.target.kind"
 TARGET_KEY = "interloper.target.key"
 TARGET_NAME = "interloper.target.name"
 
-# Event-metadata keys (see Asset._event_metadata / RunState) → attribute names.
+# Event-metadata keys (see Operation._event_metadata / RunState) → attribute names.
 _METADATA_KEYS = {
     "run_id": RUN_ID,
     "backfill_id": BACKFILL_ID,
-    "asset_id": ASSET_ID,
-    "asset_key": ASSET_KEY,
-    "asset_qualified_key": ASSET_QUALIFIED_KEY,
+    "component_id": COMPONENT_ID,
+    "component_kind": COMPONENT_KIND,
+    "component_key": COMPONENT_KEY,
+    "qualified_key": COMPONENT_QUALIFIED_KEY,
     "partition_or_window": PARTITION,
     "source_id": SOURCE_ID,
     "destination_key": DESTINATION_KEY,
@@ -49,7 +51,7 @@ def from_metadata(metadata: dict[str, Any]) -> dict[str, str]:
     stringified (ids are UUIDs).
 
     Args:
-        metadata: Event metadata (run-level metadata + asset identity fields).
+        metadata: Event metadata (run-level metadata + component identity fields).
 
     Returns:
         Attribute dict keyed by the ``interloper.*`` attribute names.

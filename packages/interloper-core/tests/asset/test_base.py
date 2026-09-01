@@ -587,7 +587,7 @@ class TestDestinationWrite:
         ]
         assert len(warnings) == 1
         # The warning is attributed to the asset so it filters/labels in the UI.
-        assert warnings[0].metadata.get("asset_id") == asset.id
+        assert warnings[0].metadata.get("component_id") == asset.id
 
     async def test_non_empty_result_is_written(self):
         il.MemoryDestination.clear()

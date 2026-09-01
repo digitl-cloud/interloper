@@ -235,9 +235,9 @@ class RunExecutor:
         parent_id: UUID | None = retry_of
         with Session(self._store.engine) as session:
             while parent_id:
-                for row in self._store.events.list_asset_executions(parent_id):
+                for row in self._store.events.list_executions(parent_id):
                     # Closest ancestor wins: only record a node the first time we see it.
-                    statuses.setdefault(row.asset_id, row.status)
+                    statuses.setdefault(row.component_id, row.status)
                 parent = session.get(Run, parent_id)
                 parent_id = parent.retry_of if parent else None
 
@@ -250,14 +250,14 @@ class RunExecutor:
             result: The run result whose per-node execution infos carry the
                 effects; nodes without effects are untouched.
         """
-        for info in result.asset_executions.values():
+        for info in result.executions.values():
             effects = info.effects
             if effects is None:
                 continue
             if effects.config:
-                self._store.components.merge_config(UUID(info.asset_id), effects.config)
+                self._store.components.merge_config(UUID(info.component_id), effects.config)
             if effects.state:
-                self._store.components.stamp_state(UUID(info.asset_id), **effects.state)
+                self._store.components.stamp_state(UUID(info.component_id), **effects.state)
 
     def _run_dag(
         self,

@@ -55,14 +55,14 @@ class TestOtelMetricsHandler:
         (duration,) = points("interloper.run.duration", status="completed")
         assert duration.sum >= 12.5
 
-    def test_asset_counter_and_duration_by_key(self, points):
+    def test_operation_counter_and_duration_by_key(self, points):
         handler = OtelMetricsHandler()
-        handler(_event(EventType.ASSET_STARTED, 0, run_id="run-m2", asset_id="a1", asset_key="orders_m2"))
-        handler(_event(EventType.ASSET_FAILED, 3.0, run_id="run-m2", asset_id="a1", asset_key="orders_m2"))
+        handler(_event(EventType.OPERATION_STARTED, 0, run_id="run-m2", component_id="a1", component_key="orders_m2"))
+        handler(_event(EventType.OPERATION_FAILED, 3.0, run_id="run-m2", component_id="a1", component_key="orders_m2"))
 
-        (counter,) = points("interloper.assets", status="failed", asset_key="orders_m2")
+        (counter,) = points("interloper.operations", status="failed", component_key="orders_m2")
         assert counter.value == 1
-        (duration,) = points("interloper.asset.duration", status="failed", asset_key="orders_m2")
+        (duration,) = points("interloper.operation.duration", status="failed", component_key="orders_m2")
         assert duration.sum == 3.0
 
     def test_destination_io_counter(self, points):
@@ -78,11 +78,11 @@ class TestOtelMetricsHandler:
     def test_duplicate_event_ids_count_once(self, points):
         # Docker/k8s hosts re-emit child events under the same deterministic id.
         handler = OtelMetricsHandler()
-        event = _event(EventType.ASSET_COMPLETED, run_id="run-m4", asset_id="a1", asset_key="orders_m4")
+        event = _event(EventType.OPERATION_COMPLETED, run_id="run-m4", component_id="a1", component_key="orders_m4")
         handler(event)
         handler(event)
 
-        (counter,) = points("interloper.assets", status="completed", asset_key="orders_m4")
+        (counter,) = points("interloper.operations", status="completed", component_key="orders_m4")
         assert counter.value == 1
 
     def test_terminal_without_start_still_counts(self, points):
@@ -161,15 +161,15 @@ class TestPlatformIdentity:
         ]
         assert matches
 
-    def test_asset_metrics_stay_identity_free(self, points):
+    def test_operation_metrics_stay_identity_free(self, points):
         handler = OtelMetricsHandler()
         handler(
             _event(
-                EventType.ASSET_COMPLETED,
-                run_id="run-p3", asset_id="a1", asset_key="orders_p3",
+                EventType.OPERATION_COMPLETED,
+                run_id="run-p3", component_id="a1", component_key="orders_p3",
                 org_id="org-p1", target_key="nightly",
             )
         )
-        (counter,) = points("interloper.assets", asset_key="orders_p3")
+        (counter,) = points("interloper.operations", component_key="orders_p3")
         assert "org_id" not in (counter.attributes or {})
         assert "target_key" not in (counter.attributes or {})

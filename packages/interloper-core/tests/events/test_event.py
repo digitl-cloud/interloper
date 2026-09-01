@@ -16,23 +16,23 @@ def test_events_get_unique_ids_by_default() -> None:
 
 def test_to_dict_includes_event_id() -> None:
     """``event_id`` is serialized as a top-level key alongside type/timestamp."""
-    event = Event(type=EventType.ASSET_STARTED, metadata={"asset_key": "foo"})
+    event = Event(type=EventType.OPERATION_STARTED, metadata={"component_key": "foo"})
     data = event.to_dict()
     assert data["event_id"] == event.id
-    assert data["type"] == "asset_started"
-    assert data["asset_key"] == "foo"
+    assert data["type"] == "operation_started"
+    assert data["component_key"] == "foo"
 
 
 def test_json_round_trip_preserves_id_and_timestamp() -> None:
     """Serializing and parsing an event keeps its id, type, timestamp and metadata."""
-    event = Event(type=EventType.ASSET_FAILED, metadata={"asset_key": "foo", "error": "boom"})
+    event = Event(type=EventType.OPERATION_FAILED, metadata={"component_key": "foo", "error": "boom"})
 
     restored = Event.from_json(event.to_json())
 
     assert restored.id == event.id
     assert restored.type == event.type
     assert restored.timestamp == event.timestamp
-    assert restored.metadata["asset_key"] == "foo"
+    assert restored.metadata["component_key"] == "foo"
     assert restored.metadata["error"] == "boom"
     # event_id is a top-level field, not metadata.
     assert "event_id" not in restored.metadata
@@ -65,9 +65,9 @@ def test_emit_event_preserves_identity() -> None:
 
 
 def test_str_prefers_qualified_key_then_bare_key() -> None:
-    """``__str__`` falls back to ``asset_key`` when no qualified key is set."""
-    qualified = Event(type=EventType.ASSET_STARTED, metadata={"asset_qualified_key": "src.foo", "asset_key": "foo"})
-    bare = Event(type=EventType.ASSET_STARTED, metadata={"asset_key": "foo"})
+    """``__str__`` falls back to ``component_key`` when no qualified key is set."""
+    qualified = Event(type=EventType.OPERATION_STARTED, metadata={"qualified_key": "src.foo", "component_key": "foo"})
+    bare = Event(type=EventType.OPERATION_STARTED, metadata={"component_key": "foo"})
     neither = Event(type=EventType.RUN_STARTED)
 
     assert "src.foo" in str(qualified)
@@ -77,11 +77,11 @@ def test_str_prefers_qualified_key_then_bare_key() -> None:
 
 def test_str_falls_back_to_error_when_no_message() -> None:
     """Failure events without a ``message`` show their ``error`` instead."""
-    event = Event(type=EventType.ASSET_FAILED, metadata={"asset_key": "foo", "error": "boom"})
+    event = Event(type=EventType.OPERATION_FAILED, metadata={"component_key": "foo", "error": "boom"})
     assert "boom" in str(event)
 
 
 def test_str_labels_log_events_with_level() -> None:
     """LOG events render as ``LOG.<LEVEL>`` instead of the bare type."""
-    event = Event(type=EventType.LOG, metadata={"asset_key": "foo", "message": "hi", "level": "WARNING"})
+    event = Event(type=EventType.LOG, metadata={"component_key": "foo", "message": "hi", "level": "WARNING"})
     assert "LOG.WARNING" in str(event)

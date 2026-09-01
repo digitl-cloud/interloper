@@ -16,7 +16,7 @@ from interloper.runner.sync_runner import SyncRunner
 
 
 def _worker(
-    asset_id: str,
+    operation_id: str,
     dag_spec: dict[str, Any],
     partition_or_window: Partition | PartitionWindow | None,
     metadata: dict[str, Any],
@@ -28,7 +28,7 @@ def _worker(
     plain dict so the parent process can record them on the execution info.
 
     Args:
-        asset_id: Id of the node to execute within the reconstructed DAG.
+        operation_id: Id of the node to execute within the reconstructed DAG.
         dag_spec: JSON-mode dump of the DAG spec to reconstruct.
         partition_or_window: Partition or window to scope the run; narrowed
             to the node's own effective partition.
@@ -52,7 +52,7 @@ def _worker(
     operation: Operation | None = None
     try:
         dag = DAGSpec(**dag_spec).reconstruct()
-        operation = dag.operation_map[asset_id]
+        operation = dag.operation_map[operation_id]
         result = asyncio.run(
             operation.execute(
                 OperationContext(
@@ -64,28 +64,28 @@ def _worker(
         )
     except Exception as e:  # noqa: BLE001
         if operation is None:
-            return (asset_id, False, format_exception(e), traceback.format_exc(), {})
+            return (operation_id, False, format_exception(e), traceback.format_exc(), {})
         failed = operation.failure(e)
         tb = traceback.format_exc() if type(operation).capture_traceback else None
         effects = {"config": failed.config, "state": failed.state}
-        return (asset_id, False, failed.error or format_exception(e), tb, effects)
+        return (operation_id, False, failed.error or format_exception(e), tb, effects)
     finally:
         if token is not None:
             otel_context.detach(token)
         # Pool workers are reused; exit hooks may never run.
         force_flush()
-    return (asset_id, True, None, None, {"config": result.config, "state": result.state})
+    return (operation_id, True, None, None, {"config": result.config, "state": result.state})
 
 
 class MultiProcessRunner(SyncRunner):
     """Process-based parallel runner.
 
-    Executes independent assets concurrently using a process pool.
-    Each asset is serialized via :class:`~interloper.dag.base.DAGSpec`,
-    reconstructed in a child process, and materialized there.  State
+    Executes independent operations concurrently using a process pool.
+    Each operation is serialized via :class:`~interloper.dag.base.DAGSpec`,
+    reconstructed in a child process, and executed there.  State
     tracking remains in the main process.
 
-    Use this runner when assets perform CPU-bound work or when
+    Use this runner when operations perform CPU-bound work or when
     you need true parallelism (bypassing the GIL)::
 
         result = await MultiProcessRunner(max_workers=2, on_event=log_event).run(dag)
@@ -102,7 +102,7 @@ class MultiProcessRunner(SyncRunner):
 
     @property
     def _capacity(self) -> int:
-        """Maximum number of concurrent assets this runner can execute.
+        """Maximum number of concurrent operations this runner can execute.
 
         Returns:
             ``max_workers``, the size of the process pool.
@@ -122,15 +122,15 @@ class MultiProcessRunner(SyncRunner):
         self._futures.clear()
         self._dag_spec = None
 
-    def _submit_asset(
+    def _submit_operation(
         self,
-        asset: Operation,
+        operation: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
-        """Submit asset for execution in a child process.
+        """Submit an operation for execution in a child process.
 
         Args:
-            asset: The asset to execute.
+            operation: The operation to execute.
             partition_or_window: Partition or window to scope the run.
 
         Returns:
@@ -142,19 +142,19 @@ class MultiProcessRunner(SyncRunner):
         if self._pool is None or self._dag_spec is None:
             raise RunnerError("Process pool not initialized")
 
-        self.state.mark_asset_running(asset)
+        self.state.mark_running(operation)
 
         future = self._pool.submit(
             _worker,
-            asset.id,
+            operation.id,
             self._dag_spec,
             partition_or_window,
             self.state.metadata,
         )
-        self._futures[future] = asset
+        self._futures[future] = operation
         return future
 
-    def _handle_completed(self, future: Future[Any], asset: Operation) -> None:
+    def _handle_completed(self, future: Future[Any], operation: Operation) -> None:
         """Process a completed future from a worker process.
 
         Unlike the base ``_handle_completed``, this interprets the
@@ -162,47 +162,53 @@ class MultiProcessRunner(SyncRunner):
         ``_worker``.
 
         Args:
-            future: The finished future returned by ``_submit_asset``.
-            asset: The asset the future was submitted for.
+            future: The finished future returned by ``_submit_operation``.
+            operation: The operation the future was submitted for.
 
         Raises:
-            RunnerError: If the asset failed and ``fail_fast`` or ``reraise`` is set.
+            RunnerError: If the operation failed and ``fail_fast`` or ``reraise`` is set.
         """
         self._futures.pop(future, None)
 
         try:
-            _key, success, error_msg, tb, effects = future.result()
+            _key, success, error_message, tb, effects = future.result()
         except Exception as e:
-            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
+            self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc())
             if self.fail_fast or self.reraise:
                 raise
             return
 
         if success:
-            self.state.mark_asset_completed(asset, effects=OperationResult(**effects))
+            self.state.mark_completed(operation, effects=OperationResult(**effects))
         else:
-            self.state.mark_asset_failed(
-                asset, error_msg or "Unknown error", tb=tb, effects=OperationResult(error=error_msg, **effects)
+            self.state.mark_failed(
+                operation,
+                error_message or "Unknown error",
+                tb=tb,
+                effects=OperationResult(error=error_message, **effects),
             )
             if self.fail_fast or self.reraise:
-                raise RunnerError(f"Asset '{asset.key}' failed: {error_msg}")
+                raise RunnerError(f"Operation '{operation.key}' failed: {error_message}")
 
-    def _handle_flushed(self, future: Future[Any], asset: Operation) -> None:
-        """Interpret the worker ``(id, success, error_msg, tb, effects)`` tuple during flush.
+    def _handle_flushed(self, future: Future[Any], operation: Operation) -> None:
+        """Interpret the worker ``(id, success, error_message, tb, effects)`` tuple during flush.
 
         Args:
             future: The finished future to interpret.
-            asset: The asset the future was submitted for.
+            operation: The operation the future was submitted for.
         """
         try:
-            _key, success, error_msg, tb, effects = future.result()
+            _key, success, error_message, tb, effects = future.result()
         except Exception as e:  # noqa: BLE001
-            self.state.mark_asset_failed(asset, format_exception(e), tb=traceback.format_exc())
+            self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc())
             return
 
         if success:
-            self.state.mark_asset_completed(asset, effects=OperationResult(**effects))
+            self.state.mark_completed(operation, effects=OperationResult(**effects))
         else:
-            self.state.mark_asset_failed(
-                asset, error_msg or "Unknown error", tb=tb, effects=OperationResult(error=error_msg, **effects)
+            self.state.mark_failed(
+                operation,
+                error_message or "Unknown error",
+                tb=tb,
+                effects=OperationResult(error=error_message, **effects),
             )

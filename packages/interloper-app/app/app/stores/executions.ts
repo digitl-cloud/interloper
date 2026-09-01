@@ -1,6 +1,6 @@
-import type { AssetExecution } from '~/types/asset_execution'
+import type { Execution } from '~/types/execution'
 
-export const useAssetExecutionsStore = defineStore('assetExecutions', () => {
+export const useExecutionsStore = defineStore('executions', () => {
     const { apiFetch } = useApi()
     const orgStore = useOrganisationStore()
 
@@ -8,16 +8,16 @@ export const useAssetExecutionsStore = defineStore('assetExecutions', () => {
      * State
      **********************/
     const runId = ref<string | null>(null)
-    const assetExecutions = ref<AssetExecution[]>([])
+    const executions = ref<Execution[]>([])
     const loading = ref(false)
     const error = ref<Error | null>(null)
 
     /**********************
      * Realtime
      **********************/
-    // Re-fetch asset executions when new events arrive for the current run.
-    // The asset_executions view aggregates events, so a full re-fetch is
-    // the simplest way to stay in sync.
+    // Re-fetch executions when new events arrive for the current run.
+    // The executions view aggregates events, so a full re-fetch is the
+    // simplest way to stay in sync.
     useRealtimeSubscription({
         table: 'events',
         scope: () => runId.value ? orgStore.organisation?.id : null,
@@ -32,7 +32,7 @@ export const useAssetExecutionsStore = defineStore('assetExecutions', () => {
      **********************/
     async function _refetch(id: string) {
         try {
-            assetExecutions.value = await apiFetch<AssetExecution[]>(`/runs/${id}/asset-executions`)
+            executions.value = await apiFetch<Execution[]>(`/runs/${id}/executions`)
         }
         catch {
             // Silently ignore — the initial fetch already set the error state
@@ -47,7 +47,7 @@ export const useAssetExecutionsStore = defineStore('assetExecutions', () => {
         loading.value = true
         error.value = null
         try {
-            assetExecutions.value = await apiFetch<AssetExecution[]>(`/runs/${id}/asset-executions`)
+            executions.value = await apiFetch<Execution[]>(`/runs/${id}/executions`)
         }
         catch (e) {
             error.value = e as Error
@@ -59,14 +59,14 @@ export const useAssetExecutionsStore = defineStore('assetExecutions', () => {
 
     function $reset() {
         runId.value = null
-        assetExecutions.value = []
+        executions.value = []
         loading.value = false
         error.value = null
     }
 
     return {
         runId,
-        assetExecutions,
+        executions,
         loading,
         error,
         fetchForRun,

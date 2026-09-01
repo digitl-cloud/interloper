@@ -13,13 +13,13 @@ const runId = route.params.run!.toString()
 
 const runsStore = useRunsStore()
 const eventsStore = useEventsStore()
-const assetExecutionsStore = useAssetExecutionsStore()
+const executionsStore = useExecutionsStore()
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
 const initialRun = ref<Run | null>(null)
-const assetExecutions = computed(() => assetExecutionsStore.assetExecutions)
+const executions = computed(() => executionsStore.executions)
 
 /** Prefer the store's copy (updated via realtime), fall back to initial fetch. */
 const run = computed(() => runsStore.findById(runId) ?? initialRun.value)
@@ -32,10 +32,10 @@ const eventInFocus = ref<RunEvent | null>(null)
 const filterStatuses = computed(() => statusFilter.value ? statusesForKey(statusFilter.value) : null)
 
 /** Timeline rows, narrowed to the active status pill. */
-const timelineRows = useAssetExecutionRows(() => {
+const timelineRows = useExecutionRows(() => {
     const statuses = filterStatuses.value
-    if (!statuses) return assetExecutions.value
-    return assetExecutions.value.filter(e => statuses.includes(e.status))
+    if (!statuses) return executions.value
+    return executions.value.filter(e => statuses.includes(e.status))
 })
 
 // Selecting a single asset narrows to it; otherwise the active status pill's
@@ -45,9 +45,9 @@ const eventAssetIds = computed<string[] | null>(() => {
     if (selectedAsset.value) return [selectedAsset.value]
     const statuses = filterStatuses.value
     if (!statuses) return null
-    return assetExecutions.value
-        .filter(e => statuses.includes(e.status) && e.asset_id)
-        .map(e => e.asset_id!)
+    return executions.value
+        .filter(e => statuses.includes(e.status) && e.component_id)
+        .map(e => e.component_id!)
 })
 watch(eventAssetIds, ids => eventsStore.filterByComponents(ids))
 
@@ -105,7 +105,7 @@ onMounted(async () => {
         const [fetchedRun] = await Promise.all([
             runsStore.fetchOne(runId),
             eventsStore.fetchForRun(runId),
-            assetExecutionsStore.fetchForRun(runId),
+            executionsStore.fetchForRun(runId),
             // Sources/assets back the Graph view; jobs resolve the run's target in the summary.
             componentsStore.byKind('source').length === 0 || componentsStore.byKind('job').length === 0
                 ? componentsStore.fetchAll(['source', 'asset', 'job'])
@@ -125,7 +125,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
     eventsStore.$reset()
-    assetExecutionsStore.$reset()
+    executionsStore.$reset()
 })
 </script>
 
@@ -164,7 +164,7 @@ onUnmounted(() => {
                 <ExecutionsRunSummary v-if="run"
                                       v-model:status-filter="statusFilter"
                                       :run="run"
-                                      :asset-executions="assetExecutions" />
+                                      :executions="executions" />
             </div>
 
         <SplitterGroup direction="vertical"

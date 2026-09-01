@@ -105,17 +105,17 @@ Every runner returns a `RunResult`:
 result.status            # ExecutionStatus (COMPLETED, FAILED, ...)
 result.execution_time    # Total execution time in seconds
 result.partition_or_window
-result.asset_executions  # dict[str, AssetExecutionInfo] keyed by asset id
+result.executions        # dict[str, ExecutionInfo] keyed by operation id
 
-result.completed_assets  # list[str] of asset keys that completed
-result.failed_assets     # list[str] of asset keys that failed
-result.canceled_assets   # list[str] of asset keys canceled downstream of a failure
+result.completed_ids     # list[str] of operation ids that completed
+result.failed_ids        # list[str] of operation ids that failed
+result.canceled_ids      # list[str] of operation ids canceled downstream of a failure
 ```
 
-Each `AssetExecutionInfo` carries:
+Each `ExecutionInfo` carries:
 
 ```py
-info.asset_key
+info.component_key
 info.status            # ExecutionStatus
 info.start_time        # datetime | None
 info.end_time          # datetime | None

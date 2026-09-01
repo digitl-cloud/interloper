@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import type { Run } from '~/types/run'
-import type { AssetExecution } from '~/types/asset_execution'
+import type { Execution } from '~/types/execution'
 import type { RunStatusBucket } from '~/composables/runStats'
 
 const props = defineProps<{
     run: Run
-    assetExecutions: AssetExecution[]
+    executions: Execution[]
 }>()
 
 /** Active status bucket key (e.g. "failed"); filters the assets + events. */
 const statusFilter = defineModel<string | null>('statusFilter', { default: null })
 
-const stats = useRunStats(toRef(props, 'run'), toRef(props, 'assetExecutions'))
+const stats = useRunStats(toRef(props, 'run'), toRef(props, 'executions'))
 
 const componentsStore = useComponentsStore()
 

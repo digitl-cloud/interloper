@@ -24,24 +24,27 @@ class EventLogger:
 
     def __init__(
         self,
-        asset_key: str,
+        component_key: str,
         metadata: dict[str, Any],
-        asset_id: str | None = None,
+        component_id: str | None = None,
+        component_kind: str = "asset",
         source_id: str | None = None,
     ) -> None:
         """Initialize the logger.
 
         Args:
-            asset_key: Qualified key of the asset that owns this logger.
+            component_key: Qualified key of the component that owns this logger.
             metadata: Run metadata included in every emitted ``LOG`` event.
-            asset_id: Id of the asset that owns this logger. Carried on every
-                emitted ``LOG`` event so it can be attributed to the asset
-                (e.g. filtered alongside its lifecycle events).
-            source_id: Id of the source the asset belongs to, if any.
+            component_id: Id of the component that owns this logger. Carried on
+                every emitted ``LOG`` event so it can be attributed to the
+                component (e.g. filtered alongside its lifecycle events).
+            component_kind: Kind of the owning component.
+            source_id: Id of the source the component belongs to, if any.
         """
-        self._asset_key = asset_key
+        self._component_key = component_key
         self._metadata = metadata
-        self._asset_id = asset_id
+        self._component_id = component_id
+        self._component_kind = component_kind
         self._source_id = source_id
 
     def _emit(self, level: int, message: str) -> None:
@@ -54,12 +57,13 @@ class EventLogger:
         """
         metadata: dict[str, Any] = {
             **self._metadata,
-            "asset_key": self._asset_key,
+            "component_key": self._component_key,
             "message": message,
             "level": logging.getLevelName(level),
         }
-        if self._asset_id is not None:
-            metadata["asset_id"] = self._asset_id
+        if self._component_id is not None:
+            metadata["component_id"] = self._component_id
+            metadata["component_kind"] = self._component_kind
         if self._source_id is not None:
             metadata["source_id"] = self._source_id
         EventBus.emit(EventType.LOG, metadata=metadata)

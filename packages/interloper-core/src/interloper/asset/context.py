@@ -61,7 +61,7 @@ class ExecutionContext:
             self._logger = EventLogger(
                 self._asset_key,
                 self._metadata,
-                asset_id=self._asset_id,
+                component_id=self._asset_id,
                 source_id=self._source_id,
             )
         return self._logger

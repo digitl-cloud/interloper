@@ -21,12 +21,12 @@ def _capture(emit: object) -> list[Event]:
     return [e for e in captured if e.type == EventType.LOG]
 
 
-def test_log_event_carries_asset_and_source_id() -> None:
+def test_log_event_carries_component_and_source_id() -> None:
     """``LOG`` events inherit the asset/source identity so they can be filtered by asset."""
     logger = EventLogger(
         "demo.a",
         {"run_id": "run-1"},
-        asset_id="asset-1",
+        component_id="asset-1",
         source_id="source-1",
     )
 
@@ -34,9 +34,9 @@ def test_log_event_carries_asset_and_source_id() -> None:
 
     assert len(events) == 1
     meta = events[0].metadata
-    assert meta["asset_id"] == "asset-1"
+    assert meta["component_id"] == "asset-1"
     assert meta["source_id"] == "source-1"
-    assert meta["asset_key"] == "demo.a"
+    assert meta["component_key"] == "demo.a"
     assert meta["message"] == "hello"
     assert meta["run_id"] == "run-1"
 
@@ -49,5 +49,5 @@ def test_log_event_omits_ids_when_unset() -> None:
 
     assert len(events) == 1
     meta = events[0].metadata
-    assert "asset_id" not in meta
+    assert "component_id" not in meta
     assert "source_id" not in meta

@@ -3,15 +3,15 @@ import type { EventType } from '~/types/event'
 type BadgeColor = 'error' | 'success' | 'info' | 'warning' | 'neutral'
 
 const iconMap: Record<EventType, string> = {
-    asset_queued: 'i-lucide-clock',
-    asset_skipped: 'i-lucide-skip-forward',
-    asset_started: 'i-lucide-play-circle',
-    asset_completed: 'i-lucide-check-circle',
-    asset_failed: 'i-lucide-alert-circle',
-    asset_canceled: 'i-lucide-x-circle',
-    asset_exec_started: 'i-lucide-play-circle',
-    asset_exec_completed: 'i-lucide-check-circle',
-    asset_exec_failed: 'i-lucide-alert-circle',
+    operation_queued: 'i-lucide-clock',
+    operation_skipped: 'i-lucide-skip-forward',
+    operation_started: 'i-lucide-play-circle',
+    operation_completed: 'i-lucide-check-circle',
+    operation_failed: 'i-lucide-alert-circle',
+    operation_canceled: 'i-lucide-x-circle',
+    asset_data_started: 'i-lucide-play-circle',
+    asset_data_completed: 'i-lucide-check-circle',
+    asset_data_failed: 'i-lucide-alert-circle',
     dest_read_started: 'i-lucide-download',
     dest_read_completed: 'i-lucide-download-cloud',
     dest_read_failed: 'i-lucide-x-circle',
@@ -31,15 +31,15 @@ const iconMap: Record<EventType, string> = {
 }
 
 const labelMap: Record<EventType, string> = {
-    asset_queued: 'Asset Queued',
-    asset_skipped: 'Asset Skipped',
-    asset_started: 'Asset Started',
-    asset_completed: 'Asset Completed',
-    asset_failed: 'Asset Failed',
-    asset_canceled: 'Asset Canceled',
-    asset_exec_started: 'Asset Exec Started',
-    asset_exec_completed: 'Asset Exec Completed',
-    asset_exec_failed: 'Asset Exec Failed',
+    operation_queued: 'Operation Queued',
+    operation_skipped: 'Operation Skipped',
+    operation_started: 'Operation Started',
+    operation_completed: 'Operation Completed',
+    operation_failed: 'Operation Failed',
+    operation_canceled: 'Operation Canceled',
+    asset_data_started: 'Asset Data Started',
+    asset_data_completed: 'Asset Data Completed',
+    asset_data_failed: 'Asset Data Failed',
     dest_read_started: 'Destination Read Started',
     dest_read_completed: 'Destination Read Completed',
     dest_read_failed: 'Destination Read Failed',
@@ -64,20 +64,20 @@ export type EventCategory = 'all' | 'lifecycle' | 'errors' | 'logs'
 const ALL_EVENT_TYPES = Object.keys(iconMap) as EventType[]
 
 /**
- * High-level orchestration milestones (run/asset/backfill state machine).
- * Excludes the granular `*_exec_*` / `dest_*` IO events and `log`.
+ * High-level orchestration milestones (run/operation/backfill state machine).
+ * Excludes the granular `asset_data_*` / `dest_*` IO events and `log`.
  */
 const LIFECYCLE_TYPES: EventType[] = [
     'run_dispatched',
     'run_started',
     'run_completed',
     'run_failed',
-    'asset_queued',
-    'asset_skipped',
-    'asset_started',
-    'asset_completed',
-    'asset_failed',
-    'asset_canceled',
+    'operation_queued',
+    'operation_skipped',
+    'operation_started',
+    'operation_completed',
+    'operation_failed',
+    'operation_canceled',
     'backfill_started',
     'backfill_completed',
     'backfill_failed',

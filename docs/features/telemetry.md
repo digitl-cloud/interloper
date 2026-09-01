@@ -164,7 +164,7 @@ The tree for a scheduled run:
 ```
 interloper.launcher.launch                    Launcher.launch
 └── interloper.runner.run                     Runner.run
-    └── interloper.asset.materialize          Asset.materialize_async
+    └── interloper.operation.execute           Operation.execute
         ├── interloper.asset.resolve_resource Asset._resolve_resource (per resource)
         ├── interloper.destination.read       Destination.read (per upstream)
         ├── interloper.asset.data             Asset.data
@@ -188,8 +188,8 @@ Note that resource *resolution* is lookup and instantiation only — the
 credentialed client a resource wraps is built lazily, so its cost lands under
 `interloper.asset.data`.
 
-Spans carry `interloper.*` attributes: `run.id`, `backfill.id`, `asset.key`,
-`asset.qualified_key`, `source.id`, `partition`, `destination.key`, `runner.type`.
+Spans carry `interloper.*` attributes: `run.id`, `backfill.id`, `component.key`,
+`component.qualified_key`, `source.id`, `partition`, `destination.key`, `runner.type`.
 Failures set span status to error; runs that swallow asset failures into a failed
 `RunResult` are marked too.
 
@@ -219,8 +219,8 @@ value (e.g. `http/dup` to emit both during a migration).
 |------------|------|------------|
 | `interloper.runs` | counter | `status` + identity† |
 | `interloper.run.duration` | histogram (s) | `status` + identity† |
-| `interloper.assets` | counter | `status`, `asset_key` |
-| `interloper.asset.duration` | histogram (s) | `status`, `asset_key` |
+| `interloper.operations` | counter | `status`, `component_key` |
+| `interloper.operation.duration` | histogram (s) | `status`, `component_key` |
 | `interloper.destination.io` | counter | `operation`, `status`, `destination_key` |
 | `interloper.runs.launched` | counter | `outcome` |
 | `interloper.scheduler.tick` | gauge (unix s) | `loop` (`cron`, `hook`, `queue`, `reaper`) |
@@ -230,8 +230,8 @@ run-level instruments when the run goes through the scheduler, which threads
 the run's organisation and target (job, source, or asset) into run metadata;
 standalone runs simply omit the attributes. The same identity lands on every
 span as `interloper.org.id` / `interloper.target.*`. It is deliberately kept
-off asset-level instruments: `org × asset_key` is the cardinality product that
-grows fastest with adoption, and per-org asset questions belong to traces
+off operation-level instruments: `org × component_key` is the cardinality product
+that grows fastest with adoption, and per-org operation questions belong to traces
 (which carry full identity) or the run history.
 
 The duration histograms use second-scaled bucket boundaries (50ms → 1h) rather

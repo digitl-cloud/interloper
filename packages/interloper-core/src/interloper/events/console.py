@@ -17,18 +17,18 @@ from interloper.events.types import EventType
 #: Logger that carries event records; configure it like any other logger.
 EVENT_LOGGER_NAME = "interloper.run"
 
-# Failures are errors, cancellations warnings, run/asset lifecycle is the
+# Failures are errors, cancellations warnings, run/operation lifecycle is the
 # INFO narrative, and the high-frequency execution / destination-I/O chatter
 # only shows at DEBUG.
 _EVENT_LEVELS: dict[EventType, int] = {
     EventType.RUN_FAILED: logging.ERROR,
-    EventType.ASSET_FAILED: logging.ERROR,
+    EventType.OPERATION_FAILED: logging.ERROR,
     EventType.BACKFILL_FAILED: logging.ERROR,
-    EventType.ASSET_CANCELED: logging.WARNING,
-    EventType.ASSET_QUEUED: logging.DEBUG,
-    EventType.ASSET_EXEC_STARTED: logging.DEBUG,
-    EventType.ASSET_EXEC_COMPLETED: logging.DEBUG,
-    EventType.ASSET_EXEC_FAILED: logging.DEBUG,
+    EventType.OPERATION_CANCELED: logging.WARNING,
+    EventType.OPERATION_QUEUED: logging.DEBUG,
+    EventType.ASSET_DATA_STARTED: logging.DEBUG,
+    EventType.ASSET_DATA_COMPLETED: logging.DEBUG,
+    EventType.ASSET_DATA_FAILED: logging.DEBUG,
     EventType.DEST_READ_STARTED: logging.DEBUG,
     EventType.DEST_READ_COMPLETED: logging.DEBUG,
     EventType.DEST_READ_FAILED: logging.DEBUG,
@@ -111,7 +111,7 @@ class ConsoleEventHandler:
     def _format(event: Event) -> str:
         """Render an event as a log message (without timestamp/level — the formatter adds those).
 
-        ``LOG`` events read as ``<asset>: <message>`` since their level already
+        ``LOG`` events read as ``<component>: <message>`` since their level already
         travels on the record; lifecycle events keep the columnar
         ``TYPE  asset  message`` form.
 
@@ -122,8 +122,8 @@ class ConsoleEventHandler:
             The formatted message string.
         """
         m = event.metadata
-        asset_key = m.get("asset_qualified_key") or m.get("asset_key") or "-"
+        component_key = m.get("qualified_key") or m.get("component_key") or "-"
         message = m.get("message") or m.get("error") or "-"
         if event.type is EventType.LOG:
-            return f"{asset_key}: {message}"
-        return f"{event.type.value.upper():<16} {asset_key}  {message}"
+            return f"{component_key}: {message}"
+        return f"{event.type.value.upper():<16} {component_key}  {message}"

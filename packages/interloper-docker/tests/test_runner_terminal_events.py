@@ -50,9 +50,9 @@ def test_host_authors_asset_failed_when_container_fails() -> None:
     with _capture() as events:
         runner._handle_completed(future, asset)
 
-    failed = [e for e in events if e.type == EventType.ASSET_FAILED]
+    failed = [e for e in events if e.type == EventType.OPERATION_FAILED]
     assert len(failed) == 1
-    assert failed[0].id == RunState._asset_event_id("run-1", "asset-1", EventType.ASSET_FAILED)
+    assert failed[0].id == RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
 
 
 def test_host_authors_asset_completed_when_container_succeeds() -> None:
@@ -64,6 +64,6 @@ def test_host_authors_asset_completed_when_container_succeeds() -> None:
     with _capture() as events:
         runner._handle_completed(future, asset)
 
-    completed = [e for e in events if e.type == EventType.ASSET_COMPLETED]
+    completed = [e for e in events if e.type == EventType.OPERATION_COMPLETED]
     assert len(completed) == 1
-    assert completed[0].id == RunState._asset_event_id("run-1", "asset-2", EventType.ASSET_COMPLETED)
+    assert completed[0].id == RunState._operation_event_id("run-1", "asset-2", EventType.OPERATION_COMPLETED)
