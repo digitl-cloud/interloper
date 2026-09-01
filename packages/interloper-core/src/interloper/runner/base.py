@@ -6,7 +6,7 @@ import asyncio
 import uuid
 from abc import abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from opentelemetry.trace import StatusCode
 from pydantic import Field, PrivateAttr
@@ -209,9 +209,10 @@ class Runner(Serializable):
         """Finalize the run and return the result.
 
         Args:
-            error: Run-level error message, set when the DAG walk itself
-                aborted. ``None`` means the walk finished, in which case the
-                run only fails if individual operations did.
+            error: Run-level error message, set only when the walk machinery
+                itself failed (deadlock, invalid DAG state, runner bug).
+                ``None`` for every other outcome — failed operations carry
+                their own detail on their execution info and events.
 
         Returns:
             A RunResult summarizing the execution outcome.
@@ -225,6 +226,25 @@ class Runner(Serializable):
             executions=executions,
             execution_time=self.state.elapsed_time or 0,
         )
+
+    def _reraise_first_failure(self) -> NoReturn:
+        """Re-raise a failed operation's exception for the direct caller.
+
+        Called after the run is finalized, when ``reraise`` is set and at
+        least one operation failed — so events and results are complete
+        before the exception surfaces. The first failed operation's original
+        exception is re-raised when the runner had it in-process.
+
+        Raises:
+            RunnerError: Carrying the recorded error message, when the
+                failure happened in another process and only its message
+                crossed back.
+        """
+        operation = self.state.failed_operations[0]
+        info = self.state.executions[operation.id]
+        if info.exception is not None:
+            raise info.exception
+        raise RunnerError(f"Operation '{operation.key}' failed: {info.error}")
 
     def _preflight_validation(
         self,

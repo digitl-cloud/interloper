@@ -63,6 +63,11 @@ class AsyncRunner(Runner):
         Returns:
             A RunResult summarizing the execution outcome.
 
+        Operation failures are absorbed into state (each node's own error,
+        traceback, and effects); with ``reraise`` set, the first failed
+        operation's original exception is re-raised after the run is
+        finalized.
+
         Raises:
             RunnerError: If a deadlock or invalid DAG state is detected.
         """
@@ -94,22 +99,31 @@ class AsyncRunner(Runner):
                 for task in done:
                     inflight.pop(task)
                     exception = task.exception()
-                    if exception is not None and (self.fail_fast or self.reraise):
+                    if exception is not None:
                         raise exception
 
-            return self._finalize_run()
+                if self.fail_fast and self.state.failed_operations:
+                    break
+
+            await self._flush(inflight)
+            result = self._finalize_run()
 
         except Exception as e:
+            # Operation failures are absorbed into state, so an exception
+            # here means the walk machinery itself broke.
             await self._flush(inflight)
             result = self._finalize_run(error=format_exception(e))
             if self.reraise:
                 raise
-            return result
         finally:
             try:
                 self._on_end()
             except Exception:  # noqa: BLE001, S110
                 pass
+
+        if self.reraise and self.state.failed_operations:
+            self._reraise_first_failure()
+        return result
 
     # -- Scheduling primitives -------------------------------------------------
 
@@ -167,8 +181,7 @@ class AsyncRunner(Runner):
                 to the operation's own effective partition before executing.
 
         Returns:
-            The execution's effects, or ``None`` if the operation failed and
-            ``reraise`` is False.
+            The execution's effects, or ``None`` if the operation failed.
         """
         self.state.mark_running(operation)
 
@@ -185,21 +198,20 @@ class AsyncRunner(Runner):
             with tracer().start_as_current_span("interloper.operation.execute", attributes=span_attrs):
                 result = await operation.execute(context)
             self.state.mark_completed(operation, effects=result)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — every failure becomes the node's record
             failed = operation.failure(e)
             tb = traceback.format_exc() if type(operation).capture_traceback else None
-            self.state.mark_failed(operation, failed.error or format_exception(e), tb=tb, effects=failed)
-            if self.reraise or self.fail_fast:
-                raise
+            self.state.mark_failed(operation, failed.error or format_exception(e), tb=tb, effects=failed, exception=e)
             return None
         return result
 
     async def _flush(self, inflight: dict[asyncio.Task[Any], Operation]) -> None:
         """Wait for all in-flight tasks and emit terminal events.
 
-        Called after an exception aborts the main loop so that every
-        in-flight operation gets a proper terminal event rather than being
-        silently abandoned as 'running'.
+        Called when the walk ends — a fail-fast break, a machinery abort,
+        or natural completion (where it is effectively a no-op) — so that
+        every in-flight operation gets a proper terminal event rather than
+        being silently abandoned as 'running'.
 
         In the async runner, ``_execute_operation`` already calls
         ``mark_failed`` / ``mark_completed``, so completed tasks are

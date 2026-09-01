@@ -164,18 +164,13 @@ class MultiProcessRunner(SyncRunner):
         Args:
             future: The finished future returned by ``_submit_operation``.
             operation: The operation the future was submitted for.
-
-        Raises:
-            RunnerError: If the operation failed and ``fail_fast`` or ``reraise`` is set.
         """
         self._futures.pop(future, None)
 
         try:
             _key, success, error_message, tb, effects = future.result()
-        except Exception as e:
-            self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc())
-            if self.fail_fast or self.reraise:
-                raise
+        except Exception as e:  # noqa: BLE001 — every failure becomes the node's record
+            self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc(), exception=e)
             return
 
         if success:
@@ -187,8 +182,6 @@ class MultiProcessRunner(SyncRunner):
                 tb=tb,
                 effects=OperationResult(error=error_message, **effects),
             )
-            if self.fail_fast or self.reraise:
-                raise RunnerError(f"Operation '{operation.key}' failed: {error_message}")
 
     def _handle_flushed(self, future: Future[Any], operation: Operation) -> None:
         """Interpret the worker ``(id, success, error_message, tb, effects)`` tuple during flush.

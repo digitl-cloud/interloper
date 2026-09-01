@@ -19,7 +19,6 @@ from interloper.events import Event, EventBus, EventType
 from interloper.operation import Operation
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
-from interloper.runner.results import ExecutionStatus
 from interloper.runner.sync_runner import SyncRunner
 from interloper.telemetry.propagation import child_process_env
 from kubernetes import client, config
@@ -220,12 +219,10 @@ class KubernetesRunner(SyncRunner):
         The log thread is joined with a longer timeout first so a child terminal
         that is still in flight wins the race.
 
-        When the run aborts on a failure, the raised error carries the asset's
-        terminal error (the child's rich report when available) rather than the
-        bare Job status — it becomes the run-level error shown in the UI.
-
-        Raises:
-            RunnerError: When the asset failed and fail-fast is enabled.
+        A failed operation aborts the run through state — the walk loop
+        checks ``failed_operations`` under fail-fast — so a child-streamed
+        terminal's rich error stays the operation's record, never overwritten
+        by the bare Job status.
         """
         job_name = self._job_map.pop(future, None)
         if job_name is not None:
@@ -233,18 +230,12 @@ class KubernetesRunner(SyncRunner):
 
         info = self.state.executions.get(operation.id)
         if info and info.is_terminal:
-            # Child streamed its own terminal. If it failed, fail-fast must
-            # still abort the run — with the child's error as the cause.
-            if info.status == ExecutionStatus.FAILED and (self.fail_fast or self.reraise):
-                raise RunnerError(f"Asset '{type(operation).key}' failed: {info.error}")
             return
 
         try:
             future.result()
         except Exception as e:
-            self.state.mark_failed(operation, format_exception(e), emit=True)
-            if self.fail_fast or self.reraise:
-                raise RunnerError(f"Asset '{type(operation).key}' failed: {e}") from e
+            self.state.mark_failed(operation, format_exception(e), emit=True, exception=e)
         else:
             self.state.mark_completed(operation, emit=True)
 

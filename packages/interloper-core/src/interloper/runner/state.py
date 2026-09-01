@@ -159,7 +159,8 @@ class RunState:
         if status == ExecutionStatus.COMPLETED:
             message = f"Run completed ({len(self.completed_operations)}/{len(self.dag.operations)} succeeded)"
         else:
-            message = f"Run failed: {error}" if error else "Run failed"
+            failed_count = len(self.failed_operations)
+            message = f"Run failed: {error}" if error else f"Run failed ({failed_count} operation(s) failed)"
 
         EventBus.emit(
             event_type,
@@ -257,6 +258,7 @@ class RunState:
         *,
         emit: bool = True,
         effects: OperationResult | None = None,
+        exception: Exception | None = None,
     ) -> None:
         """Transition an operation to FAILED and cancel downstream dependents.
 
@@ -269,8 +271,11 @@ class RunState:
                 where the child process emits the events itself.
             effects: The operation's failure effects, recorded on the
                 execution info for the platform to persist.
+            exception: The original exception, kept in memory only so
+                ``reraise`` can re-raise it faithfully; ``None`` when the
+                failure happened in another process.
         """
-        self.executions[operation.id].mark_failed(error, tb=tb)
+        self.executions[operation.id].mark_failed(error, tb=tb, exception=exception)
         self.executions[operation.id].effects = effects
         canceled = self._propagate_failure(operation.id)
 
