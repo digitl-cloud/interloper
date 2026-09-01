@@ -7,9 +7,12 @@ const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const runsStore = useRunsStore()
+const catalogStore = useCatalogStore()
 const { runs, loading, total, pageIndex, pageSize } = storeToRefs(runsStore)
 
 onMounted(async () => {
+    // Target icons read the catalog's per-type icon.
+    if (!catalogStore.loaded) catalogStore.fetchCatalog()
     if (!loading.value) await runsStore.fetch()
 })
 
@@ -24,7 +27,7 @@ const columns: TableColumn<Run>[] = [
         header: 'Target',
         cell: ({ row }) => {
             const run = row.original as Run
-            return h(EntityBadge, { label: targetLabel(run) })
+            return h(EntityBadge, { label: targetLabel(run), icon: targetIcon(run) })
         },
     },
     {

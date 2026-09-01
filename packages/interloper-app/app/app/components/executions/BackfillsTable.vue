@@ -10,9 +10,12 @@ const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const backfillsStore = useBackfillsStore()
+const catalogStore = useCatalogStore()
 const { backfills, loading } = storeToRefs(backfillsStore)
 
 onMounted(async () => {
+    // Target icons read the catalog's per-type icon.
+    if (!catalogStore.loaded) catalogStore.fetchCatalog()
     if (!loading.value) await backfillsStore.fetch()
 })
 
@@ -30,7 +33,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         header: 'Target',
         cell: ({ row }) => {
             const backfill = row.original as Backfill
-            return h(EntityBadge, { label: targetLabel(backfill) })
+            return h(EntityBadge, { label: targetLabel(backfill), icon: targetIcon(backfill) })
         },
     },
     {
