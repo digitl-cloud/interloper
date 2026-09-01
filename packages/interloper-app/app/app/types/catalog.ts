@@ -47,6 +47,8 @@ export interface ComponentDefinition {
     provider?: string
     /** Whether the type implements a live connection check (resources only). */
     checkable?: boolean
+    /** Whether the type can renew its stored credential (connections only). */
+    renewable?: boolean
 }
 
 export interface AssetDefinition extends ComponentDefinition {

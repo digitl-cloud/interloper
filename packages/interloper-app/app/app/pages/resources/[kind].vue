@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
 
 definePageMeta({ title: 'Resources' })
 
 const UIcon = resolveComponent('UIcon')
+const UBadge = resolveComponent('UBadge')
+const UTooltip = resolveComponent('UTooltip')
 
 const route = useRoute()
 const catalogStore = useCatalogStore()
@@ -42,9 +44,59 @@ componentsStore.fetchAll()
 componentsStore.fetchRelations()
 watch(kind, () => componentsStore.fetchAll([kind.value]))
 
+/** Whether automatic renewal is on for this connection (config, default on). */
+function autoRenewColumn(): TableColumn<ComponentRecord> {
+    return {
+        accessorKey: 'auto_renew',
+        header: 'Auto renew',
+        accessorFn: (row: ComponentRecord) =>
+            catalogStore.catalog[row.key]?.renewable ? String(row.auto_renew !== false) : '',
+        cell: ({ row }) => {
+            if (!catalogStore.catalog[row.original.key]?.renewable) return h('span', { class: 'text-dimmed' }, '—')
+            const enabled = row.original.auto_renew !== false
+            return h(UBadge, {
+                color: enabled ? 'success' : 'neutral',
+                icon: enabled ? 'i-lucide-refresh-cw' : 'i-lucide-pause',
+            }, () => enabled ? 'On' : 'Off')
+        },
+    }
+}
+
+/** Connection renewal state reads as one badge, like the collection's Last run. */
+function lastRenewedColumn(): TableColumn<ComponentRecord> {
+    return {
+        accessorKey: 'last_renewed_at',
+        header: 'Last renewed',
+        accessorFn: (row: ComponentRecord) => row.state?.last_renewed_at ?? '',
+        cell: ({ row }) => {
+            const state = row.original.state ?? {}
+            if (state.last_renewal_error) {
+                return h(UTooltip, { text: state.last_renewal_error }, () =>
+                    h(UBadge, { color: 'error', icon: 'i-lucide-x' }, () => 'Failed'))
+            }
+            if (!state.last_renewed_at) return h('span', { class: 'text-dimmed' }, '—')
+            return h(UBadge, { color: 'success', icon: 'i-lucide-check' }, () =>
+                `${timeSince(new Date(state.last_renewed_at))} ago`)
+        },
+    }
+}
+
 // State columns (e.g. a connection's renewal timestamps) come from the
 // kind's state schema; every definition of a kind shares its anchor's state
-// model, so the first one stands in for them all.
+// model, so the first one stands in for them all. Connections fold the
+// renewal state into one badge: the error rides the badge's tooltip.
+const tableStateColumns = computed<TableColumn<ComponentRecord>[]>(() => {
+    const stateColumns = stateSchemaColumns(definitions.value[0])
+    if (kind.value !== 'connection') return stateColumns
+    return [
+        autoRenewColumn(),
+        ...stateColumns
+            .filter(column => (column as { accessorKey?: string }).accessorKey !== 'last_renewal_error')
+            .map(column =>
+                (column as { accessorKey?: string }).accessorKey === 'last_renewed_at' ? lastRenewedColumn() : column),
+    ]
+})
+
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     { accessorKey: 'name', header: 'Name' },
     {
@@ -55,7 +107,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
             typeName(row.original.key),
         ]),
     },
-    ...stateSchemaColumns(definitions.value[0]),
+    ...tableStateColumns.value,
     {
         accessorKey: 'created_at',
         header: 'Created',
@@ -63,7 +115,29 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     },
 ])
 
+// ── Renewal ──
+
+function rowActions(item: ComponentRecord): DropdownMenuItem[][] {
+    if (kind.value !== 'connection' || !catalogStore.catalog[item.key]?.renewable) return []
+    return [[{
+        label: 'Renew now',
+        icon: 'i-lucide-refresh-cw',
+        onSelect: () => renewNow(item),
+    }]]
+}
+
+async function renewNow(item: ComponentRecord) {
+    try {
+        await runsStore.createRun(item.id)
+        toast.add({ title: `Renewal queued for ${item.name ?? typeName(item.key)}`, color: 'success' })
+    }
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to queue renewal'))
+    }
+}
+
 const toast = useToast()
+const runsStore = useRunsStore()
 
 async function handleDelete(ids: string[]) {
     try {
@@ -116,6 +190,7 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
                        :data="resources"
                        :loading="componentsStore.loading"
                        :delete-impact="componentsStore.deleteImpact"
+                       :row-actions="rowActions"
                        :search-placeholder="`Search ${pageTitle.toLowerCase()}...`"
                        @delete="handleDelete"
                        @edit="handleEdit">
