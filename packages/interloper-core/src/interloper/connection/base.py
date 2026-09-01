@@ -121,10 +121,10 @@ class Connection(Resource, Operation):
         """Renew this connection's credentials before they age out.
 
         Override in a subclass (sync or ``async``) to exchange the stored
-        credential for a fresh one — a refresh-token grant, a long-lived
-        token extension, whatever the provider's mechanism is. Same
-        execution contract as :meth:`check`: lightweight HTTP (``httpx``),
-        never a heavy provider SDK.
+        credential for a fresh one — same execution contract as
+        :meth:`check`: lightweight HTTP (``httpx``), never a heavy provider
+        SDK. OAuth connections need no override: ``OAuthConnection`` derives
+        the whole flow from the provider and the ``oauth.fields`` mapping.
 
         The renewal pipeline persists the returned :class:`Renewal.fields`
         into the stored config and schedules the next renewal; a raised
@@ -316,6 +316,72 @@ class OAuthConnection(Connection):
         if value and not data.get(field):
             data[field] = value
 
+    @classmethod
+    def renewable(cls) -> bool:
+        """Whether this connection can renew — derived, never hand-written.
+
+        A bespoke ``renew`` override always counts. Otherwise renewability
+        follows from the declarations alone: the registered provider must
+        have a refresh flow (``supports_refresh``) and ``oauth.fields`` must
+        name a connection field for each of the grant's credential roles.
+        A qualifying connection renews with zero renewal code, and one whose
+        provider has no refresh flow (TikTok: tokens do not expire) is
+        excluded automatically.
+
+        Returns:
+            True when renewal is overridden or fully derivable.
+        """
+        if cls.renew is not OAuthConnection.renew:
+            return True
+        if not isinstance(cls.oauth, OAuthConfig):
+            return False
+        spec = PROVIDERS.get(cls.oauth.provider)
+        if spec is None or not spec.supports_refresh:
+            return False
+        return {"client_id", "client_secret", "refresh_token"} <= set(cls.oauth.fields)
+
+    async def renew(self) -> Renewal:
+        """Renew the stored credential through the provider's refresh flow.
+
+        One implementation serves every OAuth connection, driven entirely by
+        what is already declared: the registered provider builds the grant
+        and parses its response (dialect included — Facebook's
+        ``fb_exchange_token``, Microsoft's scoped refresh), and
+        ``oauth.fields`` names which connection fields play the grant's
+        credential roles, the rotated credential landing back in the field
+        playing the refresh-token role. Renewing keeps inactivity-expiring
+        credentials alive and surfaces a dead one as a failure instead of a
+        later run error.
+
+        Returns:
+            The rotated credential field when the provider issued a new one,
+            and the credential's validity when reported.
+
+        Raises:
+            NotImplementedError: When the connection is not renewable (see
+                :meth:`renewable`).
+        """
+        if not (self.renewable() and isinstance(self.oauth, OAuthConfig)):
+            raise NotImplementedError(f"{type(self).__name__} has no renewal flow to derive")
+        spec = PROVIDERS[self.oauth.provider]
+        token_field = self.oauth.fields["refresh_token"]
+        refresh_token = getattr(self, token_field)
+
+        request = spec.refresh_token_request(
+            client_id=getattr(self, self.oauth.fields["client_id"]),
+            client_secret=getattr(self, self.oauth.fields["client_secret"]),
+            refresh_token=refresh_token,
+            scope=self.oauth.scope,
+        )
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            response = await client.send(request)
+        response.raise_for_status()
+        parsed = spec.parse_refresh_token_response(response.json())
+
+        rotated = parsed.refresh_token
+        fields = {token_field: rotated} if rotated and rotated != refresh_token else {}
+        return Renewal(fields=fields, expires_in=parsed.expires_in)
+
 
 class RefreshTokenOAuthConnection(OAuthConnection):
     """A connection using the standard OAuth2 refresh-token flow.
@@ -366,46 +432,3 @@ class RefreshTokenOAuthConnection(OAuthConnection):
             cls.resolve_field(data, "client_secret", cls.env_credential("CLIENT_SECRET"))
         return data
 
-    async def renew(self) -> Renewal:
-        """Exercise the refresh-token grant against the provider's token endpoint.
-
-        One implementation covers every standard-trio connection: the request
-        shape (endpoint, encoding, basic auth) comes from the registered
-        :class:`~interloper.oauth.base.OAuthProvider`, exactly like the
-        sign-in code exchange. Renewing keeps inactivity-expiring refresh
-        tokens alive, persists a rotated one when the provider issues it, and
-        surfaces a dead credential as a failure instead of a later run error.
-
-        Subclasses whose provider has no refresh grant (e.g. the Facebook
-        family, whose ``refresh_token`` field holds a long-lived access
-        token) must override this with the provider's own renewal exchange.
-
-        Returns:
-            The rotated ``refresh_token`` when one was issued, and the
-            refresh token's own validity when the provider reports it
-            (``refresh_token_expires_in`` — ``expires_in`` describes the
-            access token, which is not stored).
-        """
-        if not isinstance(self.oauth, OAuthConfig):
-            raise NotImplementedError(f"{type(self).__name__} declares no OAuth config to renew against")
-        spec = PROVIDERS[self.oauth.provider]
-
-        params = {
-            "grant_type": "refresh_token",
-            "refresh_token": self.refresh_token,
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-        }
-        auth = (self.client_id, self.client_secret) if spec.token_basic_auth else None
-
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True, auth=auth) as client:
-            if spec.token_encoding == "form":
-                response = await client.post(spec.token_url, data=params)
-            else:
-                response = await client.post(spec.token_url, json=params)
-        response.raise_for_status()
-        data = response.json()
-
-        rotated = data.get("refresh_token")
-        fields = {"refresh_token": rotated} if rotated and rotated != self.refresh_token else {}
-        return Renewal(fields=fields, expires_in=data.get("refresh_token_expires_in"))

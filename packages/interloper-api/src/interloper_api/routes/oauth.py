@@ -1,10 +1,9 @@
 """OAuth2 token exchange routes.
 
 Providers come from the core registry (``interloper.oauth``): each
-``OAuthProvider`` carries a declarative token-exchange spec (URL, method,
-encoding, parameter names), so the exchange is performed generically —
-adding a provider is an ``interloper.oauth_providers`` entry point, not a
-new route.
+``OAuthProvider`` builds its own token requests (its dialect included), so
+the exchange is performed generically — adding a provider is an
+``interloper.oauth_providers`` entry point, not a new route.
 
 The in-house *OAuth* credentials (``client_id`` / ``client_secret`` /
 ``redirect_uri``) are read from provider-scoped environment variables
@@ -19,14 +18,13 @@ buttons to render.
 
 from __future__ import annotations
 
-import base64
 import logging
 import os
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from interloper.oauth import PROVIDERS, OAuthAppCredentials, OAuthProvider
+from interloper.oauth import PROVIDERS, OAuthAppCredentials
 from interloper_db import Profile
 from pydantic import BaseModel
 
@@ -55,59 +53,10 @@ def log_provider_status() -> None:
     logger.info("OAuth sign-in providers: %s", ", ".join(sorted(active)) if active else "none configured")
 
 
-# -- Generic token exchange ----------------------------------------------------
-
-
-async def _exchange(
-    client: httpx.AsyncClient,
-    spec: OAuthProvider,
-    config: OAuthAppCredentials,
-    code: str,
-) -> dict[str, Any]:
-    """Exchange an authorization code for tokens, driven by the provider spec.
-
-    Args:
-        client: The HTTP client to use.
-        spec: The provider's token-exchange spec.
-        config: The in-house OAuth credentials.
-        code: The authorization code.
-
-    Returns:
-        The provider's raw token response (e.g. ``refresh_token``). The OAuth
-        credentials are *not* injected: they are the in-house per-provider
-        values resolved from env at runtime, so the secret never leaves the
-        server.
-    """
-    logical_values = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": config.redirect_uri,
-        "client_id": config.client_id,
-        "client_secret": config.client_secret,
-    }
-    params = {wire: logical_values[logical] for logical, wire in spec.token_params.items()}
-
-    headers: dict[str, str] = {}
-    if spec.token_basic_auth:
-        creds = base64.b64encode(f"{config.client_id}:{config.client_secret}".encode()).decode()
-        headers["Authorization"] = f"Basic {creds}"
-
-    if spec.token_method == "get":
-        response = await client.get(spec.token_url, params=params, headers=headers)
-    elif spec.token_encoding == "form":
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
-        response = await client.post(spec.token_url, data=params, headers=headers)
-    else:
-        response = await client.post(spec.token_url, json=params, headers=headers)
-    response.raise_for_status()
-
-    return response.json()
-
-
 # -- Routes --------------------------------------------------------------------
 
 
-class TokenExchangeRequest(BaseModel):
+class AuthorizationCodeExchangeRequest(BaseModel):
     """Request body for exchanging an authorization code for tokens."""
 
     code: str
@@ -151,9 +100,9 @@ def list_providers() -> list[ProviderInfo]:
 
 
 @router.post("/{provider}")
-async def exchange_token(
+async def exchange_authorization_code(
     provider: str,
-    body: TokenExchangeRequest,
+    body: AuthorizationCodeExchangeRequest,
     _user: Profile = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Exchange an authorization code for tokens. Requires authentication.
@@ -185,10 +134,17 @@ async def exchange_token(
 
     try:
         logger.info("Exchanging auth code for provider %s", provider)
+        request = spec.authorization_code_request(
+            code=body.code,
+            redirect_uri=config.redirect_uri,
+            client_id=config.client_id,
+            client_secret=config.client_secret,
+        )
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            result = await _exchange(client, spec, config, body.code)
+            response = await client.send(request)
+        response.raise_for_status()
         logger.info("Successfully exchanged auth code for provider %s", provider)
-        return result
+        return response.json()
     except httpx.HTTPStatusError as exception:
         detail = exception.response.text
         logger.error("Token exchange failed for %s: %s %s", provider, exception.response.status_code, detail)

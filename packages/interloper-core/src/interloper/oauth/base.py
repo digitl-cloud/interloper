@@ -1,14 +1,17 @@
-"""OAuthProvider: identity and token-exchange spec, plus the provider registry.
+"""OAuthProvider: a provider's identity and token-flow dialect, plus the registry.
 
-A provider describes everything interloper needs to drive an OAuth2
+A provider owns everything interloper needs to drive an OAuth2
 authorization-code flow for a third-party service: where to send the user
-(``auth_url``), where to exchange the code (``token_url``), and how that
-exchange request is shaped.
+(``auth_url``), and how to build the token requests — the code exchange and
+the refresh grant. The base class speaks plain RFC 6749; a provider whose
+dialect deviates overrides the request builders (or response parsing) on a
+subclass, so each quirk lives with the provider that has it.
 
 Connections reference providers by key through
 :class:`~interloper.oauth.config.OAuthConfig`, which resolves display
-metadata (auth_url, label, icon) from the registry; the API drives the
-token exchange generically from the same spec.
+metadata (auth_url, label, icon) from the registry; the API's sign-in
+exchange and connection renewal both send whatever request the provider
+builds.
 
 Every provider — including the built-ins shipped by interloper-core —
 registers through the ``interloper.oauth_providers`` entry-point group::
@@ -24,75 +27,168 @@ dependence, no explicit registration calls.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
+
+import httpx
 
 from interloper.registry import Registry
 
 # -- Provider spec -------------------------------------------------------------
 
 
-# Logical token-exchange parameters.  ``OAuthProvider.token_params`` maps
-# each logical name to its wire parameter name; logical names absent from
-# the mapping are omitted from the exchange request entirely.
-DEFAULT_TOKEN_PARAMS: dict[str, str] = {
-    "grant_type": "grant_type",
-    "code": "code",
-    "redirect_uri": "redirect_uri",
-    "client_id": "client_id",
-    "client_secret": "client_secret",
-}
-
-
-def token_params(*omit: str, **rename: str) -> dict[str, str]:
-    """Build a token_params mapping from the defaults.
+@dataclass(frozen=True)
+class RefreshTokenResponse:
+    """Role-level outcome of a refresh-token grant.
 
     Args:
-        *omit: Logical parameter names to drop from the request.
-        **rename: Logical name → wire name overrides.
-
-    Returns:
-        A logical → wire parameter name mapping.
+        refresh_token: The refresh credential the provider issued, or ``None``
+            when the response carried none (no rotation).
+        expires_in: Validity of the refresh credential in seconds, when the
+            provider reports it.
     """
-    params = {k: v for k, v in DEFAULT_TOKEN_PARAMS.items() if k not in omit}
-    params.update(rename)
-    return params
+
+    refresh_token: str | None = None
+    expires_in: int | None = None
 
 
 @dataclass(frozen=True)
 class OAuthProvider:
-    """Identity and token-exchange spec for an OAuth2 provider.
+    """Identity and token-flow dialect of an OAuth2 provider.
+
+    The base class speaks plain RFC 6749: the authorization-code exchange
+    and the refresh-token grant are POSTs to ``token_url`` with the standard
+    parameters. A provider whose dialect deviates — a different method,
+    parameter names, an extra parameter, another grant entirely — overrides
+    the request builders (and, for renewal, the response parsing) on a
+    subclass; the provider is the single owner of its dialect, and the
+    sign-in exchange and connection renewal consume it identically.
+
+    ``token_encoding`` is the one wire knob a plain instance may set, and it
+    only parameterizes the default builders' body encoding. Any other
+    deviation is a method override, never a new field. ``supports_refresh``
+    is a class trait of the dialect: a provider with no credential-refresh
+    flow at all (TikTok: tokens do not expire) sets it ``False`` on its
+    subclass, and connections on it derive as non-renewable.
 
     Args:
         key: Provider key (e.g. ``"amazon"``) — the registry key.
         auth_url: Authorization endpoint the user is sent to.
-        token_url: Token endpoint the authorization code is exchanged at.
+        token_url: Token endpoint the token requests are sent to.
         label: Display label (defaults to the titlecased key).
         icon: Icon identifier (e.g. ``"logos:facebook"``).
-        token_method: HTTP method of the exchange request.
-        token_encoding: Body encoding for POST exchanges (GET always
-            sends query params).
-        token_params: Logical → wire parameter names.  Logical names
-            absent from the mapping are not sent (e.g. TikTok takes no
-            ``grant_type`` or ``redirect_uri``).
-        token_basic_auth: Also send the client credentials as an HTTP
-            Basic ``Authorization`` header.
+        token_encoding: Body encoding of the default token requests.
     """
+
+    supports_refresh: ClassVar[bool] = True
 
     key: str
     auth_url: str
     token_url: str
     label: str = ""
     icon: str = ""
-    token_method: Literal["post", "get"] = "post"
     token_encoding: Literal["json", "form"] = "json"
-    token_params: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_TOKEN_PARAMS))
-    token_basic_auth: bool = False
 
     def __post_init__(self) -> None:
         """Default the label to the titlecased key."""
         if not self.label:
             object.__setattr__(self, "label", self.key.title())
+
+    # -- Token flows -------------------------------------------------------
+
+    def authorization_code_request(
+        self,
+        *,
+        code: str,
+        redirect_uri: str,
+        client_id: str,
+        client_secret: str,
+    ) -> httpx.Request:
+        """Build the authorization-code grant's token request (RFC 6749 §4.1.3).
+
+        Args:
+            code: The authorization code from the provider's consent screen.
+            redirect_uri: The redirect URI the code was issued against.
+            client_id: The OAuth app's client id.
+            client_secret: The OAuth app's client secret.
+
+        Returns:
+            The request to send; the caller owns the client and error handling.
+        """
+        return self._token_request(
+            {
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }
+        )
+
+    def refresh_token_request(
+        self,
+        *,
+        client_id: str,
+        client_secret: str,
+        refresh_token: str,
+        scope: str | None = None,
+    ) -> httpx.Request:
+        """Build the refresh-token grant request (RFC 6749 §6).
+
+        The default grant omits ``scope`` even when given: it is optional per
+        the RFC and some providers reject parameters they do not document.
+        A provider that requires it overrides (Microsoft: ``AADSTS90023``).
+
+        Args:
+            client_id: The OAuth app's client id.
+            client_secret: The OAuth app's client secret.
+            refresh_token: The credential to exchange for a fresh one.
+            scope: The connection's declared scope; ignored by the default
+                grant.
+
+        Returns:
+            The request to send; the caller owns the client and error handling.
+        """
+        return self._token_request(
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }
+        )
+
+    def parse_refresh_token_response(self, payload: dict[str, Any]) -> RefreshTokenResponse:
+        """Read the refresh grant's response at the credential-role level.
+
+        The default reads the RFC shape: ``refresh_token`` is the (possibly
+        rotated) credential when present, and ``refresh_token_expires_in``
+        its validity — ``expires_in`` describes the access token, which
+        interloper does not store.
+
+        Args:
+            payload: The grant's JSON response body.
+
+        Returns:
+            The issued refresh credential and its validity, when reported.
+        """
+        return RefreshTokenResponse(
+            refresh_token=payload.get("refresh_token"),
+            expires_in=payload.get("refresh_token_expires_in"),
+        )
+
+    def _token_request(self, params: dict[str, str]) -> httpx.Request:
+        """Build a POST to the token endpoint in the provider's body encoding.
+
+        Args:
+            params: The grant parameters to carry as the request body.
+
+        Returns:
+            The built request.
+        """
+        if self.token_encoding == "form":
+            return httpx.Request("POST", self.token_url, data=params)
+        return httpx.Request("POST", self.token_url, json=params)
 
 
 # -- Registry ------------------------------------------------------------------

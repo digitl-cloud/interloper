@@ -104,26 +104,3 @@ class FacebookAdsConnection(il.OAuthConnection):
         await self.accounts()
         return True
 
-    async def renew(self) -> il.Renewal:
-        """Exchange the long-lived access token for a fresh one.
-
-        Facebook has no refresh-token grant: a long-lived token (~60 days)
-        renews via the ``fb_exchange_token`` grant, which issues a new
-        long-lived token as long as the current one is still valid.
-
-        Returns:
-            The fresh ``access_token`` and its validity when reported.
-        """
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                f"{_GRAPH_URL}/oauth/access_token",
-                params={
-                    "grant_type": "fb_exchange_token",
-                    "client_id": self.app_id,
-                    "client_secret": self.app_secret,
-                    "fb_exchange_token": self.access_token,
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-        return il.Renewal(fields={"access_token": data["access_token"]}, expires_in=data.get("expires_in"))

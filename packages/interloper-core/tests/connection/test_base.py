@@ -1,6 +1,7 @@
 """Tests for Connection, OAuthConnection and RefreshTokenOAuthConnection."""
 
 import datetime as dt
+import urllib.parse
 from typing import ClassVar
 
 import httpx
@@ -278,6 +279,55 @@ class TestConnectionRenewal:
 
         (request,) = requests
         assert request.headers["Authorization"].startswith("Basic ")
+
+    def test_renewability_is_derived_from_declarations(self):
+        class LinkedinConn(RefreshTokenOAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("linkedin")
+            model_config = SettingsConfigDict(env_prefix="linkedin_conn_derived_")
+
+        class TkConn(OAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("tiktok", fields={"refresh_token": "access_token"})
+
+            access_token: str = SecretField("t")
+
+        assert LinkedinConn.renewable() is True
+        assert LinkedinConn.definition().renewable is True
+        # TikTok's provider has no refresh flow (tokens do not expire), and
+        # the partial fields mapping alone would also exclude it.
+        assert TkConn.renewable() is False
+        assert TkConn.definition().renewable is False
+
+    async def test_mapped_fields_renew_through_the_provider(self, monkeypatch: pytest.MonkeyPatch):
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(200, json={"access_token": "FRESH", "expires_in": 5183944})
+
+        _mock_transport(monkeypatch, handler)
+
+        class FacebookConn(OAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig(
+                "facebook",
+                fields={"client_id": "app_id", "client_secret": "app_secret", "refresh_token": "access_token"},
+            )
+            model_config = SettingsConfigDict(env_prefix="facebook_conn_renew_")
+
+            app_id: str = InputField("")
+            app_secret: str = SecretField("")
+            access_token: str = SecretField()
+
+        # No renewal code at all: the provider flow and the fields mapping
+        # derive the whole thing.
+        assert FacebookConn.renewable() is True
+        renewal = await FacebookConn(app_id="aid", app_secret="asec", access_token="LONG").renew()
+
+        assert renewal.fields == {"access_token": "FRESH"}
+        assert renewal.expires_in == 5183944
+        (request,) = requests
+        params = dict(urllib.parse.parse_qsl(request.url.query.decode()))
+        assert params["grant_type"] == "fb_exchange_token"
+        assert params["fb_exchange_token"] == "LONG"
 
 
 class TestRenewalFailureMessage:

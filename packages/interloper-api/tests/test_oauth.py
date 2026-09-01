@@ -4,7 +4,8 @@ Providers come from the core registry (``interloper.oauth``); connector
 OAuth *app* credentials are read at the route level from provider-scoped
 environment variables (``INTERLOPER_<PROVIDER>_CLIENT_ID`` / ``_CLIENT_SECRET`` /
 ``_REDIRECT_URI``).  These tests cover that resolution, the public
-``/providers`` endpoint, and the spec-driven generic token exchange.
+``/providers`` endpoint, and the token exchange route; the per-provider
+request shapes are the providers' own behavior, tested in core.
 """
 
 from __future__ import annotations
@@ -122,106 +123,59 @@ def test_exchange_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> No
     assert resp.status_code == 401
 
 
-# -- Generic exchange request shaping ------------------------------------------
+# -- Exchange route ------------------------------------------------------------
 
 
-def _capture_client(captured: list[httpx.Request]) -> httpx.AsyncClient:
+def _mock_async_client(monkeypatch: pytest.MonkeyPatch, handler) -> None:
+    """Route the exchange's AsyncClient through a mock transport."""
+    real = httpx.AsyncClient
+
+    def factory(**kwargs):
+        return real(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
+
+
+def test_exchange_spends_env_credentials_and_relays_the_raw_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[httpx.Request] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
         captured.append(request)
         return httpx.Response(200, json={"refresh_token": "rt"})
 
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    _mock_async_client(monkeypatch, handler)
+    _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs", redirect_uri="https://r")
 
+    resp = _client().post("/oauth/amazon", json={"code": "the-code"})
 
-def _cfg(monkeypatch: pytest.MonkeyPatch, provider: str) -> OAuthAppCredentials:
-    _configure(monkeypatch, provider, client_id="cid", client_secret="cs", redirect_uri="https://r")
-    creds = OAuthAppCredentials.from_env(provider)
-    assert creds is not None
-    return creds
-
-
-async def test_exchange_post_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: list[httpx.Request] = []
-    spec = PROVIDERS["amazon"]
-
-    async with _capture_client(captured) as client:
-        result = await oauth_module._exchange(client, spec, _cfg(monkeypatch, "amazon"), "the-code")
-
-    req = captured[0]
-    assert req.method == "POST"
-    assert str(req.url) == spec.token_url
-    assert json.loads(req.content) == {
+    assert resp.status_code == 200
+    # The app secret is spent server-side, never returned: only the
+    # provider's token response reaches the browser.
+    assert resp.json() == {"refresh_token": "rt"}
+    (request,) = captured
+    assert str(request.url) == PROVIDERS["amazon"].token_url
+    assert json.loads(request.content) == {
         "grant_type": "authorization_code",
         "code": "the-code",
         "redirect_uri": "https://r",
         "client_id": "cid",
         "client_secret": "cs",
     }
-    # The app secret is never returned: only the provider's token response.
-    assert result == {"refresh_token": "rt"}
 
 
-async def test_exchange_post_form(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: list[httpx.Request] = []
-    spec = PROVIDERS["linkedin"]
-
-    async with _capture_client(captured) as client:
-        await oauth_module._exchange(client, spec, _cfg(monkeypatch, "linkedin"), "the-code")
-
-    req = captured[0]
-    assert req.method == "POST"
-    assert req.headers["Content-Type"] == "application/x-www-form-urlencoded"
-    assert "grant_type=authorization_code" in req.content.decode()
-    assert "code=the-code" in req.content.decode()
-
-
-async def test_exchange_get_omits_grant_type(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: list[httpx.Request] = []
-    spec = PROVIDERS["facebook"]
-
-    async with _capture_client(captured) as client:
-        await oauth_module._exchange(client, spec, _cfg(monkeypatch, "facebook"), "the-code")
-
-    req = captured[0]
-    assert req.method == "GET"
-    assert req.url.params["code"] == "the-code"
-    assert "grant_type" not in req.url.params
-
-
-async def test_exchange_basic_auth_header(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: list[httpx.Request] = []
-    spec = PROVIDERS["pinterest"]
-
-    async with _capture_client(captured) as client:
-        await oauth_module._exchange(client, spec, _cfg(monkeypatch, "pinterest"), "the-code")
-
-    assert captured[0].headers["Authorization"].startswith("Basic ")
-
-
-async def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Providers such as TikTok 3xx-redirect to the trailing-slash URL; httpx
-    # must follow it rather than surfacing the redirect page as an error.
-    spec = PROVIDERS["amazon"]
-
+def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Providers such as TikTok 3xx-redirect to the trailing-slash URL; the
+    # route's client must follow it rather than surfacing the redirect page
+    # as an error.
     def handler(request: httpx.Request) -> httpx.Response:
         if not request.url.path.endswith("/token/"):
             return httpx.Response(307, headers={"Location": f"{request.url}/"})
         return httpx.Response(200, json={"refresh_token": "rt"})
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler), follow_redirects=True
-    ) as client:
-        result = await oauth_module._exchange(client, spec, _cfg(monkeypatch, "amazon"), "the-code")
+    _mock_async_client(monkeypatch, handler)
+    _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs", redirect_uri="https://r")
 
-    assert result == {"refresh_token": "rt"}
+    resp = _client().post("/oauth/amazon", json={"code": "the-code"})
 
-
-async def test_exchange_renamed_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: list[httpx.Request] = []
-    spec = PROVIDERS["tiktok"]
-
-    async with _capture_client(captured) as client:
-        await oauth_module._exchange(client, spec, _cfg(monkeypatch, "tiktok"), "the-code")
-
-    body = json.loads(captured[0].content)
-    assert body == {"auth_code": "the-code", "app_id": "cid", "secret": "cs"}
+    assert resp.status_code == 200
+    assert resp.json() == {"refresh_token": "rt"}
