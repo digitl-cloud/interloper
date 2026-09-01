@@ -97,7 +97,7 @@ def test_execute_roots_its_own_trace_linked_to_the_dispatch_span(
     run_span = spans["interloper.runner.run"]
     assert run_span.parent is not None and run_span.parent.span_id == root.context.span_id
     assert run_span.context.trace_id == root.context.trace_id
-    assert spans["interloper.asset.materialize"].context.trace_id == root.context.trace_id
+    assert spans["interloper.operation.execute"].context.trace_id == root.context.trace_id
 
 
 def test_execute_roots_a_trace_without_any_dispatch_span(

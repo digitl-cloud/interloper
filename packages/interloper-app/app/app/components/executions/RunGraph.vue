@@ -12,13 +12,13 @@ const props = defineProps<{ runId: string }>()
 const selectedAsset = defineModel<string | null>('selectedAsset')
 
 const { model } = useRunGraph(() => props.runId)
-const assetExecutionsStore = useAssetExecutionsStore()
+const executionsStore = useExecutionsStore()
 
-/** asset_id → formatted run duration, shown on each node. */
+/** component_id → formatted run duration, shown on each node. */
 const durationByAssetId = computed(() => {
     const map = new Map<string, string>()
-    for (const ex of assetExecutionsStore.assetExecutions) {
-        if (ex.asset_id && ex.started_at) map.set(ex.asset_id, formatElapsed(ex.started_at, ex.completed_at))
+    for (const ex of executionsStore.executions) {
+        if (ex.component_id && ex.started_at) map.set(ex.component_id, formatElapsed(ex.started_at, ex.completed_at))
     }
     return map
 })

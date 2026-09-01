@@ -106,20 +106,20 @@ def list_recent_runs(
 
 
 def get_run_detail(ctx: ToolkitContext, run_id: str) -> RunDetail | ToolError:
-    """Get full detail for a single run including events and per-asset execution status.
+    """Get full detail for a single run including events and per-operation execution status.
 
     Args:
         run_id: UUID of the run.
 
-    Returns the run metadata, event timeline, and per-asset execution summary.
+    Returns the run metadata, event timeline, and per-operation execution summary.
     """
     try:
         rid = UUID(run_id)
         run = ctx.store.runs.get(rid)
         events = ctx.store.events.list_all(run_id=rid)
-        asset_execs = ctx.store.events.list_asset_executions(rid)
+        executions = ctx.store.events.list_executions(rid)
 
-        return RunDetail(run=run, events=events, asset_executions=asset_execs)
+        return RunDetail(run=run, events=events, executions=executions)
     except Exception as e:
         return ToolError(error=str(e))
 

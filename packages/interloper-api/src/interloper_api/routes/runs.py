@@ -87,13 +87,13 @@ class RetryRequest(BaseModel):
     scope: Literal["all", "failed"] = "all"
 
 
-class AssetExecutionResponse(BaseModel):
-    """Response body for an asset execution (from the asset_executions view)."""
+class ExecutionResponse(BaseModel):
+    """Response body for an operation execution (from the ``executions`` view)."""
 
     run_id: UUID
     org_id: UUID
-    asset_id: UUID | None = None
-    asset_key: str
+    component_id: UUID | None = None
+    component_key: str
     status: str
     started_at: str | None = None
     completed_at: str | None = None
@@ -279,13 +279,13 @@ def get_run(
     return RunResponse.from_run(run)
 
 
-@router.get("/{run_id}/asset-executions")
-def list_asset_executions(
+@router.get("/{run_id}/executions")
+def list_executions(
     run_id: UUID,
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
-) -> list[AssetExecutionResponse]:
-    """List asset executions for a run.
+) -> list[ExecutionResponse]:
+    """List operation executions for a run.
 
     Args:
         run_id: The run UUID.
@@ -293,16 +293,16 @@ def list_asset_executions(
         store: The Store instance.
 
     Returns:
-        The run's asset executions, as response models.
+        The run's operation executions, as response models.
     """
     _load_authorized_run(run_id, user, store)
-    rows = store.events.list_asset_executions(run_id)
+    rows = store.events.list_executions(run_id)
     return [
-        AssetExecutionResponse(
+        ExecutionResponse(
             run_id=row.run_id,
             org_id=row.org_id,
-            asset_id=row.asset_id,
-            asset_key=row.asset_key or "",
+            component_id=row.component_id,
+            component_key=row.component_key or "",
             status=row.status,
             started_at=str(row.started_at) if row.started_at else None,
             completed_at=str(row.completed_at) if row.completed_at else None,

@@ -1,4 +1,4 @@
-import type { ExecutionStatus } from '~/types/asset_execution'
+import type { ExecutionStatus } from '~/types/execution'
 
 /** One execution drawn as a bar on a timeline row. */
 export interface TimelineBar {

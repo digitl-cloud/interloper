@@ -175,7 +175,7 @@ def test_run_events_return_404_for_non_member(store: FakeStore) -> None:
     assert resp.status_code == 404
 
 
-def test_asset_executions_return_404_for_non_member(store: FakeStore) -> None:
+def test_executions_return_404_for_non_member(store: FakeStore) -> None:
     store.role = None
     resp = _client(store).get(f"/runs/{uuid4()}/asset-executions")
     assert resp.status_code == 404

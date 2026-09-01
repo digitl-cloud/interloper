@@ -223,14 +223,14 @@ class TestTelemetrySpans:
         spans = {s.name: s for s in span_exporter.get_finished_spans()}
         assert {
             "interloper.runner.run",
-            "interloper.asset.materialize",
+            "interloper.operation.execute",
             "interloper.asset.data",
             "interloper.asset.conform",
             "interloper.destination.write",
         } <= set(spans)
 
         run_span = spans["interloper.runner.run"]
-        asset_span = spans["interloper.asset.materialize"]
+        asset_span = spans["interloper.operation.execute"]
         assert asset_span.parent is not None and asset_span.parent.span_id == run_span.context.span_id
         children = (
             "interloper.asset.data",
@@ -251,7 +251,7 @@ class TestTelemetrySpans:
         assert run_span.attributes["interloper.target.key"] == "nightly"
         assert asset_span.attributes["interloper.target.kind"] == "job"
         assert asset_span.attributes is not None
-        assert asset_span.attributes["interloper.asset.key"] == "solo"
+        assert asset_span.attributes["interloper.component.key"] == "solo"
 
         # The run span's traceparent rides the metadata dict into every event.
         trace_id = f"{run_span.context.trace_id:032x}"
@@ -273,10 +273,10 @@ class TestTelemetrySpans:
         conform = spans["interloper.asset.conform"]
         # Siblings under the asset span, not one merged span.
         assert normalize.parent is not None and conform.parent is not None
-        assert normalize.parent.span_id == spans["interloper.asset.materialize"].context.span_id
+        assert normalize.parent.span_id == spans["interloper.operation.execute"].context.span_id
         assert conform.parent.span_id == normalize.parent.span_id
         assert normalize.attributes is not None
-        assert normalize.attributes["interloper.asset.key"] == "raw"
+        assert normalize.attributes["interloper.component.key"] == "raw"
 
     async def test_schema_inference_is_traced_under_conform(self, span_exporter):
         il.MemoryDestination.clear()
@@ -333,7 +333,7 @@ class TestTelemetrySpans:
         assert len(spans) == 1
         assert spans[0].attributes is not None
         assert spans[0].attributes["interloper.resource.name"] == "creds"
-        assert spans[0].attributes["interloper.asset.key"] == "needs_resource"
+        assert spans[0].attributes["interloper.component.key"] == "needs_resource"
 
     async def test_failed_run_marks_spans_as_error(self, span_exporter):
         from opentelemetry.trace import StatusCode
@@ -347,7 +347,7 @@ class TestTelemetrySpans:
 
         spans = {s.name: s for s in span_exporter.get_finished_spans()}
         assert spans["interloper.runner.run"].status.status_code is StatusCode.ERROR
-        assert spans["interloper.asset.materialize"].status.status_code is StatusCode.ERROR
+        assert spans["interloper.operation.execute"].status.status_code is StatusCode.ERROR
         assert spans["interloper.asset.data"].status.status_code is StatusCode.ERROR
 
     async def test_remote_parent_from_metadata(self, span_exporter):

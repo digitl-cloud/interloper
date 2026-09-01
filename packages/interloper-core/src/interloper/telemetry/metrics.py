@@ -3,7 +3,7 @@
 Counters and durations are order-insensitive, so they ride the
 :class:`~interloper.events.bus.EventBus` (which already carries the full
 lifecycle taxonomy with timestamps) instead of the execution hot path.
-Metric attributes stay low-cardinality by design: ``asset_key`` is
+Metric attributes stay low-cardinality by design: ``component_key`` is
 bounded by the catalog, while ids and partitions are deliberately
 excluded.
 """
@@ -47,7 +47,7 @@ class _Bounded(OrderedDict):
 
 
 class OtelMetricsHandler:
-    """Event-bus handler recording run/asset/destination metrics.
+    """Event-bus handler recording run/operation/destination metrics.
 
     Docker/k8s hosts re-emit child-container events with deterministic
     ids, and hosts author their own terminal events under the same ids —
@@ -60,10 +60,10 @@ class OtelMetricsHandler:
         EventType.RUN_STARTED,
         EventType.RUN_COMPLETED,
         EventType.RUN_FAILED,
-        EventType.ASSET_STARTED,
-        EventType.ASSET_COMPLETED,
-        EventType.ASSET_FAILED,
-        EventType.ASSET_CANCELED,
+        EventType.OPERATION_STARTED,
+        EventType.OPERATION_COMPLETED,
+        EventType.OPERATION_FAILED,
+        EventType.OPERATION_CANCELED,
         EventType.DEST_READ_COMPLETED,
         EventType.DEST_READ_FAILED,
         EventType.DEST_WRITE_COMPLETED,
@@ -75,10 +75,10 @@ class OtelMetricsHandler:
         EventType.RUN_FAILED: "failed",
     }
 
-    _ASSET_STATUS: ClassVar[dict[EventType, str]] = {
-        EventType.ASSET_COMPLETED: "completed",
-        EventType.ASSET_FAILED: "failed",
-        EventType.ASSET_CANCELED: "canceled",
+    _OPERATION_STATUS: ClassVar[dict[EventType, str]] = {
+        EventType.OPERATION_COMPLETED: "completed",
+        EventType.OPERATION_FAILED: "failed",
+        EventType.OPERATION_CANCELED: "canceled",
     }
 
     _DEST_STATUS: ClassVar[dict[EventType, tuple[str, str]]] = {
@@ -97,9 +97,11 @@ class OtelMetricsHandler:
         m = meter()
         self._runs = m.create_counter("interloper.runs", unit="{run}", description="Finished runs")
         self._run_duration = m.create_histogram("interloper.run.duration", unit="s", description="Run duration")
-        self._assets = m.create_counter("interloper.assets", unit="{execution}", description="Finished assets")
-        self._asset_duration = m.create_histogram(
-            "interloper.asset.duration", unit="s", description="Asset execution duration"
+        self._operations = m.create_counter(
+            "interloper.operations", unit="{execution}", description="Finished operations"
+        )
+        self._operation_duration = m.create_histogram(
+            "interloper.operation.duration", unit="s", description="Operation execution duration"
         )
         self._dest_io = m.create_counter(
             "interloper.destination.io", unit="{operation}", description="Destination read/write operations"
@@ -128,13 +130,13 @@ class OtelMetricsHandler:
         """Dispatch the event to the recorder for its subject.
 
         Args:
-            event: The lifecycle event; types outside the run/asset/destination
+            event: The lifecycle event; types outside the run/operation/destination
                 taxonomies are ignored.
         """
         if event.type is EventType.RUN_STARTED or event.type in self._RUN_STATUS:
             self._record_run(event)
-        elif event.type is EventType.ASSET_STARTED or event.type in self._ASSET_STATUS:
-            self._record_asset(event)
+        elif event.type is EventType.OPERATION_STARTED or event.type in self._OPERATION_STATUS:
+            self._record_operation(event)
         elif event.type in self._DEST_STATUS:
             self._record_destination_io(event)
 
@@ -161,26 +163,26 @@ class OtelMetricsHandler:
         if (seconds := self._elapsed(key, until=event.timestamp)) is not None:
             self._run_duration.record(seconds, attributes)
 
-    def _record_asset(self, event: Event) -> None:
-        """Count a finished asset execution and record its duration, or remember a start time.
+    def _record_operation(self, event: Event) -> None:
+        """Count a finished operation execution and record its duration, or remember a start time.
 
         Args:
-            event: An ``ASSET_STARTED`` event (whose timestamp is stored) or a
-                terminal asset event (which emits the metrics).
+            event: An ``OPERATION_STARTED`` event (whose timestamp is stored) or a
+                terminal operation event (which emits the metrics).
         """
         metadata = event.metadata
-        key = ("asset", str(metadata.get("run_id", "")), str(metadata.get("asset_id", "")))
-        if event.type is EventType.ASSET_STARTED:
+        key = ("operation", str(metadata.get("run_id", "")), str(metadata.get("component_id", "")))
+        if event.type is EventType.OPERATION_STARTED:
             self._started[key] = event.timestamp
             return
 
         attributes = {
-            "status": self._ASSET_STATUS[event.type],
-            "asset_key": str(metadata.get("asset_key", "")),
+            "status": self._OPERATION_STATUS[event.type],
+            "component_key": str(metadata.get("component_key", "")),
         }
-        self._assets.add(1, attributes)
+        self._operations.add(1, attributes)
         if (seconds := self._elapsed(key, until=event.timestamp)) is not None:
-            self._asset_duration.record(seconds, attributes)
+            self._operation_duration.record(seconds, attributes)
 
     def _record_destination_io(self, event: Event) -> None:
         """Count one destination read/write, attributed by operation and outcome.

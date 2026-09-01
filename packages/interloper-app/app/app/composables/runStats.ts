@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 import type { Run } from '~/types/run'
-import type { AssetExecution, ExecutionStatus } from '~/types/asset_execution'
+import type { Execution, ExecutionStatus } from '~/types/execution'
 
 interface StatusMeta {
     key: string
@@ -52,7 +52,7 @@ export interface RunStats {
 }
 
 /** Derive per-status counts and run-level stats from the asset executions. */
-export function useRunStats(run: Ref<Run | null>, executions: Ref<AssetExecution[]>) {
+export function useRunStats(run: Ref<Run | null>, executions: Ref<Execution[]>) {
     return computed<RunStats>(() => {
         const counts: Record<string, number> = {}
         for (const ex of executions.value) counts[ex.status] = (counts[ex.status] ?? 0) + 1

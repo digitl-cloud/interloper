@@ -105,7 +105,7 @@ class TestRunSpecFileMode:
 
         err = capsys.readouterr().err
         assert "RUN_STARTED" in err
-        assert "ASSET_COMPLETED" in err
+        assert "OPERATION_COMPLETED" in err
         assert "RUN_COMPLETED" in err
         # Default filter drops destination I/O chatter.
         assert "DEST_WRITE_STARTED" not in err
@@ -120,7 +120,7 @@ class TestRunSpecFileMode:
         spec = self._materializing_spec(tmp_path)
         _cmd_run(_args(file=str(spec), quiet=True))
 
-        assert "ASSET_COMPLETED" not in capsys.readouterr().err
+        assert "OPERATION_COMPLETED" not in capsys.readouterr().err
 
     def test_events_json_streams_to_stdout(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         spec = self._materializing_spec(tmp_path)
@@ -129,7 +129,7 @@ class TestRunSpecFileMode:
         lines = [line for line in capsys.readouterr().out.splitlines() if line]
         types = {json.loads(line)["type"] for line in lines}
         assert "run_started" in types
-        assert "asset_completed" in types
+        assert "operation_completed" in types
 
     @staticmethod
     def _materializing_spec(tmp_path: Path) -> Path:

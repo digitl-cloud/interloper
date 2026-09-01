@@ -1,6 +1,6 @@
 import type { ComponentRecord, Relation } from './component'
 import type { AssetDefinition, SourceDefinition } from './catalog'
-import type { ExecutionStatus } from './asset_execution'
+import type { ExecutionStatus } from './execution'
 
 /**
  * Canonical node status states shared across every graph surface

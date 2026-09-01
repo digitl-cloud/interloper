@@ -784,7 +784,7 @@ class TestTelemetrySpans:
         spans = {s.name: s for s in span_exporter.get_finished_spans()}
         materialize = spans["interloper.dag.materialize"]
         assert materialize.attributes is not None
-        assert materialize.attributes["interloper.dag.asset_count"] == 1
+        assert materialize.attributes["interloper.dag.operation_count"] == 1
         # The runner's own span nests under the DAG entrypoint.
         run_span = spans["interloper.runner.run"]
         assert run_span.parent is not None

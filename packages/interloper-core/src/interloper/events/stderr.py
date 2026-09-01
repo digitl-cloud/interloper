@@ -5,7 +5,7 @@ parse structured events back from the container's log stream.  The
 ``@EVENT:`` prefix makes event lines reliably distinguishable from
 regular application log output in the multiplexed stream::
 
-    @EVENT:{"type":"asset_exec_started","timestamp":"...","asset_key":"..."}
+    @EVENT:{"type":"asset_data_started","timestamp":"...","component_key":"..."}
 
 Enable by setting the ``INTERLOPER_EVENTS_TO_STDERR=true`` environment
 variable — the CLI ``run`` command detects it and subscribes this

@@ -133,18 +133,18 @@ export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
 
 /**
  * A run's subgraph with *live* per-asset status from asset executions.
- * The caller is responsible for `useAssetExecutionsStore().fetchForRun(runId)`;
+ * The caller is responsible for `useExecutionsStore().fetchForRun(runId)`;
  * this model tracks that store (which is realtime-backed). (Seam — page not yet wired.)
  */
 export function useRunGraph(runId: MaybeRefOrGetter<string>) {
-    const assetExecutionsStore = useAssetExecutionsStore()
+    const executionsStore = useExecutionsStore()
     const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
 
     const statusByAssetId = computed(() => {
         const map = new Map<string, NodeStatus>()
-        for (const exec of assetExecutionsStore.assetExecutions) {
-            if (exec.asset_id) map.set(exec.asset_id, { state: stateFromExecution(exec.status) })
+        for (const exec of executionsStore.executions) {
+            if (exec.component_id) map.set(exec.component_id, { state: stateFromExecution(exec.status) })
         }
         return map
     })

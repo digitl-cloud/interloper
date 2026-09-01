@@ -44,9 +44,9 @@ see [Runners](runners.md).
 | `ASSET_COMPLETED` | Asset materialization completed |
 | `ASSET_FAILED` | Asset materialization failed |
 | `ASSET_CANCELED` | Asset canceled (downstream of a failure) |
-| `ASSET_EXEC_STARTED` | Asset function execution started |
-| `ASSET_EXEC_COMPLETED` | Asset function execution completed |
-| `ASSET_EXEC_FAILED` | Asset function execution failed |
+| `ASSET_DATA_STARTED` | Asset `data()` call started |
+| `ASSET_DATA_COMPLETED` | Asset `data()` call completed |
+| `ASSET_DATA_FAILED` | Asset `data()` call failed |
 | `DEST_READ_STARTED` | Destination read started (upstream dependency) |
 | `DEST_READ_COMPLETED` | Destination read completed |
 | `DEST_READ_FAILED` | Destination read failed |

@@ -317,7 +317,7 @@ class DAG:
         """
         from interloper.runner.async_runner import AsyncRunner
 
-        span_attrs: dict[str, Any] = {attributes.DAG_ASSET_COUNT: len(self.operations)}
+        span_attrs: dict[str, Any] = {attributes.DAG_OPERATION_COUNT: len(self.operations)}
         if partition_or_window is not None:
             span_attrs[attributes.PARTITION] = str(partition_or_window)
         with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attrs) as span:
@@ -325,7 +325,7 @@ class DAG:
             # A failed run is returned, not raised — without this the trace's
             # root span reads OK while the failure sits on a descendant.
             if result.status is ExecutionStatus.FAILED:
-                span.set_status(StatusCode.ERROR, f"{len(result.failed_assets)} asset(s) failed")
+                span.set_status(StatusCode.ERROR, f"{len(result.failed_ids)} operation(s) failed")
             return result
 
     # -- Serialization ---------------------------------------------------------

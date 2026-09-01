@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 class AsyncRunner(Runner):
     """Async-native, in-process runner — the single DAG-walking engine.
 
-    Schedules ready assets as ``asyncio`` tasks bounded by an
+    Schedules ready operations as ``asyncio`` tasks bounded by an
     ``asyncio.Semaphore``. It subsumes both serial and thread-pool execution:
 
     - ``AsyncRunner(max_workers=1)`` — serial execution (deterministic ordering).
@@ -53,7 +53,7 @@ class AsyncRunner(Runner):
         partition_or_window: Partition | PartitionWindow | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> RunResult:
-        """Materialize the DAG by dynamically scheduling ready assets.
+        """Execute the DAG by dynamically scheduling ready operations.
 
         Args:
             dag: The DAG to execute.
@@ -74,20 +74,19 @@ class AsyncRunner(Runner):
             self._semaphore = asyncio.Semaphore(self.max_workers)
 
             while not self.state.is_run_complete():
-                submitted_ids = {asset.id for asset in inflight.values()}
-                ready_assets = self.state.ready_assets
+                submitted_ids = {operation.id for operation in inflight.values()}
 
-                for asset in ready_assets:
+                for operation in self.state.ready_operations:
                     if len(inflight) >= self._capacity:
                         break
-                    if asset.id in submitted_ids:
+                    if operation.id in submitted_ids:
                         continue
-                    handle = self._submit_asset(asset, partition_or_window)
-                    inflight[handle] = asset
+                    handle = self._submit_operation(operation, partition_or_window)
+                    inflight[handle] = operation
 
                 if not inflight:
                     raise RunnerError(
-                        "No assets ready but execution not complete. "
+                        "No operations ready but execution not complete. "
                         "This indicates a circular dependency or invalid DAG state."
                     )
 
@@ -116,27 +115,27 @@ class AsyncRunner(Runner):
 
     @property
     def _capacity(self) -> int:
-        """Maximum number of concurrent assets this runner can execute.
+        """Maximum number of concurrent operations this runner can execute.
 
         Returns:
             ``max_workers``, the size of the semaphore bounding execution.
         """
         return self.max_workers
 
-    def _submit_asset(
+    def _submit_operation(
         self,
-        asset: Operation,
+        operation: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> asyncio.Task[Any]:
-        """Schedule an asset as an asyncio task guarded by the semaphore.
+        """Schedule an operation as an asyncio task guarded by the semaphore.
 
         Args:
-            asset: The asset to execute.
+            operation: The operation to execute.
             partition_or_window: Partition or window to scope the run.
 
         Returns:
             The created task, which acquires a concurrency slot before
-            materializing the asset.
+            executing the operation.
         """
         assert self._semaphore is not None
 
@@ -144,15 +143,15 @@ class AsyncRunner(Runner):
 
         async def _guarded() -> Any:
             async with sem:
-                return await self._execute_asset(asset, partition_or_window)
+                return await self._execute_operation(operation, partition_or_window)
 
         return asyncio.create_task(_guarded())
 
-    # -- Asset execution -------------------------------------------------------
+    # -- Operation execution -----------------------------------------------------
 
-    async def _execute_asset(
+    async def _execute_operation(
         self,
-        asset: Operation,
+        operation: Operation,
         partition_or_window: Partition | PartitionWindow | None = None,
     ) -> Any:
         """Execute a single operation with state tracking.
@@ -163,7 +162,7 @@ class AsyncRunner(Runner):
         whose raw errors embed secrets opt out.
 
         Args:
-            asset: The operation to execute.
+            operation: The operation to execute.
             partition_or_window: Partition or window to scope the run; narrowed
                 to the operation's own effective partition before executing.
 
@@ -171,11 +170,11 @@ class AsyncRunner(Runner):
             The execution's effects, or ``None`` if the operation failed and
             ``reraise`` is False.
         """
-        self.state.mark_asset_running(asset)
+        self.state.mark_running(operation)
 
-        effective_partition = asset.effective_partition(partition_or_window)
+        effective_partition = operation.effective_partition(partition_or_window)
         span_attrs = attributes.from_metadata(
-            asset._event_metadata(self.state.metadata, effective_partition)
+            operation._event_metadata(self.state.metadata, effective_partition)
         )
         context = OperationContext(
             partition_or_window=effective_partition,
@@ -183,13 +182,13 @@ class AsyncRunner(Runner):
             metadata=self.state.metadata,
         )
         try:
-            with tracer().start_as_current_span("interloper.asset.materialize", attributes=span_attrs):
-                result = await asset.execute(context)
-            self.state.mark_asset_completed(asset, effects=result)
+            with tracer().start_as_current_span("interloper.operation.execute", attributes=span_attrs):
+                result = await operation.execute(context)
+            self.state.mark_completed(operation, effects=result)
         except Exception as e:
-            failed = asset.failure(e)
-            tb = traceback.format_exc() if type(asset).capture_traceback else None
-            self.state.mark_asset_failed(asset, failed.error or format_exception(e), tb=tb, effects=failed)
+            failed = operation.failure(e)
+            tb = traceback.format_exc() if type(operation).capture_traceback else None
+            self.state.mark_failed(operation, failed.error or format_exception(e), tb=tb, effects=failed)
             if self.reraise or self.fail_fast:
                 raise
             return None
@@ -199,31 +198,31 @@ class AsyncRunner(Runner):
         """Wait for all in-flight tasks and emit terminal events.
 
         Called after an exception aborts the main loop so that every
-        in-flight asset gets a proper terminal event rather than being
+        in-flight operation gets a proper terminal event rather than being
         silently abandoned as 'running'.
 
-        In the async runner, ``_execute_asset`` already calls
-        ``mark_asset_failed`` / ``mark_asset_completed``, so completed
-        tasks are already handled.  We only need to cancel tasks that
-        are still pending (e.g. waiting for the semaphore).
+        In the async runner, ``_execute_operation`` already calls
+        ``mark_failed`` / ``mark_completed``, so completed tasks are
+        already handled.  We only need to cancel tasks that are still
+        pending (e.g. waiting for the semaphore).
 
         Args:
-            inflight: Tasks still in flight, mapped to the asset each was
+            inflight: Tasks still in flight, mapped to the operation each was
                 created for. An empty mapping is a no-op.
         """
         if not inflight:
             return
 
         if self.fail_fast:
-            for task, asset in inflight.items():
+            for task, operation in inflight.items():
                 task.cancel()
-                info = self.state.asset_executions.get(asset.id)
+                info = self.state.executions.get(operation.id)
                 if info and not info.is_terminal:
-                    self.state.mark_asset_canceled(asset)
+                    self.state.mark_canceled(operation)
             return
 
         # Let running tasks finish naturally and record their outcomes.
-        # (_execute_asset already calls mark_asset_failed/completed.)
+        # (_execute_operation already calls mark_failed/mark_completed.)
         done, _ = await asyncio.wait(inflight.keys())
 
         for task in done:

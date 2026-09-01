@@ -10,8 +10,8 @@ class EventType(Enum):
 
     Organized by scope:
 
-    - **Asset lifecycle**: started/completed/failed/canceled (managed by Runner).
-    - **Asset execution**: the ``data()`` call itself.
+    - **Operation lifecycle**: started/completed/failed/canceled (managed by Runner).
+    - **Asset data**: the ``data()`` call itself.
     - **Destination I/O**: individual read/write operations.
     - **Run / Backfill**: higher-level orchestration.
     - **User logging**: messages emitted via ``context.logger``.
@@ -21,17 +21,17 @@ class EventType(Enum):
     HOOK_FIRED = "hook_fired"
     HOOK_FAILED = "hook_failed"
 
-    # Asset lifecycle (managed by Runner)
-    ASSET_QUEUED = "asset_queued"
-    ASSET_STARTED = "asset_started"
-    ASSET_COMPLETED = "asset_completed"
-    ASSET_FAILED = "asset_failed"
-    ASSET_CANCELED = "asset_canceled"
+    # Operation lifecycle (managed by Runner)
+    OPERATION_QUEUED = "operation_queued"
+    OPERATION_STARTED = "operation_started"
+    OPERATION_COMPLETED = "operation_completed"
+    OPERATION_FAILED = "operation_failed"
+    OPERATION_CANCELED = "operation_canceled"
 
-    # Asset execution (the data() call)
-    ASSET_EXEC_STARTED = "asset_exec_started"
-    ASSET_EXEC_COMPLETED = "asset_exec_completed"
-    ASSET_EXEC_FAILED = "asset_exec_failed"
+    # Asset data (the data() call)
+    ASSET_DATA_STARTED = "asset_data_started"
+    ASSET_DATA_COMPLETED = "asset_data_completed"
+    ASSET_DATA_FAILED = "asset_data_failed"
 
     # Destination I/O
     DEST_READ_STARTED = "dest_read_started"

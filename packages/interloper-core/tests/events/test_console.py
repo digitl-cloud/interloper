@@ -15,22 +15,22 @@ def test_events_become_log_records(caplog: pytest.LogCaptureFixture) -> None:
     """Each event is emitted as a record on the ``interloper.run`` logger."""
     handler = ConsoleEventHandler()
     with caplog.at_level(logging.DEBUG, logger=EVENT_LOGGER_NAME):
-        handler(Event(type=EventType.ASSET_COMPLETED, metadata={"asset_key": "foo", "message": "done"}))
+        handler(Event(type=EventType.OPERATION_COMPLETED, metadata={"component_key": "foo", "message": "done"}))
 
     record = caplog.records[-1]
     assert record.name == EVENT_LOGGER_NAME
     assert record.levelno == logging.INFO
-    assert "ASSET_COMPLETED" in record.message
+    assert "OPERATION_COMPLETED" in record.message
     assert "foo" in record.message
 
 
 def test_event_levels_map_to_logging_levels() -> None:
     """Failures are errors, cancellations warnings, lifecycle info, chatter debug."""
-    assert ConsoleEventHandler._level(Event(type=EventType.ASSET_FAILED)) == logging.ERROR
+    assert ConsoleEventHandler._level(Event(type=EventType.OPERATION_FAILED)) == logging.ERROR
     assert ConsoleEventHandler._level(Event(type=EventType.RUN_FAILED)) == logging.ERROR
-    assert ConsoleEventHandler._level(Event(type=EventType.ASSET_CANCELED)) == logging.WARNING
-    assert ConsoleEventHandler._level(Event(type=EventType.ASSET_STARTED)) == logging.INFO
-    assert ConsoleEventHandler._level(Event(type=EventType.ASSET_QUEUED)) == logging.DEBUG
+    assert ConsoleEventHandler._level(Event(type=EventType.OPERATION_CANCELED)) == logging.WARNING
+    assert ConsoleEventHandler._level(Event(type=EventType.OPERATION_STARTED)) == logging.INFO
+    assert ConsoleEventHandler._level(Event(type=EventType.OPERATION_QUEUED)) == logging.DEBUG
     assert ConsoleEventHandler._level(Event(type=EventType.DEST_WRITE_STARTED)) == logging.DEBUG
 
 
@@ -38,7 +38,7 @@ def test_log_events_carry_their_authored_level(caplog: pytest.LogCaptureFixture)
     """``context.logger`` levels travel onto the record; message reads ``asset: message``."""
     handler = ConsoleEventHandler()
     with caplog.at_level(logging.DEBUG, logger=EVENT_LOGGER_NAME):
-        handler(Event(type=EventType.LOG, metadata={"asset_key": "foo", "message": "hi", "level": "WARNING"}))
+        handler(Event(type=EventType.LOG, metadata={"component_key": "foo", "message": "hi", "level": "WARNING"}))
 
     record = caplog.records[-1]
     assert record.levelno == logging.WARNING
@@ -55,8 +55,8 @@ def test_respects_logger_level(caplog: pytest.LogCaptureFixture) -> None:
     """DEBUG chatter is dropped when the logger sits at INFO."""
     handler = ConsoleEventHandler()
     with caplog.at_level(logging.INFO, logger=EVENT_LOGGER_NAME):
-        handler(Event(type=EventType.DEST_WRITE_STARTED, metadata={"asset_key": "foo"}))
-        handler(Event(type=EventType.ASSET_QUEUED, metadata={"asset_key": "foo"}))
+        handler(Event(type=EventType.DEST_WRITE_STARTED, metadata={"component_key": "foo"}))
+        handler(Event(type=EventType.OPERATION_QUEUED, metadata={"component_key": "foo"}))
 
     assert not caplog.records
 
@@ -64,7 +64,7 @@ def test_respects_logger_level(caplog: pytest.LogCaptureFixture) -> None:
 def test_record_timestamp_comes_from_the_event(caplog: pytest.LogCaptureFixture) -> None:
     """The record is stamped with the event's own time, not delivery time."""
     handler = ConsoleEventHandler()
-    event = Event(type=EventType.ASSET_STARTED, metadata={"asset_key": "foo"})
+    event = Event(type=EventType.OPERATION_STARTED, metadata={"component_key": "foo"})
     with caplog.at_level(logging.INFO, logger=EVENT_LOGGER_NAME):
         handler(event)
 
@@ -76,7 +76,7 @@ def test_json_lines_mode_streams_to_stdout(
 ) -> None:
     """JSON mode bypasses logging and writes one ``Event.to_json()`` document per line."""
     handler = ConsoleEventHandler(json_lines=True)
-    event = Event(type=EventType.LOG, metadata={"asset_key": "foo", "message": "hi", "level": "INFO"})
+    event = Event(type=EventType.LOG, metadata={"component_key": "foo", "message": "hi", "level": "INFO"})
     with caplog.at_level(logging.DEBUG, logger=EVENT_LOGGER_NAME):
         handler(event)
 

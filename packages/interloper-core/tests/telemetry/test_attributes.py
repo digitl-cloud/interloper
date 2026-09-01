@@ -11,9 +11,9 @@ class TestFromMetadata:
             {
                 "run_id": "r1",
                 "backfill_id": "b1",
-                "asset_id": "a1",
-                "asset_key": "orders",
-                "asset_qualified_key": "shop.orders",
+                "component_id": "a1",
+                "component_key": "orders",
+                "qualified_key": "shop.orders",
                 "partition_or_window": "2026-07-01",
                 "source_id": "s1",
             }
@@ -21,9 +21,9 @@ class TestFromMetadata:
         assert attrs == {
             attributes.RUN_ID: "r1",
             attributes.BACKFILL_ID: "b1",
-            attributes.ASSET_ID: "a1",
-            attributes.ASSET_KEY: "orders",
-            attributes.ASSET_QUALIFIED_KEY: "shop.orders",
+            attributes.COMPONENT_ID: "a1",
+            attributes.COMPONENT_KEY: "orders",
+            attributes.COMPONENT_QUALIFIED_KEY: "shop.orders",
             attributes.PARTITION: "2026-07-01",
             attributes.SOURCE_ID: "s1",
         }

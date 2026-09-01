@@ -18,12 +18,12 @@ from interloper_scheduler.executor import RunExecutor, run_event_metadata
 
 
 class _FakeEventStore:
-    """Returns canned asset_executions per run_id."""
+    """Returns canned executions per run_id."""
 
     def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
         self._executions = executions
 
-    def list_asset_executions(self, run_id: UUID) -> list[SimpleNamespace]:
+    def list_executions(self, run_id: UUID) -> list[SimpleNamespace]:
         return [SimpleNamespace(**row) for row in self._executions.get(run_id, [])]
 
 
@@ -56,11 +56,11 @@ def _patch_session(monkeypatch: pytest.MonkeyPatch, runs: dict[UUID, Any]) -> No
     monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(runs))
 
 
-def test_succeeded_assets_are_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_succeeded_operations_are_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     parent_id = uuid4()
     id_a, id_b = uuid4(), uuid4()
     store = _FakeStore(
-        {parent_id: [{"asset_id": id_a, "status": "success"}, {"asset_id": id_b, "status": "failed"}]}
+        {parent_id: [{"component_id": id_a, "status": "success"}, {"component_id": id_b, "status": "failed"}]}
     )
     _patch_session(monkeypatch, {parent_id: SimpleNamespace(retry_of=None)})
 
@@ -70,7 +70,7 @@ def test_succeeded_assets_are_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     assert executor._prior_successes(parent_id) == {id_a}
 
 
-def test_statuses_match_by_asset_id_not_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_statuses_match_by_component_id_not_key(monkeypatch: pytest.MonkeyPatch) -> None:
     # A run can span many assets sharing one key (e.g. an ads_stats per
     # account). One account's success must not skip the others' retries.
     parent_id = uuid4()
@@ -78,9 +78,9 @@ def test_statuses_match_by_asset_id_not_key(monkeypatch: pytest.MonkeyPatch) -> 
     store = _FakeStore(
         {
             parent_id: [
-                {"asset_id": id_a, "status": "success"},
-                {"asset_id": id_b, "status": "failed"},
-                {"asset_id": id_c, "status": "canceled"},
+                {"component_id": id_a, "status": "success"},
+                {"component_id": id_b, "status": "failed"},
+                {"component_id": id_c, "status": "canceled"},
             ]
         }
     )
@@ -100,8 +100,8 @@ def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.Mo
     id_a, id_b = uuid4(), uuid4()
     store = _FakeStore(
         {
-            mid_id: [{"asset_id": id_b, "status": "failed"}],
-            root_id: [{"asset_id": id_a, "status": "success"}, {"asset_id": id_b, "status": "failed"}],
+            mid_id: [{"component_id": id_b, "status": "failed"}],
+            root_id: [{"component_id": id_a, "status": "success"}, {"component_id": id_b, "status": "failed"}],
         }
     )
     _patch_session(
@@ -122,8 +122,8 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     id_a = uuid4()
     store = _FakeStore(
         {
-            mid_id: [{"asset_id": id_a, "status": "success"}],
-            root_id: [{"asset_id": id_a, "status": "failed"}],
+            mid_id: [{"component_id": id_a, "status": "success"}],
+            root_id: [{"component_id": id_a, "status": "failed"}],
         }
     )
     _patch_session(

@@ -530,19 +530,19 @@ class Asset(Component, Operation):
         exec_meta = self._event_metadata(metadata or {}, partition_or_window)
         span_attrs = telemetry_attributes.from_metadata(exec_meta)
         EventBus.emit(
-            EventType.ASSET_EXEC_STARTED,
+            EventType.ASSET_DATA_STARTED,
             metadata={**exec_meta, "message": f"Executing '{self.key}'"},
         )
         try:
             with tracer().start_as_current_span("interloper.asset.data", attributes=span_attrs):
                 result = await invoke(self.data, **kwargs)
             EventBus.emit(
-                EventType.ASSET_EXEC_COMPLETED,
+                EventType.ASSET_DATA_COMPLETED,
                 metadata={**exec_meta, "message": f"Executed '{self.key}'"},
             )
         except Exception as e:
             EventBus.emit(
-                EventType.ASSET_EXEC_FAILED,
+                EventType.ASSET_DATA_FAILED,
                 metadata={
                     **exec_meta,
                     "error": format_exception(e),
@@ -1138,7 +1138,7 @@ class Asset(Component, Operation):
     ) -> dict[str, Any]:
         """Build the base event metadata dict for this asset.
 
-        Merges run-level metadata with asset identity fields.
+        Merges run-level metadata with the asset's component identity fields.
 
         Args:
             metadata: Run-level metadata (e.g. run_id, backfill_id).
@@ -1149,9 +1149,10 @@ class Asset(Component, Operation):
         """
         base: dict[str, Any] = {
             **metadata,
-            "asset_id": self.id,
-            "asset_key": self.key,
-            "asset_qualified_key": self.qualified_key,
+            "component_id": self.id,
+            "component_kind": self.kind,
+            "component_key": self.key,
+            "qualified_key": self.qualified_key,
             "partition_or_window": str(partition_or_window) if partition_or_window else None,
         }
         if self._source is not None:

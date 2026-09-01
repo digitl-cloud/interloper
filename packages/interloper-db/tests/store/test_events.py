@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
 from interloper_db import engine as engine_module
-from interloper_db.models import AssetExecution, Event
+from interloper_db.models import Event, Execution
 from interloper_db.store import Store
 from interloper_db.store.events import EventStore
 
@@ -82,24 +82,23 @@ def test_sanitize_data_drops_unencodable_payloads() -> None:
 
 def _framework_event(metadata: dict[str, object]) -> il.Event:
     return il.Event(
-        type=il.EventType.ASSET_COMPLETED,
+        type=il.EventType.OPERATION_COMPLETED,
         timestamp=dt.datetime(2026, 8, 5, tzinfo=dt.timezone.utc),
         metadata=metadata,
     )
 
 
-def test_event_values_maps_asset_metadata_onto_component_columns() -> None:
-    """The ``asset_id``/``asset_key`` keys core emitters use land on the component columns.
-
-    They land with kind ``asset`` — core needs no schema knowledge.
-    """
-    asset_id = uuid4()
+def test_event_values_maps_component_metadata_onto_columns() -> None:
+    """The ``component_*`` identity keys core emitters stamp land on their columns."""
+    component_id = uuid4()
     values = EventStore._event_values(
-        _framework_event({"asset_id": str(asset_id), "asset_key": "ads", "message": "done"}),
+        _framework_event(
+            {"component_id": str(component_id), "component_kind": "asset", "component_key": "ads", "message": "done"}
+        ),
         org_id=uuid4(),
         run_id=None,
     )
-    assert values["component_id"] == asset_id
+    assert values["component_id"] == component_id
     assert values["component_kind"] == "asset"
     assert values["component_key"] == "ads"
     assert values["message"] == "done"
@@ -122,8 +121,8 @@ def test_event_values_spills_unpromoted_metadata_into_data() -> None:
     values = EventStore._event_values(
         _framework_event(
             {
-                "asset_id": str(uuid4()),
-                "asset_key": "ads",
+                "component_id": str(uuid4()),
+                "component_key": "ads",
                 "asset_qualified_key": "facebook.ads",
                 "source_id": "src-1",
                 "error": "boom",
@@ -407,7 +406,7 @@ def test_complete_run_stamps_the_jobs_last_run_at(run_store: Store) -> None:
         assert stamped_at == completed.completed_at.replace(tzinfo=timezone.utc)
 
 
-def test_asset_executions_read_model_maps_the_view(store: Store) -> None:
+def test_executions_read_model_maps_the_view(store: Store) -> None:
     """The typed read model round-trips rows shaped like the view's output.
 
     SQLite stands in: the model's table definition doubles as the view's
@@ -415,21 +414,21 @@ def test_asset_executions_read_model_maps_the_view(store: Store) -> None:
     serves in production.
     """
     engine = engine_module.get_engine()
-    AssetExecution.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+    Execution.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     run_id, asset_id, org = uuid4(), uuid4(), uuid4()
     with Session(engine) as session:
         session.add(
-            AssetExecution(
+            Execution(
                 run_id=run_id,
-                asset_id=asset_id,
+                component_id=asset_id,
                 org_id=org,
-                asset_key="a",
+                component_key="a",
                 status="success",
                 completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
             )
         )
         session.commit()
 
-    rows = store.events.list_asset_executions(run_id)
-    assert [(row.asset_key, row.status) for row in rows] == [("a", "success")]
-    assert store.events.list_asset_executions(uuid4()) == []
+    rows = store.events.list_executions(run_id)
+    assert [(row.component_key, row.status) for row in rows] == [("a", "success")]
+    assert store.events.list_executions(uuid4()) == []

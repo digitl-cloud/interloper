@@ -54,9 +54,9 @@ def test_host_authors_asset_failed_when_job_fails() -> None:
     with _capture() as events:
         runner._handle_completed(future, asset)
 
-    failed = [e for e in events if e.type == EventType.ASSET_FAILED]
+    failed = [e for e in events if e.type == EventType.OPERATION_FAILED]
     assert len(failed) == 1
-    assert failed[0].id == RunState._asset_event_id("run-1", "asset-1", EventType.ASSET_FAILED)
+    assert failed[0].id == RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
 
 
 def test_host_authors_asset_completed_when_job_succeeds() -> None:
@@ -68,22 +68,22 @@ def test_host_authors_asset_completed_when_job_succeeds() -> None:
     with _capture() as events:
         runner._handle_completed(future, asset)
 
-    completed = [e for e in events if e.type == EventType.ASSET_COMPLETED]
+    completed = [e for e in events if e.type == EventType.OPERATION_COMPLETED]
     assert len(completed) == 1
-    assert completed[0].id == RunState._asset_event_id("run-1", "asset-2", EventType.ASSET_COMPLETED)
+    assert completed[0].id == RunState._operation_event_id("run-1", "asset-2", EventType.OPERATION_COMPLETED)
 
 
 def test_host_does_not_reauthor_when_asset_already_terminal() -> None:
     """If a child terminal already marked the asset terminal, the host stays quiet."""
     runner, asset = _runner_with_asset("asset-3", "run-1")
-    runner.state.mark_asset_completed(asset, emit=False)  # as if child reported it
+    runner.state.mark_completed(asset, emit=False)  # as if child reported it
     future: Future[None] = Future()
     future.set_result(None)
 
     with _capture() as events:
         runner._handle_completed(future, asset)
 
-    assert not [e for e in events if e.type in (EventType.ASSET_COMPLETED, EventType.ASSET_FAILED)]
+    assert not [e for e in events if e.type in (EventType.OPERATION_COMPLETED, EventType.OPERATION_FAILED)]
 
 
 def test_fail_fast_surfaces_child_error_when_child_reported_terminal() -> None:
@@ -95,7 +95,7 @@ def test_fail_fast_surfaces_child_error_when_child_reported_terminal() -> None:
     """
     runner, asset = _runner_with_asset("asset-4", "run-1")
     runner.fail_fast = True
-    runner.state.mark_asset_failed(asset, "Schema validation failed on row 0: 41 errors", emit=False)
+    runner.state.mark_failed(asset, "Schema validation failed on row 0: 41 errors", emit=False)
     future: Future[None] = Future()
     future.set_exception(RunnerError("Job interloper-run-x failed"))
 
@@ -127,11 +127,11 @@ def test_fail_fast_wraps_job_error_with_asset_key() -> None:
 def test_no_fail_fast_keeps_quiet_on_child_reported_failure() -> None:
     """Without fail-fast, a child-reported terminal needs no host action."""
     runner, asset = _runner_with_asset("asset-6", "run-1")
-    runner.state.mark_asset_failed(asset, "child error", emit=False)
+    runner.state.mark_failed(asset, "child error", emit=False)
     future: Future[None] = Future()
     future.set_exception(RunnerError("Job interloper-run-x failed"))
 
     with _capture() as events:
         runner._handle_completed(future, asset)  # must not raise
 
-    assert not [e for e in events if e.type == EventType.ASSET_FAILED]
+    assert not [e for e in events if e.type == EventType.OPERATION_FAILED]
