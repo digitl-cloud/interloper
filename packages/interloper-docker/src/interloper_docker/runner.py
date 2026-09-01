@@ -180,9 +180,7 @@ class DockerRunner(SyncRunner):
             try:
                 future.result()
             except Exception as e:
-                self.state.mark_failed(operation, format_exception(e), emit=True)
-                if self.fail_fast or self.reraise:
-                    raise
+                self.state.mark_failed(operation, format_exception(e), emit=True, exception=e)
             else:
                 self.state.mark_completed(operation, emit=True)
 

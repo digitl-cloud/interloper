@@ -86,12 +86,14 @@ def test_host_does_not_reauthor_when_asset_already_terminal() -> None:
     assert not [e for e in events if e.type in (EventType.OPERATION_COMPLETED, EventType.OPERATION_FAILED)]
 
 
-def test_fail_fast_surfaces_child_error_when_child_reported_terminal() -> None:
-    """The run-level error must carry the child's rich error, not the bare Job status.
+def test_child_reported_failure_keeps_its_rich_error() -> None:
+    """A child-streamed terminal's rich error is never overwritten by the Job status.
 
-    Regression: when the child streamed its own ``asset_failed`` (rich
-    SchemaError etc.), the host returned quietly and the run error ended up
-    being some other job's generic "Job ... failed" string.
+    Regression: when the child streamed its own terminal (rich SchemaError
+    etc.), the run error used to end up being some job's generic
+    "Job ... failed" string. Fail-fast aborts through state now — the walk
+    loop sees ``failed_operations`` — so the handler must stay quiet and
+    leave the child's record intact.
     """
     runner, asset = _runner_with_asset("asset-4", "run-1")
     runner.fail_fast = True
@@ -99,29 +101,26 @@ def test_fail_fast_surfaces_child_error_when_child_reported_terminal() -> None:
     future: Future[None] = Future()
     future.set_exception(RunnerError("Job interloper-run-x failed"))
 
-    try:
-        runner._handle_completed(future, asset)
-    except RunnerError as e:
-        assert "Schema validation failed on row 0" in str(e)
-        assert "_Asset".lower() in str(e).lower() or "asset" in str(e).lower()
-    else:
-        raise AssertionError("fail_fast must abort the run on a child-reported failure")
+    runner._handle_completed(future, asset)  # must not raise
+
+    info = runner.state.executions[asset.id]
+    assert info.error == "Schema validation failed on row 0: 41 errors"
+    assert runner.state.failed_operations == [asset]
 
 
-def test_fail_fast_wraps_job_error_with_asset_key() -> None:
-    """The host fallback error names the asset, not just the Job."""
+def test_job_failure_is_recorded_in_state() -> None:
+    """A failed Job with no child terminal lands in state, not in a raise."""
     runner, asset = _runner_with_asset("asset-5", "run-1")
     runner.fail_fast = True
     future: Future[None] = Future()
     future.set_exception(RunnerError("Job interloper-run-x failed"))
 
-    try:
-        runner._handle_completed(future, asset)
-    except RunnerError as e:
-        assert "Job interloper-run-x failed" in str(e)
-        assert "failed:" in str(e)
-    else:
-        raise AssertionError("fail_fast must re-raise on job failure")
+    runner._handle_completed(future, asset)  # must not raise
+
+    info = runner.state.executions[asset.id]
+    assert info.error is not None and "Job interloper-run-x failed" in info.error
+    assert isinstance(info.exception, RunnerError)
+    assert runner.state.failed_operations == [asset]
 
 
 def test_no_fail_fast_keeps_quiet_on_child_reported_failure() -> None:

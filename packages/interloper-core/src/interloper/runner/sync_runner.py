@@ -68,6 +68,10 @@ class SyncRunner(Runner):
         Returns:
             A RunResult summarizing the execution outcome.
 
+        Operation failures are absorbed into state (each node's own error,
+        traceback, and effects); with ``reraise`` set, the first failed
+        operation's exception is re-raised after the run is finalized.
+
         Raises:
             RunnerError: If a deadlock or invalid DAG state is detected.
         """
@@ -99,19 +103,28 @@ class SyncRunner(Runner):
                     operation = inflight.pop(future)
                     self._handle_completed(future, operation)
 
-            return self._finalize_run()
+                if self.fail_fast and self.state.failed_operations:
+                    break
+
+            self._flush(inflight)
+            result = self._finalize_run()
 
         except Exception as e:
+            # Operation failures are absorbed into state, so an exception
+            # here means the walk machinery itself broke.
             self._flush(inflight)
             result = self._finalize_run(error=format_exception(e))
             if self.reraise:
                 raise
-            return result
         finally:
             try:
                 self._on_end()
             except Exception:  # noqa: BLE001, S110
                 pass
+
+        if self.reraise and self.state.failed_operations:
+            self._reraise_first_failure()
+        return result
 
     # -- Abstract interface ----------------------------------------------------
 
@@ -151,10 +164,8 @@ class SyncRunner(Runner):
         """
         try:
             result = future.result()
-        except Exception as e:
-            self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc())
-            if self.fail_fast or self.reraise:
-                raise
+        except Exception as e:  # noqa: BLE001 — every failure becomes the node's record
+            self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc(), exception=e)
             return
 
         self.state.mark_completed(operation, effects=result if isinstance(result, OperationResult) else None)
@@ -162,9 +173,10 @@ class SyncRunner(Runner):
     def _flush(self, inflight: dict[Future[Any], Operation]) -> None:
         """Wait for all in-flight futures and emit terminal events.
 
-        Called after an exception aborts the main loop so that every
-        in-flight operation gets a proper FAILED or CANCELED event rather
-        than being silently abandoned as 'running'.
+        Called when the walk ends — a fail-fast break, a machinery abort,
+        or natural completion (where it is effectively a no-op) — so that
+        every in-flight operation gets a proper FAILED or CANCELED event
+        rather than being silently abandoned as 'running'.
 
         Args:
             inflight: Futures still in flight, mapped to the operation each

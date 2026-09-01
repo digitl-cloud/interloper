@@ -126,6 +126,28 @@ class TestRunnerDrivesOperations:
         assert info.effects == OperationResult(error="curated", state={"failed": True})
         assert all("hunter2" not in str(event.metadata) for event in events)
 
+    async def test_fail_fast_abort_defers_detail_to_the_operation_event(self):
+        operation = _EffectfulOperation(id=str(uuid4()), fail=True)
+        events: list[il.Event] = []
+
+        result = await il.AsyncRunner(on_event=events.append, fail_fast=True).run(il.DAG(operation))
+
+        assert result.status is ExecutionStatus.FAILED
+        run_failed = next(event for event in events if event.type is il.EventType.RUN_FAILED)
+        assert run_failed.metadata.get("error") is None
+        operation_failed = next(event for event in events if event.type is il.EventType.OPERATION_FAILED)
+        assert operation_failed.metadata["error"] == "curated"
+        assert all("hunter2" not in str(event.metadata) for event in events)
+
+    async def test_reraise_surfaces_the_original_exception_after_finalizing(self):
+        operation = _EffectfulOperation(id=str(uuid4()), fail=True)
+        events: list[il.Event] = []
+
+        with pytest.raises(RuntimeError, match="hunter2"):
+            await il.AsyncRunner(on_event=events.append, reraise=True).run(il.DAG(operation))
+
+        assert any(event.type is il.EventType.RUN_FAILED for event in events)
+
     async def test_mixed_graph_runs_assets_and_operations_together(self):
         @il.asset()
         def solo() -> list[dict[str, Any]]:

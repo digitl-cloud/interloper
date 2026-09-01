@@ -88,8 +88,8 @@ Common runner options:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `max_workers` | `4` (`1` for `SerialRunner`) | Concurrency (named `max_containers` / `max_jobs` for Docker/K8s) |
-| `fail_fast` | `True` (`False` for Docker/K8s) | Stop the run on the first failure vs. continue |
-| `reraise` | `False` | Re-raise exceptions vs. capture them in the result |
+| `fail_fast` | `True` (`False` for Docker/K8s) | Stop scheduling new operations after the first failure vs. run the whole DAG |
+| `reraise` | `False` | Re-raise the first failed operation's exception after the run is finalized vs. only capture it in the result |
 | `on_event` | `None` | Callback invoked for each lifecycle event |
 
 ```py

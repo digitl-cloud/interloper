@@ -42,6 +42,10 @@ class ExecutionInfo:
     state fields the platform envelope persists after the run. ``None``
     until the node reaches a terminal state, and for skipped or canceled
     nodes, which never executed.
+
+    ``exception`` is in-memory only and never serialized: in-process
+    runners record the original exception so ``reraise`` can re-raise it
+    faithfully; cross-process runners only have the recorded message.
     """
 
     component_id: str
@@ -52,6 +56,7 @@ class ExecutionInfo:
     error: str | None = None
     traceback: str | None = None
     effects: OperationResult | None = None
+    exception: Exception | None = None
 
     @property
     def execution_time(self) -> float | None:
@@ -70,17 +75,20 @@ class ExecutionInfo:
         self.status = ExecutionStatus.COMPLETED
         self.end_time = dt.datetime.now(dt.timezone.utc)
 
-    def mark_failed(self, error: str, tb: str | None = None) -> None:
+    def mark_failed(self, error: str, tb: str | None = None, exception: Exception | None = None) -> None:
         """Transition to FAILED with an error message and optional traceback.
 
         Args:
             error: Error message describing the failure.
             tb: Formatted traceback string, or ``None`` when unavailable.
+            exception: The original exception, when the runner has it
+                in-process; ``None`` for cross-process failures.
         """
         self.status = ExecutionStatus.FAILED
         self.end_time = dt.datetime.now(dt.timezone.utc)
         self.error = error
         self.traceback = tb
+        self.exception = exception
 
     def mark_canceled(self) -> None:
         """Transition to CANCELED and record end time."""
