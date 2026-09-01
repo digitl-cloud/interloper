@@ -35,6 +35,22 @@ class TestFacebookDialect:
         assert parsed == RefreshTokenResponse(refresh_token="FRESH", expires_in=5183944)
 
 
+class TestMicrosoftDialect:
+    """Refresh grants carry the connection's scope (AADSTS90023)."""
+
+    def test_refresh_grant_includes_the_scope(self):
+        request = PROVIDERS["microsoft"].refresh_token_request(
+            client_id="cid", client_secret="cs", refresh_token="OLD", scope="offline_access msads.manage"
+        )
+        parsed = urllib.parse.parse_qs(request.content.decode())
+        assert parsed["scope"] == ["offline_access msads.manage"]
+        assert parsed["grant_type"] == ["refresh_token"]
+
+    def test_refresh_grant_without_declared_scope(self):
+        request = PROVIDERS["microsoft"].refresh_token_request(client_id="cid", client_secret="cs", refresh_token="OLD")
+        assert "scope" not in urllib.parse.parse_qs(request.content.decode())
+
+
 class TestPinterestDialect:
     """Client credentials also ride a Basic Authorization header."""
 

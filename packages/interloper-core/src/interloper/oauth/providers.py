@@ -103,6 +103,44 @@ class FacebookProvider(OAuthProvider):
         )
 
 
+class MicrosoftProvider(OAuthProvider):
+    """Microsoft identity platform dialect: refresh grants carry the scope."""
+
+    def refresh_token_request(
+        self,
+        *,
+        client_id: str,
+        client_secret: str,
+        refresh_token: str,
+        scope: str | None = None,
+    ) -> httpx.Request:
+        """Build the refresh grant, scope included.
+
+        Microsoft rejects some refresh tokens when the grant omits ``scope``
+        (``AADSTS90023``: "the refresh token contains only policy offers"),
+        so the connection's declared scope always rides along.
+
+        Args:
+            client_id: The OAuth app's client id.
+            client_secret: The OAuth app's client secret.
+            refresh_token: The credential to exchange for a fresh one.
+            scope: The connection's declared scope; omitted only when the
+                connection declares none.
+
+        Returns:
+            The request to send.
+        """
+        params = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+        if scope:
+            params["scope"] = scope
+        return self._token_request(params)
+
+
 class PinterestProvider(OAuthProvider):
     """Pinterest dialect: client credentials also ride a Basic Authorization header."""
 
@@ -246,7 +284,7 @@ LINKEDIN = OAuthProvider(
     token_encoding="form",
 )
 
-MICROSOFT = OAuthProvider(
+MICROSOFT = MicrosoftProvider(
     key="microsoft",
     auth_url="https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token_url="https://login.microsoftonline.com/common/oauth2/v2.0/token",

@@ -297,6 +297,24 @@ class TestConnectionRenewal:
         assert TkConn.renewable() is False
         assert TkConn.definition().renewable is False
 
+    async def test_scope_reaches_providers_that_require_it(self, monkeypatch: pytest.MonkeyPatch):
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(200, json={"access_token": "a"})
+
+        _mock_transport(monkeypatch, handler)
+
+        class MicrosoftConn(RefreshTokenOAuthConnection):
+            oauth: ClassVar[OAuthConfig] = OAuthConfig("microsoft", scope="offline_access msads.manage")
+            model_config = SettingsConfigDict(env_prefix="microsoft_conn_scope_")
+
+        await MicrosoftConn(client_id="cid", client_secret="cs", refresh_token="OLD").renew()
+
+        (request,) = requests
+        assert urllib.parse.parse_qs(request.content.decode())["scope"] == ["offline_access msads.manage"]
+
     async def test_mapped_fields_renew_through_the_provider(self, monkeypatch: pytest.MonkeyPatch):
         requests: list[httpx.Request] = []
 
