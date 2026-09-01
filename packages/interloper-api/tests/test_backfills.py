@@ -25,6 +25,7 @@ def _fake_backfill(backfill_id: UUID, status: str = "running") -> SimpleNamespac
         id=backfill_id,
         org_id=_ORG_ID,
         component_id=None,
+        target=None,
         status=status,
         start_key="2026-01-01",
         end_key="2026-01-03",

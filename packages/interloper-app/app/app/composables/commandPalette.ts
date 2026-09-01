@@ -33,16 +33,6 @@ export function useCommandPalette() {
     const userOrgs = ref<Organisation[]>([])
     const adminOrgs = ref<AdminOrganisation[]>([])
 
-    /** component_id → display name, covering source-owned children too (targets can be assets). */
-    const runTargetNames = computed(() => {
-        const map = new Map<string, string>()
-        for (const component of componentsStore.components) {
-            map.set(component.id, component.name ?? component.key)
-            for (const child of component.children) map.set(child.id, child.name ?? child.key)
-        }
-        return map
-    })
-
     // Refresh data on open so search results are current, not a stale snapshot.
     watch(open, (isOpen) => {
         if (!isOpen) return
@@ -118,7 +108,7 @@ export function useCommandPalette() {
         }
 
         const runItems: CommandPaletteItem[] = recentRuns.value.map(run => ({
-            label: runTargetNames.value.get(run.component_id ?? '') ?? 'Deleted target',
+            label: targetLabel(run),
             suffix: `${statusLabel(run.status)} · ${formatDate(run.created_at)}`,
             icon: RUN_STATUS_ICONS[run.status] ?? 'i-lucide-circle-dashed',
             to: `/executions/runs/${run.id}`,

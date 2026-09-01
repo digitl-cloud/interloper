@@ -10,28 +10,11 @@ const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const backfillsStore = useBackfillsStore()
-const componentsStore = useComponentsStore()
 const { backfills, loading } = storeToRefs(backfillsStore)
 
-/** Reactive map so cell render functions pick up changes. */
-const jobNameMap = computed(() => {
-    const map = new Map<string, string>()
-    for (const job of componentsStore.byKind('job')) {
-        map.set(job.id, job.name ?? job.key)
-    }
-    return map
-})
-
 onMounted(async () => {
-    await Promise.all([
-        !loading.value ? backfillsStore.fetch() : Promise.resolve(),
-        componentsStore.fetchAll(['job']),
-    ])
+    if (!loading.value) await backfillsStore.fetch()
 })
-
-function jobName(backfill: Backfill): string {
-    return jobNameMap.value.get(backfill.component_id ?? '') ?? 'Deleted'
-}
 
 const pagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
 const sorting = ref([{ id: 'started_at', desc: true }])
@@ -47,7 +30,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         header: 'Target',
         cell: ({ row }) => {
             const backfill = row.original as Backfill
-            return h(EntityBadge, { label: jobName(backfill) })
+            return h(EntityBadge, { label: targetLabel(backfill) })
         },
     },
     {

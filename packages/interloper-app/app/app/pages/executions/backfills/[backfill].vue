@@ -15,7 +15,6 @@ const backfillId = route.params.backfill!.toString()
 
 const { apiFetch } = useApi()
 const backfillsStore = useBackfillsStore()
-const componentsStore = useComponentsStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -51,16 +50,12 @@ async function onCancel() {
     }
 }
 
-const backfillTargetName = computed(() => {
-    const target = componentsStore.byId(backfill.value?.component_id ?? '')
-    return target ? (target.name ?? target.key) : 'Deleted job'
-})
+const backfillTargetName = computed(() => backfill.value ? targetLabel(backfill.value) : '')
 
 const fetchError = ref<unknown>(null)
 
 onMounted(async () => {
     runsLoading.value = true
-    componentsStore.fetchAll(['job'])
     try {
         const [fetchedBackfill, runs] = await Promise.all([
             backfillsStore.fetchOne(backfillId),

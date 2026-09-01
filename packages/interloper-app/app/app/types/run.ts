@@ -1,8 +1,12 @@
 export interface Run {
     id: string
     org_id: string
-    /** Target component (job, source, or asset); null if the target was deleted. */
+    /** Target component (any workload kind); null if the target was deleted. */
     component_id: string | null
+    /** Target identity, resolved server-side; null when deleted, absent on realtime partials. */
+    component_kind?: string | null
+    component_key?: string | null
+    component_name?: string | null
     backfill_id: string | null
     partition_key: string | null
     status: string

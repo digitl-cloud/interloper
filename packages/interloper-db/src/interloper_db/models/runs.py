@@ -1,7 +1,7 @@
 """Operation runs, the backfills that batch them, and the events they emit."""
 
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Optional
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Index
@@ -10,9 +10,17 @@ from sqlmodel import Field as SQLField
 
 from interloper_db.models.columns import PortableJSON, TZDateTime, timestamp_column
 
+if TYPE_CHECKING:
+    from interloper_db.models.components import Component
+
 
 class Backfill(SQLModel, table=True):
-    """A backfill spanning a date range with multiple runs."""
+    """A backfill spanning a date range with multiple runs.
+
+    ``target`` is eagerly joined so readers get the component's identity in
+    the same query; ``component_id`` nulls on deletion (runs and backfills
+    are kept as history), so a ``None`` target means exactly that.
+    """
 
     __tablename__: ClassVar[str] = "backfills"
 
@@ -37,6 +45,7 @@ class Backfill(SQLModel, table=True):
     created_at: datetime | None = timestamp_column()
 
     runs: list["Run"] = Relationship(back_populates="backfill")
+    target: Optional["Component"] = Relationship(sa_relationship_kwargs={"lazy": "joined"})
 
 
 class Run(SQLModel, table=True):
@@ -46,7 +55,9 @@ class Run(SQLModel, table=True):
     taken; its month tells settlement which usage period to release.
     ``billable`` records the operation's declaration at creation time, so
     quota decisions survive the component (``component_id`` nulls on
-    deletion and runs are kept as history).
+    deletion and runs are kept as history). ``target`` is eagerly joined
+    (many-to-one, so no row multiplication) so readers get the component's
+    identity in the same query; a ``None`` target means it was deleted.
     """
 
     __tablename__: ClassVar[str] = "runs"
@@ -81,6 +92,7 @@ class Run(SQLModel, table=True):
     created_at: datetime | None = timestamp_column()
 
     backfill: Backfill | None = Relationship(back_populates="runs")
+    target: Optional["Component"] = Relationship(sa_relationship_kwargs={"lazy": "joined"})
 
 
 class Event(SQLModel, table=True):

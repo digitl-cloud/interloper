@@ -106,9 +106,9 @@ onMounted(async () => {
             runsStore.fetchOne(runId),
             eventsStore.fetchForRun(runId),
             executionsStore.fetchForRun(runId),
-            // Sources/assets back the Graph view; jobs resolve the run's target in the summary.
-            componentsStore.byKind('source').length === 0 || componentsStore.byKind('job').length === 0
-                ? componentsStore.fetchAll(['source', 'asset', 'job'])
+            // Sources/assets back the Graph view (the run's target rides the run itself).
+            componentsStore.byKind('source').length === 0
+                ? componentsStore.fetchAll(['source', 'asset'])
                 : Promise.resolve(),
             // Asset dependency relations back the Graph view's edges.
             componentsStore.dependencies.length === 0 ? componentsStore.fetchRelations('dependency') : Promise.resolve(),
