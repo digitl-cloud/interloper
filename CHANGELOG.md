@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v0.72.0 (2026-09-02)
+
+### Bug Fixes
+
+- **api**: Report an unreadable payload as a component status
+  ([`ba361c2`](https://github.com/digitl-cloud/interloper/commit/ba361c292ab8dd340c5bca1b2667a662e7cc590e))
+
+- **app**: Pin the drawer header and footer while the body scrolls
+  ([`b502c4f`](https://github.com/digitl-cloud/interloper/commit/b502c4f90387e499b97b9578332c549b173b42ee))
+
+- **app**: Surface unreadable components and failed collection fetches
+  ([`fea01ee`](https://github.com/digitl-cloud/interloper/commit/fea01eeccb3c86cc60bad04db533a7b6e51bfcff))
+
+### Features
+
+- **app**: Enable and disable a job from the table
+  ([`98b3d87`](https://github.com/digitl-cloud/interloper/commit/98b3d87c3ff2dd90c11dac140147998115cbcf80))
+
+- **app**: Filter the wizard's component and asset lists
+  ([`c53d3c7`](https://github.com/digitl-cloud/interloper/commit/c53d3c7973949af87b583d82e063f9a72bbb98aa))
+
+### Refactoring
+
+- **api**: Schema-declared config disclosure replaces the auto_renew field
+  ([`9fc89e6`](https://github.com/digitl-cloud/interloper/commit/9fc89e60f905bca80957802a54e0a45d6ca62e93))
+
+- **scheduler**: Hold the package to the python style rules
+  ([`db33227`](https://github.com/digitl-cloud/interloper/commit/db33227a8539f902e9bef90c08789140c425f3ad))
+
+
 ## v0.71.0 (2026-09-01)
 
 ### Features
