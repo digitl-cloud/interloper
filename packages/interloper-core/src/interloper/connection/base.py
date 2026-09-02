@@ -89,6 +89,7 @@ class Connection(Resource, Operation):
         default=True,
         title="Automatic renewal",
         description="Renew this connection's credentials on a schedule",
+        json_schema_extra={"x-public": True},
     )
 
     def check(self) -> bool:

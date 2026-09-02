@@ -226,8 +226,10 @@ onMounted(async () => {
     if (props.component) {
         loadingEdit.value = true
         try {
-            // Sensitive kinds carry config only in the detail response.
-            const record = props.component.config == null && hasConfigFields.value
+            // Config always comes from the detail response: a secret kind's
+            // list row carries at most the schema's x-public subset, which
+            // must never seed (and then resubmit as) the whole form.
+            const record = hasConfigFields.value
                 ? await componentsStore.fetchOne(props.component.id)
                 : props.component
             name.value = props.component.name ?? ''
