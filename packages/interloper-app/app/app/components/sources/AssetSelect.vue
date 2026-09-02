@@ -113,18 +113,26 @@ watch([() => props.allSources, selectedKeys], () => {
     }
 }, { immediate: true, deep: true })
 
-// ── Tag filter ──────────────────────────────────────────────────────
+// ── Filters ─────────────────────────────────────────────────────────
 
 const tagFilter = ref('all')
+const search = ref('')
 
 const tagTabs = computed(() => [
     { label: 'All', value: 'all' },
     ...[...new Set(props.sourceDefn.assets.flatMap(a => a.tags))].map(tag => ({ label: tag, value: tag })),
 ])
 
-const filteredAssets = computed(() => tagFilter.value === 'all'
-    ? props.sourceDefn.assets
-    : props.sourceDefn.assets.filter(a => a.tags.includes(tagFilter.value)))
+/** Assets left by the tag tabs and the display-name/key search. */
+const filteredAssets = computed(() => {
+    const query = search.value.trim().toLowerCase()
+    return props.sourceDefn.assets.filter(asset =>
+        (tagFilter.value === 'all' || asset.tags.includes(tagFilter.value))
+        && (!query
+            || asset.key.toLowerCase().includes(query)
+            || asset.name.toLowerCase().includes(query)),
+    )
+})
 
 // ── Selection ───────────────────────────────────────────────────────
 
@@ -163,12 +171,19 @@ function depSelectionKey(assetKey: string, paramName: string): string {
 
 <template>
     <div class="flex flex-col gap-3">
-        <UTabs v-if="tagTabs.length > 2"
-               v-model="tagFilter"
-               :items="tagTabs"
-               :content="false"
-               size="sm"
-               class="w-fit" />
+        <div class="flex items-center justify-between gap-2">
+            <UTabs v-if="tagTabs.length > 2"
+                   v-model="tagFilter"
+                   :items="tagTabs"
+                   :content="false"
+                   size="sm"
+                   class="w-fit" />
+            <UInput v-model="search"
+                    placeholder="Search assets..."
+                    icon="i-lucide-search"
+                    size="sm"
+                    class="w-56" />
+        </div>
 
         <div class="flex items-center justify-between">
             <span class="text-sm text-muted">
@@ -186,7 +201,13 @@ function depSelectionKey(assetKey: string, paramName: string): string {
             </div>
         </div>
 
-        <div class="flex flex-col gap-2.5">
+        <div v-if="filteredAssets.length === 0"
+             class="flex items-center justify-center rounded-md p-6 text-sm text-muted">
+            No assets match these filters.
+        </div>
+
+        <div v-else
+             class="flex flex-col gap-2.5">
             <SelectionCard v-for="asset in filteredAssets"
                            :key="asset.key"
                            as="div"
