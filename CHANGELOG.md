@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.73.0 (2026-09-02)
+
+### Bug Fixes
+
+- **app**: Make the drawer's gutter part of the scroll area
+  ([`4b65628`](https://github.com/digitl-cloud/interloper/commit/4b656282805c895ccdc29a9d7c25de6e1d342f28))
+
+- **core**: Make a configured catalog narrow to the enabled components
+  ([`99816b9`](https://github.com/digitl-cloud/interloper/commit/99816b9910be2ff0ea0d0f9afac7cca6362f76e7))
+
+### Chores
+
+- Hold every package to the same ruff rules
+  ([`5dfd5f3`](https://github.com/digitl-cloud/interloper/commit/5dfd5f37d2fa35a397f293024feedbe7d27eff84))
+
+
 ## v0.72.0 (2026-09-02)
 
 ### Bug Fixes
