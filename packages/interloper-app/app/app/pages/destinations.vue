@@ -107,10 +107,12 @@ function handleSaved() {
             <DataTable :columns="columns"
                        :data="destinations"
                        :loading="componentsStore.loading"
+                       :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search destinations..."
                        @delete="handleDelete"
-                       @edit="handleEdit">
+                       @edit="handleEdit"
+                       @retry="componentsStore.reload()">
 
                 <template #empty>
                     <EmptyState icon="i-lucide-hard-drive"

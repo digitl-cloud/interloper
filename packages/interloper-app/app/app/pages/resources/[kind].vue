@@ -12,6 +12,7 @@ const UTooltip = resolveComponent('UTooltip')
 const route = useRoute()
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
+const { statusBadge } = useDrift()
 
 const kind = computed(() => route.params.kind as string)
 const kindLabel = computed(() => kind.value.charAt(0).toUpperCase() + kind.value.slice(1))
@@ -44,15 +45,26 @@ componentsStore.fetchAll()
 componentsStore.fetchRelations()
 watch(kind, () => componentsStore.fetchAll([kind.value]))
 
-/** Whether automatic renewal is on for this connection (config, default on). */
+/**
+ * Whether automatic renewal is on for this connection (config, default on).
+ * An `unreadable` row disclosed no config at all, so its toggle is unknown
+ * rather than on.
+ */
 function autoRenewColumn(): TableColumn<ComponentRecord> {
+    const sortValue = (row: ComponentRecord) => {
+        if (!catalogStore.catalog[row.key]?.renewable) return ''
+        return row.status === 'unreadable' ? 'unknown' : String(row.config?.auto_renew !== false)
+    }
     return {
         accessorKey: 'auto_renew',
         header: 'Auto renew',
-        accessorFn: (row: ComponentRecord) =>
-            catalogStore.catalog[row.key]?.renewable ? String(row.config?.auto_renew !== false) : '',
+        accessorFn: sortValue,
         cell: ({ row }) => {
             if (!catalogStore.catalog[row.original.key]?.renewable) return h('span', { class: 'text-dimmed' }, '—')
+            if (row.original.status === 'unreadable') {
+                return h(UTooltip, { text: 'The stored config could not be read' }, () =>
+                    h(UBadge, { color: 'warning', icon: 'i-lucide-circle-help' }, () => 'Unknown'))
+            }
             const enabled = row.original.config?.auto_renew !== false
             return h(UBadge, {
                 color: enabled ? 'success' : 'neutral',
@@ -98,7 +110,22 @@ const tableStateColumns = computed<TableColumn<ComponentRecord>[]>(() => {
 })
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
-    { accessorKey: 'name', header: 'Name' },
+    {
+        accessorKey: 'name',
+        header: 'Name',
+        cell: ({ row }) => {
+            const badge = statusBadge(row.original.status)
+            if (!badge) return row.original.name
+            return h('span', { class: 'flex items-center gap-2' }, [
+                row.original.name,
+                h(UBadge, { color: badge.color, size: 'sm' }, () =>
+                    h('span', { class: 'flex items-center gap-1' }, [
+                        h(UIcon, { name: badge.icon, class: 'size-3 shrink-0' }),
+                        badge.label,
+                    ])),
+            ])
+        },
+    },
     {
         accessorKey: 'key',
         header: 'Type',
@@ -189,11 +216,13 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
             <DataTable :columns="columns"
                        :data="resources"
                        :loading="componentsStore.loading"
+                       :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
                        :row-actions="rowActions"
                        :search-placeholder="`Search ${pageTitle.toLowerCase()}...`"
                        @delete="handleDelete"
-                       @edit="handleEdit">
+                       @edit="handleEdit"
+                       @retry="componentsStore.reload()">
                 <template #empty>
                     <EmptyState :icon="KIND_ICONS[kind] ?? 'i-lucide-box'"
                                 :title="`No ${pageTitle.toLowerCase()} yet`"

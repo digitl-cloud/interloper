@@ -28,11 +28,18 @@ const props = defineProps<{
      * backend guard stays the authority.
      */
     deleteImpact?: (ids: string[]) => { blocking: UsedByRef[], detaching: UsedByRef[] }
+    /**
+     * A failed fetch of this list (e.g. a store's `error`). Shown as an alert
+     * in place of the empty state, so a rejected request never reads as an
+     * empty collection.
+     */
+    error?: Error | null
 }>()
 
 const emit = defineEmits<{
     delete: [ids: string[]]
     edit: [item: TData]
+    retry: []
 }>()
 
 const { confirm } = useConfirm()
@@ -144,13 +151,31 @@ const hasLoaded = ref(!props.loading)
 watch(() => props.loading, (loading) => {
     if (!loading) hasLoaded.value = true
 })
-/** With no data at all (not just filtered out), render the #empty slot instead of the table. */
-const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !!slots.empty)
+/**
+ * With no data at all (not just filtered out), render the #empty slot instead
+ * of the table. A failed fetch is not an empty collection: its alert takes the
+ * slot's place, and rows from an earlier successful fetch stay listed under it.
+ */
+const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !!slots.empty && !props.error)
+const showTable = computed(() => !showEmpty.value && !(props.error && props.data.length === 0))
 </script>
 
 <template>
     <div class="w-full flex flex-col gap-2">
-        <div v-if="!showEmpty"
+        <UAlert v-if="error"
+                color="error"
+                icon="i-lucide-triangle-alert"
+                title="Couldn't load this list"
+                :description="errorDetail(error) ?? GENERIC_ERROR"
+                :actions="[{
+                    label: 'Try again',
+                    icon: 'i-lucide-refresh-cw',
+                    color: 'neutral',
+                    variant: 'outline',
+                    onClick: () => emit('retry'),
+                }]" />
+
+        <div v-if="showTable"
              class="flex items-center gap-3">
             <UInput v-model="globalFilter"
                     :placeholder="searchPlaceholder ?? 'Search...'"
@@ -174,7 +199,7 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
             <slot name="empty" />
         </div>
 
-        <UTable v-if="!showEmpty"
+        <UTable v-if="showTable"
                 ref="table"
                 v-model:pagination="pagination"
                 :data="data"
@@ -211,7 +236,7 @@ const showEmpty = computed(() => hasLoaded.value && props.data.length === 0 && !
             <div class="hidden" />
         </UDropdownMenu>
 
-        <TableFooter v-if="!showEmpty"
+        <TableFooter v-if="showTable"
                      :page="pagination.pageIndex + 1"
                      :total="totalCount"
                      :page-size="PAGE_SIZE"

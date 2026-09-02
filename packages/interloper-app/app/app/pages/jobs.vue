@@ -129,11 +129,13 @@ async function handleDelete(ids: string[]) {
             <DataTable :columns="columns"
                        :data="jobs"
                        :loading="componentsStore.loading"
+                       :error="componentsStore.error"
                        :row-actions="rowActions"
                        :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search jobs..."
                        @delete="handleDelete"
-                       @edit="handleEdit">
+                       @edit="handleEdit"
+                       @retry="componentsStore.reload()">
 
                 <template #empty>
                     <EmptyState icon="i-lucide-calendar-clock"
