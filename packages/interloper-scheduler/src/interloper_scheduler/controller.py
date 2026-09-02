@@ -20,7 +20,15 @@ _gauge_registered = False
 
 
 def _observe_ticks(_options: CallbackOptions) -> list[Observation]:
-    return [Observation(ts, {"loop": name}) for name, ts in _last_tick.items()]
+    """Report each loop's last successful tick, as the gauge callback.
+
+    Args:
+        _options: Collection options from the OTel SDK, unused.
+
+    Returns:
+        One observation per loop that has ticked at least once.
+    """
+    return [Observation(timestamp, {"loop": name}) for name, timestamp in _last_tick.items()]
 
 
 def _register_tick_gauge() -> None:
@@ -65,7 +73,11 @@ class Controller(ABC):
 
     @property
     def _loop_name(self) -> str:
-        """This loop's name on the liveness gauge (``CronController`` -> ``cron``)."""
+        """This loop's name on the liveness gauge (``CronController`` -> ``cron``).
+
+        Returns:
+            The class name with its ``Controller`` suffix stripped, lowercased.
+        """
         return type(self).__name__.removesuffix("Controller").lower()
 
     def start(self) -> None:

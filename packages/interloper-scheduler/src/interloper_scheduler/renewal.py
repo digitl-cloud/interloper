@@ -132,7 +132,7 @@ class RenewalController(Controller):
         """
         try:
             return bool(self._store.components.decode_config(connection).get("auto_renew", True))
-        except Exception:
+        except Exception:  # noqa: BLE001 — any decode failure means the run would fail too
             logger.warning("Cannot decode config of connection %s; skipping renewal", connection.id)
             return False
 

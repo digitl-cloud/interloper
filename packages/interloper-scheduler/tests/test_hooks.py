@@ -31,7 +31,11 @@ _PAST = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
 
 @pytest.fixture
 def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
-    """A store over an in-memory database, with a SQLite-friendly ``save``."""
+    """A store over an in-memory database, with a SQLite-friendly ``save``.
+
+    Yields:
+        The store bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -77,7 +81,11 @@ def _terminal_run(store: Store, component_id: UUID, *, status: str = "success") 
 
 
 def _capture_posts(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
-    """Capture WebhookHook payloads, answering every POST with 200."""
+    """Capture WebhookHook payloads, answering every POST with 200.
+
+    Returns:
+        The list the captured payloads accumulate into.
+    """
     import httpx
 
     payloads: list[dict[str, Any]] = []

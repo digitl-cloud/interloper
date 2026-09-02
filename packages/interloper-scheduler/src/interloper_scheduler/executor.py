@@ -32,37 +32,6 @@ from sqlmodel import Session
 logger = logging.getLogger(__name__)
 
 
-def run_event_metadata(run: Run, target: Component | None) -> dict[str, Any]:
-    """Run-level event metadata: the run's ids plus its target's identity.
-
-    The runner spreads this dict into every event it emits, and the
-    ``target_*`` keys have no structured ``events`` column — they land in
-    each event's ``data``, making events self-describing for telemetry
-    (which component the run executed, under what name at the time)
-    without a join through ``runs``.
-
-    Args:
-        run: The run the metadata describes.
-        target: The run's target component row, when it still exists.
-
-    Returns:
-        The metadata dict.
-    """
-    metadata: dict[str, Any] = {
-        "run_id": str(run.id),
-        "backfill_id": str(run.backfill_id) if run.backfill_id else None,
-        "org_id": str(run.org_id),
-    }
-    if target is not None:
-        metadata |= {
-            "target_id": str(target.id),
-            "target_kind": target.kind,
-            "target_key": target.key,
-            "target_name": target.name,
-        }
-    return metadata
-
-
 class RunExecutor:
     """Executes a run: loads from DB, assembles the operations, runs them.
 
@@ -91,11 +60,17 @@ class RunExecutor:
         Synchronous DB orchestration around the async DAG run; the async
         boundary lives in :meth:`_run_dag` where the engine is actually driven.
 
+        A component whose kind declares no workload cannot be executed, and
+        fails the run rather than silently succeeding.
+
         Args:
             run_id: The run to execute.
 
         Returns:
             ``True`` if the run completed successfully, ``False`` otherwise.
+
+        Raises:
+            TypeError: If the run's component declares no workload.
         """
         org_id: UUID | None = None
         run_metadata: dict[str, Any] = {"run_id": str(run_id), "backfill_id": None}
@@ -113,7 +88,7 @@ class RunExecutor:
                 org_id = db_run.org_id
                 partition_key = db_run.partition_key
                 retry_of = db_run.retry_of if db_run.retry_scope == "failed" else None
-                run_metadata = run_event_metadata(db_run, session.get(Component, component_id))
+                run_metadata = db_run.event_metadata(session.get(Component, component_id))
 
                 self._mark_running(session, db_run)
 
@@ -134,7 +109,7 @@ class RunExecutor:
 
                 target = self._store.components.load(component_id)
                 if not isinstance(target, il.Workload):
-                    raise ValueError(f"Component kind '{type(target).kind}' declares no workload")
+                    raise TypeError(f"Component kind '{type(target).kind}' declares no workload")
 
                 operations = target.operations()
                 if not operations:
@@ -160,7 +135,7 @@ class RunExecutor:
             return success
 
         except Exception as e:
-            logger.exception("Run %s failed: %s", run_id, e)
+            logger.exception("Run %s failed", run_id)
             try:
                 if org_id is not None:
                     metadata = {**run_metadata, "error": format_exception(e)}
@@ -171,7 +146,7 @@ class RunExecutor:
                 logger.exception("Failed to mark run %s as failed", run_id)
             return False
 
-    # -- Helpers ---------------------------------------------------------------
+    # -- Internals -------------------------------------------------------------
 
     @staticmethod
     def _mark_running(session: Session, db_run: Run) -> None:

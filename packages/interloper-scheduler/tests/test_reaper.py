@@ -39,7 +39,11 @@ class _FakeLauncher(Launcher):
 
 @pytest.fixture
 def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
-    """A store over an in-memory database, with a SQLite-friendly ``save``."""
+    """A store over an in-memory database, with a SQLite-friendly ``save``.
+
+    Yields:
+        The store bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},

@@ -33,7 +33,6 @@ from interloper_db.models import Component, Run
 from sqlmodel import Session, select
 
 from interloper_scheduler.controller import Controller
-from interloper_scheduler.executor import run_event_metadata
 from interloper_scheduler.launcher import RunStatus
 
 if TYPE_CHECKING:
@@ -92,6 +91,8 @@ class Reaper(Controller):
             self._ticks_since_reconcile = 0
             self._reconcile_usage()
 
+    # -- Internals -------------------------------------------------------------
+
     def _reconcile_usage(self) -> None:
         """Warn when the usage ledger drifts from the runs table.
 
@@ -133,6 +134,11 @@ class Reaper(Controller):
 
     def _reap_run(self, run: Run, now: dt.datetime, timeout_cutoff: dt.datetime) -> bool:
         """Decide whether to reap a single run and do so if needed.
+
+        Args:
+            run: The run being considered.
+            now: The tick instant.
+            timeout_cutoff: Runs started before this are past their timeout.
 
         Returns:
             ``True`` if the run was reaped.
@@ -177,7 +183,12 @@ class Reaper(Controller):
         return False
 
     def _fail_run(self, run: Run, error: str) -> None:
-        """Mark a run as failed and emit a ``RUN_FAILED`` event."""
+        """Mark a run as failed and emit a ``RUN_FAILED`` event.
+
+        Args:
+            run: The run to fail.
+            error: The reason, logged and carried on the event.
+        """
         assert run.id is not None
         logger.warning("Reaping run %s: %s", run.id, error)
 
@@ -188,7 +199,7 @@ class Reaper(Controller):
                     target = session.get(Component, run.component_id)
             event = il.Event(
                 type=il.EventType.RUN_FAILED,
-                metadata={**run_event_metadata(run, target), "error": error},
+                metadata={**run.event_metadata(target), "error": error},
             )
             self._store.events.save(event, org_id=run.org_id, run_id=run.id)
         except Exception:

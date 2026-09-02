@@ -49,7 +49,11 @@ _CATALOG = il.Catalog(
 
 @pytest.fixture
 def store() -> Iterator[Store]:
-    """A store over an in-memory database with the scheduling tables."""
+    """A store over an in-memory database with the scheduling tables.
+
+    Yields:
+        The store bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},

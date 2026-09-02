@@ -68,8 +68,8 @@ class QueueController(Controller):
                 ):
                     self._launcher.launch(run_id)
                 self._launched_counter.add(1, {"outcome": "launched"})
-            except Exception as e:
-                logger.exception("Failed to launch run %s: %s", run_id, e)
+            except Exception:
+                logger.exception("Failed to launch run %s", run_id)
                 self._launched_counter.add(1, {"outcome": "failed"})
                 # The same terminal path as any failed run: stamps the
                 # component state and advances the backfill, so a failed
@@ -119,6 +119,10 @@ class QueueController(Controller):
         """Cancel a quota-denied run (and its backfill), with an explanatory event.
 
         A canceled run is never claimed again, so the event cannot double-write.
+
+        Args:
+            session: Open session the cancellation is written through.
+            run: The run the quota denied.
         """
         run.status = "canceled"
         session.add(run)

@@ -30,7 +30,11 @@ _ORG = uuid4()
 
 @pytest.fixture
 def store() -> Iterator[Store]:
-    """A store over an in-memory database with the scheduling tables."""
+    """A store over an in-memory database with the scheduling tables.
+
+    Yields:
+        The store bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -208,11 +212,11 @@ class TestRunQuota:
         assert _state(store, job_id)["next_run_at"] > now.isoformat()
 
 
-# -- Granularity resolution ------------------------------------------------------
+# -- Granularity resolution ----------------------------------------------------
 
 
 @il.source
-def monthly_source():  # noqa: D103
+def monthly_source():
     @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.MONTH))
     def monthly_stats(context: il.ExecutionContext) -> list:
         return []
@@ -221,7 +225,7 @@ def monthly_source():  # noqa: D103
 
 
 @il.source
-def daily_source():  # noqa: D103
+def daily_source():
     @il.asset(partitioning=il.TimePartitionConfig(column="date"))
     def daily_stats(context: il.ExecutionContext) -> list:
         return []
@@ -230,7 +234,7 @@ def daily_source():  # noqa: D103
 
 
 @il.source
-def hourly_source():  # noqa: D103
+def hourly_source():
     @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.HOUR))
     def hourly_stats(context: il.ExecutionContext) -> list:
         return []
@@ -239,7 +243,11 @@ def hourly_source():  # noqa: D103
 
 
 def _catalog_store() -> Store:
-    """A store over the fixture engine whose catalog knows the test sources."""
+    """A store over the fixture engine whose catalog knows the test sources.
+
+    Returns:
+        The store, resolving the module's source definitions.
+    """
     return Store(
         catalog=il.Catalog(
             components={
