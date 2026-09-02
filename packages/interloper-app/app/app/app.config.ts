@@ -142,13 +142,16 @@ export default defineAppConfig({
     },
     // Design wizard drawer: 30px frame, 22px title, bordered header/footer.
     // Only the body scrolls (the theme scrolls the whole container), so the
-    // header and the stepper's Back/Next footer stay pinned to the frame.
+    // header and the stepper's Back/Next footer stay pinned to the frame. The
+    // gutter against those borders is the body's own padding rather than a gap
+    // between the three slots: a gap sits outside the scroll area and leaves a
+    // dead band the content can never reach, padding scrolls with it.
     drawer: {
       slots: {
-        container: 'p-[30px] pt-[26px] gap-6 overflow-hidden',
+        container: 'p-[30px] pt-[26px] gap-0 overflow-hidden',
         header: 'shrink-0 border-b border-default -mx-[30px] px-[30px] pb-5',
         title: 'text-[22px] font-bold tracking-[-0.01em]',
-        body: 'flex-1 min-h-0 overflow-y-auto',
+        body: 'flex-1 min-h-0 overflow-y-auto py-6',
         footer: 'shrink-0 border-t border-default -mx-[30px] -mb-[30px] px-[30px] py-4'
       },
       compoundVariants: [
