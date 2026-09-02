@@ -11,12 +11,13 @@ import interloper as il
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import InUseError
+from interloper.errors import HydrationError, InUseError
 from interloper_assets.facebook_ads import connection as fb_connection
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.source import FacebookAds
-from interloper_db import Component, Store
+from interloper_db import Component, ComponentStatus, Store
 
+from interloper_api import app as app_module
 from interloper_api.dependencies import get_catalog, get_current_user, get_store, require_viewer
 from interloper_api.routes import components as components_module
 
@@ -257,3 +258,74 @@ class TestPublicConfigDisclosure:
             self._row("job", config={"enabled": True}), self._store({}, {}), include_config=False
         )
         assert response.config == {"enabled": True}
+
+
+class TestUnreadablePayload:
+    """An unreadable payload is reported as a state, not raised at the caller."""
+
+    @staticmethod
+    def _row() -> Component:
+        return cast(Component, SimpleNamespace(
+            id=uuid4(),
+            org_id=uuid4(),
+            kind="connection",
+            key="k",
+            name=None,
+            config=None,
+            state=None,
+            encrypted=True,
+            parent_id=None,
+            out_relations=[],
+            children=[],
+            created_at=None,
+            updated_at=None,
+        ))
+
+    @staticmethod
+    def _store() -> Store:
+        """A store whose cipher rejects this row, the way `status` reports it.
+
+        Returns:
+            The store stand-in: ``unreadable`` status, and both decode paths
+            raising the way the real ones do (nothing should call them).
+        """
+        def _raise(row: Component) -> dict:
+            raise HydrationError(f"Failed to decrypt component {row.id}: InvalidToken")
+
+        components = SimpleNamespace(
+            status=lambda row, parent_key=None: ComponentStatus.UNREADABLE,
+            decode_config=_raise,
+            public_config=_raise,
+        )
+        return cast(Store, SimpleNamespace(components=components))
+
+    def test_list_response_discloses_nothing(self):
+        response = components_module.ComponentResponse.from_row(
+            self._row(), self._store(), include_config=False
+        )
+        assert response.status is ComponentStatus.UNREADABLE
+        assert response.config is None
+
+    def test_detail_response_reports_the_state_instead_of_failing(self):
+        response = components_module.ComponentResponse.from_row(
+            self._row(), self._store(), include_config=True
+        )
+        assert response.status is ComponentStatus.UNREADABLE
+        assert response.config is None
+
+    def test_the_app_handler_renders_a_hydration_failure_as_a_conflict(self):
+        """Paths that cannot degrade (hydration for a run) still surface the reason."""
+        app = FastAPI()
+
+        @app.get("/boom")
+        async def _boom() -> None:
+            raise HydrationError("Connection 'criteo' (abc) cannot be hydrated: its stored config does not decrypt")
+
+        @app.exception_handler(HydrationError)  # mirrors create_app's handler
+        async def _hydration_handler(_request, exc: HydrationError):
+            return await app_module._hydration_failed(_request, exc)
+
+        resp = TestClient(app, raise_server_exceptions=False).get("/boom")
+
+        assert resp.status_code == 409
+        assert "does not decrypt" in resp.json()["detail"]

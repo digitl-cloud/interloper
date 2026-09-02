@@ -9,7 +9,8 @@ from uuid import uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import ConfigError, InUseError, NotFoundError
+from cryptography.fernet import InvalidToken
+from interloper.errors import ConfigError, HydrationError, InUseError, NotFoundError
 from interloper_assets.demo.source import DemoSource
 from sqlalchemy import Engine, create_engine
 from sqlmodel import Session, select
@@ -518,7 +519,7 @@ class TestQuotaGates:
 
 
 class TestStatus:
-    """A row's catalog status, resolved through its parent for a source-owned asset."""
+    """A row's usability status: its catalog key, then its stored payload."""
 
     @pytest.fixture
     def demo_store(self, component_db: Engine) -> Store:
@@ -545,6 +546,29 @@ class TestStatus:
     def test_key_outside_the_catalog_is_missing(self, store: Store):
         row = Component(org_id=_ORG, kind="source", key="gone_source")
         assert store.components.status(row) is ComponentStatus.MISSING
+
+    def test_payload_the_key_cannot_decrypt_is_unreadable(self, component_db: Engine):
+        catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
+        written = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
+        row = written.components.create(
+            _ORG, kind="connection", key=PublicToggleConnection.key, config={"api_key": "s3cret"}
+        )
+
+        # Same row, a store whose cipher rejects what the other one wrote.
+        def _wrong_key(_data: bytes) -> bytes:
+            raise InvalidToken
+
+        rotated = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=_wrong_key)
+        assert rotated.components.status(row) is ComponentStatus.UNREADABLE
+        # Drift outranks it: without a resolvable key there is no schema to read against.
+        assert Store(catalog=il.Catalog(components={}), decrypt=_wrong_key).components.status(row) is (
+            ComponentStatus.MISSING
+        )
+
+    def test_plaintext_rows_are_never_decrypted(self, demo_store: Store):
+        row = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
+        assert not row.encrypted
+        assert demo_store.components.status(row) is ComponentStatus.OK
 
 
 # -- Resource encoding ---------------------------------------------------------
@@ -676,3 +700,21 @@ class TestPublicConfig:
         row = store.components.create(_ORG, kind="connection", key="gone", config={"token": "s3cret"})
 
         assert store.components.public_config(row) == {}
+
+
+class TestHydrateUnreadable:
+    """Hydrating an unreadable row fails as a decryption error, not as drift."""
+
+    def test_load_raises_hydration_error_not_drift(self, component_db: Engine):
+        catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
+        written = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
+        row = written.components.create(
+            _ORG, kind="connection", key=PublicToggleConnection.key, config={"api_key": "s3cret"}
+        )
+
+        def _wrong_key(_data: bytes) -> bytes:
+            raise InvalidToken
+
+        rotated = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=_wrong_key)
+        with pytest.raises(HydrationError, match="does not decrypt"):
+            rotated.components.load(row.id)

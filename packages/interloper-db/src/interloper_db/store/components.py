@@ -63,7 +63,7 @@ COMPONENT_LOAD_OPTIONS = [
 
 
 class ComponentStore:
-    """Store methods for component CRUD, hydration and catalog status."""
+    """Store methods for component CRUD, hydration and usability status."""
 
     def __init__(
         self,
@@ -362,7 +362,8 @@ class ComponentStore:
         Raises:
             NotFoundError: If the component is not found.
             ComponentDriftError: If a catalog key no longer resolves.
-            HydrationError: If reconstruction fails.
+            HydrationError: If the stored payload does not decrypt, or if
+                reconstruction fails.
         """
         with session_scope(self._engine) as session:
             db_component = session.get(Component, component_id)
@@ -372,10 +373,17 @@ class ComponentStore:
             if not owned_asset:
                 status = self.status(db_component)
                 if status is not ComponentStatus.OK:
-                    raise ComponentDriftError(
-                        f"{db_component.kind.capitalize()} '{db_component.key}' ({db_component.id}) "
-                        f"cannot be hydrated: its catalog key is {status.value}."
-                    )
+                    subject = f"{db_component.kind.capitalize()} '{db_component.key}' ({db_component.id})"
+                    # Different failures, different remedies, so different
+                    # errors: a drifted key needs the component repointed or
+                    # removed, an unreadable payload needs its config
+                    # re-entered or re-keyed.
+                    if status is ComponentStatus.UNREADABLE:
+                        raise HydrationError(
+                            f"{subject} cannot be hydrated: its stored config does not decrypt "
+                            "under the configured INTERLOPER_ENCRYPTION_KEY."
+                        )
+                    raise ComponentDriftError(f"{subject} cannot be hydrated: its catalog key is {status.value}.")
                 if db_component.kind == "job":
                     self._check_job_targets(session, db_component)
                 spec = self._hydrator.build_component_spec(session, db_component)
@@ -420,27 +428,42 @@ class ComponentStore:
         )
 
     def status(self, db_component: Component, *, parent_key: str | None = None) -> ComponentStatus:
-        """Catalog-resolution status of a component row.
+        """Usability status of a component row: catalog key, then payload.
 
         A source-owned asset resolves through its parent, whose key is read a
         row away unless the caller supplies it. A caller walking many children
         of one source should pass *parent_key*: it already knows it, and the
         lookup is then skipped per child.
 
+        The catalog answers first: without a resolvable key there is no schema
+        to read the payload against, so drift outranks readability. An
+        encrypted row then has to survive decryption, which costs one decrypt
+        per encrypted row (no query: the payload is already loaded).
+
         Args:
-            db_component: The row to resolve against the catalog.
+            db_component: The row to resolve.
             parent_key: The owning source's key when the caller already knows
                 it. Defaults to ``None``, which reads it from the database.
 
         Returns:
-            ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key.
+            ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key, or
+            ``UNREADABLE`` when the key resolves but its payload does not
+            decrypt.
         """
-        if db_component.kind != "asset":
-            return source_status(self._catalog, db_component.key)
-        if parent_key is None and db_component.parent_id is not None:
-            with session_scope(self._engine) as session:
-                parent_key = db_component.parent_key(session)
-        return asset_status(self._catalog, db_component.key, source_key=parent_key)
+        if db_component.kind == "asset":
+            if parent_key is None and db_component.parent_id is not None:
+                with session_scope(self._engine) as session:
+                    parent_key = db_component.parent_key(session)
+            return asset_status(self._catalog, db_component.key, source_key=parent_key)
+
+        catalog_status = source_status(self._catalog, db_component.key)
+        if catalog_status is not ComponentStatus.OK or not db_component.encrypted:
+            return catalog_status
+        try:
+            self.decode_config(db_component)
+        except HydrationError:
+            return ComponentStatus.UNREADABLE
+        return ComponentStatus.OK
 
     def decode_config(self, db_component: Component) -> dict[str, Any]:
         """The component's config payload, decrypting secret kinds.
