@@ -111,10 +111,12 @@ async function handleDelete(ids: string[]) {
             <DataTable :columns="columns"
                        :data="hooks"
                        :loading="componentsStore.loading"
+                       :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search hooks..."
                        @delete="handleDelete"
-                       @edit="handleEdit">
+                       @edit="handleEdit"
+                       @retry="componentsStore.reload()">
 
                 <template #empty>
                     <EmptyState icon="i-carbon-lightning"

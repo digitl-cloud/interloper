@@ -63,6 +63,9 @@ export function errorDetail(e: unknown): string | null {
     return null
 }
 
+/** Stands in for an error whose detail is not fit to show (or absent). */
+export const GENERIC_ERROR = 'Something went wrong. Try again in a moment.'
+
 /** Failure toast payload: `title` as the headline, the error's detail (when any) as the description. */
 export function errorToast(e: unknown, title: string): { title: string, description?: string, color: 'error' } {
     return { title, description: errorDetail(e) ?? undefined, color: 'error' }

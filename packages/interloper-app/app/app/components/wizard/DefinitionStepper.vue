@@ -144,6 +144,11 @@ const resourceSelections = ref<Record<string, string>>({})
 const extra = reactive<{ config: Record<string, unknown>, valid: boolean }>({ config: {}, valid: true })
 const submitting = ref(false)
 const loadingEdit = ref(false)
+/** A failed load of the edited component: the form must not pretend it is empty. */
+const loadError = ref<Error | null>(null)
+
+/** Editing a component whose stored config the server could not decrypt. */
+const unreadableConfig = computed(() => props.component?.status === 'unreadable' && hasConfigFields.value)
 
 /** Whether the schema form is in manual credential entry (vs OAuth sign-in). */
 const manualCreds = ref(true)
@@ -225,6 +230,7 @@ const resourceContext = computed<Record<string, Record<string, unknown>>>(() => 
 onMounted(async () => {
     if (props.component) {
         loadingEdit.value = true
+        loadError.value = null
         try {
             // Config always comes from the detail response: a secret kind's
             // list row carries at most the schema's x-public subset, which
@@ -244,6 +250,11 @@ onMounted(async () => {
                 relationSelections.value[step.type] = relationIds(props.component, step.type)
             }
             resourceSelections.value = resourceMap(props.component)
+        }
+        catch (e) {
+            // Seeding half a form is worse than seeding none: say what failed
+            // and let the user decide, rather than resubmitting blanks.
+            loadError.value = e as Error
         }
         finally {
             loadingEdit.value = false
@@ -433,6 +444,12 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                class="size-6 animate-spin text-muted" />
     </div>
 
+    <UAlert v-else-if="loadError"
+            color="error"
+            icon="i-lucide-triangle-alert"
+            :title="`Couldn't load this ${noun.toLowerCase()}`"
+            :description="errorDetail(loadError) ?? GENERIC_ERROR" />
+
     <UStepper v-else
               v-model="activeStep"
               :items="displaySteps"
@@ -493,6 +510,12 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                 <WizardTypeSummaryCard v-if="summaryCard"
                                        v-bind="summaryCard"
                                        @change="activeStep = 0" />
+
+                <UAlert v-if="unreadableConfig"
+                        color="warning"
+                        icon="i-lucide-lock"
+                        :title="`This ${noun.toLowerCase()}'s stored config could not be read`"
+                        description="The server's encryption key does not match the one it was saved with. The fields below start empty; saving replaces the unreadable config." />
 
                 <WizardRecap v-if="recapRows.length"
                              :rows="recapRows" />

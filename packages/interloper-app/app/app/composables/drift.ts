@@ -17,14 +17,16 @@ export interface DriftBadge {
 // ─── Composable ──────────────────────────────────────────────────────
 
 /**
- * Catalog-drift presentation, derived from the `status` each source/asset
- * carries from the API (the same resolver hydration uses). Centralises the
- * status→badge mapping and the source rollup so the table, graph nodes, and
+ * Unusable-component presentation, derived from the `status` each component
+ * carries from the API (the same checks hydration gates on). Centralises the
+ * status→badge mapping and the source rollup so the tables, graph nodes, and
  * health banner stay consistent.
  *
  * Only `missing` is true drift (removable); `disabled` is intentional
  * (the component may return when the deployment re-enables it) and is shown
- * quietly, never flagged for cleanup.
+ * quietly, never flagged for cleanup. `unreadable` is not drift at all: the
+ * key resolves and only the stored config is out of reach, so it is flagged
+ * loudly and repaired by re-entering the config, never by cleanup.
  */
 export function useDrift() {
     const componentsStore = useComponentsStore()
@@ -38,6 +40,8 @@ export function useDrift() {
                 return { label: 'Unavailable in catalog', color: 'error', icon: 'i-lucide-unplug' }
             case 'partial':
                 return { label: 'Some assets unavailable', color: 'warning', icon: 'i-lucide-triangle-alert' }
+            case 'unreadable':
+                return { label: 'Config unreadable', color: 'error', icon: 'i-lucide-lock' }
             case 'disabled':
                 return { label: 'Disabled', color: 'neutral', icon: 'i-lucide-circle-slash' }
             default:

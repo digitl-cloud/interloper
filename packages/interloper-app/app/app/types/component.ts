@@ -1,13 +1,15 @@
 /**
- * Catalog-resolution state of a persisted component (source or asset).
+ * Usability state of a persisted component in this deployment.
  *
  * Mirrors `interloper_db.store.status.ComponentStatus` on the backend, derived from
- * the same resolver hydration uses:
- *   - `ok`       — key resolves in the enabled catalog; live and runnable
- *   - `disabled` — key exists in code but is not exposed by this deployment
- *   - `missing`  — key is gone from the code entirely; this is drift
+ * the same checks hydration gates on:
+ *   - `ok`         — key resolves in the enabled catalog; live and runnable
+ *   - `disabled`   — key exists in code but is not exposed by this deployment
+ *   - `missing`    — key is gone from the code entirely; this is drift
+ *   - `unreadable` — key resolves, but the stored config does not decrypt
+ *                    under the server's encryption key (rotated or mismatched)
  */
-export type ComponentStatus = 'ok' | 'disabled' | 'missing'
+export type ComponentStatus = 'ok' | 'disabled' | 'missing' | 'unreadable'
 
 /** A relation entry embedded on a component (`component.relations[type]`). */
 export interface RelationRef {
@@ -33,11 +35,17 @@ export interface ComponentRecord {
     key: string
     name: string | null
     status: ComponentStatus
-    /** Secret kinds (connection/config/resource): decoded in detail responses; list responses carry only the schema's x-public subset (e.g. a connection's auto_renew). */
+    /**
+     * Secret kinds (connection/config/resource): decoded in detail responses;
+     * list responses carry only the schema's x-public subset (e.g. a
+     * connection's auto_renew). Null when `status` is `unreadable`: nothing
+     * was disclosed because nothing could be read.
+     */
     config: Record<string, any> | null
     /** Runtime state, e.g. job {next_run_at, last_run_at}. */
     state: Record<string, any> | null
     encrypted: boolean
+
     /** Owning source id for source-owned assets. */
     parent_id: string | null
     relations: Record<string, RelationRef[]>

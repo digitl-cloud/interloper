@@ -2,6 +2,7 @@ import type { ComponentRecord, ComponentInput, Relation, RelationInput } from '~
 
 export const useComponentsStore = defineStore('components', () => {
     const { apiFetch } = useApi()
+    const toast = useToast()
 
     /**********************
      * State
@@ -24,6 +25,19 @@ export const useComponentsStore = defineStore('components', () => {
         const idx = components.value.findIndex(c => c.id === component.id)
         if (idx >= 0) components.value[idx] = { ...components.value[idx], ...component }
         else components.value.push(component)
+    }
+
+    /**
+     * Record a failed fetch and say so out loud.
+     *
+     * A swallowed failure is indistinguishable from an empty organisation:
+     * the pages render their "nothing here yet" states over a server that
+     * refused the request. `error` drives the tables' error state; the toast
+     * covers the pages that read the store without one (graph, timeline).
+     */
+    function _reportFetchFailure(e: unknown, what: string) {
+        error.value = e as Error
+        toast.add(errorToast(e, `Failed to load ${what}`))
     }
 
     function _remove(id: string) {
@@ -55,7 +69,7 @@ export const useComponentsStore = defineStore('components', () => {
             }
         }
         catch (e) {
-            error.value = e as Error
+            _reportFetchFailure(e, 'components')
         }
         finally {
             loading.value = false
@@ -97,12 +111,21 @@ export const useComponentsStore = defineStore('components', () => {
         if (failed) throw failed.reason
     }
 
-    /** Fetch relations, optionally narrowed to a type (replaces that type only). */
+    /**
+     * Fetch relations, optionally narrowed to a type (replaces that type only).
+     * Reported rather than thrown: pages fire it without awaiting, so a
+     * rejection would otherwise surface nowhere but the console.
+     */
     async function fetchRelations(type?: string) {
         const query = type ? `?type=${type}` : ''
-        const fetched = await apiFetch<Relation[]>(`/components/relations${query}`)
-        if (type) relations.value = [...relations.value.filter(r => r.type !== type), ...fetched]
-        else relations.value = fetched
+        try {
+            const fetched = await apiFetch<Relation[]>(`/components/relations${query}`)
+            if (type) relations.value = [...relations.value.filter(r => r.type !== type), ...fetched]
+            else relations.value = fetched
+        }
+        catch (e) {
+            _reportFetchFailure(e, 'component relations')
+        }
     }
 
     async function addRelation(id: string, input: { type: string } & RelationInput): Promise<Relation> {
@@ -203,6 +226,11 @@ export const useComponentsStore = defineStore('components', () => {
         )
     }
 
+    /** Refetch everything the collection pages read: the retry their tables offer. */
+    async function reload() {
+        await Promise.all([fetchAll(), fetchRelations()])
+    }
+
     function $reset() {
         components.value = []
         relations.value = []
@@ -210,9 +238,7 @@ export const useComponentsStore = defineStore('components', () => {
         error.value = null
     }
 
-    useOrgScopedRefetch(async () => {
-        await Promise.all([fetchAll(), fetchRelations()])
-    }, $reset)
+    useOrgScopedRefetch(reload, $reset)
 
     /**********************
      * Realtime
@@ -269,6 +295,7 @@ export const useComponentsStore = defineStore('components', () => {
         update,
         remove,
         fetchRelations,
+        reload,
         addRelation,
         removeRelation,
         fetchPartitionRowCounts,
