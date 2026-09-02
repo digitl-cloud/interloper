@@ -50,10 +50,10 @@ function autoRenewColumn(): TableColumn<ComponentRecord> {
         accessorKey: 'auto_renew',
         header: 'Auto renew',
         accessorFn: (row: ComponentRecord) =>
-            catalogStore.catalog[row.key]?.renewable ? String(row.auto_renew !== false) : '',
+            catalogStore.catalog[row.key]?.renewable ? String(row.config?.auto_renew !== false) : '',
         cell: ({ row }) => {
             if (!catalogStore.catalog[row.original.key]?.renewable) return h('span', { class: 'text-dimmed' }, '—')
-            const enabled = row.original.auto_renew !== false
+            const enabled = row.original.config?.auto_renew !== false
             return h(UBadge, {
                 color: enabled ? 'success' : 'neutral',
                 icon: enabled ? 'i-lucide-refresh-cw' : 'i-lucide-pause',

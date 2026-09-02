@@ -6,8 +6,9 @@ unsaved config — resolving a FetchField's options (``/resolve``) and
 checking a connection (``/check``).
 
 The response shape is kind-agnostic — identity, drift ``status``, ``config``
-(decoded for secret kinds on detail responses), machine-owned ``state``,
-typed ``relations``, and one level of ``children`` (a source's assets).
+(decoded for secret kinds on detail responses; the schema's ``x-public``
+subset elsewhere), machine-owned ``state``, typed ``relations``, and one
+level of ``children`` (a source's assets).
 What a kind's config looks like and which relation types it may declare
 come from the catalog (``/catalog``), not from this router.
 """
@@ -118,12 +119,7 @@ class ComponentUpdateRequest(BaseModel):
 
 
 class ComponentResponse(BaseModel):
-    """Response body for a component of any kind.
-
-    ``auto_renew`` surfaces a connection's renewal toggle even in list
-    responses, where a secret kind's ``config`` stays undisclosed — the
-    toggle is operational metadata, not a credential.
-    """
+    """Response body for a component of any kind."""
 
     id: UUID
     org_id: UUID
@@ -134,7 +130,6 @@ class ComponentResponse(BaseModel):
     config: dict[str, Any] | None = None
     state: dict[str, Any] | None = None
     encrypted: bool = False
-    auto_renew: bool | None = None
     parent_id: UUID | None = None
     relations: dict[str, list[RelationRef]] = {}
     children: list[ComponentResponse] = []
@@ -154,7 +149,9 @@ class ComponentResponse(BaseModel):
 
         ``status`` is the catalog-resolution state (drift detection), derived from
         the same resolver hydration uses. Secret kinds expose their decoded
-        payload as ``config`` only when *include_config* is set (detail responses).
+        payload as ``config`` only when *include_config* is set (detail
+        responses); otherwise ``config`` carries just the schema's ``x-public``
+        subset (operational fields such as a connection's ``auto_renew``).
 
         Args:
             row: The component row to convert.
@@ -171,11 +168,7 @@ class ComponentResponse(BaseModel):
 
         config: dict[str, Any] | None = row.config
         if KINDS[row.kind].sensitive:
-            config = store.components.decode_config(row) if include_config else None
-
-        auto_renew: bool | None = None
-        if row.kind == "connection":
-            auto_renew = bool((config or store.components.decode_config(row)).get("auto_renew", True))
+            config = store.components.decode_config(row) if include_config else store.components.public_config(row)
 
         return cls(
             id=row.id,
@@ -187,7 +180,6 @@ class ComponentResponse(BaseModel):
             config=config,
             state=row.state,
             encrypted=row.encrypted,
-            auto_renew=auto_renew,
             parent_id=row.parent_id,
             relations=_relations_of(row),
             children=[

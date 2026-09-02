@@ -218,8 +218,10 @@ class TestConnectionRenewal:
         assert Renewed.renewable() is True
         definition = Renewed.definition()
         assert definition.renewable is True
-        assert "auto_renew" in definition.config_schema["properties"]
         assert Renewed().auto_renew is True
+        # The toggle is operational metadata: schema-marked disclosable so
+        # surfaces that keep the secret payload undisclosed can still show it.
+        assert definition.config_schema["properties"]["auto_renew"]["x-public"] is True
 
     async def test_generic_refresh_grant_rotates(self, monkeypatch: pytest.MonkeyPatch):
         requests: list[httpx.Request] = []

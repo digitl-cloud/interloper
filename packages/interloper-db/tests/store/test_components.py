@@ -640,3 +640,39 @@ class TestStampState:
     def test_stamp_missing_component(self, store: Store):
         with pytest.raises(NotFoundError):
             store.components.stamp_state(uuid4(), refreshed_at=None)
+
+
+class PublicToggleConnection(il.Connection):
+    """Renewable test connection whose ``auto_renew`` is schema-marked public."""
+
+    api_key: str = il.SecretField()
+
+    def renew(self) -> il.Renewal:
+        """Keep the class renewable so ``auto_renew`` stays in its schema.
+
+        Returns:
+            An effectless renewal.
+        """
+        return il.Renewal()
+
+
+class TestPublicConfig:
+    """The x-public projection over a secret payload."""
+
+    def test_public_subset_disclosed_from_encrypted_payload(self, component_db: Engine):
+        catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
+        store = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
+        row = store.components.create(
+            _ORG,
+            kind="connection",
+            key=PublicToggleConnection.key,
+            config={"api_key": "s3cret", "auto_renew": False},
+        )
+
+        assert store.components.public_config(row) == {"auto_renew": False}
+
+    def test_drifted_key_discloses_nothing(self, component_db: Engine):
+        store = Store(catalog=il.Catalog(components={}), encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
+        row = store.components.create(_ORG, kind="connection", key="gone", config={"token": "s3cret"})
+
+        assert store.components.public_config(row) == {}

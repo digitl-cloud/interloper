@@ -455,6 +455,33 @@ class ComponentStore:
             return self._hydrator.decode_data(db_component)
         return dict(db_component.config or {})
 
+    def public_config(self, db_component: Component) -> dict[str, Any]:
+        """The disclosable subset of a component's config payload.
+
+        Some config fields are operational metadata rather than credentials
+        (a connection's ``auto_renew``): their field declarations mark
+        themselves disclosable with ``x-public`` in the config schema, and
+        surfaces that keep a secret payload undisclosed (list responses)
+        show exactly that subset. A key that no longer resolves in the
+        catalog discloses nothing.
+
+        Args:
+            db_component: The row to read the payload from.
+
+        Returns:
+            The disclosed fields — empty when the schema marks none public or
+            the row's key has drifted out of the catalog.
+        """
+        definition = self._catalog.get(db_component.key)
+        if definition is None:
+            return {}
+        properties = definition.config_schema.get("properties", {})
+        public_fields = {name for name, schema in properties.items() if schema.get("x-public")}
+        if not public_fields:
+            return {}
+        payload = self.decode_config(db_component)
+        return {name: value for name, value in payload.items() if name in public_fields}
+
     def merge_config(self, component_id: UUID, fields: dict[str, Any]) -> Component:
         """Merge fields into a component's stored config payload.
 

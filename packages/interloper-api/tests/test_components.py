@@ -208,8 +208,8 @@ class TestDelete:
         assert resp.json()["detail"]["used_by"] == referrers
 
 
-class TestComponentResponseAutoRenew:
-    """The renewal toggle surfaces even when the secret config does not."""
+class TestPublicConfigDisclosure:
+    """Secret kinds disclose only the schema's x-public subset outside detail responses."""
 
     @staticmethod
     def _row(kind: str, config: dict | None = None) -> Component:
@@ -230,29 +230,30 @@ class TestComponentResponseAutoRenew:
         ))
 
     @staticmethod
-    def _store(decoded: dict) -> Store:
+    def _store(decoded: dict, public: dict) -> Store:
         components = SimpleNamespace(
             status=lambda row, parent_key=None: "ok",
             decode_config=lambda row: decoded,
+            public_config=lambda row: public,
         )
         return cast(Store, SimpleNamespace(components=components))
 
-    def test_connection_list_response_defaults_the_toggle_on(self):
+    def test_list_response_carries_the_public_subset(self):
+        store = self._store(decoded={"api_key": "SECRET", "auto_renew": False}, public={"auto_renew": False})
         response = components_module.ComponentResponse.from_row(
-            self._row("connection"), self._store({"api_key": "SECRET"}), include_config=False
+            self._row("connection"), store, include_config=False
         )
-        assert response.config is None
-        assert response.auto_renew is True
+        assert response.config == {"auto_renew": False}
 
-    def test_disabled_toggle_survives_the_undisclosed_config(self):
+    def test_detail_response_carries_the_full_decode(self):
+        store = self._store(decoded={"api_key": "SECRET", "auto_renew": False}, public={"auto_renew": False})
         response = components_module.ComponentResponse.from_row(
-            self._row("connection"), self._store({"auto_renew": False}), include_config=False
+            self._row("connection"), store, include_config=True
         )
-        assert response.config is None
-        assert response.auto_renew is False
+        assert response.config == {"api_key": "SECRET", "auto_renew": False}
 
-    def test_other_kinds_carry_no_toggle(self):
+    def test_non_secret_kinds_pass_their_config_through(self):
         response = components_module.ComponentResponse.from_row(
-            self._row("job", config={"enabled": True}), self._store({}), include_config=False
+            self._row("job", config={"enabled": True}), self._store({}, {}), include_config=False
         )
-        assert response.auto_renew is None
+        assert response.config == {"enabled": True}

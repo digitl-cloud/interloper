@@ -33,13 +33,11 @@ export interface ComponentRecord {
     key: string
     name: string | null
     status: ComponentStatus
-    /** Secret kinds (connection/config/resource): null in list responses, decoded in detail. */
+    /** Secret kinds (connection/config/resource): decoded in detail responses; list responses carry only the schema's x-public subset (e.g. a connection's auto_renew). */
     config: Record<string, any> | null
     /** Runtime state, e.g. job {next_run_at, last_run_at}. */
     state: Record<string, any> | null
     encrypted: boolean
-    /** Connection renewal toggle, surfaced even when the secret config is not (null for other kinds). */
-    auto_renew: boolean | null
     /** Owning source id for source-owned assets. */
     parent_id: string | null
     relations: Record<string, RelationRef[]>
