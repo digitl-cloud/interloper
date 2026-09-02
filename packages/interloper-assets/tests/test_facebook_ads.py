@@ -101,9 +101,11 @@ class TestSpecRoundtripAndReconcile:
         assert int(out.loc[0, "actions_link_click"]) == 7
 
     def test_sparse_row_passes_validation(self):
-        """Insights are sparse: a frame with only a few of the 75 fields must
-        pass the asset's (non-strict) validation — every schema field is
-        optional, so absent action types are not 'Field required' errors."""
+        """A sparse insights frame still passes validation.
+
+        Only a few of the 75 fields arrive, and every schema field is
+        optional, so absent action types are not 'Field required' errors.
+        """
         df = pd.DataFrame([{"date_start": "2026-06-10", "account_id": "123", "actions_link_click": 7}])
         Representation.of(df).conformer.validate(df, schemas.AdsStats)  # must not raise
 

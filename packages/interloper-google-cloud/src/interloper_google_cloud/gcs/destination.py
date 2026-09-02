@@ -69,6 +69,14 @@ class GCSDestination(PartitionedDestination):
 
     @cached_property
     def client(self) -> storage.Client:
+        """The Cloud Storage client every read and write goes through.
+
+        Built from the connection's service-account key when there is one,
+        else from ambient credentials (workload identity in-cluster).
+
+        Returns:
+            The client, cached per destination instance.
+        """
         if self.connection and self.connection.service_account_key:
             key_info = json.loads(self.connection.service_account_key)
             credentials = service_account.Credentials.from_service_account_info(key_info)
@@ -80,16 +88,33 @@ class GCSDestination(PartitionedDestination):
 
     @property
     def _format(self) -> FileFormat:
-        """The configured file format strategy."""
+        """The configured file format strategy.
+
+        Returns:
+            The strategy for the configured format.
+
+        """
         return FORMATS[self.format]
 
     def _asset_prefix(self, context: IOContext) -> str:
-        """Return the object-name prefix for an asset (no trailing slash)."""
+        """Return the object-name prefix for an asset (no trailing slash).
+
+        Args:
+            context: The IO context naming the asset.
+
+        Returns:
+            The prefix every object for the asset sits under.
+
+        """
         parts = [self.prefix or "", context.asset.dataset or "", context.asset.table]
         return "/".join(part.strip("/") for part in parts if part and part.strip("/"))
 
     def _blob_name(self, context: IOContext, partition: Partition | None) -> str:
         """Build the object name for a scope.
+
+        Args:
+            context: The IO context naming the asset.
+            partition: The partition being addressed, when scoped.
 
         Returns:
             ``.../data.{ext}``, inside a ``{column}={id}`` segment for
@@ -107,6 +132,10 @@ class GCSDestination(PartitionedDestination):
 
         Partition scopes exclude the partition column (its value lives in the
         object path).
+
+        Args:
+            context: The IO context carrying the schema.
+            partition: The partition being addressed, when scoped.
 
         Returns:
             The specs, or ``None`` when the context carries no schema.
@@ -126,6 +155,12 @@ class GCSDestination(PartitionedDestination):
 
         The row count is stamped as blob metadata so introspection never has
         to download data.
+
+        Args:
+            context: The IO context naming the asset.
+            partition: The partition being written, when scoped.
+            data: The rows to write.
+
         """
         rows = Representation.of(data).to_records(data)
         if partition is not None:
@@ -144,6 +179,10 @@ class GCSDestination(PartitionedDestination):
         The partition column is re-injected from the scope, and rows are
         reconciled against the context schema when one is set (restoring the
         declared types — text formats read everything back as strings).
+
+        Args:
+            context: The IO context carrying the schema.
+            partition: The partition being read, when scoped.
 
         Returns:
             Rows as a list of dicts.
@@ -177,6 +216,9 @@ class GCSDestination(PartitionedDestination):
         time; objects missing it (written by other tools) are downloaded and
         counted.
 
+        Args:
+            context: The IO context naming the asset.
+
         Returns:
             Mapping from partition value (as string) to row count.
         """
@@ -199,5 +241,6 @@ class GCSDestination(PartitionedDestination):
     # -- Lifecycle -------------------------------------------------------------
 
     def dispose(self) -> None:
+        """Close the storage client, if one was ever built."""
         if self.client:
             self.client.close()

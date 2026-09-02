@@ -19,5 +19,21 @@ interloper-api = { workspace = true }
 interloper-db = { workspace = true }
 interloper-scheduler = { workspace = true }
 
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+preview = true
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+
 [tool.uv.build-backend]
 module-name = "interloper_app"

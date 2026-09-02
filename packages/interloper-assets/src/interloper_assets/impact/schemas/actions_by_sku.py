@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class ActionsBySku(Schema):
-    """Listing of each action at the individual SKU level (adv_action_list_sku_pm_only report)"""
+    """Listing of each action at the individual SKU level (adv_action_list_sku_pm_only report)."""
 
     action_date: dt.datetime | None = Field(default=None, description="Date when the action occurred.")
     action_id: str | None = Field(default=None, description="Unique identifier for the action.")

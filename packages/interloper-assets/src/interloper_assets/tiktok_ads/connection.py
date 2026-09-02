@@ -28,6 +28,11 @@ class TiktokAdsConnection(il.OAuthConnection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
+        """The TikTok Ads API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         # The TikTok Business API authenticates via the "Access-Token" header, not Bearer.
         # Static-header auth drops straight into the async client.
         return il.AsyncRESTClient(BASE_URL, headers={"Access-Token": self.access_token})
@@ -41,6 +46,13 @@ class TiktokAdsConnection(il.OAuthConnection):
         environment (``INTERLOPER_TIKTOK_CLIENT_ID`` / ``INTERLOPER_TIKTOK_CLIENT_SECRET``)
         — alongside the connection's access token. Talks to the v1.3 API over the
         lightweight ``AsyncRESTClient`` (not the SDK) so it runs in the API process.
+
+        Returns:
+            The options for the field's dropdown.
+
+        Raises:
+            RuntimeError: If TikTok answers with a non-zero API code.
+
         """
         app_id = os.environ.get("INTERLOPER_TIKTOK_CLIENT_ID", "")
         secret = os.environ.get("INTERLOPER_TIKTOK_CLIENT_SECRET", "")

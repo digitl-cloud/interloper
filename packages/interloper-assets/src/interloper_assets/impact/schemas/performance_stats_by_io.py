@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class PerformanceStatsByIo(Schema):
-    """Performance report detailing metrics by IO"""
+    """Performance report detailing metrics by IO."""
 
     action_cost: float | None = Field(default=None, description="Cost associated with the actions")
     actions: int | None = Field(default=None, description="Number of actions taken")

@@ -34,6 +34,10 @@ def serialize(obj: Any) -> Any:
 
     Args:
         obj: A SQLModel row, dict, list, or primitive.
+
+    Returns:
+        The value with rows, UUIDs and datetimes rendered JSON-safe.
+
     """
     if obj is None:
         return None

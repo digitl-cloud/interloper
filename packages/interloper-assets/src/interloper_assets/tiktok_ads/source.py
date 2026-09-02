@@ -35,6 +35,14 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
     """
 
     def normalize(self, data: Any) -> pd.DataFrame:
+        """Reshape the vendor payload before the standard normalization.
+
+        Args:
+            data: The rows as the API returned them.
+
+        Returns:
+            The normalized frame.
+        """
         records = data.to_dict("records") if isinstance(data, pd.DataFrame) else data
         flat: list[dict[str, Any]] = []
         for row in records:
@@ -60,7 +68,12 @@ _ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 
 # -- HELPERS — HTTP / pagination -----------------------------------------------
 def _select_list(response: Any) -> list[dict[str, Any]]:
-    """Pull ``data.list`` out of a TikTok response, raising on a non-zero API code."""
+    """Pull ``data.list`` out of a TikTok response, raising on a non-zero API code.
+
+    Raises:
+        RuntimeError: If TikTok answers with a non-zero API code.
+
+    """
     body = response.json()
     if body.get("code") != 0:
         raise RuntimeError(f"TikTok API error {body.get('code')}: {body.get('message')}")
@@ -241,7 +254,12 @@ class TiktokAds(il.Source):
     async def advertisers(
         self, context: il.ExecutionContext, connection: TiktokAdsConnection
     ) -> list[dict[str, Any]]:
-        """The advertiser account with its attributes."""
+        """The advertiser account with its attributes.
+
+        Raises:
+            RuntimeError: If TikTok answers with a non-zero API code.
+
+        """
         response = await connection.client.get(
             "/advertiser/info/",
             params={

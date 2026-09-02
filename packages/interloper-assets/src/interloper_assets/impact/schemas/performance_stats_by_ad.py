@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class PerformanceStatsByAd(Schema):
-    """Performance report by ad"""
+    """Performance report by ad."""
 
     action_cost: float | None = Field(default=None, description="Cost associated with actions from the ad")
     actions: int | None = Field(default=None, description="Number of actions taken from the ad")

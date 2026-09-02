@@ -72,7 +72,12 @@ CATALOG_DUMP: dict[str, Any] = {
 
 @pytest.fixture
 def toolkit_db() -> Iterator[Engine]:
-    """A fresh in-memory database with component, relation, and run tables."""
+    """A fresh in-memory database with component, relation, and run tables.
+
+    Yields:
+        The engine bound to that database, disposed once the test finishes.
+
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -100,7 +105,12 @@ def ctx(toolkit_db: Engine) -> ToolkitContext:
 
 
 def _seed_chain(org_id: Any = ORG_ID) -> dict[str, Any]:
-    """Seed source→assets a→b→c (b depends on a, c depends on b)."""
+    """Seed source→assets a→b→c (b depends on a, c depends on b).
+
+    Returns:
+        The seeded component ids, keyed by asset key.
+
+    """
     source = Component(org_id=org_id, kind="source", key="facebook_ads")
     a = Component(org_id=org_id, kind="asset", key="a", parent_id=source.id)
     b = Component(org_id=org_id, kind="asset", key="b", parent_id=source.id)

@@ -31,8 +31,14 @@ def _channels(response: httpx.Response) -> list[dict[str, Any]]:
     rejected page surfaces instead of a confusing miss on the ``channels``
     key — Slack answers a refusal with 200 and ``ok: false``.
 
+    Args:
+        response: One page of the ``conversations.list`` response.
+
     Returns:
         The page's raw channel objects.
+
+    Raises:
+        RuntimeError: If Slack rejected the page (``ok: false``).
     """
     response.raise_for_status()
     body = response.json()
@@ -76,6 +82,9 @@ class SlackConnection(Connection):
         firing (sync by contract) and a form lookup, neither of which has
         independent requests to overlap. The API process runs sync providers
         in a thread, so this does not block its event loop.
+
+        Returns:
+            The bearer-authenticated client, cached per connection instance.
         """
         return RESTClient(API_BASE, auth=HTTPBearerAuth(self.bot_token), timeout=_TIMEOUT)
 

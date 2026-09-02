@@ -16,6 +16,13 @@ def replace_non_finite(obj: Any) -> Any:
     which are invalid JSON — BigQuery's load parser rejects them with "Parser
     terminated before end of string". Neither BigQuery nor JSONL files have a
     NaN concept, so map non-finite floats to ``None`` (JSON ``null``).
+
+    Args:
+        obj: The value or container to rewrite.
+
+    Returns:
+        The value with non-finite floats replaced.
+
     """
     if isinstance(obj, float):
         return obj if math.isfinite(obj) else None
@@ -27,7 +34,18 @@ def replace_non_finite(obj: Any) -> Any:
 
 
 def json_default(o: Any) -> Any:
-    """JSON serializer for types not handled by the default encoder."""
+    """JSON serializer for types not handled by the default encoder.
+
+    Args:
+        o: The object the encoder could not serialize.
+
+    Returns:
+        A JSON-encodable stand-in.
+
+    Raises:
+        TypeError: If the object has no JSON representation.
+
+    """
     if isinstance(o, (datetime.date, datetime.datetime)):
         return o.isoformat()
     if isinstance(o, Decimal):

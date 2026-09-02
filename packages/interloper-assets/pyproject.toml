@@ -33,9 +33,17 @@ interloper-pandas = { workspace = true }
 line-length = 120
 
 [tool.ruff.lint]
-extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+preview = true
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"**/schemas/**" = ["E501"]
-"tests/**" = ["ANN", "F811"]
+"**/schemas/**" = ["E501", "D100", "D101"]
+"src/interloper_assets/*/source.py" = ["DOC201"]
+"src/interloper_assets/*/*.py" = ["D100"]
+"src/interloper_assets/*/__init__.py" = ["D104"]
+"src/interloper_assets/*/schemas/__init__.py" = ["D104"]
+"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104"]

@@ -43,6 +43,10 @@ class SnapchatAdsConnection(il.RefreshTokenOAuthConnection):
         """Fetch Snapchat Ads ad accounts accessible by the connection.
 
         Flow: list organizations → list ad accounts per org.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         org_resp = await self.client.get("/v1/me/organizations")
         org_resp.raise_for_status()

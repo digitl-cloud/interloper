@@ -91,6 +91,14 @@ class FacebookActionsNormalizer(DataFrameNormalizer):
     """
 
     def normalize(self, data: Any) -> pd.DataFrame:
+        """Reshape the vendor payload before the standard normalization.
+
+        Args:
+            data: The rows as the API returned them.
+
+        Returns:
+            The normalized frame.
+        """
         df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
         if df.empty:
             return df
@@ -98,7 +106,8 @@ class FacebookActionsNormalizer(DataFrameNormalizer):
         for column in PIVOT_COLUMNS:
             if column not in df.columns:
                 continue
-            pivoted = pd.DataFrame(list(df[column].map(lambda cell: _pivot_cell(column, cell))), index=df.index)
+            cells = df[column].map(lambda cell, column=column: _pivot_cell(column, cell))
+            pivoted = pd.DataFrame(list(cells), index=df.index)
             df = pd.concat([df.drop(columns=[column]), pivoted], axis=1)
 
         df.columns = [_sanitize(c) for c in df.columns]

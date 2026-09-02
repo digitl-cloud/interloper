@@ -40,6 +40,10 @@ class CampaignManager360Connection(il.Connection):
 
         Each profile carries both the profile id and its account id/name, so the
         same lookup feeds the source's ``profile_id`` and ``account_id`` fields.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         response = await asyncio.to_thread(lambda: self.client.userProfiles().list().execute())
         return [

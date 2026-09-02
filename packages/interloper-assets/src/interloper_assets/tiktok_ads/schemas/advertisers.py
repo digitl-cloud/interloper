@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class Advertisers(Schema):
-    """Tiktok advertiser entities"""
+    """Tiktok advertiser entities."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."

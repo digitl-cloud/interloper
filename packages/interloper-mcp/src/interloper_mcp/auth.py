@@ -30,6 +30,11 @@ class PatVerifier(TokenVerifier):
     """
 
     def __init__(self, store: Store) -> None:
+        """Bind the verifier to the store tokens resolve against.
+
+        Args:
+            store: The Store instance.
+        """
         self._store = store
 
     async def verify_token(self, token: str) -> AccessToken | None:
@@ -37,6 +42,11 @@ class PatVerifier(TokenVerifier):
 
         Args:
             token: The bearer token exactly as presented by the client.
+
+        Returns:
+            The access token carrying the tenant scope, or ``None`` when the
+            token is unknown, revoked, expired, or its holder is no longer a
+            member of its organisation.
         """
         # The store is synchronous — keep the event loop free.
         result = await anyio.to_thread.run_sync(self._store.tokens.resolve, token)

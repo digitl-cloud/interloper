@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class CustomAudiences(Schema):
-    """The Facebook Custom Audiences report provides information about custom audiences volume for a given account id"""
+    """The Facebook Custom Audiences report provides information about custom audiences volume for a given account id."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."

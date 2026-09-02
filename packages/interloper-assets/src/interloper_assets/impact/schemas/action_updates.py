@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class ActionUpdates(Schema):
-    """Action updates report providing detailed information on actions and their associated attributes"""
+    """Action updates report providing detailed information on actions and their associated attributes."""
 
     action_date: dt.datetime | None = Field(default=None, description="Date when the action occurred")
     action_id: str | None = Field(default=None, description="Unique identifier for the specific action")

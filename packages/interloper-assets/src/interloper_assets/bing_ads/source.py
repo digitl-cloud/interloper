@@ -83,6 +83,10 @@ def _translate_soap_fault(error: Exception) -> None:
     The SDK surfaces a generic ``"Invalid client data"`` ``faultstring``; the
     actionable reason (e.g. ``AccountNotAuthorized``) lives in the fault detail.
     Pulls those out into a readable message. Does nothing for other exceptions.
+
+    Raises:
+        RuntimeError: Always; the function exists to raise it.
+
     """
     from suds import WebFault
 

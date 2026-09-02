@@ -27,6 +27,9 @@ class DataFrameConformer(Conformer):
     def prepare(self, data: pd.DataFrame) -> pd.DataFrame:
         """DataFrames are already canonical.
 
+        Args:
+            data: The DataFrame to prepare.
+
         Returns:
             The DataFrame unchanged.
         """
@@ -37,6 +40,11 @@ class DataFrameConformer(Conformer):
 
         Missing values in numeric columns validate correctly against
         nullable fields instead of failing as ``nan`` floats.
+
+        Args:
+            data: The DataFrame to validate.
+            schema: The schema to validate against.
+            strict: Whether unknown columns are rejected.
         """
         data = _encode_json_str_columns(data, schema)
         schema.validate_rows(dataframe_to_records(data), strict=strict)
@@ -47,6 +55,10 @@ class DataFrameConformer(Conformer):
         No per-row pydantic validation — this scales to warehouse-sized
         frames. Uses nullable pandas dtypes (``Int64``, ``Float64``,
         ``boolean``, ``string``) so missing values survive as ``pd.NA``.
+
+        Args:
+            data: The DataFrame to reconcile.
+            schema: The schema whose field specs drive the casts.
 
         Returns:
             Reconciled DataFrame.
@@ -83,6 +95,9 @@ class DataFrameConformer(Conformer):
         ``object`` columns fall back to the type of the first non-null
         value. All fields are optional, mirroring :meth:`Schema.infer`.
 
+        Args:
+            data: The DataFrame to infer from.
+
         Returns:
             A dynamically created Schema subclass.
 
@@ -104,6 +119,9 @@ DATAFRAME_CONFORMER = DataFrameConformer()
 
 def _dtype_to_py_type(series: pd.Series) -> Any:
     """Map a Series' dtype to a Python type for schema inference.
+
+    Args:
+        series: The Series whose dtype is mapped.
 
     Returns:
         The resolved Python type, or ``Any`` when unknown (e.g. an all-null
@@ -132,6 +150,12 @@ def _to_datetime(series: pd.Series) -> pd.Series:
     Plain ``to_datetime`` raises on mixed-timezone strings (common in API
     responses spanning a DST boundary or differing offsets); retry with
     ``utc=True`` to coerce those to a single UTC timezone.
+
+    Args:
+        series: The Series to parse.
+
+    Returns:
+        The parsed Series, in UTC when the input mixed offsets.
     """
     try:
         return pd.to_datetime(series, errors="raise")
@@ -140,7 +164,14 @@ def _to_datetime(series: pd.Series) -> pd.Series:
 
 
 def _json_encode_value(value: Any) -> Any:
-    """JSON-encode a ``list``/``dict``; pass scalars (and ``NA``) through."""
+    """JSON-encode a ``list``/``dict``; pass scalars (and ``NA``) through.
+
+    Args:
+        value: The value to encode.
+
+    Returns:
+        The JSON string for a nested value, else the value unchanged.
+    """
     if isinstance(value, (list, dict)):
         return json.dumps(value)
     return value
@@ -157,6 +188,10 @@ def _encode_json_str_columns(data: pd.DataFrame, schema: type[Schema]) -> pd.Dat
     untouched. Only ``object``-dtype columns are scanned, preserving the
     vectorized fast path; the input frame is copied only when a column is
     actually rewritten.
+
+    Args:
+        data: The DataFrame to scan.
+        schema: The schema whose ``str`` fields decide what is encoded.
 
     Returns:
         The frame with nested ``str``-field cells JSON-encoded (the original
@@ -179,6 +214,10 @@ def _encode_json_str_columns(data: pd.DataFrame, schema: type[Schema]) -> pd.Dat
 
 def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
     """Cast a Series to the pandas dtype matching a field spec.
+
+    Args:
+        series: The Series to cast.
+        spec: The field spec whose declared type drives the cast.
 
     Returns:
         The cast Series.
@@ -217,6 +256,9 @@ def dataframe_to_records(data: pd.DataFrame) -> list[dict[str, Any]]:
     Unlike ``DataFrame.to_dict("records")``, missing values (``NaN``, ``NaT``,
     ``pd.NA``) are mapped to ``None`` so the rows are valid against nullable
     schema fields and serialize to JSON ``null``.
+
+    Args:
+        data: The DataFrame to convert.
 
     Returns:
         Rows as a list of dicts with ``None`` for missing values.

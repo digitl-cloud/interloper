@@ -11,4 +11,4 @@ descriptions.
 from interloper_toolkit.context import ToolkitContext, serialize
 from interloper_toolkit.models import ToolError
 
-__all__ = ["ToolkitContext", "ToolError", "serialize"]
+__all__ = ["ToolError", "ToolkitContext", "serialize"]

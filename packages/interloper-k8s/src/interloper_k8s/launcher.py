@@ -49,6 +49,15 @@ class KubernetesLauncher(Launcher):
         environment; ``settings.config`` supplies the launcher-specific
         keyword arguments.
 
+        Args:
+            settings: The launcher settings block (image, namespace, resources).
+            postgres: Postgres credentials forwarded into the spawned pod.
+            runner: Runner settings the spawned process builds its runner from.
+            catalog: Catalog forwarded as import paths; required, since a pod
+                cannot see the caller's.
+            store: Accepted for the registry's uniform hook and unused — a pod
+                opens its own connection, not the caller's.
+
         Returns:
             The configured launcher.
 
@@ -226,7 +235,7 @@ class KubernetesLauncher(Launcher):
                 V1Job,
                 self._batch_v1.read_namespaced_job_status(name=job_name, namespace=self._namespace),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
             return RunState(status=RunStatus.NOT_FOUND)
 
         status = job.status
@@ -243,7 +252,16 @@ class KubernetesLauncher(Launcher):
         return RunState(status=RunStatus.RUNNING)
 
     def _pod_failure_reason(self, job_name: str) -> str:
-        """Build a short failure description from the pod's termination state."""
+        """Build a short failure description from the pod's termination state.
+
+        Args:
+            job_name: The Job whose pod is inspected.
+
+        Returns:
+            A one-line reason, falling back to a generic message when the
+            pod's state is unavailable.
+
+        """
         from typing import cast
 
         from kubernetes.client import V1PodList
@@ -256,7 +274,7 @@ class KubernetesLauncher(Launcher):
                     label_selector=f"job-name={job_name}",
                 ),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — the reason is best-effort detail on an already-failed job
             return f"Job {job_name} failed"
 
         if not pods.items:
@@ -278,7 +296,12 @@ class KubernetesLauncher(Launcher):
     # -- Helpers ---------------------------------------------------------------
 
     def _build_env(self) -> list[client.V1EnvVar]:
-        """Build environment variables for the container."""
+        """Build environment variables for the container.
+
+        Returns:
+            The environment the run pod is started with.
+
+        """
         env_map: dict[str, str] = {
             "INTERLOPER_POSTGRES_HOST": self._postgres_host,
             "INTERLOPER_POSTGRES_PORT": str(self._postgres_port),
@@ -297,7 +320,12 @@ class KubernetesLauncher(Launcher):
         return [client.V1EnvVar(name=k, value=v) for k, v in env_map.items()]
 
     def _build_resources(self) -> client.V1ResourceRequirements | None:
-        """Build resource requirements for the container."""
+        """Build resource requirements for the container.
+
+        Returns:
+            The requirements, or None when none are configured.
+
+        """
         if not self._resources:
             return None
         return client.V1ResourceRequirements(
@@ -306,7 +334,12 @@ class KubernetesLauncher(Launcher):
         )
 
     def _build_tolerations(self) -> list[client.V1Toleration]:
-        """Build tolerations for pod scheduling."""
+        """Build tolerations for pod scheduling.
+
+        Returns:
+            The configured tolerations, empty when none are set.
+
+        """
         return [
             client.V1Toleration(
                 key=t.get("key"),

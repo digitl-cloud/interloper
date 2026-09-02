@@ -12,7 +12,12 @@ from interloper.schema import Schema
 
 
 def _fake_value(annotation: Any) -> Any:
-    """Generate a single fake value for a given type annotation."""
+    """Generate a single fake value for a given type annotation.
+
+    Returns:
+        A value of the annotated type.
+
+    """
     origin = get_origin(annotation)
     args = get_args(annotation)
 

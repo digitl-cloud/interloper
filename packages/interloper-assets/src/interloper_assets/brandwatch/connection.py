@@ -20,6 +20,11 @@ class BrandwatchConnection(il.Connection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
+        """The Brandwatch API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         # Falcon.io authenticates the Measure API with the key as a query
         # parameter applied to every request. NOTE: the parameter name
         # (`param_key`) is carried over unverified from the reference connector

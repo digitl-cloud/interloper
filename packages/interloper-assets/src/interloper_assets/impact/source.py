@@ -71,6 +71,10 @@ async def _wait_for_job(connection: ImpactConnection, job_id: str) -> None:
 
     Each poll depends on the previous one's status, so this stays sequential —
     a fixed-interval async poll loop bounded by ``_JOB_POLL_TIMEOUT``.
+
+    Raises:
+        RuntimeError: If the job fails, or does not finish in time.
+
     """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + _JOB_POLL_TIMEOUT

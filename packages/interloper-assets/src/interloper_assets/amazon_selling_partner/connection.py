@@ -8,12 +8,18 @@ from pydantic_settings import SettingsConfigDict
 
 
 class AmazonSellingPartnerLocation(Enum):
+    """Selling Partner API region, which selects both endpoints."""
     NORTH_AMERICA = "NA"
     EUROPE = "EU"
     FAR_EAST = "FE"
 
     @property
     def api_url(self) -> str:
+        """The data endpoint for this region.
+
+        Returns:
+            The regional API base URL.
+        """
         return {
             AmazonSellingPartnerLocation.EUROPE: "https://sellingpartnerapi-eu.amazon.com",
             AmazonSellingPartnerLocation.FAR_EAST: "https://sellingpartnerapi-fe.amazon.com",
@@ -22,6 +28,11 @@ class AmazonSellingPartnerLocation(Enum):
 
     @property
     def auth_url(self) -> str:
+        """The token endpoint for this region.
+
+        Returns:
+            The regional authorization base URL.
+        """
         return {
             AmazonSellingPartnerLocation.EUROPE: "https://api.amazon.co.uk",
             AmazonSellingPartnerLocation.FAR_EAST: "https://api.amazon.co.jp",
@@ -75,6 +86,14 @@ class LWATokenAuth(il.OAuth2RefreshTokenAuth):
     """
 
     def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+        """Sign each request, refreshing the access token when it has expired.
+
+        Args:
+            request: The outgoing request to sign.
+
+        Yields:
+            The signed request, and the retried one after a refresh.
+        """
         if self._access_token is None:
             self._store_token((yield self._token_request()))
 
@@ -112,6 +131,11 @@ class AmazonSellingPartnerConnection(il.Connection):
 
     @cached_property
     def api_location(self) -> AmazonSellingPartnerLocation:
+        """The configured region, parsed.
+
+        Returns:
+            The region the endpoints are derived from.
+        """
         return AmazonSellingPartnerLocation(self.location)
 
     @il.fetch_field_provider
@@ -122,6 +146,10 @@ class AmazonSellingPartnerConnection(il.Connection):
         vendor-accessible endpoint to enumerate a connection's marketplaces, so
         this scopes the picker to the region's valid ids rather than detecting
         access. Requests for an out-of-region marketplace are rejected by SP-API.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         return [{"label": label, "value": value} for value, label in MARKETPLACES_BY_LOCATION[self.api_location]]
 

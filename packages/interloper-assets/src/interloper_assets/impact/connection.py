@@ -22,6 +22,11 @@ class ImpactConnection(il.Connection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
+        """The Impact API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         return il.AsyncRESTClient(
             f"{BASE_URL}/Advertisers/{self.account_sid}",
             auth=httpx.BasicAuth(username=self.account_sid, password=self.auth_token),
@@ -30,7 +35,12 @@ class ImpactConnection(il.Connection):
 
     @il.fetch_field_provider
     async def programs(self) -> list[dict[str, str]]:
-        """Fetch Impact programs (campaigns) accessible by the connection."""
+        """Fetch Impact programs (campaigns) accessible by the connection.
+
+        Returns:
+            The options for the field's dropdown.
+
+        """
         paginator = il.PageNumberPaginator(page_param="Page", total_path="@numpages")
         pages = self.client.paginate("/Campaigns", paginator, data_selector=lambda r: r.json().get("Campaigns") or [])
         return [{"Id": c["Id"], "Name": c.get("Name", c["Id"])} async for page in pages for c in page]

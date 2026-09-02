@@ -22,6 +22,11 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
+        """The LinkedIn organic API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         client = il.AsyncRESTClient(
             constants.BASE_URL,
             auth=il.OAuth2RefreshTokenAuth(
@@ -49,6 +54,10 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
         ``self.client`` to read the ``ADMINISTRATOR`` organization ACLs and
         decorates each entry with the organization entity to resolve its
         localized name.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         paginator = il.OffsetPaginator(
             limit=100,

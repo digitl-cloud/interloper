@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class Actions(Schema):
-    """Actions report detailing various metrics and attributes related to marketing actions"""
+    """Actions report detailing various metrics and attributes related to marketing actions."""
 
     action_tracker_id: str | None = Field(default=None, description="Unique identifier for the action tracker")
     action_tracker_name: str | None = Field(default=None, description="Name of the action tracker")

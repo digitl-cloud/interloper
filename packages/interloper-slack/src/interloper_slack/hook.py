@@ -48,6 +48,9 @@ class SlackHook(Hook):
     def fire(self, context: HookContext) -> None:
         """Post the event as a message to the configured channel.
 
+        Args:
+            context: The hook context carrying the event and its run.
+
         Raises:
             ConfigError: If no Slack connection is attached.
             RuntimeError: If Slack rejects the message — it answers a refusal
@@ -72,6 +75,9 @@ class SlackHook(Hook):
         ``text`` carries the headline on its own so notification previews and
         screen readers get the outcome without parsing blocks.
 
+        Args:
+            context: The hook context the message describes.
+
         Returns:
             The JSON-able message payload.
         """
@@ -93,6 +99,9 @@ class SlackHook(Hook):
 
     def _details(self, context: HookContext) -> str:
         """Render the run/partition context line.
+
+        Args:
+            context: The hook context whose run and partition are rendered.
 
         Returns:
             The line, or ``""`` when the context carries neither.

@@ -31,7 +31,15 @@ _SA_KEY = json.dumps({"type": "service_account", "project_id": "test-proj"})
 
 
 def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]:
-    """Create a BigQueryDestination with mocked GCP clients."""
+    """Create a BigQueryDestination with mocked GCP clients.
+
+    Args:
+        **overrides: Destination fields to override on the instance.
+
+    Returns:
+        The destination and its mocked BigQuery client.
+
+    """
     project = overrides.pop("_project", "test-proj")
     mock_client = MagicMock()
     mock_client.project = project
@@ -81,7 +89,7 @@ class TestPyToBqType:
         assert _py_to_bq_type(Decimal("9.99")) == "NUMERIC"
 
     def test_datetime(self):
-        assert _py_to_bq_type(datetime.datetime(2024, 1, 1, 12, 0)) == "TIMESTAMP"
+        assert _py_to_bq_type(datetime.datetime(2024, 1, 1, 12, 0)) == "TIMESTAMP"  # noqa: DTZ001 — naive is the case under test
 
     def test_date(self):
         assert _py_to_bq_type(datetime.date(2024, 1, 1)) == "DATE"
@@ -102,7 +110,7 @@ class TestPyToBqType:
         assert _py_to_bq_type({"a": 1}) == "STRING"
 
     def test_bool_before_int(self):
-        """bool is a subclass of int -- ensure bool wins."""
+        """Bool is a subclass of int -- ensure bool wins."""
         assert _py_to_bq_type(True) == "BOOLEAN"
         assert _py_to_bq_type(True) != "INTEGER"
 
@@ -127,7 +135,7 @@ class TestBqToPyType:
         assert _bq_to_py_type(Decimal("1.5")) == "NUMERIC"
 
     def test_datetime(self):
-        assert _bq_to_py_type(datetime.datetime(2024, 6, 15, 8, 30)) == "TIMESTAMP"
+        assert _bq_to_py_type(datetime.datetime(2024, 6, 15, 8, 30)) == "TIMESTAMP"  # noqa: DTZ001 — naive is the case under test
 
     def test_date(self):
         assert _bq_to_py_type(datetime.date(2024, 6, 15)) == "DATE"
@@ -142,7 +150,7 @@ class TestBqToPyType:
         assert _bq_to_py_type(None) == "STRING"
 
     def test_bool_before_int(self):
-        """bool is a subclass of int -- ensure bool wins."""
+        """Bool is a subclass of int -- ensure bool wins."""
         assert _bq_to_py_type(True) == "BOOL"
 
 
@@ -153,7 +161,7 @@ class TestInsert:
     """Load-job payload construction."""
 
     def test_nan_sent_to_bigquery_as_null(self):
-        """pandas NaN must reach the load job as JSON null, not the invalid token NaN."""
+        """Pandas NaN must reach the load job as JSON null, not the invalid token NaN."""
         dest, mock_client = _make_destination(dataset="ds")
         rows = [
             {"campaign_id": 123, "cost": float("nan"), "clicks": 5.0},
@@ -279,7 +287,7 @@ def _plain_asset() -> list:
 
 @il.asset(partitioning=il.TimePartitionConfig(column="day"))
 def _partitioned_asset() -> list:
-    """Daily rows."""
+    """Daily rows."""  # noqa: DOC201 — an asset docstring is its table description, not dev docs
     return []
 
 

@@ -82,7 +82,12 @@ class DockerRunner(SyncRunner):
     _container_map: dict[Future[Any], Container] = PrivateAttr(default_factory=dict)
 
     def model_post_init(self, context: Any) -> None:
-        """Initialize Docker client after model initialization."""
+        """Initialize Docker client after model initialization.
+
+        Args:
+            context: Pydantic's post-init context, unused.
+
+        """
         super().model_post_init(context)
         self._docker = docker.from_env()
 
@@ -90,7 +95,12 @@ class DockerRunner(SyncRunner):
 
     @property
     def _capacity(self) -> int:
-        """Maximum number of concurrent containers."""
+        """Maximum number of concurrent containers.
+
+        Returns:
+            The configured worker count.
+
+        """
         return self.max_containers
 
     def _on_start(self) -> None:
@@ -116,8 +126,16 @@ class DockerRunner(SyncRunner):
     ) -> Future[Any]:
         """Launch an asset in a Docker container and return a polling Future.
 
+        Args:
+            operation: The operation to run in its own container.
+            partition_or_window: The partition or window to materialize, when scoped.
+
         Returns:
             A Future that raises :class:`RunnerError` on container failure.
+
+        Raises:
+            RunnerError: If the container cannot be created.
+
         """
         if self._poll_pool is None:
             raise RunnerError("Poll pool not initialized")
@@ -146,7 +164,7 @@ class DockerRunner(SyncRunner):
                 stdout=True,
                 stderr=True,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — one operation's failure must not abort the run
             # Container never started — emit from the host
             self.state.mark_failed(operation, format_exception(e))
             done: Future[None] = Future()
@@ -170,6 +188,11 @@ class DockerRunner(SyncRunner):
         reporting one, the host's event is the only terminal, so the asset no
         longer orphans as ``running``.  Assets already terminal (e.g. marked
         failed during ``_submit_operation``) are skipped.
+
+        Args:
+            future: The polling future that has completed.
+            operation: The operation the container ran.
+
         """
         container = self._container_map.pop(future, None)
         if container is not None:
@@ -179,7 +202,7 @@ class DockerRunner(SyncRunner):
         if not (info and info.is_terminal):
             try:
                 future.result()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — one operation's failure must not abort the run
                 self.state.mark_failed(operation, format_exception(e), emit=True, exception=e)
             else:
                 self.state.mark_completed(operation, emit=True)
@@ -196,6 +219,11 @@ class DockerRunner(SyncRunner):
         Same host-authored-terminal contract as :meth:`_handle_completed`
         (``emit=True``, idempotent via deterministic ids) so an asset still
         in flight when the run aborts is not left orphaned as ``running``.
+
+        Args:
+            future: The polling future being flushed.
+            operation: The operation the container ran.
+
         """
         container = self._container_map.pop(future, None)
         if container is not None:
@@ -221,6 +249,9 @@ class DockerRunner(SyncRunner):
     def _poll_container(self, container: Container) -> None:
         """Block until the container exits; raise on failure.
 
+        Args:
+            container: The container to wait on.
+
         Raises:
             RunnerError: If the container exits with a non-zero code.
         """
@@ -238,7 +269,17 @@ class DockerRunner(SyncRunner):
         partition_or_window: Partition | PartitionWindow | None,
         run_id: str,
     ) -> list[str]:
-        """Build the CLI command for asset execution in a container."""
+        """Build the CLI command for asset execution in a container.
+
+        Args:
+            dag_spec: The serialized DAG the container reconstructs.
+            partition_or_window: The partition or window to materialize, when scoped.
+            run_id: The run the container reports against.
+
+        Returns:
+            The argv the container entrypoint is started with.
+
+        """
         cmd = [
             "interloper",
             "run",
@@ -263,14 +304,24 @@ class DockerRunner(SyncRunner):
         return cmd
 
     def _build_env(self) -> dict[str, str]:
-        """Build the environment variables for the container."""
+        """Build the environment variables for the container.
+
+        Returns:
+            The environment each operation container receives.
+
+        """
         env = dict(self.env_vars)
         env["INTERLOPER_EVENTS_TO_STDERR"] = "true"
         env.update(child_process_env())
         return env
 
     def _build_volumes(self) -> dict[str, dict[str, str]]:
-        """Build the volume mounts for the container."""
+        """Build the volume mounts for the container.
+
+        Returns:
+            The mounts keyed by host path, in docker-py's shape.
+
+        """
         volumes: dict[str, dict[str, str]] = {}
         if isinstance(self.volumes, dict):
             volumes.update(self.volumes)
@@ -281,7 +332,15 @@ class DockerRunner(SyncRunner):
         return volumes
 
     def _build_name(self, operation: Operation) -> str:
-        """Build the name for the container."""
+        """Build the name for the container.
+
+        Args:
+            operation: The operation the container runs.
+
+        Returns:
+            A container name unique to this operation and run.
+
+        """
         return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}"
 
     # -- Real-time event streaming (stderr) ------------------------------------
@@ -336,7 +395,12 @@ class DockerRunner(SyncRunner):
             self._log_threads[container.id] = thread
 
     def _stop_container_log_streaming(self, container: Container) -> None:
-        """Stop and clean up the log streaming thread for a container."""
+        """Stop and clean up the log streaming thread for a container.
+
+        Args:
+            container: The container whose log thread is stopped.
+
+        """
         if container.id is None:
             return
         thread = self._log_threads.pop(container.id, None)

@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class CampaignsStats(Schema):
-    """The Campaign Ads report provides insights into the performance of campaigns. It includes key metrics such as attachment quartiles, total view time of attachments, conversion rates, impressions, quartiles, spend, and total installs"""
+    """The Campaign Ads report provides insights into the performance of campaigns. It includes key metrics such as attachment quartiles, total view time of attachments, conversion rates, impressions, quartiles, spend, and total installs."""
 
     android_installs: int | None = Field(default=None, description="Number of installs on Android devices")
     attachment_avg_view_time_millis: int | None = Field(default=None, description="Average view time of attachments in milliseconds")

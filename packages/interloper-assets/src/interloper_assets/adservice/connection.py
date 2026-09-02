@@ -19,6 +19,11 @@ class AdserviceConnection(il.Connection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
+        """The Adtraction API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         base_url = "https://api.adservice.com/v2/client"
         auth = httpx.BasicAuth(username="api", password=self.api_key)
         return il.AsyncRESTClient(base_url, auth)

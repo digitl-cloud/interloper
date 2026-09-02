@@ -63,6 +63,14 @@ class BigQueryDestination(DatabaseDestination):
 
     @cached_property
     def client(self) -> bigquery.Client:
+        """The BigQuery client every write goes through.
+
+        Built from the connection's service-account key when there is one,
+        else from ambient credentials (workload identity in-cluster).
+
+        Returns:
+            The client, cached per destination instance.
+        """
         if self.connection and self.connection.service_account_key:
             key_info = json.loads(self.connection.service_account_key)
             credentials = service_account.Credentials.from_service_account_info(key_info)
@@ -522,6 +530,7 @@ class BigQueryDestination(DatabaseDestination):
     # -- Lifecycle -------------------------------------------------------------
 
     def dispose(self) -> None:
+        """Close the BigQuery client, if one was ever built."""
         if self.client:
             self.client.close()
 
@@ -543,6 +552,9 @@ def _schema_to_bq_fields(schema: type[Schema]) -> list[bigquery.SchemaField]:
 
 def _specs_to_bq_fields(specs: list[FieldSpec] | tuple[FieldSpec, ...]) -> list[bigquery.SchemaField]:
     """Map field specs to BigQuery field definitions.
+
+    Args:
+        specs: The field specs to map.
 
     Returns:
         One ``SchemaField`` per spec, carrying the spec's description.
@@ -567,6 +579,9 @@ def _asset_description(asset: Any) -> str | None:
     """Return the asset's description (its class docstring), cleaned.
 
     This mirrors how ``Component.definition()`` derives descriptions.
+
+    Args:
+        asset: The asset whose docstring is read.
 
     Returns:
         The cleaned docstring, or ``None`` when the asset has none.
@@ -751,6 +766,9 @@ def _partition_param(
 def _iso_string(value: Any) -> str:
     """Render a bound as an ISO-8601 string for STRING-typed columns.
 
+    Args:
+        value: The bound to render.
+
     Returns:
         The ISO rendering of *value*.
     """
@@ -758,7 +776,15 @@ def _iso_string(value: Any) -> str:
 
 
 def _py_type_to_bq_type(py_type: Any) -> str:
-    """Map a Python *type* (from a FieldSpec) to a BigQuery column type."""
+    """Map a Python *type* (from a FieldSpec) to a BigQuery column type.
+
+    Args:
+        py_type: The declared Python type.
+
+    Returns:
+        The BigQuery column type name.
+
+    """
     if not isinstance(py_type, type):
         return "STRING"  # typing.Any or unresolvable annotations
     if issubclass(py_type, bool):
@@ -813,7 +839,15 @@ def _infer_bq_schema(rows: list[dict[str, Any]]) -> list[bigquery.SchemaField]:
 
 
 def _py_to_bq_type(value: Any) -> str:
-    """Infer a BigQuery field type from a Python value."""
+    """Infer a BigQuery field type from a Python value.
+
+    Args:
+        value: The value to inspect.
+
+    Returns:
+        The inferred BigQuery field type name.
+
+    """
     if isinstance(value, bool):
         return "BOOLEAN"
     if isinstance(value, int):
@@ -832,7 +866,15 @@ def _py_to_bq_type(value: Any) -> str:
 
 
 def _bq_to_py_type(value: Any) -> str:
-    """Map a Python value to a BigQuery query parameter type."""
+    """Map a Python value to a BigQuery query parameter type.
+
+    Args:
+        value: The parameter value.
+
+    Returns:
+        The BigQuery query-parameter type name.
+
+    """
     if isinstance(value, bool):
         return "BOOL"
     if isinstance(value, int):

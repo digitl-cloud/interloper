@@ -19,6 +19,11 @@ class LinkedinAdsConnection(il.RefreshTokenOAuthConnection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
+        """The LinkedIn Ads API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         client = il.AsyncRESTClient(
             constants.BASE_URL,
             auth=il.OAuth2RefreshTokenAuth(
@@ -45,6 +50,10 @@ class LinkedinAdsConnection(il.RefreshTokenOAuthConnection):
         Backs the source's ``account_id`` ``FetchField``. Reuses ``self.client``
         (same base URL, version and Rest.li headers as the assets) and paginates
         the Marketing API over offset/count.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         paginator = il.OffsetPaginator(
             limit=100,

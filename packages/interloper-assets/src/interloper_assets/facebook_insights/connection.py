@@ -42,6 +42,10 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
         over the lightweight ``AsyncRESTClient`` (not the SDK) so it runs in the
         API process. The ``refresh_token`` field holds a long-lived access token,
         used directly as the bearer for ``GET /me/accounts``.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         pages: list[dict[str, str]] = []
         path: str | None = "/v21.0/me/accounts"

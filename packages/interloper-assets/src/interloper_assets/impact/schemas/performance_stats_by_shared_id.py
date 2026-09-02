@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class PerformanceStatsBySharedId(Schema):
-    """Performance report summarizing metrics by partner shared ID"""
+    """Performance report summarizing metrics by partner shared ID."""
 
     media: str | None = Field(default=None, description="Media (partner) name")
     shared_id: str | None = Field(default=None, description="Partner shared ID")

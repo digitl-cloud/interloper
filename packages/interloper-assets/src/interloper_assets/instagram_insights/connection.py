@@ -43,6 +43,10 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
         ``instagram_business_account`` (Pages without one are skipped). Talks to the
         Graph API over the lightweight ``AsyncRESTClient`` (not the SDK) so it runs
         in the API process.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         params = {
             "fields": "instagram_business_account{id,username,name},name",

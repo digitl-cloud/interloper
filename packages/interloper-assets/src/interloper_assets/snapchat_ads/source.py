@@ -39,6 +39,14 @@ class SnapchatStatsNormalizer(DataFrameNormalizer):
     """
 
     def normalize(self, data: Any) -> pd.DataFrame:
+        """Reshape the vendor payload before the standard normalization.
+
+        Args:
+            data: The rows as the API returned them.
+
+        Returns:
+            The normalized frame.
+        """
         records = data.to_dict("records") if isinstance(data, pd.DataFrame) else data
         df = pd.json_normalize(records, sep="_")
         if df.empty:
