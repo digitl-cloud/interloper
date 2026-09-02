@@ -119,7 +119,12 @@ class ComponentUpdateRequest(BaseModel):
 
 
 class ComponentResponse(BaseModel):
-    """Response body for a component of any kind."""
+    """Response body for a component of any kind.
+
+    A secret kind whose payload does not decrypt carries ``status``
+    ``unreadable`` and no ``config`` at all, rather than a subset that was
+    never read.
+    """
 
     id: UUID
     org_id: UUID
@@ -147,11 +152,15 @@ class ComponentResponse(BaseModel):
     ) -> ComponentResponse:
         """Convert a component row to its response model.
 
-        ``status`` is the catalog-resolution state (drift detection), derived from
-        the same resolver hydration uses. Secret kinds expose their decoded
-        payload as ``config`` only when *include_config* is set (detail
-        responses); otherwise ``config`` carries just the schema's ``x-public``
-        subset (operational fields such as a connection's ``auto_renew``).
+        ``status`` is the usability state hydration gates on: catalog resolution
+        (drift detection) plus, for an encrypted row, whether its payload
+        decrypts. Secret kinds expose their decoded payload as ``config`` only
+        when *include_config* is set (detail responses); otherwise ``config``
+        carries just the schema's ``x-public`` subset (operational fields such
+        as a connection's ``auto_renew``). An ``unreadable`` row carries no
+        ``config`` either way: the reason rides its ``status``, so the
+        collection still lists and the UI can say what is wrong instead of the
+        request failing over one row.
 
         Args:
             row: The component row to convert.
@@ -168,7 +177,12 @@ class ComponentResponse(BaseModel):
 
         config: dict[str, Any] | None = row.config
         if KINDS[row.kind].sensitive:
-            config = store.components.decode_config(row) if include_config else store.components.public_config(row)
+            if status is ComponentStatus.UNREADABLE:
+                config = None
+            elif include_config:
+                config = store.components.decode_config(row)
+            else:
+                config = store.components.public_config(row)
 
         return cls(
             id=row.id,

@@ -10,7 +10,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from interloper.catalog.base import Catalog
-from interloper.errors import ComponentDriftError, NotFoundError, QuotaExceededError
+from interloper.errors import ComponentDriftError, HydrationError, NotFoundError, QuotaExceededError
 from interloper_db import Store
 
 from interloper_api.dependencies import (
@@ -87,6 +87,25 @@ async def _component_drift(_request: Request, exception: ComponentDriftError) ->
     return JSONResponse(status_code=409, content={"detail": str(exception)})
 
 
+async def _hydration_failed(_request: Request, exception: HydrationError) -> JSONResponse:
+    """Render an unreadable stored record as a conflict rather than a 500.
+
+    A record that cannot be rebuilt from the database (a payload the active
+    ``INTERLOPER_ENCRYPTION_KEY`` cannot decrypt, a stored config the class no
+    longer accepts) stays broken until an operator re-keys or rewrites it, so
+    like drift it surfaces as a 409 carrying the reason instead of an opaque
+    500 that only the server log explains.
+
+    Args:
+        _request: The incoming request, unused.
+        exception: The raised :class:`HydrationError`.
+
+    Returns:
+        A 409 response carrying the exception message as ``detail``.
+    """
+    return JSONResponse(status_code=409, content={"detail": str(exception)})
+
+
 async def _quota_exceeded(_request: Request, exception: QuotaExceededError) -> JSONResponse:
     """Render store-level quota enforcement as a 429 with structured context.
 
@@ -116,6 +135,7 @@ async def _quota_exceeded(_request: Request, exception: QuotaExceededError) -> J
 _ERROR_HANDLERS: dict[type[Exception], Any] = {
     NotFoundError: _not_found,
     ComponentDriftError: _component_drift,
+    HydrationError: _hydration_failed,
     QuotaExceededError: _quota_exceeded,
 }
 

@@ -1,12 +1,15 @@
-"""Whether a stored component key still resolves against the catalog.
+"""Whether this deployment can still use a stored component.
 
 A key that no longer resolves means the class was renamed, removed, or is
-shipped by a package this deployment does not install. That is reported as a
-value rather than raised, so the UI can show a stale component instead of
-failing to load the page.
+shipped by a package this deployment does not install. A payload the active
+encryption key cannot decrypt means the row survives but its config does not.
+Either way the component is persisted and unusable until someone acts, so it
+is reported as a value rather than raised, and the UI can show a stale or
+unreadable component instead of failing to load the page.
 
-These resolve bare keys. The row-level question ("what is this component's
-status?") belongs to the component facet, which calls through to here.
+The functions here resolve bare keys against the catalog. Readability is a
+row-level question, so it belongs with the row-level status in the component
+facet, which calls through to here for the catalog half.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from interloper.errors import CatalogKeyError
 
 
 class ComponentStatus(str, Enum):
-    """Resolution state of a persisted component against the catalog."""
+    """Usability state of a persisted component in this deployment."""
 
     OK = "ok"
     """Key resolves in the enabled catalog — the component is live."""
@@ -29,6 +32,11 @@ class ComponentStatus(str, Enum):
 
     MISSING = "missing"
     """Key no longer exists in code at all — this is drift."""
+
+    UNREADABLE = "unreadable"
+    """Key resolves, but the stored payload does not decrypt under the active
+    ``INTERLOPER_ENCRYPTION_KEY`` (rotated, mismatched, or absent). The row is
+    intact; its config has to be re-entered or re-keyed."""
 
 
 def source_status(
