@@ -206,7 +206,9 @@ runner:
   type: async
   config: {}
 
-# Catalog: list of dotted import paths for sources, assets, destinations.
+# Catalog: dotted import paths of the sources, destinations and hooks this
+# deployment enables. Their connections and configs come along automatically;
+# leave the list empty to enable every component the images ship.
 catalog: []
 # - interloper_assets.demo.source.DemoSource
 # - interloper_google_cloud.BigQueryDestination

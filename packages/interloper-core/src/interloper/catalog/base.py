@@ -9,17 +9,20 @@ Registration is two entry-point groups, and nothing else:
   (core declares ``cron_job``/``trigger_hook``/``webhook_hook`` here, the
   same way ``interloper-assets`` declares its connectors).
 
-Every catalog contains the full declared universe — installation is the
-opt-in. The ``AppSettings.catalog`` import paths *add* components that are
-not shipped as entry points (e.g. local deployment-specific classes); they
-never narrow. Kind anchors are framework, not content: they live in the
-registry and never appear in the catalog.
+Installation defines the *declared universe*; ``AppSettings.catalog``
+narrows it to what a deployment *enables*. An enabled catalog holds the
+configured components, everything they depend on (their resources and, for
+sources, their assets' resources and destinations, transitively) and the
+framework's own components (the ``interloper`` package's jobs and hooks,
+present in every catalog). No configured paths means the whole universe.
+Kind anchors are framework, not content: they live in the registry and never
+appear in the catalog.
 
 Usage::
 
     import interloper as il
 
-    catalog = il.Catalog.from_settings()   # universe + configured extras
+    catalog = il.Catalog.from_settings()   # the enabled subset, or the universe
     catalog = il.Catalog.discover()        # the declared universe
 """
 
@@ -129,15 +132,17 @@ class Catalog(BaseModel):
 
     @classmethod
     def from_paths(cls, paths: list[str]) -> Catalog:
-        """Build a catalog from import paths, plus the declared universe.
+        """Build a catalog enabling the components at *paths*.
 
         Args:
-            paths: Fully qualified import paths to additional component
-                classes (e.g. local components not shipped as entry points,
-                or a ``to_paths()`` list crossing a process boundary).
+            paths: Fully qualified import paths to the enabled component
+                classes — a deployment's ``catalog`` setting, or a
+                ``to_paths()`` list crossing a process boundary. Paths that
+                fail to import are skipped with a warning.
 
         Returns:
-            Catalog of all component definitions.
+            Catalog of the listed components, their dependencies and the
+            framework's own components.
         """
         from interloper.utils.imports import import_from_path
 
@@ -151,34 +156,39 @@ class Catalog(BaseModel):
             if isinstance(loaded, type) and issubclass(loaded, Component):
                 classes.append(loaded)
 
-        return cls(components=cls._with_declared(cls._definitions_from(classes)))
+        return cls.from_assets(classes)
 
     @classmethod
     def from_settings(cls) -> Catalog:
-        """Load the catalog, adding any ``AppSettings.catalog`` import paths.
+        """Load the catalog a deployment enables.
 
-        The declared universe is always present; the configured paths add
-        components that are not shipped as entry points (e.g. local
-        deployment-specific classes).
+        ``AppSettings.catalog`` lists the enabled import paths; when it is
+        empty, the catalog is the whole declared universe.
 
         Returns:
-            Catalog of all component definitions.
+            Catalog of all enabled component definitions.
         """
         settings = AppSettings.get()
-        return cls.from_paths(settings.catalog or [])
+        if settings.catalog:
+            return cls.from_paths(settings.catalog)
+        return cls.discover()
 
     @classmethod
-    def from_assets(cls, sources_or_assets: list[type[Source | Asset]]) -> Catalog:
-        """Load catalog from a list of asset classes.
+    def from_assets(cls, sources_or_assets: Iterable[type[Component]]) -> Catalog:
+        """Build a catalog enabling the given component classes.
 
         Args:
-            sources_or_assets: Source or asset classes to define, added to the
-                declared universe.
+            sources_or_assets: The enabled component classes — typically
+                sources and assets, but any component kind is accepted.
 
         Returns:
-            Catalog of all component definitions.
+            Catalog of the given components, their dependencies and the
+            framework's own components.
         """
-        return cls(components=cls._with_declared(cls._definitions_from(sources_or_assets)))
+        definitions = cls._definitions_from(cls._with_dependencies(sources_or_assets))
+        for key, definition in cls._framework_definitions().items():
+            definitions.setdefault(key, definition)
+        return cls(components=definitions)
 
     @classmethod
     def discover(cls) -> Catalog:
@@ -191,7 +201,7 @@ class Catalog(BaseModel):
         Returns:
             Catalog of every component declared by every installed package.
         """
-        return cls.from_paths([])
+        return cls(components=dict(cls._declared_definitions()))
 
     # -- Discovery internals ---------------------------------------------------
     @classmethod
@@ -215,6 +225,53 @@ class Catalog(BaseModel):
             elif isinstance(loaded, type) and issubclass(loaded, Component):
                 classes.append(loaded)
         return tuple(classes)
+
+    @classmethod
+    def _with_dependencies(cls, components: Iterable[type[Component]]) -> list[type[Component]]:
+        """Close *components* over what they depend on.
+
+        A component's dependencies are its resource classes and, for an asset,
+        its destination classes. A source's assets are not catalog entries
+        (they are reached through their source), but their dependencies are
+        the source's too. The walk is transitive (a connection's own resources
+        come along), so the catalog never carries a relation slot whose key it
+        cannot resolve.
+
+        Args:
+            components: The explicitly enabled component classes.
+
+        Returns:
+            The enabled classes followed by their dependencies, each once, in
+            discovery order.
+        """
+        closed: list[type[Component]] = []
+        pending = list(components)
+        while pending:
+            component = pending.pop(0)
+            if component in closed:
+                continue
+            closed.append(component)
+            pending.extend(cls._dependencies_of(component))
+            if issubclass(component, Source):
+                for asset_type in component.asset_types:
+                    pending.extend(cls._dependencies_of(asset_type))
+        return closed
+
+    @classmethod
+    def _dependencies_of(cls, component: type[Component]) -> list[type[Component]]:
+        """The component classes *component* directly depends on.
+
+        Args:
+            component: The class whose declared resource (and, for an asset,
+                destination) classes are wanted.
+
+        Returns:
+            The direct dependencies, resources first.
+        """
+        dependencies: list[type[Component]] = list(component.resource_types.values())
+        if issubclass(component, Asset):
+            dependencies.extend(component.destination_types)
+        return dependencies
 
     @classmethod
     def _definitions_from(cls, components: Iterable[type[Component]]) -> dict[str, ComponentDefinition]:
@@ -258,19 +315,17 @@ class Catalog(BaseModel):
         return cls._definitions_from(cls._declared_classes())
 
     @classmethod
-    def _with_declared(cls, definitions: dict[str, ComponentDefinition]) -> dict[str, ComponentDefinition]:
-        """Ensure the declared universe is present.
+    @cache
+    def _framework_definitions(cls) -> dict[str, ComponentDefinition]:
+        """Definitions of the framework's own declared components (cached).
 
-        Every catalog contains every component the installed packages declare —
-        installation is the opt-in. Explicitly provided definitions win over
-        declared ones with the same key.
-
-        Args:
-            definitions: The explicitly provided definitions, mutated in place.
+        The framework is the ``interloper`` package: its declarations (jobs,
+        hooks) are infrastructure every deployment runs on, not content a
+        deployment curates, so they are present in every catalog.
 
         Returns:
-            The same mapping, with any missing declared definitions added.
+            Mapping from component key to definition.
         """
-        for key, definition in cls._declared_definitions().items():
-            definitions.setdefault(key, definition)
-        return definitions
+        return cls._definitions_from(
+            component for component in cls._declared_classes() if component.__module__.partition(".")[0] == "interloper"
+        )

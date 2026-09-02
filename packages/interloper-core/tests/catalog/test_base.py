@@ -26,7 +26,7 @@ class TestDiscovery:
 
 
 class TestFromSettings:
-    """Explicit settings paths are the enablement list; discovery is the fallback."""
+    """Configured paths are the enablement list; discovery is the fallback."""
 
     def test_empty_settings_fall_back_to_discovery(self, monkeypatch):
         stub = AppSettings.model_construct(catalog=[])
@@ -34,25 +34,40 @@ class TestFromSettings:
         catalog = Catalog.from_settings()
         assert "amazon_ads" in catalog.components
 
+    def test_configured_paths_narrow(self, monkeypatch):
+        stub = AppSettings.model_construct(catalog=["interloper_assets.demo.source.DemoSource"])
+        monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
+        catalog = Catalog.from_settings()
+        assert "demo_source" in catalog.components
+        assert "amazon_ads" not in catalog.components
 
-class TestDeclaredUniverse:
-    """Every catalog contains the declared universe; anchors never appear."""
+
+class TestEnablement:
+    """An enabled catalog is the listed classes, their dependencies and the framework."""
 
     def test_universe_in_discovery(self):
         components = Catalog.discover().components
         assert {"cron_job", "trigger_hook", "webhook_hook", "demo_source"} <= set(components)
 
-    def test_configured_paths_add_rather_than_narrow(self, monkeypatch):
-        stub = AppSettings.model_construct(catalog=["interloper_assets.demo.source.DemoSource"])
-        monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
-        catalog = Catalog.from_settings()
-        assert "cron_job" in catalog.components
+    def test_framework_in_every_catalog(self):
+        components = Catalog.from_paths([]).components
+        assert {"cron_job", "trigger_hook", "webhook_hook"} <= set(components)
+        assert "job" not in components  # the anchor is framework, not content
+        assert "demo_source" not in components  # content is opt-in
+
+    def test_dependencies_come_along(self):
+        catalog = Catalog.from_paths(["interloper_google_cloud.BigQueryDestination"])
+        assert "bigquery_destination" in catalog.components
+        assert "google_cloud_connection" in catalog.components
+        assert "gcs_destination" not in catalog.components
+
+    def test_unimportable_paths_are_skipped(self):
+        catalog = Catalog.from_paths(["not_a_module.Nope", "interloper_assets.demo.source.DemoSource"])
         assert "demo_source" in catalog.components
 
-    def test_universe_in_empty_catalog(self):
-        components = Catalog.from_paths([]).components
-        assert "cron_job" in components
-        assert "job" not in components  # the anchor is framework, not content
+    def test_paths_round_trip(self):
+        enabled = Catalog.from_paths(["interloper_google_cloud.BigQueryDestination"])
+        assert Catalog.from_paths(enabled.to_paths()).components.keys() == enabled.components.keys()
 
 
 class TestKindContract:

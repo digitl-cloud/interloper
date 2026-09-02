@@ -328,8 +328,8 @@ class AdminConfigResponse(BaseModel):
         Every exposed field is hand-picked here (allowlist, not blocklist), so new
         settings fields default to *not exposed* and secrets only ever surface as
         "configured" booleans. The catalog is reported from the hydrated ``Catalog``
-        (auto-discovered universe + configured extras), not ``settings.catalog``,
-        which only holds the explicitly configured import paths.
+        (the enabled components, their dependencies and the framework's own), not
+        ``settings.catalog``, which only holds the explicitly configured import paths.
 
         Args:
             settings: The instance settings the snapshot reads from.
