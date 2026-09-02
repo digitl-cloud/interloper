@@ -46,6 +46,10 @@ _TERMINAL_STATUSES = frozenset(_TERMINAL_EVENT_TYPES)
 def _claim_id(hook_id: UUID, run_id: UUID) -> str:
     """Deterministic event id for one hook firing on one run.
 
+    Args:
+        hook_id: The hook component's id.
+        run_id: The run that fired it.
+
     Returns:
         The uuid5-derived id string.
     """
@@ -101,7 +105,12 @@ class HookController(Controller):
         self._watermark = now
 
     def _evaluate(self, session: Session, run: Run) -> None:
-        """Fire every unclaimed, matching hook for one terminal run."""
+        """Fire every unclaimed, matching hook for one terminal run.
+
+        Args:
+            session: Open session the evaluation is made through.
+            run: The terminal run being reacted to.
+        """
         if run.component_id is None or run.status not in _TERMINAL_STATUSES:
             return
         event_type = _TERMINAL_EVENT_TYPES[run.status]
@@ -128,6 +137,12 @@ class HookController(Controller):
 
     def _event_metadata(self, session: Session, run: Run, target: Component, event_type: str) -> dict[str, Any]:
         """Describe the event for the hooks about to see it.
+
+        Args:
+            session: Open session the target's parent is resolved through.
+            run: The terminal run the event describes.
+            target: The run's component.
+            event_type: The hook event type the run's status produced.
 
         The ids in the context are the machine-readable half; this is the half
         a hook addressing humans (a Slack message) renders, so it carries the
@@ -157,6 +172,11 @@ class HookController(Controller):
     def _matching_hooks(self, session: Session, run: Run, target: Component) -> list[Component]:
         """Hooks watching *target* (the run's component) or its parent.
 
+        Args:
+            session: Open session the hooks are read through.
+            run: The terminal run, scoping the search to its organisation.
+            target: The run's component.
+
         Returns:
             The matching hook rows.
         """
@@ -184,8 +204,18 @@ class HookController(Controller):
         metadata: dict[str, Any],
         claim: str,
     ) -> None:
-        """Fire one hook and record the outcome on its claim."""
-        watched_ids = {str(w.id) for w in hook.watches}
+        """Fire one hook and record the outcome on its claim.
+
+        Args:
+            session: Open session the claim is written through.
+            hook_row: The hook's component row, carrying its state.
+            hook: The hydrated hook to fire.
+            run: The terminal run that triggered it.
+            event_type: The hook event type the run's status produced.
+            metadata: Event metadata recorded on the claim.
+            claim: Deterministic claim id, making the firing idempotent.
+        """
+        watched_ids = {str(watch.id) for watch in hook.watches}
         context = il.HookContext(
             event_type=event_type,
             component_id=str(run.component_id),
@@ -201,7 +231,7 @@ class HookController(Controller):
             logger.info("Hook '%s' fired for run %s (%s)", hook_row.name, run.id, event_type)
         except Exception as e:
             error = str(e)
-            logger.exception("Hook '%s' failed for run %s: %s", hook_row.name, run.id, e)
+            logger.exception("Hook '%s' failed for run %s", hook_row.name, run.id)
 
         outcome = il.EventType.HOOK_FAILED if error else il.EventType.HOOK_FIRED
         self._store.events.save(
@@ -228,6 +258,12 @@ class HookController(Controller):
 
     def _trigger(self, session: Session, run: Run, component_id: str, watched_ids: set[str]) -> None:
         """The trigger capability handed to hooks: queue a run for a component.
+
+        Args:
+            session: Open session the run is created through.
+            run: The terminal run that triggered the hook.
+            component_id: The component the hook asks to run.
+            watched_ids: Ids the hook watches, which bound what it may trigger.
 
         The originating run's partition date is propagated, so cascading
         pipelines stay on the same partition. Triggering a component the

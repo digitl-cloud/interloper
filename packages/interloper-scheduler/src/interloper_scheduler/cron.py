@@ -94,12 +94,12 @@ class CronController(Controller):
 
             for job in jobs:
                 config = job.config or {}
-                cron_expr = config.get("cron")
-                if not cron_expr:
+                cron_expression = config.get("cron")
+                if not cron_expression:
                     continue
 
                 zone = self._job_zone(job, config)
-                next_run = self._calculate_next_run(cron_expr, now, zone)
+                next_run = self._calculate_next_run(cron_expression, now, zone)
                 scheduled_time = self._state_datetime(job, "next_run_at")
 
                 # New job: schedule for the future, don't run yet
@@ -184,6 +184,8 @@ class CronController(Controller):
             session.commit()
             logger.info("Processed %d job(s)", len(jobs))
 
+    # -- Internals -------------------------------------------------------------
+
     def _backfill_window(
         self,
         session: Session,
@@ -203,12 +205,18 @@ class CronController(Controller):
         to UTC inside the window arithmetic (see
         :meth:`TimePartitionWindow.lookback`).
 
+        Resolving the granularity fails loudly when a job's targets disagree
+        on one, since a window would be wrong for some of them.
+
+        Args:
+            session: Open session the targets are resolved in.
+            job: The job row being evaluated.
+            config: The job's raw config payload.
+            now: The tick instant, on the job's wall clock.
+
         Returns:
             The window, or ``None`` for an unpartitioned job (or one whose
             lookback is explicitly null).
-
-        Raises:
-            ValueError: If the targets disagree on granularity.
         """
         # A missing key means the model default (1); an explicit null opts out.
         lookback = config.get("lookback", 1)
@@ -226,7 +234,16 @@ class CronController(Controller):
 
     @staticmethod
     def _state_datetime(job: Component, key: str) -> datetime | None:
-        """Parse a UTC ISO-8601 timestamp from a job's state."""
+        """Parse a UTC ISO-8601 timestamp from a job's state.
+
+        Args:
+            job: The job row whose state is read.
+            key: State key holding the timestamp.
+
+        Returns:
+            The timestamp as an aware UTC datetime, or ``None`` when the key
+            is absent or empty.
+        """
         value = (job.state or {}).get(key)
         if not value:
             return None
@@ -235,7 +252,13 @@ class CronController(Controller):
 
     @staticmethod
     def _set_state(session: Session, job: Component, **timestamps: datetime) -> None:
-        """Merge timestamps into the job's machine-owned state (spec untouched)."""
+        """Merge timestamps into the job's machine-owned state (spec untouched).
+
+        Args:
+            session: Open session the write joins.
+            job: The job row to stamp.
+            **timestamps: State fields to set, merged over the existing payload.
+        """
         job.stamp_state(**timestamps)
         session.add(job)
         session.flush()
@@ -248,6 +271,10 @@ class CronController(Controller):
         reads raw dicts — an unresolvable name (e.g. after a tzdata change)
         must degrade to UTC rather than wedge the whole tick.
 
+        Args:
+            job: The job row, named in the warning when its zone is unknown.
+            config: The job's raw config payload.
+
         Returns:
             The job's zone, or UTC when the config carries none.
         """
@@ -258,7 +285,7 @@ class CronController(Controller):
             logger.warning("Job '%s' has an unknown timezone %r - evaluating in UTC", job.name, name)
             return timezone.utc
 
-    def _calculate_next_run(self, cron_expr: str, base_time: datetime, zone: tzinfo) -> datetime:
+    def _calculate_next_run(self, cron_expression: str, base_time: datetime, zone: tzinfo) -> datetime:
         """Calculate the next run time from a cron expression.
 
         The expression is read on the wall clock of *zone* (croniter handles
@@ -267,15 +294,15 @@ class CronController(Controller):
         UTC — state storage stays UTC everywhere.
 
         Args:
-            cron_expr: Cron expression string.
+            cron_expression: Cron expression string.
             base_time: The reference time.
             zone: The timezone the expression is evaluated in.
 
         Returns:
             The next scheduled datetime (UTC).
         """
-        itr = croniter(cron_expr, base_time.astimezone(zone))
-        next_run = cast(datetime, itr.get_next(datetime))
+        iterator = croniter(cron_expression, base_time.astimezone(zone))
+        next_run = cast(datetime, iterator.get_next(datetime))
         if next_run.tzinfo is None:
             next_run = next_run.replace(tzinfo=zone)
         return next_run.astimezone(timezone.utc)

@@ -34,7 +34,11 @@ class _FakeLauncher(Launcher):
 
 @pytest.fixture
 def store() -> Iterator[Store]:
-    """A store over an in-memory database with the run tables."""
+    """A store over an in-memory database with the run tables.
+
+    Yields:
+        The store bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -115,7 +119,7 @@ def test_empty_tick_emits_no_launch_spans(store: Store, span_exporter: Any) -> N
     assert not [s for s in span_exporter.get_finished_spans() if s.name == "interloper.launcher.launch"]
 
 
-# -- Run quota at dispatch ------------------------------------------------------
+# -- Run quota at dispatch -----------------------------------------------------
 
 
 def _exhaust_quota(store: Store, limit: int = 1) -> None:

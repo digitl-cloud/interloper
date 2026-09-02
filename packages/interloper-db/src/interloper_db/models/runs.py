@@ -1,7 +1,7 @@
 """Operation runs, the backfills that batch them, and the events they emit."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar, Optional
+from typing import Any, ClassVar, Optional
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Index
@@ -9,9 +9,7 @@ from sqlmodel import Column, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
 from interloper_db.models.columns import PortableJSON, TZDateTime, timestamp_column
-
-if TYPE_CHECKING:
-    from interloper_db.models.components import Component
+from interloper_db.models.components import Component
 
 
 class Backfill(SQLModel, table=True):
@@ -96,6 +94,36 @@ class Run(SQLModel, table=True):
 
     backfill: Backfill | None = Relationship(back_populates="runs")
     target: Optional["Component"] = Relationship()
+
+    def event_metadata(self, target: Component | None) -> dict[str, Any]:
+        """This run's ids plus its target's identity, for the events it emits.
+
+        The runner spreads this into every event it emits. The ``target_*``
+        keys have no structured column on ``events`` — they land in each
+        event's ``data``, making events self-describing for telemetry (which
+        component the run executed, under what name at the time) without a
+        join back through ``runs``.
+
+        Args:
+            target: The component this run targets, or None when it no longer
+                resolves.
+
+        Returns:
+            The metadata dict.
+        """
+        metadata: dict[str, Any] = {
+            "run_id": str(self.id),
+            "backfill_id": str(self.backfill_id) if self.backfill_id else None,
+            "org_id": str(self.org_id),
+        }
+        if target is not None:
+            metadata |= {
+                "target_id": str(target.id),
+                "target_kind": target.kind,
+                "target_key": target.key,
+                "target_name": target.name,
+            }
+        return metadata
 
 
 class Event(SQLModel, table=True):

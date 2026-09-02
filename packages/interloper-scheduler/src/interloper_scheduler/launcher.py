@@ -170,6 +170,14 @@ class InProcessLauncher(Launcher):
     ) -> InProcessLauncher:
         """Construct from settings; uses only the runner config and the shared store.
 
+        Args:
+            settings: The launcher settings block, unused by this launcher.
+            postgres: Postgres settings, unused: the store is shared in-process.
+            runner: Runner settings the executor's runner is built from.
+            catalog: Catalog the store hydrates against.
+            store: An existing Store to reuse. Defaults to ``None``, which
+                builds one from settings.
+
         Returns:
             The configured in-process launcher.
         """
