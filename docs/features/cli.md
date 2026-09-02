@@ -103,8 +103,8 @@ dag.materialize(partition_or_window=il.TimePartition(...))
 
 A repository-root `interloper.yaml` configures a deployed instance: the Postgres connection, the
 default runner and launcher, the server/cron/worker/reaper services, and the **catalog** — the
-list of component import paths to enable. Every field also has an `INTERLOPER_*` environment
-variable equivalent.
+list of component import paths to enable (omit it to enable everything installed). Every field
+also has an `INTERLOPER_*` environment variable equivalent.
 
 ```yaml
 runner:

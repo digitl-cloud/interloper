@@ -291,7 +291,10 @@ class AppSettings(BaseSettings):
     runner: RunnerSettings = Field(default_factory=RunnerSettings)
     otel: TelemetrySettings = Field(default_factory=TelemetrySettings)
     quota: QuotaSettings = Field(default_factory=QuotaSettings)
-    catalog: list[str] = Field(default_factory=list)
+    catalog: list[str] = Field(
+        default_factory=list,
+        description="Import paths of the enabled components; empty enables everything installed",
+    )
 
     _active: ClassVar[AppSettings | None] = None
 

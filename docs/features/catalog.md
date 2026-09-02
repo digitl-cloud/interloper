@@ -16,8 +16,9 @@ from interloper_assets import DemoSource
 catalog = il.Catalog.from_assets([DemoSource])
 ```
 
-From a list of import paths (resources and destinations referenced by the components are
-discovered automatically):
+From a list of import paths — the components a deployment enables. Whatever they depend on
+(connections, configs, an asset's destinations) comes along, and so do the framework's own
+components (jobs, hooks), so nothing else needs listing:
 
 ```py
 catalog = il.Catalog.from_paths([
@@ -26,8 +27,8 @@ catalog = il.Catalog.from_paths([
 ])
 ```
 
-From application settings (the `catalog` list in [`interloper.yaml`](cli.md#interloperyaml),
-falling back to entry-point discovery):
+From application settings — the `catalog` list in [`interloper.yaml`](cli.md#interloperyaml)
+when one is configured, otherwise everything installed:
 
 ```py
 catalog = il.Catalog.from_settings()
