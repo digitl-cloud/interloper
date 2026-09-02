@@ -141,12 +141,15 @@ export default defineAppConfig({
       ]
     },
     // Design wizard drawer: 30px frame, 22px title, bordered header/footer.
+    // Only the body scrolls (the theme scrolls the whole container), so the
+    // header and the stepper's Back/Next footer stay pinned to the frame.
     drawer: {
       slots: {
-        container: 'p-[30px] pt-[26px] gap-6',
-        header: 'border-b border-default -mx-[30px] px-[30px] pb-5',
+        container: 'p-[30px] pt-[26px] gap-6 overflow-hidden',
+        header: 'shrink-0 border-b border-default -mx-[30px] px-[30px] pb-5',
         title: 'text-[22px] font-bold tracking-[-0.01em]',
-        footer: 'border-t border-default -mx-[30px] -mb-[30px] px-[30px] py-4'
+        body: 'flex-1 min-h-0 overflow-y-auto',
+        footer: 'shrink-0 border-t border-default -mx-[30px] -mb-[30px] px-[30px] py-4'
       },
       compoundVariants: [
         // Square edges: the theme rounds the drawer's inner edge per direction
