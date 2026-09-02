@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class PerformanceStatsByDomain(Schema):
-    """Performance report summarizing metrics by domain"""
+    """Performance report summarizing metrics by domain."""
 
     action_cost: float | None = Field(default=None, description="Cost associated with the actions")
     actions: int | None = Field(default=None, description="Number of actions taken")

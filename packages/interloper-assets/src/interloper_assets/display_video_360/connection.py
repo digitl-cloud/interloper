@@ -57,7 +57,12 @@ class DisplayVideo360Connection(il.Connection):
         )
 
     def _list_partners(self) -> list[dict[str, Any]]:
-        """Page through the partners accessible to the service account."""
+        """Page through the partners accessible to the service account.
+
+        Returns:
+            Every partner, across all pages.
+
+        """
         partners: list[dict[str, Any]] = []
         page_token: str | None = None
         while True:
@@ -70,7 +75,12 @@ class DisplayVideo360Connection(il.Connection):
 
     @il.fetch_field_provider
     async def partners(self) -> list[dict[str, str]]:
-        """Fetch the DV360 partners the service account has access to."""
+        """Fetch the DV360 partners the service account has access to.
+
+        Returns:
+            The options for the field's dropdown.
+
+        """
         partners = await asyncio.to_thread(self._list_partners)
         return [
             {

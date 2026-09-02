@@ -28,6 +28,7 @@ class FakeComponentStore:
     """Captures update calls; get returns the store's one row."""
 
     def __init__(self, store: "FakeStore"):
+        """Bind the fake facet to the store holding the row."""
         self._store = store
 
     def get(self, component_id: Any, *, kind: str | None = None) -> Any:
@@ -49,6 +50,7 @@ class FakeStore:
     """Presents the ``components`` facet the collection tools reach for."""
 
     def __init__(self, component: Any):
+        """Bind the fake store to the one component row it serves."""
         self.component = component
         self.update_kwargs: dict[str, Any] | None = None
         self.components = FakeComponentStore(self)

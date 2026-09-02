@@ -1,3 +1,5 @@
+"""Interloper Agent: the ADK multi-agent system and the tools it routes to."""
+
 import warnings
 
 with warnings.catch_warnings():
@@ -7,7 +9,7 @@ with warnings.catch_warnings():
     # no consumer of this package sees the noise — while a genuine use of the
     # deprecated class in our code would still warn at its own definition site.
     warnings.filterwarnings("ignore", message="BaseAgentConfig is deprecated", category=DeprecationWarning)
-    import google.adk.agents  # noqa: F401
+    import google.adk.agents
 
 from interloper_agent import agent
 from interloper_agent.context import init, set_catalog, set_store

@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class Clicks(Schema):
-    """Clicks report detailing various metrics and attributes related to clicks"""
+    """Clicks report detailing various metrics and attributes related to clicks."""
 
     ad_campaign: str | None = Field(default=None, description="Campaign associated with the advertisement")
     ad_group: str | None = Field(default=None, description="Group associated with the advertisement")

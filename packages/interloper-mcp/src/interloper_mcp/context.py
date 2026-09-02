@@ -35,7 +35,8 @@ def init_context(store: Store, catalog: Catalog) -> None:
         store: The Store every request queries.
         catalog: The catalog; dumped once — definitions don't change at runtime.
     """
-    global _store, _catalog_dump  # noqa: PLW0603
+    # One context per process: the MCP server serves a single deployment.
+    global _store, _catalog_dump
     _store = store
     _catalog_dump = catalog.dump()
 
@@ -71,12 +72,28 @@ def get_ctx() -> ToolkitContext:
 
 
 def _require_store() -> Store:
+    """The initialized store, or a loud failure.
+
+    Returns:
+        The process-wide Store.
+
+    Raises:
+        RuntimeError: If the context was never initialized.
+    """
     if _store is None:
         raise RuntimeError("MCP context not initialized. Call init_context() first.")
     return _store
 
 
 def _require_catalog() -> dict[str, Any]:
+    """The initialized catalog dump, or a loud failure.
+
+    Returns:
+        The serialized catalog every tool reads.
+
+    Raises:
+        RuntimeError: If the context was never initialized.
+    """
     if _catalog_dump is None:
         raise RuntimeError("MCP context not initialized. Call init_context() first.")
     return _catalog_dump

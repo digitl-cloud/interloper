@@ -33,6 +33,14 @@ class DisplayVideo360Normalizer(DataFrameNormalizer):
     """
 
     def column_name(self, name: str) -> str:
+        """Rewrite one vendor column name before the standard mapping.
+
+        Args:
+            name: The column name as the API returned it.
+
+        Returns:
+            The mapped column name.
+        """
         return super().column_name(name.replace("%", "pct"))
 
 
@@ -60,7 +68,12 @@ def _report_body(title: str, date: dt.date, dimensions: list[str], metrics: list
 
 
 def _wait_for_report(dbm_client: Any, query_id: str, report_id: str) -> dict:
-    """Poll a report until it reaches a terminal state; return its final payload."""
+    """Poll a report until it reaches a terminal state; return its final payload.
+
+    Raises:
+        RuntimeError: If the report fails, or does not finish in time.
+
+    """
     deadline = time.monotonic() + _REPORT_TIMEOUT
     interval = float(constants.MIN_RETRY_INTERVAL)
     while True:
@@ -125,7 +138,7 @@ def _get_report(
         # One-shot queries; clean up best-effort so they don't pile up.
         try:
             dbm_client.queries().delete(queryId=query_id).execute()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — cleanup only; the data is already downloaded
             logger.warning(f"Failed to delete query {query_id}: {exc}")
 
 
@@ -268,7 +281,12 @@ class DisplayVideo360(il.Source):
     def custom_audiences(
         self, context: il.ExecutionContext, connection: DisplayVideo360Connection
     ) -> list[_Record]:
-        """Detail of the configured audience, including per-surface audience sizes."""
+        """Detail of the configured audience, including per-surface audience sizes.
+
+        Raises:
+            ValueError: If the source carries no audience id.
+
+        """
         if not self.audience_id:
             raise ValueError("The custom_audiences asset requires the source's audience_id to be set")
         audience = (

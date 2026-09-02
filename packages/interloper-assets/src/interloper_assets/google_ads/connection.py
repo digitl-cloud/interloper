@@ -60,6 +60,11 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
 
     @cached_property
     def client(self) -> "GoogleAdsClient":
+        """The Google Ads SDK client every caller shares.
+
+        Returns:
+            The initialised client, cached per connection instance.
+        """
         from google.ads.googleads.client import GoogleAdsClient
 
         config = {
@@ -74,7 +79,12 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
 
     @il.fetch_field_provider
     async def customers(self) -> list[dict[str, str]]:
-        """Fetch Google Ads customer accounts accessible by this connection."""
+        """Fetch Google Ads customer accounts accessible by this connection.
+
+        Returns:
+            The options for the field's dropdown.
+
+        """
         async with httpx.AsyncClient(timeout=30) as client:
             # Exchange the refresh token for an access token.
             token_resp = await client.post(

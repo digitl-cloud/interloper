@@ -66,6 +66,10 @@ def _resolve_stdio_org(store: Store, token: str, org_id: str) -> UUID:
 
     Returns:
         The organisation UUID to scope all tool calls to.
+
+    Raises:
+        SystemExit: If the token is invalid, expired or revoked, or if
+            neither environment variable is set.
     """
     if token:
         resolved = store.tokens.resolve(token)

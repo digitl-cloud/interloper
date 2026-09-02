@@ -1,3 +1,5 @@
+"""Pre-built source definitions: one connector per vendor, re-exported here."""
+
 from interloper_assets.adservice.source import Adservice, AdserviceConnection
 from interloper_assets.adup.source import Adup, AdupConnection
 from interloper_assets.amazon_ads.connection import AmazonAdsAPILocation, AmazonAdsConnection
@@ -34,8 +36,8 @@ __all__ = [
     "Adup",
     "AdupConnection",
     "AmazonAds",
-    "AmazonAdsConnection",
     "AmazonAdsAPILocation",
+    "AmazonAdsConnection",
     "AmazonSellingPartner",
     "AmazonSellingPartnerConnection",
     "Awin",
@@ -51,7 +53,6 @@ __all__ = [
     "CriteoConnection",
     "DemoMonthlySource",
     "DemoSource",
-    "demo_asset",
     "DisplayVideo360",
     "DisplayVideo360Connection",
     "FacebookAds",
@@ -85,4 +86,5 @@ __all__ = [
     "TiktokAdsConnection",
     "Usercentrics",
     "UsercentricsConnection",
+    "demo_asset",
 ]

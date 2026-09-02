@@ -31,6 +31,13 @@ def with_current_time(instruction: str) -> Callable[[ReadonlyContext], str]:
 
     The model has no reliable notion of "now", so without this the relative
     timestamps the presentation rules ask for drift to its training data.
+
+    Args:
+        instruction: The static instruction the provider decorates.
+
+    Returns:
+        A provider the ADK calls per turn.
+
     """
 
     def provider(_: ReadonlyContext) -> str:
@@ -46,6 +53,10 @@ def resolve_model(name: str | None = None) -> str | BaseLlm:
     Bare names (``gemini-2.5-flash``) are native Gemini models; names with a
     provider prefix (``anthropic/claude-sonnet-4-5``) are routed through
     LiteLLM, which reads the provider's standard credential env vars.
+
+    Returns:
+        The model name for a Gemini model, else a ``LiteLlm`` wrapper.
+
     """
     name = name or AppSettings.get().agent.model
     if "/" in name:
@@ -59,7 +70,12 @@ _model = resolve_model()
 
 
 def _catalog_tools() -> list:
-    """The catalog toolset, shared by the routing agent and the consultant instance."""
+    """The catalog toolset, shared by the routing agent and the consultant instance.
+
+    Returns:
+        The catalog tool functions.
+
+    """
     return [
         catalog.list_definitions,
         catalog.get_definition,

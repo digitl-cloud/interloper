@@ -7,12 +7,18 @@ from pydantic_settings import SettingsConfigDict
 
 
 class AmazonAdsAPILocation(Enum):
+    """Amazon Ads API region, which selects both endpoints."""
     NORTH_AMERICA = "NA"
     EUROPE = "EU"
     FAR_EAST = "FE"
 
     @property
     def api_url(self) -> str:
+        """The data endpoint for this region.
+
+        Returns:
+            The regional API base URL.
+        """
         return {
             AmazonAdsAPILocation.EUROPE: "https://advertising-api-eu.amazon.com",
             AmazonAdsAPILocation.FAR_EAST: "https://advertising-api-fe.amazon.com",
@@ -21,6 +27,11 @@ class AmazonAdsAPILocation(Enum):
 
     @property
     def auth_url(self) -> str:
+        """The token endpoint for this region.
+
+        Returns:
+            The regional authorization base URL.
+        """
         return {
             AmazonAdsAPILocation.EUROPE: "https://api.amazon.co.uk",
             AmazonAdsAPILocation.FAR_EAST: "https://api.amazon.co.jp",
@@ -51,10 +62,20 @@ class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
 
     @cached_property
     def api_location(self) -> AmazonAdsAPILocation:
+        """The configured region, parsed.
+
+        Returns:
+            The region the endpoints are derived from.
+        """
         return AmazonAdsAPILocation(self.location)
 
     @cached_property
     def client(self) -> il.RESTClient:
+        """The Amazon Ads API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         location = self.api_location
         client = il.RESTClient(
             location.api_url,
@@ -72,7 +93,12 @@ class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
 
     @il.fetch_field_provider
     async def profiles(self) -> list[dict[str, str]]:
-        """Fetch Amazon Ads advertising profiles for this connection."""
+        """Fetch Amazon Ads advertising profiles for this connection.
+
+        Returns:
+            The options for the field's dropdown.
+
+        """
         location = self.api_location
 
         async with httpx.AsyncClient(timeout=30) as client:

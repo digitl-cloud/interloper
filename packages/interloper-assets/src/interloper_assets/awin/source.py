@@ -47,6 +47,14 @@ class AwinTransactionsNormalizer(DataFrameNormalizer):
     """
 
     def normalize(self, data: Any) -> pd.DataFrame:
+        """Reshape the vendor payload before the standard normalization.
+
+        Args:
+            data: The rows as the API returned them.
+
+        Returns:
+            The normalized frame.
+        """
         if isinstance(data, list):
             data = [_reshape_transaction(dict(row)) for row in data]
         return super().normalize(data)

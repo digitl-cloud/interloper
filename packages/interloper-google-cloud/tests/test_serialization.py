@@ -46,7 +46,7 @@ class TestJsonDefault:
         assert json_default(datetime.date(2024, 1, 2)) == "2024-01-02"
 
     def test_datetime(self):
-        assert json_default(datetime.datetime(2024, 1, 2, 3, 4, 5)) == "2024-01-02T03:04:05"
+        assert json_default(datetime.datetime(2024, 1, 2, 3, 4, 5)) == "2024-01-02T03:04:05"  # noqa: DTZ001 — naive is the case under test
 
     def test_decimal(self):
         assert json_default(Decimal("9.99")) == "9.99"

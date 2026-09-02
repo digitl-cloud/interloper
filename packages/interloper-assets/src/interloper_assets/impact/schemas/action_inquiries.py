@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class ActionInquiries(Schema):
-    """Impact.com inquiries report detailing inquiries and their associated attributes"""
+    """Impact.com inquiries report detailing inquiries and their associated attributes."""
 
     action_id: str | None = Field(default=None, description="Unique identifier for the action associated with the inquiry")
     action_uri: str | None = Field(default=None, description="URI for the action associated with the inquiry")

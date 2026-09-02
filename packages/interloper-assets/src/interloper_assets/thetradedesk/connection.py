@@ -29,7 +29,12 @@ class TheTradeDeskConnection(il.Connection):
 
     @il.fetch_field_provider
     async def partners(self) -> list[dict[str, str]]:
-        """Fetch the partners accessible to the API key."""
+        """Fetch the partners accessible to the API key.
+
+        Returns:
+            The options for the field's dropdown.
+
+        """
         response = await self.client.post("/partner/query", json={"PageStartIndex": 0, "PageSize": 100})
         response.raise_for_status()
         return [

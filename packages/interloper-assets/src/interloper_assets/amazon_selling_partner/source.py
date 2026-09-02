@@ -65,6 +65,10 @@ async def _wait_for_report(connection: AmazonSellingPartnerConnection, report_id
     fixed-interval loop bounded by ``_REPORT_TIMEOUT``. A failed report may still
     attach a document carrying error details, so return the payload for the
     caller to inspect rather than raising here.
+
+    Raises:
+        RuntimeError: If the report fails, or does not finish in time.
+
     """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + _REPORT_TIMEOUT
@@ -120,6 +124,10 @@ async def _get_report(
 
     Returns the parsed document, or ``None`` when the report failed only because
     the data for the requested range is not yet available.
+
+    Raises:
+        RuntimeError: If the report fails, or does not finish in time.
+
     """
     report_id = await _request_report(connection, report_type, marketplace, start_date, end_date, options)
     logger.info(f"Report id: {report_id} ({report_type})")
@@ -146,7 +154,12 @@ async def _get_report(
 
 # -- HELPERS — Data Kiosk ------------------------------------------------------
 async def _wait_for_query(connection: AmazonSellingPartnerConnection, query_id: str) -> dict:
-    """Poll a Data Kiosk query until it reaches a terminal state; return its payload."""
+    """Poll a Data Kiosk query until it reaches a terminal state; return its payload.
+
+    Raises:
+        RuntimeError: If the query fails, or does not finish in time.
+
+    """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + _QUERY_TIMEOUT
     while True:

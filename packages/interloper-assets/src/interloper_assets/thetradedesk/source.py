@@ -43,9 +43,25 @@ class TheTradeDeskNormalizer(DataFrameNormalizer):
     """
 
     def column_name(self, name: str) -> str:
+        """Rewrite one vendor column name before the standard mapping.
+
+        Args:
+            name: The column name as the API returned it.
+
+        Returns:
+            The mapped column name.
+        """
         return super().column_name(name.replace("%", "pct"))
 
     def normalize(self, data: Any) -> pd.DataFrame:
+        """Reshape the vendor payload before the standard normalization.
+
+        Args:
+            data: The rows as the API returned them.
+
+        Returns:
+            The normalized frame.
+        """
         df = super().normalize(data)
         if df.empty:
             return df
@@ -84,7 +100,12 @@ async def _create_report_schedule(
 
 
 async def _wait_for_execution(connection: TheTradeDeskConnection, partner_id: str, schedule_id: str) -> dict:
-    """Poll the schedule's execution until it completes; return the execution."""
+    """Poll the schedule's execution until it completes; return the execution.
+
+    Raises:
+        RuntimeError: If the execution fails, or does not finish in time.
+
+    """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + _REPORT_TIMEOUT
     interval = _POLL_START_INTERVAL
@@ -142,7 +163,7 @@ async def _get_report(
         try:
             response = await connection.client.delete(f"/myreports/reportschedule/{schedule_id}")
             response.raise_for_status()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — cleanup only; the data is already downloaded
             logger.warning(f"Failed to delete report schedule {schedule_id}: {exc}")
 
 

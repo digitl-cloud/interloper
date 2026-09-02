@@ -33,7 +33,12 @@ class CriteoConnection(il.RefreshTokenOAuthConnection):
 
     @il.fetch_field_provider
     async def advertisers(self) -> list[dict[str, str]]:
-        """Fetch the Criteo advertisers accessible by this connection, sorted by name."""
+        """Fetch the Criteo advertisers accessible by this connection, sorted by name.
+
+        Returns:
+            The options for the field's dropdown.
+
+        """
         response = await self.client.get(f"/{constants.API_VERSION}/advertisers/me")
         response.raise_for_status()
         advertisers = response.json().get("data", [])

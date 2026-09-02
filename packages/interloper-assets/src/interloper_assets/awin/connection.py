@@ -20,6 +20,11 @@ class AwinConnection(il.Connection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
+        """The Awin API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         return il.AsyncRESTClient(BASE_URL, auth=il.HTTPBearerAuth(self.access_token))
 
     @il.fetch_field_provider
@@ -29,6 +34,10 @@ class AwinConnection(il.Connection):
         Backs the source's ``advertiser_id`` ``FetchField``. Reuses ``self.client``
         (bearer auth is all Awin's ``/accounts`` endpoint needs) so it runs in the
         API process over the lightweight ``AsyncRESTClient``.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         response = await self.client.get("/accounts", params={"type": "advertiser"})
         response.raise_for_status()

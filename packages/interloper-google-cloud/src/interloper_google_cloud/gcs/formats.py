@@ -32,11 +32,28 @@ class FileFormat(ABC):
 
     @abstractmethod
     def serialize(self, rows: list[dict[str, Any]], specs: list[FieldSpec] | None) -> bytes:
-        """Serialize records into the format's byte payload."""
+        """Serialize records into the format's byte payload.
+
+        Args:
+            rows: The records to serialize.
+            specs: The field specs, when the format uses a declared schema.
+
+        Returns:
+            The encoded payload.
+
+        """
 
     @abstractmethod
     def deserialize(self, payload: bytes) -> list[dict[str, Any]]:
-        """Parse a byte payload back into records."""
+        """Parse a byte payload back into records.
+
+        Args:
+            payload: The encoded payload.
+
+        Returns:
+            One dict per record.
+
+        """
 
 
 class JSONLFormat(FileFormat):
@@ -52,6 +69,10 @@ class JSONLFormat(FileFormat):
         Non-finite floats become ``null`` (invalid JSON otherwise); dates and
         decimals serialize via :func:`json_default`.
 
+        Args:
+            rows: The records to serialize.
+            specs: Accepted for the interface and unused by NDJSON.
+
         Returns:
             The NDJSON payload.
         """
@@ -60,6 +81,9 @@ class JSONLFormat(FileFormat):
 
     def deserialize(self, payload: bytes) -> list[dict[str, Any]]:
         """Parse NDJSON lines into records.
+
+        Args:
+            payload: The NDJSON payload.
 
         Returns:
             One dict per non-empty line.
@@ -77,6 +101,10 @@ class CSVFormat(FileFormat):
     def serialize(self, rows: list[dict[str, Any]], specs: list[FieldSpec] | None) -> bytes:
         """Serialize records as CSV (the first row's keys are the headers).
 
+        Args:
+            rows: The records to serialize.
+            specs: Accepted for the interface and unused by CSV.
+
         Returns:
             The CSV payload; empty for no rows.
         """
@@ -90,6 +118,9 @@ class CSVFormat(FileFormat):
 
     def deserialize(self, payload: bytes) -> list[dict[str, Any]]:
         """Parse CSV into records, reading empty cells as ``None``.
+
+        Args:
+            payload: The CSV payload.
 
         Returns:
             One dict per data row.
@@ -112,6 +143,10 @@ class ParquetFormat(FileFormat):
         shape is deterministic and stable across partitions; without, pyarrow
         infers it from the data.
 
+        Args:
+            rows: The records to serialize.
+            specs: The field specs the Arrow schema is built from, when given.
+
         Returns:
             The Parquet payload.
         """
@@ -127,6 +162,9 @@ class ParquetFormat(FileFormat):
     def deserialize(self, payload: bytes) -> list[dict[str, Any]]:
         """Read a Parquet payload into records (types preserved).
 
+        Args:
+            payload: The Parquet payload.
+
         Returns:
             One dict per row.
         """
@@ -138,6 +176,9 @@ FORMATS: dict[str, FileFormat] = {fmt.key: fmt for fmt in (ParquetFormat(), JSON
 
 def _spec_to_arrow_field(spec: FieldSpec) -> pa.Field:
     """Map a field spec to an Arrow field (nested records as structs).
+
+    Args:
+        spec: The field spec to map.
 
     Returns:
         The Arrow field, wrapped in ``list_`` when the spec is repeated.
@@ -156,6 +197,13 @@ def _is_concrete_type(py_type: Any) -> bool:
 
     ``typing.Any`` is excluded explicitly — on Python 3.11+ it *is* an
     ``isinstance(..., type)``, but it types nothing.
+
+    Args:
+        py_type: The declared type to test.
+
+    Returns:
+        True when the type is a concrete class.
+
     """
     return py_type is not Any and isinstance(py_type, type)
 
@@ -165,6 +213,13 @@ def _py_type_to_arrow_type(py_type: Any) -> pa.DataType:
 
     Mirrors the BigQuery mapping (``Decimal`` → NUMERIC precision/scale) so
     parquet files load into BigQuery without casts.
+
+    Args:
+        py_type: The declared Python type.
+
+    Returns:
+        The Arrow type.
+
     """
     if not _is_concrete_type(py_type):
         return pa.string()  # typing.Any or unresolvable annotations
@@ -191,6 +246,10 @@ def _stringify_untyped(rows: list[dict[str, Any]], specs: list[FieldSpec]) -> li
     Those fields map to Arrow strings, and ``from_pylist`` does not coerce
     e.g. ints into a string column — pre-convert so the write cannot fail on
     a column the schema could not type.
+
+    Args:
+        rows: The records to rewrite.
+        specs: The field specs deciding which fields are untyped.
 
     Returns:
         The rows, copied only when a conversion applies.

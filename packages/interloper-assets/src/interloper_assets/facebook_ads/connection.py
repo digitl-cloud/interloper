@@ -73,6 +73,10 @@ class FacebookAdsConnection(il.OAuthConnection):
         Backs the source's ``account_id`` ``FetchField``. Uses the Graph API
         over httpx (not the SDK) so it runs in the API process, which omits
         the heavy SDK extras.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(

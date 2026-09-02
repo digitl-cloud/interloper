@@ -32,6 +32,14 @@ class CampaignManager360Normalizer(DataFrameNormalizer):
     """
 
     def column_name(self, name: str) -> str:
+        """Rewrite one vendor column name before the standard mapping.
+
+        Args:
+            name: The column name as the API returned it.
+
+        Returns:
+            The mapped column name.
+        """
         return super().column_name(name.replace("%", "pct"))
 
 
@@ -68,7 +76,12 @@ def _reach_report_body(
 
 # -- HELPERS — report execution --------------------------------------------------
 def _wait_for_file(service: Any, profile_id: str, report_id: int, file_id: int) -> None:
-    """Poll a report file until it is available, raising on failure or timeout."""
+    """Poll a report file until it is available, raising on failure or timeout.
+
+    Raises:
+        RuntimeError: If the report fails, or does not finish in time.
+
+    """
     deadline = time.monotonic() + _REPORT_TIMEOUT
     interval = float(constants.MIN_RETRY_INTERVAL)
     while True:
@@ -133,7 +146,7 @@ def _get_report(connection: CampaignManager360Connection, profile_id: str, repor
         # One-shot report definitions; clean up best-effort so they don't pile up.
         try:
             service.reports().delete(profileId=profile_id, reportId=report_id).execute()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — cleanup only; the data is already downloaded
             logger.warning(f"Failed to delete report {report_id}: {exc}")
 
 
@@ -257,7 +270,12 @@ class CampaignManager360(il.Source):
     def custom_audiences(
         self, context: il.ExecutionContext, connection: CampaignManager360Connection
     ) -> list[_Record]:
-        """Remarketing lists (custom audiences) of the configured advertiser."""
+        """Remarketing lists (custom audiences) of the configured advertiser.
+
+        Raises:
+            ValueError: If the source carries no ``advertiser_id``.
+
+        """
         if not self.advertiser_id:
             raise ValueError("The custom_audiences asset requires the source's advertiser_id to be set")
         items = _list_remarketing_lists(connection.client, self.profile_id, self.advertiser_id)

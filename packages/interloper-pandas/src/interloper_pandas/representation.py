@@ -23,6 +23,9 @@ class DataFrameRepresentation(Representation):
     def matches(self, data: Any) -> bool:
         """Return whether *data* is a pandas ``DataFrame``.
 
+        Args:
+            data: The value to test.
+
         Returns:
             ``True`` for DataFrames.
         """
@@ -30,6 +33,9 @@ class DataFrameRepresentation(Representation):
 
     def to_records(self, data: pd.DataFrame) -> list[dict[str, Any]]:
         """View the DataFrame as null-safe records (``NaN``/``NaT`` → ``None``).
+
+        Args:
+            data: The DataFrame to view.
 
         Returns:
             Rows as a list of dicts.
@@ -39,6 +45,9 @@ class DataFrameRepresentation(Representation):
     def from_records(self, rows: list[dict[str, Any]]) -> pd.DataFrame:
         """Materialize records into a DataFrame.
 
+        Args:
+            rows: The records to materialize.
+
         Returns:
             A pandas ``DataFrame``.
         """
@@ -46,6 +55,9 @@ class DataFrameRepresentation(Representation):
 
     def columns(self, data: pd.DataFrame) -> list[str]:
         """Return the DataFrame's column names.
+
+        Args:
+            data: The DataFrame to read.
 
         Returns:
             Column names as strings.
@@ -55,6 +67,11 @@ class DataFrameRepresentation(Representation):
     def filter_eq(self, data: pd.DataFrame, column: str, value: Any) -> pd.DataFrame:
         """Return the rows whose *column* equals *value* (compared as strings).
 
+        Args:
+            data: The DataFrame to filter.
+            column: The column to compare.
+            value: The value to match.
+
         Returns:
             The matching rows.
         """
@@ -62,6 +79,12 @@ class DataFrameRepresentation(Representation):
 
     def filter_range(self, data: pd.DataFrame, column: str, start: Any, end: Any) -> pd.DataFrame:
         """Return the rows whose *column* falls in ``[start, end)``.
+
+        Args:
+            data: The DataFrame to filter.
+            column: The column to compare, mapped through ``iso_label``.
+            start: Inclusive lower bound.
+            end: Exclusive upper bound.
 
         Returns:
             The matching rows.

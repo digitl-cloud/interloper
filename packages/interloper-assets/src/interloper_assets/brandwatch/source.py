@@ -45,7 +45,12 @@ async def _request_insights(
 
 
 async def _wait_until_ready(client: il.AsyncRESTClient, request_id: str) -> None:
-    """Poll a report until it is READY, raising on failure or timeout."""
+    """Poll a report until it is READY, raising on failure or timeout.
+
+    Raises:
+        RuntimeError: If the report fails, or does not finish in time.
+
+    """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + _POLL_TIMEOUT
     while True:

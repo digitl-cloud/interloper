@@ -142,4 +142,14 @@ Mechanics, all verified against the linter:
 - Functions nested inside another function body are exempt; the enclosing function's docstring covers them.
 - Note that the linter cannot catch a **missing** `Args:` section (ruff implements no such rule) — only an incomplete one. Writing the section is on you.
 
+**One exception, and it is not a relaxation: a docstring that ships as product copy.** Three kinds of docstring in this repo are read by someone other than a developer, and the completeness rules would corrupt them rather than document them:
+
+- a **component** docstring (`@il.asset`, `@il.source`, a `Connection` subclass) becomes the materialized table's description in BigQuery and the component's description in the app;
+- a **toolkit or agent tool** docstring becomes the tool description sent to the model (`@mcp.tool(description=fn.__doc__)`), and the injected `ctx` parameter is stripped from the tool schema — documenting it would tell the model about an argument it must never pass;
+- anything else assigned to `__doc__` for display.
+
+These get a summary and the prose a *reader* needs, and no mechanical sections. Each package's `per-file-ignores` turns the completeness rules off for them; this paragraph is the reason, so don't restate it there. Never add a `Returns:` to product copy to satisfy a linter. If you are unsure which kind you are looking at, check whether anything reads `__doc__`.
+
+**The second exemption is a generated or templated scaffold**, where the file's shape is fixed and a docstring could only name it: an alembic revision's `upgrade`/`downgrade` pair (the migration's module docstring holds its intent), a schema module declaring one class named after its file with every field already carrying a `description`, and the per-vendor connector layout repeated 45 times in `interloper-assets`. The *missing*-docstring rules are off for those; what is genuinely worth saying about a vendor — auth quirks, pagination, rate limits — belongs on the class or function it constrains, where the rules still apply.
+
 The summary line still matters most: one line, imperative, stating the contract. Prose paragraphs between the summary and the sections carry the why and the caveats, same bar as rule 3.

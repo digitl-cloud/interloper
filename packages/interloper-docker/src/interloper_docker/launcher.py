@@ -53,6 +53,15 @@ class DockerLauncher(Launcher):
         environment; ``settings.config`` supplies the launcher-specific
         keyword arguments.
 
+        Args:
+            settings: The launcher settings block (image, network, volumes).
+            postgres: Postgres credentials forwarded into the spawned container.
+            runner: Runner settings the spawned process builds its runner from.
+            catalog: Catalog forwarded as import paths; required, since a container
+                cannot see the caller's.
+            store: Accepted for the registry's uniform hook and unused — a
+                container opens its own connection, not the caller's.
+
         Returns:
             The configured launcher.
 
@@ -165,12 +174,12 @@ class DockerLauncher(Launcher):
         container_name = f"interloper_run_{str(run_id)[:8]}"
         try:
             container = self._client.containers.get(container_name)
-        except Exception:
+        except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
             return RunState(status=RunStatus.NOT_FOUND)
 
         try:
             container.reload()
-        except Exception:
+        except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
             return RunState(status=RunStatus.NOT_FOUND)
 
         state = container.attrs.get("State", {}) if container.attrs else {}
@@ -197,7 +206,12 @@ class DockerLauncher(Launcher):
         return RunState(status=RunStatus.FAILED, error=" ".join(parts))
 
     def _build_environment(self) -> dict[str, str]:
-        """Build environment variables for the container."""
+        """Build environment variables for the container.
+
+        Returns:
+            The environment the run container is started with.
+
+        """
         environment: dict[str, str] = {
             "INTERLOPER_POSTGRES_HOST": self._postgres_host,
             "INTERLOPER_POSTGRES_PORT": str(self._postgres_port),

@@ -33,7 +33,11 @@ from interloper_mcp import context as mcp_context
 
 @pytest.fixture
 def mcp_db() -> Iterator[Engine]:
-    """A fresh in-memory database with auth, token, component, and run tables."""
+    """A fresh in-memory database with auth, token, component, and run tables.
+
+    Yields:
+        The engine bound to that database, disposed once the test finishes.
+    """
     eng = engine_module.init_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -75,7 +79,11 @@ def store(mcp_db: Engine, catalog: il.Catalog) -> Store:
 
 @pytest.fixture
 def seeded(store: Store) -> dict[str, Any]:
-    """An org with one member, a valid PAT, one job component, and one run."""
+    """An org with one member, a valid PAT, one job component, and one run.
+
+    Returns:
+        The seeded ids and the raw token, keyed for the tests to read.
+    """
     profile = store.auth.upsert_profile(google_id="g-user", email="user@example.com", name="User")
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     _, raw_token = store.tokens.create(profile.id, org.id, name="test")

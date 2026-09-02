@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class PerformanceStats(Schema):
-    """Performance report detailing various metrics for media performance"""
+    """Performance report detailing various metrics for media performance."""
 
     action_cost: float | None = Field(default=None, description="Cost associated with actions")
     actions: int | None = Field(default=None, description="Number of actions taken")

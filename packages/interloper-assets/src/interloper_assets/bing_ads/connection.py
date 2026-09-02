@@ -22,12 +22,22 @@ _ENTITIES_NS = "https://bingads.microsoft.com/Customer/v13/Entities"
 
 
 def _local_name(tag: str) -> str:
-    """Strip the ``{namespace}`` prefix ElementTree puts on every tag."""
+    """Strip the ``{namespace}`` prefix ElementTree puts on every tag.
+
+    Returns:
+        The bare tag name.
+
+    """
     return tag.rsplit("}", 1)[-1]
 
 
 def _child_text(elem: ET.Element, name: str) -> str | None:
-    """Text of the first *direct child* named *name* (not any descendant)."""
+    """Text of the first *direct child* named *name* (not any descendant).
+
+    Returns:
+        The child's text, or ``None`` when there is no such child.
+
+    """
     for child in elem:
         if _local_name(child.tag) == name:
             return child.text
@@ -155,6 +165,10 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
         classes but not the heavy SDK extra. Resolves the authenticated user
         (``GetUser``) then lists every account they can reach
         (``SearchAccounts`` filtered by that user id).
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         async with httpx.AsyncClient(timeout=30) as client:
             token_response = await client.post(
@@ -210,7 +224,12 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
         action: str,
         body: str,
     ) -> ET.Element:
-        """POST one Customer Management SOAP action and return the parsed body."""
+        """POST one Customer Management SOAP action and return the parsed body.
+
+        Returns:
+            The parsed SOAP body element.
+
+        """
         envelope = (
             '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
             'xmlns:i="http://www.w3.org/2001/XMLSchema-instance">'

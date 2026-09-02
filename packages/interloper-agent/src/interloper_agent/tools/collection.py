@@ -362,7 +362,7 @@ async def check_connection(connection_id: str, tool_context: ToolContext) -> dic
 
         try:
             ok = bool(await asyncio.wait_for(invoke(conn.check), timeout=_CHECK_TIMEOUT))
-        except Exception as e:  # noqa: BLE001 — any hook failure is a categorised result, never a raise
+        except Exception as e:
             logger.error("Connection check failed for '%s' (%s): %s", component.name, component.key, e)
             category, message = _categorise(e)
             return {"status": "success", "connection": info, "ok": False, "live": True,
@@ -447,7 +447,7 @@ async def resolve_source_field_options(
 
         try:
             items = list(await asyncio.wait_for(invoke(fn), timeout=_RESOLVE_TIMEOUT) or [])
-        except Exception as e:  # noqa: BLE001 — a provider failure is a categorised result, never a raise
+        except Exception as e:
             logger.error("Resolving %s.%s via '%s' failed: %s", source_key, field, component.name, e)
             category, message = _categorise(e)
             return {"status": "error", "category": category, "error": message}

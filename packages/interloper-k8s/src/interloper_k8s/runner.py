@@ -77,6 +77,11 @@ class KubernetesRunner(SyncRunner):
 
     @property
     def _capacity(self) -> int:
+        """Maximum number of concurrent Jobs.
+
+        Returns:
+            The configured Job ceiling.
+        """
         return self.max_jobs
 
     def _on_start(self) -> None:
@@ -107,7 +112,19 @@ class KubernetesRunner(SyncRunner):
         operation: Operation,
         partition_or_window: Partition | PartitionWindow | None,
     ) -> Future[Any]:
-        """Launch an asset as a Kubernetes Job and return a polling Future."""
+        """Launch an asset as a Kubernetes Job and return a polling Future.
+
+        Args:
+            operation: The operation to run in its own Job.
+            partition_or_window: The partition or window to materialize, when scoped.
+
+        Returns:
+            A Future that raises :class:`RunnerError` on Job failure.
+
+        Raises:
+            RunnerError: If the Job cannot be created.
+
+        """
         if self._poll_pool is None or self._batch_v1 is None:
             raise RunnerError("Kubernetes client not initialized")
 
@@ -174,7 +191,7 @@ class KubernetesRunner(SyncRunner):
 
         try:
             self._batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — one operation's failure must not abort the run
             self.state.mark_failed(operation, format_exception(e))
             done: Future[None] = Future()
             done.set_result(None)
@@ -187,7 +204,12 @@ class KubernetesRunner(SyncRunner):
         return future
 
     def _cancel_all(self, handles: list[Any]) -> None:
-        """Cancel all running jobs."""
+        """Cancel all running jobs.
+
+        Args:
+            handles: The Job handles to delete.
+
+        """
         assert self._batch_v1 is not None
 
         for future in handles:
@@ -223,6 +245,11 @@ class KubernetesRunner(SyncRunner):
         checks ``failed_operations`` under fail-fast — so a child-streamed
         terminal's rich error stays the operation's record, never overwritten
         by the bare Job status.
+
+        Args:
+            future: The polling future that has completed.
+            operation: The operation the Job ran.
+
         """
         job_name = self._job_map.pop(future, None)
         if job_name is not None:
@@ -234,7 +261,7 @@ class KubernetesRunner(SyncRunner):
 
         try:
             future.result()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — one operation's failure must not abort the run
             self.state.mark_failed(operation, format_exception(e), emit=True, exception=e)
         else:
             self.state.mark_completed(operation, emit=True)
@@ -245,6 +272,11 @@ class KubernetesRunner(SyncRunner):
         Same host-authored-terminal contract as :meth:`_handle_completed`
         (``emit=True``, idempotent via deterministic ids) so an asset still
         in flight when the run aborts is not left orphaned as ``running``.
+
+        Args:
+            future: The polling future being flushed.
+            operation: The operation the Job ran.
+
         """
         job_name = self._job_map.pop(future, None)
         if job_name is not None:
@@ -263,6 +295,9 @@ class KubernetesRunner(SyncRunner):
 
     def _poll_job(self, job_name: str) -> None:
         """Block until the Job completes or fails; raise on failure.
+
+        Args:
+            job_name: The Job to wait on.
 
         Raises:
             RunnerError: If the job fails.
@@ -295,7 +330,17 @@ class KubernetesRunner(SyncRunner):
         partition_or_window: Partition | PartitionWindow | None,
         run_id: str,
     ) -> list[str]:
-        """Build the command to execute in the container."""
+        """Build the command to execute in the container.
+
+        Args:
+            dag_spec: The serialized DAG the pod reconstructs.
+            partition_or_window: The partition or window to materialize, when scoped.
+            run_id: The run the pod reports against.
+
+        Returns:
+            The argv the pod entrypoint is started with.
+
+        """
         cmd = [
             "interloper",
             "run",
@@ -320,14 +365,24 @@ class KubernetesRunner(SyncRunner):
         return cmd
 
     def _build_env(self) -> list[client.V1EnvVar]:
-        """Build the environment variables for the container."""
+        """Build the environment variables for the container.
+
+        Returns:
+            The environment each operation pod receives.
+
+        """
         env = [client.V1EnvVar(name=k, value=v) for k, v in self.env_vars.items()]
         env.append(client.V1EnvVar(name="INTERLOPER_EVENTS_TO_STDERR", value="true"))
         env.extend(client.V1EnvVar(name=k, value=v) for k, v in child_process_env().items())
         return env
 
     def _build_resources(self) -> client.V1ResourceRequirements | None:
-        """Build the resource requirements for the container."""
+        """Build the resource requirements for the container.
+
+        Returns:
+            The requirements, or None when none are configured.
+
+        """
         if not self.resources:
             return None
         return client.V1ResourceRequirements(
@@ -336,12 +391,26 @@ class KubernetesRunner(SyncRunner):
         )
 
     def _build_job_name(self, operation: Operation) -> str:
-        """Build the name for the Kubernetes job (max 63 chars)."""
+        """Build the name for the Kubernetes job (max 63 chars).
+
+        Args:
+            operation: The operation the Job runs.
+
+        Returns:
+            A Job name unique to this operation and run, within the
+            kubernetes name-length limit.
+
+        """
         # return f"interloper-run-{self.state.run_id[:8]}-{to_slug_case(type(operation).key)}"[:63]
         return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}"[:63]
 
     def _build_tolerations(self) -> list[client.V1Toleration]:
-        """Build tolerations for pod scheduling."""
+        """Build tolerations for pod scheduling.
+
+        Returns:
+            The configured tolerations, empty when none are set.
+
+        """
         return [
             client.V1Toleration(
                 key=t.get("key"),

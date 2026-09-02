@@ -7,7 +7,15 @@ from interloper_google_cloud.connection import _list_buckets, _list_projects
 
 
 def _client_returning(pages: list[dict[str, Any]]) -> AsyncMock:
-    """Build an httpx client mock whose GETs return *pages* in order."""
+    """Build an httpx client mock whose GETs return *pages* in order.
+
+    Args:
+        pages: The JSON bodies to answer with, in order.
+
+    Returns:
+        The mock client.
+
+    """
     client = AsyncMock()
     responses = []
     for page in pages:

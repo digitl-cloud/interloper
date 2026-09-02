@@ -10,7 +10,7 @@ from interloper.catalog.base import Catalog
 from interloper_db import Store, init_engine
 from interloper_toolkit import ToolkitContext, serialize
 
-__all__ = ["init", "set_store", "set_catalog", "get_store", "get_catalog", "get_org_id", "toolkit_ctx", "serialize"]
+__all__ = ["get_catalog", "get_org_id", "get_store", "init", "serialize", "set_catalog", "set_store", "toolkit_ctx"]
 
 _store: Store | None = None
 _catalog: Catalog | None = None
@@ -23,7 +23,7 @@ def init(database_url: str, catalog: Catalog) -> None:
         database_url: PostgreSQL connection string.
         catalog: Catalog instance.
     """
-    global _store, _catalog  # noqa: PLW0603
+    global _store, _catalog
     init_engine(database_url)
     _catalog = catalog
     _store = Store.from_settings(catalog=catalog)
@@ -35,7 +35,7 @@ def set_store(store: Store) -> None:
     Args:
         store: An already-initialized Store.
     """
-    global _store  # noqa: PLW0603
+    global _store
     _store = store
 
 
@@ -45,19 +45,35 @@ def set_catalog(catalog: Catalog) -> None:
     Args:
         catalog: Catalog instance.
     """
-    global _catalog  # noqa: PLW0603
+    global _catalog
     _catalog = catalog
 
 
 def get_store() -> Store:
-    """Return the global Store instance."""
+    """Return the global Store instance.
+
+    Returns:
+        The initialized Store.
+
+    Raises:
+        RuntimeError: If the context was never initialized.
+
+    """
     if _store is None:
         raise RuntimeError("Agent context not initialized. Call init() or set_store() first.")
     return _store
 
 
 def get_catalog() -> dict[str, Any]:
-    """Return the global catalog as a serialized dict."""
+    """Return the global catalog as a serialized dict.
+
+    Returns:
+        The catalog dump every tool reads.
+
+    Raises:
+        RuntimeError: If the context was never initialized.
+
+    """
     if _catalog is None:
         raise RuntimeError("Agent context not initialized. Call init() or set_catalog() first.")
     return _catalog.dump()
@@ -71,6 +87,13 @@ def get_org_id(tool_context: ToolContext | None) -> UUID:
     Args:
         tool_context: Injected by ADK. ``None`` only if a tool is invoked
             outside the ADK runtime, which is a programming error.
+
+    Returns:
+        The organisation the tool call is scoped to.
+
+    Raises:
+        ValueError: If no tool context was passed, or it carries no org.
+
     """
     if tool_context is None:
         raise ValueError("tool_context not provided (must be invoked via the ADK runtime)")
@@ -85,5 +108,9 @@ def toolkit_ctx(tool_context: ToolContext | None) -> ToolkitContext:
 
     Args:
         tool_context: Injected by ADK; carries the session's ``org_id``.
+
+    Returns:
+        The context the toolkit functions read.
+
     """
     return ToolkitContext(store=get_store(), catalog=get_catalog(), org_id=get_org_id(tool_context))

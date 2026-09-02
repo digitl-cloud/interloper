@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class DemoSchema(il.Schema):
+    """Schema the demo assets share: a stamped date and one value."""
     date: dt.date
     hello: str
 

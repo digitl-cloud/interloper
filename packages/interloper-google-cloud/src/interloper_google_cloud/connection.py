@@ -46,7 +46,17 @@ def _make_assertion(key_info: dict[str, Any], scope: str) -> str:
 
 
 async def _get_access_token(client: httpx.AsyncClient, key_info: dict[str, Any], scope: str) -> str:
-    """Exchange a service account JWT assertion for an access token."""
+    """Exchange a service account JWT assertion for an access token.
+
+    Args:
+        client: The HTTP client the exchange is made through.
+        key_info: The parsed service-account key.
+        scope: The OAuth scope requested.
+
+    Returns:
+        The bearer token.
+
+    """
     resp = await client.post(
         _TOKEN_URL,
         data={
@@ -60,6 +70,10 @@ async def _get_access_token(client: httpx.AsyncClient, key_info: dict[str, Any],
 
 async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[dict[str, str]]:
     """List the projects the credential has BigQuery access to, following pagination.
+
+    Args:
+        client: The HTTP client the listing is made through.
+        access_token: Bearer token for the listing.
 
     Returns:
         Project options with ``project_id`` and a display ``name``.
@@ -89,6 +103,11 @@ async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[d
 
 async def _list_buckets(client: httpx.AsyncClient, access_token: str, project: str) -> list[dict[str, str]]:
     """List the Cloud Storage buckets in *project*, following pagination.
+
+    Args:
+        client: The HTTP client the listing is made through.
+        access_token: Bearer token for the listing.
+        project: The project whose buckets are listed.
 
     Returns:
         Bucket options with ``name``.
@@ -141,6 +160,10 @@ class GoogleCloudConnection(Connection):
         JWT-bearer assertion from the service account key and exchanges it for
         an access token over httpx (only the signing uses google-auth), then
         pages through BigQuery's ``projects.list``.
+
+        Returns:
+            Project options for the field's dropdown.
+
         """
         key_info: dict[str, Any] = json.loads(self.service_account_key)
         async with httpx.AsyncClient(timeout=30) as client:
@@ -155,6 +178,10 @@ class GoogleCloudConnection(Connection):
         exchange as ``projects``, with the read-only storage scope; the project
         comes from the key itself (bucket names are global, but listing is
         per-project).
+
+        Returns:
+            Bucket options for the field's dropdown.
+
         """
         key_info: dict[str, Any] = json.loads(self.service_account_key)
         async with httpx.AsyncClient(timeout=30) as client:

@@ -41,7 +41,12 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
         )
 
     async def _get_access_token(self) -> str:
-        """Exchange the refresh token for an access token using HTTP Basic auth."""
+        """Exchange the refresh token for an access token using HTTP Basic auth.
+
+        Returns:
+            The token response.
+
+        """
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 f"{constants.BASE_URL}/oauth/token",
@@ -60,6 +65,10 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
 
         Backs the source's ``account_id`` ``FetchField``. Talks to the v5 API
         over httpx (not the SDK) so it runs in the API process.
+
+        Returns:
+            The options for the field's dropdown.
+
         """
         token = await self._get_access_token()
         headers = {"Authorization": f"Bearer {token}"}

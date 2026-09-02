@@ -224,7 +224,7 @@ def _build_adjacency(
             source_keys[a.parent_id] = a.parent.key
 
     # Add source_key to asset_info
-    for uid, info in asset_info.items():
+    for info in asset_info.values():
         sid_str = info["source_id"]
         if sid_str:
             info["source_key"] = source_keys.get(UUID(sid_str), "unknown")
