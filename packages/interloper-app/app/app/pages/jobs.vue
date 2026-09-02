@@ -6,7 +6,7 @@ import { jobCron, jobEnabled, jobTimezone, relationIds } from '~/types/component
 
 definePageMeta({ title: 'Jobs' })
 
-const UBadge = resolveComponent('UBadge')
+const USwitch = resolveComponent('USwitch')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
@@ -47,6 +47,32 @@ watchEffect(() => {
     router.replace({ query: { ...route.query, run: undefined } })
 })
 
+/** Jobs whose enabled flag is mid-flight, so the switch can't be double-fired. */
+const toggling = ref(new Set<string>())
+
+/**
+ * Flip a job's schedule on or off from the table. The flag lives in the job's
+ * config, so the whole config rides along: a PUT replaces the facet it carries.
+ */
+async function setEnabled(job: ComponentRecord, enabled: boolean) {
+    toggling.value = new Set(toggling.value).add(job.id)
+    try {
+        await componentsStore.update(job.id, { config: { ...(job.config ?? {}), enabled } })
+        toast.add({
+            title: `${job.name ?? 'Job'} ${enabled ? 'enabled' : 'disabled'}`,
+            color: enabled ? 'success' : 'neutral',
+        })
+    }
+    catch (e) {
+        toast.add(errorToast(e, `Failed to ${enabled ? 'enable' : 'disable'} job`))
+    }
+    finally {
+        const pending = new Set(toggling.value)
+        pending.delete(job.id)
+        toggling.value = pending
+    }
+}
+
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     {
         accessorKey: 'name',
@@ -77,14 +103,23 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
             })
         },
     },
+    ...stateSchemaColumns(catalogStore.definitionsForKind('job')[0]),
     {
         accessorKey: 'enabled',
-        header: 'Status',
-        cell: ({ row }) => h(UBadge, {
-            color: jobEnabled(row.original) ? 'success' : 'neutral',
-        }, () => jobEnabled(row.original) ? 'Enabled' : 'Disabled'),
+        header: 'Enabled',
+        accessorFn: (row: ComponentRecord) => String(jobEnabled(row)),
+        cell: ({ row }) => h('div', {
+            // The row itself opens the edit drawer; the switch owns its click.
+            onClick: (event: Event) => event.stopPropagation(),
+        }, [
+            h(USwitch, {
+                modelValue: jobEnabled(row.original),
+                disabled: toggling.value.has(row.original.id),
+                'aria-label': jobEnabled(row.original) ? 'Disable job' : 'Enable job',
+                'onUpdate:modelValue': (value: boolean) => setEnabled(row.original, value),
+            }),
+        ]),
     },
-    ...stateSchemaColumns(catalogStore.definitionsForKind('job')[0]),
     {
         accessorKey: 'created_at',
         header: 'Created',
