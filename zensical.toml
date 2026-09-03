@@ -19,8 +19,7 @@ Copyright &copy; 2026 Digitl Cloud
 """
 
 nav = [
-    { "Home" = "index.md" },
-    { "Getting started" = "getting-started.md" },
+    { "Getting started" = "index.md" },
     { "Tutorial" = "tutorial.md" },
     { "Guide" = [
         { "Assets" = "guide/assets.md" },
