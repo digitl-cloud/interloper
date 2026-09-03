@@ -250,6 +250,22 @@ class RunState:
                 },
             )
 
+    def cancel_pending(self) -> list[Operation]:
+        """Cancel every operation that has not reached a terminal state.
+
+        Called when the walk ends before the DAG is exhausted (a fail-fast
+        break or a machinery abort). Operations still queued or ready were
+        never submitted, so no task or future will ever give them a terminal
+        event; without this sweep they stay non-terminal forever.
+
+        Returns:
+            The operations that were canceled, in DAG order.
+        """
+        pending = [operation for operation in self.dag.operations if not self.executions[operation.id].is_terminal]
+        for operation in pending:
+            self.mark_canceled(operation)
+        return pending
+
     def mark_failed(
         self,
         operation: Operation,

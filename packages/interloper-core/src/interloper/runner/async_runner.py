@@ -206,17 +206,13 @@ class AsyncRunner(Runner):
         return result
 
     async def _flush(self, inflight: dict[asyncio.Task[Any], Operation]) -> None:
-        """Wait for all in-flight tasks and emit terminal events.
+        """Settle the in-flight tasks when the walk ends.
 
-        Called when the walk ends — a fail-fast break, a machinery abort,
-        or natural completion (where it is effectively a no-op) — so that
-        every in-flight operation gets a proper terminal event rather than
-        being silently abandoned as 'running'.
-
-        In the async runner, ``_execute_operation`` already calls
-        ``mark_failed`` / ``mark_completed``, so completed tasks are
-        already handled.  We only need to cancel tasks that are still
-        pending (e.g. waiting for the semaphore).
+        Called on a fail-fast break, a machinery abort, or natural
+        completion (where it is effectively a no-op). Under ``fail_fast``
+        the tasks are cancelled and finalization records every operation
+        left non-terminal as canceled; otherwise they run to completion and
+        ``_execute_operation`` records their outcomes itself.
 
         Args:
             inflight: Tasks still in flight, mapped to the operation each was
@@ -226,11 +222,8 @@ class AsyncRunner(Runner):
             return
 
         if self.fail_fast:
-            for task, operation in inflight.items():
+            for task in inflight:
                 task.cancel()
-                info = self.state.executions.get(operation.id)
-                if info and not info.is_terminal:
-                    self.state.mark_canceled(operation)
             return
 
         # Let running tasks finish naturally and record their outcomes.

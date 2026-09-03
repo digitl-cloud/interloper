@@ -81,7 +81,7 @@ process pool, a `if __name__ == "__main__":` guard.
 | Option | `AsyncRunner`, `MultiProcessRunner` | Meaning |
 |--------|-------------------------------------|---------|
 | `max_workers` | `4` | Concurrency ceiling. `SerialRunner` pins it to 1. |
-| `fail_fast` | `True` | Stop submitting after the first failure and cancel in-flight work. `False` runs everything that can still run. |
+| `fail_fast` | `True` | Stop submitting after the first failure and cancel everything else, in flight or still queued. `False` runs everything that can still run. |
 | `reraise` | `False` | Re-raise the first failed operation's exception after the run is finalized. `False` returns a failed `RunResult` instead. |
 | `on_event` | `None` | Callback receiving this run's [events](events.md). Subscribed for the duration of the run only. |
 

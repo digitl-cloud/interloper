@@ -208,6 +208,10 @@ class Runner(Serializable):
     ) -> RunResult:
         """Finalize the run and return the result.
 
+        Every operation still non-terminal at this point (in flight under a
+        fail-fast break, or never submitted) is recorded as canceled first,
+        so no execution outlives its run without a terminal event.
+
         Args:
             error: Run-level error message, set only when the walk machinery
                 itself failed (deadlock, invalid DAG state, runner bug).
@@ -217,6 +221,7 @@ class Runner(Serializable):
         Returns:
             A RunResult summarizing the execution outcome.
         """
+        self.state.cancel_pending()
         status = ExecutionStatus.FAILED if (self.state.failed_operations or error) else ExecutionStatus.COMPLETED
         executions = self.state.end_run(status, error)
 
