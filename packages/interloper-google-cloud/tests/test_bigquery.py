@@ -12,6 +12,7 @@ from google.cloud import bigquery
 from interloper.destination import IOContext
 from interloper.destination.database import PartitionFilter
 from interloper.errors import ConfigError
+from interloper.normalizer import MaterializationStrategy
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
 
@@ -365,6 +366,52 @@ class TestInsertData:
 
 
 # -- Partitioning and table metadata -------------------------------------------
+
+
+class TestSchemaUpdateOptions:
+    """Load jobs may add declared columns only under RECONCILE and only with a schema."""
+
+    def _strategy(self, dest: Any, strategy: MaterializationStrategy) -> None:
+        object.__setattr__(dest, "materialization_strategy", strategy)
+
+    def _job_config(self, mock_client: MagicMock) -> bigquery.LoadJobConfig:
+        return mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+
+    def test_reconcile_dataframe_load_allows_field_addition(self):
+        import pandas as pd
+
+        dest, mock_client = _make_destination(dataset="ds")
+        assert dest.materialization_strategy is MaterializationStrategy.RECONCILE  # the BigQuery default
+        df = pd.DataFrame([{"id": 1, "cost": 1.0, "day": datetime.date(2024, 1, 1)}])
+
+        dest.insert("tbl", "ds", df, _ctx(_plain_asset(), _RowSchema))
+
+        assert self._job_config(mock_client).schema_update_options == [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
+
+    def test_reconcile_rows_load_allows_field_addition(self):
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
+
+        assert self._job_config(mock_client).schema_update_options == [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
+
+    def test_auto_never_allows_field_addition(self):
+        import pandas as pd
+
+        dest, mock_client = _make_destination(dataset="ds")
+        self._strategy(dest, MaterializationStrategy.AUTO)
+        df = pd.DataFrame([{"id": 1, "cost": 1.0, "day": datetime.date(2024, 1, 1)}])
+
+        dest.insert("tbl", "ds", df, _ctx(_plain_asset(), _RowSchema))
+
+        assert self._job_config(mock_client).schema_update_options is None
+
+    def test_reconcile_without_schema_never_allows_field_addition(self):
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest.insert("tbl", "ds", [{"id": 1}], _ctx(_plain_asset(), None))
+
+        assert self._job_config(mock_client).schema_update_options is None
 
 
 class TestTimePartitioning:
