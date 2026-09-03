@@ -230,8 +230,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
             type(runner).__name__,
         )
 
+        from interloper.errors import PartitionError
+
         runner.on_event = on_event
-        result = asyncio.run(runner.run(dag, partition, metadata=metadata or None))
+        try:
+            result = asyncio.run(runner.run(dag, partition, metadata=metadata or None))
+        except PartitionError as exc:
+            raise SystemExit(f"Error: {exc}") from exc
 
         logger.info("Run completed: %s", result.status.name)
 
