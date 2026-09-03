@@ -42,8 +42,9 @@ Shop(account_id="act_1").to_spec().init
 # {"account_id": "act_1", "assets": {"orders": {"id": "...", "materializable": True, ...}, ...}}
 ```
 
-Reconstruction builds each asset class with its overrides; assets absent from the map are built
-bare.
+Reconstruction builds each asset class with its overrides. The map is also the list of assets the
+source ends up with: an asset absent from a non-empty map does not exist after reconstruction.
+To restrict what runs while keeping every asset wired, use `select` instead.
 
 ## Spec files
 

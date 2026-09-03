@@ -48,11 +48,18 @@ class Finance(il.Source):
         ...
 ```
 
-Both sources must be in the same DAG for the wiring to resolve:
+A cross-source contract is checked, not wired: the source only resolves keys that belong to
+itself, and nothing looks `shop.orders` up across sources. Wire the edge by instance id before
+building the DAG, and the DAG validates it against the contract:
 
 ```py
-dag = il.DAG(Shop(...), Finance(...))
+shop, finance = Shop(...), Finance(...)
+finance.revenue.dependencies["orders"] = shop.orders.id
+dag = il.DAG(shop, finance)
 ```
+
+In a spec file the same edge is an `id` on the upstream asset and a `dependencies` entry on the
+downstream one; see [Specs](specs.md).
 
 ## How wiring works
 

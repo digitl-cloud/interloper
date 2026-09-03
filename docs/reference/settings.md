@@ -1,8 +1,7 @@
 # Settings
 
 `AppSettings` is the runtime configuration the CLI and the platform read. It loads from three
-sources, highest priority first: environment variables, an `interloper.yaml` in the working
-directory, field defaults. Every section has its own environment prefix.
+sources: an `interloper.yaml` in the working directory, environment variables, field defaults. Every section has its own environment prefix.
 
 ```py
 from interloper.settings import AppSettings
@@ -93,9 +92,11 @@ catalog:
   - my_package.sources.Finance
 ```
 
-Note that a YAML block wins over environment variables for that whole submodel only when the
-block is absent: pydantic-settings merges by section, so setting `runner:` in YAML and
-`INTERLOPER_RUNNER_TYPE` in the environment resolves in favour of the environment.
+Within a section, a field present in the YAML wins over its environment variable, and the
+environment fills the fields the YAML leaves out: `runner: {type: serial}` with
+`INTERLOPER_RUNNER_TYPE=async` resolves to `serial`, while `INTERLOPER_POSTGRES_PASSWORD` completes a
+`postgres:` block that omits the password. The YAML is not interpolated, so secrets belong in the
+environment, not in `${VAR}` placeholders.
 
 ## Other environment variables
 
