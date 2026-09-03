@@ -1,8 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Interloper "i" — flat, minimal: a lowercase i in white on the brand
-       emerald. The tittle doubles as the interloper node. -->
-  <rect width="64" height="64" rx="14" fill="#174F78"/>
-  <!-- the tittle sits off-axis: the interloper, not yet in line -->
-  <circle cx="38.5" cy="17" r="5.75" fill="#FAB957"/>
-  <line x1="30" y1="31" x2="30" y2="47.5" stroke="#FAB957" stroke-width="11.5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Interloper: one node fanning out into two, drawn as a single stroked path set. -->
+  <g fill="none" stroke="#2F7CF6" stroke-width="64" stroke-linejoin="round" stroke-linecap="butt">
+    <rect x="32" y="407" width="208" height="209" rx="34"/>
+    <rect x="656" y="72" width="336" height="336" rx="62"/>
+    <rect x="656" y="616" width="336" height="336" rx="62"/>
+    <path d="M240 512 H448"/>
+    <path d="M624 238 H540 Q448 238 448 330 V694 Q448 784 540 784 H624"/>
+  </g>
 </svg>
