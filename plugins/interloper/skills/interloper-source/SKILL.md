@@ -20,6 +20,7 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
    ```py
    from functools import cached_property
 
+   import httpx
    import interloper as il
    from pydantic_settings import SettingsConfigDict
 
