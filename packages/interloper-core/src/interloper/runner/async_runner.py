@@ -206,13 +206,12 @@ class AsyncRunner(Runner):
         return result
 
     async def _flush(self, inflight: dict[asyncio.Task[Any], Operation]) -> None:
-        """Settle the in-flight tasks when the walk ends.
+        """Let the in-flight tasks finish when the walk ends.
 
         Called on a fail-fast break, a machinery abort, or natural
-        completion (where it is effectively a no-op). Under ``fail_fast``
-        the tasks are cancelled and finalization records every operation
-        left non-terminal as canceled; otherwise they run to completion and
-        ``_execute_operation`` records their outcomes itself.
+        completion (where it is effectively a no-op). Work already running
+        is never interrupted: ``_execute_operation`` records each outcome as
+        it lands, and finalization cancels whatever was never submitted.
 
         Args:
             inflight: Tasks still in flight, mapped to the operation each was
@@ -221,13 +220,6 @@ class AsyncRunner(Runner):
         if not inflight:
             return
 
-        if self.fail_fast:
-            for task in inflight:
-                task.cancel()
-            return
-
-        # Let running tasks finish naturally and record their outcomes.
-        # (_execute_operation already calls mark_failed/mark_completed.)
         done, _ = await asyncio.wait(inflight.keys())
 
         for task in done:
