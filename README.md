@@ -28,6 +28,8 @@ uv add interloper-core
 
 ## Quick start
 
+### Connections
+
 A connection holds credentials and a client. It is a pydantic-settings model: values come from
 the constructor, `.env`, or the environment (`SHOP_API_KEY` here).
 
@@ -48,6 +50,8 @@ class ShopConnection(il.Connection):
     def client(self) -> il.RESTClient:
         return il.RESTClient("https://api.shop.example", auth=il.HTTPBearerAuth(self.api_key))
 ```
+
+### Sources and assets
 
 A source groups assets. Configuration fields live on the class; assets are methods and read them
 through `self`. Resources are injected by type annotation, a parameter named after a sibling
@@ -87,6 +91,8 @@ class Shop(il.Source):
         return [{"date": day, "orders": len(orders), "revenue": sum(o["total"] for o in orders)}]
 ```
 
+### Destinations
+
 Instances carry the runtime configuration: resources, destinations, dataset. Destinations
 cascade from the source to its assets. `discriminator=True` on `account` makes the tables
 `orders__acme` and `order_stats__acme`, so several accounts share one dataset.
@@ -121,6 +127,8 @@ class JSONLDestination(il.Destination):
         return [json.loads(line) for line in path.read_text().splitlines()]
 ```
 
+### Running
+
 Run a single asset, or build a DAG. The DAG validates the wiring (missing dependencies, cycles,
 a non-partitioned asset downstream of a partitioned one) and runs assets in dependency order.
 Partitioned assets always run for a partition; a window is a loop.
@@ -140,6 +148,8 @@ runner = il.AsyncRunner(max_workers=8, fail_fast=False, on_event=print)   # or S
 result = il.run(runner.run(dag, il.TimePartition(dt.date(2026, 1, 15))))   # il.run: sync bridge, notebook-safe
 result.status, result.failed_ids, result.executions
 ```
+
+### Specs and the CLI
 
 Every component serializes to a spec and back, so a run can be described in YAML. `${VAR}` is
 read from the environment. The runner comes from `interloper.yaml` or `INTERLOPER_RUNNER_*`.
@@ -164,6 +174,8 @@ interloper run -f shop.yaml --date 2026-01-15 --dry-run
 interloper run -f shop.yaml --date 2026-01-15
 interloper run -f shop.yaml --date 2026-01            # monthly key for monthly assets; also 2026, 2026-01-15T13
 ```
+
+### Components and the catalog
 
 Components describe themselves. A package registers its components with one entry point and
 they appear in the catalog the API, the UI and spec `key` references read.
