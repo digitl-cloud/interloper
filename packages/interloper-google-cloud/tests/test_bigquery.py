@@ -184,6 +184,11 @@ def _plain_asset() -> list:
     return []
 
 
+@il.asset(schema=_RowSchema)
+def _declared_asset() -> list:
+    return []
+
+
 @il.asset(partitioning=il.TimePartitionConfig(column="day"))
 def _partitioned_asset() -> list:
     """Daily rows."""  # noqa: DOC201 — an asset docstring is its table description, not dev docs
@@ -293,6 +298,46 @@ class TestInsertData:
 
 
 # -- Partitioning and table metadata -------------------------------------------
+
+
+class TestSchemaUpdateOptions:
+    """A load may add the columns a declared schema gained; inferred or absent schemas never grow a table."""
+
+    def _job_config(self, mock_client: MagicMock) -> bigquery.LoadJobConfig:
+        return mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+
+    def test_a_declared_schema_lets_the_load_add_its_columns(self):
+        import pandas as pd
+
+        dest, mock_client = _make_destination(dataset="ds")
+        df = pd.DataFrame([{"id": 1, "cost": 1.0, "day": datetime.date(2024, 1, 1)}])
+
+        dest.insert("tbl", "ds", df, _ctx(_declared_asset(), _RowSchema))
+
+        assert self._job_config(mock_client).schema_update_options == [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
+
+    def test_rows_behind_a_declared_schema_get_the_same_allowance(self):
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_declared_asset(), _RowSchema))
+
+        assert self._job_config(mock_client).schema_update_options == [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
+
+    def test_an_inferred_schema_never_grows_the_table(self):
+        # Conform infers an effective schema for a schemaless asset; a column
+        # BigQuery does not know is then drift in the data, not a contract change.
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
+
+        assert self._job_config(mock_client).schema_update_options is None
+
+    def test_no_schema_never_grows_the_table(self):
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest.insert("tbl", "ds", [{"id": 1}], _ctx(_plain_asset(), None))
+
+        assert self._job_config(mock_client).schema_update_options is None
 
 
 class TestTimePartitioning:
