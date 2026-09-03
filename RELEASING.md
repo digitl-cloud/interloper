@@ -142,12 +142,15 @@ One-time setup:
 1. Let the first stable release run — `chart-releaser` creates the `gh-pages`
    branch and the initial `index.yaml`.
 2. Repo → *Settings* → *Pages* → set **Source** to *Deploy from a branch*,
-   branch `gh-pages`, folder `/ (root)`.
+   branch `gh-pages`, folder `/ (root)`. The same branch carries the
+   documentation site (Docs workflow, `CNAME docs.interloper.dev`), so the
+   Helm repository is reachable at `https://docs.interloper.dev` and the
+   `github.io` URL redirects there.
 
 Consumers then add the repo and install:
 
 ```bash
-helm repo add interloper https://<owner>.github.io/interloper
+helm repo add interloper https://docs.interloper.dev
 helm repo update
 helm install interloper interloper/interloper
 ```

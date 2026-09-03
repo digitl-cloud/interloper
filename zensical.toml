@@ -10,7 +10,7 @@ site_name = "Interloper"
 site_description = "The ultra-portable data asset framework"
 site_author = "Digitl Cloud"
 
-#site_url = "https://www.example.com/"
+site_url = "https://docs.interloper.dev/"
 
 repo_url = "https://github.com/digitl-cloud/interloper"
 

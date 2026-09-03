@@ -1,0 +1,53 @@
+name: Docs
+
+# Publishes the documentation site to GitHub Pages on every change to main.
+#
+# The site is built with zensical from docs/ + zensical.toml and pushed into
+# the gh-pages branch, which is also the Helm repository chart-releaser writes
+# index.yaml into (Publish workflow). keep_files leaves index.yaml alone, and
+# the CNAME file makes Pages serve the branch at docs.interloper.dev.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "zensical.toml"
+      - ".github/workflows/docs.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Build site
+        # Same isolated invocation the docs image used: zensical alone, no
+        # workspace sync. Keep the version in step with pyproject's dev group.
+        run: uv run --no-project --with "zensical>=0.0.24" zensical build
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./site
+          keep_files: true
+          cname: docs.interloper.dev
+          commit_message: "docs: publish ${{ github.sha }}"

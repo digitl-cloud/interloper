@@ -56,7 +56,7 @@ COMMON_EXTRAS ?= otel
 # plus the matching "latest" / "latest-<flavor>" tags on stable releases.
 # NOTE: the `docker` job matrix in .github/workflows/publish.yaml mirrors this
 # catalog — update both together when adding or removing a role or flavor.
-ROLES := api frontend worker scheduler docs mcp
+ROLES := api frontend worker scheduler mcp
 
 # Flavors per role, and the build-arg that carries a flavor's extra. A role
 # with no FLAVORS_<role> builds only its base image.
@@ -69,7 +69,7 @@ EXTRAS_ARG_scheduler := SCHEDULER_EXTRAS
 ALL_FLAVORS := $(sort $(foreach r,$(ROLES),$(FLAVORS_$(r))))
 
 # Concrete target stems built by `docker-build`: every role plus each
-# "<role>-<flavor>" pair → api api-agent frontend worker scheduler docs
+# "<role>-<flavor>" pair → api api-agent frontend worker scheduler mcp
 # scheduler-k8s scheduler-docker.
 TARGETS := $(ROLES) \
            $(foreach r,$(ROLES),$(foreach f,$(FLAVORS_$(r)),$(r)-$(f)))
@@ -90,15 +90,10 @@ latest_of = latest$(if $(call flavor_of,$(1)),-$(call flavor_of,$(1)))
 # (SCHEDULER_EXTRAS defaults to "docker" there).
 extras_arg = $(if $(EXTRAS_ARG_$(call role_of,$(1))),--build-arg $(EXTRAS_ARG_$(call role_of,$(1)))=$(call flavor_of,$(1)))
 
-# Dockerfile per role. The static docs site is independent of the Python
-# workspace, so it has its own standalone docs.dockerfile; every other role
-# is a target in the multi-target dockerfile.
-dockerfile_of = $(if $(filter docs,$(call role_of,$(1))),docs.dockerfile,dockerfile)
-
 # Pattern rules. Order matters on macOS' GNU make 3.81 (no shortest-stem):
 # the more specific docker-build-linux-% must come first.
 docker-build-linux-%:
-	docker build --target $(call role_of,$*) -f $(call dockerfile_of,$*) --platform linux/amd64 \
+	docker build --target $(call role_of,$*) -f dockerfile --platform linux/amd64 \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
 		--build-arg COMMON_EXTRAS=$(COMMON_EXTRAS) \
@@ -109,7 +104,7 @@ docker-build-linux-%:
 		-t $(REGISTRY)/$(call image_of,$*):$(call latest_of,$*) .
 
 docker-build-%:
-	docker build --target $(call role_of,$*) -f $(call dockerfile_of,$*) \
+	docker build --target $(call role_of,$*) -f dockerfile \
 		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
 		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
 		--build-arg COMMON_EXTRAS=$(COMMON_EXTRAS) \
