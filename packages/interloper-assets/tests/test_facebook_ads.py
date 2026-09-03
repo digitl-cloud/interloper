@@ -19,8 +19,8 @@ from interloper.dag.base import DAG
 from interloper.representation import Representation
 from interloper_pandas import DataFrameNormalizer
 
-from interloper_assets.facebook_ads import schemas
-from interloper_assets.facebook_ads.source import FacebookActionsNormalizer, FacebookAds
+from interloper_assets.facebook_ads import constants, schemas
+from interloper_assets.facebook_ads.source import PIVOT_COLUMNS, FacebookActionsNormalizer, FacebookAds
 
 
 def _source() -> Any:
@@ -103,7 +103,7 @@ class TestSpecRoundtripAndReconcile:
     def test_sparse_row_passes_validation(self):
         """A sparse insights frame still passes validation.
 
-        Only a few of the 75 fields arrive, and every schema field is
+        Only a few of the 200 fields arrive, and every schema field is
         optional, so absent action types are not 'Field required' errors.
         """
         df = pd.DataFrame([{"date_start": "2026-06-10", "account_id": "123", "actions_link_click": 7}])
@@ -115,6 +115,45 @@ class TestSpecRoundtripAndReconcile:
         normalized = child.normalizer.normalize(rows)
         assert "creative_id" in normalized.columns  # nested dict flattened by the normalizer
         Representation.of(normalized).conformer.reconcile(normalized, schemas.Ads)  # must not raise
+
+
+class TestSchemaParity:
+    """Both stats assets fetch the same action arrays; the schemas must not drop them unevenly."""
+
+    _ACTION_FAMILIES = (
+        "actions_",
+        "action_values_",
+        "cost_per_action_type_",
+        "cost_per_unique_action_type_",
+        "unique_actions_",
+    )
+
+    def test_ads_stats_declares_every_campaign_action_column(self):
+        campaigns = schemas.CampaignsStats.model_fields
+        ads = schemas.AdsStats.model_fields
+        expected = {name: info for name, info in campaigns.items() if name.startswith(self._ACTION_FAMILIES)}
+
+        missing = sorted(set(expected) - set(ads))
+        assert not missing, f"AdsStats lacks {len(missing)} campaign action columns: {missing}"
+
+        mismatched = {
+            name: (str(info.annotation), str(ads[name].annotation))
+            for name, info in expected.items()
+            if info.annotation != ads[name].annotation
+        }
+        assert not mismatched, mismatched
+
+    def test_ads_stats_declares_every_requested_scalar(self):
+        # Breakdown dimensions come back as columns too, though they are not in the fields list.
+        breakdowns = {"publisher_platform", "platform_position", "impression_device"}
+        requested = {field for field in constants.ADS_INSIGHT_FIELDS if field not in PIVOT_COLUMNS} | breakdowns
+
+        missing = sorted(requested - set(schemas.AdsStats.model_fields))
+        assert not missing, f"requested but undeclared on AdsStats (silently dropped): {missing}"
+
+    def test_campaigns_stats_declares_the_shared_scalars(self):
+        for name in ("attribution_setting", "quality_ranking", "converted_product_quantity"):
+            assert name in schemas.CampaignsStats.model_fields, name
 
 
 def test_isinstance_of_dataframe_normalizer():
