@@ -1,265 +1,338 @@
 # Tutorial
 
-## Your first asset
+This tutorial builds a small but complete source against the public
+[Open Meteo](https://open-meteo.com/) API. Each step adds one concept: an asset, a source with
+configuration, a connection carrying an HTTP client, a dependency, a schema, partitioning, and
+finally running from the CLI. The finished code is at the end.
 
-At the most basic level, an `asset` is simply a function that returns data.
-Any kind of data, whether it's a string, a list of dictionaries, a Pandas dataframe, etc.
+## 1. An asset
 
-Let's create our first asset that pulls today's Berlin weather forecast data from [Open Meteo](https://open-meteo.com/):
+An asset is a function returning data. Here it fetches yesterday's hourly forecast for Berlin:
 
 ```py
 import datetime as dt
+
 import httpx
 import interloper as il
 
+URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+
 @il.asset
-def forecast():
-    url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+def forecast() -> list[dict]:
+    date = dt.date.today() - dt.timedelta(days=1)
     params = {
-        "latitude": 52.5244,
-        "longitude": 13.4105,
-        "start_date": dt.date.today().isoformat(),
-        "end_date": dt.date.today().isoformat(),
-        "hourly": ["temperature_2m", "relative_humidity_2m", "dew_point_2m", "precipitation", "wind_speed_10m"],
+        "latitude": 52.52,
+        "longitude": 13.41,
+        "start_date": date.isoformat(),
+        "end_date": date.isoformat(),
+        "hourly": ["temperature_2m", "precipitation", "wind_speed_10m"],
     }
-    response = httpx.get(url, params=params)
-    data = response.json()["hourly"]
-    return data
+    payload = httpx.get(URL, params=params).json()["hourly"]
+    return [dict(zip(payload, values)) for values in zip(*payload.values())]
 ```
 
-We can execute our asset by instantiating it and calling `run()` — a plain synchronous call
-that works in scripts, the REPL, and notebooks alike (the async-native engine runs on a
-background event loop; async code awaits `run_async()` instead):
+Run it:
 
 ```py
-result = forecast().run()
+rows = forecast().run()
 ```
 
-!!! note
+`forecast` is a definition (a class); `forecast()` is an instance. The distinction matters as
+soon as you configure instances differently, which the next steps do.
 
-    The `@il.asset` decorator returns an asset **definition** (a class). Calling it (e.g.
-    `forecast()`) creates a runtime `Asset` instance. This separation between definition and
-    instance is a core concept in Interloper.
-
-Synchronous asset functions like the one above run on a worker thread automatically, so they
-never block the event loop. If you prefer, you can write the asset as a coroutine and
-Interloper will await it natively:
+Sync functions run on a worker thread, so they never block the engine. An `async def` asset is
+awaited natively:
 
 ```py
 @il.asset
-async def forecast():
+async def forecast() -> list[dict]:
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, params=params)
-    return response.json()["hourly"]
+        response = await client.get(URL, params=params)
+    ...
 ```
 
-## Adding context
+## 2. A source with configuration
 
-Assets that need access to partition information or a logger can request an `ExecutionContext`:
+Coordinates are configuration, not code. Move the asset into a source and declare the
+coordinates as fields:
 
 ```py
-@il.asset
-def forecast(context: il.ExecutionContext):
-    context.logger.info("Fetching forecast data...")
-    url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
-    params = {
-        "latitude": 52.5244,
-        "longitude": 13.4105,
-        "start_date": dt.date.today().isoformat(),
-        "end_date": dt.date.today().isoformat(),
-        "hourly": ["temperature_2m", "relative_humidity_2m", "dew_point_2m", "precipitation", "wind_speed_10m"],
-    }
-    response = httpx.get(url, params=params)
-    return response.json()["hourly"]
+@il.source(tags=["Weather"])
+class OpenMeteo(il.Source):
+    """Hourly weather from Open Meteo."""
+
+    latitude: float = il.InputField(default=52.52, description="Latitude of the location")
+    longitude: float = il.InputField(default=13.41, description="Longitude of the location")
+
+    @il.asset
+    def forecast(self) -> list[dict]:
+        date = dt.date.today() - dt.timedelta(days=1)
+        params = {
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "start_date": date.isoformat(),
+            "end_date": date.isoformat(),
+            "hourly": ["temperature_2m", "precipitation", "wind_speed_10m"],
+        }
+        payload = httpx.get(URL, params=params).json()["hourly"]
+        return [dict(zip(payload, values)) for values in zip(*payload.values())]
 ```
 
-## Materialization
-
-Interloper starts to make sense when we introduce the concept of **materialization**.
-
-An asset can be **materialized**, meaning that based on a `Destination` configuration, its result is **written to** that destination.
-
-Interloper ships with built-in destinations and additional ones via extension packages.
-
-Let's materialize our asset using `FileDestination`, which pickles the data on the filesystem:
+The asset is now a method: `self` is the source instance, so it reads the configured
+coordinates. The `InputField` helper is a pydantic `Field` that also tells a UI how to render the
+field; the default alone would work too.
 
 ```py
-forecast_asset = forecast(destinations=il.FileDestination("./data"))
-forecast_asset.materialize()
+berlin = OpenMeteo()
+paris = OpenMeteo(latitude=48.86, longitude=2.35)
+paris.forecast.run()
 ```
 
-The materialization handles the execution of the asset and saves the data as a pickle file under `./data/forecast/data.pkl`.
+## 3. Materialize
 
-## Defining a source
+Give the source a destination and materialize. Every asset without its own destination inherits
+the source's:
 
-Pulling data from a data source isn't typically limited to a single asset. We might fetch data from several API endpoints while reusing common configuration or a shared HTTP client.
+```py
+source = OpenMeteo(destinations=il.CSVDestination(base_path="./data"))
+source.forecast.materialize()
+# ./data/open_meteo/forecast/data.csv
+```
 
-Interloper allows you to define `sources`, which group related assets together. A source is a
-**function** decorated with `@il.source` that returns the list of assets it contains:
+The path is `{base_path}/{dataset}/{table}/data.csv`. The dataset defaults to the source key
+(`open_meteo`), the table to the asset key.
+
+## 4. A connection with an HTTP client
+
+Open Meteo needs no credentials, but most APIs do, and a client is worth sharing between
+assets. That is what a **connection** is for: a resource holding credentials and exposing a
+client. Here is one for a hypothetical authenticated weather API:
+
+```py
+from functools import cached_property
+
+@il.connection(name="Weather API")
+class WeatherConnection(il.Connection):
+    api_key: str = il.SecretField(description="API key")
+
+    @cached_property
+    def client(self) -> il.RESTClient:
+        return il.RESTClient("https://api.example.com", auth=il.HTTPBearerAuth(self.api_key))
+```
+
+Inject it into an asset by annotating a parameter with the connection type:
 
 ```py
 @il.source
-def open_meteo():
+class Weather(il.Source):
     @il.asset
-    def forecast():
-        url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": 52.5244,
-            "longitude": 13.4105,
-            "start_date": dt.date.today().isoformat(),
-            "end_date": dt.date.today().isoformat(),
-            "hourly": ["temperature_2m", "relative_humidity_2m", "dew_point_2m", "precipitation", "wind_speed_10m"],
-        }
-        response = httpx.get(url, params=params)
-        return response.json()["hourly"]
-
-    @il.asset
-    def air_quality():
-        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
-        params = {
-            "latitude": 52.5244,
-            "longitude": 13.4105,
-            "start_date": dt.date.today().isoformat(),
-            "end_date": dt.date.today().isoformat(),
-            "hourly": ["pm10", "pm2_5", "dust", "uv_index"],
-        }
-        response = httpx.get(url, params=params)
-        return response.json()["hourly"]
-
-    return [forecast, air_quality]
+    def stations(self, connection: WeatherConnection) -> list[dict]:
+        return connection.client.get("/stations").json()
 ```
 
-Instantiate the source and access individual assets by name:
+Resolution is a cascade: an instance passed on the asset, then one passed on the source, then
+one built from the environment (`API_KEY=...`). For paginated endpoints the client has a
+`paginate()` method with pluggable paginators; see [Connections](guide/connections.md).
+
+## 5. A dependency
+
+Add an asset that consumes another. Naming a parameter after a sibling asset declares the
+dependency:
 
 ```py
-source = open_meteo(destinations=il.FileDestination("./data"))
-source.forecast.run()
-source.air_quality.materialize()
+@il.source
+class OpenMeteo(il.Source):
+    ...
+
+    @il.asset
+    def forecast(self) -> list[dict]:
+        ...
+
+    @il.asset
+    def daily_summary(self, forecast: list[dict]) -> list[dict]:
+        temperatures = [row["temperature_2m"] for row in forecast]
+        return [{"min": min(temperatures), "max": max(temperatures)}]
 ```
 
-## DAG
-
-When you want to materialize multiple assets together, respecting their dependencies, use a `DAG`:
+When the DAG runs, `forecast` is materialized first, then read back from its destination and
+passed to `daily_summary`. Run the whole source:
 
 ```py
-source = open_meteo(destinations=il.FileDestination("./data"))
 dag = il.DAG(source)
 dag.materialize()
 ```
 
-`dag.materialize()` runs the DAG with the default `AsyncRunner`. For more control, use a runner
-directly — runners are async-native, so drive them with `il.run` from sync code:
+## 6. A schema
+
+Declare what `forecast` returns. With a schema the data is reconciled to it on every
+materialization: columns aligned, values coerced, mismatches reported.
 
 ```py
-result = il.run(il.SerialRunner().run(dag))
+class ForecastRow(il.Schema):
+    time: dt.datetime
+    temperature_2m: float | None
+    precipitation: float | None
+    wind_speed_10m: float | None
 
-print(result.status)           # ExecutionStatus.COMPLETED
-print(result.execution_time)   # Total time in seconds
+@il.asset(schema=ForecastRow)
+def forecast(self) -> list[dict]:
+    ...
 ```
 
-## Configuration
+Without a schema, one is inferred from the data so that destinations still know the column
+types. How strictly the schema is enforced is the asset's `materialization_strategy`; see
+[Schemas and data contracts](guide/schema.md).
 
-Sources often need external configuration like base URLs or feature flags. Define a `Config`,
-which extends [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
-for environment-based resolution, and **inject it into your asset functions** by type
-annotation:
+## 7. Partitioning
+
+A daily fetch should be driven by the run, not by `dt.date.today()`. Declare time partitioning
+and read the partition from the context:
 
 ```py
-class OpenMeteoConfig(il.Config):
-    latitude: float = 52.5244
-    longitude: float = 13.4105
-
-@il.source
-def open_meteo():
-    @il.asset
-    def forecast(config: OpenMeteoConfig):
-        url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": config.latitude,
-            "longitude": config.longitude,
-            "start_date": dt.date.today().isoformat(),
-            "end_date": dt.date.today().isoformat(),
-            "hourly": ["temperature_2m"],
-        }
-        response = httpx.get(url, params=params)
-        return response.json()["hourly"]
-
-    return [forecast]
+@il.asset(schema=ForecastRow, partitioning=il.TimePartitionConfig(column="date"))
+def forecast(self, context: il.ExecutionContext) -> list[dict]:
+    date = context.partition_date
+    params = {
+        "latitude": self.latitude,
+        "longitude": self.longitude,
+        "start_date": date.isoformat(),
+        "end_date": date.isoformat(),
+        "hourly": ["temperature_2m", "precipitation", "wind_speed_10m"],
+    }
+    payload = httpx.get(URL, params=params).json()["hourly"]
+    rows = [dict(zip(payload, values)) for values in zip(*payload.values())]
+    for row in rows:
+        row["date"] = date
+    return rows
 ```
 
-The config is automatically resolved from environment variables when the asset runs. You can
-also provide it explicitly via the `resources` mapping:
+The schema gains a `date: dt.date` column, the partition column. A partitioned asset must be
+run for a partition:
 
 ```py
-source = open_meteo()
-configured = source.forecast(resources={"config": OpenMeteoConfig(latitude=48.8566, longitude=2.3522)})
+dag.materialize(il.TimePartition(dt.date(2026, 1, 15)))
+# ./data/open_meteo/forecast/date=2026-01-15/data.csv
 ```
 
-For service **credentials** (API keys, OAuth tokens), use a [Connection](features/connections.md)
-instead of a plain `Config` — same injection mechanism, plus secret handling and an OAuth
-connect flow.
-
-## Partitioning
-
-Many data pipelines need to process data by date. Interloper supports time-based partitioning:
+Backfilling a range is a loop over a window, newest first:
 
 ```py
-@il.source
-def open_meteo():
-    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
-    def forecast(context: il.ExecutionContext):
-        date = context.partition_date
-        url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": 52.5244,
-            "longitude": 13.4105,
-            "start_date": date.isoformat(),
-            "end_date": date.isoformat(),
-            "hourly": ["temperature_2m"],
-        }
-        response = httpx.get(url, params=params)
-        return response.json()["hourly"]
-
-    return [forecast]
-```
-
-Materialize for a specific date:
-
-```py
-source = open_meteo(destinations=il.FileDestination("./data"))
-dag = il.DAG(source)
-dag.materialize(partition_or_window=il.TimePartition(dt.date.today()))
-```
-
-## Backfilling
-
-To process a range of dates, build a `TimePartitionWindow` and iterate it. It yields one
-partition per period, newest first:
-
-```py
-import datetime as dt
-
-window = il.TimePartitionWindow(
-    start=dt.date(2025, 1, 1),
-    end=dt.date(2025, 1, 7),
-)
+window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 7))
 for partition in window:
     dag.materialize(partition)
 ```
 
-There is no separate "backfiller" object, and every runner (serial, async, multi-process, Docker,
-Kubernetes) takes the same partition scope. An asset that declares `allow_window=True` can take
-the whole window as a single run instead of one run per date.
+`daily_summary` depends on a partitioned asset, so it must be partitioned too; the DAG rejects a
+non-partitioned asset downstream of a partitioned one.
 
-## Next steps
+## 8. Runners
 
-- [Assets & Sources](features/assets-sources.md) -- Detailed definition patterns
-- [Destinations](features/destinations.md) -- All available destinations
-- [Runners](features/runners.md) -- Execution strategies
-- [Schema & Normalizer](features/schema.md) -- Data normalization and validation
-- [Connections](features/connections.md) -- Credentials and the OAuth connect flow
-- [Partitioning](features/partitioning.md) -- Time-based partitioning
-- [Backfilling](features/backfilling.md) -- Historical data processing
-- [Configuration](features/config.md) -- Environment-based config
-- [Events](features/events.md) -- Lifecycle event system
-- [CLI & Manifests](features/cli.md) -- Command-line interface and declarative runs
+`dag.materialize()` uses an `AsyncRunner` with four concurrent slots. Runners are async-native;
+from sync code, drive them with `il.run`:
+
+```py
+from interloper.events import ConsoleEventHandler
+
+runner = il.AsyncRunner(max_workers=8, fail_fast=False, on_event=ConsoleEventHandler())
+result = il.run(runner.run(dag, il.TimePartition(dt.date(2026, 1, 15))))
+print(result.status, result.failed_ids)
+```
+
+`on_event` streams the run's lifecycle events through the logging stack. See
+[Execution](guide/execution.md) and [Events and logging](guide/events.md).
+
+## 9. The CLI
+
+With the source saved in `weather.py`, inspect the plan without writing a driver script. The
+module must be importable, so either install your package or put its directory on the path:
+
+```sh
+PYTHONPATH=. interloper run weather.OpenMeteo --date 2026-01-15 --dry-run
+```
+
+Import paths instantiate the class with its defaults, which here means no destinations, and
+`daily_summary` needs `forecast` to have been written somewhere. Destinations and configuration
+for a CLI run live in a **spec file**, a YAML document reconstructing a job, source or asset:
+
+```yaml
+# weather.yaml
+path: weather.OpenMeteo
+init:
+  latitude: 48.86
+  longitude: 2.35
+  destinations:
+    - path: interloper.destination.csv.CSVDestination
+      init: { base_path: ./data }
+```
+
+```sh
+PYTHONPATH=. interloper run -f weather.yaml --date 2026-01-15
+```
+
+The CLI also takes `--start-date` and `--end-date`, but that is a **single run** covering the
+whole window, which only assets declaring `allow_window=True` accept. For one run per day, loop
+as in step 7, or declare the window support described in [Partitioning](guide/partitioning.md#windowed-assets).
+
+The runner comes from `interloper.yaml` or `INTERLOPER_RUNNER_*` variables. See
+[CLI](guide/cli.md) and [Specs and serialization](guide/specs.md).
+
+## The finished source
+
+```py
+import datetime as dt
+
+import httpx
+import interloper as il
+
+URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+PARTITIONING = il.TimePartitionConfig(column="date")
+
+
+class ForecastRow(il.Schema):
+    date: dt.date
+    time: dt.datetime
+    temperature_2m: float | None
+    precipitation: float | None
+    wind_speed_10m: float | None
+
+
+class DailySummary(il.Schema):
+    date: dt.date
+    min: float
+    max: float
+
+
+@il.source(tags=["Weather"])
+class OpenMeteo(il.Source):
+    """Hourly weather from Open Meteo."""
+
+    latitude: float = il.InputField(default=52.52, description="Latitude of the location")
+    longitude: float = il.InputField(default=13.41, description="Longitude of the location")
+
+    @il.asset(schema=ForecastRow, partitioning=PARTITIONING, tags=["Report"])
+    def forecast(self, context: il.ExecutionContext) -> list[dict]:
+        date = context.partition_date
+        params = {
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "start_date": date.isoformat(),
+            "end_date": date.isoformat(),
+            "hourly": ["temperature_2m", "precipitation", "wind_speed_10m"],
+        }
+        payload = httpx.get(URL, params=params).json()["hourly"]
+        rows = [dict(zip(payload, values)) for values in zip(*payload.values())]
+        for row in rows:
+            row["date"] = date
+        return rows
+
+    @il.asset(schema=DailySummary, partitioning=PARTITIONING, tags=["Report"])
+    def daily_summary(self, context: il.ExecutionContext, forecast: list[dict]) -> list[dict]:
+        temperatures = [row["temperature_2m"] for row in forecast if row["temperature_2m"] is not None]
+        return [{"date": context.partition_date, "min": min(temperatures), "max": max(temperatures)}]
+
+
+if __name__ == "__main__":
+    source = OpenMeteo(destinations=il.CSVDestination(base_path="./data"))
+    result = il.DAG(source).materialize(il.TimePartition(dt.date(2026, 1, 15)))
+    print(result)
+```
