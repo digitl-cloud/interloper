@@ -97,7 +97,22 @@ features = [
     "toc.integrate",
 ]
 
+# Three-state colour toggle: follow the system preference by default, with
+# explicit light and dark overrides cycling through the header button.
 [[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle = { icon = "material/brightness-auto", name = "Switch to light mode" }
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
 scheme = "default"
 primary = "custom"
 accent = "custom"
+toggle = { icon = "material/brightness-7", name = "Switch to dark mode" }
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle = { icon = "material/brightness-4", name = "Switch to system preference" }

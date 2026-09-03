@@ -111,6 +111,52 @@
 }
 
 /* ==========================================================================
+   Dark scheme (slate): the header and tabs follow the page background, the
+   accent shifts to the lighter blue for contrast, inline code goes dark.
+   ========================================================================== */
+[data-md-color-scheme=slate] {
+    --md-typeset-a-color: var(--il-blue-light);
+}
+
+[data-md-color-scheme=slate] .md-header,
+[data-md-color-scheme=slate] .md-tabs {
+    background-color: var(--md-default-bg-color);
+    color: var(--md-default-fg-color);
+}
+
+[data-md-color-scheme=slate] .md-header {
+    box-shadow: 0 0 0.2rem rgba(0, 0, 0, 0.3), 0 0.2rem 0.4rem rgba(0, 0, 0, 0.3);
+}
+
+[data-md-color-scheme=slate] .md-tabs {
+    border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+
+[data-md-color-scheme=slate] .md-tabs__link--active,
+[data-md-color-scheme=slate] .md-tabs__link:hover {
+    color: var(--il-blue-light);
+}
+
+[data-md-color-scheme=slate] .md-search__form {
+    background-color: var(--md-code-bg-color);
+    color: var(--md-default-fg-color);
+}
+
+[data-md-color-scheme=slate] .md-search__form:hover {
+    background-color: var(--md-code-bg-color--light, var(--md-code-bg-color));
+}
+
+[data-md-color-scheme=slate] .md-search__input::placeholder,
+[data-md-color-scheme=slate] .md-search__icon {
+    color: var(--md-default-fg-color--light);
+}
+
+[data-md-color-scheme=slate] .md-typeset code:not(pre code) {
+    background-color: var(--md-code-bg-color);
+    color: var(--md-code-fg-color);
+}
+
+/* ==========================================================================
    Landing page helpers
    ========================================================================== */
 .center {
