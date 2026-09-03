@@ -64,6 +64,7 @@ nav = [
         { "Errors" = "reference/errors.md" },
         { "Utilities" = "reference/utils.md" },
         { "Ecosystem" = "reference/ecosystem.md" },
+        { "Claude Code plugin" = "reference/claude-code.md" },
     ] },
 ]
 
