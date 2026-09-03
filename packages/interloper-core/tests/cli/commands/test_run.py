@@ -3,7 +3,7 @@
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -21,7 +21,20 @@ class FakeRunSource(il.Source):
             return [{"x": 1}]
 
 
+class FakePartitionedSource(il.Source):
+    """Single daily-partitioned asset that does not allow windowed runs."""
+
+    class Daily(il.Asset):
+        """Returns a static row stamped with the partition date."""
+
+        partitioning: ClassVar[il.TimePartitionConfig | None] = il.TimePartitionConfig(column="date")
+
+        def data(self, context: il.ExecutionContext) -> Any:
+            return [{"date": context.partition_date, "x": 1}]
+
+
 SOURCE_PATH = f"{FakeRunSource.__module__}.FakeRunSource"
+PARTITIONED_SOURCE_PATH = f"{FakePartitionedSource.__module__}.FakePartitionedSource"
 
 
 def _args(**overrides: Any) -> argparse.Namespace:
@@ -146,6 +159,19 @@ class TestRunSpecFileMode:
                 - path: {SOURCE_PATH}
             """,
         )
+
+
+class TestRunPreflightErrors:
+    """Partition errors raised by the runner's preflight surface like the other input errors."""
+
+    def test_window_without_allow_window_is_a_clean_error(self) -> None:
+        with pytest.raises(SystemExit, match="Error: Windowed runs require") as exc_info:
+            _cmd_run(_args(target=[PARTITIONED_SOURCE_PATH], start_date="2026-01-01", end_date="2026-01-07"))
+        assert "allow_window=True" in str(exc_info.value)
+
+    def test_missing_partition_is_a_clean_error(self) -> None:
+        with pytest.raises(SystemExit, match="Error: This run requires a partition"):
+            _cmd_run(_args(target=[PARTITIONED_SOURCE_PATH]))
 
 
 class TestRunJobSpecMode:
