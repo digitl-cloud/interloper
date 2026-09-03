@@ -60,7 +60,6 @@ nav = [
         { "Utilities" = "reference/utils.md" },
         { "Ecosystem" = "reference/ecosystem.md" },
     ] },
-    { "FAQ" = "faq.md" },
 ]
 
 extra_css = ["stylesheets/extra.css"]
