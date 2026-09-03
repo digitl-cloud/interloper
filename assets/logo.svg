@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Interloper: one node fanning out into two, drawn as a single stroked path set. -->
+  <g fill="none" stroke="#2F7CF6" stroke-width="64" stroke-linejoin="round" stroke-linecap="butt">
+    <rect x="32" y="407" width="208" height="209" rx="34"/>
+    <rect x="656" y="72" width="336" height="336" rx="62"/>
+    <rect x="656" y="616" width="336" height="336" rx="62"/>
+    <path d="M240 512 H448"/>
+    <path d="M624 238 H540 Q448 238 448 330 V694 Q448 784 540 784 H624"/>
+  </g>
+</svg>
