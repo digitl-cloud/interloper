@@ -1,14 +1,13 @@
 /* ==========================================================================
    Interloper brand palette
-   Light chrome, the logo blue as brand accent and link colour, dark-navy
-   code surfaces.
+   Light chrome, the logo blue as brand accent and link colour; code blocks
+   keep the theme defaults.
    ========================================================================== */
 
 :root {
     --il-blue: #2f7cf6;
     --il-blue-dark: #1f66db;
     --il-blue-light: #6aa2f9;
-    --il-navy: #0d1526;
     --il-slate-900: #0f172a;
     --il-slate-600: #475569;
     --il-gray-100: #f1f5f9;
@@ -75,44 +74,9 @@
     color: var(--il-slate-600);
 }
 
-/* --------------------------------------------------------------------------
-   Dark-navy code surfaces, echoing the console terminal and cards.
-   Syntax tokens are tuned for the dark background (these vars are only ever
-   consumed inside code blocks, so overriding them globally is safe).
-   -------------------------------------------------------------------------- */
-[data-md-color-scheme=default] {
-    --md-code-bg-color: var(--il-navy);
-    --md-code-fg-color: #cdd6e4;
-    --md-code-hl-color: #2977ff;
-    --md-code-hl-color--light: #2977ff1a;
-    --md-code-hl-comment-color: #8a94a7;
-    --md-code-hl-operator-color: #8a94a7;
-    --md-code-hl-punctuation-color: #8a94a7;
-    --md-code-hl-generic-color: #8a94a7;
-    --md-code-hl-variable-color: #8a94a7;
-    --md-code-hl-constant-color: #9383e2;
-    --md-code-hl-function-color: #c973d9;
-    --md-code-hl-keyword-color: #6791e0;
-    --md-code-hl-number-color: #e6695b;
-    --md-code-hl-special-color: #f06090;
-    --md-code-hl-string-color: #2fb170;
-    --md-code-hl-name-color: var(--md-code-fg-color);
-}
-
-.md-typeset pre > code,
-.md-typeset .highlight {
-    border-radius: 0.4rem;
-}
-
-/* Keep inline code light so it stays legible inside body text. */
-.md-typeset code:not(pre code) {
-    background-color: var(--il-gray-100);
-    color: var(--il-slate-900);
-}
-
 /* ==========================================================================
-   Dark scheme (slate): the header and tabs follow the page background, the
-   accent shifts to the lighter blue for contrast, inline code goes dark.
+   Dark scheme (slate): the header and tabs follow the page background and
+   the accent shifts to the lighter blue for contrast.
    ========================================================================== */
 [data-md-color-scheme=slate] {
     --md-typeset-a-color: var(--il-blue-light);
@@ -149,11 +113,6 @@
 [data-md-color-scheme=slate] .md-search__input::placeholder,
 [data-md-color-scheme=slate] .md-search__icon {
     color: var(--md-default-fg-color--light);
-}
-
-[data-md-color-scheme=slate] .md-typeset code:not(pre code) {
-    background-color: var(--md-code-bg-color);
-    color: var(--md-code-fg-color);
 }
 
 /* ==========================================================================
