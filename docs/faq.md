@@ -2,96 +2,96 @@
 
 ### Why another data framework?
 
-Because the existing ones are either too opinionated, too bloated, or just don't get out of your
-way.
+Because the existing ones are either too opinionated, too heavy, or in the way.
 
 * ETL tools force rigid workflows.
-* Orchestration frameworks overcomplicate simple jobs.
-* DIY pipelines break the moment your schema changes.
+* Orchestrators overcomplicate simple jobs.
+* Hand-rolled pipelines break the moment a schema changes.
 
-Interloper sits in between:
+Interloper sits in between: write a function, materialize an asset; when you need it, declare
+dependencies, enforce schemas, partition and backfill, and run the same code from a notebook to
+a cluster.
 
-* **Simple when you want it**: write a function, materialize an asset.
-* **Powerful when you need it**: define dependencies, automatically reconcile schemas, partition
-  and backfill, run anywhere from a single thread to Kubernetes.
+### What is the difference between an asset definition and an asset instance?
 
-In terms of concepts and design, Interloper draws inspiration from modern orchestrators while
-staying a lightweight, embeddable library.
-
-
-### What is the difference between an asset definition and an `Asset`?
-
-The `@asset` decorator produces an immutable **definition** (a class) that describes *what* an
-asset does. Calling it creates a runtime `Asset` instance, which carries runtime configuration
-like destinations, resources, and dependency wiring.
+`@il.asset` produces a **definition**, a class describing what the asset does. Calling it
+produces an **instance**, which carries runtime configuration: destinations, resources,
+dataset, dependency wiring.
 
 ```py
 @il.asset
-def my_asset():       # this is the definition
+def my_asset():          # the definition
     return "hello"
 
-instance = my_asset()  # this is an Asset instance
+instance = my_asset()    # an Asset instance
 ```
 
+The same applies to sources: `OpenMeteo` is the definition, `OpenMeteo(latitude=...)` an
+instance.
 
 ### Do I need `asyncio` to run assets?
 
-No. `run()`, `materialize()`, and `dag.materialize()` are plain synchronous calls — they work
-as-is in scripts, the REPL, and notebook cells. Under the hood the execution engine is
-async-native: the sync entrypoints drive it on a persistent background event loop (see
-`il.run`). Async code uses the `*_async` counterparts (`run_async()`, `materialize_async()`)
-and `await`s them. Synchronous asset functions are offloaded to threads automatically, so you
-never have to make your asset `async` just to satisfy the engine.
-
+No. `run()`, `materialize()` and `dag.materialize()` are synchronous calls that work in scripts,
+the REPL and notebooks. The engine is async-native underneath and the sync entry points drive it
+on a persistent background loop through `il.run`. Async code uses the `*_async` counterparts and
+awaits them. Sync asset functions are offloaded to worker threads automatically, so an asset never
+has to be `async` just to satisfy the engine.
 
 ### What is the difference between `run()` and `materialize()`?
 
-`run()` executes the asset function and returns the result (normalized and conformed to its
-schema if configured) **without** writing anywhere. `materialize()` does the same and then writes
-the result to all configured destinations.
+`run()` executes the asset, normalizes and conforms the result to its schema, and returns it
+without writing anywhere. `materialize()` does the same and then writes the result to every
+configured destination.
 
+### Should I write sources as classes or functions?
+
+Classes. `@il.source class MySource(il.Source)` with `@il.asset` methods is the form every
+shipped connector uses: configuration fields live on the class, assets read them through
+`self`, and type checkers understand the result. The functional form
+(`@il.source def my_source(): return [a, b]`) still works and is documented in
+[Sources](guide/sources.md#functional-form).
 
 ### How does dependency resolution work?
 
-Within a source, if an asset's parameter name matches a sibling asset's key, the dependency is
-resolved automatically. For cross-source dependencies or name mismatches, use `requires` (or
-`optional_requires`) on the `@asset` decorator. See [Upstream Assets](features/upstream-assets.md).
-
+Within a source, a parameter named after a sibling asset is a dependency. For a different name
+or a cross-source dependency, declare `requires={"param": "source_key.asset_key"}` on the
+asset. Optional dependencies use `optional_requires` and receive `None` when the upstream is
+missing. See [Dependencies](guide/dependencies.md).
 
 ### Can I use Interloper without a DAG?
 
-Yes. You can run or materialize individual assets directly:
+Yes. Run or materialize individual assets directly:
 
 ```py
 result = my_asset().run()
-my_asset(destinations=il.FileDestination("./data")).materialize()
+my_asset(destinations=il.CSVDestination(base_path="./data")).materialize()
 ```
 
-A DAG is only needed when you have multiple assets with dependencies.
+A DAG is needed once assets depend on each other, because the DAG is what resolves upstream data.
 
+### Which destinations exist?
 
-### What destinations are available?
+The core ships `CSVDestination`, `FileDestination` (pickle) and `MemoryDestination`.
+Companion packages add BigQuery and Google Cloud Storage. Your own takes a `read()` and a
+`write()` method; database-style stores subclass `DatabaseDestination` and implement a handful
+of row operations. See [Destinations](guide/destinations.md).
 
-Built-in (core library): `MemoryDestination` (default), `FileDestination`, `CSVDestination`. Via
-`interloper-google-cloud`: `BigQueryDestination`. You can build your own by subclassing
-`il.Destination` — or `il.DatabaseDestination` for SQL-style stores. See
-[Destinations](features/destinations.md).
+### What is the difference between a Config and a Connection?
 
-> Earlier versions exposed an "IO" concept (`FileIO`, `MemoryIO`, an `interloper-sql` package).
-> That has been replaced by Destinations; there is no longer a bundled Postgres/MySQL/SQLite
-> backend.
-
-
-### What's the difference between a Config and a Connection?
-
-Both are [resources](features/resources.md) injected into asset functions and both load from the
-environment. Use a [Config](features/config.md) for plain settings and a
-[Connection](features/connections.md) for service credentials — connections add secret handling
-and an OAuth connect flow.
-
+Both are [resources](guide/resources.md) injected by type annotation and loaded from the
+environment. A `Config` holds plain settings. A `Connection` holds credentials and clients, and
+adds a health check hook, credential renewal, and the OAuth sign-in machinery. See
+[Connections](guide/connections.md).
 
 ### How do I run a backfill?
 
-Build a `TimePartitionWindow` and iterate it, materializing the DAG once per partition (newest
-first). There's no separate backfiller object. An asset that declares `allow_window=True` can
-take the whole window as a single run instead. See [Backfilling](features/backfilling.md).
+Iterate a `TimePartitionWindow` and materialize the DAG once per partition, newest first. An
+asset that declares `allow_window=True` can take the whole window as one run instead. See
+[Backfilling](guide/backfilling.md).
+
+### Where do jobs, hooks and the scheduler fit?
+
+`Job`, `CronJob` and the hook classes are core components: they declare *what* to run and
+*when*, or *what to react to*. Acting on those declarations is the job of the platform packages
+(`interloper-scheduler`, `interloper-api`, `interloper-app`), which are outside this site. The
+core pages [Jobs](guide/jobs.md) and [Hooks](guide/hooks.md) document the declarations.

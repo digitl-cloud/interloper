@@ -9,86 +9,62 @@ hide:
 ## The ultra-portable data asset framework
 </div>
 
-Interloper is a Python data-asset framework that makes defining, configuring and materializing data assets effortless.
-It combines the flexibility of a very lightweight library with powerful execution features inspired by modern orchestrators — and an **async-native** execution engine.
+Interloper is a Python framework for defining **data assets**, grouping them into **sources**,
+wiring their **dependencies**, and **materializing** them into pluggable **destinations**. It is
+a library first: a single asset is a function, and the whole engine runs in a script, a notebook,
+a container, or a scheduler with the same code.
+
+```py
+import interloper as il
+
+@il.source
+class Shop(il.Source):
+    @il.asset
+    def users(self) -> list[dict]:
+        return [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+
+    @il.asset
+    def user_count(self, users: list[dict]) -> list[dict]:
+        return [{"count": len(users)}]
+
+shop = Shop(destinations=il.CSVDestination(base_path="./data"))
+il.DAG(shop).materialize()
+```
 
 ---
 
 ## Core concepts
 
-- **Everything is an asset** -- In Interloper, an asset is a first-class entity. It **produces data**, which is then **materialized independently**. The framework provides a simple, structured way to define assets without unnecessary complexity.
-- **Destination-driven materialization** -- Asset materialization is **driven by destination configuration**, completely separate from how the data is produced. This allows for clean, flexible execution.
-- **Framework-agnostic data outputs** -- Interloper **does not enforce metadata dependencies** on destinations. Your data is written and mutated in a **deterministic, transparent way**, ensuring full control over your pipelines.
+- **Assets** produce data. An asset is a function or method returning rows, a DataFrame, or any
+  object a destination can store. Assets carry a key, an optional schema, and optional
+  partitioning.
+- **Sources** group assets that share configuration, credentials and destinations. Dependencies
+  between sibling assets are inferred from parameter names.
+- **Resources** are injected into assets by type annotation: configs for settings, connections
+  for credentials and clients, or anything else you define.
+- **Destinations** decide where and how data lands. The same asset writes to a local CSV folder
+  or a warehouse without changing its code.
+- **Partitions** slice assets by time at hourly, daily, monthly or yearly granularity. A run is
+  always scoped to a partition or a window of partitions.
+- **DAGs and runners** order assets by dependency and execute them serially, concurrently on the
+  event loop, or across processes. The engine is async-native; sync entry points are provided.
+- **Components and specs** make every asset, source, destination, connection and job
+  self-describing and serializable, so they can be persisted, reconstructed and catalogued.
 
-## Features
+## Where to start
 
-- **Asset & source definition** -- Define structured, reusable data assets using decorators.
-- **Multi-destination materialization** -- Write the same asset to multiple destinations at once.
-- **Schema & normalizer** -- Normalize, validate and reconcile data structures automatically.
-- **Upstream asset dependencies** -- Build logical relationships between assets with automatic dependency resolution.
-- **Data validation** -- Ensure data integrity before and during materialization.
-- **Partitioning & backfilling** -- Efficiently process and reprocess historical data.
-- **Async-native runners** -- Execute assets serially, concurrently with asyncio, across processes, in Docker, or on Kubernetes.
-- **Connections & resources** -- Inject credentials and reusable services into assets, with a built-in OAuth connect flow.
-- **REST & pagination** -- Build connectors against paginated REST APIs with composable clients, auth and paginators.
-- **Event system** -- Subscribe to lifecycle events for monitoring and observability.
-- **Catalog & declarative workloads** -- Introspect a catalog of components and materialize Jobs declaratively from YAML specs.
-- **CLI** -- Run and backfill DAGs from the command line.
+- [Getting started](getting-started.md): install, write a first asset, materialize it, build a DAG.
+- [Tutorial](tutorial.md): an end-to-end walk through a real source with configuration,
+  credentials, dependencies, schema, partitioning and the CLI.
+- [Guide](guide/assets.md): one page per concept, from assets to telemetry.
+- [Extending](extending/components.md): the component model, representations, runners and
+  entry points for people building on the framework.
+- [Reference](reference/decorators.md): every decorator option, setting, CLI flag, event type,
+  span and error in table form.
 
----
+## Beyond the core
 
-<div class="center" markdown>
-# Destinations
-Interloper ships with built-in destinations and additional packages for external systems.
-</div>
-
-<div class="grid cards center" markdown>
-- :material-file-outline: **FileDestination**
-    Pickle-based local filesystem storage. Ships with the core library.
-- :material-file-delimited-outline: **CSVDestination**
-    CSV files on the local filesystem. Ships with the core library.
-- :material-memory: **MemoryDestination**
-    In-memory storage for testing and development. Ships with the core library.
-- :material-cloud: **BigQueryDestination**
-    Google BigQuery materialization via `interloper-google-cloud`.
-</div>
-
-Need a custom backend? Subclass `il.Destination` (or `il.DatabaseDestination` for SQL-style stores) and implement `read`/`write`. See [Destinations](features/destinations.md).
-
----
-<div class="center" markdown>
-# Asset Library
-
-Alongside Interloper, we maintain a **pre-built collection of sources** that pull data from well-known platforms -- ranging from **social media to digital marketing and beyond**. These ready-to-use sources help you **bootstrap your data stack instantly** without reinventing the wheel.
-
-Install via `pip install interloper-assets`.
-</div>
-
-<div class="grid cards center" markdown>
-- :material-advertisements: **Adservice**
-- :material-advertisements: **Adup**
-- :fontawesome-brands-amazon: **Amazon Ads**
-- :fontawesome-brands-amazon: **Amazon Selling Partner**
-- :material-link-variant: **Awin**
-- :fontawesome-brands-microsoft: **Bing Ads**
-- :material-chart-line: **Brandwatch**
-- :fontawesome-brands-google: **Campaign Manager 360**
-- :material-target: **Criteo**
-- :fontawesome-brands-google: **Display Video 360**
-- :fontawesome-brands-google: **DoubleClick Bid Manager**
-- :fontawesome-brands-facebook: **Facebook Ads**
-- :fontawesome-brands-facebook: **Facebook Insights**
-- :fontawesome-brands-google: **Google Ads**
-- :material-link-variant: **Impact**
-- :fontawesome-brands-instagram: **Instagram Insights**
-- :fontawesome-brands-linkedin: **LinkedIn Ads**
-- :fontawesome-brands-linkedin: **LinkedIn Organic**
-- :fontawesome-brands-pinterest: **Pinterest Ads**
-- :fontawesome-brands-google: **Search Ads 360**
-- :fontawesome-brands-google: **Search Console**
-- :fontawesome-brands-snapchat: **Snapchat Ads**
-- :material-advertisements: **Teads**
-- :material-advertisements: **The Trade Desk**
-- :fontawesome-brands-tiktok: **TikTok Ads**
-- :material-cookie: **Usercentrics**
-</div>
+This site documents `interloper-core`. Companion packages add a pandas representation, a
+BigQuery destination, Docker and Kubernetes runners, a Slack hook, a library of ready-made
+sources, and a full scheduling platform with an API and a web UI. See
+[Ecosystem](reference/ecosystem.md) for the list and what each one registers.
