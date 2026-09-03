@@ -1,0 +1,20 @@
+{
+  "name": "interloper",
+  "owner": {
+    "name": "Digitl Cloud"
+  },
+  "description": "Claude Code skills for building and operating data pipelines with the Interloper framework.",
+  "plugins": [
+    {
+      "name": "interloper",
+      "displayName": "Interloper",
+      "source": "./plugins/interloper",
+      "description": "Skills for users of the Interloper framework: writing sources, connections and destinations, running and backfilling, authoring job specs, and operating a deployment.",
+      "version": "0.74.0",
+      "author": { "name": "Digitl Cloud" },
+      "category": "data",
+      "homepage": "https://docs.interloper.dev",
+      "keywords": ["interloper", "data", "pipelines", "assets", "connectors"]
+    }
+  ]
+}

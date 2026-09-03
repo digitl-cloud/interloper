@@ -1,0 +1,11 @@
+{
+  "name": "interloper",
+  "displayName": "Interloper",
+  "version": "0.74.0",
+  "description": "Skills for users of the Interloper framework: writing sources, connections and destinations, running and backfilling, authoring job specs, and operating a deployment.",
+  "author": { "name": "Digitl Cloud" },
+  "homepage": "https://docs.interloper.dev",
+  "repository": "https://github.com/digitl-cloud/interloper",
+  "license": "Apache-2.0",
+  "keywords": ["interloper", "data", "pipelines", "assets", "connectors"]
+}
