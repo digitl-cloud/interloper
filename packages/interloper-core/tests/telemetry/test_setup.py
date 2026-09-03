@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 import pytest
 
@@ -90,10 +91,49 @@ class TestDurationBuckets:
         views = setup._duration_views()
         assert {v._instrument_name for v in views} == {
             "interloper.run.duration",
-            "interloper.asset.duration",
+            "interloper.operation.duration",
         }
         for view in views:
             assert view._aggregation._boundaries == setup._DURATION_BUCKETS
+
+    def test_views_apply_to_the_handler_histograms(self, monkeypatch):
+        # A view only takes effect when its name matches the instrument the
+        # handler actually creates, so exercise the handler against a private
+        # provider carrying the views and read the exported bucket bounds back.
+        import datetime as dt
+
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+        from interloper.events import Event, EventType
+        from interloper.telemetry import metrics as metrics_module
+        from interloper.telemetry.metrics import OtelMetricsHandler
+
+        reader = InMemoryMetricReader()
+        provider = MeterProvider(metric_readers=[reader], views=setup._duration_views())
+        monkeypatch.setattr(metrics_module, "meter", lambda: provider.get_meter("interloper"))
+
+        t0 = dt.datetime(2026, 7, 1, tzinfo=dt.timezone.utc)
+        handler = OtelMetricsHandler()
+        handler(Event(type=EventType.RUN_STARTED, timestamp=t0, metadata={"run_id": "r"}))
+        handler(Event(type=EventType.RUN_COMPLETED, timestamp=t0, metadata={"run_id": "r"}))
+        operation = {"run_id": "r", "component_id": "c", "component_key": "k"}
+        handler(Event(type=EventType.OPERATION_STARTED, timestamp=t0, metadata=operation))
+        handler(Event(type=EventType.OPERATION_COMPLETED, timestamp=t0, metadata=operation))
+
+        data: Any = reader.get_metrics_data()
+        bounds = {
+            metric.name: tuple(point.explicit_bounds)
+            for rm in data.resource_metrics
+            for sm in rm.scope_metrics
+            for metric in sm.metrics
+            if metric.name.endswith(".duration")
+            for point in metric.data.data_points
+        }
+        assert bounds == {
+            "interloper.run.duration": setup._DURATION_BUCKETS,
+            "interloper.operation.duration": setup._DURATION_BUCKETS,
+        }
 
 
 class TestDeltaTemporality:

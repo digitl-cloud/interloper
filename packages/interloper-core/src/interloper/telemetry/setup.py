@@ -227,7 +227,7 @@ def _duration_views() -> list[Any]:
             instrument_name=name,
             aggregation=ExplicitBucketHistogramAggregation(_DURATION_BUCKETS),
         )
-        for name in ("interloper.run.duration", "interloper.asset.duration")
+        for name in ("interloper.run.duration", "interloper.operation.duration")
     ]
 
 
