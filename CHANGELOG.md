@@ -2,6 +2,73 @@
 
 <!-- version list -->
 
+## v0.74.0 (2026-09-03)
+
+### Bug Fixes
+
+- **core**: Cancel never-submitted operations when a run ends early
+  ([`b204f6c`](https://github.com/digitl-cloud/interloper/commit/b204f6c01c818af8a106448f8766fb699e7c0060))
+
+- **core**: Exit cleanly when the runner preflight rejects the partition
+  ([`455f969`](https://github.com/digitl-cloud/interloper/commit/455f96993bd6fac9c1230c6fd6de2da59dda4027))
+
+- **core**: Give the operation duration histogram second-scaled buckets
+  ([`33f14de`](https://github.com/digitl-cloud/interloper/commit/33f14de0cf627c627a63ade77f25733b59c3a1a7))
+
+- **core**: Send the Bearer header from AsyncRESTClient
+  ([`d94429a`](https://github.com/digitl-cloud/interloper/commit/d94429ac9e2011cc6c8b01f79b3d780de96505d0))
+
+### Documentation
+
+- Add the light/dark palette toggle, defaulting to the system preference
+  ([`2f47d29`](https://github.com/digitl-cloud/interloper/commit/2f47d29c64e63764bfdbae97dac54a23298c63a0))
+
+- Add the Web UI section with a screenshot tour and the definition pipeline
+  ([`7cce1f0`](https://github.com/digitl-cloud/interloper/commit/7cce1f08f386bbe858d7e3c5fbcff98a0d35a7cc))
+
+- Drop the FAQ page
+  ([`2de722f`](https://github.com/digitl-cloud/interloper/commit/2de722f0f3d9971649276e59fc4cbc1f9c4edf72))
+
+- Drop the landing page, Getting started is the site root
+  ([`c356074`](https://github.com/digitl-cloud/interloper/commit/c3560742006da24861b290848811068902f45158))
+
+- Make the README quick start a condensed, code-first walk through the framework
+  ([`9f1c8fe`](https://github.com/digitl-cloud/interloper/commit/9f1c8fe79261f0b1c7eb61d4e22d3c587ffe339e))
+
+- Rework the documentation site around interloper-core
+  ([`5f4163c`](https://github.com/digitl-cloud/interloper/commit/5f4163c8e4fff60e3daff7d3e3b546b6c2d66e14))
+
+- Rework the repository README
+  ([`d1d59a0`](https://github.com/digitl-cloud/interloper/commit/d1d59a0b75b57ef250007a1efefdc17da2e6c323))
+
+- Section the README quick start
+  ([`2baaa27`](https://github.com/digitl-cloud/interloper/commit/2baaa2755173c0a1dbc59c59d8024ce4ed15bc2e))
+
+- Switch the brand accent from emerald to the logo blue
+  ([`3c55b91`](https://github.com/digitl-cloud/interloper/commit/3c55b91915aadbb6067ebf9d524f814e61cf401b))
+
+- Use the node-tree icon as the site logo and favicon
+  ([`7582566`](https://github.com/digitl-cloud/interloper/commit/7582566f9a62ca03d7fef8d288c32cb75e765c64))
+
+- Use the theme's default colours for code blocks and inline code
+  ([`edbc038`](https://github.com/digitl-cloud/interloper/commit/edbc0388b6af785728200c3a3a1c1a551bfeee9f))
+
+### Features
+
+- **core**: Let in-flight work finish on a fail-fast break
+  ([`ee2f84e`](https://github.com/digitl-cloud/interloper/commit/ee2f84e96870519b6887c34652119a1b4ca63a8b))
+
+### Refactoring
+
+- **core**: Drop the unused method-asset marker
+  ([`2ba46d0`](https://github.com/digitl-cloud/interloper/commit/2ba46d058015d61591a166d71dd8e95301d2d6b2))
+
+### Breaking Changes
+
+- **core**: A fail-fast break no longer interrupts running operations; they complete (or fail) on
+  their own and are recorded as such.
+
+
 ## v0.73.0 (2026-09-02)
 
 ### Bug Fixes
