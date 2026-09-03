@@ -116,6 +116,10 @@ class JSONDestination(il.Destination):
         return json.loads(path.read_text())
 ```
 
+This form writes one file per asset and ignores `context.partition_or_window`: a partition
+rewrite replaces every partition and a window lands in one file. It suits unpartitioned assets;
+partitioned ones belong on `il.PartitionedDestination` below.
+
 Decorator options: `resources`, `key`, `name`, `icon`, `tags`, `read_representation`,
 `materialization_strategy`. Resource slots are declared as typed attributes or through
 `resources=`; see [Resources](resources.md#resources-on-sources-and-destinations).

@@ -14,6 +14,14 @@ framework expects.
 |-------|-------------|
 | `interloper-source` | Adding or changing a source, asset, connection or schema in your project. |
 | `interloper-run` | Running, materializing or backfilling from Python, a notebook, CI or the CLI, including the spec file a CLI run needs. |
+| `interloper-connection` | Writing a connection: credentials, OAuth sign-in, a health check, an account picker, environment loading. |
+| `interloper-schema` | Typing and reshaping asset rows: schemas, materialization strategies, normalizers, `SchemaError` fixes. |
+| `interloper-destination` | Writing a custom destination over files, object storage or a database, with partition and window semantics. |
+| `interloper-manifest` | Writing a job spec over several sources: shared destinations, secrets, asset selection, cross-source wiring. |
+| `interloper-backfill` | Running ranges of partitions, windowed runs, scheduled windows, per-partition progress. |
+| `interloper-triage` | Reading a failed run's events, finding the root cause and the fix, deciding whether to retry. |
+| `interloper-deploy` | Configuring the platform: `interloper.yaml`, environment variables, sign-in, catalog, provider apps, telemetry, images and chart. |
+| `interloper-upgrade` | Moving code, specs and deployments to a newer release using the changelog's breaking changes. |
 
 Skills trigger on their own from the task description, or by name (`/interloper-source`). The
 plugin is versioned with the framework: its version matches the `interloper-core` release it
