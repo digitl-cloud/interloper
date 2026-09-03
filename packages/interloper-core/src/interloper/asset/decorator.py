@@ -208,8 +208,4 @@ def _build_asset_class(
     if fn.__doc__:
         cls.__doc__ = fn.__doc__
 
-    # Mark method assets so the source can detect them
-    if is_method:
-        cls._is_method_asset = True
-
     return cls
