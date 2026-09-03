@@ -23,8 +23,13 @@ class HTTPBearerAuth(httpx.Auth):
         """
         self._token = token
 
-    def sync_auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
         """Authenticate the request with a Bearer token.
+
+        Defining ``auth_flow`` (rather than ``sync_auth_flow``) lets httpx drive
+        the same generator for :class:`~interloper.rest.client.RESTClient` and
+        :class:`~interloper.rest.client.AsyncRESTClient`; a sync-only flow leaves
+        the async client's requests unauthenticated.
 
         Args:
             request: The request to authenticate.

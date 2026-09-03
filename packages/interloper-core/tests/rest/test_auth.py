@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from interloper.rest.auth import OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth
+from interloper.rest.auth import HTTPBearerAuth, OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth
 from interloper.rest.client import AsyncRESTClient, RESTClient
 
 
@@ -30,6 +30,35 @@ def _oauth_handler(*, expect_grant: str, token: str = "tok-1"):
         return httpx.Response(200, json={"ok": True})
 
     return handler, seen
+
+
+def _echo_authorization(request: httpx.Request) -> httpx.Response:
+    """A transport that echoes the request's ``Authorization`` header back as JSON.
+
+    Args:
+        request: The intercepted request.
+
+    Returns:
+        A 200 response whose body carries the header under ``auth``.
+    """
+    return httpx.Response(200, json={"auth": request.headers.get("Authorization")})
+
+
+class TestHTTPBearerAuth:
+    """One ``auth_flow`` must serve the sync and the async client alike."""
+
+    def test_sync_client_sends_bearer_header(self):
+        auth = HTTPBearerAuth("t")
+        client = RESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(_echo_authorization))
+        with client:
+            assert client.get("/data").json() == {"auth": "Bearer t"}
+
+    async def test_async_client_sends_bearer_header(self):
+        auth = HTTPBearerAuth("t")
+        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(_echo_authorization))
+        async with client:
+            response = await client.get("/data")
+        assert response.json() == {"auth": "Bearer t"}
 
 
 class TestOAuth2SyncClient:
