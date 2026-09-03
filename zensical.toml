@@ -43,6 +43,11 @@ nav = [
         { "CLI" = "guide/cli.md" },
         { "Telemetry" = "guide/telemetry.md" },
     ] },
+    { "Web UI" = [
+        { "Tour" = "ui/index.md" },
+        { "Generated from definitions" = "ui/definitions.md" },
+        { "Running the app" = "ui/running.md" },
+    ] },
     { "Extending" = [
         { "Component model" = "extending/components.md" },
         { "Representations & conformers" = "extending/representations.md" },
