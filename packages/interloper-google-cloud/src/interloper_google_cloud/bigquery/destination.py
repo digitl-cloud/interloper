@@ -259,7 +259,13 @@ class BigQueryDestination(DatabaseDestination):
             self._ensure_dataset(dataset)
             time_partitioning = _time_partitioning(partitioning, None)
 
-        self._load(self._table_ref(table, dataset), frame, bq_schema, time_partitioning=time_partitioning)
+        self._load(
+            self._table_ref(table, dataset),
+            frame,
+            bq_schema,
+            time_partitioning=time_partitioning,
+            allow_field_addition=context.asset.schema is not None,
+        )
 
     def _load(
         self,
@@ -267,13 +273,19 @@ class BigQueryDestination(DatabaseDestination):
         df: pd.DataFrame,
         bq_schema: list[bigquery.SchemaField] | None,
         time_partitioning: bigquery.TimePartitioning | None = None,
+        *,
+        allow_field_addition: bool = False,
     ) -> None:
         """Load a DataFrame via a Parquet load job.
 
         When a schema is available, columns are aligned to it: extra columns
         are dropped (with a warning) and the load job receives explicit field
         types, so pyarrow casts values (including ``NaN`` → ``NULL``) instead
-        of relying on dtype autodetection.
+        of relying on dtype autodetection. A load behind a declared schema may
+        add the columns that schema gained since the table was created: the
+        asset's contract changed, and conform already shaped the data to it.
+        An inferred schema never grows a table, since a column BigQuery does
+        not know is then drift in the data.
 
         Args:
             ref: Fully-qualified table reference.
@@ -281,10 +293,15 @@ class BigQueryDestination(DatabaseDestination):
             bq_schema: BigQuery field definitions, or ``None`` to autodetect.
             time_partitioning: Partitioning spec for the table the load job is
                 about to create; ``None`` when the table already exists.
+            allow_field_addition: Whether the asset declares the schema the
+                load carries, so new declared columns may be added to the
+                table; defaults to ``False``.
         """
         job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND)
         if time_partitioning is not None:
             job_config.time_partitioning = time_partitioning
+        if allow_field_addition and bq_schema is not None:
+            job_config.schema_update_options = [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
 
         if bq_schema is not None:
             schema_columns = [field.name for field in bq_schema]
