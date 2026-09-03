@@ -26,7 +26,7 @@ and type. Common metadata: `component_id`, `component_kind`, `component_key`, `s
 | `operation_started` | The operation was submitted. |
 | `operation_completed` | `execute()` returned. |
 | `operation_failed` | `execute()` raised. Adds `error` and, when the operation captures tracebacks, `traceback`. |
-| `operation_canceled` | An upstream operation failed, or a fail-fast break canceled in-flight work. |
+| `operation_canceled` | An upstream operation failed, or the run ended early (fail-fast break, machinery abort) before the operation finished or was submitted. |
 
 ## Asset data
 

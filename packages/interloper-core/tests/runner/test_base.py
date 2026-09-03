@@ -370,3 +370,32 @@ class TestTelemetrySpans:
         assert run_span.context.trace_id == producer.get_span_context().trace_id
         assert run_span.parent is not None
         assert run_span.parent.span_id == producer.get_span_context().span_id
+
+
+class TestFinalizeCancelsPending:
+    """A run that ends early leaves no operation behind in a non-terminal state.
+
+    A fail-fast break only cancels what was submitted; operations still
+    waiting for a concurrency slot were never submitted, so nothing else
+    would ever give them a terminal event. Finalization sweeps them.
+    """
+
+    async def test_never_submitted_operations_are_canceled_on_fail_fast(self):
+        il.MemoryDestination.clear()
+
+        @il.asset()
+        def boom() -> list[dict[str, Any]]:
+            raise ValueError("nope")
+
+        assets = [boom(id=f"boom-{index}", destinations=[il.MemoryDestination()]) for index in range(6)]
+        events: list[Event] = []
+
+        result = await SerialRunner(on_event=events.append, fail_fast=True).run(il.DAG(*assets))
+
+        assert result.status is ExecutionStatus.FAILED
+        statuses = sorted(info.status for info in result.executions.values())
+        assert statuses == [ExecutionStatus.CANCELED] * 5 + [ExecutionStatus.FAILED]
+        canceled_events = [event for event in events if event.type is il.EventType.OPERATION_CANCELED]
+        assert len(canceled_events) == 5
+        run_failed_index = next(i for i, event in enumerate(events) if event.type is il.EventType.RUN_FAILED)
+        assert all(events.index(event) < run_failed_index for event in canceled_events)

@@ -171,12 +171,13 @@ class SyncRunner(Runner):
         self.state.mark_completed(operation, effects=result if isinstance(result, OperationResult) else None)
 
     def _flush(self, inflight: dict[Future[Any], Operation]) -> None:
-        """Wait for all in-flight futures and emit terminal events.
+        """Settle the in-flight futures when the walk ends.
 
-        Called when the walk ends — a fail-fast break, a machinery abort,
-        or natural completion (where it is effectively a no-op) — so that
-        every in-flight operation gets a proper FAILED or CANCELED event
-        rather than being silently abandoned as 'running'.
+        Called on a fail-fast break, a machinery abort, or natural
+        completion (where it is effectively a no-op). Under ``fail_fast``
+        the futures are cancelled and finalization records every operation
+        left non-terminal as canceled; otherwise they run to completion and
+        their outcomes are recorded here.
 
         Args:
             inflight: Futures still in flight, mapped to the operation each
@@ -186,11 +187,8 @@ class SyncRunner(Runner):
             return
 
         if self.fail_fast:
-            for future, operation in inflight.items():
+            for future in inflight:
                 future.cancel()
-                info = self.state.executions.get(operation.id)
-                if info and not info.is_terminal:
-                    self.state.mark_canceled(operation)
             return
 
         # Let running tasks finish naturally and record their outcomes.
