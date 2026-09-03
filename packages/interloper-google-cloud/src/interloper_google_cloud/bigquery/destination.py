@@ -273,6 +273,24 @@ class BigQueryDestination(DatabaseDestination):
             if rows:
                 self._load_rows(ref, rows, bq_schema)
 
+    def _schema_update_options(self, bq_schema: list[bigquery.SchemaField] | None) -> list[str] | None:
+        """Decide whether a load job may add declared columns the table lacks.
+
+        Only under ``RECONCILE``, and only when a declared schema drives the
+        load: the conformer has already shaped the data to that schema, so a
+        column BigQuery does not know is a schema evolution, not drift.
+        Schema-less loads never let inferred columns grow a table.
+
+        Args:
+            bq_schema: The load's field definitions, or ``None`` for autodetect.
+
+        Returns:
+            ``[ALLOW_FIELD_ADDITION]`` when additions are allowed, else ``None``.
+        """
+        if bq_schema is None or self.materialization_strategy is not MaterializationStrategy.RECONCILE:
+            return None
+        return [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
+
     def _load_dataframe(
         self,
         ref: str,
@@ -285,7 +303,8 @@ class BigQueryDestination(DatabaseDestination):
         When a schema is available, columns are aligned to it: extra columns
         are dropped (with a warning) and the load job receives explicit field
         types, so pyarrow casts values (including ``NaN`` → ``NULL``) instead
-        of relying on dtype autodetection.
+        of relying on dtype autodetection.  Under ``RECONCILE`` the job may add
+        declared columns the table lacks.
 
         Args:
             ref: Fully-qualified table reference.
@@ -295,6 +314,7 @@ class BigQueryDestination(DatabaseDestination):
                 about to create; ``None`` when the table already exists.
         """
         job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND)
+        job_config.schema_update_options = self._schema_update_options(bq_schema)
         if time_partitioning is not None:
             job_config.time_partitioning = time_partitioning
 
@@ -317,6 +337,8 @@ class BigQueryDestination(DatabaseDestination):
     def _load_rows(self, ref: str, rows: list[dict[str, Any]], bq_schema: list[bigquery.SchemaField] | None) -> None:
         """Load row dicts via a newline-delimited JSON load job.
 
+        Under ``RECONCILE`` the job may add declared columns the table lacks.
+
         Args:
             ref: Fully-qualified table reference.
             rows: Row data as list of dicts.
@@ -326,6 +348,7 @@ class BigQueryDestination(DatabaseDestination):
             source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         )
+        job_config.schema_update_options = self._schema_update_options(bq_schema)
         if bq_schema is not None:
             job_config.schema = bq_schema
         safe_rows = [replace_non_finite(json.loads(json.dumps(row, default=json_default))) for row in rows]

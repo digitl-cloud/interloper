@@ -11,6 +11,7 @@ import pytest
 from google.cloud import bigquery
 from interloper.destination import IOContext
 from interloper.errors import ConfigError
+from interloper.normalizer import MaterializationStrategy
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
 
@@ -412,6 +413,54 @@ class TestInsertData:
 
 
 # -- Partitioning and table metadata -------------------------------------------
+
+
+class TestSchemaUpdateOptions:
+    """Load jobs may add declared columns only under RECONCILE and only with a schema."""
+
+    def _strategy(self, dest: Any, strategy: MaterializationStrategy) -> None:
+        object.__setattr__(dest, "materialization_strategy", strategy)
+
+    def test_reconcile_dataframe_load_allows_field_addition(self):
+        import pandas as pd
+
+        dest, mock_client = _make_destination(dataset="ds")
+        assert dest.materialization_strategy is MaterializationStrategy.RECONCILE  # the BigQuery default
+        df = pd.DataFrame([{"id": 1, "cost": 1.0, "day": datetime.date(2024, 1, 1)}])
+
+        dest._insert_data("tbl", "ds", df, _ctx(_plain_asset(), _RowSchema))
+
+        job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+        assert job_config.schema_update_options == [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
+
+    def test_reconcile_rows_load_allows_field_addition(self):
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
+
+        job_config = mock_client.load_table_from_json.call_args.kwargs["job_config"]
+        assert job_config.schema_update_options == [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
+
+    def test_auto_never_allows_field_addition(self):
+        import pandas as pd
+
+        dest, mock_client = _make_destination(dataset="ds")
+        self._strategy(dest, MaterializationStrategy.AUTO)
+        df = pd.DataFrame([{"id": 1, "cost": 1.0, "day": datetime.date(2024, 1, 1)}])
+
+        dest._insert_data("tbl", "ds", df, _ctx(_plain_asset(), _RowSchema))
+        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
+
+        assert mock_client.load_table_from_dataframe.call_args.kwargs["job_config"].schema_update_options is None
+        assert mock_client.load_table_from_json.call_args.kwargs["job_config"].schema_update_options is None
+
+    def test_reconcile_without_schema_never_allows_field_addition(self):
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest._insert("tbl", "ds", [{"id": 1}])
+
+        job_config = mock_client.load_table_from_json.call_args.kwargs["job_config"]
+        assert job_config.schema_update_options is None
 
 
 class TestTimePartitioning:
