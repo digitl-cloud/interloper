@@ -163,3 +163,178 @@ class TestDeltaTemporality:
         # A level is meaningless as a delta of one.
         for instrument in (UpDownCounter, ObservableUpDownCounter):
             assert preference[instrument] is AggregationTemporality.CUMULATIVE
+
+
+@pytest.fixture
+def restore_module_state():
+    """Put ``setup``'s module-level provider handles back after the test.
+
+    The providers are process-wide singletons, so a test that installs
+    fakes must not leave them behind for the suites that follow.
+
+    Yields:
+        The ``setup`` module.
+    """
+    saved = (setup._tracer_provider, setup._meter_provider, setup._metrics_handler, setup._initialized)
+    yield setup
+    setup._tracer_provider, setup._meter_provider, setup._metrics_handler, setup._initialized = saved
+
+
+class FakeProvider:
+    """Provider stand-in recording the lifecycle calls made against it."""
+
+    def __init__(self) -> None:
+        """Arm the call recorders."""
+        self.flushed = 0
+        self.shut_down = 0
+
+    def force_flush(self) -> None:
+        """Record a flush."""
+        self.flushed += 1
+
+    def shutdown(self) -> None:
+        """Record a shutdown."""
+        self.shut_down += 1
+
+
+class TestProviderConstruction:
+    """What ``init_telemetry`` builds when a signal is enabled.
+
+    The global ``set_*_provider`` calls are intercepted: they are set-once
+    per process, so letting them through would replace the providers every
+    other telemetry suite asserts against.
+    """
+
+    @pytest.fixture(autouse=True)
+    def intercept_global_setters(self, monkeypatch, restore_module_state):
+        """Capture the providers instead of installing them globally.
+
+        Args:
+            monkeypatch: Fixture used to swap the SDK's setter functions.
+            restore_module_state: Restores ``setup``'s module globals afterwards.
+
+        Returns:
+            The providers that were handed to each setter.
+        """
+        from opentelemetry import metrics, trace
+
+        installed: dict[str, Any] = {}
+        monkeypatch.setattr(trace, "set_tracer_provider", lambda provider: installed.update(tracer=provider))
+        monkeypatch.setattr(metrics, "set_meter_provider", lambda provider: installed.update(meter=provider))
+        setup._initialized = False
+        return installed
+
+    def test_traces_build_a_sampled_provider(self, intercept_global_setters):
+        assert init_telemetry(TelemetrySettings(enabled=True, traces=True, metrics=False)) is True
+
+        provider = intercept_global_setters["tracer"]
+        assert provider is setup._tracer_provider
+        assert provider.resource.attributes["service.name"] == "interloper"
+        assert "meter" not in intercept_global_setters
+
+    def test_the_service_name_is_overridable(self, intercept_global_setters):
+        init_telemetry(TelemetrySettings(enabled=True, traces=True, metrics=False, service_name="api"))
+
+        assert intercept_global_setters["tracer"].resource.attributes["service.name"] == "api"
+
+    def test_metrics_build_a_provider_and_subscribe_the_handler(self, intercept_global_setters):
+        # A long export interval keeps the periodic reader from reaching for
+        # the (absent) collector during the test.
+        settings = TelemetrySettings(enabled=True, traces=False, metrics=True, metric_export_interval=3600)
+
+        assert init_telemetry(settings) is True
+
+        assert intercept_global_setters["meter"] is setup._meter_provider
+        assert setup._metrics_handler is not None
+        assert "tracer" not in intercept_global_setters
+
+    def test_the_http_protocol_selects_the_http_exporters(self, intercept_global_setters):
+        settings = TelemetrySettings(
+            enabled=True, traces=True, metrics=False, protocol="http/protobuf", endpoint="http://collector:4318"
+        )
+
+        assert init_telemetry(settings) is True
+        assert setup._tracer_provider is not None
+
+
+class TestForceFlush:
+    """Flushing without tearing the SDK down, for reused worker processes."""
+
+    def test_flushes_both_providers(self, restore_module_state):
+        tracer, meter = FakeProvider(), FakeProvider()
+        setup._tracer_provider = tracer  # ty: ignore[invalid-assignment]
+        setup._meter_provider = meter  # ty: ignore[invalid-assignment]
+
+        setup.force_flush()
+
+        assert (tracer.flushed, meter.flushed) == (1, 1)
+
+    def test_is_a_no_op_without_providers(self, restore_module_state):
+        setup._tracer_provider = None
+        setup._meter_provider = None
+
+        setup.force_flush()
+
+
+class TestShutdown:
+    """Teardown flushes, unsubscribes, and drops every handle."""
+
+    def test_shuts_down_both_providers(self, restore_module_state):
+        tracer, meter = FakeProvider(), FakeProvider()
+        setup._tracer_provider = tracer  # ty: ignore[invalid-assignment]
+        setup._meter_provider = meter  # ty: ignore[invalid-assignment]
+        setup._initialized = True
+
+        shutdown_telemetry()
+
+        assert (tracer.shut_down, meter.shut_down) == (1, 1)
+        assert setup._tracer_provider is None
+        assert setup._meter_provider is None
+        assert setup._initialized is False
+
+    def test_the_metrics_handler_is_unsubscribed(self, restore_module_state):
+        from interloper.events import EventBus
+
+        received: list[object] = []
+        setup._metrics_handler = received.append  # ty: ignore[invalid-assignment]
+        setup._initialized = True
+        EventBus.subscribe(received.append)
+
+        shutdown_telemetry()
+
+        assert setup._metrics_handler is None
+        assert received.append not in EventBus()._handlers
+
+
+class TestInstrumentation:
+    """The contrib instrumentors activate only when installed."""
+
+    def test_missing_instrumentors_are_tolerated(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "opentelemetry.instrumentation.sqlalchemy", None)
+        monkeypatch.setitem(sys.modules, "opentelemetry.instrumentation.httpx", None)
+
+        setup._instrument_libraries()
+        setup._instrument_libraries(enable=False)
+
+    def test_fastapi_instrumentation_needs_an_active_sdk(self, restore_module_state):
+        setup._initialized = False
+
+        setup.instrument_fastapi(object())
+
+    def test_a_missing_fastapi_instrumentor_is_tolerated(self, monkeypatch, restore_module_state):
+        setup._initialized = True
+        monkeypatch.setitem(sys.modules, "opentelemetry.instrumentation.fastapi", None)
+
+        setup.instrument_fastapi(object())
+
+    def test_an_active_sdk_instruments_the_app(self, restore_module_state):
+        from fastapi import FastAPI
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+        setup._initialized = True
+        app = FastAPI()
+
+        setup.instrument_fastapi(app)
+
+        assert app._is_instrumented_by_opentelemetry is True  # ty: ignore[unresolved-attribute]
+        FastAPIInstrumentor.uninstrument_app(app)

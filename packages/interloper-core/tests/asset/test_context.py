@@ -111,3 +111,75 @@ class TestPartitionDate:
         )
         with pytest.raises(AttributeError, match="partition window, not a partition"):
             context.partition_date
+
+
+class TestIdentityAndMetadata:
+    """What the context exposes about the asset it runs for."""
+
+    def test_the_asset_key_is_available(self) -> None:
+        context = ExecutionContext(asset_key="source.asset")
+
+        assert context.asset_key == "source.asset"
+
+    def test_metadata_defaults_to_empty(self) -> None:
+        assert ExecutionContext(asset_key="asset").metadata == {}
+
+    def test_metadata_is_handed_back_as_given(self) -> None:
+        context = ExecutionContext(asset_key="asset", metadata={"run_id": "r1"})
+
+        assert context.metadata == {"run_id": "r1"}
+
+
+class TestLogger:
+    """The event-emitting logger the asset's ``data()`` writes through."""
+
+    def test_it_is_built_once_and_reused(self) -> None:
+        context = ExecutionContext(asset_key="asset")
+
+        assert context.logger is context.logger
+
+    def test_messages_become_log_events(self) -> None:
+        from interloper.events import Event, EventBus, EventType
+
+        context = ExecutionContext(
+            asset_key="source.asset",
+            metadata={"run_id": "r1"},
+            asset_id="a1",
+            source_id="s1",
+        )
+        captured: list[Event] = []
+        EventBus.subscribe(captured.append)
+        try:
+            context.logger.info("fetching page 1")
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(captured.append)
+
+        logs = [event for event in captured if event.type is EventType.LOG]
+        assert len(logs) == 1
+        assert logs[0].metadata["message"] == "fetching page 1"
+        assert logs[0].metadata["component_id"] == "a1"
+        assert logs[0].metadata["source_id"] == "s1"
+        assert logs[0].metadata["run_id"] == "r1"
+
+
+class TestPartitionDateGranularity:
+    """``partition_date`` is the day-granularity accessor."""
+
+    def test_a_monthly_asset_is_pointed_at_partition_instead(self) -> None:
+        context = ExecutionContext(
+            asset_key="asset",
+            partitioning=TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH),
+            partition_or_window=TimePartition(dt.date(2026, 6, 1), TimeGranularity.MONTH),
+        )
+
+        with pytest.raises(AttributeError, match="partitioned by month. Use `context.partition`"):
+            _ = context.partition_date
+
+
+def test_an_unpartitioned_asset_explains_which_accessor_is_unavailable() -> None:
+    """The error names the accessor that was reached for."""
+    context = ExecutionContext(asset_key="asset")
+
+    with pytest.raises(AttributeError, match=r"`context.partition_date` is not available, asset is not partitioned"):
+        _ = context.partition_date
