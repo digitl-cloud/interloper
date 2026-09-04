@@ -56,3 +56,23 @@ class TestTickLiveness:
         loops = dict(points)
         assert "_stubloop" in loops
         assert loops["_stubloop"] > 0
+
+
+class _InterruptingController(Controller):
+    """Raises ``KeyboardInterrupt`` from its tick, as Ctrl-C would."""
+
+    def __init__(self) -> None:
+        super().__init__(poll_interval=0)
+
+    def _tick(self) -> None:
+        raise KeyboardInterrupt
+
+
+class TestKeyboardInterrupt:
+    """Ctrl-C ends the loop cleanly rather than surfacing a traceback."""
+
+    def test_the_loop_returns_and_says_so(self, caplog):
+        with caplog.at_level("INFO", logger="interloper_scheduler.controller"):
+            _InterruptingController().start()
+
+        assert "Shutting down _InterruptingController" in caplog.text

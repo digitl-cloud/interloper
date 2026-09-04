@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 from interloper.errors import ConfigError
 from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
@@ -74,3 +76,17 @@ class TestInProcessLauncherTelemetry:
 
         assert done.wait(5)
         assert captured["trace_id"] == span.get_span_context().trace_id
+
+
+class TestDescribeRunDefault:
+    """The base launcher cannot introspect its runs."""
+
+    def test_it_reports_no_state(self):
+        # The reaper then falls back to the dispatch timeout.
+        class MinimalLauncher(Launcher):
+            """Launcher implementing only the required half."""
+
+            def launch(self, run_id):  # pragma: no cover - unused
+                raise NotImplementedError
+
+        assert MinimalLauncher().describe_run(uuid4()) is None
