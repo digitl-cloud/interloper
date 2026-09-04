@@ -55,15 +55,17 @@ declared types and turning empty strings into `None`. Window writes are split pe
 
 ### FileDestination
 
-Pickled Python objects, one file per asset:
+Pickled Python objects, one file per partition:
 
 ```
 {base_path}/{dataset}/{table}/data.pkl
+{base_path}/{dataset}/{table}/{column}={partition_id}/data.pkl
 ```
 
-It stores whatever the asset returned, tabular or not, and is **not partition-aware**: every
-write replaces the same file regardless of the partition scope. Use it for unpartitioned assets
-or arbitrary objects; use `CSVDestination` for partitioned local files.
+Same layout as `CSVDestination`, but it stores whatever the asset returned, tabular or not —
+so use it for arbitrary objects, and `CSVDestination` when you want to read the files yourself.
+Window writes are split per partition where the data's representation allows it; a non-tabular
+object, which nothing can slice, is stored whole under each partition of the window.
 
 ### MemoryDestination
 
