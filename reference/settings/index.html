@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.58">
+      <meta name="generator" content="zensical-0.0.59">
     
     
       
@@ -375,6 +375,8 @@
   
     
       
+      
+        
       
         
       
@@ -1512,6 +1514,8 @@
       
         
       
+        
+      
     
     
     
@@ -1915,6 +1919,33 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1982,6 +2013,8 @@
       
         
       
+        
+      
     
     
     
@@ -2013,8 +2046,7 @@
 
 <h1 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h1>
 <p><code>AppSettings</code> is the runtime configuration the CLI and the platform read. It loads from three
-sources, highest priority first: environment variables, an <code>interloper.yaml</code> in the working
-directory, field defaults. Every section has its own environment prefix.</p>
+sources: an <code>interloper.yaml</code> in the working directory, environment variables, field defaults. Every section has its own environment prefix.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">AppSettings</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">settings</span> <span class="o">=</span> <span class="n">AppSettings</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>          <span class="c1"># the active settings, or freshly loaded ones</span>
@@ -2205,9 +2237,11 @@ and <code>interloper-mcp</code>.</p>
 </span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
 </span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Finance</span>
 </span></code></pre></div>
-<p>Note that a YAML block wins over environment variables for that whole submodel only when the
-block is absent: pydantic-settings merges by section, so setting <code>runner:</code> in YAML and
-<code>INTERLOPER_RUNNER_TYPE</code> in the environment resolves in favour of the environment.</p>
+<p>Within a section, a field present in the YAML wins over its environment variable, and the
+environment fills the fields the YAML leaves out: <code>runner: {type: serial}</code> with
+<code>INTERLOPER_RUNNER_TYPE=async</code> resolves to <code>serial</code>, while <code>INTERLOPER_POSTGRES_PASSWORD</code> completes a
+<code>postgres:</code> block that omits the password. The YAML is not interpolated, so secrets belong in the
+environment, not in <code>${VAR}</code> placeholders.</p>
 <h2 id="other-environment-variables">Other environment variables<a class="headerlink" href="#other-environment-variables" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

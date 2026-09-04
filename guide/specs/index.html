@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.58">
+      <meta name="generator" content="zensical-0.0.59">
     
     
       
@@ -122,7 +122,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Specs &amp; serialization
+              Specs & serialization
             
           </span>
         </div>
@@ -375,6 +375,8 @@
   
     
       
+      
+        
       
         
       
@@ -1617,6 +1619,8 @@
       
         
       
+        
+      
     
     
     
@@ -1876,6 +1880,33 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2026,8 +2057,9 @@ per-asset state (destinations, <code>materializable</code>, dependency wiring) s
 <div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">Shop</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_1"</span><span class="p">)</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span><span class="o">.</span><span class="n">init</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># {"account_id": "act_1", "assets": {"orders": {"id": "...", "materializable": True, ...}, ...}}</span>
 </span></code></pre></div>
-<p>Reconstruction builds each asset class with its overrides; assets absent from the map are built
-bare.</p>
+<p>Reconstruction builds each asset class with its overrides. The map is also the list of assets the
+source ends up with: an asset absent from a non-empty map does not exist after reconstruction.
+To restrict what runs while keeping every asset wired, use <code>select</code> instead.</p>
 <h2 id="spec-files">Spec files<a class="headerlink" href="#spec-files" title="Permanent link">&para;</a></h2>
 <p><code>Spec.from_file(path)</code> loads a YAML document, interpolating <code>${VAR}</code> placeholders from the
 environment in every string value. Unresolved variables are a hard error, so credentials never
