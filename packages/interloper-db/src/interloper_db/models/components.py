@@ -61,7 +61,7 @@ class Component(SQLModel, table=True):
     data: bytes | None = SQLField(default=None, sa_column=Column(LargeBinary))
     encrypted: bool = False
     created_at: datetime | None = timestamp_column()
-    updated_at: datetime | None = timestamp_column()
+    updated_at: datetime | None = timestamp_column(onupdate=text("CURRENT_TIMESTAMP"))
 
     # Spelled Optional[...] rather than "Component" | None: SQLModel cannot
     # resolve the union string form at mapper-configuration time.

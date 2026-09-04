@@ -144,7 +144,7 @@ class TestJobRoundTrip:
         assert {type(target).key for target in job.targets} == {"demo_source", "demo_asset"}
         assert {type(asset).key for asset in il.DAG(*job.targets).operations} == {"a", "b", "c", "d", "e", "demo_asset"}
 
-    def test_update_preserves_state(self, store: Store):
+    def test_update_preserves_state_but_drops_the_cached_schedule(self, store: Store):
         db_job = store.components.create(_ORG, kind="job", key="cron_job", name="Job", config={"cron": "0 6 * * *"})
 
         # Simulate the scheduler's targeted state write.
@@ -156,13 +156,13 @@ class TestJobRoundTrip:
         with Session(get_engine()) as session:
             row = session.get(Component, db_job.id)
             assert row is not None
-            row.state = {"next_run_at": "2026-07-07T06:00:00+00:00"}
+            row.state = {"next_run_at": "2026-07-07T06:00:00+00:00", "last_run_at": "2026-07-06T06:00:00+00:00"}
             session.add(row)
             session.commit()
 
         updated = store.components.update(db_job.id, name="Renamed", config={"cron": "0 7 * * *"})
         assert updated.name == "Renamed"
-        assert updated.state == {"next_run_at": "2026-07-07T06:00:00+00:00"}
+        assert updated.state == {"next_run_at": None, "last_run_at": "2026-07-06T06:00:00+00:00"}
 
 
 class FakeLinker(il.Component):

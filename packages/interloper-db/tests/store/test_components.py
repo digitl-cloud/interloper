@@ -666,6 +666,51 @@ class TestStampState:
             store.components.stamp_state(uuid4(), refreshed_at=None)
 
 
+class TestJobReschedule:
+    """Editing a job's spec drops its cached schedule so the scheduler re-derives it."""
+
+    _CONFIG: ClassVar[dict[str, object]] = {"cron": "0 0 * * *", "enabled": True}
+    _STATE: ClassVar[dict[str, str]] = {
+        "next_run_at": "2026-09-04T00:00:00+00:00",
+        "last_run_at": "2026-09-03T00:00:00+00:00",
+    }
+
+    def _job(self, store: Store) -> Component:
+        row = store.components.create(_ORG, kind="job", key="cron_job", name="J", config=dict(self._CONFIG))
+        return store.components.stamp_state(row.id, **self._STATE)
+
+    def test_config_change_clears_next_run_at_and_keeps_last_run_at(self, store: Store):
+        job = self._job(store)
+        updated = store.components.update(job.id, config={**self._CONFIG, "timezone": "Europe/Berlin"})
+        assert updated.state == {"next_run_at": None, "last_run_at": self._STATE["last_run_at"]}
+
+    def test_identical_config_keeps_schedule(self, store: Store):
+        job = self._job(store)
+        updated = store.components.update(job.id, config=dict(self._CONFIG))
+        assert updated.state == self._STATE
+
+    def test_rename_keeps_schedule(self, store: Store):
+        job = self._job(store)
+        updated = store.components.update(job.id, name="renamed")
+        assert updated.state == self._STATE
+
+    def test_non_job_config_change_leaves_state_alone(self, store: Store):
+        row = store.components.create(_ORG, kind="connection", key="conn", name="C", config={"a": 1}, encrypted=False)
+        store.components.stamp_state(row.id, refreshed_at="2026-09-03T00:00:00+00:00")
+        updated = store.components.update(row.id, config={"a": 2}, encrypted=False)
+        assert updated.state == {"refreshed_at": "2026-09-03T00:00:00+00:00"}
+
+
+class TestUpdatedAt:
+    def test_update_refreshes_updated_at(self, store: Store):
+        assert Component.__table__.c.updated_at.onupdate is not None  # ty: ignore[unresolved-attribute]
+        row = store.components.create(_ORG, kind="job", key="cron_job", name="J", config={"cron": "0 0 * * *"})
+        updated = store.components.update(row.id, name="renamed")
+        assert updated.updated_at is not None
+        assert updated.created_at is not None
+        assert updated.updated_at >= updated.created_at
+
+
 class PublicToggleConnection(il.Connection):
     """Renewable test connection whose ``auto_renew`` is schema-marked public."""
 
