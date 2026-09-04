@@ -12,7 +12,12 @@ import interloper as il
 from interloper.errors import ConfigError, PartitionError
 from interloper.events import Event
 from interloper.normalizer import Normalizer
-from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig
+from interloper.partitioning.time import (
+    TimeGranularity,
+    TimePartition,
+    TimePartitionConfig,
+    TimePartitionWindow,
+)
 from interloper.runner.async_runner import AsyncRunner
 from interloper.runner.base import RUNNERS
 from interloper.runner.results import ExecutionStatus
@@ -190,6 +195,45 @@ class TestPreflightValidation:
         dag = il.DAG(daily(id="daily", destinations=[il.MemoryDestination()]))
         with pytest.raises(PartitionError, match="partitioned by day"):
             await AsyncRunner().run(dag, TimePartition(dt.date(2026, 1, 1), TimeGranularity.MONTH))
+
+    async def test_a_windowed_run_needs_every_asset_to_allow_windows(self):
+        il.MemoryDestination.clear()
+        calls: list[str] = []
+
+        @il.asset(partitioning=TimePartitionConfig(column="date", allow_window=True))
+        def windowed() -> list[dict[str, Any]]:
+            calls.append("windowed")
+            return [{"date": "2026-01-01"}]
+
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def daily_only() -> list[dict[str, Any]]:
+            calls.append("daily_only")
+            return [{"date": "2026-01-01"}]
+
+        dag = il.DAG(
+            windowed(id="windowed", destinations=[il.MemoryDestination()]),
+            daily_only(id="daily_only", destinations=[il.MemoryDestination()]),
+        )
+        window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
+
+        with pytest.raises(PartitionError, match=r"allow_window=True.*daily_only"):
+            await AsyncRunner().run(dag, window)
+
+        assert calls == []
+
+    async def test_a_windowed_run_passes_when_every_asset_allows_it(self):
+        il.MemoryDestination.clear()
+
+        @il.asset(partitioning=TimePartitionConfig(column="date", allow_window=True))
+        def windowed(context: il.ExecutionContext) -> list[dict[str, Any]]:
+            return [{"date": partition.value} for partition in context.window]
+
+        dag = il.DAG(windowed(id="windowed", destinations=[il.MemoryDestination()]))
+        window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
+
+        result = await AsyncRunner().run(dag, window)
+
+        assert result.status is ExecutionStatus.COMPLETED
 
     def test_non_materializable_partitioned_assets_are_exempt(self):
         # Upstream dependencies are hydrated read-only (materializable=False);
@@ -399,3 +443,13 @@ class TestFinalizeCancelsPending:
         assert len(canceled_events) == 5
         run_failed_index = next(i for i, event in enumerate(events) if event.type is il.EventType.RUN_FAILED)
         assert all(events.index(event) < run_failed_index for event in canceled_events)
+
+
+class TestStateAccess:
+    """``state`` is only available inside a run."""
+
+    def test_before_a_run_it_is_an_actionable_error(self):
+        from interloper.errors import RunnerError
+
+        with pytest.raises(RunnerError, match="State not initialized"):
+            _ = AsyncRunner().state

@@ -4,8 +4,10 @@ import datetime
 from decimal import Decimal
 from typing import Any
 
+import pytest
 from pydantic import BaseModel, Field
 
+from interloper.errors import SchemaError
 from interloper.schema import FieldSpec, Schema
 
 
@@ -25,6 +27,20 @@ class FullSchema(Schema):
     nullable_repeated: list[int] | None
     nested: Nested | None
     untyped: Any
+
+
+class StrictRowSchema(Schema):
+    a: int
+    b: str
+
+
+class OptionalRowSchema(Schema):
+    a: int
+    b: str = "fallback"
+
+
+class RepeatedRowSchema(Schema):
+    tags: list[str] | None = None
 
 
 class ShadowingSchema(Schema):
@@ -170,3 +186,90 @@ class TestJsonSchema:
             b: str | None = None
 
         assert "required" not in AllOptional.json_schema()
+
+
+class TestInfer:
+    """Schema inference from row dicts, used at the IO boundary."""
+
+    def test_types_are_read_from_the_values(self):
+        inferred = Schema.infer([{"clicks": 1, "cost": 1.5, "campaign": "x"}])
+        specs = {spec.name: spec for spec in inferred.field_specs()}
+
+        assert specs["clicks"].type is int
+        assert specs["cost"].type is float
+        assert specs["campaign"].type is str
+
+    def test_every_field_is_nullable(self):
+        # Any key may be absent from any row.
+        inferred = Schema.infer([{"clicks": 1}])
+
+        assert all(spec.nullable for spec in inferred.field_specs())
+
+    def test_a_key_absent_from_some_rows_is_still_inferred(self):
+        inferred = Schema.infer([{"a": 1}, {"b": "x"}])
+
+        assert {spec.name for spec in inferred.field_specs()} == {"a", "b"}
+
+    def test_int_and_float_widen_to_float(self):
+        inferred = Schema.infer([{"v": 1}, {"v": 1.5}])
+        spec = next(spec for spec in inferred.field_specs() if spec.name == "v")
+
+        assert spec.type is float
+
+    def test_conflicting_types_fall_back_to_any(self):
+        inferred = Schema.infer([{"v": 1}, {"v": "x"}])
+        spec = next(spec for spec in inferred.field_specs() if spec.name == "v")
+
+        assert spec.type is Any
+
+    def test_an_all_none_column_falls_back_to_any(self):
+        inferred = Schema.infer([{"v": None}])
+        spec = next(spec for spec in inferred.field_specs() if spec.name == "v")
+
+        assert spec.type is Any
+
+    def test_the_class_name_is_configurable(self):
+        assert Schema.infer([{"a": 1}], name="AdsStats").__name__ == "AdsStats"
+
+    def test_empty_rows_cannot_be_inferred_from(self):
+        with pytest.raises(SchemaError, match="Cannot infer schema from empty data"):
+            Schema.infer([])
+
+
+class TestValidateRows:
+    """Strict validation is the STRICT materialization strategy's contract."""
+
+    def test_matching_rows_pass(self):
+        StrictRowSchema.validate_rows([{"a": 1, "b": "x"}], strict=True)
+
+    def test_extra_fields_are_rejected_in_strict_mode(self):
+        with pytest.raises(SchemaError, match=r"row 0: extra fields not in schema: \['c'\]"):
+            StrictRowSchema.validate_rows([{"a": 1, "b": "x", "c": 2}], strict=True)
+
+    def test_missing_required_fields_are_rejected_in_strict_mode(self):
+        with pytest.raises(SchemaError, match=r"row 0: missing required fields: \['b'\]"):
+            StrictRowSchema.validate_rows([{"a": 1}], strict=True)
+
+    def test_extra_fields_are_tolerated_without_strict(self):
+        StrictRowSchema.validate_rows([{"a": 1, "b": "x", "c": 2}])
+
+    def test_the_failing_row_is_named(self):
+        with pytest.raises(SchemaError, match="row 1"):
+            StrictRowSchema.validate_rows([{"a": 1, "b": "x"}, {"a": 1}], strict=True)
+
+
+class TestReconcileDefaults:
+    """Reconcile fills absent optional fields and drops unknown ones."""
+
+    def test_an_absent_optional_field_takes_its_default(self):
+        rows = OptionalRowSchema.reconcile([{"a": 1}])
+
+        assert rows == [{"a": 1, "b": "fallback"}]
+
+    def test_no_rows_returns_no_rows(self):
+        assert OptionalRowSchema.reconcile([]) == []
+
+    def test_a_repeated_field_survives(self):
+        rows = RepeatedRowSchema.reconcile([{"tags": ["a", "b"]}])
+
+        assert rows == [{"tags": ["a", "b"]}]

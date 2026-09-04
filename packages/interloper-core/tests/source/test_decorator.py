@@ -97,3 +97,74 @@ class TestMaterializable:
             return [probe_asset]
 
         assert all(not a.materializable for a in probe_source()(materializable=False).assets)
+
+
+class TestFunctionForm:
+    """``@il.source`` on a function that returns its assets."""
+
+    def test_a_list_of_asset_classes_becomes_the_source(self):
+        @il.asset
+        def one() -> list[dict[str, Any]]:
+            return [{"a": 1}]
+
+        @il.asset
+        def two() -> list[dict[str, Any]]:
+            return [{"a": 2}]
+
+        @il.source
+        def pair() -> list[type[il.Asset]]:
+            return [one, two]
+
+        assert issubclass(pair, il.Source)
+        assert {asset.key for asset in pair().assets} == {"one", "two"}
+
+    def test_a_single_asset_class_is_accepted(self):
+        @il.asset
+        def solo() -> list[dict[str, Any]]:
+            return [{"a": 1}]
+
+        @il.source
+        def wrapper() -> type[il.Asset]:
+            return solo
+
+        assert [asset.key for asset in wrapper().assets] == ["solo"]
+
+    def test_a_function_returning_nothing_usable_yields_no_assets(self):
+        @il.source
+        def empty() -> None:
+            pass
+
+        assert empty().assets == []
+
+    def test_annotated_parameters_become_config_fields(self):
+        @il.asset
+        def rows() -> list[dict[str, Any]]:
+            return [{"a": 1}]
+
+        @il.source
+        def configured(
+            account_id: str = il.InputField(default="acc-1"),
+            region: str = il.InputField(default="eu"),
+        ) -> list[type[il.Asset]]:
+            return [rows]
+
+        assert set(configured.model_fields) >= {"account_id", "region"}
+        instance = configured(account_id="acc-2")  # ty: ignore[unknown-argument]
+        assert instance.account_id == "acc-2"
+        assert instance.region == "eu"
+
+    def test_the_docstring_is_carried_over(self):
+        # Source docstrings ship as the component's description in the app.
+        @il.source
+        def documented() -> None:
+            """Everything the vendor exposes."""
+
+        assert documented.__doc__ == "Everything the vendor exposes."
+
+    def test_the_key_and_module_come_from_the_function(self):
+        @il.source
+        def google_ads() -> None:
+            pass
+
+        assert google_ads.key == "google_ads"
+        assert google_ads.__module__ == __name__

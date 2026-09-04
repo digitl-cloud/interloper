@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
+import pytest
+
+from interloper.errors import EventError
 from interloper.events import Event, EventBus, EventType
+from interloper.events.stderr import EVENT_LINE_PREFIX
 
 
 def test_events_get_unique_ids_by_default() -> None:
@@ -85,3 +91,99 @@ def test_str_labels_log_events_with_level() -> None:
     """LOG events render as ``LOG.<LEVEL>`` instead of the bare type."""
     event = Event(type=EventType.LOG, metadata={"component_key": "foo", "message": "hi", "level": "WARNING"})
     assert "LOG.WARNING" in str(event)
+
+
+class TestFromDictValidation:
+    """Deserialization rejects malformed payloads with a clear error."""
+
+    def test_a_missing_type_is_rejected(self) -> None:
+        with pytest.raises(EventError, match="Missing required field 'type'"):
+            Event.from_dict({"timestamp": "2026-01-01T00:00:00+00:00"})
+
+    def test_an_unknown_type_is_rejected(self) -> None:
+        with pytest.raises(EventError, match="Invalid event type 'not_a_type'"):
+            Event.from_dict({"type": "not_a_type", "timestamp": "2026-01-01T00:00:00+00:00"})
+
+    def test_a_missing_timestamp_is_rejected(self) -> None:
+        with pytest.raises(EventError, match="Missing required field 'timestamp'"):
+            Event.from_dict({"type": EventType.RUN_STARTED.value})
+
+    def test_an_unparseable_timestamp_is_rejected(self) -> None:
+        with pytest.raises(EventError, match="Invalid timestamp format"):
+            Event.from_dict({"type": EventType.RUN_STARTED.value, "timestamp": "yesterday"})
+
+    def test_a_non_temporal_timestamp_is_rejected(self) -> None:
+        with pytest.raises(EventError, match="Invalid timestamp value"):
+            Event.from_dict({"type": EventType.RUN_STARTED.value, "timestamp": 1767225600})
+
+    def test_a_datetime_timestamp_is_taken_as_is(self) -> None:
+        timestamp = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+
+        event = Event.from_dict({"type": EventType.RUN_STARTED.value, "timestamp": timestamp})
+
+        assert event.timestamp == timestamp
+
+    def test_every_other_key_becomes_metadata(self) -> None:
+        event = Event.from_dict(
+            {
+                "event_id": "e1",
+                "type": EventType.RUN_STARTED.value,
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "run_id": "r1",
+                "message": "hello",
+            }
+        )
+
+        assert event.id == "e1"
+        assert event.metadata == {"run_id": "r1", "message": "hello"}
+
+
+class TestFromLogLine:
+    """Parsing events back out of a child container's log stream."""
+
+    def test_a_prefixed_line_is_parsed(self) -> None:
+        original = Event(type=EventType.RUN_STARTED, metadata={"run_id": "r1"})
+
+        parsed = Event.from_log_line(f"{EVENT_LINE_PREFIX}{original.to_json()}\n")
+
+        assert parsed is not None
+        assert parsed.id == original.id
+        assert parsed.metadata == {"run_id": "r1"}
+
+    def test_a_bare_json_line_is_parsed(self) -> None:
+        original = Event(type=EventType.RUN_COMPLETED)
+
+        parsed = Event.from_log_line(original.to_json())
+
+        assert parsed is not None
+        assert parsed.type is EventType.RUN_COMPLETED
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "",
+            "   \n",
+            "2026-01-01 INFO  some regular log line",
+            f"{EVENT_LINE_PREFIX}{{not json",
+            '{"type": "not_a_type", "timestamp": "2026-01-01T00:00:00+00:00"}',
+        ],
+    )
+    def test_anything_else_is_ignored(self, line: str) -> None:
+        # Application logs share the stream, so an unrecognised line must
+        # never take the log-forwarding thread down.
+        assert Event.from_log_line(line) is None
+
+
+def test_stderr_handler_writes_a_prefixed_line(capsys: pytest.CaptureFixture[str]) -> None:
+    """The container-side handler emits exactly what ``from_log_line`` parses."""
+    from interloper.events.stderr import StderrEventHandler
+
+    event = Event(type=EventType.RUN_STARTED, metadata={"run_id": "r1"})
+
+    StderrEventHandler()(event)
+
+    line = capsys.readouterr().err
+    assert line.startswith(EVENT_LINE_PREFIX)
+    parsed = Event.from_log_line(line)
+    assert parsed is not None
+    assert parsed.id == event.id

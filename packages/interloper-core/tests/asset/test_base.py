@@ -8,7 +8,7 @@ import asyncio
 import datetime as dt
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -19,6 +19,7 @@ from interloper.errors import AssetError, DestinationError, PartitionError
 from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
+from interloper.runner.results import ExecutionStatus
 from interloper.serializable import Spec
 
 # -- Fixtures ------------------------------------------------------------------
@@ -858,3 +859,322 @@ class TestAssetIdentity:
             return ""
 
         assert standalone().identity == il.AssetIdentity(None, "standalone")
+
+
+# -- Partition row counts ------------------------------------------------------
+
+
+class TestPartitionRowCounts:
+    """Row counts delegated to the asset's first resolved destination."""
+
+    def test_delegates_to_the_destination(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+        asset = FakeAssetDaily(id="daily", destinations=[mem])
+        mem.write(
+            il.IOContext(asset=asset, partition_or_window=TimePartition(dt.date(2026, 1, 1))),
+            [{"date": "2026-01-01"}, {"date": "2026-01-01"}],
+        )
+
+        assert asset.partition_row_counts() == {"2026-01-01": 2}
+
+    def test_an_unpartitioned_asset_is_rejected(self):
+        asset = FakeAsset(destinations=[FakeDestination()])
+
+        with pytest.raises(PartitionError, match="is not partitioned"):
+            asset.partition_row_counts()
+
+    def test_no_destination_is_rejected(self):
+        with pytest.raises(AssetError, match="No destinations found"):
+            FakeAssetDaily().partition_row_counts()
+
+
+# -- Dependency resolution -----------------------------------------------------
+
+
+class DependentSource(il.Source):
+    """``consumer`` requires ``producer``; ``tolerant`` only prefers it."""
+
+    class Producer(il.Asset):
+        """Returns one row."""
+
+        def data(self) -> Any:
+            return [{"x": 1}]
+
+    class Consumer(il.Asset):
+        """Requires the upstream's rows."""
+
+        requires: ClassVar[dict[str, str]] = {"producer": "producer"}
+
+        def data(self, producer: Any) -> Any:
+            return producer
+
+    class Tolerant(il.Asset):
+        """Runs with or without the upstream's rows."""
+
+        optional_requires: ClassVar[dict[str, str]] = {"producer": "producer"}
+
+        def data(self, producer: Any) -> Any:
+            return producer or [{"fallback": True}]
+
+
+class TestDependencyResolution:
+    """What ``_build_kwargs`` does about upstream data."""
+
+    async def test_a_required_dependency_without_a_dag_is_an_actionable_error(self):
+        il.MemoryDestination.clear()
+        source = DependentSource(destinations=[il.MemoryDestination()])
+        consumer = next(asset for asset in source.assets if asset.key == "consumer")
+
+        with pytest.raises(AssetError, match="has dependencies but no DAG provided"):
+            await consumer.run_async()
+
+    async def test_an_optional_dependency_without_a_dag_resolves_to_none(self):
+        il.MemoryDestination.clear()
+        source = DependentSource(destinations=[il.MemoryDestination()])
+        tolerant = next(asset for asset in source.assets if asset.key == "tolerant")
+
+        assert await tolerant.run_async() == [{"fallback": True}]
+
+    async def test_a_required_dependency_is_read_from_the_upstream_destination(self):
+        il.MemoryDestination.clear()
+        dag = il.DAG(DependentSource(select=["producer", "consumer"], destinations=[il.MemoryDestination()]))
+
+        result = await il.AsyncRunner(max_workers=1).run(dag)
+
+        assert result.status is ExecutionStatus.COMPLETED
+
+    async def test_an_optional_dependency_that_cannot_be_read_resolves_to_none(self):
+        # The upstream never ran, so its destination has nothing to return.
+        il.MemoryDestination.clear()
+        source = DependentSource(select=["tolerant"], destinations=[il.MemoryDestination()])
+        dag = il.DAG(source)
+        tolerant = next(o for o in dag.operations if o.key == "tolerant")
+
+        assert await tolerant.run_async(dag=dag) == [{"fallback": True}]  # ty: ignore[unresolved-attribute]
+
+
+class TestUpstreamReadFailures:
+    """Reading an upstream's data is where a run most often breaks."""
+
+    async def test_a_missing_upstream_destination_is_named(self):
+        il.MemoryDestination.clear()
+        source = DependentSource(select=["producer", "consumer"])
+        dag = il.DAG(source)
+        consumer = next(o for o in dag.operations if o.key == "consumer")
+
+        with pytest.raises(AssetError, match="No destination found for upstream asset 'producer'"):
+            await consumer.run_async(dag=dag)  # ty: ignore[unresolved-attribute]
+
+    async def test_a_failing_read_is_wrapped_and_reported(self):
+        il.MemoryDestination.clear()
+
+        class BrokenReadDestination(il.Destination):
+            """Destination whose reads always fail."""
+
+            def read(self, context: Any) -> Any:
+                """Fail every read.
+
+                Args:
+                    context: Ignored IO context.
+
+                Raises:
+                    RuntimeError: Always.
+                """
+                raise RuntimeError("backend down")
+
+            def write(self, context: Any, data: Any) -> None:
+                """Accept and drop the data.
+
+                Args:
+                    context: Ignored IO context.
+                    data: Ignored payload.
+                """
+
+        source = DependentSource(select=["producer", "consumer"], destinations=[BrokenReadDestination()])
+        dag = il.DAG(source)
+        consumer = next(o for o in dag.operations if o.key == "consumer")
+        captured: list[Event] = []
+        EventBus.subscribe(captured.append)
+        try:
+            with pytest.raises(AssetError, match="Failed to load data from upstream asset 'producer'"):
+                await consumer.run_async(dag=dag)  # ty: ignore[unresolved-attribute]
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(captured.append)
+
+        failures = [e for e in captured if e.type is EventType.DEST_READ_FAILED]
+        assert len(failures) == 1
+        assert "backend down" in failures[0].metadata["error"]
+        assert failures[0].metadata["traceback"]
+
+
+class TestDestinationWriteFailures:
+    """A write failure is reported before it propagates."""
+
+    async def test_a_failing_write_emits_the_failure_event(self):
+        il.MemoryDestination.clear()
+
+        class BrokenWriteDestination(il.Destination):
+            """Destination whose writes always fail."""
+
+            def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
+                """Unused.
+
+                Args:
+                    context: Ignored IO context.
+
+                Returns:
+                    Nothing.
+                """
+                return None
+
+            def write(self, context: Any, data: Any) -> None:
+                """Fail every write.
+
+                Args:
+                    context: Ignored IO context.
+                    data: Ignored payload.
+
+                Raises:
+                    RuntimeError: Always.
+                """
+                raise RuntimeError("disk full")
+
+        @il.asset()
+        def rows() -> list[dict[str, Any]]:
+            return [{"a": 1}]
+
+        asset = rows(id="rows", destinations=[BrokenWriteDestination()])
+        captured: list[Event] = []
+        EventBus.subscribe(captured.append)
+        try:
+            with pytest.raises(RuntimeError, match="disk full"):
+                await asset.materialize_async()
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(captured.append)
+
+        failures = [e for e in captured if e.type is EventType.DEST_WRITE_FAILED]
+        assert len(failures) == 1
+        assert "disk full" in failures[0].metadata["error"]
+
+
+class TestNonMaterializableAssets:
+    """Read-only hydration of an upstream dependency."""
+
+    async def test_materialize_returns_nothing(self):
+        il.MemoryDestination.clear()
+        asset = FakeAsset(destinations=[il.MemoryDestination()], materializable=False)
+
+        assert await asset.materialize_async() is None
+
+
+# -- Conform edge cases --------------------------------------------------------
+
+
+class TestConformEdgeCases:
+    """What ``_normalize_and_conform`` does with data the conformer cannot shape."""
+
+    async def test_non_tabular_data_without_a_schema_passes_through(self):
+        # Arbitrary objects bound for a FileDestination have no contract to
+        # check against, so they must reach the destination untouched.
+        payload = object()
+
+        @il.asset()
+        def opaque() -> Any:
+            return payload
+
+        asset = opaque(id="opaque")
+
+        assert asset._normalize_and_conform(payload) is payload
+        assert asset._effective_schema is None
+
+    def test_non_tabular_data_with_a_schema_is_an_actionable_error(self):
+        @il.asset(schema=ConformSchema)
+        def opaque() -> Any:
+            return object()
+
+        asset = opaque(id="opaque")
+
+        with pytest.raises(AssetError, match="declares a schema but returned data that cannot be checked"):
+            asset._normalize_and_conform(object())
+
+    def test_strict_returns_the_validated_data_unchanged(self):
+        from interloper.normalizer import MaterializationStrategy
+
+        @il.asset(schema=StrictConformSchema, materialization_strategy=MaterializationStrategy.STRICT)
+        def rows() -> list[dict[str, Any]]:
+            return [{"user_id": 1, "name": "x"}]
+
+        asset = rows(id="rows")
+        data = [{"user_id": 1, "name": "x"}]
+
+        assert asset._normalize_and_conform(data) == data
+        assert asset._effective_schema is StrictConformSchema
+
+    def test_failed_inference_leaves_no_effective_schema(self, monkeypatch: pytest.MonkeyPatch):
+        # Inference is best-effort metadata; a conformer that cannot infer
+        # must not fail the materialization.
+        from interloper.conformer.base import RowsConformer
+
+        @il.asset()
+        def rows() -> list[dict[str, Any]]:
+            return [{"a": 1}]
+
+        asset = rows(id="rows")
+        monkeypatch.setattr(
+            RowsConformer, "infer", lambda self, data: (_ for _ in ()).throw(RuntimeError("cannot infer"))
+        )
+
+        assert asset._normalize_and_conform([{"a": 1}]) == [{"a": 1}]
+        assert asset._effective_schema is None
+
+
+# -- Reconfiguration coverage --------------------------------------------------
+
+
+class TestReconfigurationFields:
+    """Every ``__call__`` override lands on the copy."""
+
+    def test_dataset_and_strategy_are_overridable(self):
+        asset = FakeAsset()
+
+        from interloper.normalizer import MaterializationStrategy
+
+        reconfigured = asset(
+            dataset="analytics",
+            materialization_strategy=MaterializationStrategy.STRICT,
+        )
+
+        assert reconfigured.dataset == "analytics"
+        assert reconfigured.materialization_strategy is MaterializationStrategy.STRICT
+        assert asset.dataset != "analytics"
+
+    def test_a_single_destination_is_wrapped_in_a_list(self):
+        destination = FakeDestination()
+
+        reconfigured = FakeAsset()(destinations=destination)
+
+        assert reconfigured.destinations == [destination]
+
+    def test_destinations_none_becomes_an_empty_list(self):
+        assert FakeAsset(destinations=None).destinations == []  # ty: ignore[invalid-argument-type]
+
+
+# -- Time-partition scope validation -------------------------------------------
+
+
+class TestTimePartitionScope:
+    """``_validate_time_partitioning`` guards the scope's shape."""
+
+    def test_no_scope_is_accepted(self):
+        asset = FakeAssetDaily()
+
+        asset._validate_time_partitioning(asset.partitioning, None)
+
+    def test_a_non_time_partition_is_rejected(self):
+        asset = FakeAssetDaily()
+
+        with pytest.raises(PartitionError, match="is time-partitioned, but the run was given a FakePartition"):
+            asset._validate_time_partitioning(asset.partitioning, FakePartition("x"))
