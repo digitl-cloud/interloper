@@ -276,24 +276,11 @@ const CLOCK_STEPS = [
     DAY, 7 * DAY,
 ]
 
-/** Local midnight of the day containing `ms` — the anchor clock ticks align to. */
-function dayStart(ms: number): number {
-    const date = new Date(ms)
-    date.setHours(0, 0, 0, 0)
-    return date.getTime()
-}
-
 function formatClock(absolute: number, step: number): string {
     const date = new Date(absolute)
-    const midnight = date.getHours() === 0 && date.getMinutes() === 0 && date.getSeconds() === 0
-    if (step >= DAY || midnight) {
-        return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-    }
-    return date.toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        ...(step < MINUTE ? { second: '2-digit' } : {}),
-    })
+    const midnight = millisSinceMidnight(date) < SECOND
+    if (step >= DAY || midnight) return formatShortDay(date)
+    return formatClockTime(date, step < MINUTE)
 }
 
 /** "Nice" evenly-spaced ticks across the current viewport. */
@@ -303,7 +290,7 @@ const ticks = computed(() => {
 
     if (props.axis === 'clock') {
         const step = CLOCK_STEPS.find(s => span / s <= 8) ?? CLOCK_STEPS.at(-1)!
-        const anchor = dayStart(baseTime.value + start) - baseTime.value
+        const anchor = startOfDay(baseTime.value + start) - baseTime.value
         for (let v = anchor + Math.ceil((start - anchor) / step) * step; v <= end; v += step) {
             result.push({ value: v, percent: toPercent(v), label: formatClock(baseTime.value + v, step) })
         }

@@ -12,6 +12,46 @@ export function setDisplayTimeZone(tz: string | null | undefined) {
     }
 }
 
+const DAY = 86_400_000
+
+/** Milliseconds elapsed since midnight of the display-timezone day containing `date`. */
+export function millisSinceMidnight(date: Date): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+        timeZone: displayTimeZone,
+    }).formatToParts(date)
+    const part = (type: string) => Number(parts.find(p => p.type === type)?.value ?? 0)
+    return ((part('hour') * 60 + part('minute')) * 60 + part('second')) * 1000 + date.getMilliseconds()
+}
+
+/** Epoch ms of midnight, in the display timezone, of the day containing `ms`. */
+export function startOfDay(ms: number): number {
+    let midnight = ms - millisSinceMidnight(new Date(ms))
+    // On DST-transition days the wall clock and elapsed time disagree by the
+    // shift, so the first pass lands an hour off; nudge towards the nearer midnight.
+    const drift = millisSinceMidnight(new Date(midnight))
+    if (drift) midnight += drift > DAY / 2 ? DAY - drift : -drift
+    return midnight
+}
+
+/** Wall-clock label in the display timezone, e.g. "14:05" or "14:05:30" with `seconds`. */
+export function formatClockTime(date: Date, seconds = false): string {
+    return date.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        ...(seconds ? { second: '2-digit' } : {}),
+        timeZone: displayTimeZone,
+    })
+}
+
+/** Short day label in the display timezone, e.g. "4 Feb". */
+export function formatShortDay(date: Date): string {
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: displayTimeZone })
+}
+
 export function timeSince(date: Date): string {
     const seconds = Math.floor((new Date().valueOf() - date.valueOf()) / 1000)
     let interval = seconds / 31536000
