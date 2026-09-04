@@ -2128,12 +2128,14 @@ another class raises <code>DestinationError</code> at materialization:</p>
 read reconciles the rows against the effective schema carried in the context, restoring the
 declared types and turning empty strings into <code>None</code>. Window writes are split per partition.</p>
 <h3 id="filedestination">FileDestination<a class="headerlink" href="#filedestination" title="Permanent link">&para;</a></h3>
-<p>Pickled Python objects, one file per asset:</p>
+<p>Pickled Python objects, one file per partition:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>{base_path}/{dataset}/{table}/data.pkl
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>{base_path}/{dataset}/{table}/{column}={partition_id}/data.pkl
 </span></code></pre></div>
-<p>It stores whatever the asset returned, tabular or not, and is <strong>not partition-aware</strong>: every
-write replaces the same file regardless of the partition scope. Use it for unpartitioned assets
-or arbitrary objects; use <code>CSVDestination</code> for partitioned local files.</p>
+<p>Same layout as <code>CSVDestination</code>, but it stores whatever the asset returned, tabular or not —
+so use it for arbitrary objects, and <code>CSVDestination</code> when you want to read the files yourself.
+Window writes are split per partition where the data's representation allows it; a non-tabular
+object, which nothing can slice, is stored whole under each partition of the window.</p>
 <h3 id="memorydestination">MemoryDestination<a class="headerlink" href="#memorydestination" title="Permanent link">&para;</a></h3>
 <p>An in-process store keyed by <code>{dataset}/{table}/{column}={partition_id}</code>, shared by every
 instance, meant for tests:</p>
