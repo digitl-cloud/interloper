@@ -2064,7 +2064,8 @@ point runs. Acting on the schedule is the job of the platform scheduler, outside
 <p>Cascading works exactly like a source's: a job-level destination reaches every target without
 one, and a job-level connection reaches every target and destination with a matching empty slot.</p>
 <p><code>JobState</code> (<code>next_run_at</code>, <code>last_run_at</code>) is the job's machine-owned state, written by the
-scheduler.</p>
+scheduler. Editing a job's config clears <code>next_run_at</code>, so the next tick re-derives the schedule
+from the new spec rather than firing once more at the slot the old one produced.</p>
 <h2 id="cronjob">CronJob<a class="headerlink" href="#cronjob" title="Permanent link">&para;</a></h2>
 <p><code>CronJob</code> adds the trigger:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">job</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">CronJob</span><span class="p">(</span>
