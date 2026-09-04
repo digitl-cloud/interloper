@@ -30,7 +30,8 @@ Cascading works exactly like a source's: a job-level destination reaches every t
 one, and a job-level connection reaches every target and destination with a matching empty slot.
 
 `JobState` (`next_run_at`, `last_run_at`) is the job's machine-owned state, written by the
-scheduler.
+scheduler. Editing a job's config clears `next_run_at`, so the next tick re-derives the schedule
+from the new spec rather than firing once more at the slot the old one produced.
 
 ## CronJob
 

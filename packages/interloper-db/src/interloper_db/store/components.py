@@ -194,7 +194,10 @@ class ComponentStore:
 
         Passing ``children`` makes a source's child asset set exactly that
         list; omitting it leaves the current set as is. The machine-owned
-        ``state`` column is never touched here.
+        ``state`` column is left alone, with one exception: a job whose config
+        changes has its cached ``next_run_at`` cleared, so the scheduler
+        re-derives the schedule from the new spec on its next tick instead of
+        firing once more at the slot the old spec produced.
 
         Args:
             component_id: The component UUID.
@@ -223,7 +226,10 @@ class ComponentStore:
                 db_component.name = name
             if config is not None:
                 self._refresh_derived_name(db_component, new_config=config, explicit_rename=name is not None)
+                spec_changed = config != (db_component.config or {})
                 self._apply_config(db_component, config, encrypted)
+                if db_component.kind == "job" and spec_changed:
+                    db_component.stamp_state(next_run_at=None)
             if db_component.kind == "source":
                 self._check_source_collision(session, db_component)
                 if children is not None:

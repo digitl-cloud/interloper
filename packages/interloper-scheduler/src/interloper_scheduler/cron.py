@@ -5,7 +5,8 @@ Jobs are component rows (``kind='job'``): their trigger lives in ``config``
 (machine-owned, UTC ISO-8601 strings): it advances ``next_run_at`` here;
 ``last_run_at`` is stamped by ``complete_run`` when a run finishes.
 State is a pure cache — wiping it just makes every job reschedule from its
-cron expression on the next tick.
+cron expression on the next tick, which is what the store does to a job's
+``next_run_at`` whenever its config changes.
 
 The ISO strings are written in one canonical form (timezone-aware UTC
 ``isoformat()``), which makes lexicographic string comparison in SQL a
