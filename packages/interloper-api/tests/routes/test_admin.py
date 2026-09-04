@@ -7,12 +7,14 @@ store stands in for persistence so these stay pure unit tests.
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
 from interloper_db.store.quotas import QUOTAS
@@ -591,3 +593,246 @@ def test_update_quota_rejects_an_unknown_quota(store: FakeStore) -> None:
     assert resp.status_code == 422
     assert "max_bananas" in resp.text
     assert store.quota_updates == []
+
+
+# -- Cross-org invitations -----------------------------------------------------
+
+
+def test_list_invitations_404s_before_touching_anything(store: FakeStore) -> None:
+    """The org is resolved first, so an unknown id never reaches the invitations."""
+
+    def missing(org_id):
+        raise NotFoundError(f"Organisation {org_id} not found")
+
+    store.organisations.get = missing
+
+    resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{uuid4()}/invitations")
+
+    assert resp.status_code == 404
+
+
+def test_list_invitations_returns_the_orgs_pending_ones(store: FakeStore) -> None:
+    """A super-admin sees any organisation's outstanding invitations."""
+    invitation_id = uuid4()
+    store.organisations.list_invitations = lambda org_id: [
+        SimpleNamespace(
+            id=invitation_id,
+            email="new@acme.test",
+            role="viewer",
+            created_at=None,
+            expires_at=datetime.now(timezone.utc),
+        )
+    ]
+
+    resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{store.org.id}/invitations")
+
+    assert resp.status_code == 200
+    assert [row["id"] for row in resp.json()] == [str(invitation_id)]
+
+
+def test_cancel_invitation_deletes_it(store: FakeStore) -> None:
+    """The invitation id alone identifies the row; the org only scopes the path."""
+    deleted: list[UUID] = []
+    store.organisations.delete_invitation = deleted.append
+    invitation_id = uuid4()
+
+    resp = _client(store, is_super_admin=True).delete(
+        f"/admin/organisations/{store.org.id}/invitations/{invitation_id}"
+    )
+
+    assert resp.json() == {"status": "ok"}
+    assert deleted == [invitation_id]
+
+
+# -- Activity titles ----------------------------------------------------------
+
+
+class TestActivityTitles:
+    """``_activity_title`` renders each derived entry kind."""
+
+    @pytest.mark.parametrize(
+        ("entry", "expected"),
+        [
+            ({"kind": "org_created", "subject": "", "extra": None}, ("Organisation created", None)),
+            (
+                {"kind": "org_deleted", "subject": "", "extra": None},
+                ("Organisation deleted", "Retained read-only for billing history."),
+            ),
+            (
+                {"kind": "member_joined", "subject": "ada@x", "extra": "admin"},
+                ("ada@x joined the organisation", "Role: admin"),
+            ),
+            ({"kind": "member_joined", "subject": "ada@x", "extra": None}, ("ada@x joined the organisation", None)),
+            (
+                {"kind": "invitation_sent", "subject": "new@x", "extra": "Ada"},
+                ("Invitation sent to new@x", "Invited by Ada"),
+            ),
+            ({"kind": "invitation_sent", "subject": "new@x", "extra": None}, ("Invitation sent to new@x", None)),
+            ({"kind": "source_added", "subject": "facebook_ads", "extra": None}, ("Source added — facebook_ads", None)),
+        ],
+    )
+    def test_each_kind_renders(self, entry: dict, expected: tuple[str, str | None]) -> None:
+        assert admin_module._activity_title(entry) == expected
+
+    @pytest.mark.parametrize(
+        ("count", "expected"),
+        [("1", "1 run completed successfully"), ("2", "2 runs completed successfully")],
+    )
+    def test_the_run_count_is_pluralised(self, count: str, expected: str) -> None:
+        title, detail = admin_module._activity_title({"kind": "runs_completed", "subject": count, "extra": None})
+
+        assert (title, detail) == (expected, None)
+
+    def test_large_run_counts_are_thousands_separated(self) -> None:
+        title, _ = admin_module._activity_title({"kind": "runs_completed", "subject": "12345", "extra": None})
+
+        assert title == "12,345 runs completed successfully"
+
+    def test_an_unknown_kind_falls_back_to_its_name(self) -> None:
+        # A new derived kind must render as something rather than crashing.
+        assert admin_module._activity_title({"kind": "future_kind", "subject": "x", "extra": None}) == (
+            "future_kind",
+            None,
+        )
+
+
+# -- Config-snapshot introspection --------------------------------------------
+
+
+class TestRegistryDefaults:
+    """The snapshot annotates configured values with the registry's defaults."""
+
+    def test_an_unregistered_launcher_has_no_defaults(self) -> None:
+        assert admin_module._launcher_defaults("not-a-launcher") == {}
+
+    def test_a_missing_scheduler_extra_yields_no_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # An API-only image is built without interloper-scheduler.
+        monkeypatch.setitem(sys.modules, "interloper_scheduler.launcher", None)
+
+        assert admin_module._launcher_defaults("kubernetes") == {}
+
+    def test_a_registered_launcher_exposes_its_defaults(self) -> None:
+        defaults = admin_module._launcher_defaults("in_process")
+
+        assert isinstance(defaults, dict)
+
+    def test_an_unregistered_runner_has_no_defaults(self) -> None:
+        assert admin_module._runner_defaults("not-a-runner") == {}
+
+    def test_a_registered_runner_exposes_its_field_defaults(self) -> None:
+        defaults = admin_module._runner_defaults("async")
+
+        assert defaults["max_workers"] == 4
+
+    def test_an_uninstalled_package_leaves_the_version_unknown(
+        self, monkeypatch: pytest.MonkeyPatch, fake_settings: SimpleNamespace
+    ) -> None:
+        # Running from a source checkout rather than an installed dist.
+        def missing(name: str) -> str:
+            raise admin_module.metadata.PackageNotFoundError(name)
+
+        monkeypatch.setattr(admin_module.metadata, "version", missing)
+
+        snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, {"agent": True})
+
+        assert snapshot.deployment.version is None
+
+
+# -- Invitation email ----------------------------------------------------------
+
+
+class TestAdminInvitationEmail:
+    """``_send_invitation_email`` reads the SMTP config itself and never raises.
+
+    Unlike the organisations route's copy, this one looks the config up from
+    the process state rather than taking it as an argument.
+    """
+
+    @staticmethod
+    def _invitation() -> SimpleNamespace:
+        return SimpleNamespace(token="tok", email="new@acme.test")
+
+    @staticmethod
+    def _request() -> Request:
+        """Build a request stand-in carrying only the base URL.
+
+        Returns:
+            The stand-in, typed as a ``Request`` for the helper under test.
+        """
+        return cast(Request, SimpleNamespace(base_url="https://app.example.com/"))
+
+    @pytest.fixture
+    def smtp(self, monkeypatch: pytest.MonkeyPatch):
+        """Install an SMTP config into the process state.
+
+        Args:
+            monkeypatch: Fixture used to set the state slot.
+
+        Returns:
+            A callable taking the config to install.
+        """
+        from interloper_api.dependencies import state as state_module
+
+        def install(config) -> None:
+            monkeypatch.setattr(state_module, "_smtp_config", config)
+
+        return install
+
+    def test_an_unconfigured_mailer_is_logged_and_skipped(
+        self, smtp, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        smtp(None)
+
+        with caplog.at_level("WARNING", logger="interloper_api.routes.admin"):
+            admin_module._send_invitation_email(self._request(), self._invitation(), "Acme", "Ada")
+
+        assert "SMTP not configured" in caplog.text
+
+    def test_a_disabled_mailer_is_treated_as_unconfigured(
+        self, smtp, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        smtp(SimpleNamespace(enabled=False))
+
+        with caplog.at_level("WARNING", logger="interloper_api.routes.admin"):
+            admin_module._send_invitation_email(self._request(), self._invitation(), "Acme", "Ada")
+
+        assert "SMTP not configured" in caplog.text
+
+    def test_a_configured_mailer_gets_the_invite_url(
+        self, smtp, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        built: list[dict] = []
+
+        class FakeEmail:
+            def __init__(self, **kwargs) -> None:
+                built.append(kwargs)
+
+            def send(self, smtp_config, email) -> None:
+                built[-1]["sent_to"] = email
+
+        smtp(SimpleNamespace(enabled=True))
+        monkeypatch.setattr(admin_module, "InvitationEmail", FakeEmail)
+
+        admin_module._send_invitation_email(self._request(), self._invitation(), "Acme", "Ada")
+
+        assert built[0]["invite_url"] == "https://app.example.com/invite/tok"
+        assert built[0]["org_name"] == "Acme"
+        assert built[0]["sent_to"] == "new@acme.test"
+
+    def test_a_mailer_failure_is_logged_not_raised(
+        self, smtp, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class FailingEmail:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def send(self, smtp_config, email) -> None:
+                raise OSError("smtp unreachable")
+
+        smtp(SimpleNamespace(enabled=True))
+        monkeypatch.setattr(admin_module, "InvitationEmail", FailingEmail)
+
+        with caplog.at_level("ERROR", logger="interloper_api.routes.admin"):
+            admin_module._send_invitation_email(self._request(), self._invitation(), "Acme", "Ada")
+
+        assert "Failed to send invitation email to new@acme.test" in caplog.text
