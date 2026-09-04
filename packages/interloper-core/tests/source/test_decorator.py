@@ -6,13 +6,14 @@ from typing import Any
 import pytest
 
 import interloper as il
-from interloper.normalizer import MaterializationStrategy
+from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.source.decorator import _SOURCE_PARAMS
 
 # -- Fixtures ------------------------------------------------------------------
 
 # A usable value per decorator parameter, so the whole advertised surface can be
-# exercised generically.
+# exercised generically. Every value must be non-None: the decorator skips
+# None-valued parameters, so one here would silently exercise nothing.
 PARAM_VALUES: dict[str, Any] = {
     "resources": {},
     "destinations": [],
@@ -22,7 +23,7 @@ PARAM_VALUES: dict[str, Any] = {
     "icon": "icon:custom",
     "dataset": "custom_dataset",
     "default_destination_key": "custom_destination",
-    "normalizer": None,
+    "normalizer": Normalizer(),
     "materialization_strategy": MaterializationStrategy.RECONCILE,
 }
 
@@ -49,13 +50,15 @@ class TestParameterSurface:
     def test_every_advertised_parameter_is_routed(self):
         assert set(advertised_params()) == set(_SOURCE_PARAMS)
 
+    def test_no_sample_value_is_none(self):
+        """A None value is skipped by the decorator, so it would prove nothing."""
+        assert [name for name, value in PARAM_VALUES.items() if value is None] == []
+
     @pytest.mark.parametrize("param", advertised_params())
     def test_every_advertised_parameter_builds_a_function_source(self, param):
         """Each parameter must actually work — a routed name with no matching field crashes at build."""
         value = PARAM_VALUES.get(param, "__missing__")
         assert value != "__missing__", f"add a sample value for the new {param!r} decorator parameter"
-        if value is None:
-            pytest.skip(f"{param} has no non-None sample value")
 
         @il.source(**{param: value})
         def probe():
@@ -67,8 +70,6 @@ class TestParameterSurface:
     def test_every_advertised_parameter_builds_a_class_source(self, param):
         value = PARAM_VALUES.get(param, "__missing__")
         assert value != "__missing__", f"add a sample value for the new {param!r} decorator parameter"
-        if value is None:
-            pytest.skip(f"{param} has no non-None sample value")
 
         @il.source(**{param: value})
         class Probe:
