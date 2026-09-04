@@ -359,3 +359,229 @@ class TestListRunsWindow:
         _timed_run(store, started_at=None, completed_at=None)
 
         assert len(store.runs.list_all(_ORG_ID, limit=100)) == 2
+
+
+class TestGetAndComplete:
+    """Id-addressed reads and the terminal transition."""
+
+    def test_get_returns_the_run(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+
+        assert store.runs.get(run.id).id == run.id
+
+    def test_get_missing_run_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Run {missing} not found"):
+            store.runs.get(missing)
+
+    def test_complete_records_success(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+
+        store.runs.complete(run.id, success=True)
+
+        completed = store.runs.get(run.id)
+        assert completed.status == "success"
+        assert completed.completed_at is not None
+
+    def test_complete_records_failure(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+
+        store.runs.complete(run.id, success=False)
+
+        assert store.runs.get(run.id).status == "failed"
+
+    def test_complete_missing_run_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Run {missing} not found"):
+            store.runs.complete(missing, success=True)
+
+    def test_get_backfill_returns_it(self, store: Store):
+        backfill = _backfill(store)
+
+        assert store.runs.get_backfill(backfill.id).id == backfill.id
+
+    def test_get_missing_backfill_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Backfill {missing} not found"):
+            store.runs.get_backfill(missing)
+
+
+class TestPartitionKeyValidation:
+    """A run's partition key must be a shape the framework recognises."""
+
+    def test_a_well_formed_key_is_accepted(self, store: Store):
+        run = store.runs.create(_ORG_ID, partition_key="2026-01-01")
+
+        assert run.partition_key == "2026-01-01"
+
+    def test_an_unrecognised_shape_is_rejected(self, store: Store):
+        with pytest.raises(ValueError):
+            store.runs.create(_ORG_ID, partition_key="not-a-key")
+
+
+class TestRetryValidation:
+    """Only a failed run can be retried, and only with a known scope."""
+
+    def test_an_unknown_scope_is_rejected(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+
+        with pytest.raises(ValueError, match="Invalid retry scope: 'sideways'"):
+            store.runs.retry(run.id, scope="sideways")
+
+    def test_a_missing_run_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Run {missing} not found"):
+            store.runs.retry(missing)
+
+    def test_a_run_that_did_not_fail_is_rejected(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+
+        with pytest.raises(ValueError, match="is not failed"):
+            store.runs.retry(run.id)
+
+    def test_the_failed_scope_is_accepted(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=False)
+
+        retried = store.runs.retry(run.id, scope="failed")
+
+        assert retried.retry_of == run.id
+        assert retried.retry_scope == "failed"
+
+
+class TestBackfillGranularity:
+    """A backfill spans one granularity; mixed bounds fail closed."""
+
+    def test_mixed_granularity_bounds_are_rejected(self, store: Store):
+        with pytest.raises(ValueError, match="must share one granularity"):
+            store.runs.create_backfill(_ORG_ID, start_key="2026-01", end_key="2026-01-05")
+
+    def test_a_monthly_span_is_accepted(self, store: Store):
+        backfill = store.runs.create_backfill(_ORG_ID, start_key="2026-01", end_key="2026-03")
+
+        assert backfill.partitions == 3
+
+
+class TestListActiveBackfills:
+    """The active listing covers the two non-terminal statuses."""
+
+    def test_running_and_queued_are_listed(self, store: Store):
+        backfill = _backfill(store)
+
+        active = store.runs.list_active_backfills(_ORG_ID)
+
+        assert [row.id for row in active] == [backfill.id]
+
+    def test_a_terminal_backfill_is_excluded(self, store: Store):
+        backfill = _backfill(store)
+        with Session(store.engine) as session:
+            row = session.get(Backfill, backfill.id)
+            assert row is not None
+            row.status = "success"
+            session.add(row)
+            session.commit()
+
+        assert store.runs.list_active_backfills(_ORG_ID) == []
+
+    def test_another_orgs_backfills_are_excluded(self, store: Store):
+        _backfill(store)
+
+        assert store.runs.list_active_backfills(uuid4()) == []
+
+
+class TestBackfillProgression:
+    """Completing a run advances the backfill, or terminates it."""
+
+    def test_the_backfill_succeeds_once_every_run_has(self, store: Store):
+        backfill = store.runs.create_backfill(
+            _ORG_ID, start_key="2026-01-01", end_key="2026-01-02", concurrency=2
+        )
+        for run_id in _run_statuses(store, backfill.id):
+            store.runs.complete(run_id, success=True)
+
+        assert store.runs.get_backfill(backfill.id).status == "success"
+
+    def test_one_failure_without_fail_fast_still_finishes_as_failed(self, store: Store):
+        backfill = store.runs.create_backfill(
+            _ORG_ID, start_key="2026-01-01", end_key="2026-01-02", concurrency=2, fail_fast=False
+        )
+        run_ids = list(_run_statuses(store, backfill.id))
+        store.runs.complete(run_ids[0], success=False)
+        store.runs.complete(run_ids[1], success=True)
+
+        finished = store.runs.get_backfill(backfill.id)
+        assert finished.status == "failed"
+        assert finished.completed_at is not None
+
+    def test_fail_fast_cancels_the_pending_runs(self, store: Store):
+        # The remaining partitions are not worth spending once one failed.
+        backfill = store.runs.create_backfill(
+            _ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=1, fail_fast=True
+        )
+        first = next(
+            run_id for run_id, status in _run_statuses(store, backfill.id).items() if status == "queued"
+        )
+
+        store.runs.complete(first, success=False)
+
+        assert store.runs.get_backfill(backfill.id).status == "failed"
+        assert "pending" not in _run_statuses(store, backfill.id).values()
+
+    def test_a_completion_promotes_the_next_partition(self, store: Store):
+        backfill = store.runs.create_backfill(
+            _ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=1
+        )
+        first = next(
+            run_id for run_id, status in _run_statuses(store, backfill.id).items() if status == "queued"
+        )
+
+        store.runs.complete(first, success=True)
+
+        statuses = _partition_statuses(store, backfill.id)
+        assert statuses["2026-01-04"] == "success"
+        # Newest-first, matching the initial dispatch order.
+        assert statuses["2026-01-03"] == "queued"
+
+    def test_a_completion_outside_any_backfill_is_a_no_op(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+
+        store.runs.complete(run.id, success=True)
+
+        assert store.runs.get(run.id).status == "success"
+
+
+class TestRunFilters:
+    """``list_all``/``count`` narrow on component, backfill and status."""
+
+    def test_the_component_filter_narrows_the_listing(self, store: Store):
+        target = _component(store, kind="source")
+        store.runs.create(_ORG_ID, component_id=target)
+        store.runs.create(_ORG_ID)
+
+        assert len(store.runs.list_all(_ORG_ID, component_id=target)) == 1
+        assert store.runs.count(_ORG_ID, component_id=target) == 1
+
+    def test_the_backfill_filter_narrows_the_listing(self, store: Store):
+        backfill = _backfill(store, days=2)
+        store.runs.create(_ORG_ID)
+
+        assert len(store.runs.list_all(_ORG_ID, backfill_id=backfill.id)) == 2
+        assert store.runs.count(_ORG_ID, backfill_id=backfill.id) == 2
+
+    def test_the_status_filter_narrows_the_listing(self, store: Store):
+        succeeded = store.runs.create(_ORG_ID)
+        store.runs.complete(succeeded.id, success=True)
+        store.runs.create(_ORG_ID)
+
+        assert [row.id for row in store.runs.list_all(_ORG_ID, status="success")] == [succeeded.id]
+        assert store.runs.count(_ORG_ID, status="success") == 1
+
+    def test_another_orgs_runs_are_never_listed(self, store: Store):
+        store.runs.create(_ORG_ID)
+
+        assert store.runs.list_all(uuid4()) == []
+        assert store.runs.count(uuid4()) == 0

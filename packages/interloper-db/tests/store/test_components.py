@@ -10,8 +10,17 @@ from uuid import uuid4
 import interloper as il
 import pytest
 from cryptography.fernet import InvalidToken
-from interloper.errors import ConfigError, HydrationError, InUseError, NotFoundError
-from interloper_assets.demo.source import DemoSource
+from interloper.errors import (
+    CatalogKeyError,
+    ComponentDriftError,
+    ConfigError,
+    HydrationError,
+    InUseError,
+    NotFoundError,
+)
+from interloper.partitioning.time import TimeGranularity
+from interloper_assets.demo.source import DemoMonthlySource, DemoSource
+from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from sqlalchemy import Engine, create_engine
 from sqlmodel import Session, select
 
@@ -763,3 +772,254 @@ class TestHydrateUnreadable:
         rotated = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=_wrong_key)
         with pytest.raises(HydrationError, match="does not decrypt"):
             rotated.components.load(row.id)
+
+
+class TestMissingComponents:
+    """Every id-addressed operation names what it could not find."""
+
+    def test_update_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Component {missing} not found"):
+            store.components.update(missing, name="x")
+
+    def test_delete_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Component {missing} not found"):
+            store.components.delete(missing)
+
+    def test_load_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Component {missing} not found"):
+            store.components.load(missing)
+
+
+class TestUpdateChildren:
+    """Only a source has children to update."""
+
+    def test_children_on_a_childless_kind_is_refused(self, store: Store):
+        row = store.components.create(_ORG, kind="destination", key="dest")
+
+        with pytest.raises(ConfigError, match="Components of kind 'destination' have no children"):
+            store.components.update(row.id, children=["a"])
+
+    def test_a_source_accepts_a_child_selection(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = store.components.create(_ORG, kind="source", key="demo_source", children=["a", "b"])
+
+        store.components.update(row.id, children=["a"])
+
+        with Session(component_db) as session:
+            children = session.exec(select(Component).where(Component.parent_id == row.id)).all()
+        assert [child.key for child in children] == ["a"]
+
+
+class TestLoadDrift:
+    """Hydration fails closed, with the remedy the failure implies.
+
+    Drift is produced the way it arises in practice: the row is written by a
+    store whose catalog lists the key, then read by one whose catalog does
+    not — ``create`` itself rejects an unknown key. The class is still
+    importable, so the status is ``disabled`` rather than ``missing``.
+    """
+
+    def test_a_drifted_key_raises_component_drift(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = writer.components.create(_ORG, kind="source", key="demo_source")
+        reader = Store(catalog=il.Catalog(components={}))
+
+        with pytest.raises(ComponentDriftError, match="its catalog key is disabled"):
+            reader.components.load(row.id)
+
+    def test_an_unreadable_payload_raises_hydration_error(self, component_db: Engine):
+        # A different remedy from drift: the config needs re-entering or re-keying.
+        catalog = il.Catalog(
+            components={FacebookAdsConnection.key: FacebookAdsConnection.definition()}
+        )
+        writer = Store(catalog=catalog, encrypt=lambda b: b, decrypt=lambda b: b)
+        row = writer.components.create(
+            _ORG,
+            kind="connection",
+            key=FacebookAdsConnection.key,
+            config={"access_token": "TOK", "app_id": "A", "app_secret": "S"},
+        )
+
+        def broken_decrypt(payload: bytes) -> bytes:
+            raise InvalidToken
+
+        reader = Store(catalog=catalog, encrypt=lambda b: b, decrypt=broken_decrypt)
+
+        with pytest.raises(HydrationError, match="does not decrypt"):
+            reader.components.load(row.id)
+
+    def test_an_asset_the_source_no_longer_declares_raises(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = store.components.create(_ORG, kind="source", key="demo_source", children=["a"])
+        with Session(component_db) as session:
+            orphan = Component(org_id=_ORG, kind="asset", key="not_declared", parent_id=source.id)
+            session.add(orphan)
+            session.commit()
+            orphan_id = orphan.id
+
+        with pytest.raises(ComponentDriftError, match="is no longer declared by source"):
+            store.components.load(orphan_id)
+
+
+class TestPublicConfig:
+    """The ``x-public`` subset a collection response may disclose."""
+
+    def test_a_schema_without_public_fields_discloses_nothing(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = store.components.create(_ORG, kind="source", key="demo_source")
+
+        assert store.components.public_config(row) == {}
+
+    def test_a_drifted_key_discloses_nothing(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = writer.components.create(_ORG, kind="source", key="demo_source")
+        reader = Store(catalog=il.Catalog(components={}))
+
+        assert reader.components.public_config(row) == {}
+
+
+class TestDerivedName:
+    """The display name derived from a component's own config."""
+
+    def test_a_drifted_key_derives_no_name(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = writer.components.create(_ORG, kind="source", key="demo_source", config={})
+        reader = Store(catalog=il.Catalog(components={}))
+
+        assert reader.components._derived_name(row, row.config) is None
+
+    def test_a_kind_mismatch_derives_no_name(self, component_db: Engine):
+        # The stored kind and the catalog class disagree, so nothing is derivable.
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = store.components.create(_ORG, kind="source", key="demo_source")
+        row.kind = "destination"
+
+        assert store.components._derived_name(row, {}) is None
+
+    def test_an_unconstructable_config_derives_no_name(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = store.components.create(_ORG, kind="source", key="demo_source")
+
+        assert store.components._derived_name(row, {"random_failure_probability": "not-a-float"}) is None
+
+
+class TestSourceCollision:
+    """Two instances of one source must not silently share a materialization target."""
+
+    def test_colliding_datasets_are_refused(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "shared"})
+
+        with pytest.raises(ConfigError):
+            store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "shared"})
+
+    def test_distinct_datasets_are_allowed(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "one"})
+
+        store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "two"})
+
+    def test_another_org_is_not_a_collision(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "shared"})
+
+        store.components.create(uuid4(), kind="source", key="demo_source", config={"dataset": "shared"})
+
+
+class TestEnsureChildrenDrift:
+    """A source whose key no longer resolves cannot have its children reconciled."""
+
+    def test_a_drifted_source_key_raises(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = writer.components.create(_ORG, kind="source", key="demo_source")
+        reader = Store(catalog=il.Catalog(components={}))
+
+        with pytest.raises(CatalogKeyError, match="Unknown source key: demo_source"):
+            reader.components.update(row.id, children=["a"])
+
+
+class TestJobPartitionGranularity:
+    """The scheduler reads one granularity off a job's targets, or fails closed."""
+
+    def test_a_job_with_no_targets_has_none(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        job = store.components.create(_ORG, kind="job", key="cron_job")
+
+        with Session(component_db) as session:
+            assert store.components.job_partition_granularity(session, job.id) is None
+
+    def test_a_partitioned_source_target_reports_its_granularity(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = store.components.create(_ORG, kind="source", key="demo_source")
+        job = store.components.create(
+            _ORG, kind="job", key="cron_job", relations={"target": [(source.id, "")]}
+        )
+
+        with Session(component_db) as session:
+            assert store.components.job_partition_granularity(session, job.id) is TimeGranularity.DAY
+
+    def test_a_partitioned_asset_target_reports_its_granularity(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = store.components.create(_ORG, kind="source", key="demo_source", children=["a"])
+        with Session(component_db) as session:
+            asset = session.exec(select(Component).where(Component.parent_id == source.id)).one()
+            asset_id = asset.id
+        job = store.components.create(
+            _ORG, kind="job", key="cron_job", relations={"target": [(asset_id, "")]}
+        )
+
+        with Session(component_db) as session:
+            assert store.components.job_partition_granularity(session, job.id) is TimeGranularity.DAY
+
+    def test_targets_disagreeing_on_granularity_fail_closed(self, component_db: Engine):
+        # Scheduling one window would be wrong for at least one target.
+        store = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource]))
+        daily = store.components.create(_ORG, kind="source", key="demo_source")
+        monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
+        job = store.components.create(
+            _ORG,
+            kind="job",
+            key="cron_job",
+            relations={"target": [(daily.id, ""), (monthly.id, "")]},
+        )
+
+        with Session(component_db) as session, pytest.raises(
+            ValueError, match="Job targets disagree on partition granularity"
+        ):
+            store.components.job_partition_granularity(session, job.id)
+
+    def test_a_drifted_target_contributes_nothing(self, component_db: Engine):
+        # Drift is the run path's problem, not the scheduler's.
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = writer.components.create(_ORG, kind="source", key="demo_source")
+        job = writer.components.create(
+            _ORG, kind="job", key="cron_job", relations={"target": [(source.id, "")]}
+        )
+        reader = Store(catalog=il.Catalog(components={}))
+
+        with Session(component_db) as session:
+            assert reader.components.job_partition_granularity(session, job.id) is None
+
+
+class TestCheckJobTargets:
+    """A job whose target drifted cannot be hydrated."""
+
+    def test_a_drifted_target_raises(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = writer.components.create(_ORG, kind="source", key="demo_source")
+        job = writer.components.create(
+            _ORG, kind="job", key="cron_job", relations={"target": [(source.id, "")]}
+        )
+        reader = Store(catalog=il.Catalog(components={}))
+
+        with Session(component_db) as session:
+            db_job = session.get(Component, job.id)
+            assert db_job is not None
+            with pytest.raises(ComponentDriftError, match="is disabled"):
+                reader.components._check_job_targets(session, db_job)

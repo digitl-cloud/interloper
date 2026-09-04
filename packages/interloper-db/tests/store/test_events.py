@@ -432,3 +432,70 @@ def test_executions_read_model_maps_the_view(store: Store) -> None:
     rows = store.events.list_executions(run_id)
     assert [(row.component_key, row.status) for row in rows] == [("a", "success")]
     assert store.events.list_executions(uuid4()) == []
+
+
+class TestEventValues:
+    """The row values derived from a framework event."""
+
+    def test_a_non_uuid_event_id_gets_a_fresh_one(self) -> None:
+        # Producer ids are normally uuid5-derived; anything else still persists
+        # rather than failing the write and dropping the event.
+        event = il.Event(type=il.EventType.RUN_STARTED, metadata={})
+        event.id = "not-a-uuid"
+
+        values = EventStore._event_values(event, _ORG_ID, _RUN_ID)
+
+        assert isinstance(values["id"], UUID)
+
+    def test_a_uuid_event_id_is_preserved(self) -> None:
+        # Identity survives end to end so the upsert dedups re-delivery.
+        event = il.Event(type=il.EventType.RUN_STARTED, metadata={})
+
+        values = EventStore._event_values(event, _ORG_ID, _RUN_ID)
+
+        assert str(values["id"]) == event.id
+
+
+class TestFilters:
+    """``list_all`` and ``count`` share one filter set."""
+
+    def test_the_org_filter_narrows_the_listing(self, store: Store) -> None:
+        _seed(_make_events(2))
+        _seed([
+            Event(
+                id=uuid4(),
+                org_id=uuid4(),
+                run_id=_OTHER_RUN_ID,
+                event_type="asset_completed",
+                timestamp=_BASE_TS,
+            )
+        ])
+
+        assert len(store.events.list_all(org_id=_ORG_ID)) == 2
+        assert store.events.count(org_id=_ORG_ID) == 2
+
+    def test_the_component_filter_narrows_the_listing(self, store: Store) -> None:
+        mine = uuid4()
+        _seed(_make_events(2, component_id=mine))
+        _seed(_make_events(3, component_id=uuid4(), start=100))
+
+        assert len(store.events.list_all(component_ids=[mine])) == 2
+        assert store.events.count(component_ids=[mine]) == 2
+
+    def test_several_component_ids_union(self, store: Store) -> None:
+        first, second = uuid4(), uuid4()
+        _seed(_make_events(2, component_id=first))
+        _seed(_make_events(3, component_id=second, start=100))
+
+        assert store.events.count(component_ids=[first, second]) == 5
+
+    def test_the_type_filter_narrows_the_listing(self, store: Store) -> None:
+        _seed(_make_events(3))
+
+        assert store.events.count(run_id=_RUN_ID, event_types=["asset_completed"]) == 1
+
+    def test_no_filters_counts_everything(self, store: Store) -> None:
+        _seed(_make_events(2))
+        _seed(_make_events(3, run_id=_OTHER_RUN_ID, start=100))
+
+        assert store.events.count() == 5

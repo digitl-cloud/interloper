@@ -172,3 +172,36 @@ class TestListAndRevoke:
 
         assert first.revoked_at is not None
         assert second.revoked_at == first.revoked_at
+
+
+class TestGetToken:
+    """Id-addressed reads."""
+
+    def test_get_returns_the_token(self, store: Store, member: tuple[Profile, Organisation]):
+        profile, org = member
+        token, _raw = store.tokens.create(user_id=profile.id, organisation_id=org.id, name="ci")
+
+        assert store.tokens.get(token.id).id == token.id
+
+    def test_get_missing_token_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Token {missing} not found"):
+            store.tokens.get(missing)
+
+
+class TestResolveOrphanedToken:
+    """A token whose profile vanished resolves to nothing."""
+
+    def test_it_resolves_to_none(self, store: Store, member: tuple[Profile, Organisation], token_db: Engine):
+        # The foreign key makes this unreachable through the store's own API,
+        # so the orphan is fabricated with constraints off — the guard exists
+        # for a row that should not be there.
+        profile, org = member
+        _token, raw = store.tokens.create(user_id=profile.id, organisation_id=org.id, name="ci")
+        with token_db.connect() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.exec_driver_sql("DELETE FROM profiles")
+            connection.commit()
+
+        assert store.tokens.resolve(raw) is None
