@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import interloper as il
+import pytest
 from interloper_assets.demo.source import DemoSource
 
 from interloper_db.store.status import ComponentStatus, asset_status, source_status
@@ -55,3 +56,22 @@ def test_owned_asset_status_cascades_missing_parent() -> None:
 def test_owned_asset_status_cascades_disabled_parent() -> None:
     status = asset_status(_EMPTY, _ASSET_KEY, source_key=_SOURCE_KEY, discovered=_ENABLED)
     assert status is ComponentStatus.DISABLED
+
+
+def test_an_enabled_source_whose_class_vanished_reads_as_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The defensive arm: the catalog said ok but the class did not resolve.
+
+    Unreachable through normal operation — the catalog is built from importable
+    classes — so the resolution is broken deliberately to prove the fallback
+    reports ``missing`` rather than raising into the caller.
+    """
+    catalog = il.Catalog.from_assets([DemoSource])
+
+    def unresolvable(key: str, catalog: object) -> None:
+        raise ImportError("class went away")
+
+    monkeypatch.setattr(
+        il.Source, "resolve_key", classmethod(lambda cls, key, catalog: unresolvable(key, catalog))
+    )
+
+    assert asset_status(catalog, _ASSET_KEY, source_key=_SOURCE_KEY) is ComponentStatus.MISSING

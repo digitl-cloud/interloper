@@ -8,6 +8,8 @@ from uuid import uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConfigError, NotFoundError
+from interloper_assets.demo.source import DemoSource
+from interloper_assets.facebook_ads.source import FacebookAds
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
@@ -298,3 +300,32 @@ class TestRequiredDependencyUnbindGuard:
         dep_store.components.update(down.id, relations={"dependency": [(up_two.id, "up")]})
         (edge,) = dep_store.relations.list_all(_ORG, type="dependency")
         assert edge.dst_id == up_two.id
+
+
+class TestAddValidation:
+    """``add`` vets the source, the vocabulary and the slot before writing."""
+
+    def test_a_missing_source_raises(self, store: Store):
+        missing = uuid4()
+
+        with pytest.raises(NotFoundError, match=f"Component {missing} not found"):
+            store.relations.add(missing, type="resource", dst_id=uuid4(), slot="connection")
+
+    def test_a_slot_on_an_unslotted_relation_is_refused(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = store.components.create(_ORG, kind="source", key="demo_source")
+        destination = store.components.create(_ORG, kind="destination", key="dest")
+
+        with pytest.raises(ConfigError, match="is not slotted"):
+            store.relations.add(source.id, type="destination", dst_id=destination.id, slot="nope")
+
+    def test_a_slot_expecting_another_key_is_refused(self, component_db: Engine):
+        # The slot declares the component key it accepts; anything else would
+        # be wired into a resource the source cannot use.
+        catalog = il.Catalog.from_assets([FacebookAds])
+        store = Store(catalog=catalog, encrypt=lambda b: b, decrypt=lambda b: b)
+        source = store.components.create(_ORG, kind="source", key="facebook_ads")
+        wrong = store.components.create(_ORG, kind="destination", key="dest")
+
+        with pytest.raises(ConfigError):
+            store.relations.add(source.id, type="resource", dst_id=wrong.id, slot="connection")

@@ -16,6 +16,7 @@ from sqlmodel import Session
 from interloper_db.models import Component, Quota, Run
 from interloper_db.store import Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
+from interloper_db.store.quotas.definitions import QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH
 
 UsageRows = Callable[[], dict[dt.date, tuple[int, int]]]
 RunFactory = Callable[..., Run]
@@ -246,3 +247,40 @@ class TestSetQuota:
             store.quotas.set_overrides(org_id, {"max_bananas": 1})
         with pytest.raises(ValueError, match=">= 0"):
             store.quotas.set_overrides(org_id, {"max_sources": -1})
+
+
+class TestRunStatus:
+    """``run_status`` reports the committed count against the effective limit."""
+
+    def test_an_unlimited_quota_reads_the_ledger_not_at_all(self, store: Store, org_id: UUID):
+        # No default and no override, so the ledger is never touched.
+        assert store.quotas.run_status(org_id) == (0, None)
+
+    def test_a_limited_quota_reports_the_committed_count(
+        self, store: Store, org_id: UUID, make_run
+    ):
+        store.quotas.set_overrides(org_id, {QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH: 5})
+        run = make_run()
+        store.quotas.try_reserve_run(run)
+
+        used, limit = store.quotas.run_status(org_id)
+
+        assert (used, limit) == (1, 5)
+
+
+class TestTryReserveRunUnlimited:
+    """An unlimited quota reserves without writing a ledger row."""
+
+    def test_it_succeeds_without_metering(self, store: Store, make_run, usage_rows):
+        run = make_run()
+
+        assert store.quotas.try_reserve_run(run) is True
+        assert usage_rows() == {}
+
+
+class TestCheckWithLock:
+    """A lock-requiring quota short-circuits when unlimited."""
+
+    def test_an_unlimited_lock_quota_passes_without_a_session(self, store: Store, org_id: UUID):
+        # effective_limit returns None, so the gate returns before opening one.
+        store.quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="run")

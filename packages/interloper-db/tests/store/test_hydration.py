@@ -214,3 +214,52 @@ class TestHydrationErrorSanitisation:
         assert "Failed to hydrate source 'demo_source'" in message
         assert "app_secret: Field required" in message
         assert "s3cret-value" not in message
+
+
+class TestDecodeData:
+    """The stored ``data`` payload, decrypted for sensitive kinds."""
+
+    def test_no_data_decodes_to_an_empty_dict(self, store: Store):
+        row = store.components.create(_ORG, kind="source", key="demo_source")
+
+        assert store.components._hydrator.decode_data(row) == {}
+
+    def test_an_encrypted_row_without_a_cipher_is_an_actionable_error(self, component_db: Engine):
+        writer = Store(catalog=_CATALOG, encrypt=lambda b: b, decrypt=lambda b: b)
+        row = writer.components.create(
+            _ORG, kind="connection", key="demo_connection", config={"token": "s3cret"}
+        )
+        row.data = row.data or b"payload"
+        row.encrypted = True
+        reader = Store(catalog=_CATALOG)
+
+        with pytest.raises(HydrationError, match="INTERLOPER_ENCRYPTION_KEY"):
+            reader.components._hydrator.decode_data(row)
+
+
+class TestRelationsByType:
+    """The grouped relation lookup used while building a spec."""
+
+    def test_a_row_with_no_id_has_no_relations(self, store: Store):
+        from sqlmodel import Session
+
+        with Session(store.engine) as session:
+            assert store.components._hydrator._relations_by_type(session, None) == {}
+
+
+class TestResolvePath:
+    """A spec's import path comes from the catalog entry."""
+
+    def test_a_drifted_key_is_an_actionable_error(self, component_db: Engine):
+        from interloper.errors import CatalogKeyError
+        from sqlmodel import Session
+
+        writer = Store(catalog=_CATALOG)
+        row = writer.components.create(_ORG, kind="source", key="demo_source")
+        reader = Store(catalog=il.Catalog(components={}))
+
+        with Session(component_db) as session:
+            db_row = session.get(type(row), row.id)
+            assert db_row is not None
+            with pytest.raises(CatalogKeyError, match="Unknown source key: demo_source"):
+                reader.components._hydrator._resolve_path(session, db_row)
