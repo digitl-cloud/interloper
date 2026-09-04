@@ -436,3 +436,48 @@ class TestGranularityResolution:
         runs = _runs(store)
         assert len(runs) == 1
         assert runs[0].partition_key is None
+
+
+class TestJobsWithoutACron:
+    """A job carrying no cron expression is skipped, not scheduled."""
+
+    def test_it_is_left_alone(self, store: Store):
+        # Enabled but with no expression: selected by the sweep, then skipped.
+        component_id = _job(store, config={"enabled": True})
+        controller = CronController(store=store)
+
+        controller._tick()
+
+        with Session(store.engine) as session:
+            assert session.exec(select(Run)).all() == []
+            row = session.get(Component, component_id)
+            assert row is not None
+            assert (row.state or {}).get("next_run_at") is None
+
+
+class TestNaiveCronResult:
+    """A naive fire time is anchored in the job's zone before converting to UTC."""
+
+    def test_it_is_stamped_with_the_jobs_zone(self, monkeypatch: pytest.MonkeyPatch, store: Store):
+        # croniter normally returns aware datetimes; a naive one must not be
+        # read as UTC when the job runs on another wall clock.
+        import interloper_scheduler.cron as cron_module
+
+        class NaiveCroniter:
+            def __init__(self, expression: str, base: dt.datetime) -> None:
+                pass
+
+            def get_next(self, _type: Any) -> dt.datetime:
+                # Naive on purpose: that is the branch under test.
+                return dt.datetime(2026, 6, 1, 2, 0)  # noqa: DTZ001
+
+        monkeypatch.setattr(cron_module, "croniter", NaiveCroniter)
+        controller = CronController(store=store)
+
+        result = controller._calculate_next_run(
+            "0 2 * * *", dt.datetime.now(dt.timezone.utc), ZoneInfo("Europe/Berlin")
+        )
+
+        assert result.tzinfo is dt.timezone.utc
+        # 02:00 Berlin in June is 00:00 UTC.
+        assert result == dt.datetime(2026, 6, 1, 0, 0, tzinfo=dt.timezone.utc)

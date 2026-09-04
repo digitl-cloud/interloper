@@ -157,3 +157,159 @@ class TestTargetContext:
                 "target_key": "nightly",
                 "target_name": "Nightly sync",
             }
+
+
+class TestTick:
+    """One scan, plus the hourly usage reconciliation that rides the loop."""
+
+    def test_a_reaped_run_is_logged(self, store: Store, caplog: pytest.LogCaptureFixture) -> None:
+        _dispatched_run(store, age_seconds=7200)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)
+
+        with caplog.at_level("INFO", logger="interloper_scheduler.reaper"):
+            reaper._tick()
+
+        assert "Reaped 1 dispatched run(s)" in caplog.text
+
+    def test_nothing_to_reap_logs_nothing(self, store: Store, caplog: pytest.LogCaptureFixture) -> None:
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)
+        reaper._ticks_since_reconcile = 0
+
+        with caplog.at_level("INFO", logger="interloper_scheduler.reaper"):
+            reaper._tick()
+
+        assert "Reaped" not in caplog.text
+
+    def test_the_first_tick_reconciles(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+        # ``_ticks_since_reconcile`` starts at the threshold on purpose.
+        calls: list[bool] = []
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+        monkeypatch.setattr(reaper, "_reconcile_usage", lambda: calls.append(True))
+
+        reaper._tick()
+
+        assert calls == [True]
+
+    def test_later_ticks_wait_for_the_interval(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[bool] = []
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None), poll_interval=60)
+        monkeypatch.setattr(reaper, "_reconcile_usage", lambda: calls.append(True))
+
+        reaper._tick()  # the first one reconciles
+        reaper._tick()
+
+        assert calls == [True]
+
+    def test_the_interval_is_about_an_hour_of_ticks(self, store: Store) -> None:
+        assert Reaper(store=store, launcher=_FakeLauncher(None), poll_interval=60)._reconcile_every == 60
+        assert Reaper(store=store, launcher=_FakeLauncher(None), poll_interval=3600)._reconcile_every == 1
+
+    def test_a_zero_poll_interval_does_not_divide_by_zero(self, store: Store) -> None:
+        assert Reaper(store=store, launcher=_FakeLauncher(None), poll_interval=0)._reconcile_every == 3600
+
+
+class TestReconcileUsage:
+    """Ledger drift is advisory: warned about, never corrected."""
+
+    def test_drift_is_warned_about(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        drift = {"org_id": _ORG, "period_start": dt.date(2026, 6, 1), "ledger": 5, "recomputed": 7}
+        monkeypatch.setattr(store.quotas, "reconcile_usage", lambda: [drift])
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        with caplog.at_level("WARNING", logger="interloper_scheduler.reaper"):
+            reaper._reconcile_usage()
+
+        assert "Usage ledger drift" in caplog.text
+        assert "ledger=5" in caplog.text
+        assert "runs table=7" in caplog.text
+
+    def test_no_drift_warns_nothing(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(store.quotas, "reconcile_usage", list)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        with caplog.at_level("WARNING", logger="interloper_scheduler.reaper"):
+            reaper._reconcile_usage()
+
+        assert "Usage ledger drift" not in caplog.text
+
+    def test_a_failed_reconciliation_does_not_stop_the_loop(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # Housekeeping must never take the reaper down.
+        def broken() -> list[dict[str, Any]]:
+            raise RuntimeError("query failed")
+
+        monkeypatch.setattr(store.quotas, "reconcile_usage", broken)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
+            reaper._reconcile_usage()
+
+        assert "Usage reconciliation failed" in caplog.text
+
+
+class TestLauncherFailure:
+    """A launcher that cannot answer falls through to the timeout."""
+
+    def test_a_describe_failure_is_logged_and_survived(
+        self, store: Store, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class BrokenLauncher(Launcher):
+            """Launcher whose ``describe_run`` always raises."""
+
+            def launch(self, run_id: UUID) -> None:  # pragma: no cover - unused
+                raise NotImplementedError
+
+            def describe_run(self, run_id: UUID) -> RunState | None:
+                raise RuntimeError("api unreachable")
+
+        run_id = _dispatched_run(store, age_seconds=7200)
+        reaper = Reaper(store=store, launcher=BrokenLauncher(), timeout=3600)
+
+        with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
+            assert reaper._reap() == 1
+
+        assert f"Failed to describe run {run_id}" in caplog.text
+        assert _status(store, run_id) == "failed"
+
+
+class TestFailureReportingIsBestEffort:
+    """Neither half of the failure record may take the reaper down."""
+
+    def test_a_failed_event_save_is_logged_and_survived(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        run_id = _dispatched_run(store, age_seconds=7200)
+
+        def broken_save(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> None:
+            raise RuntimeError("events table unreachable")
+
+        monkeypatch.setattr(store.events, "save", broken_save)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)
+
+        with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
+            assert reaper._reap() == 1
+
+        assert f"Failed to save RUN_FAILED event for run {run_id}" in caplog.text
+        # The run is still marked failed, which is what unsticks it.
+        assert _status(store, run_id) == "failed"
+
+    def test_a_failed_completion_is_logged_and_survived(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        run_id = _dispatched_run(store, age_seconds=7200)
+
+        def broken_complete(run_id: UUID, success: bool) -> None:
+            raise RuntimeError("runs table unreachable")
+
+        monkeypatch.setattr(store.runs, "complete", broken_complete)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)
+
+        with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
+            assert reaper._reap() == 1
+
+        assert f"Failed to mark run {run_id} as failed" in caplog.text

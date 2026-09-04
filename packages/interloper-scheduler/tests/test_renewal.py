@@ -209,3 +209,56 @@ class TestRenewalRuns:
         assert state["next_renewal_at"] is not None
         # The run's failure event carries the curated message only.
         assert events and all("SECRET" not in str(e.data) for e in events)
+
+
+class TestNoRenewableKeys:
+    """A catalog with nothing renewable does no work at all."""
+
+    def test_the_tick_returns_immediately(self, store: Store):
+        controller = RenewalController(catalog=il.Catalog(components={}), store=store)
+
+        controller._tick()
+
+        assert _runs(store) == []
+
+
+class TestAutoRenewDecode:
+    """``auto_renew`` is read off the stored config, defaulting to on."""
+
+    def test_an_undecodable_config_skips_the_connection(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # A connection whose config will not decode would fail the run too.
+        component_id = _connection(store)
+        controller = RenewalController(catalog=_CATALOG, store=store)
+
+        def broken_decode(component: Any) -> dict[str, Any]:
+            raise RuntimeError("cannot decrypt")
+
+        monkeypatch.setattr(store.components, "decode_config", broken_decode)
+
+        with Session(store.engine) as session:
+            row = session.get(Component, component_id)
+            assert row is not None
+            with caplog.at_level("WARNING", logger="interloper_scheduler.renewal"):
+                assert controller._auto_renew(row) is False
+
+        assert f"Cannot decode config of connection {component_id}" in caplog.text
+
+    def test_it_defaults_to_on(self, store: Store):
+        component_id = _connection(store, config={})
+        controller = RenewalController(catalog=_CATALOG, store=store)
+
+        with Session(store.engine) as session:
+            row = session.get(Component, component_id)
+            assert row is not None
+            assert controller._auto_renew(row) is True
+
+    def test_an_explicit_opt_out_is_honoured(self, store: Store):
+        component_id = _connection(store, config={"auto_renew": False})
+        controller = RenewalController(catalog=_CATALOG, store=store)
+
+        with Session(store.engine) as session:
+            row = session.get(Component, component_id)
+            assert row is not None
+            assert controller._auto_renew(row) is False

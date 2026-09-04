@@ -345,3 +345,61 @@ class TestHookEvaluation:
         with Session(engine_module.get_engine()) as session:
             queued = session.exec(select(Run).where(Run.status == "queued")).all()
             assert [q.component_id for q in queued] == [root.id]
+
+
+class TestFirstTickWatermark:
+    """The first sweep sets its own watermark rather than replaying history."""
+
+    def test_a_fresh_controller_starts_from_now(self, store: Store):
+        controller = HookController(store=store, poll_interval=999)
+        assert controller._watermark is None
+
+        controller._tick()
+
+        assert controller._watermark is not None
+
+
+class TestEvaluateGuards:
+    """``_evaluate`` skips a run it cannot react to."""
+
+    def test_a_run_without_a_component_is_skipped(self, store: Store):
+        run = store.runs.create(_ORG)
+        controller = HookController(store=store, poll_interval=999)
+
+        with Session(engine_module.get_engine()) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            db_run.status = "success"
+            controller._evaluate(session, db_run)
+
+    def test_a_non_terminal_run_is_skipped(self, store: Store):
+        component_id = store.components.create(_ORG, kind="source", key="demo_source", name="Demo").id
+        run = store.runs.create(_ORG, component_id=component_id)
+        controller = HookController(store=store, poll_interval=999)
+
+        with Session(engine_module.get_engine()) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            controller._evaluate(session, db_run)
+
+    def test_a_run_whose_target_vanished_is_skipped(self, store: Store):
+        # Defensive: the foreign key makes this unreachable in practice.
+        component_id = store.components.create(_ORG, kind="source", key="demo_source", name="Demo").id
+        run = _terminal_run(store, component_id)
+        controller = HookController(store=store, poll_interval=999)
+
+        with Session(engine_module.get_engine()) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            db_run.component_id = uuid4()
+            controller._evaluate(session, db_run)
+
+    def test_a_run_with_no_matching_hook_is_skipped(self, store: Store):
+        component_id = store.components.create(_ORG, kind="source", key="demo_source", name="Demo").id
+        run = _terminal_run(store, component_id)
+        controller = HookController(store=store, poll_interval=999)
+
+        with Session(engine_module.get_engine()) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            controller._evaluate(session, db_run)
