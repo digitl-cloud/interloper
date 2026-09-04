@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v0.75.0 (2026-09-04)
+
+### Bug Fixes
+
+- **app**: Render the timeline clock axis in the user's display timezone
+  ([`6faf6e8`](https://github.com/digitl-cloud/interloper/commit/6faf6e8a6a6650e708b07b1c14daae9fcf496e30))
+
+- **db**: Reschedule a job when its spec changes
+  ([`562db49`](https://github.com/digitl-cloud/interloper/commit/562db499129339865c430d18268646aca770f61a))
+
+### Chores
+
+- Publish the documentation to GitHub Pages instead of a cluster image
+  ([`f58a9f4`](https://github.com/digitl-cloud/interloper/commit/f58a9f48e0abcac12474c4c7d9b4d29abfbb0c85))
+
+### Features
+
+- Ship a Claude Code plugin with the interloper-source and interloper-run skills
+  ([`c916200`](https://github.com/digitl-cloud/interloper/commit/c916200a6815b5eb36212607f3d6c0c3c75e0496))
+
+- Show the httpx import the connection check needs
+  ([`d0ddd0a`](https://github.com/digitl-cloud/interloper/commit/d0ddd0a43f5fcd5cebc5b581165dd2c79682ea93))
+
+- **plugin**: Add the remaining user skills and correct the docs they exposed
+  ([`193d211`](https://github.com/digitl-cloud/interloper/commit/193d2113abeccb672e8af3293c3726d86a7a436f))
+
+### Breaking Changes
+
+- The ghcr.io/digitl-cloud/interloper-docs image is no longer published. The Helm repository URL
+  becomes https://docs.interloper.dev; the github.io URL keeps working through GitHub's redirect.
+
+
 ## v0.74.0 (2026-09-03)
 
 ### Bug Fixes
