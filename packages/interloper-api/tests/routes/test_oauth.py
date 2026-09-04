@@ -179,3 +179,34 @@ def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.MonkeyPatc
 
     assert resp.status_code == 200
     assert resp.json() == {"refresh_token": "rt"}
+
+
+def test_exchange_relays_a_provider_rejection_as_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 4xx from the provider becomes a 500 carrying its body, not a traceback."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, text="invalid_grant")
+
+    _mock_async_client(monkeypatch, handler)
+    _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs", redirect_uri="https://r")
+
+    resp = _client().post("/oauth/amazon", json={"code": "stale"})
+
+    assert resp.status_code == 500
+    assert resp.json()["detail"] == "Failed to exchange auth code: invalid_grant"
+
+
+def test_exchange_relays_a_transport_failure_as_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unreachable provider is a 500, and the code never leaks into the detail."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route to host")
+
+    _mock_async_client(monkeypatch, handler)
+    _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs", redirect_uri="https://r")
+
+    resp = _client().post("/oauth/amazon", json={"code": "the-code"})
+
+    assert resp.status_code == 500
+    assert "no route to host" in resp.json()["detail"]
+    assert "the-code" not in resp.json()["detail"]
