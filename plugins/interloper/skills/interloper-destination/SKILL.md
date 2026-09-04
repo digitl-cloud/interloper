@@ -100,7 +100,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
 | Append instead of replace | `write_disposition: WriteDisposition = WriteDisposition.APPEND` on the database destination |
 | Credentials for the sink | a connection slot: `resources={"connection": MyConnection}` on the decorator, injected by type |
 | Cached client on the instance | private attribute `_client: Client | None = None`, plain assignment works |
-| Built-ins to imitate | `il.CSVDestination` (partitioned files), `il.FileDestination` (pickle, not partition-aware), `il.MemoryDestination` |
+| Built-ins to imitate | `il.CSVDestination` (partitioned files), `il.FileDestination` (same layout, pickled objects), `il.MemoryDestination` |
 
 ## Common mistakes
 

@@ -36,6 +36,7 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
 
    | Version | Old | New |
    |---------|-----|-----|
+   | 0.76.0 | `FileDestination` ignored the partition scope: one `{dataset}/{table}/data.pkl` per asset, and `{table}/{table}/` when no dataset was set | a `{column}={partition_id}` segment per partition, and no duplicated segment — same layout as `CSVDestination`. Re-materialize, or move existing pickles into the partition directories |
    | 0.74.0 | a fail-fast break interrupted running operations | they finish on their own and are recorded |
    | 0.70.0 | `OAuthProvider.token_method`, `token_params`, `token_basic_auth`; `renew()` overrides | request-builder overrides on the provider; `renewable` is derived, drop `renew()` |
    | 0.68.0 | `EventType.ASSET_STARTED/COMPLETED/FAILED`, `RunResult.asset_executions` | `OPERATION_*` events filtered on `metadata["component_kind"] == "asset"`; `ASSET_DATA_*` mark only the `data()` step |
@@ -55,7 +56,8 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    Functional `@il.source def ...` sources and `asyncio.run(...)` still work; the class-based
    form (`@il.source(resources={...}) class X(il.Source)` with `@il.asset` methods, see the
    interloper-source skill) is the documented one. `FileDestination` writes
-   `{base_path}/{dataset}/{table}/data.pkl`. `AppSettings()` from the project directory
+   `{base_path}/{dataset}/{table}/data.pkl`, plus a `{column}={partition_id}` segment when the
+   asset is partitioned. `AppSettings()` from the project directory
    validates an `interloper.yaml`. `runner: type: k8s` in `interloper.yaml` is still a
    valid registry key; confirm registered keys with
    `python -c "from importlib.metadata import entry_points; print([e.name for e in entry_points(group='interloper.runners')])"`.
