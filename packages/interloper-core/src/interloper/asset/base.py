@@ -13,11 +13,13 @@ from pydantic import Field, PrivateAttr, field_validator
 from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
+from interloper.asset.upstream import Upstream
 from interloper.component import Component, ComponentDefinition, Dependency, RelationDefinition
 from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
     AssetError,
+    DataNotFoundError,
     DependencyContractError,
     DependencyNotFoundError,
     NormalizerError,
@@ -753,15 +755,15 @@ class Asset(Component, Operation):
         """Build kwargs for the data function.
 
         Maps function parameters to their values: ``context`` is injected
-        directly, declared resources are resolved by name, and all other
-        parameters are treated as upstreams loaded from
-        destination via the DAG.
+        directly, declared resources are resolved by name, and every declared
+        upstream is read through :meth:`_read_upstreams`; many-valued slots
+        receive the legs, single slots the first leg's data.
 
         Args:
             context: The execution context injected as the ``context`` parameter.
             partition_or_window: Scope used when reading upstreams.
             dag: DAG the upstream assets are looked up in. ``None`` is allowed
-                only when every upstream is optional (those resolve to ``None``).
+                only when no parameter has a wired upstream to read.
 
         Returns:
             Keyword arguments to pass to ``data()``.
@@ -785,34 +787,81 @@ class Asset(Component, Operation):
                     attributes={**self._span_attributes(), telemetry_attributes.RESOURCE_NAME: parameter_name},
                 ):
                     kwargs[parameter_name] = self._resolve_resource(parameter_name)
-            else:
-                if parameter_name not in self.upstreams:
-                    continue
-                is_optional = declared.get(parameter_name) is not None and declared[parameter_name].optional
-                if dag is None:
-                    if is_optional:
-                        kwargs[parameter_name] = None
-                        continue
+            elif parameter_name in declared:
+                dependency = declared[parameter_name]
+                upstream_ids = self.upstreams.get(parameter_name, [])
+                if upstream_ids and dag is None:
                     raise AssetError(
                         f"Asset '{self.key}' has upstreams but no DAG provided. "
-                        "Pass a DAG to run() or materialize() for dependency resolution."
+                        "Pass a DAG to run() or materialize() for upstream resolution."
                     )
-
-                upstream_id = self.upstreams[parameter_name][0]
-                upstream_asset = cast(Asset, dag.operation_map[upstream_id])
-                if is_optional:
-                    try:
-                        kwargs[parameter_name] = await self._destination_read(
-                            upstream_asset, partition_or_window, context.metadata
-                        )
-                    except (AssetError, Exception):  # noqa: BLE001
-                        kwargs[parameter_name] = None
-                else:
-                    kwargs[parameter_name] = await self._destination_read(
-                        upstream_asset, partition_or_window, context.metadata
-                    )
+                legs = (
+                    await self._read_upstreams(parameter_name, upstream_ids, dag, partition_or_window, context.metadata)
+                    if upstream_ids and dag is not None
+                    else []
+                )
+                if dependency.many:
+                    kwargs[parameter_name] = legs
+                elif legs:
+                    kwargs[parameter_name] = legs[0].data
+                elif dependency.optional:
+                    kwargs[parameter_name] = None
+                # A non-optional single slot always has a leg here: the DAG's
+                # contract check guarantees a wired, present upstream.
 
         return kwargs
+
+    async def _read_upstreams(
+        self,
+        parameter_name: str,
+        upstream_ids: list[str],
+        dag: DAG,
+        partition_or_window: Partition | PartitionWindow | None,
+        metadata: dict[str, Any],
+    ) -> list[Upstream]:
+        """Read every leg wired into one slot.
+
+        A leg whose destination holds no data for the scope is handed over
+        with ``data=None`` and a warning event, never dropped: the asset
+        decides what a missing leg means. Any other read failure fails the
+        asset, optional slot or not.
+
+        Args:
+            parameter_name: The ``data()`` parameter the legs are read for.
+            upstream_ids: The wired upstream ids, every one present in *dag*.
+            dag: The DAG the upstream assets are looked up in.
+            partition_or_window: Scope of the reads.
+            metadata: Run-level metadata carried onto the emitted events.
+
+        Returns:
+            One :class:`Upstream` per leg, in wiring order.
+
+        Raises:
+            AssetError: If a leg cannot be read for a reason other than
+                missing data.
+        """
+        legs: list[Upstream] = []
+        for upstream_id in upstream_ids:
+            upstream_asset = cast(Asset, dag.operation_map[upstream_id])
+            try:
+                data = await self._destination_read(upstream_asset, partition_or_window, metadata)
+            except AssetError as error:
+                if not isinstance(error.__cause__, DataNotFoundError):
+                    raise
+                EventBus.emit(
+                    EventType.LOG,
+                    metadata={
+                        **self._event_metadata(metadata, partition_or_window),
+                        "level": "WARNING",
+                        "message": (
+                            f"Asset '{self.key}' found no data in upstream '{upstream_asset.qualified_key}' for "
+                            f"parameter '{parameter_name}' at {partition_or_window}; the leg is passed with data=None"
+                        ),
+                    },
+                )
+                data = None
+            legs.append(Upstream(asset=upstream_asset, data=data))
+        return legs
 
     async def _destination_write(
         self,
