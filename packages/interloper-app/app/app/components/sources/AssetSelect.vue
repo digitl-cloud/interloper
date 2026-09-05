@@ -54,7 +54,7 @@ function getAssetDeps(assetDefn: AssetDefinition): AssetDep[] {
     const deps: AssetDep[] = []
     for (const [paramName, slot] of Object.entries(upstreamSlots(assetDefn))) {
         const qk = slot.key
-        const isOptional = !slot.required
+        const isOptional = slot.optional
         const { sourceKey, assetKey } = parseQualifiedKey(qk)
         const isCrossSource = !!sourceKey && sourceKey !== props.sourceDefn.key
 

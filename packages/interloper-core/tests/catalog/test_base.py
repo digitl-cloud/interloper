@@ -137,4 +137,4 @@ class TestVocabulary:
             "c": "demo_source.c",
             "d": "demo_source.d",
         }
-        assert all(slot.required for slot in slots.values())
+        assert all(not slot.optional for slot in slots.values())

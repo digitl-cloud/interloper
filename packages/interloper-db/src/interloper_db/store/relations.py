@@ -265,7 +265,7 @@ class RelationStore:
         return dst
 
     def _check_slot_target(
-        self, session: Session, src: Component, relation_type: str, slot: str, slot_def: il.RelationSlot, dst: Component
+        self, session: Session, src: Component, relation_type: str, slot: str, slot_def: il.Dependency, dst: Component
     ) -> None:
         """Enforce a slot's declared destination identity, when it declares one.
 
@@ -338,9 +338,9 @@ class RelationStore:
 
         Consults the referrer's own vocabulary: a type declared
         ``on_delete="detach"`` detaches, as does a slot the referrer declares
-        optional (``RelationSlot.required=False`` — an ``optional_requires``
-        dependency). Anything unresolvable — unknown type, drifted key,
-        undeclared slot — blocks, keeping the guard fail-closed.
+        optional (``Dependency.optional=True``), such as an optional upstream
+        dependency. Anything unresolvable (unknown type, drifted key,
+        undeclared slot) blocks, keeping the guard fail-closed.
 
         Args:
             session: Open session the referrer's vocabulary is resolved
@@ -358,14 +358,14 @@ class RelationStore:
         if definition.on_delete == "detach":
             return True
         slot = definition.slots.get(relation.slot)
-        return slot is not None and not slot.required
+        return slot is not None and slot.optional
 
     @staticmethod
     def _blocked_unbinds(definition: il.RelationDefinition | None, slots: Iterable[str]) -> list[str]:
         """Bound slots whose explicit unbinding the vocabulary refuses.
 
         A slot blocks when its type declares ``on_unbind="block"`` and the slot
-        is required. Unknown definitions or slots (drift) don't block.
+        is not optional. Unknown definitions or slots (drift) don't block.
 
         Args:
             definition: Relation definition the slots belong to. None (an
@@ -378,7 +378,7 @@ class RelationStore:
         if definition is None or definition.on_unbind != "block":
             return []
         return sorted(
-            {slot for slot in slots if (slot_def := definition.slots.get(slot)) is not None and slot_def.required}
+            {slot for slot in slots if (slot_def := definition.slots.get(slot)) is not None and not slot_def.optional}
         )
 
     @staticmethod

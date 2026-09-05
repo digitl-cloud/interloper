@@ -81,7 +81,7 @@ pickers from:
 | `slotted` | Whether each relation fills a named slot (resource slots, upstream parameters). |
 | `inline` | Whether the field holds component instances (default) or bare ids resolved at run time (asset upstreams). |
 | `keys` | Allowed destination keys, as picker metadata. |
-| `slots` | The slots a concrete class declares (`RelationSlot(key, required)`). |
+| `slots` | The slots a concrete class declares (`Dependency(key, optional, many)`); `many` marks a slot that binds several components. |
 | `on_delete` | What deleting the relation's target does to the referrer: `block` (default, for consumption relations) or `detach` (for orchestration pointers such as a job's targets or a hook's watches). |
 | `on_unbind` | What explicitly unbinding a bound required slot does: `detach` (default) or `block` (asset upstreams). |
 

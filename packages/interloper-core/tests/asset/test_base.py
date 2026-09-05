@@ -199,8 +199,8 @@ class TestDefinition:
 
         slots = FakeDependentAsset.definition().relations["upstream"].slots
         assert slots["upstream"].key == "other_source.things"
-        assert slots["upstream"].required is True
-        assert slots["extra"].required is False
+        assert slots["upstream"].optional is False
+        assert slots["extra"].optional is True
 
     def test_definition_includes_asset_schema_when_set(self):
         from typing import ClassVar
