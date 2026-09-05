@@ -29,6 +29,7 @@ from interloper.errors import format_exception
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from interloper.component.base import Dependency
     from interloper.dag.base import DAG
     from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
     from interloper.serializable import Spec
@@ -111,8 +112,7 @@ class Operation(Workload):
         kind: ClassVar[str]
         key: ClassVar[str]
         materializable: bool
-        upstreams: dict[str, str]
-        optional_requires: ClassVar[Mapping[str, str]]
+        upstreams: dict[str, list[str]]
         source: Any | None
         partitioning: ClassVar[PartitionConfig | None]
 
@@ -126,7 +126,6 @@ class Operation(Workload):
 
     materializable = True
     upstreams = {}  # noqa: RUF012
-    optional_requires = {}  # noqa: RUF012
     source = None
     partitioning = None
 
@@ -159,12 +158,22 @@ class Operation(Workload):
         """
         return partition_or_window if self.partitioning is not None else None
 
+    def declared_upstreams(self) -> dict[str, Dependency]:
+        """The node's declared upstream contract.
+
+        The default declares nothing; ``Asset`` returns its ``depends_on``.
+
+        Returns:
+            Parameter name to declaration.
+        """
+        return {}
+
     def validate_upstreams(self, nodes: Mapping[str, Operation]) -> None:
         """Validate this node's wired upstreams against its own contracts.
 
         Called once per node at DAG construction. The default has nothing
         to validate; ``Asset`` checks its wired upstream identities against
-        its ``requires`` contract here.
+        its ``depends_on`` contract here.
 
         Args:
             nodes: Every node in the DAG, keyed by id.

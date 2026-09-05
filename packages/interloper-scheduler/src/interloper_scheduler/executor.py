@@ -177,14 +177,15 @@ class RunExecutor:
         while frontier:
             next_frontier: list[il.Operation] = []
             for operation in frontier:
-                for dependency_id in operation.upstreams.values():
-                    if dependency_id in visited:
-                        continue
-                    visited.add(dependency_id)
-                    upstream = cast(il.Asset, self._store.components.load(UUID(dependency_id)))
-                    upstream.materializable = False
-                    operations.append(upstream)
-                    next_frontier.append(upstream)
+                for upstream_ids in operation.upstreams.values():
+                    for dependency_id in upstream_ids:
+                        if dependency_id in visited:
+                            continue
+                        visited.add(dependency_id)
+                        upstream = cast(il.Asset, self._store.components.load(UUID(dependency_id)))
+                        upstream.materializable = False
+                        operations.append(upstream)
+                        next_frontier.append(upstream)
             frontier = next_frontier
 
     def _prior_successes(self, retry_of: UUID) -> set[UUID]:

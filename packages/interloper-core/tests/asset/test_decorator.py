@@ -98,8 +98,7 @@ class TestParameterizedForm:
             name="Custom Asset",
             icon="carbon:data-table",
             resources={"config": DecoratorResource},
-            requires={"upstream": "other"},
-            optional_requires={"maybe": "another"},
+            depends_on={"upstream": "other", "maybe": il.Dependency(key="another", optional=True)},
         )
         def declared(context: il.ExecutionContext, config: DecoratorResource) -> list[dict[str, Any]]:
             return []
@@ -113,8 +112,7 @@ class TestParameterizedForm:
         assert declared.name == "Custom Asset"
         assert declared.icon == "carbon:data-table"
         assert declared.resource_types == {"config": DecoratorResource}
-        assert declared.requires == {"upstream": "other"}
-        assert declared.optional_requires == {"maybe": "another"}
+        assert declared.declared_upstreams()["maybe"] == il.Dependency(key="another", optional=True)
 
     def test_field_declarations_become_real_field_defaults(self):
         normalizer = Normalizer()

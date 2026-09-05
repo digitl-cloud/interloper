@@ -194,8 +194,10 @@ class TestDefinition:
         from typing import ClassVar
 
         class FakeDependentAsset(il.Asset):
-            requires: ClassVar[dict[str, str]] = {"upstream": "other_source.things"}
-            optional_requires: ClassVar[dict[str, str]] = {"extra": "other_source.extras"}
+            depends_on: ClassVar[dict[str, Any]] = {
+                "upstream": "other_source.things",
+                "extra": il.Dependency(key="other_source.extras", optional=True),
+            }
 
         slots = FakeDependentAsset.definition().relations["upstream"].slots
         assert slots["upstream"].key == "other_source.things"
@@ -461,8 +463,8 @@ class TestReconfiguration:
         assert reconfigured.destinations == [new_dest]
 
     def test_override_deps(self):
-        reconfigured = FakeAsset()(upstreams={"upstream": "abc"})
-        assert reconfigured.upstreams == {"upstream": "abc"}
+        reconfigured = FakeAsset()(upstreams={"upstream": ["abc"]})
+        assert reconfigured.upstreams == {"upstream": ["abc"]}
 
     def test_resources_are_merged_not_replaced(self):
         existing = FakeResource(value="existing")
@@ -514,9 +516,9 @@ class TestSerialization:
         assert config.value == "abc"
 
     def test_asset_with_deps_roundtrip(self):
-        asset = FakeAsset(upstreams={"upstream": "asset-id-123"})
+        asset = FakeAsset(upstreams={"upstream": "asset-id-123"})  # ty: ignore[invalid-argument-type]
         restored = FakeAsset.from_spec(asset.to_spec())
-        assert restored.upstreams == {"upstream": "asset-id-123"}
+        assert restored.upstreams == {"upstream": ["asset-id-123"]}
 
     def test_asset_preserves_instance_id(self):
         asset = FakeAsset(id="fixed123")
@@ -918,7 +920,7 @@ class DependentSource(il.Source):
     class Consumer(il.Asset):
         """Requires the upstream's rows."""
 
-        requires: ClassVar[dict[str, str]] = {"producer": "producer"}
+        depends_on: ClassVar[dict[str, Any]] = {"producer": "producer"}
 
         def data(self, producer: Any) -> Any:
             return producer
@@ -926,7 +928,7 @@ class DependentSource(il.Source):
     class Tolerant(il.Asset):
         """Runs with or without the upstream's rows."""
 
-        optional_requires: ClassVar[dict[str, str]] = {"producer": "producer"}
+        depends_on: ClassVar[dict[str, Any]] = {"producer": il.Dependency(key="producer", optional=True)}
 
         def data(self, producer: Any) -> Any:
             return producer or [{"fallback": True}]
@@ -1201,4 +1203,78 @@ def test_upstream_relation_replaces_dependency():
     assert relations["upstream"].field == "upstreams"
     assert relations["upstream"].kinds == ["asset"]
     assert relations["upstream"].inline is False
-    assert FakeAsset(upstreams={"x": "id-1"}).upstreams == {"x": "id-1"}
+    assert FakeAsset(upstreams={"x": "id-1"}).upstreams == {"x": ["id-1"]}  # ty: ignore[invalid-argument-type]
+
+
+class FakeFanIn(il.Asset):
+    """Asset with one many-valued slot and one optional single slot."""
+
+    depends_on: ClassVar[dict[str, Any]] = {
+        "campaigns": il.Dependency(key="*.campaigns", many=True),
+        "rules": il.Dependency(key="rules", optional=True),
+    }
+
+    def data(self, campaigns: list[il.Upstream], rules: Any = None) -> Any:  # pragma: no cover
+        return None
+
+
+class TestDeclaredUpstreams:
+    def test_reads_strings_and_declarations(self):
+        declared = FakeFanIn.declared_upstreams()
+        assert declared["campaigns"] == il.Dependency(key="*.campaigns", many=True)
+        assert declared["rules"] == il.Dependency(key="rules", optional=True)
+
+    def test_plain_string_is_a_single_non_optional_slot(self):
+        class Single(il.Asset):
+            """Fixture."""
+
+            depends_on: ClassVar[dict[str, Any]] = {"orders": "shop.orders"}
+
+        assert Single.declared_upstreams()["orders"] == il.Dependency(key="shop.orders")
+
+    def test_definition_publishes_the_same_objects(self):
+        relation = FakeFanIn.definition().relations["upstream"]
+        assert relation.slots == FakeFanIn.declared_upstreams()
+
+    def test_decorator_accepts_declarations(self):
+        @il.asset(depends_on={"campaigns": il.Dependency(key="*.campaigns", many=True)})
+        def fan_in(campaigns: list[il.Upstream]) -> Any:  # pragma: no cover
+            return None
+
+        assert fan_in.declared_upstreams()["campaigns"].many is True
+
+    def test_old_names_are_gone(self):
+        assert not hasattr(il.Asset, "requires")
+        assert not hasattr(il.Asset, "optional_requires")
+
+    def test_sibling_upstreams_resolves_bare_and_own_qualified_keys_only(self):
+        class Downstream(il.Asset):
+            """Fixture."""
+
+            depends_on: ClassVar[dict[str, Any]] = {
+                "a": "a",
+                "b": "shop.b",
+                "c": "warehouse.c",
+                "d": il.Dependency(key="*.d", many=True),
+                "e": il.Dependency(key="e", optional=True),
+            }
+
+        assert Downstream.sibling_upstreams("shop", ["a", "b", "c", "d", "e"]) == {"a": "a", "b": "b", "e": "e"}
+
+
+class TestUpstreamsShape:
+    def test_bare_string_is_wrapped(self):
+        fan_in = FakeFanIn(upstreams={"rules": "id-9"})  # ty: ignore[invalid-argument-type]
+        assert fan_in.upstreams == {"rules": ["id-9"]}
+
+    def test_lists_are_kept(self):
+        assert FakeFanIn(upstreams={"campaigns": ["id-1", "id-2"]}).upstreams["campaigns"] == ["id-1", "id-2"]
+
+    def test_spec_round_trip_emits_lists(self):
+        upstreams = {"campaigns": ["id-1", "id-2"], "rules": "id-9"}
+        asset = FakeFanIn(upstreams=upstreams)  # ty: ignore[invalid-argument-type]
+        spec = asset.to_spec()
+        init = spec.init
+        assert init is not None
+        assert init["upstreams"] == {"campaigns": ["id-1", "id-2"], "rules": ["id-9"]}
+        assert il.Asset.from_spec(spec).upstreams == {"campaigns": ["id-1", "id-2"], "rules": ["id-9"]}

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, overload
 
 from interloper.asset.base import Asset
+from interloper.component import Dependency
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import PartitionConfig
@@ -23,8 +24,7 @@ def asset(
     destinations: list[type[Destination]] = ...,
     schema: type[Schema] | None = ...,
     partitioning: PartitionConfig | None = ...,
-    requires: dict[str, str] = ...,
-    optional_requires: dict[str, str] = ...,
+    depends_on: dict[str, str | Dependency] = ...,
     tags: list[str] = ...,
     key: str = ...,
     name: str = ...,
@@ -40,8 +40,7 @@ def asset(
     destinations: list[type[Destination]] | None = None,
     schema: type[Schema] | None = None,
     partitioning: PartitionConfig | None = None,
-    requires: dict[str, str] | None = None,
-    optional_requires: dict[str, str] | None = None,
+    depends_on: dict[str, str | Dependency] | None = None,
     tags: list[str] | None = None,
     key: str | None = None,
     name: str | None = None,
@@ -77,10 +76,11 @@ def asset(
         schema: The asset's output schema. ``None`` leaves it undeclared, so
             AUTO infers one at materialization.
         partitioning: Partition config for the asset. ``None`` means unpartitioned.
-        requires: Mandatory upstream dependencies, keyed by ``data()`` parameter
-            name, valued by asset key (bare or qualified).
-        optional_requires: Same shape as ``requires``, but unresolved
-            dependencies pass ``None`` instead of failing.
+        depends_on: Upstream assets, keyed by ``data()`` parameter name. A
+            value is an asset key (bare, qualified or ``*.asset``) for a
+            non-optional single slot, or a
+            :class:`~interloper.component.base.Dependency` for an optional or
+            many-valued slot.
         tags: Catalog tags for the asset (e.g. ``["Report"]``).
         key: Asset key. Defaults to the decorated function's name.
         name: Human-readable display name. Defaults to a label built from the key.
@@ -110,10 +110,8 @@ def asset(
         classvars["icon"] = icon
     if resources is not None:
         classvars["resource_types"] = resources
-    if requires is not None:
-        classvars["requires"] = requires
-    if optional_requires is not None:
-        classvars["optional_requires"] = optional_requires
+    if depends_on is not None:
+        classvars["depends_on"] = depends_on
 
     if materialization_strategy is not None:
         fields["materialization_strategy"] = materialization_strategy

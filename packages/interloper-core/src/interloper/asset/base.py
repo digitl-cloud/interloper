@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import traceback
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, cast
 
 from pydantic import Field, PrivateAttr, field_validator
@@ -128,7 +128,7 @@ class AssetDefinition(ComponentDefinition):
     Cross-entity references use keys (not inlined schemas):
     - ``resource_types`` maps resource name → component key
     - ``destination_types`` lists destination component keys
-    - ``requires`` maps parameter name → asset key (bare or qualified)
+    - ``depends_on`` maps parameter name → asset key (bare or qualified)
 
     Same-entity data is inlined:
     - ``asset_schema`` is the asset's own output schema
@@ -192,8 +192,7 @@ class Asset(Component, Operation):
         ),
     }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"destinations", "normalizer", "upstreams"})
-    requires: ClassVar[dict[str, str]] = {}
-    optional_requires: ClassVar[dict[str, str]] = {}
+    depends_on: ClassVar[dict[str, str | Dependency]] = {}
     tags: ClassVar[list[str]] = []
 
     _source_type: ClassVar[type[Source] | None] = None
@@ -214,7 +213,7 @@ class Asset(Component, Operation):
         ),
     )
     normalizer: Normalizer | None = Field(default=None)
-    upstreams: dict[str, str] = Field(default_factory=dict)
+    upstreams: dict[str, list[str]] = Field(default_factory=dict)
 
     # Private
     _source: Source | None = PrivateAttr(default=None)
@@ -235,6 +234,24 @@ class Asset(Component, Operation):
         if value is None:
             return []
         return value if isinstance(value, (list, tuple)) else [value]
+
+    @field_validator("upstreams", mode="before")
+    @classmethod
+    def _coerce_upstreams(cls, value: Any) -> Any:
+        """Accept a bare id where a list of ids is expected.
+
+        Hand wiring and older specs write ``{"orders": "<id>"}``; the wiring
+        is always a list, so a lone string is wrapped.
+
+        Args:
+            value: The raw ``upstreams`` input, parameter name to id or ids.
+
+        Returns:
+            The input with every string value wrapped in a one-element list.
+        """
+        if not isinstance(value, dict):
+            return value
+        return {name: [ids] if isinstance(ids, str) else ids for name, ids in value.items()}
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Infer ``resource_types`` from ``data()`` type annotations.
@@ -360,23 +377,59 @@ class Asset(Component, Operation):
         )
 
     @classmethod
+    def declared_upstreams(cls) -> dict[str, Dependency]:
+        """The asset's upstream contract, one :class:`Dependency` per parameter.
+
+        The single reading of ``depends_on``: a plain string is a
+        non-optional single slot on that key, a :class:`Dependency` is taken
+        as declared.
+
+        Returns:
+            Parameter name to declaration.
+        """
+        return {
+            parameter: declared if isinstance(declared, Dependency) else Dependency(key=declared)
+            for parameter, declared in cls.depends_on.items()
+        }
+
+    @classmethod
+    def sibling_upstreams(cls, source_key: str, sibling_keys: Iterable[str]) -> dict[str, str]:
+        """The declared upstreams that resolve to a sibling of the declaring source.
+
+        The one sibling-wiring rule, shared by the source at construction and
+        by the platform store at creation: a declared key whose source is the
+        declaring source (bare, or qualified with its own key) and whose asset
+        key names a sibling other than the asset itself.
+
+        Args:
+            source_key: Key of the source the asset belongs to.
+            sibling_keys: Keys of the source's assets, the asset itself included.
+
+        Returns:
+            Parameter name to sibling asset key.
+        """
+        siblings = set(sibling_keys)
+        wiring: dict[str, str] = {}
+        for parameter, dependency in cls.declared_upstreams().items():
+            if not dependency.key:
+                continue
+            expected = AssetIdentity.resolve(dependency.key, own_source_key=source_key)
+            if expected.source_key == source_key and expected.asset_key in siblings and expected.asset_key != cls.key:
+                wiring[parameter] = expected.asset_key
+        return wiring
+
+    @classmethod
     def relation_definitions(cls) -> dict[str, RelationDefinition]:
         """Enrich the vocabulary with upstream slots and destination keys.
 
-        Upstream slots come from the class's ``requires`` /
-        ``optional_requires`` contracts (slot key is the, possibly
-        qualified, upstream asset key).
+        Upstream slots are :meth:`declared_upstreams`.
 
         Returns:
             Relation type → enriched definition.
         """
         relations = super().relation_definitions()
         if "upstream" in relations:
-            slots = {parameter: Dependency(key=key) for parameter, key in cls.requires.items()}
-            slots |= {
-                parameter: Dependency(key=key, optional=True) for parameter, key in cls.optional_requires.items()
-            }
-            relations["upstream"] = relations["upstream"].model_copy(update={"slots": slots})
+            relations["upstream"] = relations["upstream"].model_copy(update={"slots": cls.declared_upstreams()})
         if "destination" in relations:
             relations["destination"] = relations["destination"].model_copy(
                 update={"keys": [dest_cls.key for dest_cls in cls.destination_types]}
@@ -396,7 +449,7 @@ class Asset(Component, Operation):
         materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
         normalizer: Normalizer | None = _UNSET,  # ty: ignore[invalid-parameter-default]
-        upstreams: dict[str, str] | None = None,
+        upstreams: dict[str, list[str]] | None = None,
     ) -> Self:
         """Return a reconfigured copy of this asset.
 
@@ -416,7 +469,7 @@ class Asset(Component, Operation):
             materialization_strategy: How the data is checked against the schema.
             normalizer: Normalizer applied before conform; pass ``None`` to
                 explicitly clear it.
-            upstreams: Mapping of ``data()`` parameter name to upstream asset id.
+            upstreams: Mapping of ``data()`` parameter name to upstream asset ids.
         """
         overrides: dict[str, Any] = {}
         if id is not None:
@@ -459,15 +512,15 @@ class Asset(Component, Operation):
         return OperationResult()
 
     def validate_upstreams(self, nodes: Mapping[str, Operation]) -> None:
-        """Check the wired upstreams against the ``requires`` contract.
+        """Check the wired upstreams against the ``depends_on`` contract.
 
-        For each ``(parameter_name, upstream_id)`` in ``upstreams``, if
-        ``requires`` or ``optional_requires`` declares an expected key for
-        that parameter, the wired upstream's identity must match the declared
-        key's resolution (bare keys expect an asset of this asset's own
-        source, see :meth:`AssetIdentity.resolve`). Upstream ids absent from
-        *nodes* are ignored here: graph construction already rejected the
-        non-optional ones.
+        For each ``(parameter_name, upstream_ids)`` in ``upstreams``, if
+        ``depends_on`` declares an expected key for that parameter, every
+        wired upstream's identity must satisfy the declared key (bare keys
+        expect an asset of this asset's own source, see
+        :meth:`AssetIdentity.resolve`; ``*.asset`` accepts any source). Upstream
+        ids absent from *nodes* are ignored here: graph construction already
+        rejected the non-optional ones.
 
         Args:
             nodes: Every node in the DAG, keyed by id.
@@ -476,19 +529,20 @@ class Asset(Component, Operation):
             DependencyContractError: If any wired upstream violates its contract.
         """
         own_source_key = self._source.key if self._source is not None else None
-        for parameter_name, upstream_id in self.upstreams.items():
-            if upstream_id not in nodes:
+        declared = self.declared_upstreams()
+        for parameter_name, upstream_ids in self.upstreams.items():
+            dependency = declared.get(parameter_name)
+            if dependency is None or not dependency.key:
                 continue
-            expected_key = self.requires.get(parameter_name) or self.optional_requires.get(parameter_name)
-            if not expected_key:
-                continue
-            expected = AssetIdentity.resolve(expected_key, own_source_key=own_source_key)
-            upstream = cast(Asset, nodes[upstream_id])
-            if upstream.identity != expected:
-                raise DependencyContractError(
-                    f"Asset '{self.key}' parameter '{parameter_name}' requires "
-                    f"'{expected_key}' but is wired to '{upstream.identity}'."
-                )
+            for upstream_id in upstream_ids:
+                if upstream_id not in nodes:
+                    continue
+                upstream = cast(Asset, nodes[upstream_id])
+                if not upstream.identity.satisfies(dependency.key, own_source_key=own_source_key):
+                    raise DependencyContractError(
+                        f"Asset '{self.key}' parameter '{parameter_name}' depends on "
+                        f"'{dependency.key}' but is wired to '{upstream.identity}'."
+                    )
 
     def run(
         self,
@@ -700,7 +754,7 @@ class Asset(Component, Operation):
         """
         kwargs: dict[str, Any] = {}
         signature = inspect.signature(self.data)
-        optional_names = set(self.optional_requires)
+        declared = self.declared_upstreams()
 
         for parameter_name in signature.parameters:
             if parameter_name in ("self", "source", "kwargs"):
@@ -717,8 +771,9 @@ class Asset(Component, Operation):
             else:
                 if parameter_name not in self.upstreams:
                     continue
+                is_optional = declared.get(parameter_name) is not None and declared[parameter_name].optional
                 if dag is None:
-                    if parameter_name in optional_names:
+                    if is_optional:
                         kwargs[parameter_name] = None
                         continue
                     raise AssetError(
@@ -726,9 +781,9 @@ class Asset(Component, Operation):
                         "Pass a DAG to run() or materialize() for dependency resolution."
                     )
 
-                upstream_id = self.upstreams[parameter_name]
+                upstream_id = self.upstreams[parameter_name][0]
                 upstream_asset = cast(Asset, dag.operation_map[upstream_id])
-                if parameter_name in optional_names:
+                if is_optional:
                     try:
                         kwargs[parameter_name] = await self._destination_read(
                             upstream_asset, partition_or_window, context.metadata

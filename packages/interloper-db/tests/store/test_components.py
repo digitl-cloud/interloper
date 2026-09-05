@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import ClassVar
+from typing import Any, ClassVar
 from uuid import uuid4
 
 import interloper as il
@@ -215,13 +215,13 @@ class GuardUpstream(il.Asset):
 class GuardRequired(il.Asset):
     """Asset with a required dependency on ``guard_upstream``."""
 
-    requires: ClassVar[dict[str, str]] = {"up": "guard_upstream"}
+    depends_on: ClassVar[dict[str, Any]] = {"up": "guard_upstream"}
 
 
 class GuardOptional(il.Asset):
     """Asset with an optional dependency on ``guard_upstream``."""
 
-    optional_requires: ClassVar[dict[str, str]] = {"up": "guard_upstream"}
+    depends_on: ClassVar[dict[str, Any]] = {"up": il.Dependency(key="guard_upstream", optional=True)}
 
 
 class TestDependencyDeleteSemantics:
@@ -265,7 +265,7 @@ class WireDownSource(il.Source):
     class Consumer(il.Asset):
         """Asset with a required cross-source dependency."""
 
-        requires: ClassVar[dict[str, str]] = {"rows": "wire_up_source.rows"}
+        depends_on: ClassVar[dict[str, Any]] = {"rows": "wire_up_source.rows"}
 
 
 class WireDownOptionalSource(il.Source):
@@ -274,7 +274,7 @@ class WireDownOptionalSource(il.Source):
     class Reader(il.Asset):
         """Asset with an optional cross-source dependency."""
 
-        optional_requires: ClassVar[dict[str, str]] = {"rows": "wire_up_source.rows"}
+        depends_on: ClassVar[dict[str, Any]] = {"rows": il.Dependency(key="wire_up_source.rows", optional=True)}
 
 
 def _child(source: Component, key: str) -> Component:

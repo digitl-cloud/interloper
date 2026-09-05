@@ -10,7 +10,7 @@ from typing_extensions import Self
 
 from interloper.asset import Asset
 from interloper.asset.base import AssetDefinition, AssetIdentity
-from interloper.component import Component, ComponentDefinition, RelationDefinition
+from interloper.component import Component, ComponentDefinition, Dependency, RelationDefinition
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
@@ -168,7 +168,7 @@ class Source(Component, Workload):
     # -- Construction & resolution ---------------------------------------------
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-discover assets and infer requires at source definition time.
+        """Auto-discover assets and infer upstreams at source definition time.
 
         Asset classes defined in the source body (via ``@asset`` on
         methods) appear as class attributes.  We collect them into
@@ -382,37 +382,29 @@ class Source(Component, Workload):
 
     @classmethod
     def _infer_upstreams(cls) -> None:
-        """Populate ``requires`` and ``optional_requires`` on asset classes.
+        """Populate ``depends_on`` on asset classes from sibling parameter names.
 
-        Matches parameter names against sibling asset keys. Parameters
-        with a ``None`` default are inferred as optional.
+        A parameter named after a sibling asset declares an upstream on it;
+        a ``None`` default makes that upstream optional.
         """
         sibling_keys: set[str] = {a.key for a in cls.asset_types}
         for asset_cls in cls.asset_types:
             if not hasattr(asset_cls, "data"):
                 continue
             signature = inspect.signature(asset_cls.data)
-            inferred: dict[str, str] = {}
-            inferred_optional: dict[str, str] = {}
+            inferred: dict[str, str | Dependency] = {}
             for parameter_name, parameter in signature.parameters.items():
                 if parameter_name in ("self", "context", "source", "kwargs"):
                     continue
-                if parameter_name in asset_cls.resource_types:
-                    continue
-                if parameter_name in asset_cls.requires:
-                    continue
-                if parameter_name in asset_cls.optional_requires:
+                if parameter_name in asset_cls.resource_types or parameter_name in asset_cls.depends_on:
                     continue
                 if parameter_name in sibling_keys and parameter_name != asset_cls.key:
                     qualified = str(AssetIdentity(cls.key, parameter_name))
-                    if parameter.default is None:
-                        inferred_optional[parameter_name] = qualified
-                    else:
-                        inferred[parameter_name] = qualified
+                    inferred[parameter_name] = (
+                        Dependency(key=qualified, optional=True) if parameter.default is None else qualified
+                    )
             if inferred:
-                asset_cls.requires = {**asset_cls.requires, **inferred}
-            if inferred_optional:
-                asset_cls.optional_requires = {**asset_cls.optional_requires, **inferred_optional}
+                asset_cls.depends_on = {**asset_cls.depends_on, **inferred}
 
     @classmethod
     def asset_def(cls, key: str) -> AssetDefinition:
@@ -532,9 +524,9 @@ class Source(Component, Workload):
     def _resolve_upstreams(self, asset: Asset, siblings: dict[str, Asset]) -> None:
         """Wire intra-source upstreams for a single asset.
 
-        Looks at ``requires`` and ``optional_requires`` entries whose
-        qualified key belongs to this source.  If a sibling asset
-        matches, wires it into ``asset.upstreams``.
+        Applies :meth:`~interloper.asset.base.Asset.sibling_upstreams` to the
+        source's assets. Qualified keys naming another source and wildcard
+        keys are left to the DAG, which sees every node.
 
         Pre-existing ``upstreams`` entries (e.g. hydrated from persisted
         relations) are never overwritten.
@@ -542,18 +534,12 @@ class Source(Component, Workload):
         Args:
             asset: The asset whose ``upstreams`` map is wired in place.
             siblings: The source's assets keyed by asset key, including *asset*
-                itself, self-references are skipped.
+                itself.
         """
-        for mapping in (asset.requires, asset.optional_requires):
-            for parameter_name, required_qk in mapping.items():
-                if parameter_name in asset.upstreams:
-                    continue
-                expected = AssetIdentity.resolve(required_qk, own_source_key=self.key)
-                if expected.source_key != self.key:
-                    continue
-                sibling = siblings.get(expected.asset_key)
-                if sibling is not None and sibling is not asset:
-                    asset.upstreams[parameter_name] = sibling.id
+        for parameter_name, sibling_key in type(asset).sibling_upstreams(self.key, siblings).items():
+            if parameter_name in asset.upstreams:
+                continue
+            asset.upstreams[parameter_name] = [siblings[sibling_key].id]
 
     # -- Definition ------------------------------------------------------------
 
