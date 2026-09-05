@@ -820,17 +820,21 @@ class Asset(Component, Operation):
         A leg whose destination holds no data for the scope is handed over
         with ``data=None`` and a warning event, never dropped: the asset
         decides what a missing leg means. Any other read failure fails the
-        asset, optional slot or not.
+        asset, optional slot or not. A wired id absent from *dag* is skipped
+        the same way, with its own warning: ``validate_upstreams`` and the
+        DAG's graph construction only tolerate such an id when the slot is
+        optional, so the leg simply does not exist for this run.
 
         Args:
             parameter_name: The ``data()`` parameter the legs are read for.
-            upstream_ids: The wired upstream ids, every one present in *dag*.
+            upstream_ids: The wired upstream ids; an id absent from *dag* is
+                skipped rather than read.
             dag: The DAG the upstream assets are looked up in.
             partition_or_window: Scope of the reads.
             metadata: Run-level metadata carried onto the emitted events.
 
         Returns:
-            One :class:`Upstream` per leg, in wiring order.
+            One :class:`Upstream` per leg present in *dag*, in wiring order.
 
         Raises:
             AssetError: If a leg cannot be read for a reason other than
@@ -838,6 +842,19 @@ class Asset(Component, Operation):
         """
         legs: list[Upstream] = []
         for upstream_id in upstream_ids:
+            if upstream_id not in dag.operation_map:
+                EventBus.emit(
+                    EventType.LOG,
+                    metadata={
+                        **self._event_metadata(metadata, partition_or_window),
+                        "level": "WARNING",
+                        "message": (
+                            f"Asset '{self.key}' upstream '{upstream_id}' for parameter '{parameter_name}' "
+                            "is not in the DAG; the leg is skipped"
+                        ),
+                    },
+                )
+                continue
             upstream_asset = cast(Asset, dag.operation_map[upstream_id])
             try:
                 data = await self._destination_read(upstream_asset, partition_or_window, metadata)

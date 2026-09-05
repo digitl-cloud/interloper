@@ -1463,3 +1463,26 @@ class TestUpstreamReads:
         broken = FakeLegSourceOne(destinations=[Broken()])
         asset = lenient(destinations=[mem])
         assert DAG(broken(materializable=False), asset).materialize(partition).status is ExecutionStatus.FAILED
+
+    def test_optional_upstream_absent_from_the_dag_is_skipped_with_a_warning(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+
+        @il.asset(depends_on={"c": il.Dependency(key="fake_leg_source_one.campaigns", optional=True)})
+        def lenient(c: Any = None) -> Any:
+            return [{"got": c is not None}]
+
+        asset = lenient(destinations=[mem], upstreams={"c": ["not-in-this-dag"]})
+        warnings_seen: list[Event] = []
+
+        def handler(event: Event) -> None:
+            if event.metadata.get("level") == "WARNING":
+                warnings_seen.append(event)
+
+        EventBus.subscribe(handler)
+        try:
+            assert asset.run(dag=DAG(asset)) == [{"got": False}]
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(handler)
+        assert any("is not in the DAG" in e.metadata.get("message", "") for e in warnings_seen)
