@@ -123,7 +123,7 @@ An instance carries the runtime state a definition does not know about:
 |-------|---------|
 | `destinations` | Destination instances to write to. A single destination is accepted and wrapped in a list. |
 | `dataset` | Namespace (schema, folder) the asset materializes into. Defaults to the source's. |
-| `default_destination_key` | With several destinations, the one downstream readers should prefer. Carried for the platform; the core reads upstream data from the first resolved destination. |
+| `default_destination_key` | With several destinations, the one downstream readers load from. |
 | `materializable` | `False` turns the asset into a read-only dependency: it is skipped by runners but its stored output is still readable. |
 | `materialization_strategy` | How strictly the data is checked against the schema. |
 | `normalizer` | The normalizer applied before conform. |

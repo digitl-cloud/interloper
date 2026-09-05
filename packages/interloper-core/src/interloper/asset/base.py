@@ -722,15 +722,14 @@ class Asset(Component, Operation):
     def partition_row_counts(self) -> dict[str, int]:
         """Return row counts grouped by this asset's partition column.
 
-        Delegates to :meth:`Destination.partition_row_counts` using the first
-        resolved destination.
+        Delegates to :meth:`Destination.partition_row_counts` using the
+        configured default destination.
 
         Returns:
             Mapping from partition value (as string) to row count.
 
         Raises:
             PartitionError: If this asset is not partitioned.
-            AssetError: If no destinations are configured.
         """
         if self.partitioning is None:
             raise PartitionError(
@@ -738,12 +737,9 @@ class Asset(Component, Operation):
                 "Cannot compute partition row counts without a partition column."
             )
 
-        destinations = self._resolve_destinations()
-        if not destinations:
-            raise AssetError(f"No destinations found for asset '{self.key}'")
-
+        destination = self._read_destination()
         context = IOContext(asset=self)
-        return destinations[0].partition_row_counts(context)
+        return destination.partition_row_counts(context)
 
     # -- Internals -------------------------------------------------------------
     async def _build_kwargs(
@@ -952,10 +948,7 @@ class Asset(Component, Operation):
         Raises:
             AssetError: If no destination is found for the upstream asset.
         """
-        destinations = upstream_asset._resolve_destinations()
-        if not destinations:
-            raise AssetError(f"No destination found for upstream asset '{upstream_asset.key}'")
-        destination = destinations[0]
+        destination = upstream_asset._read_destination()
 
         effective_partition = upstream_asset.effective_partition(partition_or_window)
         destination_context = IOContext(
@@ -1262,6 +1255,24 @@ class Asset(Component, Operation):
         for destination in destinations:
             self._validate_destination(destination)
         return destinations
+
+    def _read_destination(self) -> Destination:
+        """The destination downstream readers load this asset from.
+
+        The destination whose key equals ``default_destination_key`` when one
+        is configured and present, else the first resolved destination.
+
+        Returns:
+            The destination to read from.
+
+        Raises:
+            AssetError: If the asset resolves no destination at all.
+        """
+        destinations = self._resolve_destinations()
+        if not destinations:
+            raise AssetError(f"No destination found for upstream asset '{self.key}'")
+        preferred = next((d for d in destinations if d.key == self.default_destination_key), None)
+        return preferred or destinations[0]
 
     def _span_attributes(self) -> dict[str, str]:
         """Identity attributes for spans opened below the asset's own span.
