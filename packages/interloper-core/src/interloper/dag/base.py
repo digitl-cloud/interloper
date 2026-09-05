@@ -12,7 +12,7 @@ from interloper.asset.base import Asset
 from interloper.component import Component
 from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, DependencyNotFoundError
 from interloper.operation import Operation, Workload
-from interloper.partitioning import Partition, PartitionWindow
+from interloper.partitioning import Partition, PartitionWindow, TimePartitionConfig
 from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.serializable import Spec
 from interloper.telemetry import attributes
@@ -230,10 +230,17 @@ class DAG:
                 raise CircularDependencyError(f"Circular dependency detected involving '{operation.key}'")
 
     def _check_partition_dependencies(self) -> None:
-        """Check that no non-partitioned operation depends on a partitioned one.
+        """Check partition compatibility along every edge.
+
+        No unpartitioned dependent of a partitioned upstream, and equal
+        granularity between time-partitioned ends. Read-only upstreams are
+        included on purpose; the read uses the dependent's partition against
+        the upstream table.
 
         Raises:
-            DAGError: If a non-partitioned operation depends on a partitioned one.
+            DAGError: If a non-partitioned operation depends on a partitioned
+                one, or if two time-partitioned ends of an edge have
+                different granularities.
         """
         for operation_id, preds in self.predecessors.items():
             operation = self.operation_map[operation_id]
@@ -241,8 +248,19 @@ class DAG:
                 upstream = self.operation_map[pred_id]
                 if upstream.partitioning is not None and operation.partitioning is None:
                     raise DAGError(
-                        f"Invalid dependency: partitioned asset '{upstream.key}' "
-                        f"cannot be a dependency of non-partitioned asset '{operation.key}'"
+                        f"Invalid upstream: partitioned asset '{upstream.key}' "
+                        f"cannot be an upstream of non-partitioned asset '{operation.key}'"
+                    )
+                if (
+                    isinstance(upstream.partitioning, TimePartitionConfig)
+                    and isinstance(operation.partitioning, TimePartitionConfig)
+                    and upstream.partitioning.granularity is not operation.partitioning.granularity
+                ):
+                    raise DAGError(
+                        f"Invalid upstream: '{upstream.key}' is partitioned by "
+                        f"{upstream.partitioning.granularity.value} but its dependent '{operation.key}' by "
+                        f"{operation.partitioning.granularity.value}; a run has one partition scope, so both "
+                        f"ends of an edge must share a granularity."
                     )
 
     # -- Traversal -------------------------------------------------------------

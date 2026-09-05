@@ -134,6 +134,24 @@ class FakePairSource(il.Source):
             return None
 
 
+class FakeDaily(il.Asset):
+    """Daily asset."""
+
+    partitioning: ClassVar[PartitionConfig | None] = il.TimePartitionConfig(column="date")
+
+
+class FakeMonthly(il.Asset):
+    """Monthly asset depending on a daily one."""
+
+    partitioning: ClassVar[PartitionConfig | None] = il.TimePartitionConfig(
+        column="date", granularity=il.TimeGranularity.MONTH
+    )
+    depends_on: ClassVar[dict[str, Any]] = {"daily": "fake_daily"}
+
+    def data(self, daily: Any) -> Any:  # pragma: no cover
+        return None
+
+
 # -- Larger topology fixtures --------------------------------------------------
 # (mirroring the patterns from the previous framework)
 # The source classes below must live at module level so that ``import_from_path``
@@ -485,6 +503,19 @@ class TestValidation:
         # ``dag_mixed`` fixture already built the DAG without error; presence
         # of all four assets proves construction + validation passed.
         assert len(dag_mixed.operations) == 4
+
+
+class TestGranularityAcrossEdges:
+    def test_mixed_granularity_raises_even_for_read_only_upstreams(self):
+        daily = FakeDaily(materializable=False)
+        monthly = FakeMonthly(upstreams={"daily": [daily.id]})
+        with pytest.raises(DAGError, match="partitioned by day"):
+            DAG(daily, monthly)
+
+    def test_equal_granularity_passes(self):
+        upstream = FakeDaily()
+        downstream = FakeDaily(upstreams={"x": [upstream.id]})
+        DAG(upstream, downstream)  # no raise
 
 
 class TestDeclaredResolution:
