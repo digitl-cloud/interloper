@@ -16,8 +16,7 @@ instance field.
 | `partitioning` | `PartitionConfig` | class | Partition configuration. |
 | `destinations` | `list[type[Destination]]` | class | Allowed destination classes. |
 | `resources` | `dict[str, type[Resource]]` | class | Resource slots; wins over annotations. |
-| `requires` | `dict[str, str]` | class | Mandatory upstream assets, parameter to key. |
-| `optional_requires` | `dict[str, str]` | class | Optional upstream assets. |
+| `depends_on` | `dict[str, str \| Dependency]` | class | Upstream assets, parameter to key; `il.Dependency` for optional or many-valued slots. |
 | `materialization_strategy` | `MaterializationStrategy` | field | Schema enforcement. |
 | `normalizer` | `Normalizer` | field | Normalizer applied before conform. |
 
@@ -91,7 +90,7 @@ Calling an instance returns a copy; omitted keywords mean "unchanged".
 | `materializable` | `materializable` (applied to every asset) |
 | `materialization_strategy` | `materialization_strategy` |
 | `normalizer` (`None` clears) | `normalizer` |
-| `dependencies` | |
+| `upstreams` (replaced) | |
 
 ## `OAuthConfig`
 

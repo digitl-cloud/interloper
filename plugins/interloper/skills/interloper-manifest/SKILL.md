@@ -26,6 +26,7 @@ https://docs.interloper.dev/guide/jobs/
        - path: interloper.destination.csv.CSVDestination
          init:
            base_path: ./data
+     # a qualified `depends_on` key wires itself when exactly one match is in the job
      targets:
        - path: shop.Shop
          init:
@@ -43,8 +44,7 @@ https://docs.interloper.dev/guide/jobs/
            currency: USD
            assets:
              revenue:
-               upstreams:
-                 orders: shop-orders        # wires Finance.revenue(orders=...) to shop.orders
+               upstreams: {orders: [shop-orders]}   # explicit wiring; only needed when several candidates exist
    ```
 
 2. **Run it.** The CLI does not put the working directory on `sys.path`, and `${VAR}` is a hard
@@ -58,8 +58,7 @@ https://docs.interloper.dev/guide/jobs/
 
    Read the dry-run plan: each numbered line is one generation, parallel operations share a
    line. A downstream asset on the same line as its upstream, or a `materializable / total`
-   count that does not add up, means the edge is not wired and the run will fail with
-   `TypeError: ... missing 1 required positional argument`. A failed run still leaves the
+   count that does not add up, means the edge is not wired. A failed run still leaves the
    completed upstream files under `./data`.
 
 3. **Check the output** at `./data/<dataset>/<table>/<column>=<key>/data.csv`. Exit code is
@@ -72,11 +71,13 @@ https://docs.interloper.dev/guide/jobs/
   removes `orders`, not `order_stats`. Use `select:` to restrict what runs. Use `assets:` only
   for per-asset overrides (`id`, `materializable`, `destinations`, `upstreams`) and list
   every asset the run needs.
-- **`requires` does not wire.** `requires={"orders": "shop.orders"}` on an asset is a contract
-  the DAG checks against wired dependencies; nothing resolves `shop.orders` by key across
-  sources. Wire the edge yourself: an `id` on the upstream asset and `upstreams:` on the
-  downstream one, as above. In Python: `fin.revenue.upstreams["orders"] = shop.orders.id`
-  before `il.DAG(shop, fin)`. Intra-source dependencies wire themselves.
+- **`depends_on` wires itself when unambiguous.** A qualified key (`shop.orders`) binds the
+  single matching asset in the job; two matches (two `shop` instances) fail at load time with
+  `DAGError`, and an unbound non-optional key fails at load time with
+  `DependencyNotFoundError`. Wire by id (an `id` on the upstream, `upstreams:` on the
+  downstream) only in the ambiguous case. A many-valued slot
+  (`il.Dependency(key="*.campaigns", many=True)`) takes a list:
+  `upstreams: {campaigns: [id-a, id-b]}`.
 - **`${VAR}` is a spec-file feature.** `Spec.from_file` interpolates it; `interloper.yaml`
   (settings) does not, see the interloper-deploy skill.
 - **Connections resolve from the environment** when their fields are env-loadable
@@ -103,8 +104,8 @@ https://docs.interloper.dev/guide/jobs/
 ## Common mistakes
 
 - `materializable: false` to drop an asset: the map is a whitelist and the other assets vanish.
-- Expecting `requires` to connect two sources; the symptom is `TypeError: missing 1 required
-  positional argument: '<param>'` at run time, with no error at load time.
+- Reading `DependencyNotFoundError: ... nothing is wired in the DAG` as a bug: the job lacks
+  the upstream source, or two instances match and need explicit wiring.
 - `il.DAG([shop, fin])`: the constructor is varargs, `il.DAG(shop, fin)`.
 - `${VAR}` inside a `{ ... }` flow mapping breaks the YAML.
 - Reading `No module named 'shop'` as a spec error: set `PYTHONPATH=.`.

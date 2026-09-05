@@ -74,17 +74,17 @@ your own) receives a resolved instance. Declaring the slot explicitly with
 annotation. See [Resources](resources.md) for the resolution cascade.
 
 **Dependencies**: any other parameter is an upstream asset. Inside a source, a parameter named
-after a sibling asset is wired automatically; `requires` and `optional_requires` declare the
-rest. See [Dependencies](dependencies.md).
+after a sibling asset is wired automatically; `depends_on` declares the rest, with
+`il.Dependency` for optional or many-valued slots. See [Dependencies](dependencies.md).
 
 ```py
-@il.asset(requires={"raw": "warehouse.raw_orders"})
+@il.asset(depends_on={"raw": "warehouse.raw_orders"})
 def orders(
     self,
     context: il.ExecutionContext,      # the run's context
     connection: ShopConnection,        # a resource, by annotation
     users: list[dict],                 # a sibling asset, by name
-    raw: list[dict],                   # a cross-source asset, by requires
+    raw: list[dict],                   # a cross-source asset, by depends_on
 ) -> list[dict]:
     ...
 ```
@@ -103,8 +103,7 @@ def orders(
     partitioning=il.TimePartitionConfig(column="date"),
     destinations=[il.CSVDestination],                  # allowed destination classes
     resources={"connection": AdsConnection},           # explicit resource slots
-    requires={"campaigns": "ads.campaigns"},           # mandatory upstream assets
-    optional_requires={"budget": "finance.budget"},    # optional upstream assets
+    depends_on={"campaigns": "ads.campaigns", "budget": il.Dependency(key="finance.budget", optional=True)},  # upstream assets
     materialization_strategy=il.MaterializationStrategy.RECONCILE,
     normalizer=il.Normalizer(flatten_max_level=1),
 )
@@ -127,7 +126,7 @@ An instance carries the runtime state a definition does not know about:
 | `materializable` | `False` turns the asset into a read-only dependency: it is skipped by runners but its stored output is still readable. |
 | `materialization_strategy` | How strictly the data is checked against the schema. |
 | `normalizer` | The normalizer applied before conform. |
-| `upstreams` | Parameter name to upstream asset **id**. Filled by the source; can be set by hand. |
+| `upstreams` | Parameter name to the upstream asset **ids**, always a list. Filled by the source and the DAG; can be set by hand. |
 | `id` | Instance identity, a UUID by default. |
 | `resources` | Slot name to resource instance. |
 
