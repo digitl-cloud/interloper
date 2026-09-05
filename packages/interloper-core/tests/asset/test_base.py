@@ -347,6 +347,22 @@ class TestDestinations:
             FakeAssetTypedDest()._validate_destination(FakeOtherDestination())
 
 
+class TestReadDestination:
+    def test_default_destination_key_selects_the_read_destination(self):
+        first, second = il.MemoryDestination(), il.CSVDestination(base_path="/tmp/unused")
+        asset = FakeAsset(destinations=[first, second], default_destination_key=second.key)
+        assert asset._read_destination() is second
+
+    def test_falls_back_to_the_first_destination(self):
+        first, second = il.MemoryDestination(), il.CSVDestination(base_path="/tmp/unused")
+        asset = FakeAsset(destinations=[first, second])
+        assert asset._read_destination() is first
+
+    def test_raises_without_destinations(self):
+        with pytest.raises(AssetError, match="No destination found"):
+            FakeAsset()._read_destination()
+
+
 # -- Partitioning validation ---------------------------------------------------
 
 
@@ -902,7 +918,7 @@ class TestPartitionRowCounts:
             asset.partition_row_counts()
 
     def test_no_destination_is_rejected(self):
-        with pytest.raises(AssetError, match="No destinations found"):
+        with pytest.raises(AssetError, match="No destination found"):
             FakeAssetDaily().partition_row_counts()
 
 
