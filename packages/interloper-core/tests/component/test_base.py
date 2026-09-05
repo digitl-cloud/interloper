@@ -667,3 +667,19 @@ class TestStrictInitKwargs:
     def test_resource_slot_kwargs_still_route(self):
         consumer = FakeConsumer(resource=FakeResource(text="abc"))  # type: ignore[call-arg]
         assert isinstance(consumer.resources["resource"], FakeResource)
+
+
+def test_dependency_defaults_and_flags():
+    """``Dependency`` defaults to a required, single-valued slot; ``RelationSlot`` is gone."""
+    dependency = il.Dependency(key="*.campaigns")
+    assert (dependency.optional, dependency.many) == (False, False)
+    fan_in = il.Dependency(key="*.campaigns", optional=True, many=True)
+    assert (fan_in.optional, fan_in.many) == (True, True)
+    assert not hasattr(il, "RelationSlot")
+
+
+def test_relation_definition_slots_are_dependencies():
+    """A relation definition's ``slots`` are ``Dependency`` instances, serialized with the flags."""
+    definition = il.RelationDefinition(kinds=["asset"], field="upstreams", slotted=True)
+    enriched = definition.model_copy(update={"slots": {"x": il.Dependency(key="a")}})
+    assert enriched.model_dump()["slots"]["x"] == {"key": "a", "optional": False, "many": False}

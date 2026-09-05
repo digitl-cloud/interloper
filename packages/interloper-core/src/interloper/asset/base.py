@@ -13,7 +13,7 @@ from pydantic import Field, PrivateAttr, field_validator
 from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
-from interloper.component import Component, ComponentDefinition, RelationDefinition, RelationSlot
+from interloper.component import Component, ComponentDefinition, Dependency, RelationDefinition
 from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
@@ -349,9 +349,9 @@ class Asset(Component, Operation):
         """
         relations = super().relation_definitions()
         if "upstream" in relations:
-            slots = {parameter: RelationSlot(key=key) for parameter, key in cls.requires.items()}
+            slots = {parameter: Dependency(key=key) for parameter, key in cls.requires.items()}
             slots |= {
-                parameter: RelationSlot(key=key, required=False) for parameter, key in cls.optional_requires.items()
+                parameter: Dependency(key=key, optional=True) for parameter, key in cls.optional_requires.items()
             }
             relations["upstream"] = relations["upstream"].model_copy(update={"slots": slots})
         if "destination" in relations:

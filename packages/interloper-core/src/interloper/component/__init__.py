@@ -4,14 +4,14 @@ from interloper.component.base import (
     KINDS,
     Component,
     ComponentDefinition,
+    Dependency,
     RelationDefinition,
-    RelationSlot,
 )
 
 __all__ = [
     "KINDS",
     "Component",
     "ComponentDefinition",
+    "Dependency",
     "RelationDefinition",
-    "RelationSlot",
 ]

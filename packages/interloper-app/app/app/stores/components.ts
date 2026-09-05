@@ -185,7 +185,7 @@ export const useComponentsStore = defineStore('components', () => {
         if (!defn) return false
         if (defn.on_delete === 'detach') return true
         const slot = defn.slots?.[r.slot]
-        return !!slot && !slot.required
+        return !!slot && slot.optional
     }
 
     /**

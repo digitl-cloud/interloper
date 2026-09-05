@@ -1,8 +1,11 @@
-/** A declared slot on a slotted relation type. */
-export interface RelationSlot {
+/** A declared dependency: a slot on a slotted relation type. Mirrors `interloper.component.base.Dependency`. */
+export interface Dependency {
     /** Expected dst component key. `''` accepts any component of the relation's kinds. */
     key: string
-    required: boolean
+    /** Whether the slot may stay unbound. */
+    optional: boolean
+    /** Whether the slot binds several components (a fan-in). */
+    many: boolean
 }
 
 /** One relation type a component kind may declare toward other components. */
@@ -15,9 +18,9 @@ export interface RelationDefinition {
     /**
      * Declared slots. Set for `resource` (slot → resource key) and
      * `upstream` (param → upstream asset key, possibly qualified
-     * `source_key.asset_key`; `required` flag meaningful).
+     * `source_key.asset_key`; `optional` and `many` flags meaningful).
      */
-    slots: Record<string, RelationSlot>
+    slots: Record<string, Dependency>
     /**
      * What deleting the relation's destination does to the referrer:
      * `block` refuses the deletion, `detach` cascades the relation away
@@ -73,16 +76,16 @@ export function resourceSlots(defn: ComponentDefinition): Record<string, string>
     return Object.fromEntries(Object.entries(slots).map(([slot, s]) => [slot, s.key]))
 }
 
-/** Upstream slots: param name → upstream asset key + required flag. */
-export function upstreamSlots(defn: ComponentDefinition): Record<string, RelationSlot> {
+/** Upstream slots: param name → upstream asset key + optional/many flags. */
+export function upstreamSlots(defn: ComponentDefinition): Record<string, Dependency> {
     return defn.relations?.upstream?.slots ?? {}
 }
 
-/** Required upstream params → upstream asset key (bare or qualified). */
+/** Required (non-optional) upstream params → upstream asset key (bare or qualified). */
 export function requiredUpstreams(defn: ComponentDefinition): Record<string, string> {
     return Object.fromEntries(
         Object.entries(upstreamSlots(defn))
-            .filter(([, s]) => s.required)
+            .filter(([, s]) => !s.optional)
             .map(([param, s]) => [param, s.key]),
     )
 }

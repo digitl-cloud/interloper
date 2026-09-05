@@ -52,16 +52,21 @@ KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kin
 
 
 # -- Relations -----------------------------------------------------------------
-class RelationSlot(BaseModel):
-    """A declared slot on a slotted relation type.
+class Dependency(BaseModel):
+    """One declared dependency of a component on another: a slot on a slotted relation type.
 
-    ``key`` names the expected component key for the slot (``""`` accepts any
-    component of the relation's kinds); ``required`` distinguishes mandatory
-    slots from optional ones.
+    The same object declares a slot on a class (an asset's ``depends_on``
+    values, a resource slot derived from ``resource_types``) and publishes it
+    in the class's definition. ``key`` names the expected component key
+    (``""`` accepts any component of the relation's kinds; upstream slots use
+    the asset key grammar, bare, ``source.asset`` or ``*.asset``);
+    ``optional`` marks a slot that may stay unbound; ``many`` marks a slot
+    that binds several components at once (a fan-in).
     """
 
     key: str = ""
-    required: bool = True
+    optional: bool = False
+    many: bool = False
 
 
 class RelationDefinition(BaseModel):
@@ -86,7 +91,7 @@ class RelationDefinition(BaseModel):
     referrer at its next run; ``"detach"`` lets the relation cascade away —
     right for orchestration pointers (a job's ``target``, a hook's ``watch``)
     that merely shrink the referrer's scope. Optional slots
-    (``RelationSlot.required=False``) detach regardless of this default.
+    (``Dependency.optional=True``) detach regardless of this default.
 
     ``on_unbind`` declares what *explicitly* unbinding a bound required slot
     does: ``"detach"`` (the default) allows it — the escape hatch for
@@ -101,7 +106,7 @@ class RelationDefinition(BaseModel):
     slotted: bool = False
     inline: bool = True
     keys: list[str] = Field(default_factory=list)
-    slots: dict[str, RelationSlot] = Field(default_factory=dict)
+    slots: dict[str, Dependency] = Field(default_factory=dict)
     on_delete: Literal["block", "detach"] = "block"
     on_unbind: Literal["block", "detach"] = "detach"
 
@@ -529,7 +534,7 @@ class Component(Serializable):
             relations["resource"] = relations["resource"].model_copy(
                 update={
                     "slots": {
-                        name: RelationSlot(key=resource_type.key) for name, resource_type in cls.resource_types.items()
+                        name: Dependency(key=resource_type.key) for name, resource_type in cls.resource_types.items()
                     }
                 }
             )
