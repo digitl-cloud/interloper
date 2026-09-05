@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 import pytest
 
 import interloper as il
-from interloper.asset.base import AssetDefinition
+from interloper.asset.base import AssetDefinition, AssetIdentity
 from interloper.component.base import Component
 from interloper.errors import AssetError, DestinationError, PartitionError
 from interloper.events import Event, EventBus, EventType
@@ -859,6 +859,20 @@ class TestAssetIdentity:
             return ""
 
         assert standalone().identity == il.AssetIdentity(None, "standalone")
+
+    def test_satisfies_bare_key_means_same_source(self):
+        assert AssetIdentity("shop", "orders").satisfies("orders", own_source_key="shop")
+        assert not AssetIdentity("warehouse", "orders").satisfies("orders", own_source_key="shop")
+
+    def test_satisfies_qualified_key_names_the_source(self):
+        assert AssetIdentity("shop", "orders").satisfies("shop.orders", own_source_key="finance")
+        assert not AssetIdentity("warehouse", "orders").satisfies("shop.orders", own_source_key="finance")
+
+    def test_satisfies_wildcard_accepts_any_source_including_none(self):
+        assert AssetIdentity("facebook_ads", "campaigns").satisfies("*.campaigns")
+        assert AssetIdentity("tiktok_ads", "campaigns").satisfies("*.campaigns")
+        assert AssetIdentity(None, "campaigns").satisfies("*.campaigns")
+        assert not AssetIdentity("facebook_ads", "ads").satisfies("*.campaigns")
 
 
 # -- Partition row counts ------------------------------------------------------
