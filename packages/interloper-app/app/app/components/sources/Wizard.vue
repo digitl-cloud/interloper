@@ -86,7 +86,7 @@ async function wireCrossDeps(saved: ComponentRecord) {
             const childId = assetKey ? childIdByKey.get(assetKey) : undefined
             if (!childId || !paramName || !upstreamId) return
             // Tolerate re-submits of an already-wired dependency on edit.
-            await componentsStore.addRelation(childId, { type: 'dependency', dst_id: upstreamId, slot: paramName }).catch(() => { })
+            await componentsStore.addRelation(childId, { type: 'upstream', dst_id: upstreamId, slot: paramName }).catch(() => { })
         }),
     )
 }

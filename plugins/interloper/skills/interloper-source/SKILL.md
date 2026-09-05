@@ -119,7 +119,7 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
 | Name instances by a field | `discriminator=True` on that field (also suffixes table names) |
 | Hourly, monthly, yearly partitions | `il.TimePartitionConfig(column=..., granularity=il.TimeGranularity.MONTH)` |
 | Whole ranges in one call | `il.TimePartitionConfig(column=..., allow_window=True)`, then read `context.window` |
-| Cross-source dependency | `requires={"param": "other_source.asset"}` declares the contract; wire it with `asset.dependencies["param"] = other.asset.id` before `il.DAG(...)`, or by `id` in the spec (interloper-manifest skill) |
+| Cross-source dependency | `requires={"param": "other_source.asset"}` declares the contract; wire it with `asset.upstreams["param"] = other.asset.id` before `il.DAG(...)`, or by `id` in the spec (interloper-manifest skill) |
 | Optional dependency | parameter default `None`, or `optional_requires` |
 | Reshape vendor payloads | `normalizer=il.Normalizer(flatten_max_level=1, snake_case_digits=True)` |
 | OAuth service | subclass `il.RefreshTokenOAuthConnection` with `@il.connection(oauth=il.OAuthConfig("google", scope=...))` |

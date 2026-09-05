@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { JsonSchemaProperty } from '~/types/catalog'
-import { parseQualifiedKey, requiredDependencies } from '~/types/catalog'
+import { parseQualifiedKey, requiredUpstreams } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 import { relationIds } from '~/types/component'
 import type { Run } from '~/types/run'
@@ -231,7 +231,7 @@ async function runNow() {
 
 /** Upstream dependencies as display rows (param → resolved upstream asset). */
 const dependencyRows = computed(() => {
-    const reqs = props.assetDefn ? requiredDependencies(props.assetDefn) : {}
+    const reqs = props.assetDefn ? requiredUpstreams(props.assetDefn) : {}
     return Object.entries(reqs).map(([param, qk]) => {
         const { sourceKey } = parseQualifiedKey(qk)
         return {

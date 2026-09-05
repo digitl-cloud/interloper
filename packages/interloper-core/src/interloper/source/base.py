@@ -182,7 +182,7 @@ class Source(Component, Workload):
         """
         super().__init_subclass__(**kwargs)
         cls._collect_asset_types()
-        cls._infer_all_requires()
+        cls._infer_upstreams()
 
     @model_validator(mode="before")
     @classmethod
@@ -381,7 +381,7 @@ class Source(Component, Workload):
         setattr(cls, asset_cls.__name__, ref)
 
     @classmethod
-    def _infer_all_requires(cls) -> None:
+    def _infer_upstreams(cls) -> None:
         """Populate ``requires`` and ``optional_requires`` on asset classes.
 
         Matches parameter names against sibling asset keys. Parameters
@@ -489,7 +489,7 @@ class Source(Component, Workload):
                 asset.materialization_strategy = self.materialization_strategy
 
             self.trickle_resources(asset)
-            self._resolve_deps(asset, siblings)
+            self._resolve_upstreams(asset, siblings)
 
         for destination in self.destinations:
             self.trickle_resources(destination)
@@ -529,31 +529,31 @@ class Source(Component, Workload):
                 return asset
         raise AttributeError(f"Source has no asset with key '{name}'")
 
-    def _resolve_deps(self, asset: Asset, siblings: dict[str, Asset]) -> None:
-        """Wire intra-source dependencies for a single asset.
+    def _resolve_upstreams(self, asset: Asset, siblings: dict[str, Asset]) -> None:
+        """Wire intra-source upstreams for a single asset.
 
         Looks at ``requires`` and ``optional_requires`` entries whose
         qualified key belongs to this source.  If a sibling asset
-        matches, wires it into ``asset.dependencies``.
+        matches, wires it into ``asset.upstreams``.
 
-        Pre-existing ``dependencies`` entries (e.g. hydrated from persisted
+        Pre-existing ``upstreams`` entries (e.g. hydrated from persisted
         relations) are never overwritten.
 
         Args:
-            asset: The asset whose ``dependencies`` map is wired in place.
+            asset: The asset whose ``upstreams`` map is wired in place.
             siblings: The source's assets keyed by asset key, including *asset*
-                itself — self-references are skipped.
+                itself, self-references are skipped.
         """
         for mapping in (asset.requires, asset.optional_requires):
             for parameter_name, required_qk in mapping.items():
-                if parameter_name in asset.dependencies:
+                if parameter_name in asset.upstreams:
                     continue
                 expected = AssetIdentity.resolve(required_qk, own_source_key=self.key)
                 if expected.source_key != self.key:
                     continue
                 sibling = siblings.get(expected.asset_key)
                 if sibling is not None and sibling is not asset:
-                    asset.dependencies[parameter_name] = sibling.id
+                    asset.upstreams[parameter_name] = sibling.id
 
     # -- Definition ------------------------------------------------------------
 

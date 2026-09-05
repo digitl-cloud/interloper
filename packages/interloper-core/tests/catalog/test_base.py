@@ -128,10 +128,10 @@ class TestVocabulary:
 
     def test_source_owned_asset_resolves_through_its_parent(self):
         catalog = Catalog.discover()
-        # The anchor knows assets have dependencies; only the source's own
+        # The anchor knows assets have upstreams; only the source's own
         # declaration knows which ones, and which of them are required.
-        assert catalog.vocabulary("asset", "e")["dependency"].slots == {}
-        slots = catalog.vocabulary("asset", "e", parent_key="demo_source")["dependency"].slots
+        assert catalog.vocabulary("asset", "e")["upstream"].slots == {}
+        slots = catalog.vocabulary("asset", "e", parent_key="demo_source")["upstream"].slots
         assert {name: slot.key for name, slot in slots.items()} == {
             "b": "demo_source.b",
             "c": "demo_source.c",

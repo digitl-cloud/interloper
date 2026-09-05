@@ -35,7 +35,7 @@ export interface CollectionRow {
 
 interface UseCollectionRowsOptions {
     sources: Ref<ComponentRecord[]>
-    dependencies: Ref<Relation[]>
+    upstreams: Ref<Relation[]>
     destinations: Ref<ComponentRecord[]>
     jobs: Ref<ComponentRecord[]>
     runs: Ref<Run[]>
@@ -72,7 +72,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
         }
 
         const map = new Map<string, Array<{ name: string; icon: string }>>()
-        for (const dep of options.dependencies.value) {
+        for (const dep of options.upstreams.value) {
             if (!map.has(dep.src_id)) map.set(dep.src_id, [])
             const upstreamQk = qkById.get(dep.dst_id)
             let name = upstreamQk ?? dep.dst_id

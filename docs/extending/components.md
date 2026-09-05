@@ -78,17 +78,17 @@ pickers from:
 |---------------------------|---------|
 | `kinds` | Component kinds the relation may point at. |
 | `field` | The instance field carrying the relation: a `list` for unslotted types, a `dict[slot, ...]` for slotted ones. Must exist on the class. |
-| `slotted` | Whether each relation fills a named slot (resource slots, dependency parameters). |
-| `inline` | Whether the field holds component instances (default) or bare ids resolved at run time (asset dependencies). |
+| `slotted` | Whether each relation fills a named slot (resource slots, upstream parameters). |
+| `inline` | Whether the field holds component instances (default) or bare ids resolved at run time (asset upstreams). |
 | `keys` | Allowed destination keys, as picker metadata. |
 | `slots` | The slots a concrete class declares (`RelationSlot(key, required)`). |
 | `on_delete` | What deleting the relation's target does to the referrer: `block` (default, for consumption relations) or `detach` (for orchestration pointers such as a job's targets or a hook's watches). |
-| `on_unbind` | What explicitly unbinding a bound required slot does: `detach` (default) or `block` (asset dependencies). |
+| `on_unbind` | What explicitly unbinding a bound required slot does: `detach` (default) or `block` (asset upstreams). |
 
 Declarations are **extend-only**: a subclass's `relation_types` merges over its parent's, so
 `TriggerHook` adds `target` without losing `watch` and `resource`. `relation_definitions()`
 returns the vocabulary enriched with the class's own slots: resource slots from
-`resource_types`, dependency slots from `requires`, allowed destination keys from
+`resource_types`, upstream slots from `requires`, allowed destination keys from
 `destination_types`.
 
 A relation whose `field` does not exist on the class raises `ValueError` when the definition is

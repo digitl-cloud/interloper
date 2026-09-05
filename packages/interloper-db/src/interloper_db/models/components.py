@@ -131,8 +131,8 @@ class ComponentRelation(SQLModel, table=True):
     """A typed, directed relation between two components.
 
     ``type`` names the relation; ``slot`` disambiguates multiple relations of
-    the same type on one source component (a resource slot name, a dependency
-    parameter name — empty when the relation has no slot semantics).
+    the same type on one source component (a resource slot name, an upstream
+    parameter name, empty when the relation has no slot semantics).
 
     Checks constrain the types the schema knows and permit any type they
     don't, so new relation types need no schema change.
@@ -155,14 +155,17 @@ class ComponentRelation(SQLModel, table=True):
         # Relation shapes (which types a kind may declare, which kinds they may
         # point at, slotted or not) are enforced by the store from the class
         # vocabulary — an open set, so it is deliberately not mirrored in CHECKs.
+        # Resource slots are single-valued by schema. Upstream slots are
+        # single-valued only when their class says so, which the store
+        # enforces from the slot contract (a many-valued slot fans in).
         Index(
             "uq_component_relations_slot",
             "src_id",
             "type",
             "slot",
             unique=True,
-            postgresql_where=text("type IN ('resource', 'dependency')"),
-            sqlite_where=text("type IN ('resource', 'dependency')"),
+            postgresql_where=text("type = 'resource'"),
+            sqlite_where=text("type = 'resource'"),
         ),
         Index("ix_component_relations_org_id_type", "org_id", "type"),
         Index("ix_component_relations_dst_id_type", "dst_id", "type"),

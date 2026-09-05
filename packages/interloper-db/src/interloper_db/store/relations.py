@@ -1,11 +1,11 @@
 """Relation policy: validated reads and writes for the edge table.
 
-The class vocabulary is the contract. It resolves parent-aware — a
-source-owned asset's definition (dependency slots, ``required`` flags)
-lives on the parent source's definition — with the kind's anchor as the
+The class vocabulary is the contract. It resolves parent-aware, a
+source-owned asset's definition (upstream slots, ``required`` flags)
+lives on the parent source's definition, with the kind's anchor as the
 drift fallback. Writes enforce the declared shape: relation type, dst
 kind, slot names, and each slot's expected destination identity (resolved
-through :meth:`~interloper.asset.base.AssetIdentity.resolve` for dependency
+through :meth:`~interloper.asset.base.AssetIdentity.resolve` for upstream
 slots). Unbinding follows the vocabulary's ``on_unbind`` semantics: bound
 required slots of a blocking type refuse it. Rows are stamped with the
 denormalized ``org_id``/``src_kind``/``dst_kind`` triple the composite
@@ -269,7 +269,7 @@ class RelationStore:
     ) -> None:
         """Enforce a slot's declared destination identity, when it declares one.
 
-        Dependency slot keys resolve through ``AssetIdentity.resolve``: an
+        Upstream slot keys resolve through ``AssetIdentity.resolve``: an
         intra-source dep (the declarer's own source) must bind a sibling of
         the same source instance; a cross-source one accepts the named
         source's asset from any instance. Other slotted types (resources)
@@ -278,7 +278,7 @@ class RelationStore:
         Args:
             session: Open session the parent rows are loaded through.
             src: Source component declaring the slot.
-            relation_type: Relation type the slot belongs to. ``"dependency"`` selects
+            relation_type: Relation type the slot belongs to. ``"upstream"`` selects
                 the asset-identity resolution described above.
             slot: Slot name, used for error messages.
             slot_def: Slot definition. An empty ``key`` declares no expected
@@ -291,7 +291,7 @@ class RelationStore:
         """
         if not slot_def.key:
             return
-        if relation_type != "dependency":
+        if relation_type != "upstream":
             if dst.key != slot_def.key:
                 raise ConfigError(
                     f"Relation '{relation_type}' slot '{slot}' of '{src.key}' expects a '{slot_def.key}' "
@@ -303,19 +303,19 @@ class RelationStore:
         expected = AssetIdentity.resolve(slot_def.key, own_source_key=own_source_key)
         if dst.key != expected.asset_key:
             raise ConfigError(
-                f"Dependency slot '{slot}' of '{src.key}' expects asset '{slot_def.key}', got '{dst.key}'"
+                f"Upstream slot '{slot}' of '{src.key}' expects asset '{slot_def.key}', got '{dst.key}'"
             )
         if expected.source_key == own_source_key:
             if src.parent_id is not None and dst.parent_id != src.parent_id:
                 raise ConfigError(
-                    f"Dependency slot '{slot}' of '{src.key}' must bind a sibling asset "
+                    f"Upstream slot '{slot}' of '{src.key}' must bind a sibling asset "
                     f"of the same source instance"
                 )
         else:
             dst_parent = session.get(Component, dst.parent_id) if dst.parent_id else None
             if dst_parent is None or dst_parent.key != expected.source_key:
                 raise ConfigError(
-                    f"Dependency slot '{slot}' of '{src.key}' expects an asset of source "
+                    f"Upstream slot '{slot}' of '{src.key}' expects an asset of source "
                     f"'{expected.source_key}', got one of '{dst_parent.key if dst_parent else 'none'}'"
                 )
 

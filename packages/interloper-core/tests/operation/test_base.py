@@ -43,7 +43,7 @@ class TestContract:
     def test_node_protocol_defaults(self):
         operation = _NoopOperation()
         assert operation.materializable is True
-        assert operation.dependencies == {}
+        assert operation.upstreams == {}
         assert operation.partitioning is None
         assert operation.effective_partition(None) is None
         assert type(operation).capture_traceback is True

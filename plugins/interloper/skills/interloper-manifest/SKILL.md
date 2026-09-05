@@ -43,7 +43,7 @@ https://docs.interloper.dev/guide/jobs/
            currency: USD
            assets:
              revenue:
-               dependencies:
+               upstreams:
                  orders: shop-orders        # wires Finance.revenue(orders=...) to shop.orders
    ```
 
@@ -70,12 +70,12 @@ https://docs.interloper.dev/guide/jobs/
 - **`assets:` is a whitelist.** Reconstruction builds only the assets listed in the map; an
   asset left out does not exist in the run, so `assets: {order_stats: {materializable: false}}`
   removes `orders`, not `order_stats`. Use `select:` to restrict what runs. Use `assets:` only
-  for per-asset overrides (`id`, `materializable`, `destinations`, `dependencies`) and list
+  for per-asset overrides (`id`, `materializable`, `destinations`, `upstreams`) and list
   every asset the run needs.
 - **`requires` does not wire.** `requires={"orders": "shop.orders"}` on an asset is a contract
   the DAG checks against wired dependencies; nothing resolves `shop.orders` by key across
-  sources. Wire the edge yourself: an `id` on the upstream asset and `dependencies:` on the
-  downstream one, as above. In Python: `fin.revenue.dependencies["orders"] = shop.orders.id`
+  sources. Wire the edge yourself: an `id` on the upstream asset and `upstreams:` on the
+  downstream one, as above. In Python: `fin.revenue.upstreams["orders"] = shop.orders.id`
   before `il.DAG(shop, fin)`. Intra-source dependencies wire themselves.
 - **`${VAR}` is a spec-file feature.** `Spec.from_file` interpolates it; `interloper.yaml`
   (settings) does not, see the interloper-deploy skill.

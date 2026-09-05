@@ -3,12 +3,12 @@
  * Checkbox multi-select for choosing which assets to enable on a source.
  *
  * For assets with cross-source dependencies (qualified keys in the
- * definition's `dependency` relation slots), shows a dropdown to select the
+ * definition's `upstream` relation slots), shows a dropdown to select the
  * upstream asset instance. Auto-resolves when only one candidate exists;
  * prioritises assets within the same source.
  */
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
-import { dependencySlots, parseQualifiedKey } from '~/types/catalog'
+import { upstreamSlots, parseQualifiedKey } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 
 const selectedKeys = defineModel<string[]>('selectedKeys', { default: () => [] })
@@ -52,7 +52,7 @@ interface AssetDep {
 /** Compute dependency info for a given asset definition. */
 function getAssetDeps(assetDefn: AssetDefinition): AssetDep[] {
     const deps: AssetDep[] = []
-    for (const [paramName, slot] of Object.entries(dependencySlots(assetDefn))) {
+    for (const [paramName, slot] of Object.entries(upstreamSlots(assetDefn))) {
         const qk = slot.key
         const isOptional = !slot.required
         const { sourceKey, assetKey } = parseQualifiedKey(qk)

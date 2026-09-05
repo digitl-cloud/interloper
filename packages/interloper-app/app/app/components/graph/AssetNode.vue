@@ -3,7 +3,7 @@ import type { ContextMenuItem } from '@nuxt/ui'
 import { Handle, Position, useVueFlow, useNodeConnections, useNodeId } from '@vue-flow/core'
 import type { Connection } from '@vue-flow/core'
 import type { ComponentRecord } from '~/types/component'
-import { requiredDependencies } from '~/types/catalog'
+import { requiredUpstreams } from '~/types/catalog'
 
 const props = defineProps<{
     asset: ComponentRecord
@@ -84,11 +84,11 @@ const shouldFade = computed(() => isDragging.value && !isDragSource.value && !is
 
 // Check if this asset has all required upstream dependencies
 const requiredDepCount = computed(() =>
-    props.assetDefn ? Object.keys(requiredDependencies(props.assetDefn)).length : 0,
+    props.assetDefn ? Object.keys(requiredUpstreams(props.assetDefn)).length : 0,
 )
 const isRunnable = computed(() => {
     if (requiredDepCount.value === 0) return true
-    const upstreams = componentsStore.dependencies.filter(d => d.src_id === props.asset.id)
+    const upstreams = componentsStore.upstreams.filter(d => d.src_id === props.asset.id)
     return upstreams.length >= requiredDepCount.value
 })
 
@@ -124,8 +124,8 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                         description: `This will remove all upstream dependencies from "${label.value}".`,
                     })
                     if (confirmed) {
-                        const deps = componentsStore.dependencies.filter(d => d.src_id === props.asset.id)
-                        await Promise.all(deps.map(d => componentsStore.removeRelation(d.src_id, 'dependency', d.dst_id)))
+                        const deps = componentsStore.upstreams.filter(d => d.src_id === props.asset.id)
+                        await Promise.all(deps.map(d => componentsStore.removeRelation(d.src_id, 'upstream', d.dst_id)))
                     }
                 },
             },

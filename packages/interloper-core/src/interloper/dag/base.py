@@ -65,7 +65,7 @@ class DAGSpec(BaseModel):
 class DAG:
     """Directed acyclic graph of operations.
 
-    Dependencies are resolved from pre-computed ``dependencies`` on each node
+    Dependencies are resolved from pre-computed ``upstreams`` on each node
     (mapping parameter names to upstream node ids).  The DAG validates
     the wiring and provides topological ordering for parallel execution.
     """
@@ -129,7 +129,7 @@ class DAG:
 
             self.predecessors[operation.id] = []
 
-            for parameter_name, upstream_id in operation.dependencies.items():
+            for parameter_name, upstream_id in operation.upstreams.items():
                 if upstream_id not in self.operation_map:
                     if parameter_name in operation.optional_requires:
                         continue
@@ -145,21 +145,21 @@ class DAG:
 
     def _validate(self) -> None:
         """Validate the DAG structure."""
-        self._check_requires()
+        self._check_upstreams()
         self._check_circular_dependencies()
         self._check_partition_dependencies()
 
-    def _check_requires(self) -> None:
-        """Let every live node validate its wired dependencies against its contracts.
+    def _check_upstreams(self) -> None:
+        """Let every live node validate its wired upstreams against its contracts.
 
         The contract itself belongs to the node (an asset checks its wired
-        upstream identities against its ``requires`` declaration — see
-        :meth:`~interloper.asset.base.Asset.validate_dependencies`); the DAG
+        upstream identities against its ``requires`` declaration, see
+        :meth:`~interloper.asset.base.Asset.validate_upstreams`); the DAG
         only decides which nodes are live.
         """
         for operation in self.operations:
             if operation.materializable:
-                operation.validate_dependencies(self.operation_map)
+                operation.validate_upstreams(self.operation_map)
 
     def _check_circular_dependencies(self) -> None:
         """Check for circular dependencies using DFS.
@@ -444,7 +444,7 @@ class DAG:
         target = self.operation_map[operation_id]
         operations: list[Operation] = []
         for upstream_id in self.get_predecessors(operation_id):
-            # Wired dependencies are assets by relation schema.
+            # Wired upstreams are assets by relation schema.
             parent = cast(Asset, self.operation_map[upstream_id])(materializable=False)
             operations.append(parent)
         operations.append(target)

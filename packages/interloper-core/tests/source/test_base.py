@@ -1,6 +1,6 @@
 """Tests for ``interloper.source.base``."""
 
-# Note: no ``from __future__ import annotations`` — ``Source._infer_all_requires``
+# Note: no ``from __future__ import annotations``, ``Source._infer_upstreams``
 # and ``Asset._infer_resource_types`` read parameter annotations via
 # ``inspect.signature`` and need them as real classes, not lazy strings.
 
@@ -248,14 +248,14 @@ class TestAssets:
         with pytest.raises(KeyError):
             FakeSourceWithAssets.asset_def("does_not_exist")
 
-    def test_infer_all_requires_wires_sibling_dependency(self):
+    def test_infer_upstreams_wires_sibling_dependency(self):
         second_cls = next(
             cls for cls in FakeSourceWithAssets.asset_types if cls.key == "fake_second"
         )
         assert "fake_first" in second_cls.requires
         assert second_cls.requires["fake_first"] == f"{FakeSourceWithAssets.key}.fake_first"
 
-    def test_infer_all_requires_marks_default_none_as_optional(self):
+    def test_infer_upstreams_marks_default_none_as_optional(self):
         class FakeOptionalDepsSource(il.Source):
             class FakeA(il.Asset):
                 pass
@@ -386,9 +386,9 @@ class TestResolution:
         source = FakeSourceWithAssets()
         first = source.fake_first
         second = source.fake_second
-        # ``_infer_all_requires`` populated ``second.requires``; ``_resolve_deps``
-        # wires those into ``second.deps`` pointing at the sibling's instance id.
-        assert second.dependencies["fake_first"] == first.id
+        # ``_infer_upstreams`` populated ``second.requires``; ``_resolve_upstreams``
+        # wires those into ``second.upstreams`` pointing at the sibling's instance id.
+        assert second.upstreams["fake_first"] == first.id
 
 
 # -- __call__ reconfiguration --------------------------------------------------
@@ -539,8 +539,8 @@ class TestSelect:
         by_key = {type(a).key: a for a in source.assets}
         assert by_key["fake_second"].materializable
         assert not by_key["fake_first"].materializable
-        # The non-materializable sibling stays wired as a dependency.
-        assert by_key["fake_first"].id in by_key["fake_second"].dependencies.values()
+        # The non-materializable sibling stays wired as an upstream.
+        assert by_key["fake_first"].id in by_key["fake_second"].upstreams.values()
 
     def test_selected_assets_keep_their_source(self):
         source = FakeSourceWithAssets(select=["fake_first"])
