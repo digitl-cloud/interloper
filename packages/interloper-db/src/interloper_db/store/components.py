@@ -23,7 +23,6 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.asset.base import AssetIdentity
 from interloper.catalog.base import Catalog
 from interloper.errors import (
     CatalogKeyError,
@@ -823,14 +822,10 @@ class ComponentStore:
             child = children_by_key.get(asset_key)
             if child is None:
                 continue
-            all_requires = {**asset_type.requires, **asset_type.optional_requires}
-            for param_name, declared_key in all_requires.items():
-                expected = AssetIdentity.resolve(declared_key, own_source_key=source_key)
-                if expected.source_key != source_key or expected.asset_key == asset_key:
+            for param_name, sibling_key in asset_type.sibling_upstreams(source_key, children_by_key).items():
+                if (child.id, param_name) in bound:
                     continue
-                if expected.asset_key not in children_by_key or (child.id, param_name) in bound:
-                    continue
-                _add_relation(session, child, children_by_key[expected.asset_key], "upstream", param_name)
+                _add_relation(session, child, children_by_key[sibling_key], "upstream", param_name)
 
     def job_partition_granularity(self, session: Session, job_id: UUID) -> TimeGranularity | None:
         """Resolve the granularity a job's partitioned targets share.

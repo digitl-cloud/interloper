@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 from uuid import uuid4
 
 import interloper as il
@@ -47,13 +47,13 @@ class GuardUpstream(il.Asset):
 class GuardRequired(il.Asset):
     """Asset with a required dependency on ``guard_upstream``."""
 
-    requires: ClassVar[dict[str, str]] = {"up": "guard_upstream"}
+    depends_on: ClassVar[dict[str, Any]] = {"up": "guard_upstream"}
 
 
 class GuardOptional(il.Asset):
     """Asset with an optional dependency on ``guard_upstream``."""
 
-    optional_requires: ClassVar[dict[str, str]] = {"up": "guard_upstream"}
+    depends_on: ClassVar[dict[str, Any]] = {"up": il.Dependency(key="guard_upstream", optional=True)}
 
 
 class WireUpSource(il.Source):
@@ -69,7 +69,7 @@ class WireDownSource(il.Source):
     class Consumer(il.Asset):
         """Asset with a required cross-source dependency."""
 
-        requires: ClassVar[dict[str, str]] = {"rows": "wire_up_source.rows"}
+        depends_on: ClassVar[dict[str, Any]] = {"rows": "wire_up_source.rows"}
 
 
 class TestRelations:

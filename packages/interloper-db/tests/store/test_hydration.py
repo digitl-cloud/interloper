@@ -68,9 +68,9 @@ class TestSourceRoundTrip:
         assets_by_key = {type(asset).key: asset for asset in source.assets}
         assert {key: asset.id for key, asset in assets_by_key.items()} == rows_by_key
         assert assets_by_key["e"].upstreams == {
-            "b": rows_by_key["b"],
-            "c": rows_by_key["c"],
-            "d": rows_by_key["d"],
+            "b": [rows_by_key["b"]],
+            "c": [rows_by_key["c"]],
+            "d": [rows_by_key["d"]],
         }
 
     def test_source_owned_asset_loads_through_its_parent(self, store: Store):

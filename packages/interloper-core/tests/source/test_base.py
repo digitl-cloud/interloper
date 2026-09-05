@@ -252,8 +252,8 @@ class TestAssets:
         second_cls = next(
             cls for cls in FakeSourceWithAssets.asset_types if cls.key == "fake_second"
         )
-        assert "fake_first" in second_cls.requires
-        assert second_cls.requires["fake_first"] == f"{FakeSourceWithAssets.key}.fake_first"
+        assert "fake_first" in second_cls.declared_upstreams()
+        assert second_cls.declared_upstreams()["fake_first"].key == f"{FakeSourceWithAssets.key}.fake_first"
 
     def test_infer_upstreams_marks_default_none_as_optional(self):
         class FakeOptionalDepsSource(il.Source):
@@ -267,8 +267,7 @@ class TestAssets:
         second_cls = next(
             cls for cls in FakeOptionalDepsSource.asset_types if cls.key == "fake_b"
         )
-        assert "fake_a" in second_cls.optional_requires
-        assert "fake_a" not in second_cls.requires
+        assert second_cls.declared_upstreams()["fake_a"].optional is True
 
 
 # -- Trickle-down resolution ---------------------------------------------------
@@ -386,9 +385,9 @@ class TestResolution:
         source = FakeSourceWithAssets()
         first = source.fake_first
         second = source.fake_second
-        # ``_infer_upstreams`` populated ``second.requires``; ``_resolve_upstreams``
+        # ``_infer_upstreams`` populated ``second.depends_on``; ``_resolve_upstreams``
         # wires those into ``second.upstreams`` pointing at the sibling's instance id.
-        assert second.upstreams["fake_first"] == first.id
+        assert second.upstreams["fake_first"] == [first.id]
 
 
 # -- __call__ reconfiguration --------------------------------------------------
@@ -540,7 +539,9 @@ class TestSelect:
         assert by_key["fake_second"].materializable
         assert not by_key["fake_first"].materializable
         # The non-materializable sibling stays wired as an upstream.
-        assert by_key["fake_first"].id in by_key["fake_second"].upstreams.values()
+        assert by_key["fake_first"].id in {
+            upstream_id for upstream_ids in by_key["fake_second"].upstreams.values() for upstream_id in upstream_ids
+        }
 
     def test_selected_assets_keep_their_source(self):
         source = FakeSourceWithAssets(select=["fake_first"])

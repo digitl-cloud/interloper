@@ -24,7 +24,7 @@ class ChainSource(il.Source):
     class Middle(il.Asset):
         """Depends on ``root``."""
 
-        requires: ClassVar[dict[str, str]] = {"root": "root"}
+        depends_on: ClassVar[dict[str, Any]] = {"root": "root"}
 
         def data(self, root: Any) -> Any:
             return root
@@ -32,7 +32,7 @@ class ChainSource(il.Source):
     class Leaf(il.Asset):
         """Depends on ``middle``."""
 
-        requires: ClassVar[dict[str, str]] = {"middle": "middle"}
+        depends_on: ClassVar[dict[str, Any]] = {"middle": "middle"}
 
         def data(self, middle: Any) -> Any:
             return middle
@@ -50,7 +50,7 @@ class ForkSource(il.Source):
     class LeftLeaf(il.Asset):
         """Depends on ``root``."""
 
-        requires: ClassVar[dict[str, str]] = {"root": "root"}
+        depends_on: ClassVar[dict[str, Any]] = {"root": "root"}
 
         def data(self, root: Any) -> Any:
             return root
@@ -58,7 +58,7 @@ class ForkSource(il.Source):
     class RightLeaf(il.Asset):
         """Depends on ``root``."""
 
-        requires: ClassVar[dict[str, str]] = {"root": "root"}
+        depends_on: ClassVar[dict[str, Any]] = {"root": "root"}
 
         def data(self, root: Any) -> Any:
             return root

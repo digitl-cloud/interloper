@@ -129,17 +129,19 @@ class DAG:
 
             self.predecessors[operation.id] = []
 
-            for parameter_name, upstream_id in operation.upstreams.items():
-                if upstream_id not in self.operation_map:
-                    if parameter_name in operation.optional_requires:
-                        continue
-                    raise DependencyNotFoundError(
-                        f"'{operation.key}' dependency '{parameter_name}' points to id '{upstream_id}' "
-                        f"which is not in the DAG."
-                    )
+            for parameter_name, upstream_ids in operation.upstreams.items():
+                dependency = operation.declared_upstreams().get(parameter_name)
+                for upstream_id in upstream_ids:
+                    if upstream_id not in self.operation_map:
+                        if dependency is not None and dependency.optional:
+                            continue
+                        raise DependencyNotFoundError(
+                            f"'{operation.key}' dependency '{parameter_name}' points to id '{upstream_id}' "
+                            f"which is not in the DAG."
+                        )
 
-                self.predecessors[operation.id].append(upstream_id)
-                self.successors[upstream_id].append(operation.id)
+                    self.predecessors[operation.id].append(upstream_id)
+                    self.successors[upstream_id].append(operation.id)
 
     # -- Validation ------------------------------------------------------------
 
@@ -153,7 +155,7 @@ class DAG:
         """Let every live node validate its wired upstreams against its contracts.
 
         The contract itself belongs to the node (an asset checks its wired
-        upstream identities against its ``requires`` declaration, see
+        upstream identities against its ``depends_on`` declaration, see
         :meth:`~interloper.asset.base.Asset.validate_upstreams`); the DAG
         only decides which nodes are live.
         """

@@ -72,7 +72,7 @@ class ChainSource(il.Source):
     class Consumer(il.Asset):
         """Passes the failing upstream's rows through."""
 
-        requires: ClassVar[dict[str, str]] = {"broken": "broken"}
+        depends_on: ClassVar[dict[str, Any]] = {"broken": "broken"}
 
         def data(self, broken: Any) -> Any:
             return broken
