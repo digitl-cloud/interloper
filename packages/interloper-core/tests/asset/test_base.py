@@ -15,6 +15,7 @@ import pytest
 import interloper as il
 from interloper.asset.base import AssetDefinition, AssetIdentity
 from interloper.component.base import Component
+from interloper.dag import DAG
 from interloper.errors import AssetError, DestinationError, PartitionError
 from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
@@ -945,12 +946,15 @@ class TestDependencyResolution:
         with pytest.raises(AssetError, match="has upstreams but no DAG provided"):
             await consumer.run_async()
 
-    async def test_an_optional_dependency_without_a_dag_resolves_to_none(self):
+    async def test_an_optional_dependency_without_a_dag_is_also_an_actionable_error(self):
+        # A DAG is what resolves an upstream id to its asset; without one there is
+        # nothing to read, optional slot or not.
         il.MemoryDestination.clear()
         source = DependentSource(destinations=[il.MemoryDestination()])
         tolerant = next(asset for asset in source.assets if asset.key == "tolerant")
 
-        assert await tolerant.run_async() == [{"fallback": True}]
+        with pytest.raises(AssetError, match="has upstreams but no DAG provided"):
+            await tolerant.run_async()
 
     async def test_a_required_dependency_is_read_from_the_upstream_destination(self):
         il.MemoryDestination.clear()
@@ -1278,3 +1282,168 @@ class TestUpstreamsShape:
         assert init is not None
         assert init["upstreams"] == {"campaigns": ["id-1", "id-2"], "rules": ["id-9"]}
         assert il.Asset.from_spec(spec).upstreams == {"campaigns": ["id-1", "id-2"], "rules": ["id-9"]}
+
+
+# -- Upstream reads --------------------------------------------------------------
+
+
+class FakeLegSourceOne(il.Source):
+    """Provider one."""
+
+    class Campaigns(il.Asset):
+        """Daily campaigns."""
+
+        partitioning: ClassVar[PartitionConfig | None] = TimePartitionConfig(column="date")
+
+        def data(self, context: il.ExecutionContext) -> Any:
+            return [{"date": context.partition_date, "id": "one"}]
+
+
+class FakeLegSourceTwo(il.Source):
+    """Provider two."""
+
+    class Campaigns(il.Asset):
+        """Daily campaigns."""
+
+        partitioning: ClassVar[PartitionConfig | None] = TimePartitionConfig(column="date")
+
+        def data(self, context: il.ExecutionContext) -> Any:
+            return [{"date": context.partition_date, "id": "two"}]
+
+
+class TestUpstreamReads:
+    @staticmethod
+    def _matcher() -> type[il.Asset]:
+        @il.asset(
+            depends_on={"campaigns": il.Dependency(key="*.campaigns", many=True)},
+            partitioning=TimePartitionConfig(column="date"),
+        )
+        def matches(context: il.ExecutionContext, campaigns: list[il.Upstream]) -> Any:
+            rows = []
+            for leg in campaigns:
+                assert leg.asset.source is not None
+                rows.append(
+                    {
+                        "date": context.partition_date,
+                        "source": leg.asset.source.key,
+                        "rows": len(leg.data) if leg.data is not None else None,
+                    }
+                )
+            return rows
+
+        return matches
+
+    def test_many_slot_receives_one_upstream_per_leg(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+        one, two = FakeLegSourceOne(destinations=[mem]), FakeLegSourceTwo(destinations=[mem])
+        matcher = self._matcher()(destinations=[mem])
+        partition = TimePartition(dt.date(2026, 1, 1))
+        result = DAG(one, two, matcher).materialize(partition)
+        assert result.status is ExecutionStatus.COMPLETED
+        rows = mem.read(il.IOContext(asset=matcher, partition_or_window=partition))
+        assert sorted(row["source"] for row in rows) == ["fake_leg_source_one", "fake_leg_source_two"]
+        assert all(row["rows"] == 1 for row in rows)
+
+    def test_missing_leg_arrives_as_none_with_a_warning(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+        one, two = FakeLegSourceOne(destinations=[mem]), FakeLegSourceTwo(destinations=[mem])
+        partition = TimePartition(dt.date(2026, 1, 1))
+        DAG(one).materialize(partition)  # only provider one has data
+        matcher = self._matcher()(destinations=[mem])
+        warnings_seen: list[Event] = []
+
+        def handler(event: Event) -> None:
+            if event.metadata.get("level") == "WARNING":
+                warnings_seen.append(event)
+
+        EventBus.subscribe(handler)
+        try:
+            result = DAG(one(materializable=False), two(materializable=False), matcher).materialize(partition)
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(handler)
+        assert result.status is ExecutionStatus.COMPLETED
+        read_context = il.IOContext(asset=matcher, partition_or_window=partition)
+        rows = {row["source"]: row["rows"] for row in mem.read(read_context)}
+        assert rows == {"fake_leg_source_one": 1, "fake_leg_source_two": None}
+        assert any("found no data in upstream" in e.metadata.get("message", "") for e in warnings_seen)
+
+    def test_other_read_errors_fail_the_asset(self):
+        class Broken(il.Destination):
+            """Destination whose reads always fail for a reason other than missing data."""
+
+            def read(self, context: il.IOContext) -> Any:
+                raise RuntimeError("boom")
+
+            def write(self, context: il.IOContext, data: Any) -> None:
+                return None
+
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+        one = FakeLegSourceOne(destinations=[Broken()])
+        matcher = self._matcher()(destinations=[mem])
+        partition = TimePartition(dt.date(2026, 1, 1))
+        result = DAG(one(materializable=False), matcher).materialize(partition)
+        assert result.status is ExecutionStatus.FAILED
+
+    def test_optional_many_slot_with_nothing_bound_receives_an_empty_list(self):
+        il.MemoryDestination.clear()
+
+        @il.asset(depends_on={"campaigns": il.Dependency(key="*.campaigns", optional=True, many=True)})
+        def lonely(campaigns: list[il.Upstream]) -> Any:
+            return [{"n": len(campaigns)}]
+
+        asset = lonely(destinations=[il.MemoryDestination()])
+        assert asset.run(dag=DAG(asset)) == [{"n": 0}]
+
+    def test_single_slot_receives_raw_data(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+        one = FakeLegSourceOne(destinations=[mem])
+        partition = TimePartition(dt.date(2026, 1, 1))
+        DAG(one).materialize(partition)
+
+        @il.asset(depends_on={"c": "fake_leg_source_one.campaigns"}, partitioning=TimePartitionConfig(column="date"))
+        def single(context: il.ExecutionContext, c: Any) -> Any:
+            return [{"date": context.partition_date, "ids": [row["id"] for row in c]}]
+
+        asset = single(destinations=[mem])
+        DAG(one(materializable=False), asset).materialize(partition)
+        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
+            {"date": dt.date(2026, 1, 1), "ids": ["one"]}
+        ]
+
+    def test_optional_single_slot_is_none_on_missing_data_and_fails_otherwise(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+        one = FakeLegSourceOne(destinations=[mem])
+
+        @il.asset(
+            depends_on={"c": il.Dependency(key="fake_leg_source_one.campaigns", optional=True)},
+            partitioning=TimePartitionConfig(column="date"),
+        )
+        def lenient(context: il.ExecutionContext, c: Any = None) -> Any:
+            return [{"date": context.partition_date, "got": c is not None}]
+
+        asset = lenient(destinations=[mem])
+        partition = TimePartition(dt.date(2030, 5, 5))  # provider never ran for this day
+        result = DAG(one(materializable=False), asset).materialize(partition)
+        assert result.status is ExecutionStatus.COMPLETED
+        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
+            {"date": dt.date(2030, 5, 5), "got": False}
+        ]
+
+        class Broken(il.Destination):
+            """Destination whose reads always fail for a reason other than missing data."""
+
+            def read(self, context: il.IOContext) -> Any:
+                raise RuntimeError("boom")
+
+            def write(self, context: il.IOContext, data: Any) -> None:
+                return None
+
+        broken = FakeLegSourceOne(destinations=[Broken()])
+        asset = lenient(destinations=[mem])
+        assert DAG(broken(materializable=False), asset).materialize(partition).status is ExecutionStatus.FAILED
