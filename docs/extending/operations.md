@@ -38,12 +38,12 @@ plain defaults that make any subclass a valid node; `Asset` overrides them with 
 |--------|---------|-------|
 | `id`, `kind`, `key`, `qualified_key` | from `Component` | qualified with the source key |
 | `materializable` | `True` | field |
-| `upstreams` | `{}` | parameter name to upstream id |
-| `optional_requires` | `{}` | class contract |
+| `upstreams` | `{}` | parameter name to upstream ids |
+| `declared_upstreams()` | `{}` | `depends_on` as `Dependency` objects |
 | `source` | `None` | the owning source |
 | `partitioning` | `None` | the partition config |
 | `effective_partition(scope)` | scope if partitioned else `None` | same |
-| `validate_upstreams(nodes)` | no-op | checks `requires` contracts |
+| `validate_upstreams(nodes)` | no-op | checks the signature, cardinality and identities |
 | `_event_metadata(metadata, scope)` | component identity | adds `qualified_key`, `source_id` |
 
 ## Writing an operation

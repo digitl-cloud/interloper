@@ -119,8 +119,9 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
 | Name instances by a field | `discriminator=True` on that field (also suffixes table names) |
 | Hourly, monthly, yearly partitions | `il.TimePartitionConfig(column=..., granularity=il.TimeGranularity.MONTH)` |
 | Whole ranges in one call | `il.TimePartitionConfig(column=..., allow_window=True)`, then read `context.window` |
-| Cross-source dependency | `requires={"param": "other_source.asset"}` declares the contract; wire it with `asset.upstreams["param"] = other.asset.id` before `il.DAG(...)`, or by `id` in the spec (interloper-manifest skill) |
-| Optional dependency | parameter default `None`, or `optional_requires` |
+| Cross-source dependency | `depends_on={"param": "other_source.asset"}` declares the contract; the DAG wires it when one match is present, otherwise wire by id |
+| Optional dependency | parameter default `None`, or `depends_on={"param": il.Dependency(key="key", optional=True)}` |
+| Fan in over every matching asset | `depends_on={"param": il.Dependency(key="*.asset_key", many=True)}`, `data()` receives `list[il.Upstream]` |
 | Reshape vendor payloads | `normalizer=il.Normalizer(flatten_max_level=1, snake_case_digits=True)` |
 | OAuth service | subclass `il.RefreshTokenOAuthConnection` with `@il.connection(oauth=il.OAuthConfig("google", scope=...))` |
 

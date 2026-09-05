@@ -88,7 +88,7 @@ pickers from:
 Declarations are **extend-only**: a subclass's `relation_types` merges over its parent's, so
 `TriggerHook` adds `target` without losing `watch` and `resource`. `relation_definitions()`
 returns the vocabulary enriched with the class's own slots: resource slots from
-`resource_types`, upstream slots from `requires`, allowed destination keys from
+`resource_types`, upstream slots from `depends_on`, allowed destination keys from
 `destination_types`.
 
 A relation whose `field` does not exist on the class raises `ValueError` when the definition is
