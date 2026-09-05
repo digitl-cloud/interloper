@@ -14,7 +14,7 @@ export interface RelationDefinition {
     keys: string[]
     /**
      * Declared slots. Set for `resource` (slot → resource key) and
-     * `dependency` (param → upstream asset key, possibly qualified
+     * `upstream` (param → upstream asset key, possibly qualified
      * `source_key.asset_key`; `required` flag meaningful).
      */
     slots: Record<string, RelationSlot>
@@ -73,15 +73,15 @@ export function resourceSlots(defn: ComponentDefinition): Record<string, string>
     return Object.fromEntries(Object.entries(slots).map(([slot, s]) => [slot, s.key]))
 }
 
-/** Dependency slots: param name → upstream asset key + required flag. */
-export function dependencySlots(defn: ComponentDefinition): Record<string, RelationSlot> {
-    return defn.relations?.dependency?.slots ?? {}
+/** Upstream slots: param name → upstream asset key + required flag. */
+export function upstreamSlots(defn: ComponentDefinition): Record<string, RelationSlot> {
+    return defn.relations?.upstream?.slots ?? {}
 }
 
-/** Required dependency params → upstream asset key (bare or qualified). */
-export function requiredDependencies(defn: ComponentDefinition): Record<string, string> {
+/** Required upstream params → upstream asset key (bare or qualified). */
+export function requiredUpstreams(defn: ComponentDefinition): Record<string, string> {
     return Object.fromEntries(
-        Object.entries(dependencySlots(defn))
+        Object.entries(upstreamSlots(defn))
             .filter(([, s]) => s.required)
             .map(([param, s]) => [param, s.key]),
     )

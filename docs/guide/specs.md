@@ -35,7 +35,7 @@ settings-configured catalog built lazily.
 
 A source is the unit of reconstruction. Its spec carries the assets as an **override map**
 keyed by asset key rather than as individual specs, which keeps the document compact and lets
-per-asset state (destinations, `materializable`, dependency wiring) survive:
+per-asset state (destinations, `materializable`, upstream wiring) survive:
 
 ```py
 Shop(account_id="act_1").to_spec().init

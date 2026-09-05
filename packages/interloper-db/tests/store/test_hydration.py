@@ -42,7 +42,7 @@ class TestSourceRoundTrip:
         assert db_source.kind == "source"
         assert sorted(child.key for child in db_source.children) == ["a", "b", "c", "d", "e"]
 
-        deps = store.relations.list_all(_ORG, type="dependency")
+        deps = store.relations.list_all(_ORG, type="upstream")
         by_child = {}
         children_by_id = {child.id: child.key for child in db_source.children}
         for rel in deps:
@@ -67,7 +67,7 @@ class TestSourceRoundTrip:
         rows_by_key = {child.key: str(child.id) for child in db_source.children}
         assets_by_key = {type(asset).key: asset for asset in source.assets}
         assert {key: asset.id for key, asset in assets_by_key.items()} == rows_by_key
-        assert assets_by_key["e"].dependencies == {
+        assert assets_by_key["e"].upstreams == {
             "b": rows_by_key["b"],
             "c": rows_by_key["c"],
             "d": rows_by_key["d"],
@@ -90,7 +90,7 @@ class TestSourceRoundTrip:
         refreshed = store.components.get(db_source.id, kind="source")
         assert sorted(child.key for child in refreshed.children) == ["a", "b"]
         # e (and its dependency relations) are gone; b keeps its dep on a.
-        remaining = store.relations.list_all(_ORG, type="dependency")
+        remaining = store.relations.list_all(_ORG, type="upstream")
         assert [rel.slot for rel in remaining] == ["a"]
 
 

@@ -1,5 +1,5 @@
 import type { Connection } from '@vue-flow/core'
-import { dependencySlots, qualifiedKey } from '~/types/catalog'
+import { upstreamSlots, qualifiedKey } from '~/types/catalog'
 import type { ComponentRecord, Relation } from '~/types/component'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ export interface DependencyPair {
 
 interface UseGraphConnectionRulesOptions {
     sources: Ref<ComponentRecord[]>
-    /** Persisted `dependency` relations (src = downstream asset, dst = upstream). */
+    /** Persisted `upstream` relations (src = downstream asset, dst = upstream). */
     assetDependencies: Ref<Relation[]>
     assetToSource: Ref<Map<string, string | null>>
     /** asset id → qualified key ("source_key.asset_key") */
@@ -225,7 +225,7 @@ export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions)
         for (const downstream of downstreamAssets) {
             const spec = options.getAssetDefinition(downstream.qk)
             if (!spec) continue
-            const allReqs = dependencySlots(spec)
+            const allReqs = upstreamSlots(spec)
             for (const upstream of upstreamAssets) {
                 if (upstream.id === downstream.id) continue
                 // Find the param name that this upstream satisfies

@@ -8,7 +8,7 @@ const componentsStore = useComponentsStore()
 const runsStore = useRunsStore()
 const toast = useToast()
 const { confirm } = useConfirm()
-const { loading, dependencies } = storeToRefs(componentsStore)
+const { loading, upstreams } = storeToRefs(componentsStore)
 const sources = computed(() => componentsStore.byKind('source'))
 const destinations = computed(() => componentsStore.byKind('destination'))
 const jobs = computed(() => componentsStore.byKind('job'))
@@ -17,7 +17,7 @@ const { getWarnings, filterByCategory } = useAssetWarnings()
 const { statusBadge } = useDrift()
 const { data, sourceInfoById, typeInfoByKey, assetCount } = useCollectionRows({
     sources,
-    dependencies,
+    upstreams,
     destinations,
     jobs,
     runs,

@@ -124,11 +124,11 @@ class TestRelations:
         upstream = store.components.create(_ORG, kind="asset", key="a")
         downstream = store.components.create(_ORG, kind="asset", key="b")
 
-        relation = store.relations.add(downstream.id, type="dependency", dst_id=upstream.id, slot="a")
+        relation = store.relations.add(downstream.id, type="upstream", dst_id=upstream.id, slot="a")
         assert (relation.src_id, relation.dst_id, relation.slot) == (downstream.id, upstream.id, "a")
-        assert len(store.relations.list_all(_ORG, type="dependency")) == 1
+        assert len(store.relations.list_all(_ORG, type="upstream")) == 1
 
-        store.relations.remove(downstream.id, type="dependency", dst_id=upstream.id)
+        store.relations.remove(downstream.id, type="upstream", dst_id=upstream.id)
         assert store.relations.list_all(_ORG) == []
 
 
@@ -185,34 +185,34 @@ class TestDependencySlotValidation:
         source = demo_store.components.create(_ORG, kind="source", key="demo_source")
         with pytest.raises(ConfigError, match="declares no slot 'nope'"):
             demo_store.relations.add(
-                _child(source, "b").id, type="dependency", dst_id=_child(source, "a").id, slot="nope"
+                _child(source, "b").id, type="upstream", dst_id=_child(source, "a").id, slot="nope"
             )
 
     def test_wrong_target_key_rejected(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source")
         with pytest.raises(ConfigError, match="expects asset 'demo_source.a', got 'e'"):
             demo_store.relations.add(
-                _child(source, "b").id, type="dependency", dst_id=_child(source, "e").id, slot="a"
+                _child(source, "b").id, type="upstream", dst_id=_child(source, "e").id, slot="a"
             )
 
     def test_self_edge_rejected(self, store: Store):
         asset = store.components.create(_ORG, kind="asset", key="a")
         with pytest.raises(ConfigError, match="itself"):
-            store.relations.add(asset.id, type="dependency", dst_id=asset.id, slot="x")
+            store.relations.add(asset.id, type="upstream", dst_id=asset.id, slot="x")
 
     def test_cross_instance_sibling_rejected(self, demo_store: Store):
         first = demo_store.components.create(_ORG, kind="source", key="demo_source")
         second = demo_store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "other"})
         with pytest.raises(ConfigError, match="sibling asset of the same source instance"):
             demo_store.relations.add(
-                _child(first, "b").id, type="dependency", dst_id=_child(second, "a").id, slot="a"
+                _child(first, "b").id, type="upstream", dst_id=_child(second, "a").id, slot="a"
             )
 
     def test_cross_source_dep_accepts_any_instance(self, wire_store: Store):
         up_two = wire_store.components.create(_ORG, kind="source", key="wire_up_source", config={"dataset": "two"})
         down = wire_store.components.create(_ORG, kind="source", key="wire_down_source")
         relation = wire_store.relations.add(
-            _child(down, "consumer").id, type="dependency", dst_id=_child(up_two, "rows").id, slot="rows"
+            _child(down, "consumer").id, type="upstream", dst_id=_child(up_two, "rows").id, slot="rows"
         )
         assert relation.dst_id == _child(up_two, "rows").id
 
@@ -224,7 +224,7 @@ class TestDependencySlotValidation:
         down = store.components.create(_ORG, kind="source", key="wire_down_source")
         with pytest.raises(ConfigError, match="expects asset 'wire_up_source.rows'"):
             store.relations.add(
-                _child(down, "consumer").id, type="dependency", dst_id=_child(demo, "a").id, slot="rows"
+                _child(down, "consumer").id, type="upstream", dst_id=_child(demo, "a").id, slot="rows"
             )
 
 
@@ -241,10 +241,10 @@ class TestRelationUpsert:
         down = wire_store.components.create(_ORG, kind="source", key="wire_down_source")
         consumer = _child(down, "consumer")
 
-        wire_store.relations.add(consumer.id, type="dependency", dst_id=_child(up_one, "rows").id, slot="rows")
-        wire_store.relations.add(consumer.id, type="dependency", dst_id=_child(up_two, "rows").id, slot="rows")
+        wire_store.relations.add(consumer.id, type="upstream", dst_id=_child(up_one, "rows").id, slot="rows")
+        wire_store.relations.add(consumer.id, type="upstream", dst_id=_child(up_two, "rows").id, slot="rows")
 
-        (edge,) = wire_store.relations.list_all(_ORG, type="dependency")
+        (edge,) = wire_store.relations.list_all(_ORG, type="upstream")
         assert edge.dst_id == _child(up_two, "rows").id
 
     def test_identical_add_is_a_noop(self, wire_store: Store):
@@ -252,11 +252,11 @@ class TestRelationUpsert:
         down = wire_store.components.create(_ORG, kind="source", key="wire_down_source")
         consumer, rows = _child(down, "consumer"), _child(up, "rows")
 
-        first = wire_store.relations.add(consumer.id, type="dependency", dst_id=rows.id, slot="rows")
-        second = wire_store.relations.add(consumer.id, type="dependency", dst_id=rows.id, slot="rows")
+        first = wire_store.relations.add(consumer.id, type="upstream", dst_id=rows.id, slot="rows")
+        second = wire_store.relations.add(consumer.id, type="upstream", dst_id=rows.id, slot="rows")
 
         assert (second.src_id, second.dst_id, second.slot) == (first.src_id, first.dst_id, first.slot)
-        assert len(wire_store.relations.list_all(_ORG, type="dependency")) == 1
+        assert len(wire_store.relations.list_all(_ORG, type="upstream")) == 1
 
 
 class TestRequiredDependencyUnbindGuard:
@@ -269,36 +269,36 @@ class TestRequiredDependencyUnbindGuard:
     def test_remove_required_dependency_refused(self, dep_store: Store):
         up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
         down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_required", relations={"dependency": [(up.id, "up")]}
+            _ORG, kind="asset", key="guard_required", relations={"upstream": [(up.id, "up")]}
         )
         with pytest.raises(ConfigError, match="cannot be unbound"):
-            dep_store.relations.remove(down.id, type="dependency", dst_id=up.id)
-        assert len(dep_store.relations.list_all(_ORG, type="dependency")) == 1
+            dep_store.relations.remove(down.id, type="upstream", dst_id=up.id)
+        assert len(dep_store.relations.list_all(_ORG, type="upstream")) == 1
 
     def test_remove_optional_dependency_allowed(self, dep_store: Store):
         up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
         down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_optional", relations={"dependency": [(up.id, "up")]}
+            _ORG, kind="asset", key="guard_optional", relations={"upstream": [(up.id, "up")]}
         )
-        dep_store.relations.remove(down.id, type="dependency", dst_id=up.id)
-        assert dep_store.relations.list_all(_ORG, type="dependency") == []
+        dep_store.relations.remove(down.id, type="upstream", dst_id=up.id)
+        assert dep_store.relations.list_all(_ORG, type="upstream") == []
 
     def test_sync_clear_of_required_dependency_refused(self, dep_store: Store):
         up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
         down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_required", relations={"dependency": [(up.id, "up")]}
+            _ORG, kind="asset", key="guard_required", relations={"upstream": [(up.id, "up")]}
         )
         with pytest.raises(ConfigError, match="cannot be unbound"):
-            dep_store.components.update(down.id, relations={"dependency": []})
+            dep_store.components.update(down.id, relations={"upstream": []})
 
     def test_sync_repoint_of_required_dependency_allowed(self, dep_store: Store):
         up_one = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
         up_two = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
         down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_required", relations={"dependency": [(up_one.id, "up")]}
+            _ORG, kind="asset", key="guard_required", relations={"upstream": [(up_one.id, "up")]}
         )
-        dep_store.components.update(down.id, relations={"dependency": [(up_two.id, "up")]})
-        (edge,) = dep_store.relations.list_all(_ORG, type="dependency")
+        dep_store.components.update(down.id, relations={"upstream": [(up_two.id, "up")]})
+        (edge,) = dep_store.relations.list_all(_ORG, type="upstream")
         assert edge.dst_id == up_two.id
 
 

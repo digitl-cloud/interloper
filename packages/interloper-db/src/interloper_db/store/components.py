@@ -788,15 +788,15 @@ class ComponentStore:
             session.add(children[key])
         session.flush()
 
-        self._wire_intra_deps(session, source_cls, children)
+        self._wire_intra_upstreams(session, source_cls, children)
 
     @staticmethod
-    def _wire_intra_deps(
+    def _wire_intra_upstreams(
         session: Session,
         source_cls: type[il.Source],
         children_by_key: dict[str, Component],
     ) -> None:
-        """Top up missing intra-source dependency relations from class metadata.
+        """Top up missing intra-source upstream relations from class metadata.
 
         Idempotent over the full child set — assets enabled after their
         siblings still get the edges *into* them wired. Slots that already
@@ -804,7 +804,7 @@ class ComponentStore:
 
         Args:
             session: Open session the relations are added to.
-            source_cls: The catalog class declaring the dependencies.
+            source_cls: The catalog class declaring the upstreams.
             children_by_key: The source's enabled child rows, keyed by asset key.
         """
         source_key = source_cls.key
@@ -814,7 +814,7 @@ class ComponentStore:
             for row in session.exec(
                 select(ComponentRelation.src_id, ComponentRelation.slot).where(
                     col(ComponentRelation.src_id).in_(child_ids),
-                    ComponentRelation.type == "dependency",
+                    ComponentRelation.type == "upstream",
                 )
             ).all()
         }
@@ -830,7 +830,7 @@ class ComponentStore:
                     continue
                 if expected.asset_key not in children_by_key or (child.id, param_name) in bound:
                     continue
-                _add_relation(session, child, children_by_key[expected.asset_key], "dependency", param_name)
+                _add_relation(session, child, children_by_key[expected.asset_key], "upstream", param_name)
 
     def job_partition_granularity(self, session: Session, job_id: UUID) -> TimeGranularity | None:
         """Resolve the granularity a job's partitioned targets share.

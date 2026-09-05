@@ -37,7 +37,7 @@ const emit = defineEmits<{
 
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
-const { loading, dependencies: assetDependencies } = storeToRefs(componentsStore)
+const { loading, upstreams: assetDependencies } = storeToRefs(componentsStore)
 
 const { model } = useCollectionGraph({ sourceIds: () => props.sourceIds })
 

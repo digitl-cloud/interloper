@@ -201,7 +201,7 @@ class TestDeleteInUseGuard:
             session.add(b)
             session.commit()
             a_id, b_id = a.id, b.id
-        store.relations.add(b_id, type="dependency", dst_id=a_id, slot="a")
+        store.relations.add(b_id, type="upstream", dst_id=a_id, slot="a")
 
         store.components.delete(parent.id)
         with pytest.raises(NotFoundError):
@@ -234,7 +234,7 @@ class TestDependencyDeleteSemantics:
     def test_required_dependency_blocks(self, dep_store: Store):
         up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
         down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_required", relations={"dependency": [(up.id, "up")]}
+            _ORG, kind="asset", key="guard_required", relations={"upstream": [(up.id, "up")]}
         )
 
         with pytest.raises(InUseError) as excinfo:
@@ -244,7 +244,7 @@ class TestDependencyDeleteSemantics:
     def test_optional_dependency_detaches(self, dep_store: Store):
         up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
         down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_optional", relations={"dependency": [(up.id, "up")]}
+            _ORG, kind="asset", key="guard_optional", relations={"upstream": [(up.id, "up")]}
         )
 
         dep_store.components.delete(up.id)
@@ -292,15 +292,15 @@ class TestIntraSourceWiring:
 
     def test_full_dag_wired_on_create(self, demo_store: Store):
         demo_store.components.create(_ORG, kind="source", key="demo_source")
-        edges = demo_store.relations.list_all(_ORG, type="dependency")
+        edges = demo_store.relations.list_all(_ORG, type="upstream")
         assert len(edges) == 6  # b,c,d -> a and e -> b,c,d
 
     def test_children_enabled_later_get_inbound_edges(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
-        assert [r.slot for r in demo_store.relations.list_all(_ORG, type="dependency")] == ["b"]  # only e -> b
+        assert [r.slot for r in demo_store.relations.list_all(_ORG, type="upstream")] == ["b"]  # only e -> b
 
         updated = demo_store.components.update(source.id, children=["a", "b", "e"])
-        edges = demo_store.relations.list_all(_ORG, type="dependency")
+        edges = demo_store.relations.list_all(_ORG, type="upstream")
         by_slot = {r.slot: (r.src_id, r.dst_id) for r in edges}
         assert set(by_slot) == {"a", "b"}
         assert by_slot["a"] == (_child(updated, "b").id, _child(updated, "a").id)
@@ -309,7 +309,7 @@ class TestIntraSourceWiring:
         source = demo_store.components.create(_ORG, kind="source", key="demo_source")
         demo_store.components.update(source.id, name="renamed")
         demo_store.components.update(source.id, children=["a", "b", "c", "d", "e"])
-        assert len(demo_store.relations.list_all(_ORG, type="dependency")) == 6
+        assert len(demo_store.relations.list_all(_ORG, type="upstream")) == 6
 
     def test_update_without_children_leaves_child_set_untouched(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
@@ -328,24 +328,24 @@ class TestChildRemovalGuard:
         up = wire_store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
         down = wire_store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
         wire_store.relations.add(
-            _child(down, "consumer").id, type="dependency", dst_id=_child(up, "rows").id, slot="rows"
+            _child(down, "consumer").id, type="upstream", dst_id=_child(up, "rows").id, slot="rows"
         )
 
         with pytest.raises(InUseError) as excinfo:
             wire_store.components.update(up.id, children=[])
         assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
-        assert wire_store.relations.list_all(_ORG, type="dependency") != []
+        assert wire_store.relations.list_all(_ORG, type="upstream") != []
 
     def test_removing_child_with_optional_external_dep_detaches(self, wire_store: Store):
         up = wire_store.components.create(_ORG, kind="source", key="wire_up_source")
         down = wire_store.components.create(_ORG, kind="source", key="wire_down_optional_source")
         wire_store.relations.add(
-            _child(down, "reader").id, type="dependency", dst_id=_child(up, "rows").id, slot="rows"
+            _child(down, "reader").id, type="upstream", dst_id=_child(up, "rows").id, slot="rows"
         )
 
         updated = wire_store.components.update(up.id, children=[])
         assert updated.children == []
-        assert wire_store.relations.list_all(_ORG, type="dependency") == []
+        assert wire_store.relations.list_all(_ORG, type="upstream") == []
 
     def test_intra_source_reshape_not_blocked(self, component_db: Engine):
         from interloper_assets.demo.source import DemoSource
@@ -354,7 +354,7 @@ class TestChildRemovalGuard:
         source = store.components.create(_ORG, kind="source", key="demo_source")
         updated = store.components.update(source.id, children=["a"])
         assert [child.key for child in updated.children] == ["a"]
-        assert store.relations.list_all(_ORG, type="dependency") == []
+        assert store.relations.list_all(_ORG, type="upstream") == []
 
 
 class DiscriminatedSource(il.Source):

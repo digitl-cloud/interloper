@@ -231,7 +231,7 @@ class TestKinds:
         assert il.KINDS["job"].sensitive is False
 
     def test_relation_vocabulary_from_anchors(self):
-        assert set(il.KINDS["asset"].relation_types) == {"resource", "destination", "dependency"}
+        assert set(il.KINDS["asset"].relation_types) == {"resource", "destination", "upstream"}
         assert il.KINDS["job"].relation_types["target"].kinds == ["source", "asset"]
 
     def test_unknown_kind_fails_loudly(self):

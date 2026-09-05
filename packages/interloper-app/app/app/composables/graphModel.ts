@@ -77,7 +77,7 @@ export function useCollectionGraph(options: CollectionGraphOptions = {}) {
             })
         }
 
-        return assemble(sourceEntries, assetEntries, componentsStore.dependencies)
+        return assemble(sourceEntries, assetEntries, componentsStore.upstreams)
     })
 
     return { model }
@@ -125,7 +125,7 @@ export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
             })
         }
 
-        return assemble(sourceEntries, assetEntries, componentsStore.dependencies)
+        return assemble(sourceEntries, assetEntries, componentsStore.upstreams)
     })
 
     return { model }
@@ -184,7 +184,7 @@ export function useRunGraph(runId: MaybeRefOrGetter<string>) {
             })
         }
 
-        return assemble(sourceEntries, assetEntries, componentsStore.dependencies)
+        return assemble(sourceEntries, assetEntries, componentsStore.upstreams)
     })
 
     return { model }

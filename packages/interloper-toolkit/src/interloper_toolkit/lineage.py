@@ -30,7 +30,7 @@ def get_upstream(ctx: ToolkitContext, asset_id: str) -> UpstreamResult | ToolErr
     including the parameter name used for each dependency.
     """
     try:
-        deps = ctx.store.relations.list_all(ctx.org_id, type="dependency")
+        deps = ctx.store.relations.list_all(ctx.org_id, type="upstream")
         target = UUID(asset_id)
 
         upstream = []
@@ -58,7 +58,7 @@ def get_downstream(ctx: ToolkitContext, asset_id: str) -> DownstreamResult | Too
     Returns the list of assets that directly depend on this asset.
     """
     try:
-        deps = ctx.store.relations.list_all(ctx.org_id, type="dependency")
+        deps = ctx.store.relations.list_all(ctx.org_id, type="upstream")
         target = UUID(asset_id)
 
         downstream = []
@@ -165,7 +165,7 @@ def cross_source_dependencies(ctx: ToolkitContext) -> CrossSourceDependencies | 
     different sources.
     """
     try:
-        deps = ctx.store.relations.list_all(ctx.org_id, type="dependency")
+        deps = ctx.store.relations.list_all(ctx.org_id, type="upstream")
         assets = ctx.store.components.list_all(ctx.org_id, kinds=["asset"])
 
         asset_source: dict[UUID, UUID | None] = {}
@@ -211,7 +211,7 @@ def _build_adjacency(
         ``(adjacency_map, asset_info_map)`` — info values feed
         :class:`LineageItem` kwargs (asset_key, source_id, source_key).
     """
-    deps = ctx.store.relations.list_all(ctx.org_id, type="dependency")
+    deps = ctx.store.relations.list_all(ctx.org_id, type="upstream")
     assets = ctx.store.components.list_all(ctx.org_id, kinds=["asset"])
 
     asset_info: dict[UUID, dict[str, str]] = {}

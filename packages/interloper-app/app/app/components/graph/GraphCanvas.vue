@@ -550,7 +550,7 @@ const edges = computed<Edge[]>(() => {
                 : { stroke: 'var(--graph-edge)', strokeWidth: 1.5, opacity: '0.15' }
         return {
             ...e,
-            type: 'dependency',
+            type: 'upstream',
             zIndex: active ? 1003 : 1001,
             style,
         }
@@ -756,7 +756,7 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                                 :selected="data.asset.id === selectedId"
                                 @view="emit('asset-click', data.asset, data.assetDefn, data.source)" />
             </template>
-            <template #edge-dependency="edgeProps">
+            <template #edge-upstream="edgeProps">
                 <GraphDependencyEdge v-bind="edgeProps" />
             </template>
             <Background :size=".8" />

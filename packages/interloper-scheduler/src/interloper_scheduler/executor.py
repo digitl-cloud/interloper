@@ -177,7 +177,7 @@ class RunExecutor:
         while frontier:
             next_frontier: list[il.Operation] = []
             for operation in frontier:
-                for dependency_id in operation.dependencies.values():
+                for dependency_id in operation.upstreams.values():
                     if dependency_id in visited:
                         continue
                     visited.add(dependency_id)

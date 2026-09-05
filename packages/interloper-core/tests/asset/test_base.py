@@ -169,7 +169,7 @@ class TestDefinition:
         assert defn.name
         assert defn.relations["resource"].slots == {}
         assert defn.relations["destination"].keys == []
-        assert defn.relations["dependency"].slots == {}
+        assert defn.relations["upstream"].slots == {}
         assert defn.asset_schema is None
         assert defn.partitioning is None
 
@@ -197,7 +197,7 @@ class TestDefinition:
             requires: ClassVar[dict[str, str]] = {"upstream": "other_source.things"}
             optional_requires: ClassVar[dict[str, str]] = {"extra": "other_source.extras"}
 
-        slots = FakeDependentAsset.definition().relations["dependency"].slots
+        slots = FakeDependentAsset.definition().relations["upstream"].slots
         assert slots["upstream"].key == "other_source.things"
         assert slots["upstream"].required is True
         assert slots["extra"].required is False
@@ -461,8 +461,8 @@ class TestReconfiguration:
         assert reconfigured.destinations == [new_dest]
 
     def test_override_deps(self):
-        reconfigured = FakeAsset()(dependencies={"upstream": "abc"})
-        assert reconfigured.dependencies == {"upstream": "abc"}
+        reconfigured = FakeAsset()(upstreams={"upstream": "abc"})
+        assert reconfigured.upstreams == {"upstream": "abc"}
 
     def test_resources_are_merged_not_replaced(self):
         existing = FakeResource(value="existing")
@@ -514,9 +514,9 @@ class TestSerialization:
         assert config.value == "abc"
 
     def test_asset_with_deps_roundtrip(self):
-        asset = FakeAsset(dependencies={"upstream": "asset-id-123"})
+        asset = FakeAsset(upstreams={"upstream": "asset-id-123"})
         restored = FakeAsset.from_spec(asset.to_spec())
-        assert restored.dependencies == {"upstream": "asset-id-123"}
+        assert restored.upstreams == {"upstream": "asset-id-123"}
 
     def test_asset_preserves_instance_id(self):
         asset = FakeAsset(id="fixed123")
@@ -926,7 +926,7 @@ class TestDependencyResolution:
         source = DependentSource(destinations=[il.MemoryDestination()])
         consumer = next(asset for asset in source.assets if asset.key == "consumer")
 
-        with pytest.raises(AssetError, match="has dependencies but no DAG provided"):
+        with pytest.raises(AssetError, match="has upstreams but no DAG provided"):
             await consumer.run_async()
 
     async def test_an_optional_dependency_without_a_dag_resolves_to_none(self):
@@ -1178,3 +1178,13 @@ class TestTimePartitionScope:
 
         with pytest.raises(PartitionError, match="is time-partitioned, but the run was given a FakePartition"):
             asset._validate_time_partitioning(asset.partitioning, FakePartition("x"))
+
+
+def test_upstream_relation_replaces_dependency():
+    """The ``dependency`` relation type is gone; ``upstream`` takes its place."""
+    relations = il.Asset.relation_types
+    assert "dependency" not in relations
+    assert relations["upstream"].field == "upstreams"
+    assert relations["upstream"].kinds == ["asset"]
+    assert relations["upstream"].inline is False
+    assert FakeAsset(upstreams={"x": "id-1"}).upstreams == {"x": "id-1"}

@@ -55,7 +55,7 @@ _UNSET = object()
 
 warnings.filterwarnings("ignore", message='Field name "schema" in "AssetDefinition"')
 # Deliberate: Asset refines the Operation node protocol's plain defaults into real fields.
-warnings.filterwarnings("ignore", message='Field name "(materializable|dependencies)" in "Asset"')
+warnings.filterwarnings("ignore", message='Field name "(materializable|upstreams)" in "Asset"')
 
 
 class AssetIdentity(NamedTuple):
@@ -164,11 +164,11 @@ class Asset(Component, Operation):
         # TODO: `"resource": RelationDefinition(kinds=["resources"]...` ?
         "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
         "destination": RelationDefinition(kinds=["destination"], field="destinations"),
-        "dependency": RelationDefinition(
-            kinds=["asset"], field="dependencies", slotted=True, inline=False, on_unbind="block"
+        "upstream": RelationDefinition(
+            kinds=["asset"], field="upstreams", slotted=True, inline=False, on_unbind="block"
         ),
     }
-    internal_fields: ClassVar[frozenset[str]] = frozenset({"destinations", "normalizer", "dependencies"})
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"destinations", "normalizer", "upstreams"})
     requires: ClassVar[dict[str, str]] = {}
     optional_requires: ClassVar[dict[str, str]] = {}
     tags: ClassVar[list[str]] = []
@@ -191,7 +191,7 @@ class Asset(Component, Operation):
         ),
     )
     normalizer: Normalizer | None = Field(default=None)
-    dependencies: dict[str, str] = Field(default_factory=dict)
+    upstreams: dict[str, str] = Field(default_factory=dict)
 
     # Private
     _source: Source | None = PrivateAttr(default=None)
@@ -338,22 +338,22 @@ class Asset(Component, Operation):
 
     @classmethod
     def relation_definitions(cls) -> dict[str, RelationDefinition]:
-        """Enrich the vocabulary with dependency slots and destination keys.
+        """Enrich the vocabulary with upstream slots and destination keys.
 
-        Dependency slots come from the class's ``requires`` /
-        ``optional_requires`` contracts (slot key is the — possibly
-        qualified — upstream asset key).
+        Upstream slots come from the class's ``requires`` /
+        ``optional_requires`` contracts (slot key is the, possibly
+        qualified, upstream asset key).
 
         Returns:
             Relation type → enriched definition.
         """
         relations = super().relation_definitions()
-        if "dependency" in relations:
+        if "upstream" in relations:
             slots = {parameter: RelationSlot(key=key) for parameter, key in cls.requires.items()}
             slots |= {
                 parameter: RelationSlot(key=key, required=False) for parameter, key in cls.optional_requires.items()
             }
-            relations["dependency"] = relations["dependency"].model_copy(update={"slots": slots})
+            relations["upstream"] = relations["upstream"].model_copy(update={"slots": slots})
         if "destination" in relations:
             relations["destination"] = relations["destination"].model_copy(
                 update={"keys": [dest_cls.key for dest_cls in cls.destination_types]}
@@ -373,7 +373,7 @@ class Asset(Component, Operation):
         materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
         normalizer: Normalizer | None = _UNSET,  # ty: ignore[invalid-parameter-default]
-        dependencies: dict[str, str] | None = None,
+        upstreams: dict[str, str] | None = None,
     ) -> Self:
         """Return a reconfigured copy of this asset.
 
@@ -393,7 +393,7 @@ class Asset(Component, Operation):
             materialization_strategy: How the data is checked against the schema.
             normalizer: Normalizer applied before conform; pass ``None`` to
                 explicitly clear it.
-            dependencies: Mapping of ``data()`` parameter name to upstream asset id.
+            upstreams: Mapping of ``data()`` parameter name to upstream asset id.
         """
         overrides: dict[str, Any] = {}
         if id is not None:
@@ -412,8 +412,8 @@ class Asset(Component, Operation):
             overrides["materialization_strategy"] = materialization_strategy
         if normalizer is not _UNSET:
             overrides["normalizer"] = normalizer
-        if dependencies is not None:
-            overrides["dependencies"] = dependencies
+        if upstreams is not None:
+            overrides["upstreams"] = upstreams
         return self.model_copy(update=overrides)
 
     # -- Execution -------------------------------------------------------------
@@ -435,14 +435,14 @@ class Asset(Component, Operation):
         await self.materialize_async(context.partition_or_window, context.dag, context.metadata)
         return OperationResult()
 
-    def validate_dependencies(self, nodes: Mapping[str, Operation]) -> None:
-        """Check the wired dependencies against the ``requires`` contract.
+    def validate_upstreams(self, nodes: Mapping[str, Operation]) -> None:
+        """Check the wired upstreams against the ``requires`` contract.
 
-        For each ``(parameter_name, upstream_id)`` in ``dependencies``, if
+        For each ``(parameter_name, upstream_id)`` in ``upstreams``, if
         ``requires`` or ``optional_requires`` declares an expected key for
         that parameter, the wired upstream's identity must match the declared
         key's resolution (bare keys expect an asset of this asset's own
-        source — see :meth:`AssetIdentity.resolve`). Upstream ids absent from
+        source, see :meth:`AssetIdentity.resolve`). Upstream ids absent from
         *nodes* are ignored here: graph construction already rejected the
         non-optional ones.
 
@@ -450,10 +450,10 @@ class Asset(Component, Operation):
             nodes: Every node in the DAG, keyed by id.
 
         Raises:
-            DependencyContractError: If any wired dep violates its contract.
+            DependencyContractError: If any wired upstream violates its contract.
         """
         own_source_key = self._source.key if self._source is not None else None
-        for parameter_name, upstream_id in self.dependencies.items():
+        for parameter_name, upstream_id in self.upstreams.items():
             if upstream_id not in nodes:
                 continue
             expected_key = self.requires.get(parameter_name) or self.optional_requires.get(parameter_name)
@@ -485,7 +485,7 @@ class Asset(Component, Operation):
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
-            dag: DAG for dependency resolution (required if asset has dependencies).
+            dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
@@ -501,14 +501,14 @@ class Asset(Component, Operation):
     ) -> Any:
         """Execute the asset and return the result without writing to destination.
 
-        Resolves context, resources, and upstream dependencies (via DAG), then
+        Resolves context, resources, and upstreams (via DAG), then
         runs the data function.  Sync ``data()`` functions are automatically
         offloaded to a thread via ``asyncio.to_thread``; async ``data()``
         functions are awaited natively.
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
-            dag: DAG for dependency resolution (required if asset has dependencies).
+            dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
@@ -576,7 +576,7 @@ class Asset(Component, Operation):
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
-            dag: DAG for dependency resolution (required if asset has dependencies).
+            dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
@@ -594,7 +594,7 @@ class Asset(Component, Operation):
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
-            dag: DAG for dependency resolution (required if asset has dependencies).
+            dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
@@ -614,8 +614,8 @@ class Asset(Component, Operation):
         Subclasses must override this method.
 
         Args:
-            **kwargs: The resolved call arguments — the execution context,
-                declared resources, and upstream dependencies, keyed by the
+            **kwargs: The resolved call arguments: the execution context,
+                declared resources, and upstreams, keyed by the
                 parameter names of the overriding signature.
 
         Raises:
@@ -660,20 +660,20 @@ class Asset(Component, Operation):
 
         Maps function parameters to their values: ``context`` is injected
         directly, declared resources are resolved by name, and all other
-        parameters are treated as upstream dependencies loaded from
+        parameters are treated as upstreams loaded from
         destination via the DAG.
 
         Args:
             context: The execution context injected as the ``context`` parameter.
-            partition_or_window: Scope used when reading upstream dependencies.
+            partition_or_window: Scope used when reading upstreams.
             dag: DAG the upstream assets are looked up in. ``None`` is allowed
-                only when every dependency is optional (those resolve to ``None``).
+                only when every upstream is optional (those resolve to ``None``).
 
         Returns:
             Keyword arguments to pass to ``data()``.
 
         Raises:
-            AssetError: If a dependency cannot be resolved or read.
+            AssetError: If an upstream cannot be resolved or read.
         """
         kwargs: dict[str, Any] = {}
         signature = inspect.signature(self.data)
@@ -692,18 +692,18 @@ class Asset(Component, Operation):
                 ):
                     kwargs[parameter_name] = self._resolve_resource(parameter_name)
             else:
-                if parameter_name not in self.dependencies:
+                if parameter_name not in self.upstreams:
                     continue
                 if dag is None:
                     if parameter_name in optional_names:
                         kwargs[parameter_name] = None
                         continue
                     raise AssetError(
-                        f"Asset '{self.key}' has dependencies but no DAG provided. "
+                        f"Asset '{self.key}' has upstreams but no DAG provided. "
                         "Pass a DAG to run() or materialize() for dependency resolution."
                     )
 
-                upstream_id = self.dependencies[parameter_name]
+                upstream_id = self.upstreams[parameter_name]
                 upstream_asset = cast(Asset, dag.operation_map[upstream_id])
                 if parameter_name in optional_names:
                     try:

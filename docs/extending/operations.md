@@ -38,12 +38,12 @@ plain defaults that make any subclass a valid node; `Asset` overrides them with 
 |--------|---------|-------|
 | `id`, `kind`, `key`, `qualified_key` | from `Component` | qualified with the source key |
 | `materializable` | `True` | field |
-| `dependencies` | `{}` | parameter name to upstream id |
+| `upstreams` | `{}` | parameter name to upstream id |
 | `optional_requires` | `{}` | class contract |
 | `source` | `None` | the owning source |
 | `partitioning` | `None` | the partition config |
 | `effective_partition(scope)` | scope if partitioned else `None` | same |
-| `validate_dependencies(nodes)` | no-op | checks `requires` contracts |
+| `validate_upstreams(nodes)` | no-op | checks `requires` contracts |
 | `_event_metadata(metadata, scope)` | component identity | adds `qualified_key`, `source_id` |
 
 ## Writing an operation
@@ -71,7 +71,7 @@ class Vacuum(il.Component, il.Operation):
         return il.OperationResult(error=f"Vacuum of {self.table} failed: {type(error).__name__}")
 ```
 
-`il.DAG(vacuum)` runs it like any node; wiring it after an asset is a `dependencies` entry.
+`il.DAG(vacuum)` runs it like any node; wiring it after an asset is an `upstreams` entry.
 `invoke` calls a sync or async callable uniformly.
 
 ## Where effects go

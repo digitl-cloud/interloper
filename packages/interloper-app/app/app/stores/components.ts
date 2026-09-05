@@ -15,8 +15,8 @@ export const useComponentsStore = defineStore('components', () => {
     /**********************
      * Getters
      **********************/
-    /** All relations of type `dependency` (asset → upstream asset edges). */
-    const dependencies = computed(() => relations.value.filter(r => r.type === 'dependency'))
+    /** All relations of type `upstream` (asset → upstream asset edges). */
+    const upstreams = computed(() => relations.value.filter(r => r.type === 'upstream'))
 
     /**********************
      * Internals
@@ -286,7 +286,7 @@ export const useComponentsStore = defineStore('components', () => {
     return {
         components,
         relations,
-        dependencies,
+        upstreams,
         loading,
         error,
         fetchAll,

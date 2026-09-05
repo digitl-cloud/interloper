@@ -1,7 +1,7 @@
 import type { ComponentRecord } from '~/types/component'
 import { jobTargetIds, relationRefs } from '~/types/component'
 import type { AssetDefinition } from '~/types/catalog'
-import { parseQualifiedKey, qualifiedKey, requiredDependencies } from '~/types/catalog'
+import { parseQualifiedKey, qualifiedKey, requiredUpstreams } from '~/types/catalog'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ export function useAssetWarnings() {
     /** Recorded upstream asset IDs per asset. */
     const upstreamsByAssetId = computed(() => {
         const map = new Map<string, Set<string>>()
-        for (const dep of componentsStore.dependencies) {
+        for (const dep of componentsStore.upstreams) {
             if (!map.has(dep.src_id)) map.set(dep.src_id, new Set())
             map.get(dep.src_id)!.add(dep.dst_id)
         }
@@ -99,7 +99,7 @@ export function useAssetWarnings() {
         // --- Dependency warnings ---
         if (defn) {
             const recorded = upstreamsByAssetId.value.get(assetId) ?? new Set()
-            for (const [_param, depQk] of Object.entries(requiredDependencies(defn))) {
+            for (const [_param, depQk] of Object.entries(requiredUpstreams(defn))) {
                 // A dep is satisfied by a recorded upstream matching the declared
                 // identity — a sibling of this source instance for intra-source
                 // deps, any instance of the named source for cross-source ones.

@@ -117,10 +117,10 @@ def _seed_chain(org_id: Any = ORG_ID) -> dict[str, Any]:
     c = Component(org_id=org_id, kind="asset", key="c", parent_id=source.id)
     deps = [
         ComponentRelation(
-            src_id=b.id, dst_id=a.id, type="dependency", slot="a", org_id=org_id, src_kind="asset", dst_kind="asset"
+            src_id=b.id, dst_id=a.id, type="upstream", slot="a", org_id=org_id, src_kind="asset", dst_kind="asset"
         ),
         ComponentRelation(
-            src_id=c.id, dst_id=b.id, type="dependency", slot="b", org_id=org_id, src_kind="asset", dst_kind="asset"
+            src_id=c.id, dst_id=b.id, type="upstream", slot="b", org_id=org_id, src_kind="asset", dst_kind="asset"
         ),
     ]
     ids = {"source": source.id, "a": a.id, "b": b.id, "c": c.id}

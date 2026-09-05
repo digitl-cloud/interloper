@@ -127,7 +127,7 @@ An instance carries the runtime state a definition does not know about:
 | `materializable` | `False` turns the asset into a read-only dependency: it is skipped by runners but its stored output is still readable. |
 | `materialization_strategy` | How strictly the data is checked against the schema. |
 | `normalizer` | The normalizer applied before conform. |
-| `dependencies` | Parameter name to upstream asset **id**. Filled by the source; can be set by hand. |
+| `upstreams` | Parameter name to upstream asset **id**. Filled by the source; can be set by hand. |
 | `id` | Instance identity, a UUID by default. |
 | `resources` | Slot name to resource instance. |
 

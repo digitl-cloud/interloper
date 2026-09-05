@@ -111,7 +111,7 @@ class Operation(Workload):
         kind: ClassVar[str]
         key: ClassVar[str]
         materializable: bool
-        dependencies: dict[str, str]
+        upstreams: dict[str, str]
         optional_requires: ClassVar[Mapping[str, str]]
         source: Any | None
         partitioning: ClassVar[PartitionConfig | None]
@@ -125,7 +125,7 @@ class Operation(Workload):
             ...
 
     materializable = True
-    dependencies = {}  # noqa: RUF012
+    upstreams = {}  # noqa: RUF012
     optional_requires = {}  # noqa: RUF012
     source = None
     partitioning = None
@@ -159,8 +159,8 @@ class Operation(Workload):
         """
         return partition_or_window if self.partitioning is not None else None
 
-    def validate_dependencies(self, nodes: Mapping[str, Operation]) -> None:
-        """Validate this node's wired dependencies against its own contracts.
+    def validate_upstreams(self, nodes: Mapping[str, Operation]) -> None:
+        """Validate this node's wired upstreams against its own contracts.
 
         Called once per node at DAG construction. The default has nothing
         to validate; ``Asset`` checks its wired upstream identities against

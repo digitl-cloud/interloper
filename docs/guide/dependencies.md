@@ -54,16 +54,16 @@ building the DAG, and the DAG validates it against the contract:
 
 ```py
 shop, finance = Shop(...), Finance(...)
-finance.revenue.dependencies["orders"] = shop.orders.id
+finance.revenue.upstreams["orders"] = shop.orders.id
 dag = il.DAG(shop, finance)
 ```
 
-In a spec file the same edge is an `id` on the upstream asset and a `dependencies` entry on the
+In a spec file the same edge is an `id` on the upstream asset and an `upstreams` entry on the
 downstream one; see [Specs](specs.md).
 
 ## How wiring works
 
-Each asset instance carries `dependencies`, a mapping from parameter name to the upstream
+Each asset instance carries `upstreams`, a mapping from parameter name to the upstream
 asset's **instance id**. The source fills it for intra-source contracts at construction; the DAG
 checks every entry at build time:
 
@@ -77,11 +77,11 @@ Wiring by hand is possible, for example to connect a standalone asset:
 
 ```py
 extra = extra_asset(destinations=dest)
-source.report.dependencies["data"] = extra.id
+source.report.upstreams["data"] = extra.id
 dag = il.DAG(source, extra)
 ```
 
-Persisted dependencies (from a stored spec) are never overwritten by inference.
+Persisted upstreams (from a stored spec) are never overwritten by inference.
 
 ## Reading upstream data
 
