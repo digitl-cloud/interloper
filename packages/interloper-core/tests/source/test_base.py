@@ -4,7 +4,7 @@
 # and ``Asset._infer_resource_types`` read parameter annotations via
 # ``inspect.signature`` and need them as real classes, not lazy strings.
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -70,6 +70,24 @@ class FakeDiscriminatedSource(il.Source):
 
     class FakeDiscriminated(il.Asset):
         """Asset whose table name carries the source instance discriminator."""
+
+
+class FakeFanInSource(il.Source):
+    """Source owning a many-valued slot and a sibling; the sibling is wired, the wildcard is not."""
+
+    class Campaigns(il.Asset):
+        """Sibling that happens to match the wildcard."""
+
+    class Matches(il.Asset):
+        """Fan-in asset."""
+
+        depends_on: ClassVar[dict[str, Any]] = {
+            "campaigns": il.Dependency(key="*.campaigns", many=True),
+            "sibling": "campaigns",
+        }
+
+        def data(self, campaigns: list[il.Upstream], sibling: Any) -> Any:  # pragma: no cover
+            return None
 
 
 # -- Identity and class metadata -----------------------------------------------
@@ -268,6 +286,26 @@ class TestAssets:
             cls for cls in FakeOptionalDepsSource.asset_types if cls.key == "fake_b"
         )
         assert second_cls.declared_upstreams()["fake_a"].optional is True
+
+    def test_resolve_upstreams_wires_bare_siblings_and_leaves_wildcards_to_the_dag(self):
+        source = FakeFanInSource()
+        assert source.matches.upstreams == {"sibling": [source.campaigns.id]}
+
+    def test_none_default_sibling_parameter_is_an_optional_upstream(self):
+        class Pair(il.Source):
+            """Source with an optional sibling upstream."""
+
+            class First(il.Asset):
+                """Upstream."""
+
+            class Second(il.Asset):
+                """Downstream with an optional sibling parameter."""
+
+                def data(self, first: Any = None) -> Any:  # pragma: no cover
+                    return None
+
+        declared = Pair.Second.declared_upstreams()["first"]
+        assert declared == il.Dependency(key="pair.first", optional=True)
 
 
 # -- Trickle-down resolution ---------------------------------------------------
