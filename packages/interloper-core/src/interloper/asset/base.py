@@ -64,7 +64,7 @@ class AssetIdentity(NamedTuple):
 
     ``str()`` renders the qualified-key form (``source_key.asset_key``, bare
     for standalone assets). :meth:`resolve` is the single reading of declared
-    dependency keys (``depends_on`` entries and upstream slot keys) — everything
+    dependency keys (``depends_on`` entries and upstream slot keys); everything
     that interprets one must resolve through it.
     """
 
