@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from interloper.source import Source
 
 _UNSET = object()
+ANY_SOURCE = "*"
 
 
 warnings.filterwarnings("ignore", message='Field name "schema" in "AssetDefinition"')
@@ -63,8 +64,8 @@ class AssetIdentity(NamedTuple):
 
     ``str()`` renders the qualified-key form (``source_key.asset_key``, bare
     for standalone assets). :meth:`resolve` is the single reading of declared
-    dependency keys (``requires`` / ``optional_requires`` entries, dependency
-    slot keys) — everything that interprets one must resolve through it.
+    dependency keys (``depends_on`` entries and upstream slot keys) — everything
+    that interprets one must resolve through it.
     """
 
     source_key: str | None
@@ -92,6 +93,26 @@ class AssetIdentity(NamedTuple):
             return cls(source_key, asset_key)
         return cls(own_source_key, declared_key)
 
+    def satisfies(self, declared_key: str, *, own_source_key: str | None = None) -> bool:
+        """Whether this identity is an acceptable upstream for a declared key.
+
+        A bare key expects an asset of the declaring source, a qualified key
+        an asset of the named source type, and ``*.asset`` an asset of that
+        key from any source, standalone assets included.
+
+        Args:
+            declared_key: The upstream key as written on the declaring asset.
+            own_source_key: Key of the source declaring the upstream, used to
+                scope a bare key. ``None`` for a standalone asset.
+
+        Returns:
+            True when the asset key matches and the source constraint holds.
+        """
+        expected = AssetIdentity.resolve(declared_key, own_source_key=own_source_key)
+        if self.asset_key != expected.asset_key:
+            return False
+        return expected.source_key == ANY_SOURCE or self.source_key == expected.source_key
+
     def __str__(self) -> str:
         """Format as a key.
 
@@ -113,12 +134,14 @@ class AssetDefinition(ComponentDefinition):
     - ``asset_schema`` is the asset's own output schema
     - ``partitioning`` is the asset's own partition config
 
-    Asset keys come in two forms:
+    Asset keys come in three forms:
 
-    - **Bare key** — ``"campaigns"`` — scoped to the parent source.
-      Used for intra-source dependencies.
-    - **Qualified key** — ``"facebook_ads.campaigns"`` — globally unique.
-      Used for cross-source dependencies in ``requires`` / ``optional_requires``.
+    - **Bare key**, ``"campaigns"``: scoped to the parent source. Used for
+      intra-source dependencies.
+    - **Qualified key**, ``"facebook_ads.campaigns"``: globally unique. Used for
+      cross-source dependencies in ``depends_on``.
+    - **Wildcard key**, ``"*.campaigns"``: that asset key from any source. Used by
+      many-valued slots (``Dependency(many=True)``) to fan in across providers.
 
     The ``qualified_key`` property returns the globally unique form.
     """
