@@ -13,6 +13,7 @@ import interloper as il
 from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
 from interloper.errors import (
+    AssetError,
     AssetNotFoundError,
     CircularDependencyError,
     DAGError,
@@ -66,6 +67,70 @@ class FakeSource(il.Source):
         """Second nested asset that depends on the first via parameter name."""
 
         def data(self, fake_first: Any) -> Any:  # pragma: no cover
+            return None
+
+
+class FakeShop(il.Source):
+    """Upstream source with an ``orders`` asset."""
+
+    class Orders(il.Asset):
+        """Orders."""
+
+
+class FakeFinance(il.Source):
+    """Downstream source depending on ``fake_shop.orders`` by qualified key."""
+
+    class Revenue(il.Asset):
+        """Revenue."""
+
+        depends_on: ClassVar[dict[str, Any]] = {"orders": "fake_shop.orders"}
+
+        def data(self, orders: Any) -> Any:  # pragma: no cover
+            return None
+
+
+class FakeProviderA(il.Source):
+    """First provider with a ``campaigns`` asset."""
+
+    class Campaigns(il.Asset):
+        """Campaigns."""
+
+
+class FakeProviderB(il.Source):
+    """Second provider with a ``campaigns`` asset."""
+
+    class Campaigns(il.Asset):
+        """Campaigns."""
+
+
+class FakeMatcher(il.Asset):
+    """Standalone fan-in over every ``campaigns`` asset."""
+
+    depends_on: ClassVar[dict[str, Any]] = {"campaigns": il.Dependency(key="*.campaigns", many=True)}
+
+    def data(self, campaigns: list[il.Upstream]) -> Any:  # pragma: no cover
+        return None
+
+
+class FakeSloppy(il.Asset):
+    """Asset whose ``data()`` takes a parameter nothing declares."""
+
+    def data(self, ordres: Any) -> Any:  # pragma: no cover
+        return None
+
+
+class FakePairSource(il.Source):
+    """Source whose second asset depends on its first by bare key."""
+
+    class First(il.Asset):
+        """Upstream."""
+
+    class Second(il.Asset):
+        """Downstream."""
+
+        depends_on: ClassVar[dict[str, Any]] = {"first": "first"}
+
+        def data(self, first: Any) -> Any:  # pragma: no cover
             return None
 
 
@@ -420,6 +485,63 @@ class TestValidation:
         # ``dag_mixed`` fixture already built the DAG without error; presence
         # of all four assets proves construction + validation passed.
         assert len(dag_mixed.operations) == 4
+
+
+class TestDeclaredResolution:
+    def test_qualified_key_resolves_to_the_single_match(self):
+        shop, finance = FakeShop(), FakeFinance()
+        dag = DAG(shop, finance)
+        assert finance.revenue.upstreams == {"orders": [shop.orders.id]}
+        assert dag.predecessors[finance.revenue.id] == [shop.orders.id]
+
+    def test_qualified_key_with_two_matches_is_ambiguous(self):
+        shop_one, shop_two, finance = FakeShop(), FakeShop(), FakeFinance()
+        with pytest.raises(DAGError, match="2 matching assets"):
+            DAG(shop_one, shop_two, finance)
+
+    def test_unbound_slot_fails_at_build(self):
+        finance = FakeFinance()
+        with pytest.raises(DependencyNotFoundError, match="nothing is wired"):
+            DAG(finance)
+
+    def test_unbound_slot_is_ignored_on_read_only_nodes(self):
+        finance = FakeFinance()(materializable=False)
+        DAG(finance)  # no raise
+
+    def test_many_slot_binds_every_match(self):
+        a, b, matcher = FakeProviderA(), FakeProviderB(), FakeMatcher()
+        dag = DAG(a, b, matcher)
+        assert set(matcher.upstreams["campaigns"]) == {a.campaigns.id, b.campaigns.id}
+        assert set(dag.predecessors[matcher.id]) == {a.campaigns.id, b.campaigns.id}
+        assert [op.key for op in dag.topological_generations()[-1]] == ["fake_matcher"]
+
+    def test_many_slot_without_match_fails_unless_optional(self):
+        with pytest.raises(DependencyNotFoundError, match="nothing is wired"):
+            DAG(FakeMatcher())
+
+    def test_many_slot_keeps_explicit_wiring(self):
+        a, b, matcher = FakeProviderA(), FakeProviderB(), FakeMatcher()
+        matcher.upstreams["campaigns"] = [a.campaigns.id]
+        dag = DAG(a, b, matcher)
+        assert dag.predecessors[matcher.id] == [a.campaigns.id]
+
+    def test_wired_leg_of_wrong_identity_is_a_contract_error(self):
+        a, matcher = FakeProviderA(), FakeMatcher()
+        other = FakeOtherAsset()
+        matcher.upstreams["campaigns"] = [a.campaigns.id, other.id]
+        with pytest.raises(DependencyContractError):
+            DAG(a, other, matcher)
+
+    def test_bare_key_resolves_within_the_source_instance(self):
+        one, two = FakePairSource(), FakePairSource()
+        one.second.upstreams.clear()  # simulate a sibling wiring lost before build
+        dag = DAG(one, two)
+        assert one.second.upstreams == {"first": [one.first.id]}
+        assert dag.predecessors[one.second.id] == [one.first.id]
+
+    def test_undeclared_non_default_parameter_fails_at_build(self):
+        with pytest.raises(AssetError, match="neither the context, a resource, nor a declared upstream"):
+            DAG(FakeSloppy())
 
 
 # -- Traversal -----------------------------------------------------------------
