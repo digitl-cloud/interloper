@@ -122,26 +122,72 @@ class DAG:
         for operation in self.operations:
             self.successors[operation.id] = []
 
-        # Build dependency graph from resolved dependencies
+        self._resolve_declared()
+
         for operation in self.operations:
             if not operation.materializable:
                 continue
 
             self.predecessors[operation.id] = []
-
+            declared = operation.declared_upstreams()
             for parameter_name, upstream_ids in operation.upstreams.items():
-                dependency = operation.declared_upstreams().get(parameter_name)
+                dependency = declared.get(parameter_name)
+                optional = dependency is not None and dependency.optional
                 for upstream_id in upstream_ids:
                     if upstream_id not in self.operation_map:
-                        if dependency is not None and dependency.optional:
+                        if optional:
                             continue
                         raise DependencyNotFoundError(
-                            f"'{operation.key}' dependency '{parameter_name}' points to id '{upstream_id}' "
+                            f"'{operation.key}' upstream '{parameter_name}' points to id '{upstream_id}' "
                             f"which is not in the DAG."
                         )
-
                     self.predecessors[operation.id].append(upstream_id)
                     self.successors[upstream_id].append(operation.id)
+
+    def _resolve_declared(self) -> None:
+        """Wire declared upstream keys that nothing has wired yet.
+
+        For every live asset and every unwired declaration, the candidates
+        are the other assets in the DAG whose identity satisfies the key; a
+        bare key is further restricted to the asset's own source instance. A
+        many-valued slot binds every candidate; a single slot binds exactly
+        one. Wiring writes the asset's ``upstreams`` in place, the same way a
+        source wires its siblings, so specs and the CLI need no extra step
+        for cross-source contracts.
+
+        Raises:
+            DAGError: If a single slot has several candidates; the caller
+                must wire it explicitly.
+        """
+        assets = [operation for operation in self.operations if isinstance(operation, Asset)]
+        for asset in assets:
+            if not asset.materializable:
+                continue
+            own_source_key = asset.source.key if asset.source is not None else None
+            for parameter_name, dependency in asset.declared_upstreams().items():
+                if asset.upstreams.get(parameter_name) or not dependency.key:
+                    continue
+                bare = "." not in dependency.key
+                candidates = [
+                    candidate
+                    for candidate in assets
+                    if candidate is not asset
+                    and candidate.identity.satisfies(dependency.key, own_source_key=own_source_key)
+                    and (not bare or candidate.source is asset.source)
+                ]
+                if not candidates:
+                    continue
+                if dependency.many:
+                    asset.upstreams[parameter_name] = [candidate.id for candidate in candidates]
+                elif len(candidates) > 1:
+                    listed = ", ".join(f"{candidate.qualified_key}#{candidate.id[:8]}" for candidate in candidates)
+                    raise DAGError(
+                        f"'{asset.qualified_key}' parameter '{parameter_name}' depends on '{dependency.key}' and "
+                        f"the DAG holds {len(candidates)} matching assets ({listed}); wire "
+                        f"upstreams['{parameter_name}'] explicitly."
+                    )
+                else:
+                    asset.upstreams[parameter_name] = [candidates[0].id]
 
     # -- Validation ------------------------------------------------------------
 
@@ -152,13 +198,7 @@ class DAG:
         self._check_partition_dependencies()
 
     def _check_upstreams(self) -> None:
-        """Let every live node validate its wired upstreams against its contracts.
-
-        The contract itself belongs to the node (an asset checks its wired
-        upstream identities against its ``depends_on`` declaration, see
-        :meth:`~interloper.asset.base.Asset.validate_upstreams`); the DAG
-        only decides which nodes are live.
-        """
+        """Let every live node validate its contract (see ``Asset.validate_upstreams``)."""
         for operation in self.operations:
             if operation.materializable:
                 operation.validate_upstreams(self.operation_map)

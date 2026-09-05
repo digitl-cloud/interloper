@@ -172,8 +172,8 @@ class Operation(Workload):
         """Validate this node's wired upstreams against its own contracts.
 
         Called once per node at DAG construction. The default has nothing
-        to validate; ``Asset`` checks its wired upstream identities against
-        its ``depends_on`` contract here.
+        to validate; ``Asset`` checks its signature, its cardinality and
+        its wired identities here.
 
         Args:
             nodes: Every node in the DAG, keyed by id.

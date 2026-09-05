@@ -141,7 +141,7 @@ class TestBlockingWalk:
         def upstream() -> list[dict[str, Any]]:
             return [{"x": 1}]
 
-        @il.asset()
+        @il.asset(depends_on={"upstream": "upstream"})
         def downstream(upstream: list[dict[str, Any]]) -> list[dict[str, Any]]:
             return upstream
 

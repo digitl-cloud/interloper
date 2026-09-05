@@ -19,6 +19,7 @@ from interloper.destination import Destination, IOContext
 from interloper.errors import (
     AssetError,
     DependencyContractError,
+    DependencyNotFoundError,
     NormalizerError,
     PartitionError,
     format_exception,
@@ -512,31 +513,47 @@ class Asset(Component, Operation):
         return OperationResult()
 
     def validate_upstreams(self, nodes: Mapping[str, Operation]) -> None:
-        """Check the wired upstreams against the ``depends_on`` contract.
+        """Check the asset's contract against its signature and its wiring.
 
-        For each ``(parameter_name, upstream_ids)`` in ``upstreams``, if
-        ``depends_on`` declares an expected key for that parameter, every
-        wired upstream's identity must satisfy the declared key (bare keys
-        expect an asset of this asset's own source, see
-        :meth:`AssetIdentity.resolve`; ``*.asset`` accepts any source). Upstream
-        ids absent from *nodes* are ignored here: graph construction already
-        rejected the non-optional ones.
+        Three checks, in order: every ``data()`` parameter without a default
+        is the context, a resource, or a declared upstream (an undeclared one
+        would surface as a ``TypeError`` inside ``data()`` at run time);
+        every non-optional slot has at least one wired upstream present in
+        *nodes*; every wired upstream present in *nodes* satisfies its slot
+        key (bare keys expect the asset's own source, see
+        :meth:`AssetIdentity.satisfies`). Called once per live node at DAG
+        construction; upstream ids absent from *nodes* are ignored here,
+        graph construction already rejected the non-optional ones.
 
         Args:
             nodes: Every node in the DAG, keyed by id.
 
         Raises:
-            DependencyContractError: If any wired upstream violates its contract.
+            AssetError: If ``data()`` takes an undeclared parameter without a default.
+            DependencyNotFoundError: If a non-optional slot has nothing wired in *nodes*.
+            DependencyContractError: If a wired upstream violates its slot key.
         """
-        own_source_key = self._source.key if self._source is not None else None
         declared = self.declared_upstreams()
-        for parameter_name, upstream_ids in self.upstreams.items():
-            dependency = declared.get(parameter_name)
-            if dependency is None or not dependency.key:
+        for parameter_name, parameter in inspect.signature(self.data).parameters.items():
+            if parameter_name in ("self", "context", "source", "kwargs") or parameter_name in self.resource_types:
                 continue
-            for upstream_id in upstream_ids:
-                if upstream_id not in nodes:
-                    continue
+            if parameter_name not in declared and parameter.default is inspect.Parameter.empty:
+                raise AssetError(
+                    f"{type(self).__name__}.data(): parameter '{parameter_name}' is neither the context, a resource, "
+                    f"nor a declared upstream; add it to depends_on or give it a default."
+                )
+
+        own_source_key = self._source.key if self._source is not None else None
+        for parameter_name, dependency in declared.items():
+            present = [upstream_id for upstream_id in self.upstreams.get(parameter_name, []) if upstream_id in nodes]
+            if not dependency.optional and not present:
+                raise DependencyNotFoundError(
+                    f"'{self.qualified_key}' depends on '{dependency.key}' for parameter '{parameter_name}' "
+                    f"but nothing is wired in the DAG."
+                )
+            if not dependency.key:
+                continue
+            for upstream_id in present:
                 upstream = cast(Asset, nodes[upstream_id])
                 if not upstream.identity.satisfies(dependency.key, own_source_key=own_source_key):
                     raise DependencyContractError(
