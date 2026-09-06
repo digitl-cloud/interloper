@@ -18,8 +18,11 @@ class Upstream:
             ``identity`` and ``id`` tell the legs apart.
         data: The data read from the upstream's destination for the run's
             partition, in that destination's read representation. ``None``
-            when the upstream holds no data for that partition; a ``LOG``
-            warning names the leg.
+            when the upstream has nothing materialized where the destination
+            looks (no table or object for that scope at all); a ``LOG``
+            warning names the leg. An existing but empty scope is not this
+            case: it arrives as whatever the destination returns for an
+            empty read (an empty list or frame), not ``None``.
     """
 
     asset: Asset

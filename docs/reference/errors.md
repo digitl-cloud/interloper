@@ -19,12 +19,12 @@ except InterloperError:
 | `ConfigError` | `ValueError` | A configuration value is missing, mistyped or unresolvable; an unknown runner type; an unregistered OAuth provider without `auth_url`; a component of an unregistered kind. |
 | `SpecError` | `ConfigError` | A spec file is missing, unparsable, references undefined `${VAR}`s or is not a valid spec. |
 | `CatalogKeyError` | `ConfigError` | A catalog key does not resolve. |
-| `DAGError` | `ValueError` | Empty DAG, non-workload item, duplicate id, unpartitioned asset downstream of a partitioned one, non-runnable component in `DAG.from_spec_file`. |
+| `DAGError` | `ValueError` | Empty DAG, non-workload item, duplicate id, unpartitioned asset downstream of a partitioned one, non-runnable component in `DAG.from_spec_file`, two assets match a single-valued declared key. |
 | `CircularDependencyError` | `DAGError` | A cycle in the graph. |
-| `DependencyNotFoundError` | `DAGError` | A mandatory dependency points at an id outside the DAG. |
+| `DependencyNotFoundError` | `DAGError` | A mandatory dependency points at an id outside the DAG, or a non-optional upstream slot with nothing wired. |
 | `AssetNotFoundError` | `DAGError`, `KeyError` | An operation id is not in the DAG. |
-| `AssetError` | `ValueError` | Dependencies without a DAG, a failed upstream read, a resource of the wrong type, a strategy requiring a schema without one, a schema declared on non-tabular data, no destinations for row counts. |
-| `DependencyContractError` | `AssetError` | A wired upstream does not match the `requires` contract. |
+| `AssetError` | `ValueError` | Dependencies without a DAG, a failed upstream read, a resource of the wrong type, a strategy requiring a schema without one, a schema declared on non-tabular data, no destinations for row counts; raised at DAG build when a non-default `data()` parameter is neither the context, a resource nor a declared upstream. |
+| `DependencyContractError` | `AssetError` | A wired upstream does not satisfy its declared key, or a single-valued slot holds several upstreams. |
 | `SourceError` | `ValueError` | `select` names an unknown asset. |
 | `ConnectionCheckError` | | A connection check fails with a curated message. |
 | `PartitionError` | `ValueError` | A partitioned asset run without a scope, a window against `allow_window=False`, a granularity mismatch, a scope before `start`, row counts on an unpartitioned asset. |

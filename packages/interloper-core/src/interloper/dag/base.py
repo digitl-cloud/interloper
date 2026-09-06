@@ -153,7 +153,11 @@ class DAG:
         many-valued slot binds every candidate; a single slot binds exactly
         one. Wiring writes the asset's ``upstreams`` in place, the same way a
         source wires its siblings, so specs and the CLI need no extra step
-        for cross-source contracts.
+        for cross-source contracts. Because resolution writes into the asset
+        instance, an instance reused across several DAGs keeps its first
+        resolution; explicit wiring is never overwritten. An empty list
+        counts as unwired, so an optional many slot cannot use one to pin
+        "no legs": declare it optional and leave it unbound instead.
 
         Raises:
             DAGError: If a single slot has several candidates; the caller

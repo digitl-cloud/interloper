@@ -15,8 +15,8 @@ One builder covers every kind: a component's init is its ``config`` (or its
 decrypted ``data`` for secret-bearing kinds) plus whatever its outgoing
 relations and children contribute. Relations are mapped through the row's
 own vocabulary (the catalog class's definition, anchor as drift fallback),
-so the walk needs no kind dispatch — an asset simply has no ``target``
-relations, a destination no ``dependency`` ones.
+so the walk needs no kind dispatch: an asset simply has no ``target``
+relations, a destination no ``upstream`` ones.
 
 The Store wraps this pattern in thin ``load_*`` convenience methods, but
 any caller can use the hydrator directly to assemble a spec (for example,
