@@ -1464,6 +1464,23 @@ class TestUpstreamReads:
         asset = lenient(destinations=[mem])
         assert DAG(broken(materializable=False), asset).materialize(partition).status is ExecutionStatus.FAILED
 
+    def test_non_optional_single_slot_receives_none_when_the_upstream_has_no_data(self):
+        il.MemoryDestination.clear()
+        mem = il.MemoryDestination()
+        one = FakeLegSourceOne(destinations=[mem])
+
+        @il.asset(depends_on={"c": "fake_leg_source_one.campaigns"}, partitioning=TimePartitionConfig(column="date"))
+        def strict(context: il.ExecutionContext, c: Any) -> Any:
+            return [{"date": context.partition_date, "got": c is not None}]
+
+        asset = strict(destinations=[mem])
+        partition = TimePartition(dt.date(2030, 5, 5))  # the provider never ran for this day
+        result = DAG(one(materializable=False), asset).materialize(partition)
+        assert result.status is ExecutionStatus.COMPLETED
+        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
+            {"date": dt.date(2030, 5, 5), "got": False}
+        ]
+
     def test_optional_upstream_absent_from_the_dag_is_skipped_with_a_warning(self):
         il.MemoryDestination.clear()
         mem = il.MemoryDestination()
