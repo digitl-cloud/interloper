@@ -60,7 +60,7 @@ class AssetError(InterloperError, ValueError):
 
 
 class DependencyContractError(AssetError):
-    """A wired dependency does not satisfy its declared upstream key."""
+    """A wired upstream does not satisfy its declared key, or a single-valued slot holds several upstreams."""
 
 
 # -- Source --------------------------------------------------------------------

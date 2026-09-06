@@ -126,7 +126,7 @@ upstream consumes. The read returns whatever that destination's `read()` yields:
 built-in destinations, a DataFrame for DataFrame-native ones. `optional` is a wiring rule, not a
 data rule: for every slot, optional or not, single or many, a leg is `None` (a `None` leg for a
 many slot, a `None` argument for a single slot) only when the upstream has nothing materialized
-where the destination looks — no table or object for that scope at all (`MemoryDestination` and
+where the destination looks: no table or object for that scope at all (`MemoryDestination` and
 the file destinations key storage per partition, so a missing partition is exactly this case;
 `BigQueryDestination` reaches it only when the table itself does not exist). An existing scope
 that simply has no rows for the partition is not this case: it returns whatever the destination
