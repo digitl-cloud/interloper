@@ -87,9 +87,10 @@ def campaign_matches(context: il.ExecutionContext, campaigns: list[il.Upstream])
 
 The DAG binds every match it holds, and explicit wiring (`upstreams["campaigns"] = [id1, id2]`, or
 a list in a spec) is kept as is. `optional=True` allows an empty list. A bound leg with no data for
-the run's partition arrives with `data` set to `None` and a warning event names it; the asset
-decides what a missing leg means. Any other read error fails the asset. The same rule holds for a
-single slot: an optional one receives `None` when its upstream has no data for the partition.
+the run's partition arrives with `data` set to `None` and a `LOG` warning event names it, whether or
+not the slot is optional; the asset decides what a missing leg means. Any other read error fails the
+asset. The same rule holds for a single slot: it receives `None` when its upstream has no data for
+the partition, whether or not the slot is optional.
 
 ## How wiring works
 
@@ -119,9 +120,11 @@ Persisted upstreams (from a stored spec) are never overwritten by inference.
 At run time the downstream asset reads each dependency from the destination named by the
 upstream's `default_destination_key`, or its first destination, scoped to the partition the
 upstream consumes. The read returns whatever that destination's `read()` yields: rows for the
-built-in destinations, a DataFrame for DataFrame-native ones. A read that finds no data for the
-partition yields `None` when the slot is optional; any other read failure fails the asset
-regardless of optionality.
+built-in destinations, a DataFrame for DataFrame-native ones. `optional` is a wiring rule, not a
+data rule: for every slot, optional or not, single or many, a read that finds no data for the
+partition yields `None` (a `None` leg for a many slot, a `None` argument for a single slot) and a
+`LOG` warning event names the upstream, since data is expected to be occasionally missing. Any
+other read failure fails the asset.
 
 Reads emit `dest_read_*` events and an `interloper.destination.read` span.
 

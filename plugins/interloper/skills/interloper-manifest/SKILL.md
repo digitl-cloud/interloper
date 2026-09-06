@@ -104,8 +104,9 @@ https://docs.interloper.dev/guide/jobs/
 ## Common mistakes
 
 - `materializable: false` to drop an asset: the map is a whitelist and the other assets vanish.
-- Reading `DependencyNotFoundError: ... nothing is wired in the DAG` as a bug: the job lacks
-  the upstream source, or two instances match and need explicit wiring.
+- Reading `DependencyNotFoundError: ... nothing is wired in the DAG` as a bug: it means the job
+  lacks the upstream source. Reading `DAGError: ... matching assets` as a bug: it means two
+  instances match and one must be wired by id.
 - `il.DAG([shop, fin])`: the constructor is varargs, `il.DAG(shop, fin)`.
 - `${VAR}` inside a `{ ... }` flow mapping breaks the YAML.
 - Reading `No module named 'shop'` as a spec error: set `PYTHONPATH=.`.
