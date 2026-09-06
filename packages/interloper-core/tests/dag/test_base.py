@@ -574,6 +574,21 @@ class TestDeclaredResolution:
         with pytest.raises(AssetError, match="neither the context, a resource, nor a declared upstream"):
             DAG(FakeSloppy())
 
+    def test_single_slot_wired_to_several_upstreams_is_a_contract_error(self):
+        a, b = FakeProviderA(), FakeProviderB()
+
+        class Single(il.Asset):
+            """Single-valued slot over any campaigns asset."""
+
+            depends_on: ClassVar[dict[str, Any]] = {"c": il.Dependency(key="*.campaigns")}
+
+            def data(self, c: Any) -> Any:  # pragma: no cover
+                return None
+
+        single = Single(upstreams={"c": [a.campaigns.id, b.campaigns.id]})
+        with pytest.raises(DependencyContractError, match="single-valued slot but 2 upstreams"):
+            DAG(a, b, single)
+
 
 # -- Traversal -----------------------------------------------------------------
 

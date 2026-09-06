@@ -517,12 +517,13 @@ class Asset(Component, Operation):
     def validate_upstreams(self, nodes: Mapping[str, Operation]) -> None:
         """Check the asset's contract against its signature and its wiring.
 
-        Three checks, in order: every ``data()`` parameter without a default
+        Four checks, in order: every ``data()`` parameter without a default
         is the context, a resource, or a declared upstream (an undeclared one
         would surface as a ``TypeError`` inside ``data()`` at run time);
         every non-optional slot has at least one wired upstream present in
-        *nodes*; every wired upstream present in *nodes* satisfies its slot
-        key (bare keys expect the asset's own source, see
+        *nodes*; a single-valued slot (``many=False``) has at most one wired
+        upstream present in *nodes*; every wired upstream present in *nodes*
+        satisfies its slot key (bare keys expect the asset's own source, see
         :meth:`AssetIdentity.satisfies`). Called once per live node at DAG
         construction; upstream ids absent from *nodes* are ignored here,
         graph construction already rejected the non-optional ones.
@@ -533,7 +534,8 @@ class Asset(Component, Operation):
         Raises:
             AssetError: If ``data()`` takes an undeclared parameter without a default.
             DependencyNotFoundError: If a non-optional slot has nothing wired in *nodes*.
-            DependencyContractError: If a wired upstream violates its slot key.
+            DependencyContractError: If a wired upstream violates its slot key, or a
+                single-valued slot has several upstreams wired.
         """
         declared = self.declared_upstreams()
         for parameter_name, parameter in inspect.signature(self.data).parameters.items():
@@ -552,6 +554,11 @@ class Asset(Component, Operation):
                 raise DependencyNotFoundError(
                     f"'{self.qualified_key}' depends on '{dependency.key}' for parameter '{parameter_name}' "
                     f"but nothing is wired in the DAG."
+                )
+            if not dependency.many and len(present) > 1:
+                raise DependencyContractError(
+                    f"'{self.qualified_key}' parameter '{parameter_name}' is a single-valued slot but "
+                    f"{len(present)} upstreams are wired; declare many=True or wire one."
                 )
             if not dependency.key:
                 continue
