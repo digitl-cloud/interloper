@@ -824,13 +824,16 @@ class Asset(Component, Operation):
     ) -> list[Upstream]:
         """Read every leg wired into one slot.
 
-        A leg whose destination holds no data for the scope is handed over
-        with ``data=None`` and a warning event, never dropped: the asset
-        decides what a missing leg means. Any other read failure fails the
-        asset, optional slot or not. A wired id absent from *dag* is skipped
-        the same way, with its own warning: ``validate_upstreams`` and the
-        DAG's graph construction only tolerate such an id when the slot is
-        optional, so the leg simply does not exist for this run.
+        A leg whose upstream has nothing materialized where the destination
+        looks (no table or object for that scope at all) is handed over with
+        ``data=None`` and a warning event, never dropped: the asset decides
+        what a missing leg means. An existing but empty scope is not this
+        case; it comes back as whatever the destination returns for an empty
+        read (an empty list or frame), not ``None``. Any other read failure
+        fails the asset, optional slot or not. A wired id absent from *dag*
+        is skipped the same way, with its own warning: ``validate_upstreams``
+        and the DAG's graph construction only tolerate such an id when the
+        slot is optional, so the leg simply does not exist for this run.
 
         Args:
             parameter_name: The ``data()`` parameter the legs are read for.
@@ -957,7 +960,7 @@ class Asset(Component, Operation):
         partition_or_window: Partition | PartitionWindow | None,
         metadata: dict[str, Any],
     ) -> Any:
-        """Read data from an upstream asset's first destination.
+        """Read data from an upstream asset's read destination (see ``_read_destination``).
 
         Args:
             upstream_asset: The asset whose materialized data is read.

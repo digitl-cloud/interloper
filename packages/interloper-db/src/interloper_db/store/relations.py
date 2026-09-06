@@ -1,7 +1,7 @@
 """Relation policy: validated reads and writes for the edge table.
 
 The class vocabulary is the contract. It resolves parent-aware, a
-source-owned asset's definition (upstream slots, ``required`` flags)
+source-owned asset's definition (upstream slots, ``optional`` flags)
 lives on the parent source's definition, with the kind's anchor as the
 drift fallback. Writes enforce the declared shape: relation type, dst
 kind, slot names, and each slot's expected destination identity (resolved

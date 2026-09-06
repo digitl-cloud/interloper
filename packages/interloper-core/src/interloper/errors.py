@@ -60,7 +60,7 @@ class AssetError(InterloperError, ValueError):
 
 
 class DependencyContractError(AssetError):
-    """A wired dependency does not match the declared requires contract."""
+    """A wired dependency does not satisfy its declared upstream key."""
 
 
 # -- Source --------------------------------------------------------------------
