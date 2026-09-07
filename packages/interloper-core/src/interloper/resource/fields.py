@@ -9,9 +9,12 @@ are forwarded transparently.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from interloper.component.relation import Relation
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -63,21 +66,21 @@ def is_fetch_field_provider(candidate: Any) -> bool:
     return bool(getattr(candidate, FETCH_FIELD_PROVIDER_ATTR, False))
 
 
-def validate_fetch_field_providers(cls: type[BaseModel], resource_types: dict[str, Any]) -> None:
+def validate_fetch_field_providers(cls: type[BaseModel], relations: dict[str, Relation]) -> None:
     """Check every ``FetchField(provider=...)`` on *cls* resolves to a provider.
 
     For each field carrying an ``x-fetch``, the provider ``"<slot>.<method>"``
-    must name a declared resource slot whose resource class exposes
-    ``<method>`` marked with :func:`fetch_field_provider`. Fails loudly at
-    catalog-build time rather than letting the form silently fail at runtime.
+    must name a declared relation whose target class exposes ``<method>``
+    marked with :func:`fetch_field_provider`. Fails loudly at catalog-build
+    time rather than letting the form silently fail at runtime.
 
     Args:
         cls: The component class being defined (source or destination).
-        resource_types: The component's ``resource_types`` (slot → resource class).
+        relations: The component's declared relations, name to ``Relation``.
 
     Raises:
-        TypeError: If a provider reference is malformed, names an unknown
-            slot, or targets a method that is not a ``@fetch_field_provider``.
+        TypeError: If a provider reference is malformed, names an undeclared
+            relation, or targets a method that is not a ``@fetch_field_provider``.
     """
     for field_name, field in cls.model_fields.items():
         extra = field.json_schema_extra
@@ -92,14 +95,15 @@ def validate_fetch_field_providers(cls: type[BaseModel], resource_types: dict[st
             raise TypeError(
                 f"{cls.__name__}.{field_name}: FetchField provider '{provider}' must be of the form '<slot>.<method>'"
             )
-        resource_cls = resource_types.get(slot)
-        if resource_cls is None:
+        relation = relations.get(slot)
+        if relation is None:
             raise TypeError(
                 f"{cls.__name__}.{field_name}: FetchField provider '{provider}' "
-                f"references resource slot '{slot}', which is not declared in resources={{}}"
+                f"references relation '{slot}', which is not declared"
             )
-        target = getattr(resource_cls, method, None)
-        if not is_fetch_field_provider(target):
+        resource_cls = relation.target
+        candidate = getattr(resource_cls, method, None)
+        if not is_fetch_field_provider(candidate):
             raise TypeError(
                 f"{cls.__name__}.{field_name}: FetchField provider '{provider}' targets "
                 f"'{resource_cls.__name__}.{method}', which is not a @fetch_field_provider method"

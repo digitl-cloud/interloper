@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 from opentelemetry.trace import StatusCode
 from pydantic import BaseModel
 
-from interloper.asset.base import Asset
+from interloper.asset.base import Asset, _dependency_key
 from interloper.component import Component
 from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, DependencyNotFoundError
 from interloper.operation import Operation, Workload
@@ -176,7 +176,7 @@ class DAG:
                     candidate
                     for candidate in assets
                     if candidate is not asset
-                    and candidate.identity.satisfies(dependency.key, own_source_key=own_source_key)
+                    and candidate.identity.satisfies(_dependency_key(dependency), own_source_key=own_source_key)
                     and (not bare or candidate.source is asset.source)
                 ]
                 if not candidates:

@@ -5,12 +5,12 @@ from __future__ import annotations
 import inspect
 from typing import Any, ClassVar
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 from typing_extensions import Self
 
 from interloper.asset import Asset
 from interloper.asset.base import AssetDefinition, AssetIdentity
-from interloper.component import Component, ComponentDefinition, Dependency, RelationDefinition
+from interloper.component import Component, ComponentDefinition, Relation
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
@@ -115,14 +115,10 @@ class Source(Component, Workload):
     destination_types: ClassVar[list[type[Destination]]] = []
     asset_types: ClassVar[list[type[Asset]]] = []
     tags: ClassVar[list[str]] = []
-    relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
-        "destination": RelationDefinition(kinds=["destination"], field="destinations"),
-    }
+    destinations = Relation("destination", many=True, optional=True)
     internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "destinations", "normalizer", "select"})
 
     # State
-    destinations: list[Destination] = Field(default_factory=list)
     normalizer: Normalizer | None = Field(default=None)
     materialization_strategy: MaterializationStrategy | None = SelectField(
         default=MaterializationStrategy.AUTO,
@@ -139,22 +135,6 @@ class Source(Component, Workload):
     select: list[str] | None = Field(
         default=None, description="Asset keys to materialize; others stay as read-only dependencies"
     )
-
-    @field_validator("destinations", mode="before")
-    @classmethod
-    def _coerce_destinations(cls, value: Any) -> Any:
-        """Accept a single destination or ``None`` where a list is expected.
-
-        Args:
-            value: The raw ``destinations`` input — ``None``, a single
-                destination, or an already-sequence of them.
-
-        Returns:
-            The value as a list.
-        """
-        if value is None:
-            return []
-        return value if isinstance(value, (list, tuple)) else [value]
 
     # Exposed fields
     dataset: str = InputField(default="", description="Defaults to the source key when left empty")
@@ -221,20 +201,6 @@ class Source(Component, Workload):
                 instances.append(asset_cls(**assets[asset_cls.key]))
         data["assets"] = instances
         return data
-
-    @classmethod
-    def relation_definitions(cls) -> dict[str, RelationDefinition]:
-        """Enrich the vocabulary with the source's allowed destination keys.
-
-        Returns:
-            Relation type → enriched definition.
-        """
-        relations = super().relation_definitions()
-        if "destination" in relations:
-            relations["destination"] = relations["destination"].model_copy(
-                update={"keys": [dest_cls.key for dest_cls in cls.destination_types]}
-            )
-        return relations
 
     def model_post_init(self, context: Any) -> None:
         """Instantiate default asset types (if none were supplied) and resolve trickle-down fields.
@@ -392,7 +358,7 @@ class Source(Component, Workload):
             if not hasattr(asset_cls, "data"):
                 continue
             signature = inspect.signature(asset_cls.data)
-            inferred: dict[str, str | Dependency] = {}
+            inferred: dict[str, str | Relation] = {}
             for parameter_name, parameter in signature.parameters.items():
                 if parameter_name in ("self", "context", "source", "kwargs"):
                     continue
@@ -401,7 +367,7 @@ class Source(Component, Workload):
                 if parameter_name in sibling_keys and parameter_name != asset_cls.key:
                     qualified = str(AssetIdentity(cls.key, parameter_name))
                     inferred[parameter_name] = (
-                        Dependency(key=qualified, optional=True) if parameter.default is None else qualified
+                        Relation("asset", qualified, optional=True) if parameter.default is None else qualified
                     )
             if inferred:
                 asset_cls.depends_on = {**asset_cls.depends_on, **inferred}
@@ -461,8 +427,6 @@ class Source(Component, Workload):
             self.dataset = self.key
         validate_key(self.dataset)
 
-        siblings: dict[str, Asset] = {a.key: a for a in self.assets}
-
         for asset in self.assets:
             asset._source = self
             if not asset.dataset:
@@ -470,8 +434,6 @@ class Source(Component, Workload):
             validate_key(asset.table)
             if not asset.default_destination_key and self.default_destination_key:
                 asset.default_destination_key = self.default_destination_key
-            if not asset.destinations and self.destinations:
-                asset.destinations = list(self.destinations)
             if asset.normalizer is None and self.normalizer is not None:
                 asset.normalizer = self.normalizer
             if (
@@ -479,12 +441,6 @@ class Source(Component, Workload):
                 and asset.materialization_strategy == MaterializationStrategy.AUTO
             ):
                 asset.materialization_strategy = self.materialization_strategy
-
-            self.trickle_resources(asset)
-            self._resolve_upstreams(asset, siblings)
-
-        for destination in self.destinations:
-            self.trickle_resources(destination)
 
     def __getattr__(self, name: str) -> Asset:
         """Instance-level asset lookup fallback.
@@ -550,11 +506,7 @@ class Source(Component, Workload):
         Returns:
             A SourceDefinition with metadata and nested asset definitions.
         """
-        # Resolved resource map (includes annotation-declared slots, not just
-        # ``__dict__``) so the SourceDefinition's ``resources`` and its
-        # FetchField pickers work for both declaration styles.
-        resource_types: dict[str, type[Resource]] = cls.resource_types
-        validate_fetch_field_providers(cls, resource_types)
+        validate_fetch_field_providers(cls, cls.relations)
 
         return SourceDefinition(
             kind=cls.kind,
@@ -565,7 +517,7 @@ class Source(Component, Workload):
             description=cls.__doc__ or "",
             tags=list(cls.tags),
             config_schema=cls.config_schema(),
-            relations=cls.relation_definitions(),
+            relations=dict(cls.relations),
             assets=[asset_cls.definition().model_copy(update={"source_key": cls.key}) for asset_cls in cls.asset_types],
         )
 

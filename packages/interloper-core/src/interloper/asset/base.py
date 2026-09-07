@@ -14,7 +14,7 @@ from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
 from interloper.asset.upstream import Upstream
-from interloper.component import Component, ComponentDefinition, Dependency, RelationDefinition
+from interloper.component import Component, ComponentDefinition, Relation
 from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
@@ -164,6 +164,23 @@ class AssetDefinition(ComponentDefinition):
         return str(AssetIdentity(self.source_key or None, self.key))
 
 
+def _dependency_key(relation: Relation) -> str:
+    """The single key a ``depends_on``-declared upstream relation names, if any.
+
+    ``depends_on`` (removed once Task 5 finishes the migration) only ever
+    declares one key per upstream, unlike a general :class:`Relation`, so the
+    first of :meth:`Relation.keys` is the whole story.
+
+    Args:
+        relation: The declared upstream relation to read the key from.
+
+    Returns:
+        The declared key, or an empty string when the relation names none.
+    """
+    keys = relation.keys()
+    return keys[0] if keys else ""
+
+
 class Asset(Component, Operation):
     """A data-producing component.
 
@@ -186,16 +203,8 @@ class Asset(Component, Operation):
     destination_types: ClassVar[list[type[Destination]]] = []
     schema: ClassVar[type[Schema] | None] = None
     partitioning: ClassVar[PartitionConfig | None] = None
-    relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        # TODO: `"resource": RelationDefinition(kinds=["resources"]...` ?
-        "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
-        "destination": RelationDefinition(kinds=["destination"], field="destinations"),
-        "upstream": RelationDefinition(
-            kinds=["asset"], field="upstreams", slotted=True, inline=False, on_unbind="block"
-        ),
-    }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"destinations", "normalizer", "upstreams"})
-    depends_on: ClassVar[dict[str, str | Dependency]] = {}
+    depends_on: ClassVar[dict[str, str | Relation]] = {}
     tags: ClassVar[list[str]] = []
 
     _source_type: ClassVar[type[Source] | None] = None
@@ -374,24 +383,24 @@ class Asset(Component, Operation):
             description=cls.__doc__ or "",
             tags=list(cls.tags),
             config_schema=cls.config_schema(),
-            relations=cls.relation_definitions(),
+            relations=dict(cls.relations),
             asset_schema=schema_dict,
             partitioning=partitioning_dict,
         )
 
     @classmethod
-    def declared_upstreams(cls) -> dict[str, Dependency]:
-        """The asset's upstream contract, one :class:`Dependency` per parameter.
+    def declared_upstreams(cls) -> dict[str, Relation]:
+        """The asset's upstream contract, one :class:`Relation` per parameter.
 
         The single reading of ``depends_on``: a plain string is a
-        non-optional single slot on that key, a :class:`Dependency` is taken
+        non-optional single upstream on that key, a :class:`Relation` is taken
         as declared.
 
         Returns:
             Parameter name to declaration.
         """
         return {
-            parameter: declared if isinstance(declared, Dependency) else Dependency(key=declared)
+            parameter: declared if isinstance(declared, Relation) else Relation("asset", declared)
             for parameter, declared in cls.depends_on.items()
         }
 
@@ -416,28 +425,10 @@ class Asset(Component, Operation):
         for parameter, dependency in cls.declared_upstreams().items():
             if not dependency.key:
                 continue
-            expected = AssetIdentity.resolve(dependency.key, own_source_key=source_key)
+            expected = AssetIdentity.resolve(_dependency_key(dependency), own_source_key=source_key)
             if expected.source_key == source_key and expected.asset_key in siblings and expected.asset_key != cls.key:
                 wiring[parameter] = expected.asset_key
         return wiring
-
-    @classmethod
-    def relation_definitions(cls) -> dict[str, RelationDefinition]:
-        """Enrich the vocabulary with upstream slots and destination keys.
-
-        Upstream slots are :meth:`declared_upstreams`.
-
-        Returns:
-            Relation type → enriched definition.
-        """
-        relations = super().relation_definitions()
-        if "upstream" in relations:
-            relations["upstream"] = relations["upstream"].model_copy(update={"slots": cls.declared_upstreams()})
-        if "destination" in relations:
-            relations["destination"] = relations["destination"].model_copy(
-                update={"keys": [dest_cls.key for dest_cls in cls.destination_types]}
-            )
-        return relations
 
     # -- Reconfiguration -------------------------------------------------------
 
@@ -564,7 +555,7 @@ class Asset(Component, Operation):
                 continue
             for upstream_id in present:
                 upstream = cast(Asset, nodes[upstream_id])
-                if not upstream.identity.satisfies(dependency.key, own_source_key=own_source_key):
+                if not upstream.identity.satisfies(_dependency_key(dependency), own_source_key=own_source_key):
                     raise DependencyContractError(
                         f"Asset '{self.key}' parameter '{parameter_name}' depends on "
                         f"'{dependency.key}' but is wired to '{upstream.identity}'."

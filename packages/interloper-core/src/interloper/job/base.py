@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, Field, field_validator
 
 from interloper.asset.base import Asset
-from interloper.component.base import Component, RelationDefinition
+from interloper.component.base import Component
 from interloper.destination import Destination
 from interloper.operation import Operation, Workload
 from interloper.source.base import Source
@@ -42,13 +42,6 @@ class Job(Component, Workload):
     """
 
     icon: ClassVar[str] = "carbon:event-schedule"
-    relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        # A target is an orchestration pointer, not an input: deleting it just
-        # shrinks the job's scope, so it detaches rather than blocking.
-        "target": RelationDefinition(kinds=["source", "asset"], field="targets", on_delete="detach"),
-        "destination": RelationDefinition(kinds=["destination"], field="destinations"),
-        "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
-    }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"targets", "destinations"})
     state_model: ClassVar[type[BaseModel] | None] = JobState
 

@@ -8,7 +8,7 @@ from typing import Any, ClassVar, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field
 
 from interloper.asset.base import Asset
-from interloper.component.base import Component, RelationDefinition
+from interloper.component.base import Component
 from interloper.job.base import Job
 from interloper.source.base import Source
 
@@ -64,12 +64,6 @@ class Hook(Component):
     """
 
     icon: ClassVar[str] = "carbon:lightning"
-    relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        # A watch is observation, not consumption: a hook with fewer (or no)
-        # watches goes dormant rather than breaking, so it detaches.
-        "watch": RelationDefinition(kinds=["source", "asset", "job"], field="watches", on_delete="detach"),
-        "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
-    }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"watches"})
     state_model: ClassVar[type[BaseModel] | None] = HookState
 

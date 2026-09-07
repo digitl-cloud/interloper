@@ -118,8 +118,10 @@ class TestRelation:
 
 class TestBound:
     def test_class_access_returns_relation(self) -> None:
+        """The relation carries its stamped name; ``collect()`` is what stamps it, not the descriptor."""
+
         class Owner:
-            conn = Bound(Relation(Conn))
+            conn = Bound(Relation(Conn, name="conn"))
 
         assert isinstance(Owner.conn, Relation)
         assert Owner.conn.name == "conn"

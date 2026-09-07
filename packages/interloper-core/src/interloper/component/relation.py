@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from types import UnionType
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,7 +37,7 @@ class ComponentIdentity(NamedTuple):
             The component's identity, its parent's key as ``source_key`` when
             it has a parent, ``None`` otherwise.
         """
-        parent = component.parent  # ty: ignore[unresolved-attribute]
+        parent = component.parent
         return cls(parent.key if parent is not None else None, component.key)
 
     @classmethod
@@ -148,6 +149,66 @@ class Relation(BaseModel):
             data.setdefault("key", key)
         super().__init__(**data)
 
+    @classmethod
+    def from_annotation(cls, hint: Any, namespace: dict[str, Any]) -> Relation | None:
+        """Build the relation an annotation declares, when it declares one.
+
+        Recognised shapes are a component class (``connection: PostgresConnection``),
+        a forward reference to one, and the optional forms ``X | None`` and
+        ``Optional[X]``. Anything else is not a relation and stays an ordinary
+        field: a scalar, a container, and ``Component`` itself, which names no
+        kind and so cannot say what would fill the relation.
+
+        Args:
+            hint: The annotation as written, already evaluated or still the
+                forward-reference string ``from __future__ import annotations``
+                leaves behind.
+            namespace: The namespace a forward reference resolves against,
+                normally the declaring class's module globals.
+
+        Returns:
+            A relation targeting the annotated class, ``optional`` when the
+            annotation admits ``None``, or ``None`` when the annotation
+            declares no relation.
+        """
+        from interloper.component.base import Component
+
+        target, optional = cls._unwrap_optional(hint, namespace)
+        if get_origin(target) is None and isinstance(target, type) and issubclass(target, Component) and target.kind:
+            return cls(target, optional=optional)
+        return None
+
+    @staticmethod
+    def _unwrap_optional(hint: Any, namespace: dict[str, Any]) -> tuple[Any, bool]:
+        """Strip an annotation's ``None`` arm and resolve a forward reference.
+
+        Args:
+            hint: The annotation as written, evaluated or a string.
+            namespace: The namespace a forward reference resolves against.
+
+        Returns:
+            The single named type the annotation carries (``None`` when it
+            carries several, or a string that does not resolve) and whether
+            the annotation admits ``None``.
+        """
+        if isinstance(hint, str):
+            text = hint.strip()
+            optional = text.startswith("Optional[") and text.endswith("]")
+            if optional:
+                text = text[len("Optional[") : -1].strip()
+            written = [part.strip() for part in text.split("|")]
+            named = [part for part in written if part != "None"]
+            if len(named) != 1:
+                return None, False
+            return namespace.get(named[0]), optional or len(named) < len(written)
+        if get_origin(hint) in (Union, UnionType):
+            arguments = get_args(hint)
+            named_types = [argument for argument in arguments if argument is not type(None)]
+            if len(named_types) != 1:
+                return None, False
+            return named_types[0], len(named_types) < len(arguments)
+        return hint, False
+
     def kinds(self) -> list[str]:
         """Normalise ``kind`` to a list.
 
@@ -232,15 +293,6 @@ class Bound(IgnoredDescriptor):
             relation: The relation this descriptor exposes and binds against.
         """
         self.relation = relation
-
-    def __set_name__(self, owner: type, name: str) -> None:
-        """Stamp the relation's ``name`` from the attribute it is bound to.
-
-        Args:
-            owner: The class the descriptor was defined on.
-            name: The attribute name it was bound to.
-        """
-        self.relation.name = name
 
     def __get__(self, instance: Any, owner: type | None = None) -> Any:
         """Resolve the relation itself on class access, bound value(s) on an instance.

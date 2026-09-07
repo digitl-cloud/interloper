@@ -11,7 +11,6 @@ from interloper.resource.fields import (
     fetch_field_provider,
     is_fetch_field_provider,
 )
-from interloper.resource.ref import ResourceRef
 
 __all__ = [
     "FetchField",
@@ -19,7 +18,6 @@ __all__ = [
     "JsonField",
     "Resource",
     "ResourceDefinition",
-    "ResourceRef",
     "SecretField",
     "SelectField",
     "TextField",

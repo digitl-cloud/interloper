@@ -4,8 +4,6 @@ from interloper.component.base import (
     KINDS,
     Component,
     ComponentDefinition,
-    Dependency,
-    RelationDefinition,
 )
 from interloper.component.relation import Bound, ComponentIdentity, Relation
 
@@ -15,7 +13,5 @@ __all__ = [
     "Component",
     "ComponentDefinition",
     "ComponentIdentity",
-    "Dependency",
     "Relation",
-    "RelationDefinition",
 ]
