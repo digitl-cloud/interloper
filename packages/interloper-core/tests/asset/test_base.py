@@ -352,6 +352,20 @@ class TestInference:
 
         assert set(A.relations) == {"destinations"}
 
+    def test_variadic_parameters_declare_nothing(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, *args: Any, **extra: Any) -> Any:  # pragma: no cover
+                return []
+
+        assert set(A.relations) == {"destinations"}
+
+    def test_unresolvable_annotation_is_a_definition_error(self):
+        with pytest.raises(TypeError, match="could not be resolved"):
+
+            class A(il.Asset):
+                def data(self, x: "Nope") -> Any:  # noqa: F821  # ty: ignore[unresolved-reference]
+                    return []
+
     def test_unknown_parameter_is_a_definition_error(self):
         with pytest.raises(TypeError, match="nothing can fill it"):
 
@@ -1338,7 +1352,11 @@ class TestUpstreamReads:
         def lenient(c: il.Upstream | None = None) -> Any:
             return [{"got": c is not None}]
 
-        asset = lenient(destinations=[mem], c=one.campaigns)  # ty: ignore[unknown-argument]
+        # A DAG pulls every bound upstream in read-only, so the only way to run
+        # against one that lacks it is to bind after the graph was built.
+        asset = lenient(destinations=[mem])
+        dag = DAG(asset)
+        asset.bind("c", one.campaigns)
         warnings_seen: list[Event] = []
 
         def handler(event: Event) -> None:
@@ -1347,7 +1365,7 @@ class TestUpstreamReads:
 
         EventBus.subscribe(handler)
         try:
-            assert asset.run(dag=DAG(asset)) == [{"got": False}]
+            assert asset.run(dag=dag) == [{"got": False}]
             EventBus.flush(timeout=5.0)
         finally:
             EventBus.unsubscribe(handler)

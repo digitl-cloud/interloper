@@ -125,9 +125,14 @@ class FakeUnfillableSource(il.Source):
     """Source whose asset names a non-optional relation nothing can fill."""
 
     class FakeOrphan(il.Asset):
-        """Asset naming a sibling that exists in no source."""
+        """Asset naming a sibling its own source does not have.
 
-        orders: il.Asset = il.Relation("asset", "nowhere.orders")
+        A bare key is source-local, so the source itself is the authority on
+        whether anything can fill it and says so at construction; a qualified
+        key would name another source's asset, which only a DAG can rule on.
+        """
+
+        orders: il.Asset = il.Relation("asset", "orders")
 
         def data(self, orders: il.Upstream) -> Any:  # pragma: no cover
             return []

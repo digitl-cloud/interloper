@@ -416,9 +416,16 @@ class Component(Serializable):
         be one of *nodes*. This is a DAG-wide check the constructor cannot
         make, since the DAG doesn't exist yet at construction time.
 
+        For the same reason *nodes* is also what makes an unbound
+        ``asset``-kind relation reaching outside the owner's own source
+        (:attr:`~Relation.source_local`) an error: nothing before the graph
+        can fill such a relation, so nothing before the graph can call it
+        unfilled either.
+
         Args:
             nodes: Every node materializing in the same run, keyed by id. When
-                ``None``, the DAG-membership check is skipped.
+                ``None``, the DAG-membership check is skipped and a relation
+                only the graph can fill is left alone.
 
         Raises:
             ConfigError: If any relation is unbound and non-optional, holds
@@ -430,7 +437,8 @@ class Component(Serializable):
         for name, relation in type(self).relations.items():
             targets = self._bound.get(name, [])
             if not targets:
-                if not relation.optional and not relation.self_filling:
+                graph_filled = nodes is None and "asset" in relation.kinds() and not relation.source_local
+                if not relation.optional and not relation.self_filling and not graph_filled:
                     problems.append(f"'{name}' is unbound and non-optional")
                 continue
             if not relation.many and len(targets) > 1:

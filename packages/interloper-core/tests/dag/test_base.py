@@ -14,8 +14,8 @@ from interloper.dag.base import DAG
 from interloper.errors import (
     AssetNotFoundError,
     CircularDependencyError,
+    ConfigError,
     DAGError,
-    DependencyNotFoundError,
 )
 from interloper.partitioning.base import PartitionConfig
 from interloper.runner.results import ExecutionStatus
@@ -116,13 +116,19 @@ class FakeMatcher(il.Asset):
 
 
 class FakePairSource(il.Source):
-    """Source whose second asset depends on its first by bare key."""
+    """Source whose second asset depends on its first by bare key.
+
+    The sibling relation is declared optional so a test can clear the binding
+    the source made at construction and watch the DAG resolve it again.
+    """
 
     class First(il.Asset):
         """Upstream."""
 
     class Second(il.Asset):
         """Downstream."""
+
+        first: il.Asset | None = il.Relation("asset", "first", optional=True)
 
         def data(self, first: il.Upstream) -> Any:  # pragma: no cover
             return None
@@ -145,6 +151,73 @@ class FakeMonthly(il.Asset):
 
     def data(self, daily: il.Upstream) -> Any:  # pragma: no cover
         return None
+
+
+# -- Read-only upstream fixtures -----------------------------------------------
+
+
+class FbLike(il.Source):
+    """Ad platform source exposing a ``campaigns`` asset."""
+
+    class Campaigns(il.Asset):
+        """One campaign row."""
+
+        def data(self, context: il.ExecutionContext) -> Any:  # pragma: no cover
+            return [{"campaign_id": "fb-1"}]
+
+
+class TtLike(il.Source):
+    """Second ad platform source exposing a ``campaigns`` asset."""
+
+    class Campaigns(il.Asset):
+        """One campaign row."""
+
+        def data(self, context: il.ExecutionContext) -> Any:  # pragma: no cover
+            return [{"campaign_id": "tt-1"}]
+
+
+class Matcher(il.Source):
+    """Source whose asset fans in over every ``campaigns`` asset of the run."""
+
+    class CampaignMatches(il.Asset):
+        """One row per matched campaign."""
+
+        campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True)
+
+        def data(self, context: il.ExecutionContext, campaigns: list[il.Upstream]) -> Any:  # pragma: no cover
+            return [{"matched": len(campaigns)}]
+
+
+class ShopA(il.Source):
+    """Shop source exposing an ``orders`` asset."""
+
+    class Orders(il.Asset):
+        """One order row."""
+
+        def data(self, context: il.ExecutionContext) -> Any:  # pragma: no cover
+            return [{"order_id": "a-1"}]
+
+
+class ShopB(il.Source):
+    """Second shop source exposing an ``orders`` asset."""
+
+    class Orders(il.Asset):
+        """One order row."""
+
+        def data(self, context: il.ExecutionContext) -> Any:  # pragma: no cover
+            return [{"order_id": "b-1"}]
+
+
+class FinanceSingle(il.Source):
+    """Source whose asset names a single ``orders`` upstream owned by any source."""
+
+    class Revenue(il.Asset):
+        """Revenue over one orders upstream."""
+
+        orders: il.Asset | None = il.Relation("asset", "*.orders")
+
+        def data(self, context: il.ExecutionContext, orders: il.Upstream) -> Any:  # pragma: no cover
+            return [{"revenue": 1}]
 
 
 # -- Larger topology fixtures --------------------------------------------------
@@ -453,16 +526,19 @@ class TestGraph:
         assert upstream.id not in dag.predecessors
         assert dag.predecessors[downstream.id] == [upstream.id]
 
-    def test_a_bound_upstream_outside_the_dag_raises(self):
-        downstream = FakeAssetRequiringFake(upstream=FakeAsset())
-        with pytest.raises(DependencyNotFoundError):
-            DAG(downstream)
+    def test_a_bound_upstream_outside_the_dag_joins_read_only(self):
+        upstream = FakeAsset()
+        downstream = FakeAssetRequiringFake(upstream=upstream)
+        dag = DAG(downstream)
+        assert dag.operation_map[upstream.id].materializable is False
+        assert dag.predecessors[downstream.id] == [upstream.id]
 
-    def test_a_bound_optional_upstream_outside_the_dag_is_tolerated(self):
-        asset = FakeAssetOptionallyRequiringFake(upstream=FakeAsset())
+    def test_an_optional_bound_upstream_outside_the_dag_joins_read_only_too(self):
+        upstream = FakeAsset()
+        asset = FakeAssetOptionallyRequiringFake(upstream=upstream)
         dag = DAG(asset)
-        assert asset.id in dag.operation_map
-        assert dag.predecessors[asset.id] == []
+        assert dag.operation_map[upstream.id].materializable is False
+        assert dag.predecessors[asset.id] == [upstream.id]
 
 
 # -- Validation ----------------------------------------------------------------
@@ -508,31 +584,26 @@ class TestGranularityAcrossEdges:
 
 
 class TestDeclaredResolution:
-    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_qualified_key_resolves_to_the_single_match(self):
         shop, finance = FakeShop(), FakeFinance()
         dag = DAG(shop, finance)
         assert finance.revenue.bound("orders") is shop.orders
         assert dag.predecessors[finance.revenue.id] == [shop.orders.id]
 
-    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_qualified_key_with_two_matches_is_ambiguous(self):
         shop_one, shop_two, finance = FakeShop(), FakeShop(), FakeFinance()
         with pytest.raises(DAGError, match="2 matching assets"):
             DAG(shop_one, shop_two, finance)
 
-    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_unbound_slot_fails_at_build(self):
         finance = FakeFinance()
-        with pytest.raises(DependencyNotFoundError, match="nothing is wired"):
+        with pytest.raises(ConfigError, match="unbound"):
             DAG(finance)
 
-    @pytest.mark.xfail(strict=True, reason="Task 6: read-only nodes are exempt from resolution")
     def test_unbound_slot_is_ignored_on_read_only_nodes(self):
         finance = FakeFinance()(materializable=False)
         DAG(finance)  # no raise
 
-    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_many_slot_binds_every_match(self):
         a, b, matcher = FakeProviderA(), FakeProviderB(), FakeMatcher()
         dag = DAG(a, b, matcher)
@@ -540,9 +611,8 @@ class TestDeclaredResolution:
         assert set(dag.predecessors[matcher.id]) == {a.campaigns.id, b.campaigns.id}
         assert [op.key for op in dag.topological_generations()[-1]] == ["fake_matcher"]
 
-    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_many_slot_without_match_fails_unless_optional(self):
-        with pytest.raises(DependencyNotFoundError, match="nothing is wired"):
+        with pytest.raises(ConfigError, match="unbound"):
             DAG(FakeMatcher())
 
     def test_many_slot_keeps_explicit_bindings(self):
@@ -551,13 +621,41 @@ class TestDeclaredResolution:
         dag = DAG(a, b, matcher)
         assert dag.predecessors[matcher.id] == [a.campaigns.id]
 
-    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_bare_key_resolves_within_the_source_instance(self):
         one, two = FakePairSource(), FakePairSource()
         one.second.unbind("first", one.first)  # simulate a sibling binding lost before build
         dag = DAG(one, two)
         assert one.second.bound("first") is one.first
         assert dag.predecessors[one.second.id] == [one.first.id]
+
+
+# -- Read-only upstreams -------------------------------------------------------
+
+
+class TestReadOnlyUpstreams:
+    def test_bound_upstream_outside_workloads_joins_read_only(self):
+        fb, matcher = FbLike(), Matcher()
+        matcher.campaign_matches.bind("campaigns", fb.campaigns)
+        dag = DAG(matcher)
+
+        node = dag.operation_map[fb.campaigns.id]
+        assert node.materializable is False
+        assert node is not fb.campaigns
+        assert node.source is fb
+        assert dag.get_predecessors(matcher.campaign_matches.id) == [fb.campaigns.id]
+
+    def test_unbound_wildcard_binds_every_candidate_in_dag(self):
+        fb, tt, matcher = FbLike(), TtLike(), Matcher()
+        dag = DAG(fb, tt, matcher)
+        assert set(dag.get_predecessors(matcher.campaign_matches.id)) == {fb.campaigns.id, tt.campaigns.id}
+
+    def test_single_with_two_candidates_is_an_error(self):
+        with pytest.raises(DAGError, match="explicitly"):
+            DAG(ShopA(), ShopB(), FinanceSingle())
+
+    def test_required_unbound_after_resolution_fails(self):
+        with pytest.raises(ConfigError, match="unbound"):
+            DAG(FinanceSingle())
 
 
 # -- Traversal -----------------------------------------------------------------
