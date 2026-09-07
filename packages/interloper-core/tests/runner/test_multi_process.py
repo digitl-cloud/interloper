@@ -6,7 +6,7 @@ import sys
 from collections.abc import Iterator
 from concurrent.futures import Future
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 
@@ -72,10 +72,8 @@ class ChainSource(il.Source):
     class Consumer(il.Asset):
         """Passes the failing upstream's rows through."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"broken": "broken"}
-
-        def data(self, broken: Any) -> Any:
-            return broken
+        def data(self, broken: il.Upstream) -> Any:
+            return broken.data
 
 
 @pytest.fixture(autouse=True)

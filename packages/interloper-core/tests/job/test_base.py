@@ -99,7 +99,7 @@ class TestRelations:
 
     def test_a_hook_is_not_an_acceptable_target(self):
         with pytest.raises(ConfigError, match="does not accept"):
-            il.Job(targets=[il.WebhookHook(url="https://x.test")])
+            il.Job(targets=[il.WebhookHook(url="https://x.test")])  # ty: ignore[invalid-argument-type]
 
     def test_relation_fields_are_not_config_fields(self):
         properties = il.Job.config_schema()["properties"]
@@ -163,7 +163,6 @@ class TestWorkloadDefaults:
         job.bind("destinations", destination)
         assert job.targets[0].destinations == [destination]
 
-    @pytest.mark.xfail(strict=True, reason="Task 5: the Asset anchor declares its destinations relation")
     def test_destinations_cascade_to_asset_targets(self):
         destination = FakeJobDestination()
         job = il.Job(targets=[FakeStandaloneAsset()], destinations=[destination])

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 import interloper as il
-from interloper.component.relation import ANY_SOURCE, Bound, ComponentIdentity, Relation
+from interloper.component.relation import ANY_SOURCE, ComponentIdentity, Relation
 
 
 class Conn(il.Connection):
@@ -85,15 +88,33 @@ class TestRelation:
         class Cfg(il.Config):
             threshold: int = il.InputField(default=1)
 
+        assert Relation(Cfg).self_filling is True
+        assert isinstance(Relation(Cfg).fallback(), Cfg)
+        assert Relation("destination", many=True).self_filling is False
+
+    def test_a_settings_target_always_fills_itself(self) -> None:
         class Needy(il.Config):
             token: str = il.InputField()
 
-        assert Relation(Cfg).self_filling is True
-        assert isinstance(Relation(Cfg).fallback(), Cfg)
+        # A resource reads its required fields from the environment, so it is
+        # the read that fails, not the build.
+        assert Relation(Needy).self_filling is True
+        with pytest.raises(ValidationError):
+            Relation(Needy).fallback()
+
+    def test_a_required_field_on_a_plain_component_keeps_it_unfillable(self) -> None:
+        class Needy(il.Destination):
+            bucket: str
+
+            def read(self, context: il.IOContext) -> None:
+                return None
+
+            def write(self, context: il.IOContext, data: object) -> None:
+                return None
+
         assert Relation(Needy).self_filling is False
         assert Relation(Needy).fallback() is None
-        assert Relation(Needy, default=lambda: Needy(token="t")).self_filling is True
-        assert Relation("destination", many=True).self_filling is False
+        assert Relation(Needy, default=lambda: Needy(bucket="b")).self_filling is True
 
     def test_self_filling_false_for_target_without_model_fields(self) -> None:
         class Plain:
@@ -116,12 +137,24 @@ class TestRelation:
         }
 
 
-class TestBound:
-    def test_class_access_returns_relation(self) -> None:
-        """The relation carries its stamped name; ``collect()`` is what stamps it, not the descriptor."""
+class TestDescriptor:
+    def test_class_access_returns_the_relation_itself(self) -> None:
+        """A relation is its own descriptor; ``collect()`` is what stamps its name, not the descriptor."""
 
         class Owner:
-            conn = Bound(Relation(Conn, name="conn"))
+            conn: Conn = Relation(Conn, name="conn")
 
         assert isinstance(Owner.conn, Relation)
         assert Owner.conn.name == "conn"
+
+    def test_instance_access_returns_what_is_bound(self) -> None:
+        """An instance reads through to its own bindings."""
+        connection = Conn()
+
+        class Owner(il.Source):
+            """Source declaring the relation as a plain attribute."""
+
+            conn: Conn = Relation(Conn)
+
+        assert Owner(conn=connection).conn is connection
+        assert Owner().conn is None

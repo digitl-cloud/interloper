@@ -1,6 +1,6 @@
 """Interloper's public API: assets, sources, destinations, DAGs, and runners."""
 
-from interloper.asset import Asset, AssetDefinition, AssetIdentity, ExecutionContext, Upstream, asset
+from interloper.asset import Asset, AssetDefinition, ExecutionContext, Upstream, asset
 from interloper.catalog import Catalog
 from interloper.component import (
     KINDS,
@@ -86,7 +86,6 @@ __all__ = [
     "KINDS",
     "Asset",
     "AssetDefinition",
-    "AssetIdentity",
     "AsyncRESTClient",
     "AsyncRunner",
     "BasePaginator",

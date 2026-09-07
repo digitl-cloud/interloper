@@ -6,7 +6,7 @@ import asyncio
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 from pydantic import PrivateAttr
@@ -109,10 +109,8 @@ class BrokenChainSource(il.Source):
     class Consumer(il.Asset):
         """Passes the failing upstream's rows through."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"broken": "broken"}
-
-        def data(self, broken: Any) -> Any:
-            return broken
+        def data(self, broken: il.Upstream) -> Any:
+            return broken.data
 
 
 def _memory() -> il.MemoryDestination:
@@ -141,14 +139,12 @@ class TestBlockingWalk:
         def upstream() -> list[dict[str, Any]]:
             return [{"x": 1}]
 
-        @il.asset(depends_on={"upstream": "upstream"})
-        def downstream(upstream: list[dict[str, Any]]) -> list[dict[str, Any]]:
-            return upstream
+        @il.asset
+        def downstream(upstream: il.Upstream) -> list[dict[str, Any]]:
+            return upstream.data
 
-        dag = il.DAG(
-            upstream(id="upstream", destinations=[_memory()]),
-            downstream(id="downstream", destinations=[_memory()]),
-        )
+        first = upstream(id="upstream", destinations=[_memory()])
+        dag = il.DAG(first, downstream(id="downstream", destinations=[_memory()], upstream=first))  # ty: ignore[unknown-argument]
         runner = ThreadRunner()
 
         il.run(runner.run(dag))

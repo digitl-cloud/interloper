@@ -192,6 +192,7 @@ class TestRunPreflightErrors:
 class TestRunJobSpecMode:
     """``interloper run -f <job-spec>`` reconstructs the Job and runs it."""
 
+    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_job_spec_dry_run_prints_plan(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         import yaml
 

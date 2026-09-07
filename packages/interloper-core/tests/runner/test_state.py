@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 
@@ -24,18 +24,14 @@ class ChainSource(il.Source):
     class Middle(il.Asset):
         """Depends on ``root``."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"root": "root"}
-
-        def data(self, root: Any) -> Any:
-            return root
+        def data(self, root: il.Upstream) -> Any:
+            return root.data
 
     class Leaf(il.Asset):
         """Depends on ``middle``."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"middle": "middle"}
-
-        def data(self, middle: Any) -> Any:
-            return middle
+        def data(self, middle: il.Upstream) -> Any:
+            return middle.data
 
 
 class ForkSource(il.Source):
@@ -50,18 +46,14 @@ class ForkSource(il.Source):
     class LeftLeaf(il.Asset):
         """Depends on ``root``."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"root": "root"}
-
-        def data(self, root: Any) -> Any:
-            return root
+        def data(self, root: il.Upstream) -> Any:
+            return root.data
 
     class RightLeaf(il.Asset):
         """Depends on ``root``."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"root": "root"}
-
-        def data(self, root: Any) -> Any:
-            return root
+        def data(self, root: il.Upstream) -> Any:
+            return root.data
 
 
 @pytest.fixture

@@ -3,16 +3,50 @@
 from __future__ import annotations
 
 from types import UnionType
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get_origin, overload
 
 from pydantic import BaseModel, ConfigDict, Field
-
-from interloper.serializable import IgnoredDescriptor
+from pydantic_settings import BaseSettings
 
 if TYPE_CHECKING:
     from interloper.component.base import Component
 
 ANY_SOURCE = "*"
+
+
+def unwrap_optional(hint: Any, namespace: dict[str, Any]) -> tuple[Any, bool]:
+    """Strip an annotation's ``None`` arm and resolve a forward reference.
+
+    The single reading of ``X | None`` in the framework: both
+    :meth:`Relation.from_annotation` and the asset layer's ``data()``
+    parameter inference go through it.
+
+    Args:
+        hint: The annotation as written, evaluated or a string.
+        namespace: The namespace a forward reference resolves against.
+
+    Returns:
+        The single named type the annotation carries (``None`` when it
+        carries several, or a string that does not resolve) and whether
+        the annotation admits ``None``.
+    """
+    if isinstance(hint, str):
+        text = hint.strip()
+        optional = text.startswith("Optional[") and text.endswith("]")
+        if optional:
+            text = text[len("Optional[") : -1].strip()
+        written = [part.strip() for part in text.split("|")]
+        named = [part for part in written if part != "None"]
+        if len(named) != 1:
+            return None, False
+        return namespace.get(named[0]), optional or len(named) < len(written)
+    if get_origin(hint) in (Union, UnionType):
+        arguments = get_args(hint)
+        named_types = [argument for argument in arguments if argument is not type(None)]
+        if len(named_types) != 1:
+            return None, False
+        return named_types[0], len(named_types) < len(arguments)
+    return hint, False
 
 
 class ComponentIdentity(NamedTuple):
@@ -107,6 +141,20 @@ class Relation(BaseModel):
     ``self_filling`` together describe a relation that can be resolved
     without an explicit binding.
 
+    A relation is also its own descriptor: :meth:`Component.collect` installs
+    the stamped copy under the relation's name, so the class attribute reads
+    as the declaration and the instance attribute as what is bound to it, and
+    assignment rebinds it.
+
+    The declaration form the framework writes pairs the relation with the
+    annotation of what fills it
+    (``destinations: list[Destination] = Relation("destination", many=True)``).
+    The ``TYPE_CHECKING`` ``__new__`` is what makes that form check: the type
+    checker reads a Pydantic field of the annotated type, so the constructor
+    kwarg and the instance attribute are both typed, while the runtime sees a
+    ``Relation`` (Pydantic ignores it, and :meth:`Component.collect` drops the
+    annotation before fields are collected).
+
     ``default`` (intended type ``Callable[[], Component] | None``) and
     ``target`` (intended type ``type[Component] | None``, the class this
     relation was declared from when class-declared) are annotated ``Any``
@@ -125,6 +173,25 @@ class Relation(BaseModel):
     on_delete: Literal["block", "detach"] = "block"
     name: str = ""
     target: Any = Field(default=None, exclude=True)
+
+    if TYPE_CHECKING:
+
+        def __new__(cls, *args: Any, **kwargs: Any) -> Any:
+            """Type-checking-only stub that widens construction to ``Any``.
+
+            Never defined at runtime, where Pydantic's own ``__new__`` builds
+            the relation. It exists so a typed declaration
+            (``x: list[Destination] = Relation("destination", many=True)``)
+            reads as a field of the annotated type instead of a type error.
+
+            Args:
+                *args: Positional arguments, forwarded to :meth:`__init__`.
+                **kwargs: Keyword arguments, forwarded to :meth:`__init__`.
+
+            Returns:
+                The new relation, typed ``Any`` so it satisfies any annotation.
+            """
+            ...
 
     def __init__(self, kind_or_class: str | list[str] | type = "", key: str | list[str] = "", /, **data: Any) -> None:
         """Build a relation from either a component class or explicit kind/key values.
@@ -173,41 +240,10 @@ class Relation(BaseModel):
         """
         from interloper.component.base import Component
 
-        target, optional = cls._unwrap_optional(hint, namespace)
+        target, optional = unwrap_optional(hint, namespace)
         if get_origin(target) is None and isinstance(target, type) and issubclass(target, Component) and target.kind:
             return cls(target, optional=optional)
         return None
-
-    @staticmethod
-    def _unwrap_optional(hint: Any, namespace: dict[str, Any]) -> tuple[Any, bool]:
-        """Strip an annotation's ``None`` arm and resolve a forward reference.
-
-        Args:
-            hint: The annotation as written, evaluated or a string.
-            namespace: The namespace a forward reference resolves against.
-
-        Returns:
-            The single named type the annotation carries (``None`` when it
-            carries several, or a string that does not resolve) and whether
-            the annotation admits ``None``.
-        """
-        if isinstance(hint, str):
-            text = hint.strip()
-            optional = text.startswith("Optional[") and text.endswith("]")
-            if optional:
-                text = text[len("Optional[") : -1].strip()
-            written = [part.strip() for part in text.split("|")]
-            named = [part for part in written if part != "None"]
-            if len(named) != 1:
-                return None, False
-            return namespace.get(named[0]), optional or len(named) < len(written)
-        if get_origin(hint) in (Union, UnionType):
-            arguments = get_args(hint)
-            named_types = [argument for argument in arguments if argument is not type(None)]
-            if len(named_types) != 1:
-                return None, False
-            return named_types[0], len(named_types) < len(arguments)
-        return hint, False
 
     def kinds(self) -> list[str]:
         """Normalise ``kind`` to a list.
@@ -262,9 +298,11 @@ class Relation(BaseModel):
     def self_filling(self) -> bool:
         """Whether this relation can be resolved without an explicit binding.
 
-        True when a ``default`` factory is set, or when the relation is
-        single-valued, has a ``target`` class, and every field of that class
-        (besides ``id``) is optional.
+        Three cases, all of them single-valued but for the first: a ``default``
+        factory is set; the ``target`` is a settings class, whose required
+        fields come from the environment, so a resource the user never bound
+        is still constructible where it is read; or every field of the
+        ``target`` (besides ``id``) is optional, so the class constructs bare.
 
         Returns:
             True when the relation can fill itself.
@@ -273,6 +311,8 @@ class Relation(BaseModel):
             return True
         if self.many or self.target is None:
             return False
+        if isinstance(self.target, type) and issubclass(self.target, BaseSettings):
+            return True
         fields = getattr(self.target, "model_fields", None)
         if fields is None:
             return False
@@ -281,10 +321,15 @@ class Relation(BaseModel):
     def fallback(self) -> Any | None:
         """Produce the value this relation resolves to when left unbound.
 
+        A settings target is constructed here and not at build time, which is
+        what keeps a connection whose credentials live in the environment
+        usable: the validation error of a credential that is neither bound nor
+        in the environment propagates from the read that needed it.
+
         Returns:
             A fresh ``default()`` when set, a fresh ``target()`` when the
-            relation is self-filling through its target's optional fields,
-            or ``None`` when the relation cannot fill itself.
+            relation is self-filling, or ``None`` when the relation cannot
+            fill itself.
         """
         if self.default is not None:
             return self.default()
@@ -292,30 +337,48 @@ class Relation(BaseModel):
             return self.target()
         return None
 
+    # -- Descriptor ------------------------------------------------------------
 
-class Bound(IgnoredDescriptor):
-    """Descriptor installed for each relation: the ``Relation`` on the class, bound value(s) on an instance."""
+    @overload
+    def __get__(self, instance: None, owner: type | None = None) -> Relation: ...
+    @overload
+    def __get__(self, instance: Component, owner: type | None = None) -> Any: ...
+    def __get__(self, instance: Component | None, owner: type | None = None) -> Any:
+        """Resolve to the relation itself on class access, to bound value(s) on an instance.
 
-    def __init__(self, relation: Relation) -> None:
-        """Attach the descriptor to its relation.
-
-        Args:
-            relation: The relation this descriptor exposes and binds against.
-        """
-        self.relation = relation
-
-    def __get__(self, instance: Any, owner: type | None = None) -> Any:
-        """Resolve the relation itself on class access, bound value(s) on an instance.
+        A relation is its own descriptor: :meth:`Component.collect` installs
+        the stamped copy under the relation's name, so ``Widget.connection`` is
+        the declaration and ``widget.connection`` what is bound to it.
 
         Args:
             instance: The component the attribute is accessed on, or ``None``
                 for class-level access.
-            owner: The class the descriptor is defined on; unused.
+            owner: The class the descriptor is installed on; unused, the
+                relation already carries its name.
 
         Returns:
-            The ``Relation`` when accessed on the class; otherwise the
-            instance's bound value(s) for this relation's name.
+            This relation on class access; otherwise the instance's bound
+            value(s) for this relation's name (see
+            :meth:`Component.bound`).
         """
         if instance is None:
-            return self.relation
-        return instance.bound(self.relation.name)
+            return self
+        return instance.bound(self.name)
+
+    def __set__(self, instance: Component, value: Any) -> None:
+        """Replace what is bound to this relation on *instance*, atomically.
+
+        The replacement is checked before the existing binding is touched, so
+        a rejected assignment (wrong kind, several targets on a single-valued
+        relation) leaves the previous binding exactly as it was. This is the
+        one rebinding mechanism: :meth:`Component.__setattr__` routes a
+        relation name here rather than doing the work itself.
+
+        Args:
+            instance: The component the assignment was made on.
+            value: ``None`` or an empty sequence clears the binding, a single
+                component binds it, a list or tuple binds every element.
+        """
+        targets = tuple(value) if isinstance(value, (list, tuple)) else (() if value is None else (value,))
+        instance._check_targets(self.name, self, targets)
+        instance._bound[self.name] = list(targets)

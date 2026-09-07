@@ -140,16 +140,27 @@ class TestVocabulary:
         # 'cron_job' resolves, but as a job — a hook row with that key is drift.
         assert set(catalog.vocabulary("hook", "cron_job")) == {"watches"}
 
-    @pytest.mark.xfail(strict=True, reason="Task 5: assets infer their upstream relations from data()")
     def test_source_owned_asset_resolves_through_its_parent(self):
         catalog = Catalog.discover()
-        # The anchor knows nothing about which upstreams an asset has; only the
-        # source's own declaration names them.
-        assert catalog.vocabulary("asset", "e") == {}
+        # The anchor knows only what every asset declares; which upstreams an
+        # asset has comes from the source's own declaration. Their keys are
+        # bare, which is what scopes them to the parent source.
+        assert set(catalog.vocabulary("asset", "e")) == {"destinations"}
         relations = catalog.vocabulary("asset", "e", parent_key="demo_source")
-        assert {name: relation.keys() for name, relation in relations.items()} == {
-            "b": ["demo_source.b"],
-            "c": ["demo_source.c"],
-            "d": ["demo_source.d"],
+        upstreams = {name: relation for name, relation in relations.items() if "asset" in relation.kinds()}
+        assert {name: relation.keys() for name, relation in upstreams.items()} == {
+            "b": ["b"],
+            "c": ["c"],
+            "d": ["d"],
         }
-        assert all(not relation.optional for relation in relations.values())
+        assert all(not relation.optional for relation in upstreams.values())
+
+    def test_a_source_owned_bare_key_binds_the_sibling(self):
+        from interloper_assets.demo.source import DemoSource
+
+        # The other half of the parent scoping: the bare keys the catalog
+        # reports are the sibling assets the source binds at construction.
+        assert DemoSource.sibling_bindings()["e"] == {"b": "b", "c": "c", "d": "d"}
+        source = DemoSource()
+        by_key = {asset.key: asset for asset in source.assets}
+        assert by_key["e"].bound("b") is by_key["b"]

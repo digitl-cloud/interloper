@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 from opentelemetry.trace import StatusCode
 from pydantic import BaseModel
 
-from interloper.asset.base import Asset, _dependency_key
+from interloper.asset.base import Asset
 from interloper.component import Component
 from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, DependencyNotFoundError
 from interloper.operation import Operation, Workload
@@ -65,9 +65,11 @@ class DAGSpec(BaseModel):
 class DAG:
     """Directed acyclic graph of operations.
 
-    Dependencies are resolved from pre-computed ``upstreams`` on each node
-    (mapping parameter names to upstream node ids).  The DAG validates
-    the wiring and provides topological ordering for parallel execution.
+    Edges come from the nodes' own bindings: whatever fills an
+    ``asset``-kind relation (see
+    :meth:`~interloper.operation.base.Operation.upstream_relations`) is a
+    node this one runs after. The DAG validates every live node's relations
+    and provides topological ordering for parallel execution.
     """
 
     def __init__(self, *items: Workload | type[Workload]) -> None:
@@ -122,90 +124,44 @@ class DAG:
         for operation in self.operations:
             self.successors[operation.id] = []
 
-        self._resolve_declared()
-
         for operation in self.operations:
             if not operation.materializable:
                 continue
 
             self.predecessors[operation.id] = []
-            declared = operation.declared_upstreams()
-            for parameter_name, upstream_ids in operation.upstreams.items():
-                dependency = declared.get(parameter_name)
-                optional = dependency is not None and dependency.optional
-                for upstream_id in upstream_ids:
-                    if upstream_id not in self.operation_map:
-                        if optional:
+            for name, relation in operation.upstream_relations().items():
+                bound = operation.bound(name)
+                upstreams = bound if isinstance(bound, list) else [bound] if bound is not None else []
+                for upstream in upstreams:
+                    if upstream.id not in self.operation_map:
+                        if relation.optional:
                             continue
                         raise DependencyNotFoundError(
-                            f"'{operation.key}' upstream '{parameter_name}' points to id '{upstream_id}' "
+                            f"'{operation.key}' relation '{name}' is bound to '{upstream.qualified_key}' "
                             f"which is not in the DAG."
                         )
-                    self.predecessors[operation.id].append(upstream_id)
-                    self.successors[upstream_id].append(operation.id)
-
-    def _resolve_declared(self) -> None:
-        """Wire declared upstream keys that nothing has wired yet.
-
-        For every live asset and every unwired declaration, the candidates
-        are the other assets in the DAG whose identity satisfies the key; a
-        bare key is further restricted to the asset's own source instance. A
-        many-valued slot binds every candidate; a single slot binds exactly
-        one. Wiring writes the asset's ``upstreams`` in place, the same way a
-        source wires its siblings, so specs and the CLI need no extra step
-        for cross-source contracts. Because resolution writes into the asset
-        instance, an instance reused across several DAGs keeps its first
-        resolution; explicit wiring is never overwritten. An empty list
-        counts as unwired, so an optional many slot cannot use one to pin
-        "no legs": declare it optional and leave it unbound instead.
-
-        Raises:
-            DAGError: If a single slot has several candidates; the caller
-                must wire it explicitly.
-        """
-        assets = [operation for operation in self.operations if isinstance(operation, Asset)]
-        for asset in assets:
-            if not asset.materializable:
-                continue
-            own_source_key = asset.source.key if asset.source is not None else None
-            for parameter_name, dependency in asset.declared_upstreams().items():
-                if asset.upstreams.get(parameter_name) or not dependency.key:
-                    continue
-                bare = "." not in dependency.key
-                candidates = [
-                    candidate
-                    for candidate in assets
-                    if candidate is not asset
-                    and candidate.identity.satisfies(_dependency_key(dependency), own_source_key=own_source_key)
-                    and (not bare or candidate.source is asset.source)
-                ]
-                if not candidates:
-                    continue
-                if dependency.many:
-                    asset.upstreams[parameter_name] = [candidate.id for candidate in candidates]
-                elif len(candidates) > 1:
-                    listed = ", ".join(f"{candidate.qualified_key}#{candidate.id[:8]}" for candidate in candidates)
-                    raise DAGError(
-                        f"'{asset.qualified_key}' parameter '{parameter_name}' depends on '{dependency.key}' and "
-                        f"the DAG holds {len(candidates)} matching assets ({listed}); wire "
-                        f"upstreams['{parameter_name}'] explicitly."
-                    )
-                else:
-                    asset.upstreams[parameter_name] = [candidates[0].id]
+                    self.predecessors[operation.id].append(upstream.id)
+                    self.successors[upstream.id].append(operation.id)
 
     # -- Validation ------------------------------------------------------------
 
     def _validate(self) -> None:
         """Validate the DAG structure."""
-        self._check_upstreams()
+        self._check_relations()
         self._check_circular_dependencies()
         self._check_partition_dependencies()
 
-    def _check_upstreams(self) -> None:
-        """Let every live node validate its contract (see ``Asset.validate_upstreams``)."""
+    def _check_relations(self) -> None:
+        """Let every live node check its own relations against the DAG's nodes.
+
+        See :meth:`~interloper.component.base.Component.validate_relations`;
+        the DAG is what can answer whether a bound upstream is actually
+        running in this graph.
+        """
+        nodes = {id: node for id, node in self.operation_map.items() if isinstance(node, Component)}
         for operation in self.operations:
-            if operation.materializable:
-                operation.validate_upstreams(self.operation_map)
+            if operation.materializable and isinstance(operation, Component):
+                operation.validate_relations(nodes)
 
     def _check_circular_dependencies(self) -> None:
         """Check for circular dependencies using DFS.
@@ -508,7 +464,7 @@ class DAG:
         target = self.operation_map[operation_id]
         operations: list[Operation] = []
         for upstream_id in self.get_predecessors(operation_id):
-            # Wired upstreams are assets by relation schema.
+            # Only an asset can fill an asset-kind relation, so every parent is one.
             parent = cast(Asset, self.operation_map[upstream_id])(materializable=False)
             operations.append(parent)
         operations.append(target)

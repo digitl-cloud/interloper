@@ -25,6 +25,12 @@ from interloper.runner.serial import SerialRunner
 from interloper.settings import RunnerSettings
 
 
+class Creds(il.Resource):
+    """Resource fixture an asset declares by annotating its ``data()`` parameter."""
+
+    token: str = "t"
+
+
 class TestRegistry:
     """Entry-point discovery of runners."""
 
@@ -360,12 +366,7 @@ class TestTelemetrySpans:
     async def test_resource_resolution_is_traced_per_resource(self, span_exporter):
         il.MemoryDestination.clear()
 
-        class Creds(il.Resource):
-            token: str = "t"
-
-        # Declared explicitly: this module's `from __future__ import
-        # annotations` makes hints strings, which type inference can't read.
-        @il.asset(resources={"creds": Creds})
+        @il.asset
         def needs_resource(creds: Creds) -> list[dict[str, Any]]:
             return [{"x": creds.token}]
 

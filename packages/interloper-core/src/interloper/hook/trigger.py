@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from interloper.component import Relation
 from interloper.errors import ConfigError
@@ -27,12 +27,7 @@ class TriggerHook(Hook):
     advertise it.
     """
 
-    if TYPE_CHECKING:
-        targets: list[Source | Asset | Job]
-
-    relations: ClassVar[dict[str, Relation]] = {
-        "targets": Relation(["source", "asset", "job"], many=True, optional=True),
-    }
+    targets: list[Source | Asset | Job] = Relation(["source", "asset", "job"], many=True, optional=True)
 
     def fire(self, context: HookContext) -> None:
         """Trigger a run for every target.

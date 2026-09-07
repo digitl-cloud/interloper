@@ -116,12 +116,7 @@ class Source(Component, Workload):
     tags: ClassVar[list[str]] = []
     internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "normalizer", "select"})
 
-    if TYPE_CHECKING:
-        destinations: list[Destination]
-
-    relations: ClassVar[dict[str, Relation]] = {
-        "destinations": Relation("destination", many=True, optional=True),
-    }
+    destinations: list[Destination] = Relation("destination", many=True, optional=True)
 
     # State
     normalizer: Normalizer | None = Field(default=None)
@@ -263,7 +258,7 @@ class Source(Component, Workload):
         selected = set(self.select or [])
         self.assets = [a if a.key in selected else a(materializable=False) for a in self.assets]
         for asset in self.assets:
-            asset._source = self
+            asset.parent = self
 
     # -- Serialization ---------------------------------------------------------
 
@@ -469,7 +464,6 @@ class Source(Component, Workload):
         validate_key(self.dataset)
 
         for asset in self.assets:
-            asset._source = self
             asset.parent = self
             if not asset.dataset:
                 asset.dataset = self.dataset
@@ -641,7 +635,6 @@ class Source(Component, Workload):
         stale = {name: self._trickled_asset_keys(name) for name in relations}
         copy = self.model_copy(deep=True)
         for asset in copy.assets:
-            asset._source = copy
             asset.parent = copy
             for name, keys in stale.items():
                 if asset.key in keys:

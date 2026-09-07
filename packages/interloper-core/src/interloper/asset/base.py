@@ -6,22 +6,21 @@ import asyncio
 import inspect
 import traceback
 import warnings
-from collections.abc import Iterable, Mapping
-from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints
 
-from pydantic import Field, PrivateAttr, field_validator
+from pydantic import Field, PrivateAttr
 from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
 from interloper.asset.upstream import Upstream
-from interloper.component import Component, ComponentDefinition, Relation
+from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation, unwrap_optional
 from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
     AssetError,
     DataNotFoundError,
-    DependencyContractError,
-    DependencyNotFoundError,
+    DestinationError,
     NormalizerError,
     PartitionError,
     format_exception,
@@ -38,7 +37,6 @@ from interloper.partitioning import (
     TimePartitionWindow,
 )
 from interloper.representation import Representation
-from interloper.resource import Resource
 from interloper.resource.fields import SelectField
 from interloper.schema import Schema
 from interloper.telemetry import attributes as telemetry_attributes
@@ -54,97 +52,34 @@ if TYPE_CHECKING:
     from interloper.source import Source
 
 _UNSET = object()
-ANY_SOURCE = "*"
+
+# Parameters of ``data()`` that declare no relation: the instance itself, the
+# two values the asset injects, and the catch-all.
+_RESERVED_PARAMETERS = frozenset({"self", "context", "source", "kwargs"})
+_VARIADIC_KINDS = (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL)
 
 
 warnings.filterwarnings("ignore", message='Field name "schema" in "AssetDefinition"')
 # Deliberate: Asset refines the Operation node protocol's plain defaults into real fields.
-warnings.filterwarnings("ignore", message='Field name "(materializable|upstreams)" in "Asset"')
-
-
-class AssetIdentity(NamedTuple):
-    """The identity of an asset type: its owning source's key and its own.
-
-    ``str()`` renders the qualified-key form (``source_key.asset_key``, bare
-    for standalone assets). :meth:`resolve` is the single reading of declared
-    dependency keys (``depends_on`` entries and upstream slot keys); everything
-    that interprets one must resolve through it.
-    """
-
-    source_key: str | None
-    asset_key: str
-
-    @classmethod
-    def resolve(cls, declared_key: str, *, own_source_key: str | None = None) -> AssetIdentity:
-        """The identity a declared dependency key expects.
-
-        A bare key is scoped to the declaring asset's own source, a
-        qualified key names the source explicitly.
-
-        Args:
-            declared_key: The dependency key as written, bare (``"campaigns"``)
-                or qualified (``"facebook_ads.campaigns"``).
-            own_source_key: Key of the source declaring the dependency, used to
-                scope a bare key. ``None`` for a standalone asset.
-
-        Returns:
-            The expected identity; ``source_key`` is ``None`` for a bare key
-            declared by a standalone asset.
-        """
-        if "." in declared_key:
-            source_key, asset_key = declared_key.split(".", 1)
-            return cls(source_key, asset_key)
-        return cls(own_source_key, declared_key)
-
-    def satisfies(self, declared_key: str, *, own_source_key: str | None = None) -> bool:
-        """Whether this identity is an acceptable upstream for a declared key.
-
-        A bare key expects an asset of the declaring source, a qualified key
-        an asset of the named source type, and ``*.asset`` an asset of that
-        key from any source, standalone assets included.
-
-        Args:
-            declared_key: The upstream key as written on the declaring asset.
-            own_source_key: Key of the source declaring the upstream, used to
-                scope a bare key. ``None`` for a standalone asset.
-
-        Returns:
-            True when the asset key matches and the source constraint holds.
-        """
-        expected = AssetIdentity.resolve(declared_key, own_source_key=own_source_key)
-        if self.asset_key != expected.asset_key:
-            return False
-        return expected.source_key == ANY_SOURCE or self.source_key == expected.source_key
-
-    def __str__(self) -> str:
-        """Format as a key.
-
-        Returns:
-            The qualified-key form; bare when there is no source.
-        """
-        return f"{self.source_key}.{self.asset_key}" if self.source_key else self.asset_key
+warnings.filterwarnings("ignore", message='Field name "materializable" in "Asset"')
 
 
 class AssetDefinition(ComponentDefinition):
-    """Definition of an asset including its resource types and tags.
+    """Definition of an asset: what may fill its relations, its schema, its partitioning.
 
-    Cross-entity references use keys (not inlined schemas):
-    - ``resource_types`` maps resource name → component key
-    - ``destination_types`` lists destination component keys
-    - ``depends_on`` maps parameter name → asset key (bare or qualified)
-
-    Same-entity data is inlined:
-    - ``asset_schema`` is the asset's own output schema
-    - ``partitioning`` is the asset's own partition config
+    Cross-entity references travel as keys: ``relations`` names the kinds and
+    keys that may fill each declared link. Same-entity data is inlined:
+    ``asset_schema`` is the asset's own output schema and ``partitioning`` its
+    own partition config.
 
     Asset keys come in three forms:
 
     - **Bare key**, ``"campaigns"``: scoped to the parent source. Used for
-      intra-source dependencies.
-    - **Qualified key**, ``"facebook_ads.campaigns"``: globally unique. Used for
-      cross-source dependencies in ``depends_on``.
-    - **Wildcard key**, ``"*.campaigns"``: that asset key from any source. Used by
-      many-valued slots (``Dependency(many=True)``) to fan in across providers.
+      intra-source relations.
+    - **Qualified key**, ``"facebook_ads.campaigns"``: globally unique. Used
+      for cross-source relations.
+    - **Wildcard key**, ``"*.campaigns"``: that asset key from any source.
+      Used by many-valued relations to fan in across providers.
 
     The ``qualified_key`` property returns the globally unique form.
     """
@@ -161,57 +96,42 @@ class AssetDefinition(ComponentDefinition):
         Falls back to the bare ``key`` if no source key is set
         (e.g. standalone assets not owned by a source).
         """
-        return str(AssetIdentity(self.source_key or None, self.key))
-
-
-def _dependency_key(relation: Relation) -> str:
-    """The single key a ``depends_on``-declared upstream relation names, if any.
-
-    ``depends_on`` (removed once Task 5 finishes the migration) only ever
-    declares one key per upstream, unlike a general :class:`Relation`, so the
-    first of :meth:`Relation.keys` is the whole story.
-
-    Args:
-        relation: The declared upstream relation to read the key from.
-
-    Returns:
-        The declared key, or an empty string when the relation names none.
-    """
-    keys = relation.keys()
-    return keys[0] if keys else ""
+        return str(ComponentIdentity(self.source_key or None, self.key))
 
 
 class Asset(Component, Operation):
     """A data-producing component.
 
-    Subclass and implement ``data()`` to define an asset::
+    Subclass and implement ``data()`` to define an asset. Every parameter of
+    that signature is filled at run time: ``context`` and ``source`` are
+    injected, and every other parameter declares a relation read off its
+    annotation. A component class is filled with whatever is bound to it, and
+    ``il.Upstream`` (or ``list[il.Upstream]``) with the data read from an
+    upstream asset of the parameter's name::
 
-        class Users(Asset):
-            resource_types = {"config": MyConfig}
-
-            def data(self, **kwargs: Any) -> Any:
-                return fetch_users()
+        class Revenue(Asset):
+            def data(self, connection: MyConnection, orders: Upstream) -> Any:
+                return connection.price(orders.data)
 
     Or use the ``@asset`` decorator for a functional style::
 
-        @asset(resources={"config": MyConfig})
-        def users(**kwargs: Any) -> Any:
-            return fetch_users()
+        @asset
+        def revenue(connection: MyConnection, orders: Upstream) -> Any:
+            return connection.price(orders.data)
     """
 
     # Definition
-    destination_types: ClassVar[list[type[Destination]]] = []
+    destinations: list[Destination] = Relation("destination", many=True, optional=True)
     schema: ClassVar[type[Schema] | None] = None
     partitioning: ClassVar[PartitionConfig | None] = None
-    internal_fields: ClassVar[frozenset[str]] = frozenset({"destinations", "normalizer", "upstreams"})
-    depends_on: ClassVar[dict[str, str | Relation]] = {}
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"normalizer"})
     tags: ClassVar[list[str]] = []
 
     _source_type: ClassVar[type[Source] | None] = None
+    _data_fn: ClassVar[Callable[..., Any] | None] = None
     _defer_validation: ClassVar[bool] = True
 
     # State
-    destinations: list[Destination] = Field(default_factory=list)
     dataset: str = Field(default="")
     default_destination_key: str = Field(default="")
     materializable: bool = Field(default=True)
@@ -226,103 +146,115 @@ class Asset(Component, Operation):
         ),
     )
     normalizer: Normalizer | None = Field(default=None)
-    upstreams: dict[str, list[str]] = Field(default_factory=dict)
 
     # Private
-    _source: Source | None = PrivateAttr(default=None)
     _effective_schema: type[Schema] | None = PrivateAttr(default=None)
 
-    @field_validator("destinations", mode="before")
-    @classmethod
-    def _validate_destinations(cls, value: Any) -> Any:
-        """Accept a single destination or ``None`` where a list is expected.
-
-        Args:
-            value: The raw field value: a single destination, a list or tuple of
-                them, or ``None``.
-
-        Returns:
-            The value as a list.
-        """
-        if value is None:
-            return []
-        return value if isinstance(value, (list, tuple)) else [value]
-
-    @field_validator("upstreams", mode="before")
-    @classmethod
-    def _coerce_upstreams(cls, value: Any) -> Any:
-        """Accept a bare id where a list of ids is expected.
-
-        Hand wiring and older specs write ``{"orders": "<id>"}``; the wiring
-        is always a list, so a lone string is wrapped.
-
-        Args:
-            value: The raw ``upstreams`` input, parameter name to id or ids.
-
-        Returns:
-            The input with every string value wrapped in a one-element list.
-        """
-        if not isinstance(value, dict):
-            return value
-        return {name: [ids] if isinstance(ids, str) else ids for name, ids in value.items()}
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Infer ``resource_types`` from ``data()`` type annotations.
-
-        Args:
-            **kwargs: Class-creation keyword arguments, forwarded to
-                ``super().__init_subclass__``.
-        """
-        super().__init_subclass__(**kwargs)
-        cls._infer_resource_types()
+    # -- Construction ----------------------------------------------------------
 
     @classmethod
-    def _infer_resource_types(cls) -> None:
-        """Populate ``resource_types`` from ``data()`` annotations.
+    def collect(cls) -> None:
+        """Collect the declared relations, then infer one per ``data()`` parameter.
 
-        Uses ``inspect.signature`` (which respects ``__signature__``
-        overrides set by the ``@asset`` decorator) to read parameter
-        annotations.  Any parameter annotated with a ``Resource``
-        subclass that isn't already explicitly declared is added.
-        Explicit declarations always take precedence.
+        The signature is the declaration: a parameter that is neither reserved
+        (see :data:`_RESERVED_PARAMETERS`), variadic (``*args``, ``**extra``:
+        nothing is passed through them) nor already declared as a relation
+        (by ``relations=``, a :class:`Relation` attribute or an annotation, all
+        of which win) gets a relation inferred from its annotation. An asset
+        therefore says what it needs once, where it uses it.
+
+        Inference only runs on a class that writes its own ``data()``; a
+        subclass that inherits one inherits its relations with it. A parameter
+        nothing could ever fill is a definition error, raised from
+        :meth:`_infer_relation` as the class is created.
         """
+        super().collect()
         if "data" not in cls.__dict__:
             return
-        explicit: dict[str, type[Resource]] = cls.__dict__.get("resource_types", {})
         try:
             signature = inspect.signature(cls.data)
         except (TypeError, ValueError):
             return
-        inferred: dict[str, type[Resource]] = {}
-        for parameter_name, parameter in signature.parameters.items():
-            if parameter_name in ("self", "context", "source", "kwargs"):
+        hints = cls._data_hints()
+        inferred: dict[str, Relation] = {}
+        for name, parameter in signature.parameters.items():
+            if name in _RESERVED_PARAMETERS or name in cls.relations or parameter.kind in _VARIADIC_KINDS:
                 continue
-            if parameter_name in explicit:
-                continue
-            hint = parameter.annotation
-            if hint is inspect.Parameter.empty:
-                continue
-            if isinstance(hint, type) and issubclass(hint, Resource):
-                inferred[parameter_name] = hint
+            hint = hints.get(name, parameter.annotation)
+            inferred[name] = cls._infer_relation(name, hint, optional=parameter.default is None)
         if inferred:
-            cls.resource_types = {**explicit, **inferred}
+            cls.relations = {**cls.relations, **inferred}
+            for name, relation in inferred.items():
+                setattr(cls, name, relation)
+
+    @classmethod
+    def _data_hints(cls) -> dict[str, Any]:
+        """The resolved type hints of the function backing ``data()``.
+
+        The ``@asset`` decorator's ``data()`` is a wrapper taking ``**kwargs``,
+        so its own annotations say nothing about the asset; the decorated
+        function is kept as ``_data_fn`` and is what the hints come from,
+        since resolving a string annotation needs the module the function was
+        written in rather than the wrapper's.
+
+        Returns:
+            Parameter name to resolved annotation, empty when an annotation
+            cannot be resolved at all (a class local to a function body, say),
+            in which case the caller falls back to the raw annotations.
+        """
+        fn = cls.__dict__.get("_data_fn") or cls.data
+        try:
+            return get_type_hints(fn)
+        except Exception:  # noqa: BLE001 - an unresolvable annotation is handled by the caller
+            return {}
+
+    @classmethod
+    def _infer_relation(cls, name: str, hint: Any, *, optional: bool) -> Relation:
+        """The relation one ``data()`` parameter declares.
+
+        Args:
+            name: The parameter name, which is the relation's name and, for an
+                upstream, the bare asset key it expects.
+            hint: The parameter's annotation, resolved when it could be.
+            optional: Whether the parameter defaults to ``None``, which makes
+                the relation optional whatever its annotation says.
+
+        Returns:
+            An ``asset``-kind relation on the parameter's own name for
+            ``il.Upstream`` (many-valued for ``list[il.Upstream]``), otherwise
+            one targeting the annotated component class.
+
+        Raises:
+            TypeError: If the annotation could not be resolved to a type at
+                all, or if it names neither a component class nor
+                ``il.Upstream``, so nothing could ever fill the parameter.
+        """
+        target, admits_none = unwrap_optional(hint, {})
+        optional = optional or admits_none
+        if target is Upstream:
+            return Relation("asset", name, optional=optional, name=name)
+        if get_origin(target) is list and get_args(target) == (Upstream,):
+            return Relation("asset", name, many=True, optional=optional, name=name)
+        if isinstance(target, type) and issubclass(target, Component) and target.kind:
+            return Relation(target, optional=optional, name=name)
+        if isinstance(hint, str):
+            raise TypeError(f"{cls.__name__}.data() parameter '{name}': annotation '{hint}' could not be resolved")
+        raise TypeError(
+            f"{cls.__name__}.data() parameter '{name}' is neither a Component class nor il.Upstream; "
+            "nothing can fill it"
+        )
 
     # -- Identity & definition -------------------------------------------------
 
     @property
     def source(self) -> Source | None:
-        """The source this asset belongs to, if any."""
-        return self._source
+        """The source this asset belongs to, if any.
 
-    @property
-    def identity(self) -> AssetIdentity:
-        """The asset's :class:`AssetIdentity` (owning source key + own key)."""
-        return AssetIdentity(self._source.key if self._source is not None else None, self.key)
-
-    @property
-    def qualified_key(self) -> str:
-        """The fully qualified asset key: ``source_key.asset_key``."""
-        return str(self.identity)
+        An asset's owning source *is* its parent (see
+        :attr:`~interloper.component.base.Component.parent`); only a source
+        ever parents an asset, so the cast is safe.
+        """
+        return cast("Source | None", self.parent)
 
     @property
     def table(self) -> str:
@@ -332,7 +264,8 @@ class Asset(Component, Operation):
         :meth:`~interloper.source.base.Source.asset_table`) and the result is
         coerced to a valid identifier. Standalone assets use their class key.
         """
-        raw = self._source.asset_table(self) if self._source is not None else self.key
+        source = self.source
+        raw = source.asset_table(self) if source is not None else self.key
         return to_identifier(raw)
 
     @classmethod
@@ -343,7 +276,7 @@ class Asset(Component, Operation):
         ``"module:SourceName.AssetName"``, where the colon explicitly
         marks the module / attribute boundary.  Resolution walks the
         attribute chain at class level via the ``AssetRef`` descriptor
-        installed on the parent source — no instantiation required.
+        installed on the parent source, with no instantiation required.
 
         Standalone assets return the regular dotted module path.
 
@@ -389,103 +322,73 @@ class Asset(Component, Operation):
             partitioning=partitioning_dict,
         )
 
-    @classmethod
-    def declared_upstreams(cls) -> dict[str, Relation]:
-        """The asset's upstream contract, one :class:`Relation` per parameter.
-
-        The single reading of ``depends_on``: a plain string is a
-        non-optional single upstream on that key, a :class:`Relation` is taken
-        as declared.
-
-        Returns:
-            Parameter name to declaration.
-        """
-        return {
-            parameter: declared if isinstance(declared, Relation) else Relation("asset", declared)
-            for parameter, declared in cls.depends_on.items()
-        }
-
-    @classmethod
-    def sibling_upstreams(cls, source_key: str, sibling_keys: Iterable[str]) -> dict[str, str]:
-        """The declared upstreams that resolve to a sibling of the declaring source.
-
-        The one sibling-wiring rule, shared by the source at construction and
-        by the platform store at creation: a declared key whose source is the
-        declaring source (bare, or qualified with its own key) and whose asset
-        key names a sibling other than the asset itself.
-
-        Args:
-            source_key: Key of the source the asset belongs to.
-            sibling_keys: Keys of the source's assets, the asset itself included.
-
-        Returns:
-            Parameter name to sibling asset key.
-        """
-        siblings = set(sibling_keys)
-        wiring: dict[str, str] = {}
-        for parameter, dependency in cls.declared_upstreams().items():
-            if not dependency.key:
-                continue
-            expected = AssetIdentity.resolve(_dependency_key(dependency), own_source_key=source_key)
-            if expected.source_key == source_key and expected.asset_key in siblings and expected.asset_key != cls.key:
-                wiring[parameter] = expected.asset_key
-        return wiring
-
     # -- Reconfiguration -------------------------------------------------------
 
     def __call__(
         self,
         *,
         id: str | None = None,
-        resources: dict[str, Resource] | None = None,
-        destinations: Destination | list[Destination] | None = None,
+        materializable: bool | None = None,
         dataset: str | None = None,
         default_destination_key: str | None = None,
-        materializable: bool | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
         normalizer: Normalizer | None = _UNSET,  # ty: ignore[invalid-parameter-default]
-        upstreams: dict[str, list[str]] | None = None,
+        **relations: Any,
     ) -> Self:
         """Return a reconfigured copy of this asset.
 
-        Every argument defaults to ``None``, meaning "leave unchanged" — the one
-        exception is ``normalizer``, whose sentinel default lets an explicit
-        ``None`` clear the configured normalizer.
+        Every fixed parameter defaults to ``None``, meaning "leave unchanged".
+        Two exceptions: ``normalizer``, whose sentinel default lets an explicit
+        ``None`` clear the configured normalizer, and a name in **relations,
+        where ``None`` clears the binding, so only leaving the name out
+        entirely leaves it as is.
+
+        The copy carries this asset's own bindings and parent, so a copy made
+        to flip one field (the non-materializable parents of a mini-DAG, say)
+        still reads from the same destinations and upstreams.
 
         Args:
             id: New component id for the copy.
-            resources: Resources merged over the asset's own, by name.
-            destinations: A single destination or a list of them, replacing the
-                asset's configured destinations.
+            materializable: Whether the copy writes to destinations at all.
             dataset: Dataset (schema/namespace) the asset materializes into.
             default_destination_key: When the asset has several destinations,
                 the one downstream assets read it from.
-            materializable: Whether the copy writes to destinations at all.
             materialization_strategy: How the data is checked against the schema.
             normalizer: Normalizer applied before conform; pass ``None`` to
                 explicitly clear it.
-            upstreams: Mapping of ``data()`` parameter name to upstream asset ids.
+            **relations: Replacement targets for the copy's declared relations,
+                keyed by relation name: a single component, a list of them, or
+                ``None`` to clear the binding.
+
+        Returns:
+            A copy of this asset carrying the overrides.
+
+        Raises:
+            TypeError: If a keyword argument names no declared relation.
         """
+        unknown = [name for name in relations if name not in type(self).relations]
+        if unknown:
+            raise TypeError(f"{type(self).__name__} declares no relation(s): {', '.join(sorted(unknown))}")
         overrides: dict[str, Any] = {}
         if id is not None:
             overrides["id"] = id
-        if resources is not None:
-            overrides["resources"] = {**self.resources, **resources}
-        if destinations is not None:
-            overrides["destinations"] = destinations if isinstance(destinations, list) else [destinations]
+        if materializable is not None:
+            overrides["materializable"] = materializable
         if dataset is not None:
             overrides["dataset"] = dataset
         if default_destination_key is not None:
             overrides["default_destination_key"] = default_destination_key
-        if materializable is not None:
-            overrides["materializable"] = materializable
         if materialization_strategy is not None:
             overrides["materialization_strategy"] = materialization_strategy
         if normalizer is not _UNSET:
             overrides["normalizer"] = normalizer
-        if upstreams is not None:
-            overrides["upstreams"] = upstreams
-        return self.model_copy(update=overrides)
+        copy = self.model_copy(update=overrides)
+        # The copy inherits the private state, bindings included: its own dict,
+        # pointing at the same targets, so rebinding one leaves this asset alone.
+        copy._bound = {name: list(targets) for name, targets in self._bound.items()}
+        for name, value in relations.items():
+            setattr(copy, name, value)
+        return copy
 
     # -- Execution -------------------------------------------------------------
 
@@ -500,67 +403,11 @@ class Asset(Component, Operation):
             context: The facts this execution is scoped to.
 
         Returns:
-            An effectless result — a materialization's effects are its
+            An effectless result: a materialization's effects are its
             destination writes and the events it emits.
         """
         await self.materialize_async(context.partition_or_window, context.dag, context.metadata)
         return OperationResult()
-
-    def validate_upstreams(self, nodes: Mapping[str, Operation]) -> None:
-        """Check the asset's contract against its signature and its wiring.
-
-        Four checks, in order: every ``data()`` parameter without a default
-        is the context, a resource, or a declared upstream (an undeclared one
-        would surface as a ``TypeError`` inside ``data()`` at run time);
-        every non-optional slot has at least one wired upstream present in
-        *nodes*; a single-valued slot (``many=False``) has at most one wired
-        upstream present in *nodes*; every wired upstream present in *nodes*
-        satisfies its slot key (bare keys expect the asset's own source, see
-        :meth:`AssetIdentity.satisfies`). Called once per live node at DAG
-        construction; upstream ids absent from *nodes* are ignored here,
-        graph construction already rejected the non-optional ones.
-
-        Args:
-            nodes: Every node in the DAG, keyed by id.
-
-        Raises:
-            AssetError: If ``data()`` takes an undeclared parameter without a default.
-            DependencyNotFoundError: If a non-optional slot has nothing wired in *nodes*.
-            DependencyContractError: If a wired upstream violates its slot key, or a
-                single-valued slot has several upstreams wired.
-        """
-        declared = self.declared_upstreams()
-        for parameter_name, parameter in inspect.signature(self.data).parameters.items():
-            if parameter_name in ("self", "context", "source", "kwargs") or parameter_name in self.resource_types:
-                continue
-            if parameter_name not in declared and parameter.default is inspect.Parameter.empty:
-                raise AssetError(
-                    f"{type(self).__name__}.data(): parameter '{parameter_name}' is neither the context, a resource, "
-                    f"nor a declared upstream; add it to depends_on or give it a default."
-                )
-
-        own_source_key = self._source.key if self._source is not None else None
-        for parameter_name, dependency in declared.items():
-            present = [upstream_id for upstream_id in self.upstreams.get(parameter_name, []) if upstream_id in nodes]
-            if not dependency.optional and not present:
-                raise DependencyNotFoundError(
-                    f"'{self.qualified_key}' depends on '{dependency.key}' for parameter '{parameter_name}' "
-                    f"but nothing is wired in the DAG."
-                )
-            if not dependency.many and len(present) > 1:
-                raise DependencyContractError(
-                    f"'{self.qualified_key}' parameter '{parameter_name}' is a single-valued slot but "
-                    f"{len(present)} upstreams are wired; declare many=True or wire one."
-                )
-            if not dependency.key:
-                continue
-            for upstream_id in present:
-                upstream = cast(Asset, nodes[upstream_id])
-                if not upstream.identity.satisfies(_dependency_key(dependency), own_source_key=own_source_key):
-                    raise DependencyContractError(
-                        f"Asset '{self.key}' parameter '{parameter_name}' depends on "
-                        f"'{dependency.key}' but is wired to '{upstream.identity}'."
-                    )
 
     def run(
         self,
@@ -570,7 +417,7 @@ class Asset(Component, Operation):
     ) -> Any:
         """Execute the asset and return the result without writing to destination.
 
-        Sync entrypoint for scripts, REPLs, and notebooks — drives
+        Sync entrypoint for scripts, REPLs, and notebooks; drives
         :meth:`run_async` to completion on the bridge loop
         (see :func:`interloper.run`)::
 
@@ -596,10 +443,11 @@ class Asset(Component, Operation):
     ) -> Any:
         """Execute the asset and return the result without writing to destination.
 
-        Resolves context, resources, and upstreams (via DAG), then
-        runs the data function.  Sync ``data()`` functions are automatically
-        offloaded to a thread via ``asyncio.to_thread``; async ``data()``
-        functions are awaited natively.
+        Resolves the context and everything the declared relations fill
+        (upstreams through the DAG), then runs the data function. Sync
+        ``data()`` functions are automatically offloaded to a thread via
+        ``asyncio.to_thread``; async ``data()`` functions are awaited
+        natively.
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
@@ -611,13 +459,14 @@ class Asset(Component, Operation):
         """
         self._validate_partitioning(partition_or_window)
 
+        source = self.source
         context = ExecutionContext(
             asset_key=self.key,
             partition_or_window=partition_or_window,
             partitioning=self.partitioning,
             metadata=metadata,
             asset_id=self.id,
-            source_id=self._source.id if self._source is not None else None,
+            source_id=source.id if source is not None else None,
         )
 
         kwargs = await self._build_kwargs(context, partition_or_window, dag)
@@ -661,7 +510,7 @@ class Asset(Component, Operation):
     ) -> Any:
         """Execute the asset and write the result to all configured destinations.
 
-        Sync entrypoint for scripts, REPLs, and notebooks — drives
+        Sync entrypoint for scripts, REPLs, and notebooks; drives
         :meth:`materialize_async` to completion on the bridge loop
         (see :func:`interloper.run`)::
 
@@ -709,9 +558,9 @@ class Asset(Component, Operation):
         Subclasses must override this method.
 
         Args:
-            **kwargs: The resolved call arguments: the execution context,
-                declared resources, and upstreams, keyed by the
-                parameter names of the overriding signature.
+            **kwargs: The resolved call arguments: the execution context, the
+                owning source and whatever fills the declared relations, keyed
+                by the parameter names of the overriding signature.
 
         Raises:
             NotImplementedError: If the subclass does not implement ``data()``.
@@ -747,74 +596,68 @@ class Asset(Component, Operation):
         partition_or_window: Partition | PartitionWindow | None,
         dag: DAG | None,
     ) -> dict[str, Any]:
-        """Build kwargs for the data function.
+        """Build the keyword arguments ``data()`` is called with.
 
-        Maps function parameters to their values: ``context`` is injected
-        directly, declared resources are resolved by name, and every declared
-        upstream is read through :meth:`_read_upstreams`; many-valued slots
-        receive the legs, single slots the first leg's data.
+        One value per parameter: ``context`` and ``source`` are injected
+        directly, an ``asset``-kind relation is read through
+        :meth:`_read_upstreams` (every leg when it is many-valued, the single
+        leg or ``None`` otherwise), and any other relation resolves to what is
+        bound to it, or to what it can fill itself with (see
+        :meth:`~interloper.component.base.Component.resolve`).
 
         Args:
             context: The execution context injected as the ``context`` parameter.
-            partition_or_window: Scope used when reading upstreams.
+            partition_or_window: Scope the upstreams are read at.
             dag: DAG the upstream assets are looked up in. ``None`` is allowed
-                only when no parameter has a wired upstream to read.
+                only when no relation has an upstream to read.
 
         Returns:
             Keyword arguments to pass to ``data()``.
 
         Raises:
-            AssetError: If an upstream cannot be resolved or read.
+            AssetError: If an upstream is bound but no DAG was provided.
         """
         kwargs: dict[str, Any] = {}
-        signature = inspect.signature(self.data)
-        declared = self.declared_upstreams()
+        relations = type(self).relations
 
-        for parameter_name in signature.parameters:
-            if parameter_name in ("self", "source", "kwargs"):
+        for name in inspect.signature(self.data).parameters:
+            if name in ("self", "kwargs"):
                 continue
-            if parameter_name == "context":
+            if name == "context":
                 kwargs["context"] = context
-            elif parameter_name in self.resource_types:
-                # Lazily-built clients cost under the data() span, not here.
-                with tracer().start_as_current_span(
-                    "interloper.asset.resolve_resource",
-                    attributes={**self._span_attributes(), telemetry_attributes.RESOURCE_NAME: parameter_name},
-                ):
-                    kwargs[parameter_name] = self._resolve_resource(parameter_name)
-            elif parameter_name in declared:
-                dependency = declared[parameter_name]
-                upstream_ids = self.upstreams.get(parameter_name, [])
-                if upstream_ids and dag is None:
+            elif name == "source":
+                kwargs["source"] = self._parent
+            elif name not in relations:
+                continue
+            elif "asset" in relations[name].kinds():
+                # Bind-time validation is what makes this cast sound: only an asset is accepted here.
+                targets = cast("list[Asset]", self._bound.get(name, []))
+                if targets and dag is None:
                     raise AssetError(
                         f"Asset '{self.key}' has upstreams but no DAG provided. "
                         "Pass a DAG to run() or materialize() for upstream resolution."
                     )
-                legs = (
-                    await self._read_upstreams(parameter_name, upstream_ids, dag, partition_or_window, context.metadata)
-                    if upstream_ids and dag is not None
-                    else []
-                )
-                if dependency.many:
-                    kwargs[parameter_name] = legs
-                elif legs:
-                    kwargs[parameter_name] = legs[0].data
-                elif dependency.optional:
-                    kwargs[parameter_name] = None
-                # A non-optional single slot always has a leg here: the DAG's
-                # contract check guarantees a wired, present upstream.
+                legs = await self._read_upstreams(name, targets, dag, partition_or_window, context.metadata)
+                kwargs[name] = legs if relations[name].many else (legs[0] if legs else None)
+            else:
+                # Lazily-built clients cost under the data() span, not here.
+                with tracer().start_as_current_span(
+                    "interloper.asset.resolve_resource",
+                    attributes={**self._span_attributes(), telemetry_attributes.RESOURCE_NAME: name},
+                ):
+                    kwargs[name] = self.resolve(name)
 
         return kwargs
 
     async def _read_upstreams(
         self,
-        parameter_name: str,
-        upstream_ids: list[str],
-        dag: DAG,
+        name: str,
+        targets: list[Asset],
+        dag: DAG | None,
         partition_or_window: Partition | PartitionWindow | None,
         metadata: dict[str, Any],
     ) -> list[Upstream]:
-        """Read every leg wired into one slot.
+        """Read every leg bound to one upstream relation.
 
         A leg whose upstream has nothing materialized where the destination
         looks (no table or object for that scope at all) is handed over with
@@ -822,44 +665,49 @@ class Asset(Component, Operation):
         what a missing leg means. An existing but empty scope is not this
         case; it comes back as whatever the destination returns for an empty
         read (an empty list or frame), not ``None``. Any other read failure
-        fails the asset, optional slot or not. A wired id absent from *dag*
-        is skipped the same way, with its own warning: ``validate_upstreams``
-        and the DAG's graph construction only tolerate such an id when the
-        slot is optional, so the leg simply does not exist for this run.
+        fails the asset, optional relation or not. A bound upstream absent
+        from *dag* is skipped the same way, with its own warning: relation
+        validation and the DAG's graph construction only tolerate such a
+        binding when the relation is optional, so the leg simply does not
+        exist for this run.
 
         Args:
-            parameter_name: The ``data()`` parameter the legs are read for.
-            upstream_ids: The wired upstream ids; an id absent from *dag* is
-                skipped rather than read.
-            dag: The DAG the upstream assets are looked up in.
+            name: The ``data()`` parameter the legs are read for.
+            targets: The bound upstream assets; one absent from *dag* is
+                skipped rather than read, and one present is read through the
+                DAG's own node.
+            dag: The DAG the upstream assets are looked up in, ``None`` when
+                the run was given none, which leaves nothing to look up.
             partition_or_window: Scope of the reads.
             metadata: Run-level metadata carried onto the emitted events.
 
         Returns:
-            One :class:`Upstream` per leg present in *dag*, in wiring order.
+            One :class:`Upstream` per leg present in *dag*, in binding order.
 
         Raises:
             AssetError: If a leg cannot be read for a reason other than
                 missing data.
         """
         legs: list[Upstream] = []
-        for upstream_id in upstream_ids:
-            if upstream_id not in dag.operation_map:
+        for target in targets:
+            # DAG membership is by id, so the leg is read from the DAG's own node: for a mini-DAG
+            # that is a read-only copy of the bound asset, and reading the binding would miss it.
+            if dag is not None and target.id not in dag.operation_map:
                 EventBus.emit(
                     EventType.LOG,
                     metadata={
                         **self._event_metadata(metadata, partition_or_window),
                         "level": "WARNING",
                         "message": (
-                            f"Asset '{self.key}' upstream '{upstream_id}' for parameter '{parameter_name}' "
+                            f"Asset '{self.key}' upstream '{target.qualified_key}' for parameter '{name}' "
                             "is not in the DAG; the leg is skipped"
                         ),
                     },
                 )
                 continue
-            upstream_asset = cast(Asset, dag.operation_map[upstream_id])
+            upstream = cast("Asset", dag.operation_map[target.id]) if dag is not None else target
             try:
-                data = await self._destination_read(upstream_asset, partition_or_window, metadata)
+                data = await self._destination_read(upstream, partition_or_window, metadata)
             except AssetError as error:
                 if not isinstance(error.__cause__, DataNotFoundError):
                     raise
@@ -869,13 +717,13 @@ class Asset(Component, Operation):
                         **self._event_metadata(metadata, partition_or_window),
                         "level": "WARNING",
                         "message": (
-                            f"Asset '{self.key}' found no data in upstream '{upstream_asset.qualified_key}' for "
-                            f"parameter '{parameter_name}' at {partition_or_window}; the leg is passed with data=None"
+                            f"Asset '{self.key}' found no data in upstream '{upstream.qualified_key}' for "
+                            f"parameter '{name}' at {partition_or_window}; the leg is passed with data=None"
                         ),
                     },
                 )
                 data = None
-            legs.append(Upstream(asset=upstream_asset, data=data))
+            legs.append(Upstream(asset=upstream, data=data))
         return legs
 
     async def _destination_write(
@@ -894,7 +742,7 @@ class Asset(Component, Operation):
             result: The normalized and conformed data to write. An empty result
                 is skipped with a warning.
         """
-        destinations = self._resolve_destinations()
+        destinations = self._destinations()
         if not destinations:
             return
 
@@ -1013,7 +861,7 @@ class Asset(Component, Operation):
 
         Normalization (when a normalizer is configured) reshapes the data:
         flattening, column renaming, missing-key fill.  Conform then enforces
-        the declared schema according to the materialization strategy — it
+        the declared schema according to the materialization strategy: it
         runs whether or not a normalizer is configured, so a declared schema
         is always a checked contract.
 
@@ -1090,7 +938,7 @@ class Asset(Component, Operation):
     def _infer_schema(self, conformer: Conformer, result: Any) -> type[Schema] | None:
         """Best-effort schema inference for the IO boundary (AUTO, no declared schema).
 
-        Inference is metadata for destinations (DDL, typed loads) — it must
+        Inference is metadata for destinations (DDL, typed loads): it must
         never fail a materialization, so any inference error yields ``None``.
 
         Args:
@@ -1105,7 +953,7 @@ class Asset(Component, Operation):
             return None
         try:
             return conformer.infer(result)
-        except Exception:  # noqa: BLE001 — inference is best-effort metadata
+        except Exception:  # noqa: BLE001 - inference is best-effort metadata
             return None
 
     def _validate_partitioning(
@@ -1146,13 +994,13 @@ class Asset(Component, Operation):
 
         A time-partitioned asset requires a *time* partition: only those carry
         the granularity, so anything else would reach the asset as a scope that
-        cannot answer ``granularity`` or ``bounds`` — the contract
+        cannot answer ``granularity`` or ``bounds``, the contract
         ``context.partition`` rests on.
 
         Args:
             partitioning: The asset's declared time partition config.
             partition_or_window: The scope the run was given. ``None`` short-circuits
-                the check — the missing-scope case is caught by the caller.
+                the check; the missing-scope case is caught by the caller.
 
         Raises:
             PartitionError: If the scope is not a time partition, its
@@ -1186,91 +1034,36 @@ class Asset(Component, Operation):
             )
 
     def _validate_destination(self, destination: Destination) -> None:
-        """Validate that a destination is compatible with this asset's destination_types.
+        """Check that a destination is one this asset's ``destinations`` relation accepts.
 
         Args:
             destination: The destination instance to check. Any destination is
-                accepted when the asset declares no ``destination_types``.
+                accepted when the relation narrows no key.
 
         Raises:
-            DestinationError: If the destination type is not in destination_types.
+            DestinationError: If the relation does not accept the destination.
         """
-        allowed = self.destination_types
-        if not allowed:
+        relation = type(self).relations["destinations"]
+        if relation.accepts(destination.kind, destination.identity, owner=self.identity):
             return
-        if not isinstance(destination, tuple(allowed)):
-            from interloper.errors import DestinationError
+        raise DestinationError(
+            f"Destination '{type(destination).__name__}' is not compatible with "
+            f"asset '{self.key}'. Allowed keys: [{', '.join(relation.keys())}]"
+        )
 
-            allowed_names = ", ".join(t.__name__ for t in allowed)
-            raise DestinationError(
-                f"Destination '{type(destination).__name__}' is not compatible with "
-                f"asset '{self.key}'. Allowed types: [{allowed_names}]"
-            )
+    def _destinations(self) -> list[Destination]:
+        """The destinations this asset writes to and is read from.
 
-    def _resolve_resource(self, name: str) -> Resource | None:
-        """Resolve a named resource instance for this asset.
-
-        Resolution order:
-        1. Asset's own ``resources[name]``.
-        2. Source's ``resources[name]`` (if asset belongs to a source).
-        3. Source's resource matching by type (if asset belongs to a source).
-        4. Auto-instantiate from ``resource_types[name]``.
-        5. None.
-
-        Args:
-            name: The resource name to resolve.
+        Nothing is resolved here: a source trickles its own destinations into
+        every asset that has none of its own at construction, so what is bound
+        is the whole answer. The check catches a binding made by something
+        other than :meth:`~interloper.component.base.Component.bind` (a
+        hydration writing straight into the instance, say).
 
         Returns:
-            A resource instance or ``None``.
-
-        Raises:
-            AssetError: If the resolved resource does not match the declared type.
+            The bound destinations, in binding order; empty when none is bound.
         """
-        res_type = self.resource_types.get(name)
-
-        resolved: Resource | None = None
-
-        # 1. Asset's own instance
-        if name in self.resources:
-            resolved = self.resources[name]
-
-        # 2–3. Source resources (by name, then by type)
-        elif self._source is not None:
-            source_res = self._source.resources.get(name)
-            if source_res is not None:
-                resolved = source_res
-            elif res_type is not None:
-                for sr in self._source.resources.values():
-                    if isinstance(sr, res_type):
-                        resolved = sr
-
-        # 4. Auto-instantiate
-        if resolved is None and res_type is not None:
-            resolved = res_type()
-
-        # Validate against declared resource type
-        if resolved is not None and res_type is not None and not isinstance(resolved, res_type):
-            raise AssetError(
-                f"Resource '{name}' on asset '{self.key}' expected type "
-                f"'{res_type.__name__}', got '{type(resolved).__name__}'."
-            )
-
-        return resolved
-
-    def _resolve_destinations(self) -> list[Destination]:
-        """Resolve and validate the destination list for this asset.
-
-        Resolution order:
-        1. Asset's own destinations.
-        2. Source's destinations (if asset belongs to a source).
-        3. Empty list.
-
-        Returns:
-            A list of validated destination instances (may be empty).
-        """
-        destinations = self.destinations
-        if not destinations and self._source is not None:
-            destinations = self._source.destinations
+        destinations: list[Destination] = self.destinations
         for destination in destinations:
             self._validate_destination(destination)
         return destinations
@@ -1279,15 +1072,15 @@ class Asset(Component, Operation):
         """The destination downstream readers load this asset from.
 
         The destination whose key equals ``default_destination_key`` when one
-        is configured and present, else the first resolved destination.
+        is configured and bound, else the first bound destination.
 
         Returns:
             The destination to read from.
 
         Raises:
-            AssetError: If the asset resolves no destination at all.
+            AssetError: If the asset has no destination at all.
         """
-        destinations = self._resolve_destinations()
+        destinations = self._destinations()
         if not destinations:
             raise AssetError(f"No destination found for upstream asset '{self.key}'")
         preferred = next((d for d in destinations if d.key == self.default_destination_key), None)
@@ -1296,7 +1089,7 @@ class Asset(Component, Operation):
     def _span_attributes(self) -> dict[str, str]:
         """Identity attributes for spans opened below the asset's own span.
 
-        Run id and partition are omitted deliberately — the ancestor spans
+        Run id and partition are omitted deliberately: the ancestor spans
         already carry them, and these are emitted from code paths that
         don't hold the run metadata.
 
@@ -1329,6 +1122,7 @@ class Asset(Component, Operation):
             "qualified_key": self.qualified_key,
             "partition_or_window": str(partition_or_window) if partition_or_window else None,
         }
-        if self._source is not None:
-            base["source_id"] = self._source.id
+        source = self.source
+        if source is not None:
+            base["source_id"] = source.id
         return base

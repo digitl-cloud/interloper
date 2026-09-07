@@ -1,7 +1,7 @@
 """Tests for ``interloper.asset.decorator``."""
 
-# Note: no ``from __future__ import annotations`` — ``Asset._infer_resource_types``
-# reads parameter annotations via ``inspect.signature`` and needs them as real
+# Note: no ``from __future__ import annotations``. ``Asset.collect`` reads the
+# ``data()`` parameter annotations to infer relations and needs them as real
 # classes (not lazily-evaluated strings).
 
 import datetime as dt
@@ -11,8 +11,8 @@ import interloper as il
 from interloper.normalizer import MaterializationStrategy, Normalizer
 
 
-class DecoratorResource(il.Resource):
-    """Resource fixture referenced from a decorated function's annotations."""
+class DecoratorConfig(il.Config):
+    """Config fixture referenced from a decorated function's annotations."""
 
     value: str = ""
 
@@ -97,13 +97,15 @@ class TestParameterizedForm:
             key="custom",
             name="Custom Asset",
             icon="carbon:data-table",
-            resources={"config": DecoratorResource},
-            depends_on={"upstream": "other", "maybe": il.Dependency(key="another", optional=True)},
+            relations={
+                "upstream": il.Relation("asset", "other"),
+                "maybe": il.Relation("asset", "another", optional=True),
+            },
         )
-        def declared(context: il.ExecutionContext, config: DecoratorResource) -> list[dict[str, Any]]:
+        def declared(context: il.ExecutionContext, config: DecoratorConfig) -> list[dict[str, Any]]:
             return []
 
-        assert declared.destination_types == [DecoratorDestination]
+        assert declared.relations["destinations"].keys() == [DecoratorDestination.key]
         assert declared.schema is DecoratorSchema
         assert declared.partitioning is not None
         assert declared.partitioning.column == "date"
@@ -111,8 +113,9 @@ class TestParameterizedForm:
         assert declared.key == "custom"
         assert declared.name == "Custom Asset"
         assert declared.icon == "carbon:data-table"
-        assert declared.resource_types == {"config": DecoratorResource}
-        assert declared.declared_upstreams()["maybe"] == il.Dependency(key="another", optional=True)
+        assert declared.relations["config"].key == DecoratorConfig.key
+        assert declared.relations["upstream"] == il.Relation("asset", "other", name="upstream")
+        assert declared.relations["maybe"] == il.Relation("asset", "another", optional=True, name="maybe")
 
     def test_field_declarations_become_real_field_defaults(self):
         normalizer = Normalizer()
@@ -138,22 +141,39 @@ class TestParameterizedForm:
         assert plain.partitioning is None
 
 
-class TestResourceInference:
-    """Resource types are read off the ``data()`` annotations."""
+class TestRelationInference:
+    """Relations are read off the ``data()`` annotations."""
 
     def test_an_annotated_parameter_is_inferred(self):
         @il.asset
-        def uses_resource(config: DecoratorResource) -> list[dict[str, Any]]:
+        def uses_config(config: DecoratorConfig) -> list[dict[str, Any]]:
             return []
 
-        assert uses_resource.resource_types == {"config": DecoratorResource}
+        assert uses_config.relations["config"].key == DecoratorConfig.key
+        assert uses_config.relations["config"].kind == "config"
 
-    def test_context_and_kwargs_are_not_resources(self):
+    def test_context_and_kwargs_declare_nothing(self):
         @il.asset
         def uses_context(context: il.ExecutionContext, **kwargs: Any) -> list[dict[str, Any]]:
             return []
 
-        assert uses_context.resource_types == {}
+        assert set(uses_context.relations) == {"destinations"}
+
+    def test_an_explicit_relation_wins_over_the_annotation(self):
+        @il.asset(relations={"config": il.Relation(DecoratorConfig, optional=True)})
+        def uses_config(config: DecoratorConfig) -> list[dict[str, Any]]:
+            return []
+
+        assert uses_config.relations["config"].optional is True
+
+    def test_destinations_narrows_the_relation_keys(self):
+        @il.asset(destinations=[DecoratorDestination])
+        def narrowed() -> list[dict[str, Any]]:
+            return []
+
+        relation = narrowed.relations["destinations"]
+        assert relation.keys() == [DecoratorDestination.key]
+        assert (relation.many, relation.optional) == (True, True)
 
 
 class TestSignatureShapes:

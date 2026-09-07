@@ -11,7 +11,6 @@ from interloper.component import Relation
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import PartitionConfig
-from interloper.resource import Resource
 from interloper.schema import Schema
 
 
@@ -20,11 +19,10 @@ def asset(fn: Callable[..., Any], /) -> type[Asset]: ...
 @overload
 def asset(
     *,
-    resources: dict[str, type[Resource]] = ...,
+    relations: dict[str, Relation] = ...,
     destinations: list[type[Destination]] = ...,
     schema: type[Schema] | None = ...,
     partitioning: PartitionConfig | None = ...,
-    depends_on: dict[str, str | Relation] = ...,
     tags: list[str] = ...,
     key: str = ...,
     name: str = ...,
@@ -36,11 +34,10 @@ def asset(
     fn: Callable[..., Any] | None = None,
     /,
     *,
-    resources: dict[str, type[Resource]] | None = None,
+    relations: dict[str, Relation] | None = None,
     destinations: list[type[Destination]] | None = None,
     schema: type[Schema] | None = None,
     partitioning: PartitionConfig | None = None,
-    depends_on: dict[str, str | Relation] | None = None,
     tags: list[str] | None = None,
     key: str | None = None,
     name: str | None = None,
@@ -62,25 +59,28 @@ def asset(
         async def events(**kwargs):
             return await fetch_events()
 
-        @asset(resources={"config": MyConfig, "connection": MyConn})
+        @asset
         def other(config: MyConfig, connection: MyConn) -> Any:
             return fetch_other()
+
+    Every parameter of the decorated function declares a relation, inferred
+    from its annotation (see :meth:`~interloper.asset.base.Asset.collect`);
+    ``relations`` is for the declarations an annotation cannot express, such as
+    a cross-source or many-valued upstream.
 
     Args:
         fn: The function to turn into an asset, passed positionally when the
             decorator is used bare. ``None`` in the parenthesised form, which
             returns a decorator instead.
-        resources: Resource types keyed by ``data()`` parameter name. Explicit
-            declarations win over the types inferred from annotations.
-        destinations: Destination types the asset is allowed to write to.
+        relations: Relation name to
+            :class:`~interloper.component.relation.Relation`, keyed by
+            ``data()`` parameter name. Explicit declarations win over the ones
+            inferred from the annotations.
+        destinations: Destination classes the asset is allowed to write to;
+            narrows the key list of its ``destinations`` relation.
         schema: The asset's output schema. ``None`` leaves it undeclared, so
             AUTO infers one at materialization.
         partitioning: Partition config for the asset. ``None`` means unpartitioned.
-        depends_on: Upstream assets, keyed by ``data()`` parameter name. A
-            value is an asset key (bare, qualified or ``*.asset``) for a
-            non-optional single slot, or a
-            :class:`~interloper.component.relation.Relation` for an optional or
-            many-valued slot.
         tags: Catalog tags for the asset (e.g. ``["Report"]``).
         key: Asset key. Defaults to the decorated function's name.
         name: Human-readable display name. Defaults to a label built from the key.
@@ -94,8 +94,11 @@ def asset(
     classvars: dict[str, Any] = {}
     fields: dict[str, Any] = {}
 
+    declared: dict[str, Relation] = dict(relations or {})
     if destinations is not None:
-        classvars["destination_types"] = destinations
+        declared["destinations"] = Relation("destination", [cls.key for cls in destinations], many=True, optional=True)
+    if declared:
+        classvars["relations"] = declared
     if schema is not None:
         classvars["schema"] = schema
     if partitioning is not None:
@@ -108,10 +111,6 @@ def asset(
         classvars["name"] = name
     if icon is not None:
         classvars["icon"] = icon
-    if resources is not None:
-        classvars["resource_types"] = resources
-    if depends_on is not None:
-        classvars["depends_on"] = depends_on
 
     if materialization_strategy is not None:
         fields["materialization_strategy"] = materialization_strategy
@@ -136,16 +135,18 @@ def _build_asset_class(
     """Build an Asset subclass from a function or method.
 
     If the function's first parameter is ``self``, the asset is treated
-    as a **method asset** — at materialization time, the source instance
+    as a **method asset**: at materialization time, the source instance
     is passed as ``self``.  Otherwise it's a standalone function asset.
 
-    Explicit resource declarations from decorator kwargs are passed through.
-    Annotation-based inference is handled by ``Asset.__init_subclass__``.
+    The decorated function is kept on the class as ``_data_fn``: the generated
+    ``data()`` is a ``**kwargs`` wrapper, so the original is what relation
+    inference reads its annotations from (see
+    :meth:`~interloper.asset.base.Asset.collect`).
 
     Args:
         fn: The sync or async function (or method) backing the asset's ``data()``.
         classvars: Class-level attributes to set on the generated subclass
-            (``key``, ``tags``, ``resource_types``, …).
+            (``key``, ``tags``, ``relations``, …).
         fields: Pydantic field values to set on the generated subclass, annotated
             from ``Asset.model_fields``.
 
@@ -167,11 +168,11 @@ def _build_asset_class(
         if is_async:
 
             async def data(self: Asset, **kwargs: Any) -> Any:
-                return await fn(self._source, **kwargs)
+                return await fn(self.source, **kwargs)
         else:
 
             def data(self: Asset, **kwargs: Any) -> Any:
-                return fn(self._source, **kwargs)
+                return fn(self.source, **kwargs)
 
         data.__signature__ = data_sig  # ty: ignore[invalid-assignment]
     else:
@@ -190,7 +191,7 @@ def _build_asset_class(
 
         data.__signature__ = data_sig  # ty: ignore[invalid-assignment]
 
-    namespace: dict[str, Any] = {"data": data, **classvars, **fields}
+    namespace: dict[str, Any] = {"data": data, "_data_fn": fn, **classvars, **fields}
     namespace["__module__"] = fn.__module__
     namespace["__qualname__"] = fn.__qualname__
 

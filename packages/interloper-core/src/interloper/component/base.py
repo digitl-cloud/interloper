@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from typing_extensions import Self
 
-from interloper.component.relation import Bound, ComponentIdentity, Relation
+from interloper.component.relation import ComponentIdentity, Relation
 from interloper.errors import ConfigError
 from interloper.registry import Registry
 from interloper.serializable.base import IgnoredDescriptor, Serializable, Spec
@@ -131,29 +131,33 @@ class Component(Serializable):
     def collect(cls) -> None:
         """Merge the class's declared relations and install their descriptors.
 
-        Three declaration styles feed one map, in increasing precedence: an
-        annotation naming a component class (``connection: PostgresConnection``),
-        a :class:`Relation` class attribute (``config = Relation(BigQueryConfig)``),
-        and a ``relations`` dict written on the class body, which is what the
-        decorators emit. The result merges over every base's map, so a subclass
-        entry replaces the inherited entry of the same name and nothing an
-        ancestor declared is ever lost.
+        Three declaration forms feed one map, in increasing precedence:
 
-        Each entry is copied and stamped with its name, then exposed through a
-        :class:`~interloper.component.relation.Bound` descriptor: the relation
-        at class access, the bound component(s) at instance access. The copy is
-        what keeps a subclass's redeclaration off its parent's map.
+        - an annotation naming a component class
+          (``connection: PostgresConnection``), the shorthand for a relation
+          that needs nothing said beyond what fills it;
+        - a :class:`Relation` value, which is where anything else the relation
+          declares is written. Annotate it with what fills it
+          (``destinations: list[Destination] = Relation("destination", many=True)``)
+          so both the constructor kwarg and the attribute are typed; the
+          annotation is then for the type checker only, since the relation
+          itself says what it accepts. A bare ``config = Relation(BigQueryConfig)``
+          declares the same relation untyped;
+        - a ``relations`` dict written on the class body, which is what the
+          decorators emit.
+
+        The result merges over every base's map, so a subclass entry replaces
+        the inherited entry of the same name and nothing an ancestor declared
+        is ever lost.
+
+        Each entry is copied, stamped with its name and installed under that
+        name: a :class:`~interloper.component.relation.Relation` is its own
+        descriptor, so the class attribute reads as the declaration and the
+        instance attribute as what is bound to it. The copy is what keeps a
+        subclass's redeclaration off its parent's map.
 
         Annotated relations are dropped from the class's own annotations before
         Pydantic collects its fields, so a relation is never also a field.
-
-        The :class:`Bound` descriptor this installs is invisible to the type
-        checker, which still sees the class-body value it replaced (a
-        ``relations`` dict, an annotation, or a bare ``Relation``). A class
-        that declares its anchors through a ``relations`` dict therefore
-        repeats each one under ``if TYPE_CHECKING:`` as the attribute its
-        callers actually see at runtime (``destinations: list[Destination]``),
-        with no comment needed at each site now that the reason lives here.
         """
         inherited: dict[str, Relation] = {}
         for base in reversed(cls.__mro__[1:]):
@@ -177,7 +181,7 @@ class Component(Serializable):
         for name, relation in cls.relations.items():
             stamped = relation.model_copy(update={"name": name})
             cls.relations[name] = stamped
-            setattr(cls, name, Bound(stamped))
+            setattr(cls, name, stamped)
             annotations.pop(name, None)
 
     @classmethod
@@ -239,28 +243,21 @@ class Component(Serializable):
             self.id = str(uuid.uuid4())
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Rebind a relation on plain attribute assignment, otherwise defer to Pydantic.
+        """Route a relation assignment to its descriptor, otherwise defer to Pydantic.
 
-        Pydantic's own ``__setattr__`` only special-cases ``property``, so a
-        :class:`~interloper.component.relation.Bound` descriptor never runs on
-        assignment; this is what makes ``widget.destinations = [...]`` work.
-
-        The replacement is validated before the existing binding is touched,
-        so a rejected reassignment (wrong kind, too many targets for a
-        single-valued relation) leaves the previous binding exactly as it was.
+        Pydantic's own ``__setattr__`` bypasses descriptors other than
+        ``property``, so a relation name is handed to ``object.__setattr__``,
+        which runs :meth:`Relation.__set__` and rebinds. The rebinding logic
+        lives there and only there.
 
         Args:
             name: The attribute being set.
-            value: For a relation name, ``None`` or an empty sequence clears
-                the binding, a single component or a list/tuple of components
-                replaces it; any other name is forwarded to Pydantic as a
-                field assignment.
+            value: For a relation name, whatever :meth:`Relation.__set__`
+                accepts; any other name is forwarded to Pydantic as a field
+                assignment.
         """
         if name in type(self).relations:
-            relation = self._relation(name)
-            targets = tuple(value) if isinstance(value, (list, tuple)) else (() if value is None else (value,))
-            self._check_targets(name, relation, targets)
-            self._bound[name] = list(targets)
+            object.__setattr__(self, name, value)
             return
         super().__setattr__(name, value)
 

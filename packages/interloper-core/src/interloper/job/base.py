@@ -46,14 +46,8 @@ class Job(Component, Workload):
     icon: ClassVar[str] = "carbon:event-schedule"
     state_model: ClassVar[type[BaseModel] | None] = JobState
 
-    if TYPE_CHECKING:
-        targets: list[Source | Asset]
-        destinations: list[Destination]
-
-    relations: ClassVar[dict[str, Relation]] = {
-        "targets": Relation(["source", "asset"], many=True, optional=True, on_delete="detach"),
-        "destinations": Relation("destination", many=True, optional=True),
-    }
+    targets: list[Source | Asset] = Relation(["source", "asset"], many=True, optional=True, on_delete="detach")
+    destinations: list[Destination] = Relation("destination", many=True, optional=True)
 
     enabled: bool = Field(default=True, description="Job will run on the configured schedule")
     tags: list[str] = Field(default_factory=list)
