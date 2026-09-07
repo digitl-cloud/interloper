@@ -27,8 +27,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from interloper.errors import format_exception
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from interloper.component.base import Relation
     from interloper.dag.base import DAG
     from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
@@ -111,8 +109,8 @@ class Operation(Workload):
         id: str
         kind: ClassVar[str]
         key: ClassVar[str]
+        relations: ClassVar[dict[str, Relation]]
         materializable: bool
-        upstreams: dict[str, list[str]]
         source: Any | None
         partitioning: ClassVar[PartitionConfig | None]
 
@@ -124,8 +122,20 @@ class Operation(Workload):
             """
             ...
 
+        def bound(self, name: str) -> Any:
+            """What is bound to one of this node's relations (see ``Component.bound``).
+
+            Args:
+                name: The relation name as declared on the class.
+
+            Returns:
+                The bound node(s): a list for a many-valued relation, the
+                single node or ``None`` otherwise.
+            """
+            ...
+
     materializable = True
-    upstreams = {}  # noqa: RUF012
+    relations = {}  # noqa: RUF012
     source = None
     partitioning = None
 
@@ -158,26 +168,17 @@ class Operation(Workload):
         """
         return partition_or_window if self.partitioning is not None else None
 
-    def declared_upstreams(self) -> dict[str, Relation]:
-        """The node's declared upstream contract.
+    def upstream_relations(self) -> dict[str, Relation]:
+        """The node's relations that another node in the graph fills.
 
-        The default declares nothing; ``Asset`` returns its ``depends_on``.
+        An ``asset``-kind relation is an edge: whatever fills it is a node the
+        graph must order before this one. Every other relation points at
+        something outside the graph (a connection, a config, a destination).
 
         Returns:
-            Parameter name to declaration.
+            Relation name to declaration, for the relations accepting assets.
         """
-        return {}
-
-    def validate_upstreams(self, nodes: Mapping[str, Operation]) -> None:
-        """Validate this node's wired upstreams against its own contracts.
-
-        Called once per node at DAG construction. The default has nothing
-        to validate; ``Asset`` checks its signature, its cardinality and
-        its wired identities here.
-
-        Args:
-            nodes: Every node in the DAG, keyed by id.
-        """
+        return {name: relation for name, relation in type(self).relations.items() if "asset" in relation.kinds()}
 
     def _validate_time_partitioning(self, partitioning: Any, partition_or_window: Any) -> None:
         """Validate a time-partitioned run scope against this node.

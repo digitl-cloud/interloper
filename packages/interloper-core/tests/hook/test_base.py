@@ -114,7 +114,7 @@ class TestFire:
         from interloper.errors import ConfigError
 
         with pytest.raises(ConfigError, match="does not accept"):
-            FakeNotifyHook(watches=[il.MemoryDestination()])
+            FakeNotifyHook(watches=[il.MemoryDestination()])  # ty: ignore[invalid-argument-type]
 
 
 class TestTriggerFire:

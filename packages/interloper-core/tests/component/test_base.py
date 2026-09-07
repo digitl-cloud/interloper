@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, ClassVar
 
 import pytest
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 import interloper as il
 from interloper.component.base import (
@@ -237,7 +237,7 @@ class TestDefinition:
 
 
 class Conn(il.Connection):
-    """Connection for binding tests; the required secret keeps it from self-filling."""
+    """Connection for binding tests; the required secret is read from the environment, not from a binding."""
 
     api_secret: str = il.SecretField()
 
@@ -260,12 +260,30 @@ class Dest(il.Destination):
         pass
 
 
+class NeedyDest(il.Destination):
+    """Destination with a required field, so a relation targeting it can never fill itself."""
+
+    bucket: str
+
+    def read(self, context: Any) -> Any:  # pragma: no cover
+        return None
+
+    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
+        pass
+
+
 class Widget(il.Source):
     """Source with an annotated connection, an explicit optional config, and a self-filling config."""
 
     connection: Conn
-    config = il.Relation(Cfg, optional=True)
-    fallback = il.Relation(Cfg)
+    config: Cfg | None = il.Relation(Cfg, optional=True)
+    fallback: Cfg = il.Relation(Cfg)
+
+
+class Gadget(il.Source):
+    """Source whose one non-optional relation nothing can fill: no default, no settings target."""
+
+    store: NeedyDest = il.Relation(NeedyDest)
 
 
 class TestCollect:
@@ -276,14 +294,14 @@ class TestCollect:
 
     def test_relation_attribute_keeps_flags(self):
         assert Widget.relations["config"].optional is True
-        assert Widget.config.name == "config"
+        assert Widget.relations["config"].name == "config"
 
     def test_anchor_relations_inherited(self):
         assert Widget.relations["destinations"].many is True
 
     def test_subclass_replaces_same_name(self):
         class Narrow(Widget):
-            connection = il.Relation(Conn, optional=True)
+            connection: Conn | None = il.Relation(Conn, optional=True)
 
         assert Narrow.relations["connection"].optional is True
         assert Widget.relations["connection"].optional is False
@@ -313,12 +331,23 @@ class TestBind:
         assert "fallback" not in widget.bound_ids()
 
     def test_missing_required_is_a_build_error(self):
-        with pytest.raises(ConfigError, match="connection"):
-            Widget()
+        with pytest.raises(ConfigError, match="store"):
+            Gadget()
+
+    def test_a_settings_relation_is_left_to_the_read(self, monkeypatch):
+        # A connection's required fields come from the environment, so an
+        # unbound one builds and only the read can fail.
+        monkeypatch.delenv("api_secret", raising=False)
+        monkeypatch.delenv("API_SECRET", raising=False)
+        widget = Widget()  # ty: ignore[missing-argument]
+
+        assert widget.bound("connection") is None
+        with pytest.raises(ValidationError):
+            widget.resolve("connection")
 
     def test_wrong_kind_rejected(self):
         with pytest.raises(ConfigError, match="connection"):
-            Widget(connection=Cfg())  # type: ignore[arg-type]
+            Widget(connection=Cfg())  # ty: ignore[invalid-argument-type]
 
     def test_single_relation_rejects_second_target(self):
         widget = Widget(connection=Conn(api_secret="s"))
@@ -357,7 +386,7 @@ class TestBind:
 
     def test_unknown_kwarg_is_a_type_error(self):
         with pytest.raises(TypeError, match="unexpected"):
-            Widget(connection=Conn(api_secret="s"), nope=1)
+            Widget(connection=Conn(api_secret="s"), nope=1)  # ty: ignore[unknown-argument]
 
 
 class TestSetAttrRelations:
@@ -381,13 +410,13 @@ class TestSetAttrRelations:
     def test_assigning_wrong_kind_raises(self):
         widget = Widget(connection=Conn(api_secret="s"))
         with pytest.raises(ConfigError, match="connection"):
-            widget.connection = Cfg()  # type: ignore[assignment]
+            widget.connection = Cfg()  # ty: ignore[invalid-assignment]
 
     def test_failed_reassignment_leaves_original_binding_intact(self):
         connection = Conn(api_secret="s")
         widget = Widget(connection=connection)
         with pytest.raises(ConfigError, match="connection"):
-            widget.connection = Cfg()  # type: ignore[assignment]
+            widget.connection = Cfg()  # ty: ignore[invalid-assignment]
         assert widget.connection is connection
 
 
@@ -397,7 +426,7 @@ class TestSetAttrRelations:
 class Child(il.Asset):
     """Asset declaring a connection relation."""
 
-    connection = il.Relation(Conn, optional=True)
+    connection: Conn | None = il.Relation(Conn, optional=True)
 
     def data(self, context: il.ExecutionContext) -> list[dict]:
         return []
@@ -423,7 +452,7 @@ class TestTrickle:
             """Another connection kind."""
 
         class Picky(il.Asset):
-            connection = il.Relation(Other, optional=True)
+            connection: Other | None = il.Relation(Other, optional=True)
 
             def data(self, context: il.ExecutionContext) -> list[dict]:
                 return []
@@ -447,7 +476,7 @@ class TestValidateRelations:
                 return []
 
         class Down(il.Asset):
-            up = il.Relation("asset", "up")
+            up: il.Asset = il.Relation("asset", "up")
 
             def data(self, context: il.ExecutionContext, up: il.Upstream) -> list[dict]:
                 return []
@@ -639,6 +668,7 @@ class TestSerialization:
         """A Spec-shaped dict nested inside a user dict is walked and reconstructed."""
         component = FakeComponent(resources={"r": FakeResource(text="abc")})
         restored = Component.from_spec(component.to_spec())
+        assert isinstance(restored, FakeComponent)
         assert isinstance(restored.resources["r"], FakeResource)
 
     # -- Error cases -------------------------------------------------------

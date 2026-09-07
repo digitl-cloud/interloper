@@ -67,12 +67,9 @@ class Hook(Component):
     icon: ClassVar[str] = "carbon:lightning"
     state_model: ClassVar[type[BaseModel] | None] = HookState
 
-    if TYPE_CHECKING:
-        watches: list[Source | Asset | Job]
-
-    relations: ClassVar[dict[str, Relation]] = {
-        "watches": Relation(["source", "asset", "job"], many=True, optional=True, on_delete="detach"),
-    }
+    watches: list[Source | Asset | Job] = Relation(
+        ["source", "asset", "job"], many=True, optional=True, on_delete="detach"
+    )
 
     events: list[HookEvent] = Field(
         default=["run_failed"],

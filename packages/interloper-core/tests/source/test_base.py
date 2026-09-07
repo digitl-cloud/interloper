@@ -7,6 +7,7 @@
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 import interloper as il
 from interloper.asset.base import AssetDefinition
@@ -21,8 +22,8 @@ from interloper.source.base import SourceDefinition
 class FakeConnection(il.Connection):
     """Connection fixture trickled from a source down to its assets.
 
-    The required token keeps it from self-filling, so a relation that
-    targets it must actually be bound to satisfy validation.
+    The token is required, and a connection reads it from the environment, so
+    an unbound relation targeting it builds and fails on the read.
     """
 
     token: str = il.SecretField()
@@ -64,7 +65,7 @@ class FakeSourceWithAssets(il.Source):
     class FakeSecond(il.Asset):
         """Second asset naming its sibling explicitly."""
 
-        fake_first = il.Relation("asset", "fake_first")
+        fake_first: il.Asset = il.Relation("asset", "fake_first")
 
         def data(self, fake_first: il.Upstream) -> Any:  # pragma: no cover
             return None
@@ -90,7 +91,7 @@ class Shop(il.Source):
     class Orders(il.Asset):
         """Upstream asset filled with the source's connection."""
 
-        connection = il.Relation(FakeConnection)
+        connection: FakeConnection = il.Relation(FakeConnection)
 
         def data(self, connection: FakeConnection) -> Any:  # pragma: no cover
             return []
@@ -98,7 +99,7 @@ class Shop(il.Source):
     class Revenue(il.Asset):
         """Downstream asset naming its sibling by bare key."""
 
-        orders = il.Relation("asset", "orders")
+        orders: il.Asset = il.Relation("asset", "orders")
 
         def data(self, orders: il.Upstream) -> Any:  # pragma: no cover
             return []
@@ -114,7 +115,7 @@ class Finance(il.Source):
         this source must stay constructible with it unbound.
         """
 
-        orders = il.Relation("asset", "shop.orders", optional=True)
+        orders: il.Asset | None = il.Relation("asset", "shop.orders", optional=True)
 
         def data(self, orders: il.Upstream) -> Any:  # pragma: no cover
             return []
@@ -126,7 +127,7 @@ class FakeUnfillableSource(il.Source):
     class FakeOrphan(il.Asset):
         """Asset naming a sibling that exists in no source."""
 
-        orders = il.Relation("asset", "nowhere.orders")
+        orders: il.Asset = il.Relation("asset", "nowhere.orders")
 
         def data(self, orders: il.Upstream) -> Any:  # pragma: no cover
             return []
@@ -201,7 +202,7 @@ class TestSourceRelations:
 
     def test_a_single_destination_is_accepted(self):
         destination = FakeDestination()
-        assert FakeSource(destinations=destination).destinations == [destination]
+        assert FakeSource(destinations=destination).destinations == [destination]  # ty: ignore[invalid-argument-type]
 
     def test_annotation_declares_a_relation(self):
         relation = Shop.relations["connection"]
@@ -210,13 +211,20 @@ class TestSourceRelations:
     def test_connection_trickles_to_assets(self):
         connection = FakeConnection(token="secret")
         source = Shop(connection=connection)
-        assert source.orders.connection is connection
+        assert source.orders.connection is connection  # ty: ignore[unresolved-attribute]
 
-    def test_missing_non_optional_connection_raises_naming_it(self):
-        from interloper.errors import ConfigError
+    def test_missing_connection_builds_and_fails_on_the_read(self, monkeypatch):
+        # A connection reads its credentials from the environment, so an
+        # unbound one is a read-time failure, not a build-time one.
+        monkeypatch.delenv("token", raising=False)
+        monkeypatch.delenv("TOKEN", raising=False)
+        shop = Shop()  # ty: ignore[missing-argument]
 
-        with pytest.raises(ConfigError, match="connection"):
-            Shop()
+        assert shop.bound("connection") is None
+        with pytest.raises(ValidationError):
+            shop.resolve("connection")
+        with pytest.raises(ValidationError):
+            shop.orders.resolve("connection")
 
     def test_asset_relation_nothing_can_fill_raises_naming_asset_and_relation(self):
         from interloper.errors import ConfigError
@@ -228,7 +236,7 @@ class TestSourceRelations:
 
     def test_destination_bound_after_construction_still_trickles(self):
         class FakeConnectedDestination(FakeDestination):
-            connection = il.Relation(FakeConnection, optional=True)
+            connection: FakeConnection | None = il.Relation(FakeConnection, optional=True)
 
         connection = FakeConnection(token="secret")
         destination = FakeConnectedDestination()
@@ -239,7 +247,7 @@ class TestSourceRelations:
     def test_sibling_bindings_and_bind(self):
         assert Shop.sibling_bindings() == {"revenue": {"orders": "orders"}}
         source = Shop(connection=FakeConnection(token="secret"))
-        assert source.revenue.orders is source.orders
+        assert source.revenue.orders is source.orders  # ty: ignore[unresolved-attribute]
 
     def test_cross_source_key_stays_unbound(self):
         assert Finance.sibling_bindings() == {}
@@ -415,7 +423,6 @@ class TestResolution:
         source = FakeTrickleSource(dataset="parent_ds")
         assert source.assets[0].dataset == "child_own"
 
-    @pytest.mark.xfail(strict=True, reason="Task 5: the Asset anchor declares its destinations relation")
     def test_trickles_destination_to_assets(self):
         source_dest = FakeDestination()
 
@@ -497,7 +504,7 @@ class TestResolution:
 
     def test_trickles_into_bound_destinations(self):
         class FakeConnectedDestination(FakeDestination):
-            connection = il.Relation(FakeConnection, optional=True)
+            connection: FakeConnection | None = il.Relation(FakeConnection, optional=True)
 
         class FakeConnectedSource(il.Source):
             connection: FakeConnection
@@ -580,20 +587,20 @@ class TestReconfiguration:
         a, b = FakeConnection(token="a"), FakeConnection(token="b")
         source = Shop(connection=a)
         reconfigured = source(connection=b)
-        assert reconfigured.orders.connection is b
+        assert reconfigured.orders.connection is b  # ty: ignore[unresolved-attribute]
 
     def test_repointing_a_connection_preserves_an_asset_s_own_binding(self):
         a, b, own = FakeConnection(token="a"), FakeConnection(token="b"), FakeConnection(token="own")
-        source = Shop(connection=a, assets={"orders": {"connection": own}})
+        source = Shop(connection=a, assets={"orders": {"connection": own}})  # ty: ignore[invalid-argument-type]
         reconfigured = source(connection=b)
         # The copy is deep: what survives is an equal value, not the same object.
-        assert reconfigured.orders.connection.token == "own"
+        assert reconfigured.orders.connection.token == "own"  # ty: ignore[unresolved-attribute]
 
     def test_repointing_a_connection_leaves_the_original_source_untouched(self):
         a, b = FakeConnection(token="a"), FakeConnection(token="b")
         source = Shop(connection=a)
         source(connection=b)
-        assert source.orders.connection is a
+        assert source.orders.connection is a  # ty: ignore[unresolved-attribute]
 
 
 # -- Serialization round-trip --------------------------------------------------
@@ -674,7 +681,6 @@ class TestSelect:
         with pytest.raises(ValidationError, match="has no asset"):
             FakeSourceWithAssets(select=["nope"])
 
-    @pytest.mark.xfail(strict=True, reason="Task 6: DAG edges come from bound relations")
     def test_dag_over_selected_source(self):
         dag = il.DAG(FakeSourceWithAssets(select=["fake_second"]))
         generations = dag.topological_generations()

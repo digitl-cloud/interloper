@@ -44,22 +44,22 @@ class DemoSource(il.Source):
         return self._do(context, "A")
 
     @il.asset(schema=DemoSchema, partitioning=partitioning, tags=["Report"])
-    def b(self, context: il.ExecutionContext, a: str, x: str | None = None) -> pd.DataFrame:
+    def b(self, context: il.ExecutionContext, a: il.Upstream) -> pd.DataFrame:
         """Depends on A. Part of the example DAG (a -> b -> e)."""
         return self._do(context, "B")
 
     @il.asset(schema=DemoSchema, partitioning=partitioning, tags=["Report"])
-    def c(self, context: il.ExecutionContext, a: str) -> pd.DataFrame:
+    def c(self, context: il.ExecutionContext, a: il.Upstream) -> pd.DataFrame:
         """Depends on A. Part of the example DAG (a -> c -> e)."""
         return self._do(context, "C")
 
     @il.asset(schema=DemoSchema, partitioning=partitioning, tags=["Report"])
-    def d(self, context: il.ExecutionContext, a: str) -> pd.DataFrame:
+    def d(self, context: il.ExecutionContext, a: il.Upstream) -> pd.DataFrame:
         """Depends on A. Part of the example DAG (a -> d -> e)."""
         return self._do(context, "D")
 
     @il.asset(schema=DemoSchema, partitioning=partitioning, tags=["Report"])
-    def e(self, context: il.ExecutionContext, b: str, c: str, d: str) -> pd.DataFrame:
+    def e(self, context: il.ExecutionContext, b: il.Upstream, c: il.Upstream, d: il.Upstream) -> pd.DataFrame:
         """Depends on B, C, and D. Sink asset of the example DAG."""
         return self._do(context, "E")
 

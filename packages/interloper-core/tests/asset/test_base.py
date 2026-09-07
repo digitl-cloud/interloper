@@ -1,8 +1,9 @@
 """Tests for ``interloper.asset.base``."""
 
-# Note: no ``from __future__ import annotations`` — ``Asset._infer_resource_types``
-# reads parameter annotations via ``inspect.signature`` and needs them as real
-# classes (not lazily-evaluated strings).
+# Note: no ``from __future__ import annotations``. ``Asset.collect`` reads the
+# ``data()`` parameter annotations to infer relations and needs them as real
+# classes, not lazily-evaluated strings a locally-defined fixture would leave
+# unresolvable.
 
 import asyncio
 import datetime as dt
@@ -11,12 +12,14 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import pytest
+from pydantic import ValidationError
 
 import interloper as il
-from interloper.asset.base import AssetDefinition, AssetIdentity
+from interloper.asset.base import AssetDefinition
 from interloper.component.base import Component
+from interloper.component.relation import ComponentIdentity
 from interloper.dag import DAG
-from interloper.errors import AssetError, DestinationError, PartitionError
+from interloper.errors import AssetError, ConfigError, DestinationError, PartitionError
 from interloper.events import Event, EventBus, EventType
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
@@ -25,13 +28,19 @@ from interloper.serializable import Spec
 
 # -- Fixtures ------------------------------------------------------------------
 
-
-class FakeResource(il.Resource):
-    value: str = ""
+PARTITION = TimePartitionConfig(column="date")
 
 
-class FakeOtherResource(il.Resource):
-    other: str = ""
+class Conn(il.Connection):
+    """Connection fixture; the required secret is read from the environment, so the read is what fails."""
+
+    api_secret: str = il.SecretField()
+
+
+class Cfg(il.Config):
+    """Config fixture; every field is defaulted, so its relation fills itself."""
+
+    threshold: int = il.InputField(default=1)
 
 
 class FakeDestination(il.Destination):
@@ -50,6 +59,18 @@ class FakeOtherDestination(il.Destination):
         pass
 
 
+class NeedyDestination(il.Destination):
+    """Destination fixture with a required field, so its relation never fills itself."""
+
+    bucket: str
+
+    def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
+        return None
+
+    def write(self, context: Any, data: Any) -> None:  # pragma: no cover - not exercised
+        pass
+
+
 class FakeAsset(il.Asset):
     """Plain asset fixture."""
 
@@ -58,10 +79,10 @@ class FakeOtherAsset(il.Asset):
     """Second asset class used for subclass-identity tests."""
 
 
-class FakeAssetWithResource(il.Asset):
-    """Asset whose ``data()`` signature declares a typed resource dependency."""
+class FakeAssetWithConfig(il.Asset):
+    """Asset whose ``data()`` signature declares a self-filling config."""
 
-    def data(self, config: FakeResource) -> Any:  # pragma: no cover
+    def data(self, config: Cfg) -> Any:  # pragma: no cover
         return None
 
 
@@ -79,6 +100,40 @@ class FakeSourceOwnedAsset(il.Asset):
 FakeParentSource.register_asset_type(FakeSourceOwnedAsset)
 
 
+@il.source
+class FbLike(il.Source):
+    """Provider fixture: one stamped ``campaigns`` asset."""
+
+    @il.asset(partitioning=PARTITION)
+    def campaigns(self, context: il.ExecutionContext) -> Any:
+        """One row per partition.
+
+        Args:
+            context: The execution context carrying the partition.
+
+        Returns:
+            The single stamped row.
+        """
+        return [{"date": context.partition_date, "id": "fb"}]
+
+
+@il.source
+class TtLike(il.Source):
+    """Second provider fixture: one stamped ``campaigns`` asset."""
+
+    @il.asset(partitioning=PARTITION)
+    def campaigns(self, context: il.ExecutionContext) -> Any:
+        """One row per partition.
+
+        Args:
+            context: The execution context carrying the partition.
+
+        Returns:
+            The single stamped row.
+        """
+        return [{"date": context.partition_date, "id": "tt"}]
+
+
 @dataclass(frozen=True)
 class FakePartition(Partition):
     pass
@@ -88,6 +143,35 @@ class FakePartition(Partition):
 class FakePartitionWindow(PartitionWindow):
     def __iter__(self) -> Iterator[Partition]:  # noqa: D105 - protocol method
         yield FakePartition(self.start)  # pragma: no cover - not exercised
+
+
+@pytest.fixture(autouse=True)
+def _clear_memory_destination() -> None:
+    """Empty the class-wide ``MemoryDestination`` storage before every test."""
+    il.MemoryDestination.clear()
+
+
+async def _capture_log_events(coro: Any) -> list[Event]:
+    """Await *coro* and return the ``LOG`` events it emitted.
+
+    Args:
+        coro: The coroutine to await with a subscriber attached.
+
+    Returns:
+        The captured ``LOG`` events, in emission order.
+    """
+    captured: list[Event] = []
+
+    def handler(event: Event) -> None:
+        captured.append(event)
+
+    EventBus.subscribe(handler)
+    try:
+        await coro
+        EventBus.flush(timeout=5.0)
+    finally:
+        EventBus.unsubscribe(handler)
+    return [e for e in captured if e.type == EventType.LOG]
 
 
 # -- Identity and class metadata -----------------------------------------------
@@ -108,7 +192,7 @@ class TestIdentity:
 
     def test_classpath_for_source_owned_asset_uses_colon_convention(self):
         cp = FakeSourceOwnedAsset.classpath()
-        # Format is "module:SourceName.AssetName" — the colon marks the
+        # Format is "module:SourceName.AssetName": the colon marks the
         # module / attribute boundary explicitly.
         assert ":" in cp
         assert cp.endswith(":FakeParentSource.FakeSourceOwnedAsset")
@@ -120,7 +204,7 @@ class TestIdentity:
     def test_path_on_source_owned_instance_equals_classpath(self):
         source = FakeParentSource()
         asset = FakeSourceOwnedAsset()
-        asset._source = source
+        asset.parent = source
         assert asset.path() == FakeSourceOwnedAsset.classpath()
 
     def test_source_property_none_for_standalone(self):
@@ -129,8 +213,15 @@ class TestIdentity:
     def test_source_property_set_when_source_attached(self):
         source = FakeParentSource()
         asset = FakeSourceOwnedAsset()
-        asset._source = source
+        asset.parent = source
         assert asset.source is source
+
+    def test_identity_is_the_component_identity(self):
+        source = FakeParentSource()
+        asset = FakeSourceOwnedAsset()
+        asset.parent = source
+        assert asset.identity == ComponentIdentity(FakeParentSource.key, FakeSourceOwnedAsset.key)
+        assert FakeAsset().identity == ComponentIdentity(None, "fake_asset")
 
     def test_qualified_key_standalone(self):
         assert FakeAsset().qualified_key == "fake_asset"
@@ -138,7 +229,7 @@ class TestIdentity:
     def test_qualified_key_when_source_attached(self):
         source = FakeParentSource()
         asset = FakeSourceOwnedAsset()
-        asset._source = source
+        asset.parent = source
         assert asset.qualified_key == f"{FakeParentSource.key}.{type(asset).key}"
 
     def test_table_standalone_equals_key(self):
@@ -147,7 +238,7 @@ class TestIdentity:
     def test_table_when_source_attached_uses_asset_table(self):
         source = FakeParentSource()
         asset = FakeSourceOwnedAsset()
-        asset._source = source
+        asset.parent = source
         assert asset.table == source.asset_table(asset) == type(asset).key
 
     def test_data_default_raises_not_implemented(self):
@@ -168,9 +259,8 @@ class TestDefinition:
         assert defn.key == "fake_asset"
         assert defn.path == FakeAsset.classpath()
         assert defn.name
-        assert defn.relations["resource"].slots == {}
-        assert defn.relations["destination"].keys == []
-        assert defn.relations["upstream"].slots == {}
+        assert defn.relations["destinations"].many is True
+        assert defn.relations["destinations"].keys() == []
         assert defn.asset_schema is None
         assert defn.partitioning is None
 
@@ -187,27 +277,12 @@ class TestDefinition:
         defn = FakeAsset.definition().model_copy(update={"source_key": "my_source"})
         assert defn.qualified_key == "my_source.fake_asset"
 
-    def test_definition_includes_inferred_resources(self):
-        defn = FakeAssetWithResource.definition()
-        assert defn.relations["resource"].slots["config"].key == FakeResource.key
-
-    def test_definition_dependency_slots_from_requires(self):
-        from typing import ClassVar
-
-        class FakeDependentAsset(il.Asset):
-            depends_on: ClassVar[dict[str, Any]] = {
-                "upstream": "other_source.things",
-                "extra": il.Dependency(key="other_source.extras", optional=True),
-            }
-
-        slots = FakeDependentAsset.definition().relations["upstream"].slots
-        assert slots["upstream"].key == "other_source.things"
-        assert slots["upstream"].optional is False
-        assert slots["extra"].optional is True
+    def test_definition_publishes_the_inferred_relations(self):
+        defn = FakeAssetWithConfig.definition()
+        assert defn.relations["config"].key == Cfg.key
+        assert defn.relations["config"].kind == "config"
 
     def test_definition_includes_asset_schema_when_set(self):
-        from typing import ClassVar
-
         class FakeSchema(il.Schema):
             value: str
 
@@ -219,8 +294,6 @@ class TestDefinition:
         assert "properties" in defn.asset_schema
 
     def test_definition_includes_partitioning_when_set(self):
-        from typing import ClassVar
-
         class FakeAssetPartitioned(il.Asset):
             partitioning: ClassVar[PartitionConfig | None] = PartitionConfig(column="day")
 
@@ -228,123 +301,367 @@ class TestDefinition:
         assert defn.partitioning == {"column": "day", "allow_window": False}
 
 
-# -- Resource type inference and runtime resolution ----------------------------
+# -- Relation inference from data() --------------------------------------------
 
 
-class TestResources:
-    def test_inferred_from_data_annotations(self):
-        assert FakeAssetWithResource.resource_types == {"config": FakeResource}
+class TestInference:
+    def test_component_annotation_becomes_relation(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, connection: Conn) -> Any:  # pragma: no cover
+                return []
 
-    def test_no_inference_when_data_not_overridden(self):
-        assert FakeAsset.resource_types == {}
+        assert A.relations["connection"].key == "conn"
+        assert A.relations["connection"].kind == "connection"
+        assert A.relations["connection"].optional is False
 
-    def test_skips_self_context_source_kwargs(self):
-        class FakeAssetReservedParams(il.Asset):
-            def data(self, context: Any, source: Any, **kwargs: Any) -> Any:  # pragma: no cover
-                return None
+    def test_none_default_makes_optional(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, config: Cfg | None = None) -> Any:  # pragma: no cover
+                return []
 
-        assert FakeAssetReservedParams.resource_types == {}
+        assert A.relations["config"].optional is True
 
-    def test_skips_params_without_annotation(self):
-        class FakeAssetNoAnnotation(il.Asset):
-            def data(self, untyped) -> Any:  # pragma: no cover
-                return None
+    def test_optional_annotation_makes_optional(self):
+        # Written as a string on purpose: a lazily-evaluated annotation must
+        # resolve the same way as a real class.
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, config: "Cfg | None" = None) -> Any:  # pragma: no cover
+                return []
 
-        assert FakeAssetNoAnnotation.resource_types == {}
+        assert A.relations["config"].optional is True
 
-    def test_explicit_entries_take_precedence_over_inferred(self):
-        from typing import ClassVar
+    def test_upstream_annotation_is_a_bare_asset_key(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, orders: il.Upstream) -> Any:  # pragma: no cover
+                return []
 
-        class FakeAssetExplicit(il.Asset):
-            resource_types: ClassVar[dict[str, type[il.Resource]]] = {"config": FakeOtherResource}
+        relation = A.relations["orders"]
+        assert (relation.kind, relation.key, relation.many) == ("asset", "orders", False)
 
-            def data(self, config: FakeResource) -> Any:  # pragma: no cover
-                return None
+    def test_list_upstream_is_many(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, campaigns: list[il.Upstream]) -> Any:  # pragma: no cover
+                return []
 
-        assert FakeAssetExplicit.resource_types["config"] is FakeOtherResource
+        assert A.relations["campaigns"].many is True
 
-    def test_resolve_own_resource(self):
-        own = FakeResource(value="own")
-        asset = FakeAssetWithResource(resources={"config": own})
-        assert asset._resolve_resource("config") is own
+    def test_reserved_parameters_declare_nothing(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, source: Any, **kwargs: Any) -> Any:  # pragma: no cover
+                return []
 
-    def test_resolve_falls_back_to_source_by_name(self):
-        asset = FakeAssetWithResource()
-        source = FakeParentSource(resources={"config": FakeResource(value="from_source")})
-        asset._source = source
-        resolved = asset._resolve_resource("config")
-        assert isinstance(resolved, FakeResource)
-        assert resolved.value == "from_source"
+        assert set(A.relations) == {"destinations"}
 
-    def test_resolve_falls_back_to_source_by_type(self):
-        asset = FakeAssetWithResource()
-        source = FakeParentSource(resources={"elsewhere": FakeResource(value="by_type")})
-        asset._source = source
-        resolved = asset._resolve_resource("config")
-        assert isinstance(resolved, FakeResource)
-        assert resolved.value == "by_type"
+    def test_unknown_parameter_is_a_definition_error(self):
+        with pytest.raises(TypeError, match="nothing can fill it"):
 
-    def test_resolve_auto_instantiates_when_nothing_configured(self):
-        asset = FakeAssetWithResource()
-        resolved = asset._resolve_resource("config")
-        assert isinstance(resolved, FakeResource)
+            class A(il.Asset):
+                def data(self, context: il.ExecutionContext, x: str) -> Any:  # pragma: no cover
+                    return []
 
-    def test_resolve_raises_on_type_mismatch(self):
-        asset = FakeAssetWithResource(resources={"config": FakeOtherResource()})
-        with pytest.raises(AssetError):
-            asset._resolve_resource("config")
+    def test_unannotated_parameter_is_a_definition_error(self):
+        with pytest.raises(TypeError, match="nothing can fill it"):
+
+            class A(il.Asset):
+                def data(self, context: il.ExecutionContext, x) -> Any:  # pragma: no cover
+                    return []
+
+    def test_explicit_relations_win(self):
+        class A(il.Asset):
+            campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True)
+
+            def data(self, context: il.ExecutionContext, campaigns: list[il.Upstream]) -> Any:  # pragma: no cover
+                return []
+
+        assert A.relations["campaigns"].key == "*.campaigns"
+
+    def test_the_decorator_infers_from_the_decorated_function(self):
+        @il.asset
+        def rows(context: il.ExecutionContext, connection: Conn) -> Any:  # pragma: no cover
+            return []
+
+        assert rows.relations["connection"].key == "conn"
+
+    def test_nothing_is_inferred_without_a_data_override(self):
+        assert set(FakeAsset.relations) == {"destinations"}
+
+
+# -- Injection into data() -----------------------------------------------------
+
+
+class TestInjection:
+    def test_resource_and_upstream_injected(self):
+        seen: dict[str, Any] = {}
+
+        @il.source
+        class Shop(il.Source):
+            """Source whose ``revenue`` asset consumes its connection and its sibling."""
+
+            connection: Conn
+
+            @il.asset(partitioning=PARTITION)
+            def orders(self, context: il.ExecutionContext) -> Any:
+                """One order row per partition.
+
+                Args:
+                    context: The execution context carrying the partition.
+
+                Returns:
+                    The single stamped row.
+                """
+                return [{"date": context.partition_date, "id": "o1"}]
+
+            @il.asset(partitioning=PARTITION)
+            def revenue(self, context: il.ExecutionContext, connection: Conn, orders: il.Upstream) -> Any:
+                """One row counting the upstream's rows.
+
+                Args:
+                    context: The execution context carrying the partition.
+                    connection: The connection bound on the source.
+                    orders: The upstream leg.
+
+                Returns:
+                    The single stamped row.
+                """
+                seen.update(connection=connection, orders=orders)
+                return [{"date": context.partition_date, "n": len(orders.data or [])}]
+
+        connection, memory = Conn(api_secret="s"), il.MemoryDestination()
+        shop = Shop(connection=connection, destinations=[memory])  # ty: ignore[unknown-argument]
+
+        result = DAG(shop).materialize(TimePartition(dt.date(2026, 9, 1)))
+
+        assert result.status is ExecutionStatus.COMPLETED
+        assert seen["connection"] is connection
+        assert seen["orders"].asset is shop.orders
+        assert [row["id"] for row in seen["orders"].data] == ["o1"]
+
+    def test_many_receives_one_leg_per_bound_upstream(self):
+        seen: dict[str, Any] = {}
+
+        # The relation stays optional: nothing its own source holds can fill a
+        # cross-source key, so it is bound once both providers exist.
+        @il.source
+        class Matcher(il.Source):
+            """Source whose asset fans in every ``campaigns`` asset bound to it."""
+
+            @il.asset(
+                partitioning=PARTITION,
+                relations={"campaigns": il.Relation("asset", "*.campaigns", many=True, optional=True)},
+            )
+            def matches(self, context: il.ExecutionContext, campaigns: list[il.Upstream]) -> Any:
+                """No rows; the legs are what the test reads.
+
+                Args:
+                    context: The execution context carrying the partition.
+                    campaigns: One leg per bound upstream.
+
+                Returns:
+                    No rows.
+                """
+                seen["legs"] = campaigns
+                return []
+
+        memory = il.MemoryDestination()
+        fb, tt = FbLike(destinations=[memory]), TtLike(destinations=[memory])
+        matcher = Matcher(destinations=[memory])
+        matcher.matches.bind("campaigns", fb.campaigns, tt.campaigns)
+
+        result = DAG(fb, tt, matcher).materialize(TimePartition(dt.date(2026, 9, 1)))
+
+        assert result.status is ExecutionStatus.COMPLETED
+        assert {leg.asset.id for leg in seen["legs"]} == {fb.campaigns.id, tt.campaigns.id}
+
+    def test_missing_partition_gives_none_data(self):
+        # The upstream is bound but never materialised, so its leg arrives as
+        # Upstream(asset, data=None) and a LOG warning names it; the asset still runs.
+        seen: dict[str, Any] = {}
+
+        @il.asset(partitioning=PARTITION, relations={"campaigns": il.Relation("asset", "*.campaigns")})
+        def lonely(context: il.ExecutionContext, campaigns: il.Upstream) -> Any:
+            """No rows; the leg is what the test reads.
+
+            Args:
+                context: The execution context carrying the partition.
+                campaigns: The upstream leg.
+
+            Returns:
+                No rows.
+            """
+            seen["leg"] = campaigns
+            return []
+
+        memory = il.MemoryDestination()
+        fb = FbLike(destinations=[memory])
+        asset = lonely(destinations=[memory], campaigns=fb.campaigns)  # ty: ignore[unknown-argument]
+        warnings_seen: list[Event] = []
+
+        def handler(event: Event) -> None:
+            if event.metadata.get("level") == "WARNING":
+                warnings_seen.append(event)
+
+        EventBus.subscribe(handler)
+        try:
+            result = DAG(fb(materializable=False), asset).materialize(TimePartition(dt.date(2026, 9, 1)))
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(handler)
+
+        assert result.status is ExecutionStatus.COMPLETED
+        # The leg carries the DAG's own node, the read-only copy of the binding.
+        assert seen["leg"].asset.id == fb.campaigns.id
+        assert seen["leg"].asset.materializable is False
+        assert seen["leg"].data is None
+        assert any("found no data in upstream" in e.metadata.get("message", "") for e in warnings_seen)
+
+    def test_a_self_filling_relation_is_instantiated_at_read_time(self):
+        seen: dict[str, Any] = {}
+
+        @il.asset
+        def rows(config: Cfg) -> Any:
+            """No rows; the injected config is what the test reads.
+
+            Args:
+                config: The self-filling config.
+
+            Returns:
+                No rows.
+            """
+            seen["config"] = config
+            return []
+
+        rows(id="rows").run()
+
+        assert isinstance(seen["config"], Cfg)
+
+    def test_an_optional_relation_nothing_can_fill_is_none(self):
+        seen: dict[str, Any] = {}
+
+        @il.asset
+        def rows(store: NeedyDestination | None = None) -> Any:
+            """No rows; the injected destination is what the test reads.
+
+            Args:
+                store: The optional destination, unfillable without a binding.
+
+            Returns:
+                No rows.
+            """
+            seen["store"] = store
+            return []
+
+        rows(id="rows").run()
+
+        assert seen["store"] is None
+
+    def test_an_unbound_connection_fails_on_the_read(self, monkeypatch):
+        # A connection's required fields come from the environment, so the
+        # relation fills itself and the missing credential surfaces here.
+        monkeypatch.delenv("api_secret", raising=False)
+        monkeypatch.delenv("API_SECRET", raising=False)
+
+        @il.asset
+        def rows(connection: Conn) -> Any:
+            """No rows; the read never gets this far.
+
+            Args:
+                connection: The connection the relation fills itself with.
+
+            Returns:
+                No rows.
+            """
+            return []
+
+        asset = rows(id="rows")
+        with pytest.raises(ValidationError):
+            asset.run()
+
+    def test_the_source_is_injected(self):
+        seen: dict[str, Any] = {}
+
+        @il.source
+        class Holder(il.Source):
+            """Source whose asset reads its parent through the ``source`` parameter."""
+
+            @il.asset
+            def rows(self, source: Any) -> Any:
+                """No rows; the injected source is what the test reads.
+
+                Args:
+                    source: The owning source.
+
+                Returns:
+                    No rows.
+                """
+                seen["source"] = source
+                return []
+
+        holder = Holder()
+        holder.rows.run()
+
+        assert seen["source"] is holder
+
+    async def test_upstreams_without_a_dag_are_an_actionable_error(self):
+        @il.asset(relations={"campaigns": il.Relation("asset", "*.campaigns")})
+        def consumer(campaigns: il.Upstream) -> Any:  # pragma: no cover - never reached
+            return []
+
+        fb = FbLike(destinations=[il.MemoryDestination()])
+        asset = consumer(destinations=[il.MemoryDestination()], campaigns=fb.campaigns)  # ty: ignore[unknown-argument]
+
+        with pytest.raises(AssetError, match="has upstreams but no DAG provided"):
+            await asset.run_async()
 
 
 # -- Destination resolution and validation -------------------------------------
 
 
 class TestDestinations:
-    def test_resolve_asset_own_destination(self):
-        dest = FakeDestination()
-        asset = FakeAsset(destinations=[dest])
-        assert asset._resolve_destinations() == [dest]
+    def test_the_asset_binds_its_own_destinations(self):
+        destination = FakeDestination()
+        assert FakeAsset(destinations=[destination]).destinations == [destination]
 
-    def test_resolve_wraps_single_destination_in_list(self):
-        asset = FakeAsset(destinations=[FakeDestination()])
-        resolved = asset._resolve_destinations()
-        assert isinstance(resolved, list)
-        assert len(resolved) == 1
+    def test_a_single_destination_is_wrapped_in_a_list(self):
+        destination = FakeDestination()
+        assert FakeAsset(destinations=destination).destinations == [destination]  # ty: ignore[invalid-argument-type]
 
-    def test_resolve_keeps_list_destination(self):
-        dests = [FakeDestination(), FakeOtherDestination()]
-        asset = FakeAsset(destinations=dests)  # ty: ignore[invalid-argument-type]
-        assert asset._resolve_destinations() == dests
+    def test_several_destinations_are_kept_in_order(self):
+        destinations: list[il.Destination] = [FakeDestination(), FakeOtherDestination()]
+        assert FakeAsset(destinations=destinations).destinations == destinations
 
-    def test_resolve_falls_back_to_source_destination(self):
-        source_dest = FakeDestination()
-        source = FakeParentSource(destinations=[source_dest])
-        asset = FakeAsset()
-        asset._source = source
-        assert asset._resolve_destinations() == [source_dest]
+    def test_the_source_trickles_its_destinations_down(self):
+        destination = FakeDestination()
+        source = FakeParentSource(destinations=[destination])
+        assert source.assets[0].destinations == [destination]
 
-    def test_resolve_returns_empty_when_nothing_configured(self):
-        assert FakeAsset()._resolve_destinations() == []
+    def test_nothing_configured_leaves_the_relation_empty(self):
+        assert FakeAsset().destinations == []
 
-    def test_validate_destination_is_noop_when_types_empty(self):
-        # FakeAsset has no destination_types → anything is allowed.
+    def test_validate_destination_is_a_noop_when_no_key_is_declared(self):
         FakeAsset()._validate_destination(FakeDestination())
 
-    def test_validate_destination_accepts_declared_type(self):
-        from typing import ClassVar
+    def test_validate_destination_accepts_a_declared_key(self):
+        @il.asset(destinations=[FakeDestination])
+        def narrowed() -> Any:  # pragma: no cover - not exercised
+            return []
 
-        class FakeAssetTypedDest(il.Asset):
-            destination_types: ClassVar[list[type[il.Destination]]] = [FakeDestination]
+        narrowed()._validate_destination(FakeDestination())
 
-        FakeAssetTypedDest()._validate_destination(FakeDestination())
-
-    def test_validate_destination_rejects_undeclared_type(self):
-        from typing import ClassVar
-
-        class FakeAssetTypedDest(il.Asset):
-            destination_types: ClassVar[list[type[il.Destination]]] = [FakeDestination]
+    def test_validate_destination_rejects_an_undeclared_key(self):
+        @il.asset(destinations=[FakeDestination])
+        def narrowed() -> Any:  # pragma: no cover - not exercised
+            return []
 
         with pytest.raises(DestinationError):
-            FakeAssetTypedDest()._validate_destination(FakeOtherDestination())
+            narrowed()._validate_destination(FakeOtherDestination())
+
+    def test_binding_an_undeclared_destination_is_rejected(self):
+        @il.asset(destinations=[FakeDestination])
+        def narrowed() -> Any:  # pragma: no cover - not exercised
+            return []
+
+        with pytest.raises(ConfigError):
+            narrowed(destinations=[FakeOtherDestination()])
 
 
 class TestReadDestination:
@@ -474,21 +791,18 @@ class TestReconfiguration:
     def test_override_materializable(self):
         assert FakeAsset(materializable=True)(materializable=False).materializable is False
 
-    def test_override_destination(self):
-        new_dest = FakeOtherDestination()
-        reconfigured = FakeAsset(destinations=[FakeDestination()])(destinations=new_dest)
-        assert reconfigured.destinations == [new_dest]
+    def test_dataset_and_strategy_are_overridable(self):
+        from interloper.normalizer import MaterializationStrategy
 
-    def test_override_deps(self):
-        reconfigured = FakeAsset()(upstreams={"upstream": ["abc"]})
-        assert reconfigured.upstreams == {"upstream": ["abc"]}
+        asset = FakeAsset()
+        reconfigured = asset(dataset="analytics", materialization_strategy=MaterializationStrategy.STRICT)
 
-    def test_resources_are_merged_not_replaced(self):
-        existing = FakeResource(value="existing")
-        extra = FakeOtherResource(other="extra")
-        asset = FakeAsset(resources={"a": existing})
-        reconfigured = asset(resources={"b": extra})
-        assert reconfigured.resources == {"a": existing, "b": extra}
+        assert reconfigured.dataset == "analytics"
+        assert reconfigured.materialization_strategy is MaterializationStrategy.STRICT
+        assert asset.dataset != "analytics"
+
+    def test_override_default_destination_key(self):
+        assert FakeAsset()(default_destination_key="memory").default_destination_key == "memory"
 
     def test_normalizer_explicit_none_clears_normalizer(self):
         # The ``normalizer`` parameter uses a _UNSET sentinel so that
@@ -500,6 +814,34 @@ class TestReconfiguration:
         asset = FakeAsset(dataset="original", materializable=False)
         reconfigured = asset(dataset="updated")
         assert reconfigured.materializable is False
+
+    def test_the_copy_keeps_the_originals_bindings(self):
+        destination = FakeDestination()
+        source = FakeParentSource()
+        asset = FakeSourceOwnedAsset(destinations=[destination])
+        asset.parent = source
+
+        reconfigured = asset(materializable=False)
+
+        assert reconfigured.destinations == [destination]
+        assert reconfigured.parent is source
+
+    def test_rebinding_a_relation_leaves_the_original_untouched(self):
+        first, second = FakeDestination(), FakeOtherDestination()
+        asset = FakeAsset(destinations=[first])
+
+        reconfigured = asset(destinations=second)
+
+        assert reconfigured.destinations == [second]
+        assert asset.destinations == [first]
+
+    def test_a_relation_set_to_none_is_cleared(self):
+        asset = FakeAsset(destinations=[FakeDestination()])
+        assert asset(destinations=None).destinations == []
+
+    def test_an_unknown_keyword_is_rejected(self):
+        with pytest.raises(TypeError, match="declares no relation"):
+            FakeAsset()(nonsense=1)
 
 
 # -- Serialization round-trip --------------------------------------------------
@@ -513,29 +855,12 @@ class TestSerialization:
         assert restored.dataset == "ds"
         assert restored.materializable is False
 
+    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_asset_with_destination_roundtrip(self):
         asset = FakeAsset(destinations=[FakeDestination()])
         restored = Component.from_spec(asset.to_spec())
         assert isinstance(restored, FakeAsset)
         assert isinstance(restored.destinations[0], FakeDestination)
-
-    def test_asset_with_list_of_destinations_roundtrip(self):
-        asset = FakeAsset(destinations=[FakeDestination(), FakeOtherDestination()])
-        restored = FakeAsset.from_spec(asset.to_spec())
-        assert isinstance(restored.destinations[0], FakeDestination)
-        assert isinstance(restored.destinations[1], FakeOtherDestination)
-
-    def test_asset_with_resources_roundtrip(self):
-        asset = FakeAsset(resources={"config": FakeResource(value="abc")})
-        restored = FakeAsset.from_spec(asset.to_spec())
-        config = restored.resources["config"]
-        assert isinstance(config, FakeResource)
-        assert config.value == "abc"
-
-    def test_asset_with_deps_roundtrip(self):
-        asset = FakeAsset(upstreams={"upstream": "asset-id-123"})  # ty: ignore[invalid-argument-type]
-        restored = FakeAsset.from_spec(asset.to_spec())
-        assert restored.upstreams == {"upstream": ["asset-id-123"]}
 
     def test_asset_preserves_instance_id(self):
         asset = FakeAsset(id="fixed123")
@@ -545,7 +870,7 @@ class TestSerialization:
     def test_source_owned_asset_roundtrip_preserves_subclass(self):
         source = FakeParentSource()
         asset = FakeSourceOwnedAsset(dataset="override", materializable=False)
-        asset._source = source
+        asset.parent = source
 
         restored = FakeSourceOwnedAsset.from_spec(asset.to_spec())
         assert isinstance(restored, FakeSourceOwnedAsset)
@@ -553,41 +878,20 @@ class TestSerialization:
         assert restored.materializable is False
 
     def test_roundtrip_via_json_string(self):
-        asset = FakeAsset(
-            dataset="ds",
-            destinations=[FakeDestination(), FakeOtherDestination()],
-            resources={"config": FakeResource(value="v")},
-        )
+        asset = FakeAsset(dataset="ds", default_destination_key="memory")
         spec_json = asset.to_spec().model_dump_json()
         restored = Spec.model_validate_json(spec_json).reconstruct()
 
         assert isinstance(restored, FakeAsset)
         assert restored.dataset == "ds"
-        assert isinstance(restored.destinations, list)
-        assert isinstance(restored.resources["config"], FakeResource)
+        assert restored.default_destination_key == "memory"
 
 
-# -- Destination write — empty-result handling ---------------------------------
-
-
-async def _capture_log_events(coro: Any) -> list[Event]:
-    captured: list[Event] = []
-
-    def handler(event: Event) -> None:
-        captured.append(event)
-
-    EventBus.subscribe(handler)
-    try:
-        await coro
-        EventBus.flush(timeout=5.0)
-    finally:
-        EventBus.unsubscribe(handler)
-    return [e for e in captured if e.type == EventType.LOG]
+# -- Destination write, empty-result handling ---------------------------------
 
 
 class TestDestinationWrite:
     async def test_empty_result_skips_write_and_warns(self):
-        il.MemoryDestination.clear()
         mem = il.MemoryDestination()
 
         @il.asset()
@@ -610,7 +914,6 @@ class TestDestinationWrite:
         assert warnings[0].metadata.get("component_id") == asset.id
 
     async def test_non_empty_result_is_written(self):
-        il.MemoryDestination.clear()
         mem = il.MemoryDestination()
 
         @il.asset()
@@ -853,47 +1156,6 @@ class TestConform:
         assert [s.name for s in captured["schema"].field_specs()] == ["user_id"]
 
 
-class TestAssetIdentity:
-    """The canonical reading of bare/qualified dependency keys."""
-
-    def test_bare_key_scopes_to_own_source(self):
-        assert il.AssetIdentity.resolve("a", own_source_key="s") == il.AssetIdentity("s", "a")
-
-    def test_bare_key_on_standalone_declarer_has_no_source(self):
-        assert il.AssetIdentity.resolve("a") == il.AssetIdentity(None, "a")
-
-    def test_qualified_key_names_the_source_explicitly(self):
-        assert il.AssetIdentity.resolve("other.a", own_source_key="s") == il.AssetIdentity("other", "a")
-
-    def test_qualified_key_splits_on_the_first_dot(self):
-        assert il.AssetIdentity.resolve("s.a.b") == il.AssetIdentity("s", "a.b")
-
-    def test_str_renders_the_qualified_form(self):
-        assert str(il.AssetIdentity("s", "a")) == "s.a"
-        assert str(il.AssetIdentity(None, "a")) == "a"
-
-    def test_asset_identity_property(self):
-        @il.asset
-        def standalone() -> str:
-            return ""
-
-        assert standalone().identity == il.AssetIdentity(None, "standalone")
-
-    def test_satisfies_bare_key_means_same_source(self):
-        assert AssetIdentity("shop", "orders").satisfies("orders", own_source_key="shop")
-        assert not AssetIdentity("warehouse", "orders").satisfies("orders", own_source_key="shop")
-
-    def test_satisfies_qualified_key_names_the_source(self):
-        assert AssetIdentity("shop", "orders").satisfies("shop.orders", own_source_key="finance")
-        assert not AssetIdentity("warehouse", "orders").satisfies("shop.orders", own_source_key="finance")
-
-    def test_satisfies_wildcard_accepts_any_source_including_none(self):
-        assert AssetIdentity("facebook_ads", "campaigns").satisfies("*.campaigns")
-        assert AssetIdentity("tiktok_ads", "campaigns").satisfies("*.campaigns")
-        assert AssetIdentity(None, "campaigns").satisfies("*.campaigns")
-        assert not AssetIdentity("facebook_ads", "ads").satisfies("*.campaigns")
-
-
 # -- Partition row counts ------------------------------------------------------
 
 
@@ -901,7 +1163,6 @@ class TestPartitionRowCounts:
     """Row counts delegated to the asset's first resolved destination."""
 
     def test_delegates_to_the_destination(self):
-        il.MemoryDestination.clear()
         mem = il.MemoryDestination()
         asset = FakeAssetDaily(id="daily", destinations=[mem])
         mem.write(
@@ -922,89 +1183,195 @@ class TestPartitionRowCounts:
             FakeAssetDaily().partition_row_counts()
 
 
-# -- Dependency resolution -----------------------------------------------------
+# -- Upstream reads ------------------------------------------------------------
 
 
-class DependentSource(il.Source):
-    """``consumer`` requires ``producer``; ``tolerant`` only prefers it."""
+class TestUpstreamReads:
+    @staticmethod
+    def _matcher() -> type[il.Asset]:
+        """Build a matcher asset fanning in every ``campaigns`` asset bound to it.
 
-    class Producer(il.Asset):
-        """Returns one row."""
+        Returns:
+            The asset class.
+        """
 
-        def data(self) -> Any:
-            return [{"x": 1}]
+        @il.asset(
+            relations={"campaigns": il.Relation("asset", "*.campaigns", many=True)},
+            partitioning=PARTITION,
+        )
+        def matches(context: il.ExecutionContext, campaigns: list[il.Upstream]) -> Any:
+            rows = []
+            for leg in campaigns:
+                assert leg.asset.source is not None
+                rows.append(
+                    {
+                        "date": context.partition_date,
+                        "source": leg.asset.source.key,
+                        "rows": len(leg.data) if leg.data is not None else None,
+                    }
+                )
+            return rows
 
-    class Consumer(il.Asset):
-        """Requires the upstream's rows."""
+        return matches
 
-        depends_on: ClassVar[dict[str, Any]] = {"producer": "producer"}
+    def test_many_slot_receives_one_upstream_per_leg(self):
+        mem = il.MemoryDestination()
+        one, two = FbLike(destinations=[mem]), TtLike(destinations=[mem])
+        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns, two.campaigns])  # ty: ignore[unknown-argument]
+        partition = TimePartition(dt.date(2026, 1, 1))
 
-        def data(self, producer: Any) -> Any:
-            return producer
-
-    class Tolerant(il.Asset):
-        """Runs with or without the upstream's rows."""
-
-        depends_on: ClassVar[dict[str, Any]] = {"producer": il.Dependency(key="producer", optional=True)}
-
-        def data(self, producer: Any) -> Any:
-            return producer or [{"fallback": True}]
-
-
-class TestDependencyResolution:
-    """What ``_build_kwargs`` does about upstream data."""
-
-    async def test_a_required_dependency_without_a_dag_is_an_actionable_error(self):
-        il.MemoryDestination.clear()
-        source = DependentSource(destinations=[il.MemoryDestination()])
-        consumer = next(asset for asset in source.assets if asset.key == "consumer")
-
-        with pytest.raises(AssetError, match="has upstreams but no DAG provided"):
-            await consumer.run_async()
-
-    async def test_an_optional_dependency_without_a_dag_is_also_an_actionable_error(self):
-        # A DAG is what resolves an upstream id to its asset; without one there is
-        # nothing to read, optional slot or not.
-        il.MemoryDestination.clear()
-        source = DependentSource(destinations=[il.MemoryDestination()])
-        tolerant = next(asset for asset in source.assets if asset.key == "tolerant")
-
-        with pytest.raises(AssetError, match="has upstreams but no DAG provided"):
-            await tolerant.run_async()
-
-    async def test_a_required_dependency_is_read_from_the_upstream_destination(self):
-        il.MemoryDestination.clear()
-        dag = il.DAG(DependentSource(select=["producer", "consumer"], destinations=[il.MemoryDestination()]))
-
-        result = await il.AsyncRunner(max_workers=1).run(dag)
+        result = DAG(one, two, matcher).materialize(partition)
 
         assert result.status is ExecutionStatus.COMPLETED
+        rows = mem.read(il.IOContext(asset=matcher, partition_or_window=partition))
+        assert sorted(row["source"] for row in rows) == ["fb_like", "tt_like"]
+        assert all(row["rows"] == 1 for row in rows)
 
-    async def test_an_optional_dependency_that_cannot_be_read_resolves_to_none(self):
-        # The upstream never ran, so its destination has nothing to return.
-        il.MemoryDestination.clear()
-        source = DependentSource(select=["tolerant"], destinations=[il.MemoryDestination()])
-        dag = il.DAG(source)
-        tolerant = next(o for o in dag.operations if o.key == "tolerant")
+    def test_missing_leg_arrives_as_none_with_a_warning(self):
+        mem = il.MemoryDestination()
+        one, two = FbLike(destinations=[mem]), TtLike(destinations=[mem])
+        partition = TimePartition(dt.date(2026, 1, 1))
+        DAG(one).materialize(partition)  # only provider one has data
+        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns, two.campaigns])  # ty: ignore[unknown-argument]
+        warnings_seen: list[Event] = []
 
-        assert await tolerant.run_async(dag=dag) == [{"fallback": True}]  # ty: ignore[unresolved-attribute]
+        def handler(event: Event) -> None:
+            if event.metadata.get("level") == "WARNING":
+                warnings_seen.append(event)
+
+        EventBus.subscribe(handler)
+        try:
+            result = DAG(one(materializable=False), two(materializable=False), matcher).materialize(partition)
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(handler)
+
+        assert result.status is ExecutionStatus.COMPLETED
+        read = mem.read(il.IOContext(asset=matcher, partition_or_window=partition))
+        rows = {row["source"]: row["rows"] for row in read}
+        assert rows == {"fb_like": 1, "tt_like": None}
+        assert any("found no data in upstream" in e.metadata.get("message", "") for e in warnings_seen)
+
+    def test_other_read_errors_fail_the_asset(self):
+        class Broken(il.Destination):
+            """Destination whose reads always fail for a reason other than missing data."""
+
+            def read(self, context: il.IOContext) -> Any:
+                raise RuntimeError("boom")
+
+            def write(self, context: il.IOContext, data: Any) -> None:
+                return None
+
+        mem = il.MemoryDestination()
+        one = FbLike(destinations=[Broken()])
+        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns])  # ty: ignore[unknown-argument]
+        partition = TimePartition(dt.date(2026, 1, 1))
+
+        result = DAG(one(materializable=False), matcher).materialize(partition)
+
+        assert result.status is ExecutionStatus.FAILED
+
+    def test_optional_many_slot_with_nothing_bound_receives_an_empty_list(self):
+        @il.asset(relations={"campaigns": il.Relation("asset", "*.campaigns", optional=True, many=True)})
+        def lonely(campaigns: list[il.Upstream]) -> Any:
+            return [{"n": len(campaigns)}]
+
+        asset = lonely(destinations=[il.MemoryDestination()])
+        assert asset.run(dag=DAG(asset)) == [{"n": 0}]
+
+    def test_single_slot_receives_one_leg(self):
+        mem = il.MemoryDestination()
+        one = FbLike(destinations=[mem])
+        partition = TimePartition(dt.date(2026, 1, 1))
+        DAG(one).materialize(partition)
+
+        @il.asset(relations={"c": il.Relation("asset", "fb_like.campaigns")}, partitioning=PARTITION)
+        def single(context: il.ExecutionContext, c: il.Upstream) -> Any:
+            return [{"date": context.partition_date, "ids": [row["id"] for row in c.data]}]
+
+        asset = single(destinations=[mem], c=one.campaigns)  # ty: ignore[unknown-argument]
+        DAG(one(materializable=False), asset).materialize(partition)
+
+        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
+            {"date": dt.date(2026, 1, 1), "ids": ["fb"]}
+        ]
+
+    def test_optional_single_slot_is_none_on_missing_data_and_fails_otherwise(self):
+        mem = il.MemoryDestination()
+        one = FbLike(destinations=[mem])
+
+        @il.asset(
+            relations={"c": il.Relation("asset", "fb_like.campaigns", optional=True)},
+            partitioning=PARTITION,
+        )
+        def lenient(context: il.ExecutionContext, c: il.Upstream | None = None) -> Any:
+            return [{"date": context.partition_date, "got": c is not None and c.data is not None}]
+
+        asset = lenient(destinations=[mem], c=one.campaigns)  # ty: ignore[unknown-argument]
+        partition = TimePartition(dt.date(2030, 5, 5))  # provider never ran for this day
+
+        result = DAG(one(materializable=False), asset).materialize(partition)
+
+        assert result.status is ExecutionStatus.COMPLETED
+        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
+            {"date": dt.date(2030, 5, 5), "got": False}
+        ]
+
+        class Broken(il.Destination):
+            """Destination whose reads always fail for a reason other than missing data."""
+
+            def read(self, context: il.IOContext) -> Any:
+                raise RuntimeError("boom")
+
+            def write(self, context: il.IOContext, data: Any) -> None:
+                return None
+
+        broken = FbLike(destinations=[Broken()])
+        asset = lenient(destinations=[mem], c=broken.campaigns)  # ty: ignore[unknown-argument]
+        assert DAG(broken(materializable=False), asset).materialize(partition).status is ExecutionStatus.FAILED
+
+    def test_an_upstream_absent_from_the_dag_is_skipped_with_a_warning(self):
+        mem = il.MemoryDestination()
+        one = FbLike(destinations=[mem])
+
+        @il.asset(relations={"c": il.Relation("asset", "fb_like.campaigns", optional=True)})
+        def lenient(c: il.Upstream | None = None) -> Any:
+            return [{"got": c is not None}]
+
+        asset = lenient(destinations=[mem], c=one.campaigns)  # ty: ignore[unknown-argument]
+        warnings_seen: list[Event] = []
+
+        def handler(event: Event) -> None:
+            if event.metadata.get("level") == "WARNING":
+                warnings_seen.append(event)
+
+        EventBus.subscribe(handler)
+        try:
+            assert asset.run(dag=DAG(asset)) == [{"got": False}]
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(handler)
+
+        assert any("is not in the DAG" in e.metadata.get("message", "") for e in warnings_seen)
 
 
 class TestUpstreamReadFailures:
     """Reading an upstream's data is where a run most often breaks."""
 
     async def test_a_missing_upstream_destination_is_named(self):
-        il.MemoryDestination.clear()
-        source = DependentSource(select=["producer", "consumer"])
-        dag = il.DAG(source)
-        consumer = next(o for o in dag.operations if o.key == "consumer")
+        one = FbLike()
 
-        with pytest.raises(AssetError, match="No destination found for upstream asset 'producer'"):
-            await consumer.run_async(dag=dag)  # ty: ignore[unresolved-attribute]
+        @il.asset(relations={"c": il.Relation("asset", "fb_like.campaigns")}, partitioning=PARTITION)
+        def consumer(context: il.ExecutionContext, c: il.Upstream) -> Any:  # pragma: no cover - never reached
+            return []
+
+        asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)  # ty: ignore[unknown-argument]
+        dag = DAG(one(materializable=False), asset)
+
+        with pytest.raises(AssetError, match="No destination found for upstream asset 'campaigns'"):
+            await asset.run_async(TimePartition(dt.date(2026, 1, 1)), dag=dag)
 
     async def test_a_failing_read_is_wrapped_and_reported(self):
-        il.MemoryDestination.clear()
-
         class BrokenReadDestination(il.Destination):
             """Destination whose reads always fail."""
 
@@ -1027,14 +1394,19 @@ class TestUpstreamReadFailures:
                     data: Ignored payload.
                 """
 
-        source = DependentSource(select=["producer", "consumer"], destinations=[BrokenReadDestination()])
-        dag = il.DAG(source)
-        consumer = next(o for o in dag.operations if o.key == "consumer")
+        one = FbLike(destinations=[BrokenReadDestination()])
+
+        @il.asset(relations={"c": il.Relation("asset", "fb_like.campaigns")}, partitioning=PARTITION)
+        def consumer(context: il.ExecutionContext, c: il.Upstream) -> Any:  # pragma: no cover - never reached
+            return []
+
+        asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)  # ty: ignore[unknown-argument]
+        dag = DAG(one(materializable=False), asset)
         captured: list[Event] = []
         EventBus.subscribe(captured.append)
         try:
-            with pytest.raises(AssetError, match="Failed to load data from upstream asset 'producer'"):
-                await consumer.run_async(dag=dag)  # ty: ignore[unresolved-attribute]
+            with pytest.raises(AssetError, match="Failed to load data from upstream asset 'campaigns'"):
+                await asset.run_async(TimePartition(dt.date(2026, 1, 1)), dag=dag)
             EventBus.flush(timeout=5.0)
         finally:
             EventBus.unsubscribe(captured.append)
@@ -1049,8 +1421,6 @@ class TestDestinationWriteFailures:
     """A write failure is reported before it propagates."""
 
     async def test_a_failing_write_emits_the_failure_event(self):
-        il.MemoryDestination.clear()
-
         class BrokenWriteDestination(il.Destination):
             """Destination whose writes always fail."""
 
@@ -1100,7 +1470,6 @@ class TestNonMaterializableAssets:
     """Read-only hydration of an upstream dependency."""
 
     async def test_materialize_returns_nothing(self):
-        il.MemoryDestination.clear()
         asset = FakeAsset(destinations=[il.MemoryDestination()], materializable=False)
 
         assert await asset.materialize_async() is None
@@ -1167,37 +1536,6 @@ class TestConformEdgeCases:
         assert asset._effective_schema is None
 
 
-# -- Reconfiguration coverage --------------------------------------------------
-
-
-class TestReconfigurationFields:
-    """Every ``__call__`` override lands on the copy."""
-
-    def test_dataset_and_strategy_are_overridable(self):
-        asset = FakeAsset()
-
-        from interloper.normalizer import MaterializationStrategy
-
-        reconfigured = asset(
-            dataset="analytics",
-            materialization_strategy=MaterializationStrategy.STRICT,
-        )
-
-        assert reconfigured.dataset == "analytics"
-        assert reconfigured.materialization_strategy is MaterializationStrategy.STRICT
-        assert asset.dataset != "analytics"
-
-    def test_a_single_destination_is_wrapped_in_a_list(self):
-        destination = FakeDestination()
-
-        reconfigured = FakeAsset()(destinations=destination)
-
-        assert reconfigured.destinations == [destination]
-
-    def test_destinations_none_becomes_an_empty_list(self):
-        assert FakeAsset(destinations=None).destinations == []  # ty: ignore[invalid-argument-type]
-
-
 # -- Time-partition scope validation -------------------------------------------
 
 
@@ -1214,292 +1552,3 @@ class TestTimePartitionScope:
 
         with pytest.raises(PartitionError, match="is time-partitioned, but the run was given a FakePartition"):
             asset._validate_time_partitioning(asset.partitioning, FakePartition("x"))
-
-
-def test_upstream_relation_replaces_dependency():
-    """The ``dependency`` relation type is gone; ``upstream`` takes its place."""
-    relations = il.Asset.relation_types
-    assert "dependency" not in relations
-    assert relations["upstream"].field == "upstreams"
-    assert relations["upstream"].kinds == ["asset"]
-    assert relations["upstream"].inline is False
-    assert FakeAsset(upstreams={"x": "id-1"}).upstreams == {"x": ["id-1"]}  # ty: ignore[invalid-argument-type]
-
-
-class FakeFanIn(il.Asset):
-    """Asset with one many-valued slot and one optional single slot."""
-
-    depends_on: ClassVar[dict[str, Any]] = {
-        "campaigns": il.Dependency(key="*.campaigns", many=True),
-        "rules": il.Dependency(key="rules", optional=True),
-    }
-
-    def data(self, campaigns: list[il.Upstream], rules: Any = None) -> Any:  # pragma: no cover
-        return None
-
-
-class TestDeclaredUpstreams:
-    def test_reads_strings_and_declarations(self):
-        declared = FakeFanIn.declared_upstreams()
-        assert declared["campaigns"] == il.Dependency(key="*.campaigns", many=True)
-        assert declared["rules"] == il.Dependency(key="rules", optional=True)
-
-    def test_plain_string_is_a_single_non_optional_slot(self):
-        class Single(il.Asset):
-            """Fixture."""
-
-            depends_on: ClassVar[dict[str, Any]] = {"orders": "shop.orders"}
-
-        assert Single.declared_upstreams()["orders"] == il.Dependency(key="shop.orders")
-
-    def test_definition_publishes_the_same_objects(self):
-        relation = FakeFanIn.definition().relations["upstream"]
-        assert relation.slots == FakeFanIn.declared_upstreams()
-
-    def test_decorator_accepts_declarations(self):
-        @il.asset(depends_on={"campaigns": il.Dependency(key="*.campaigns", many=True)})
-        def fan_in(campaigns: list[il.Upstream]) -> Any:  # pragma: no cover
-            return None
-
-        assert fan_in.declared_upstreams()["campaigns"].many is True
-
-    def test_old_names_are_gone(self):
-        assert not hasattr(il.Asset, "requires")
-        assert not hasattr(il.Asset, "optional_requires")
-
-    def test_sibling_upstreams_resolves_bare_and_own_qualified_keys_only(self):
-        class Downstream(il.Asset):
-            """Fixture."""
-
-            depends_on: ClassVar[dict[str, Any]] = {
-                "a": "a",
-                "b": "shop.b",
-                "c": "warehouse.c",
-                "d": il.Dependency(key="*.d", many=True),
-                "e": il.Dependency(key="e", optional=True),
-            }
-
-        assert Downstream.sibling_upstreams("shop", ["a", "b", "c", "d", "e"]) == {"a": "a", "b": "b", "e": "e"}
-
-
-class TestUpstreamsShape:
-    def test_bare_string_is_wrapped(self):
-        fan_in = FakeFanIn(upstreams={"rules": "id-9"})  # ty: ignore[invalid-argument-type]
-        assert fan_in.upstreams == {"rules": ["id-9"]}
-
-    def test_lists_are_kept(self):
-        assert FakeFanIn(upstreams={"campaigns": ["id-1", "id-2"]}).upstreams["campaigns"] == ["id-1", "id-2"]
-
-    def test_spec_round_trip_emits_lists(self):
-        upstreams = {"campaigns": ["id-1", "id-2"], "rules": "id-9"}
-        asset = FakeFanIn(upstreams=upstreams)  # ty: ignore[invalid-argument-type]
-        spec = asset.to_spec()
-        init = spec.init
-        assert init is not None
-        assert init["upstreams"] == {"campaigns": ["id-1", "id-2"], "rules": ["id-9"]}
-        assert il.Asset.from_spec(spec).upstreams == {"campaigns": ["id-1", "id-2"], "rules": ["id-9"]}
-
-
-# -- Upstream reads --------------------------------------------------------------
-
-
-class FakeLegSourceOne(il.Source):
-    """Provider one."""
-
-    class Campaigns(il.Asset):
-        """Daily campaigns."""
-
-        partitioning: ClassVar[PartitionConfig | None] = TimePartitionConfig(column="date")
-
-        def data(self, context: il.ExecutionContext) -> Any:
-            return [{"date": context.partition_date, "id": "one"}]
-
-
-class FakeLegSourceTwo(il.Source):
-    """Provider two."""
-
-    class Campaigns(il.Asset):
-        """Daily campaigns."""
-
-        partitioning: ClassVar[PartitionConfig | None] = TimePartitionConfig(column="date")
-
-        def data(self, context: il.ExecutionContext) -> Any:
-            return [{"date": context.partition_date, "id": "two"}]
-
-
-class TestUpstreamReads:
-    @staticmethod
-    def _matcher() -> type[il.Asset]:
-        @il.asset(
-            depends_on={"campaigns": il.Dependency(key="*.campaigns", many=True)},
-            partitioning=TimePartitionConfig(column="date"),
-        )
-        def matches(context: il.ExecutionContext, campaigns: list[il.Upstream]) -> Any:
-            rows = []
-            for leg in campaigns:
-                assert leg.asset.source is not None
-                rows.append(
-                    {
-                        "date": context.partition_date,
-                        "source": leg.asset.source.key,
-                        "rows": len(leg.data) if leg.data is not None else None,
-                    }
-                )
-            return rows
-
-        return matches
-
-    def test_many_slot_receives_one_upstream_per_leg(self):
-        il.MemoryDestination.clear()
-        mem = il.MemoryDestination()
-        one, two = FakeLegSourceOne(destinations=[mem]), FakeLegSourceTwo(destinations=[mem])
-        matcher = self._matcher()(destinations=[mem])
-        partition = TimePartition(dt.date(2026, 1, 1))
-        result = DAG(one, two, matcher).materialize(partition)
-        assert result.status is ExecutionStatus.COMPLETED
-        rows = mem.read(il.IOContext(asset=matcher, partition_or_window=partition))
-        assert sorted(row["source"] for row in rows) == ["fake_leg_source_one", "fake_leg_source_two"]
-        assert all(row["rows"] == 1 for row in rows)
-
-    def test_missing_leg_arrives_as_none_with_a_warning(self):
-        il.MemoryDestination.clear()
-        mem = il.MemoryDestination()
-        one, two = FakeLegSourceOne(destinations=[mem]), FakeLegSourceTwo(destinations=[mem])
-        partition = TimePartition(dt.date(2026, 1, 1))
-        DAG(one).materialize(partition)  # only provider one has data
-        matcher = self._matcher()(destinations=[mem])
-        warnings_seen: list[Event] = []
-
-        def handler(event: Event) -> None:
-            if event.metadata.get("level") == "WARNING":
-                warnings_seen.append(event)
-
-        EventBus.subscribe(handler)
-        try:
-            result = DAG(one(materializable=False), two(materializable=False), matcher).materialize(partition)
-            EventBus.flush(timeout=5.0)
-        finally:
-            EventBus.unsubscribe(handler)
-        assert result.status is ExecutionStatus.COMPLETED
-        read_context = il.IOContext(asset=matcher, partition_or_window=partition)
-        rows = {row["source"]: row["rows"] for row in mem.read(read_context)}
-        assert rows == {"fake_leg_source_one": 1, "fake_leg_source_two": None}
-        assert any("found no data in upstream" in e.metadata.get("message", "") for e in warnings_seen)
-
-    def test_other_read_errors_fail_the_asset(self):
-        class Broken(il.Destination):
-            """Destination whose reads always fail for a reason other than missing data."""
-
-            def read(self, context: il.IOContext) -> Any:
-                raise RuntimeError("boom")
-
-            def write(self, context: il.IOContext, data: Any) -> None:
-                return None
-
-        il.MemoryDestination.clear()
-        mem = il.MemoryDestination()
-        one = FakeLegSourceOne(destinations=[Broken()])
-        matcher = self._matcher()(destinations=[mem])
-        partition = TimePartition(dt.date(2026, 1, 1))
-        result = DAG(one(materializable=False), matcher).materialize(partition)
-        assert result.status is ExecutionStatus.FAILED
-
-    def test_optional_many_slot_with_nothing_bound_receives_an_empty_list(self):
-        il.MemoryDestination.clear()
-
-        @il.asset(depends_on={"campaigns": il.Dependency(key="*.campaigns", optional=True, many=True)})
-        def lonely(campaigns: list[il.Upstream]) -> Any:
-            return [{"n": len(campaigns)}]
-
-        asset = lonely(destinations=[il.MemoryDestination()])
-        assert asset.run(dag=DAG(asset)) == [{"n": 0}]
-
-    def test_single_slot_receives_raw_data(self):
-        il.MemoryDestination.clear()
-        mem = il.MemoryDestination()
-        one = FakeLegSourceOne(destinations=[mem])
-        partition = TimePartition(dt.date(2026, 1, 1))
-        DAG(one).materialize(partition)
-
-        @il.asset(depends_on={"c": "fake_leg_source_one.campaigns"}, partitioning=TimePartitionConfig(column="date"))
-        def single(context: il.ExecutionContext, c: Any) -> Any:
-            return [{"date": context.partition_date, "ids": [row["id"] for row in c]}]
-
-        asset = single(destinations=[mem])
-        DAG(one(materializable=False), asset).materialize(partition)
-        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
-            {"date": dt.date(2026, 1, 1), "ids": ["one"]}
-        ]
-
-    def test_optional_single_slot_is_none_on_missing_data_and_fails_otherwise(self):
-        il.MemoryDestination.clear()
-        mem = il.MemoryDestination()
-        one = FakeLegSourceOne(destinations=[mem])
-
-        @il.asset(
-            depends_on={"c": il.Dependency(key="fake_leg_source_one.campaigns", optional=True)},
-            partitioning=TimePartitionConfig(column="date"),
-        )
-        def lenient(context: il.ExecutionContext, c: Any = None) -> Any:
-            return [{"date": context.partition_date, "got": c is not None}]
-
-        asset = lenient(destinations=[mem])
-        partition = TimePartition(dt.date(2030, 5, 5))  # provider never ran for this day
-        result = DAG(one(materializable=False), asset).materialize(partition)
-        assert result.status is ExecutionStatus.COMPLETED
-        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
-            {"date": dt.date(2030, 5, 5), "got": False}
-        ]
-
-        class Broken(il.Destination):
-            """Destination whose reads always fail for a reason other than missing data."""
-
-            def read(self, context: il.IOContext) -> Any:
-                raise RuntimeError("boom")
-
-            def write(self, context: il.IOContext, data: Any) -> None:
-                return None
-
-        broken = FakeLegSourceOne(destinations=[Broken()])
-        asset = lenient(destinations=[mem])
-        assert DAG(broken(materializable=False), asset).materialize(partition).status is ExecutionStatus.FAILED
-
-    def test_non_optional_single_slot_receives_none_when_the_upstream_has_no_data(self):
-        il.MemoryDestination.clear()
-        mem = il.MemoryDestination()
-        one = FakeLegSourceOne(destinations=[mem])
-
-        @il.asset(depends_on={"c": "fake_leg_source_one.campaigns"}, partitioning=TimePartitionConfig(column="date"))
-        def strict(context: il.ExecutionContext, c: Any) -> Any:
-            return [{"date": context.partition_date, "got": c is not None}]
-
-        asset = strict(destinations=[mem])
-        partition = TimePartition(dt.date(2030, 5, 5))  # the provider never ran for this day
-        result = DAG(one(materializable=False), asset).materialize(partition)
-        assert result.status is ExecutionStatus.COMPLETED
-        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
-            {"date": dt.date(2030, 5, 5), "got": False}
-        ]
-
-    def test_optional_upstream_absent_from_the_dag_is_skipped_with_a_warning(self):
-        il.MemoryDestination.clear()
-        mem = il.MemoryDestination()
-
-        @il.asset(depends_on={"c": il.Dependency(key="fake_leg_source_one.campaigns", optional=True)})
-        def lenient(c: Any = None) -> Any:
-            return [{"got": c is not None}]
-
-        asset = lenient(destinations=[mem], upstreams={"c": ["not-in-this-dag"]})
-        warnings_seen: list[Event] = []
-
-        def handler(event: Event) -> None:
-            if event.metadata.get("level") == "WARNING":
-                warnings_seen.append(event)
-
-        EventBus.subscribe(handler)
-        try:
-            assert asset.run(dag=DAG(asset)) == [{"got": False}]
-            EventBus.flush(timeout=5.0)
-        finally:
-            EventBus.unsubscribe(handler)
-        assert any("is not in the DAG" in e.metadata.get("message", "") for e in warnings_seen)

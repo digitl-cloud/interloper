@@ -5,13 +5,13 @@ from interloper.component.base import (
     Component,
     ComponentDefinition,
 )
-from interloper.component.relation import Bound, ComponentIdentity, Relation
+from interloper.component.relation import ComponentIdentity, Relation, unwrap_optional
 
 __all__ = [
     "KINDS",
-    "Bound",
     "Component",
     "ComponentDefinition",
     "ComponentIdentity",
     "Relation",
+    "unwrap_optional",
 ]

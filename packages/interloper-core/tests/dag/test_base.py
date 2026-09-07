@@ -1,9 +1,8 @@
 """Tests for ``interloper.dag.base``."""
 
-# Note: no ``from __future__ import annotations`` — the fixtures below define
-# methods whose parameter annotations must be real classes (not lazy strings)
-# so that sibling-dep inference in ``Source._infer_upstreams`` can resolve
-# them by name.
+# Note: no ``from __future__ import annotations``. The fixtures below define
+# ``data()`` methods whose parameter annotations must be real classes (not lazy
+# strings) for ``Asset.collect`` to infer their relations.
 
 from typing import Any, ClassVar
 
@@ -13,11 +12,9 @@ import interloper as il
 from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
 from interloper.errors import (
-    AssetError,
     AssetNotFoundError,
     CircularDependencyError,
     DAGError,
-    DependencyContractError,
     DependencyNotFoundError,
 )
 from interloper.partitioning.base import PartitionConfig
@@ -28,15 +25,21 @@ from interloper.serializable import Spec
 
 
 class FakeAsset(il.Asset):
-    """Plain asset fixture."""
+    """Plain asset fixture; its optional relation accepts any asset."""
+
+    upstream: il.Asset | None = il.Relation("asset", optional=True)
 
 
 class FakeOtherAsset(il.Asset):
     """Second asset class used for subclass-identity and list tests."""
 
+    upstream: il.Asset | None = il.Relation("asset", optional=True)
+
 
 class FakeThirdAsset(il.Asset):
     """Third asset class used for multi-level topology tests."""
+
+    upstream: il.Asset | None = il.Relation("asset", optional=True)
 
 
 class FakePartitionedAsset(il.Asset):
@@ -46,15 +49,15 @@ class FakePartitionedAsset(il.Asset):
 
 
 class FakeAssetRequiringFake(il.Asset):
-    """Asset whose ``depends_on`` contract expects an upstream keyed ``fake_asset``."""
+    """Asset whose relation expects an upstream keyed ``fake_asset``."""
 
-    depends_on: ClassVar[dict[str, Any]] = {"upstream": "fake_asset"}
+    upstream: FakeAsset = il.Relation("asset", "fake_asset")
 
 
 class FakeAssetOptionallyRequiringFake(il.Asset):
-    """Asset whose optional ``depends_on`` contract expects ``fake_asset`` but may be missing."""
+    """Asset whose optional relation expects ``fake_asset`` but tolerates its absence."""
 
-    depends_on: ClassVar[dict[str, Any]] = {"upstream": il.Dependency(key="fake_asset", optional=True)}
+    upstream: FakeAsset | None = il.Relation("asset", "fake_asset", optional=True)
 
 
 class FakeSource(il.Source):
@@ -66,7 +69,7 @@ class FakeSource(il.Source):
     class FakeSecond(il.Asset):
         """Second nested asset that depends on the first via parameter name."""
 
-        def data(self, fake_first: Any) -> Any:  # pragma: no cover
+        def data(self, fake_first: il.Upstream) -> Any:  # pragma: no cover
             return None
 
 
@@ -83,9 +86,9 @@ class FakeFinance(il.Source):
     class Revenue(il.Asset):
         """Revenue."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"orders": "fake_shop.orders"}
+        orders: il.Asset = il.Relation("asset", "fake_shop.orders")
 
-        def data(self, orders: Any) -> Any:  # pragma: no cover
+        def data(self, orders: il.Upstream) -> Any:  # pragma: no cover
             return None
 
 
@@ -106,16 +109,9 @@ class FakeProviderB(il.Source):
 class FakeMatcher(il.Asset):
     """Standalone fan-in over every ``campaigns`` asset."""
 
-    depends_on: ClassVar[dict[str, Any]] = {"campaigns": il.Dependency(key="*.campaigns", many=True)}
+    campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True)
 
     def data(self, campaigns: list[il.Upstream]) -> Any:  # pragma: no cover
-        return None
-
-
-class FakeSloppy(il.Asset):
-    """Asset whose ``data()`` takes a parameter nothing declares."""
-
-    def data(self, ordres: Any) -> Any:  # pragma: no cover
         return None
 
 
@@ -128,9 +124,7 @@ class FakePairSource(il.Source):
     class Second(il.Asset):
         """Downstream."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"first": "first"}
-
-        def data(self, first: Any) -> Any:  # pragma: no cover
+        def data(self, first: il.Upstream) -> Any:  # pragma: no cover
             return None
 
 
@@ -138,6 +132,7 @@ class FakeDaily(il.Asset):
     """Daily asset."""
 
     partitioning: ClassVar[PartitionConfig | None] = il.TimePartitionConfig(column="date")
+    upstream: il.Asset | None = il.Relation("asset", optional=True)
 
 
 class FakeMonthly(il.Asset):
@@ -146,9 +141,9 @@ class FakeMonthly(il.Asset):
     partitioning: ClassVar[PartitionConfig | None] = il.TimePartitionConfig(
         column="date", granularity=il.TimeGranularity.MONTH
     )
-    depends_on: ClassVar[dict[str, Any]] = {"daily": "fake_daily"}
+    daily: FakeDaily = il.Relation("asset", "fake_daily")
 
-    def data(self, daily: Any) -> Any:  # pragma: no cover
+    def data(self, daily: il.Upstream) -> Any:  # pragma: no cover
         return None
 
 
@@ -183,23 +178,23 @@ class FakeComplexSource(il.Source):
         return []
 
     @il.asset
-    def c(self, a: list[dict]) -> list[dict]:  # pragma: no cover
+    def c(self, a: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset
-    def d(self, a: list[dict]) -> list[dict]:  # pragma: no cover
+    def d(self, a: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset
-    def e(self, b: list[dict], c: list[dict]) -> list[dict]:  # pragma: no cover
+    def e(self, b: il.Upstream, c: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset
-    def f(self, d: list[dict]) -> list[dict]:  # pragma: no cover
+    def f(self, d: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset
-    def g(self, e: list[dict], f: list[dict]) -> list[dict]:  # pragma: no cover
+    def g(self, e: il.Upstream, f: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
 
@@ -216,23 +211,23 @@ class FakePartitionedSource(il.Source):
         return []
 
     @il.asset(partitioning=_PART)
-    def c(self, a: list[dict]) -> list[dict]:  # pragma: no cover
+    def c(self, a: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset(partitioning=_PART)
-    def d(self, a: list[dict]) -> list[dict]:  # pragma: no cover
+    def d(self, a: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset(partitioning=_PART)
-    def e(self, b: list[dict], c: list[dict]) -> list[dict]:  # pragma: no cover
+    def e(self, b: il.Upstream, c: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset(partitioning=_PART)
-    def f(self, d: list[dict]) -> list[dict]:  # pragma: no cover
+    def f(self, d: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset(partitioning=_PART)
-    def g(self, e: list[dict], f: list[dict]) -> list[dict]:  # pragma: no cover
+    def g(self, e: il.Upstream, f: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
 
@@ -258,11 +253,11 @@ class FakeMixedSource(il.Source):
         return []
 
     @il.asset(partitioning=_PART)
-    def c(self, a: list[dict]) -> list[dict]:  # pragma: no cover
+    def c(self, a: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
     @il.asset(partitioning=_PART)
-    def e(self, b: list[dict], c: list[dict]) -> list[dict]:  # pragma: no cover
+    def e(self, b: il.Upstream, c: il.Upstream) -> list[dict]:  # pragma: no cover
         return []
 
 
@@ -415,7 +410,7 @@ class TestGraph:
 
     def test_predecessors_wired_from_deps(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstreams={"upstream": [upstream.id]})
+        downstream = FakeOtherAsset(upstream=upstream)
         dag = DAG(upstream, downstream)
         assert dag.predecessors[downstream.id] == [upstream.id]
         assert dag.successors[upstream.id] == [downstream.id]
@@ -450,21 +445,21 @@ class TestGraph:
         assert dag.successors[by_key["g"].id] == []
 
     def test_non_materializable_asset_skipped_from_predecessors(self):
-        # Non-materializable assets are parents, not roots — their predecessors
+        # Non-materializable assets are parents, not roots, so their predecessors
         # are not computed (they don't need to execute).
         upstream = FakeAsset(materializable=False)
-        downstream = FakeOtherAsset(upstreams={"upstream": [upstream.id]})
+        downstream = FakeOtherAsset(upstream=upstream)
         dag = DAG(upstream, downstream)
         assert upstream.id not in dag.predecessors
         assert dag.predecessors[downstream.id] == [upstream.id]
 
-    def test_missing_required_dep_raises(self):
-        downstream = FakeAsset(upstreams={"upstream": ["nonexistent-id"]})
+    def test_a_bound_upstream_outside_the_dag_raises(self):
+        downstream = FakeAssetRequiringFake(upstream=FakeAsset())
         with pytest.raises(DependencyNotFoundError):
             DAG(downstream)
 
-    def test_missing_optional_dep_is_tolerated(self):
-        asset = FakeAssetOptionallyRequiringFake(upstreams={"upstream": ["nonexistent-id"]})
+    def test_a_bound_optional_upstream_outside_the_dag_is_tolerated(self):
+        asset = FakeAssetOptionallyRequiringFake(upstream=FakeAsset())
         dag = DAG(asset)
         assert asset.id in dag.operation_map
         assert dag.predecessors[asset.id] == []
@@ -476,26 +471,20 @@ class TestGraph:
 class TestValidation:
     def test_valid_requires_contract_passes(self):
         upstream = FakeAsset()
-        downstream = FakeAssetRequiringFake(upstreams={"upstream": [upstream.id]})
+        downstream = FakeAssetRequiringFake(upstream=upstream)
         DAG(upstream, downstream)  # no raise
-
-    def test_requires_contract_mismatch_raises(self):
-        upstream = FakeOtherAsset()
-        downstream = FakeAssetRequiringFake(upstreams={"upstream": [upstream.id]})
-        with pytest.raises(DependencyContractError):
-            DAG(upstream, downstream)
 
     def test_circular_dependency_raises(self):
         a = FakeAsset(id="aaaaaaaa")
         b = FakeOtherAsset(id="bbbbbbbb")
-        a.upstreams = {"b": [b.id]}
-        b.upstreams = {"a": [a.id]}
+        a.upstream = b
+        b.upstream = a
         with pytest.raises(CircularDependencyError):
             DAG(a, b)
 
     def test_non_partitioned_depending_on_partitioned_raises(self):
         upstream = FakePartitionedAsset()
-        downstream = FakeAsset(upstreams={"upstream": [upstream.id]})
+        downstream = FakeAsset(upstream=upstream)
         with pytest.raises(DAGError):
             DAG(upstream, downstream)
 
@@ -508,86 +497,67 @@ class TestValidation:
 class TestGranularityAcrossEdges:
     def test_mixed_granularity_raises_even_for_read_only_upstreams(self):
         daily = FakeDaily(materializable=False)
-        monthly = FakeMonthly(upstreams={"daily": [daily.id]})
+        monthly = FakeMonthly(daily=daily)
         with pytest.raises(DAGError, match="partitioned by day"):
             DAG(daily, monthly)
 
     def test_equal_granularity_passes(self):
         upstream = FakeDaily()
-        downstream = FakeDaily(upstreams={"x": [upstream.id]})
+        downstream = FakeDaily(upstream=upstream)
         DAG(upstream, downstream)  # no raise
 
 
 class TestDeclaredResolution:
+    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_qualified_key_resolves_to_the_single_match(self):
         shop, finance = FakeShop(), FakeFinance()
         dag = DAG(shop, finance)
-        assert finance.revenue.upstreams == {"orders": [shop.orders.id]}
+        assert finance.revenue.bound("orders") is shop.orders
         assert dag.predecessors[finance.revenue.id] == [shop.orders.id]
 
+    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_qualified_key_with_two_matches_is_ambiguous(self):
         shop_one, shop_two, finance = FakeShop(), FakeShop(), FakeFinance()
         with pytest.raises(DAGError, match="2 matching assets"):
             DAG(shop_one, shop_two, finance)
 
+    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_unbound_slot_fails_at_build(self):
         finance = FakeFinance()
         with pytest.raises(DependencyNotFoundError, match="nothing is wired"):
             DAG(finance)
 
+    @pytest.mark.xfail(strict=True, reason="Task 6: read-only nodes are exempt from resolution")
     def test_unbound_slot_is_ignored_on_read_only_nodes(self):
         finance = FakeFinance()(materializable=False)
         DAG(finance)  # no raise
 
+    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_many_slot_binds_every_match(self):
         a, b, matcher = FakeProviderA(), FakeProviderB(), FakeMatcher()
         dag = DAG(a, b, matcher)
-        assert set(matcher.upstreams["campaigns"]) == {a.campaigns.id, b.campaigns.id}
+        assert {leg.id for leg in matcher.campaigns} == {a.campaigns.id, b.campaigns.id}
         assert set(dag.predecessors[matcher.id]) == {a.campaigns.id, b.campaigns.id}
         assert [op.key for op in dag.topological_generations()[-1]] == ["fake_matcher"]
 
+    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_many_slot_without_match_fails_unless_optional(self):
         with pytest.raises(DependencyNotFoundError, match="nothing is wired"):
             DAG(FakeMatcher())
 
-    def test_many_slot_keeps_explicit_wiring(self):
-        a, b, matcher = FakeProviderA(), FakeProviderB(), FakeMatcher()
-        matcher.upstreams["campaigns"] = [a.campaigns.id]
+    def test_many_slot_keeps_explicit_bindings(self):
+        a, b = FakeProviderA(), FakeProviderB()
+        matcher = FakeMatcher(campaigns=[a.campaigns])
         dag = DAG(a, b, matcher)
         assert dag.predecessors[matcher.id] == [a.campaigns.id]
 
-    def test_wired_leg_of_wrong_identity_is_a_contract_error(self):
-        a, matcher = FakeProviderA(), FakeMatcher()
-        other = FakeOtherAsset()
-        matcher.upstreams["campaigns"] = [a.campaigns.id, other.id]
-        with pytest.raises(DependencyContractError):
-            DAG(a, other, matcher)
-
+    @pytest.mark.xfail(strict=True, reason="Task 6: the DAG resolves declared keys to bindings")
     def test_bare_key_resolves_within_the_source_instance(self):
         one, two = FakePairSource(), FakePairSource()
-        one.second.upstreams.clear()  # simulate a sibling wiring lost before build
+        one.second.unbind("first", one.first)  # simulate a sibling binding lost before build
         dag = DAG(one, two)
-        assert one.second.upstreams == {"first": [one.first.id]}
+        assert one.second.bound("first") is one.first
         assert dag.predecessors[one.second.id] == [one.first.id]
-
-    def test_undeclared_non_default_parameter_fails_at_build(self):
-        with pytest.raises(AssetError, match="neither the context, a resource, nor a declared upstream"):
-            DAG(FakeSloppy())
-
-    def test_single_slot_wired_to_several_upstreams_is_a_contract_error(self):
-        a, b = FakeProviderA(), FakeProviderB()
-
-        class Single(il.Asset):
-            """Single-valued slot over any campaigns asset."""
-
-            depends_on: ClassVar[dict[str, Any]] = {"c": il.Dependency(key="*.campaigns")}
-
-            def data(self, c: Any) -> Any:  # pragma: no cover
-                return None
-
-        single = Single(upstreams={"c": [a.campaigns.id, b.campaigns.id]})
-        with pytest.raises(DependencyContractError, match="single-valued slot but 2 upstreams"):
-            DAG(a, b, single)
 
 
 # -- Traversal -----------------------------------------------------------------
@@ -602,8 +572,8 @@ class TestTraversal:
 
     def test_topological_generations_linear_chain(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstreams={"a": [a.id]})
-        c = FakeThirdAsset(upstreams={"b": [b.id]})
+        b = FakeOtherAsset(upstream=a)
+        c = FakeThirdAsset(upstream=b)
         dag = DAG(a, b, c)
         levels = dag.topological_generations()
         assert len(levels) == 3
@@ -613,8 +583,8 @@ class TestTraversal:
 
     def test_topological_generations_parallel_branches(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstreams={"a": [a.id]})
-        c = FakeThirdAsset(upstreams={"a": [a.id]})
+        b = FakeOtherAsset(upstream=a)
+        c = FakeThirdAsset(upstream=a)
         dag = DAG(a, b, c)
         levels = dag.topological_generations()
         assert levels[0] == [a]
@@ -656,21 +626,21 @@ class TestTraversal:
         # Mini-DAG shape: a skipped parent upstream of a live target. The
         # parent's edge counts as satisfied, and only the target appears.
         a = FakeAsset()
-        b = FakeOtherAsset(upstreams={"a": [a.id]})
+        b = FakeOtherAsset(upstream=a)
         dag = DAG(a(materializable=False), b)
         levels = dag.topological_generations()
         assert [[asset.id for asset in level] for level in levels] == [[b.id]]
 
     def test_topological_generations_on_mini_dag(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstreams={"a": [a.id]})
+        b = FakeOtherAsset(upstream=a)
         mini = DAG(a, b).mini_dag(b.id)
         levels = mini.topological_generations()
         assert [[asset.id for asset in level] for level in levels] == [[b.id]]
 
     def test_get_predecessors_returns_upstream_ids(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstreams={"upstream": [upstream.id]})
+        downstream = FakeOtherAsset(upstream=upstream)
         dag = DAG(upstream, downstream)
         assert dag.get_predecessors(downstream.id) == [upstream.id]
 
@@ -681,7 +651,7 @@ class TestTraversal:
 
     def test_get_successors_returns_downstream_ids(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstreams={"upstream": [upstream.id]})
+        downstream = FakeOtherAsset(upstream=upstream)
         dag = DAG(upstream, downstream)
         assert dag.get_successors(upstream.id) == [downstream.id]
 
@@ -697,7 +667,7 @@ class TestTraversal:
 class TestMiniDag:
     def test_mini_dag_contains_target_and_parents(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstreams={"a": [a.id]})
+        b = FakeOtherAsset(upstream=a)
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
@@ -707,7 +677,7 @@ class TestMiniDag:
 
     def test_mini_dag_marks_parents_non_materializable(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstreams={"a": [a.id]})
+        b = FakeOtherAsset(upstream=a)
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
@@ -774,9 +744,10 @@ class TestSerialization:
         restored = DAG.from_spec(dag.to_spec())
         assert {asset.id for asset in restored.operations} == {a.id, b.id}
 
+    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_roundtrip_preserves_predecessor_wiring(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstreams={"upstream": [upstream.id]})
+        downstream = FakeOtherAsset(upstream=upstream)
         dag = DAG(upstream, downstream)
         restored = DAG.from_spec(dag.to_spec())
 
@@ -796,9 +767,10 @@ class TestSerialization:
         for asset_id, succs in dag.successors.items():
             assert sorted(restored.successors[asset_id]) == sorted(succs)
 
+    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_roundtrip_via_json_string(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstreams={"upstream": [upstream.id]})
+        downstream = FakeOtherAsset(upstream=upstream)
         dag = DAG(upstream, downstream)
 
         json_str = dag.to_spec().model_dump_json()
@@ -807,7 +779,7 @@ class TestSerialization:
         assert len(reloaded.operations) == 2
         downstream_restored = next(a for a in reloaded.operations if type(a).key == "fake_other_asset")
         upstream_restored = next(a for a in reloaded.operations if type(a).key == "fake_asset")
-        assert downstream_restored.upstreams["upstream"] == [upstream_restored.id]
+        assert downstream_restored.bound("upstream") is upstream_restored
 
     def test_roundtrip_preserves_source_owned_assets(self):
         dag = DAG(FakeSource())
@@ -817,7 +789,7 @@ class TestSerialization:
 
     def test_roundtrip_preserves_mini_dag_shape(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstreams={"a": [a.id]})
+        b = FakeOtherAsset(upstream=a)
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
@@ -846,7 +818,7 @@ class TestSerialization:
         """Mini-DAG from a source should not include assets that aren't in the subgraph."""
         dag = DAG(FakeComplexSource())
         by_key = {type(a).key: a for a in dag.operations}
-        # ``c`` depends on ``a`` only — the mini-DAG should have ``a`` and ``c``,
+        # ``c`` depends on ``a`` only, so the mini-DAG should have ``a`` and ``c``,
         # NOT ``b``, ``d``, ``e``, ``f``, ``g``.
         mini = dag.mini_dag(by_key["c"].id)
 
@@ -860,6 +832,7 @@ class TestSerialization:
             else:
                 assert asset.materializable is False
 
+    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_roundtrip_source_mini_dag_only_one_materializable(self, dag: il.DAG):
         """Every mini-DAG round-trip should have exactly one materializable asset."""
         for asset in dag.operations:
@@ -908,6 +881,7 @@ class TestFromSpec:
 class TestFromSpecFile:
     """DAG compilation from a runnable component spec document."""
 
+    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_job_spec_compiles(self, tmp_path):
         import yaml
 

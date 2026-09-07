@@ -43,10 +43,35 @@ class TestContract:
     def test_node_protocol_defaults(self):
         operation = _NoopOperation()
         assert operation.materializable is True
-        assert operation.upstreams == {}
         assert operation.partitioning is None
         assert operation.effective_partition(None) is None
         assert type(operation).capture_traceback is True
+
+
+class TestUpstreamRelations:
+    """The graph reads a node's asset-kind relations, and only those."""
+
+    def test_a_node_declaring_no_relation_has_no_upstream(self):
+        assert _NoopOperation().upstream_relations() == {}
+
+    def test_only_asset_kind_relations_are_upstreams(self):
+        @il.asset(relations={"orders": il.Relation("asset", "shop.orders")})
+        def revenue(orders: il.Upstream) -> Any:  # pragma: no cover - not exercised
+            return []
+
+        relations = revenue().upstream_relations()
+
+        assert set(relations) == {"orders"}
+        assert relations["orders"].keys() == ["shop.orders"]
+
+    def test_a_many_valued_relation_is_reported_as_declared(self):
+        @il.asset(relations={"campaigns": il.Relation("asset", "*.campaigns", many=True, optional=True)})
+        def matches(campaigns: list[il.Upstream]) -> Any:  # pragma: no cover - not exercised
+            return []
+
+        relation = matches().upstream_relations()["campaigns"]
+
+        assert (relation.many, relation.optional) == (True, True)
 
 
 class TestKindWiring:
