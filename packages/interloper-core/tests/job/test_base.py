@@ -134,7 +134,6 @@ class TestSpec:
         assert clone.lookback == 7
         assert clone.offset == 3
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_round_trip_preserves_targets(self):
         job = il.CronJob(cron="0 6 * * *", targets=[FakeSource(), FakeStandaloneAsset()])
         clone = il.CronJob.from_spec(job.to_spec())

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import sys
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -52,6 +54,31 @@ def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
 
 
 KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)
+
+
+# -- Reconstruction ------------------------------------------------------------
+_deferring_validation: ContextVar[bool] = ContextVar("interloper_deferring_relation_validation", default=False)
+
+
+@contextmanager
+def defer_relation_validation() -> Iterator[None]:
+    """Suspend construction-time relation validation for the duration of the block.
+
+    Reconstruction builds a document's components one at a time and binds
+    what its ``{"ref": id}`` values name only once every one of them exists,
+    so a component whose non-optional relation travels as a reference is
+    incomplete the moment it is constructed. Deferring the check is what
+    lets it be constructed at all; :meth:`Component._bind_references` runs
+    the same check once the document is whole.
+
+    Yields:
+        ``None``; the block runs with the check suspended.
+    """
+    token = _deferring_validation.set(True)
+    try:
+        yield
+    finally:
+        _deferring_validation.reset(token)
 
 
 # -- Definitions ---------------------------------------------------------------
@@ -109,6 +136,7 @@ class Component(Serializable):
 
     _bound: dict[str, list[Component]] = PrivateAttr(default_factory=dict)
     _parent: Component | None = PrivateAttr(default=None)
+    _pending_references: dict[str, list[str | Component]] = PrivateAttr(default_factory=dict)
 
     # -- Construction ----------------------------------------------------------
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -206,7 +234,8 @@ class Component(Serializable):
         reaching Pydantic, which knows nothing about relations: a list or tuple
         binds every element, ``None`` binds nothing. Nothing is bound
         implicitly, so the instance is checked once every explicit target is in
-        place, unless the class defers that check.
+        place, unless the class defers that check or reconstruction has
+        suspended it (see :func:`defer_relation_validation`).
 
         Unknown kwargs are a loud error rather than pydantic's silent
         ``extra="ignore"`` drop: a misnamed field would otherwise vanish, and a
@@ -230,7 +259,7 @@ class Component(Serializable):
             if value is None:
                 continue
             self.bind(name, *(value if isinstance(value, (list, tuple)) else [value]))
-        if not cls._defer_validation:
+        if not cls._defer_validation and not _deferring_validation.get():
             self.validate_relations()
 
     def model_post_init(self, context: Any) -> None:
@@ -592,12 +621,181 @@ class Component(Serializable):
 
     # -- Serialization & resolution --------------------------------------------
     def to_spec(self) -> Spec:
-        """Serialize this instance to a reconstructible spec, carrying its id.
+        """Serialize this instance to a reconstructible spec, relations included.
+
+        One traversal, one rule (see :meth:`_emit`): a target that has an
+        owner is always a reference, since it travels inside that owner's own
+        spec, and a target that has none is written out in full the first
+        time the traversal reaches it and as a reference afterwards. What a
+        relation holds sits in ``init`` under the relation's name, a list for
+        a ``many`` relation and a single value otherwise; a relation with
+        nothing bound is left out.
 
         Returns:
-            A Spec capturing this instance's state and identity.
+            A Spec capturing this instance's state, identity and bindings.
         """
-        return super().to_spec().model_copy(update={"id": self.id})
+        return self._to_spec(seen=set())
+
+    def _to_spec(
+        self,
+        *,
+        seen: set[str],
+        without: Collection[str] = (),
+        drop: Mapping[str, Collection[str]] | None = None,
+    ) -> Spec:
+        """Serialize this instance as one step of an ongoing traversal.
+
+        Args:
+            seen: Ids the traversal has already written out in full, extended
+                with this component's own. One set is shared by every spec of
+                a document, which is what turns a repeated target into a
+                reference.
+            without: Init keys to leave out entirely, naming a field or a
+                relation; what an owner writes out itself is passed here.
+            drop: Target ids to leave out of one relation's list rather than
+                the whole relation, keyed by relation name; a document that
+                does not hold every target a relation binds (a graph read
+                only part of a source's assets, say) uses this to keep the
+                targets it does hold instead of omitting the relation whole.
+
+        Returns:
+            A Spec capturing this instance's state, identity and bindings.
+        """
+        seen.add(self.id)
+        init = self._fields_init(without=without)
+        for name, targets in self._bound.items():
+            if not targets or name in without:
+                continue
+            excluded = (drop or {}).get(name, ())
+            kept = [target for target in targets if target.id not in excluded]
+            if not kept:
+                continue
+            values = [self._emit(target, seen=seen) for target in kept]
+            init[name] = values if type(self).relations[name].many else values[0]
+        return self._build_spec(init=init or None).model_copy(update={"id": self.id})
+
+    @staticmethod
+    def _emit(target: Component, *, seen: set[str]) -> dict[str, Any]:
+        """Serialize one bound target, in full or as a reference.
+
+        Args:
+            target: The bound component to write out.
+            seen: Ids the traversal has already written out in full.
+
+        Returns:
+            The target's own spec as a JSON-able mapping, or the
+            ``{"ref": id}`` reference standing in for it.
+        """
+        if target.parent is not None or target.id in seen:
+            return Spec.reference(target.id)
+        return target._to_spec(seen=seen).model_dump(mode="json", exclude_defaults=True)
+
+    def _children(self) -> list[Component]:
+        """The components this one owns, which travel inside its own spec.
+
+        Returns:
+            The owned components; empty for a component that owns none.
+        """
+        return []
+
+    @classmethod
+    def _split_references(cls, values: dict[str, Any]) -> tuple[dict[str, Any], dict[str, list[str | Component]]]:
+        """Separate a reconstruction's reference values from what it can construct with.
+
+        A relation mixing references with inline targets is held back whole,
+        in its original order, rather than split into an inline part built
+        now and a reference part appended later: that would construct the
+        component with the inline targets first and bind the references
+        after, reversing whichever of the two the document actually put
+        first (see :meth:`_bind_references`). A relation left with nothing
+        but references drops out of the kwargs entirely, so the component is
+        constructed from the targets the document carries inline and
+        nothing else; the references are bound once the whole document
+        exists.
+
+        Args:
+            values: Constructor keyword arguments as a spec's init loaded
+                them, every nested spec already reconstructed and every
+                ``{"ref": id}`` still a mapping.
+
+        Returns:
+            The kwargs to construct with, and what each relation still owes,
+            keyed by relation name and kept in original order: a reference
+            as its id, an inline target kept as the instance itself.
+        """
+        kwargs: dict[str, Any] = {}
+        pending: dict[str, list[str | Component]] = {}
+        for name, value in values.items():
+            if name not in cls.relations or value is None:
+                kwargs[name] = value
+                continue
+            given = list(value) if isinstance(value, (list, tuple)) else [value]
+            if any(Spec.is_reference(entry) for entry in given):
+                pending[name] = [entry[Spec.REFERENCE_KEY] if Spec.is_reference(entry) else entry for entry in given]
+            else:
+                kwargs[name] = value
+        return kwargs, pending
+
+    @staticmethod
+    def _bind_references(
+        registry: dict[str, Component],
+        resolve: Callable[[str], Component] | None = None,
+    ) -> None:
+        """Bind every reference a reconstruction left pending, then validate.
+
+        The second pass of reconstruction. Every component the document built
+        is in *registry*, so it is what a reference resolves against first
+        and *resolve* only reaches for a target the document does not carry.
+        Validation comes last, once nothing is missing, and mirrors what
+        construction would have done: a class that defers the check is left
+        to its owner's cascade.
+
+        Args:
+            registry: Every component the document built, keyed by id.
+            resolve: Called with an id the registry does not hold; ``None``
+                makes such an id an error.
+        """
+        for component in list(registry.values()):
+            pending = component._pending_references
+            component._pending_references = {}
+            for name, entries in pending.items():
+                targets = [
+                    entry if isinstance(entry, Component) else Component._lookup_reference(entry, registry, resolve)
+                    for entry in entries
+                ]
+                component.bind(name, *targets)
+        for component in list(registry.values()):
+            if not type(component)._defer_validation:
+                component.validate_relations()
+
+    @staticmethod
+    def _lookup_reference(
+        reference: str,
+        registry: dict[str, Component],
+        resolve: Callable[[str], Component] | None,
+    ) -> Component:
+        """Find the component a reference names.
+
+        Args:
+            reference: The referenced component's id.
+            registry: Every component the document built, keyed by id.
+            resolve: Called with an id the registry does not hold; ``None``
+                makes such an id an error.
+
+        Returns:
+            The referenced component.
+
+        Raises:
+            SpecError: If neither the registry nor *resolve* supplies it.
+        """
+        from interloper.errors import SpecError
+
+        target = registry.get(reference)
+        if target is None and resolve is not None:
+            target = resolve(reference)
+        if target is None:
+            raise SpecError(f"unresolved reference '{reference}'")
+        return target
 
     @classmethod
     def resolve_key(cls, key: str, catalog: Catalog | None = None) -> type[Self]:

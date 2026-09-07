@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field, model_validator
@@ -181,6 +181,11 @@ class Source(Component, Workload):
         ``Spec.reconstruct()`` hands back in after the walker
         has resolved any nested component specs inside the overrides.
 
+        An override may name a relation target by reference rather than
+        carry it: those are held back the way
+        :meth:`~interloper.serializable.base.Spec.reconstruct` holds back a
+        component's own, and bound on the asset once the document is whole.
+
         Args:
             data: The raw model input. Anything that is not a dict, or whose
                 ``assets`` entry is not an override map, is returned untouched.
@@ -196,8 +201,12 @@ class Source(Component, Workload):
 
         instances: list[Asset] = []
         for asset_cls in cls.asset_types:
-            if asset_cls.key in assets:
-                instances.append(asset_cls(**assets[asset_cls.key]))
+            if asset_cls.key not in assets:
+                continue
+            overrides, pending = asset_cls._split_references(assets[asset_cls.key])
+            instance = asset_cls(**overrides)
+            instance._pending_references = pending
+            instances.append(instance)
         data["assets"] = instances
         return data
 
@@ -226,7 +235,14 @@ class Source(Component, Workload):
         self._bind_siblings()
 
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
-        """Check this source's own relations, then cascade into every asset.
+        """Check this source's own relations, then cascade into every materializing asset.
+
+        An asset this source does not materialize is only ever read, so what
+        fills its own relations is nothing any run needs: it is left
+        unchecked, the same position :meth:`~interloper.dag.base.DAG._check_relations`
+        takes on a node it only reads. That is what keeps a source
+        reconstructible from a partial set of assets, where a read-only asset
+        names a sibling the document does not carry.
 
         Args:
             nodes: Every node materializing in the same run, keyed by id,
@@ -236,15 +252,17 @@ class Source(Component, Workload):
         """
         super().validate_relations(nodes)
         for asset in self.assets:
-            asset.validate_relations(nodes)
+            if asset.materializable:
+                asset.validate_relations(nodes)
 
     def _apply_select(self) -> None:
         """Mark assets outside ``select`` as non-materializable.
 
         Unselected assets stay in the list so intra-source dependency wiring
-        keeps validating (and their outputs stay readable), but only the
-        selected assets execute — the same mechanism as
-        :meth:`~interloper.dag.base.DAG.mini_dag`.
+        can still resolve them by key and their outputs stay readable, but
+        only the selected assets execute, and :meth:`validate_relations`
+        checks only those: the same position as
+        :meth:`~interloper.dag.base.DAG.mini_dag` on a node it only reads.
 
         Raises:
             SourceError: If a selected key matches no asset of this source.
@@ -262,41 +280,94 @@ class Source(Component, Workload):
 
     # -- Serialization ---------------------------------------------------------
 
-    def to_spec(self) -> Spec:
-        """Serialize to a spec with ``assets`` as a key → init override map.
+    def _to_spec(
+        self,
+        *,
+        seen: set[str],
+        without: Collection[str] = (),
+        drop: Mapping[str, Collection[str]] | None = None,
+    ) -> Spec:
+        """Serialize to a spec whose ``assets`` is a key to init override map.
 
-        Source is the unit of reconstruction: each asset's own state is
-        serialised as a plain dict under the asset's key, with no
-        individual ``path``.  This mirrors :meth:`_apply_asset_overrides`
-        on the reconstruction side, and keeps the source spec compact
-        (no duplicated class paths, no nested ``Spec`` wrapping
-        for each asset).
+        Args:
+            seen: Ids the traversal has already written out in full; see
+                :meth:`~interloper.component.base.Component._to_spec`.
+            without: Init keys to leave out.
+            drop: Target ids to leave out of one of this source's own
+                relations, keyed by relation name, rather than the whole
+                relation; see :meth:`~interloper.component.base.Component._to_spec`.
 
         Returns:
             A ``Spec`` capturing this source and its assets.
         """
-        init: dict[str, Any] = {}
-        for name in type(self).model_fields:
-            if name == "id":
-                continue
-            value = getattr(self, name)
-            if value is None:
-                continue
-            if name == "assets":
-                overrides: dict[str, Any] = {}
-                for asset in value:
-                    asset_spec = asset.to_spec()
-                    asset_init = dict(asset_spec.init or {})
-                    if asset_spec.id:
-                        # Preserve instance id so dependencies wire up after round-trip
-                        asset_init["id"] = asset_spec.id
-                    overrides[asset.key] = asset_init
-                if overrides:
-                    init["assets"] = overrides
-                continue
-            init[name] = Spec.dump_value(value)
+        return self._source_spec(seen=seen, without=without, assets=self.assets, drop=drop)
 
-        return Spec(path=self.path(), id=self.id, init=init or None)
+    def _source_spec(
+        self,
+        *,
+        seen: set[str],
+        without: Collection[str] = (),
+        assets: list[Asset],
+        drop: Mapping[str, Collection[str]] | None = None,
+        asset_drop: Mapping[str, Mapping[str, Collection[str]]] | None = None,
+    ) -> Spec:
+        """Serialize this source over a given set of asset instances.
+
+        Source is the unit of reconstruction: an asset never travels under a
+        relation, only under the source that owns it, as a plain init payload
+        carrying its id and no ``path`` of its own. This mirrors
+        :meth:`_apply_asset_overrides` on the reconstruction side and keeps
+        the document compact.
+
+        A relation an asset holds only because this source trickled it down
+        is left out of its payload: the same trickle refills it when the
+        source rebinds its own target on reconstruction, so writing it out
+        would say twice what the source already says once.
+
+        *assets* and *asset_drop* are what let a graph serialise a source
+        from its own asset copies rather than the source's originals: a
+        mini-DAG flags the parents it only reads as non-materializable, a
+        run may hold just some of a source's assets, and a binding pointing
+        outside the document has nowhere to be written (see
+        :meth:`~interloper.dag.base.DAG.to_spec`).
+
+        Args:
+            seen: Ids the traversal has already written out in full.
+            without: Init keys to leave out of this source's own payload.
+            assets: The asset instances to write out under ``assets``.
+            drop: Target ids to leave out of one of this source's own
+                relations, keyed by relation name.
+            asset_drop: Target ids to leave out of one of an asset's
+                relations, keyed first by that asset's key and then by
+                relation name; the per-asset counterpart of *drop*.
+
+        Returns:
+            A ``Spec`` capturing this source and the given assets.
+        """
+        spec = super()._to_spec(seen=seen, without=(*without, "assets"), drop=drop)
+        if not assets:
+            return spec
+        trickled = {name: self._trickled_asset_keys(name) for name in self._bound}
+        overrides: dict[str, Any] = {}
+        for asset in assets:
+            skipped = {name for name, keys in trickled.items() if asset.key in keys}
+            asset_init = dict(
+                asset._to_spec(seen=seen, without=skipped, drop=(asset_drop or {}).get(asset.key)).init or {}
+            )
+            # The id is what every binding naming this asset resolves through.
+            asset_init["id"] = asset.id
+            overrides[asset.key] = asset_init
+        init = dict(spec.init or {})
+        init["assets"] = overrides
+        return spec.model_copy(update={"init": init})
+
+    def _children(self) -> list[Component]:
+        """The assets this source owns, which travel inside its own spec.
+
+        Returns:
+            This source's asset instances.
+        """
+        return list(self.assets)
 
     # -- Assets ----------------------------------------------------------------
 

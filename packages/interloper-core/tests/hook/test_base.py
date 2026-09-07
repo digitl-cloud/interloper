@@ -143,7 +143,6 @@ class TestSpecRoundTrip:
         restored = FakeNotifyHook.from_spec(hook.to_spec())
         assert restored.events == ["run_completed"]
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_round_trip_preserves_watches(self):
         hook = FakeNotifyHook(watches=[FakeSource()], events=["run_completed"])
         restored = FakeNotifyHook.from_spec(hook.to_spec())
