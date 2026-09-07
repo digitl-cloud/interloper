@@ -607,6 +607,16 @@ class TestReconfiguration:
         # The copy is deep: what survives is an equal value, not the same object.
         assert reconfigured.orders.connection.token == "own"  # ty: ignore[unresolved-attribute]
 
+    def test_repointing_a_connection_on_a_chained_copy_reaches_its_assets(self):
+        a, b = FakeConnection(token="a"), FakeConnection(token="b")
+        source = Shop(connection=a)
+        copy = source(dataset="other")
+        rebound = copy(connection=b)
+        assert rebound.orders.connection is b  # ty: ignore[unresolved-attribute]
+        assert source.orders.connection is a  # ty: ignore[unresolved-attribute]
+        # The intermediate copy is deep: what it holds is an equal value, not the same object.
+        assert copy.orders.connection.token == "a"  # ty: ignore[unresolved-attribute]
+
     def test_repointing_a_connection_leaves_the_original_source_untouched(self):
         a, b = FakeConnection(token="a"), FakeConnection(token="b")
         source = Shop(connection=a)

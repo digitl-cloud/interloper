@@ -310,6 +310,23 @@ class TestCollect:
         assert "dataset" in Widget.model_fields
         assert "dataset" not in Widget.relations
 
+    def test_a_component_annotation_left_as_a_field_is_a_definition_error(self):
+        # Collected against the declaring module, resolved by pydantic against
+        # the defining scope: a class local to this test is seen by one only.
+        class LocalConn(il.Connection):
+            """A connection the collector's module namespace cannot see."""
+
+        with pytest.raises(TypeError, match="not collected as a relation"):
+
+            class Local(il.Source):
+                connection: LocalConn
+
+    def test_annotation_naming_a_later_class_is_a_definition_error(self):
+        with pytest.raises(TypeError, match="could not be resolved"):
+
+            class Early(il.Source):
+                connection: LaterConn  # noqa: F821  # ty: ignore[unresolved-reference]
+
 
 class TestBind:
     def test_kwargs_bind(self):
