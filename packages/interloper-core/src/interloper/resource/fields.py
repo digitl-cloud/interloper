@@ -29,8 +29,8 @@ FETCH_FIELD_PROVIDER_ATTR = "__is_fetch_field_provider__"
 def fetch_field_provider(fn: F) -> F:
     """Mark a resource method as a :func:`FetchField` data source.
 
-    A ``FetchField(provider="<slot>.<method>")`` resolves its options by
-    instantiating the resource in slot ``<slot>`` (from the credentials the
+    A ``FetchField(provider="<name>.<method>")`` resolves its options by
+    instantiating the resource bound to the relation ``<name>`` (from the credentials the
     form already holds) and calling the method named ``<method>``. Only
     methods marked with this decorator may be invoked that way; it is the
     allowlist that stops the browser from calling arbitrary attributes.
@@ -69,10 +69,12 @@ def is_fetch_field_provider(candidate: Any) -> bool:
 def validate_fetch_field_providers(cls: type[BaseModel], relations: dict[str, Relation]) -> None:
     """Check every ``FetchField(provider=...)`` on *cls* resolves to a provider.
 
-    For each field carrying an ``x-fetch``, the provider ``"<slot>.<method>"``
-    must name a declared relation whose target class exposes ``<method>``
-    marked with :func:`fetch_field_provider`. Fails loudly at catalog-build
-    time rather than letting the form silently fail at runtime.
+    For each field carrying an ``x-fetch``, the provider ``"<name>.<method>"``
+    must name a declared relation, that relation must have been declared from
+    a component class (a relation declared by kind and key names no class to
+    read the method off), and that class must expose ``<method>`` marked with
+    :func:`fetch_field_provider`. Fails loudly at catalog-build time rather
+    than letting the form silently fail at runtime.
 
     Args:
         cls: The component class being defined (source or destination).
@@ -80,7 +82,8 @@ def validate_fetch_field_providers(cls: type[BaseModel], relations: dict[str, Re
 
     Raises:
         TypeError: If a provider reference is malformed, names an undeclared
-            relation, or targets a method that is not a ``@fetch_field_provider``.
+            relation, names a relation that was not declared from a component
+            class, or targets a method that is not a ``@fetch_field_provider``.
     """
     for field_name, field in cls.model_fields.items():
         extra = field.json_schema_extra
@@ -90,23 +93,26 @@ def validate_fetch_field_providers(cls: type[BaseModel], relations: dict[str, Re
         if not isinstance(fetch, dict):
             continue
         provider = fetch.get("provider")
-        slot, _, method = str(provider).partition(".")
-        if not slot or not method:
+        name, _, method = str(provider).partition(".")
+        if not name or not method:
             raise TypeError(
-                f"{cls.__name__}.{field_name}: FetchField provider '{provider}' must be of the form '<slot>.<method>'"
+                f"{cls.__name__}.{field_name}: FetchField provider '{provider}' must be of the form '<name>.<method>'"
             )
-        relation = relations.get(slot)
+        relation = relations.get(name)
         if relation is None:
             raise TypeError(
                 f"{cls.__name__}.{field_name}: FetchField provider '{provider}' "
-                f"references relation '{slot}', which is not declared"
+                f"references relation '{name}', which is not declared"
             )
-        resource_cls = relation.target
-        candidate = getattr(resource_cls, method, None)
-        if not is_fetch_field_provider(candidate):
+        if relation.target is None:
+            raise TypeError(
+                f"{cls.__name__}.{field_name}: FetchField provider '{provider}' names relation '{name}', "
+                f"which is not declared from a component class"
+            )
+        if not is_fetch_field_provider(getattr(relation.target, method, None)):
             raise TypeError(
                 f"{cls.__name__}.{field_name}: FetchField provider '{provider}' targets "
-                f"'{resource_cls.__name__}.{method}', which is not a @fetch_field_provider method"
+                f"'{relation.target.__name__}.{method}', which is not a @fetch_field_provider method"
             )
 
 
@@ -348,20 +354,20 @@ def FetchField(
 ) -> Any:
     """Field whose options are fetched from a resource's provider method.
 
-    The backend instantiates the resource in slot ``<slot>`` (from the
-    credentials the form already holds) and calls the :func:`fetch_field_provider`
-    method ``<method>`` on it. The lookup logic lives next to the credentials
+    The backend instantiates the resource bound to the relation ``<name>``
+    (from the credentials the form already holds) and calls the
+    :func:`fetch_field_provider` method ``<method>`` on it. The lookup logic lives next to the credentials
     it uses; there is no per-provider API route to hand-write.
 
-    The dependency is the provider's own slot (the ``<slot>`` part): the
+    The dependency is the provider's own relation (the ``<name>`` part): the
     frontend waits for that resource to be selected, then resolves via
     ``/components/resolve``. It is implicit in ``provider``, so there is no
     separate ``depends_on``.
 
     Args:
         default: Default value (``...`` means required).
-        provider: ``"<slot>.<method>"`` reference to a ``@fetch_field_provider``
-            method on the resource in slot ``<slot>``.
+        provider: ``"<name>.<method>"`` reference to a ``@fetch_field_provider``
+            method on the resource bound to the relation ``<name>``.
         label_key: Key in each response item used as the display label.
         value_key: Key in each response item used as the stored value.
         **kwargs: Forwarded to ``pydantic.Field``. Pass ``discriminator=True``
@@ -371,7 +377,7 @@ def FetchField(
         A Pydantic Field descriptor.
 
     Raises:
-        ValueError: If ``provider`` is not of the form ``"<slot>.<method>"``.
+        ValueError: If ``provider`` is not of the form ``"<name>.<method>"``.
 
     Example::
 
@@ -381,9 +387,9 @@ def FetchField(
             value_key="account_id",
         )
     """
-    slot, _, method = provider.partition(".")
-    if not slot or not method:
-        raise ValueError(f"FetchField provider '{provider}' must be of the form '<slot>.<method>'")
+    name, _, method = provider.partition(".")
+    if not name or not method:
+        raise ValueError(f"FetchField provider '{provider}' must be of the form '<name>.<method>'")
     extra = _extra(kwargs, "fetch")
     extra["x-fetch"] = {
         "provider": provider,
