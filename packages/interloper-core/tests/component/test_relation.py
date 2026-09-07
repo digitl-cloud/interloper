@@ -57,6 +57,10 @@ class TestRelation:
         assert relation.keys() == ["*.campaigns"]
         assert relation.many is True
 
+    def test_misspelled_keyword_is_refused(self) -> None:
+        with pytest.raises(ValidationError, match="manny"):
+            Relation("asset", "campaigns", manny=True)
+
     def test_list_kinds_and_keys(self) -> None:
         relation = Relation(["source", "asset"], ["a", "b"])
         assert relation.kinds() == ["source", "asset"]

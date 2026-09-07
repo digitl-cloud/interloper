@@ -14,12 +14,12 @@ import uuid
 from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from typing_extensions import Self
 
-from interloper.component.relation import ComponentIdentity, Relation
+from interloper.component.relation import ComponentIdentity, Relation, unwrap_optional
 from interloper.errors import ConfigError
 from interloper.registry import Registry
 from interloper.serializable.base import IgnoredDescriptor, Serializable, Spec
@@ -214,18 +214,44 @@ class Component(Serializable):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """Validate that at most one config field is marked as the discriminator.
+        """Check the discriminator fields and the annotations Pydantic kept as fields.
+
+        Runs once Pydantic has built the fields, which is the only moment the
+        two collectors can be compared: :meth:`collect` reads the annotations
+        against the declaring module, Pydantic reads them against the full
+        defining scope. An annotation naming a component class that
+        :meth:`collect` did not turn into a relation therefore became a plain
+        field, silently: no trickle, no ``{ref}``, and two classes differing
+        only in declaration order behaving differently. Both that and an
+        annotation Pydantic could not resolve at all are refused here.
 
         Args:
             **kwargs: Class-creation keyword arguments, passed through to ``super()``.
 
         Raises:
-            TypeError: If several fields carry ``discriminator=True``.
+            TypeError: If several fields carry ``discriminator=True``, if a
+                field's annotation names a component class that was not
+                collected as a relation, or if a field's annotation could not
+                be resolved.
         """
         super().__pydantic_init_subclass__(**kwargs)
         marked = cls._discriminator_fields()
         if len(marked) > 1:
             raise TypeError(f"Component '{cls.__name__}' marks multiple discriminator fields: {sorted(marked)}")
+        module = sys.modules.get(cls.__module__)
+        namespace = vars(module) if module else {}
+        for name, field in cls.model_fields.items():
+            annotation, _ = unwrap_optional(field.annotation, namespace)
+            if isinstance(annotation, ForwardRef):
+                raise TypeError(
+                    f"{cls.__name__}.{name} is annotated with '{annotation.__forward_arg__}', which could not be "
+                    f"resolved; define the class before it is referenced or declare the relation explicitly"
+                )
+            if Relation.from_annotation(annotation, namespace) is not None:
+                raise TypeError(
+                    f"{cls.__name__}.{name} is annotated with a Component class but was not collected as a "
+                    f"relation; define the class before it is referenced or declare the relation explicitly"
+                )
 
     def __init__(self, /, **data: Any) -> None:
         """Bind the relation kwargs, validate everything else as fields.

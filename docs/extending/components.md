@@ -103,7 +103,10 @@ name and nothing an ancestor declared is lost. Each entry is copied, stamped wit
 installed under it: a `Relation` is its own descriptor, so `Widget.connection` is the
 declaration and `widget.connection` what is bound to it. An annotated relation is dropped from
 the class's annotations before pydantic collects its fields, so a relation is never also a
-field.
+field. The two collectors read the annotations against different namespaces (the declaring
+module here, the full defining scope in pydantic), so an annotation naming a component class
+that ends up a plain field, and one that resolves nowhere at all, are both `TypeError` at class
+definition rather than a component silently missing a relation.
 
 **Operations**, all of them on `Component`:
 

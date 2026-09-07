@@ -567,8 +567,12 @@ class Source(Component, Workload):
 
         A child receives a relation's binding only through
         :meth:`~interloper.component.base.Component.trickle`, which passes
-        this source's own bound objects through unchanged; identity is what
-        tells that binding apart from one an asset bound on its own.
+        this source's own targets through unchanged; the target ids are what
+        tell that binding apart from one an asset bound on its own. Ids and
+        not object identity, because a deep copy rebuilds a source's own
+        bindings and its assets' separately: the copy's assets then hold
+        distinct objects carrying the same ids, and an identity comparison
+        would read every trickled binding on a copy as the asset's own.
 
         Args:
             name: The relation name to check.
@@ -578,15 +582,10 @@ class Source(Component, Workload):
             this source's own list of targets, in order. Empty when this
             source itself holds nothing for *name*.
         """
-        own = self._bound.get(name, [])
+        own = [target.id for target in self._bound.get(name, [])]
         if not own:
             return set()
-        return {
-            asset.key
-            for asset in self.assets
-            if len(asset._bound.get(name, [])) == len(own)
-            and all(mine is theirs for mine, theirs in zip(asset._bound.get(name, []), own))
-        }
+        return {asset.key for asset in self.assets if [target.id for target in asset._bound.get(name, [])] == own}
 
     def _rebound(self, name: str) -> None:
         """Trickle this source's bindings down whenever one of them changes.

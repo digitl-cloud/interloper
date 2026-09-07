@@ -163,7 +163,7 @@ class Relation(BaseModel):
     directly. Both fields are excluded from dumps.
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     kind: str | list[str]
     key: str | list[str] = ""
@@ -203,7 +203,8 @@ class Relation(BaseModel):
             key: The relation's ``key`` value, ignored when ``kind_or_class``
                 is a class.
             **data: Remaining field values (``many``, ``optional``,
-                ``default``, ``on_delete``, ``name``), forwarded to Pydantic.
+                ``default``, ``on_delete``, ``name``), forwarded to Pydantic,
+                which rejects any other name rather than dropping it.
         """
         if isinstance(kind_or_class, type):
             data.update(
