@@ -95,16 +95,16 @@ class TestFetchField:
 
         fetch = Src.definition().config_schema["properties"]["thing_id"]["x-fetch"]
         assert fetch["provider"] == "connection.things"
-        # The dependency is implicit in the provider's slot — no depends_on/endpoint.
+        # The dependency is implicit in the provider's relation: no depends_on/endpoint.
         assert "depends_on" not in fetch
         assert "endpoint" not in fetch
 
     def test_rejects_malformed_provider(self):
-        with pytest.raises(ValueError, match="<slot>.<method>"):
+        with pytest.raises(ValueError, match="<name>.<method>"):
             il.FetchField(provider="things")
 
-    def test_annotation_declared_slot_validates_and_is_exposed(self):
-        """A slot declared via a typed annotation (not the decorator's ``relations=``) works.
+    def test_annotation_declared_relation_validates_and_is_exposed(self):
+        """A relation declared via a typed annotation (not the decorator's ``relations=``) works.
 
         The relation lives on ``cls.relations``, not ``resource_types``, so
         validation and the definition's ``relations`` map must both resolve
@@ -123,12 +123,21 @@ class TestFetchField:
 
 
 class TestValidation:
-    def test_unknown_slot_rejected(self):
+    def test_unknown_relation_rejected(self):
         class Src(il.Source):
             connection: Conn
             thing_id: str = il.FetchField(provider="other.things")
 
         with pytest.raises(TypeError, match="not declared"):
+            Src.definition()
+
+    def test_relation_declared_without_a_class_rejected(self):
+        class Src(il.Source):
+            connection: Conn
+            store = il.Relation("connection", "conn")
+            thing_id: str = il.FetchField(provider="store.things")
+
+        with pytest.raises(TypeError, match="not declared from a component class"):
             Src.definition()
 
     def test_non_provider_method_rejected(self):

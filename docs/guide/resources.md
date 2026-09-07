@@ -99,7 +99,9 @@ A `many` relation never falls back: `resolve(name)` on it is exactly `bound(name
 when nothing is bound.
 
 A fallback is never bound, so an explicit binding or a later trickle always wins over it, and
-`to_spec()` never carries an auto-instantiated component. Because a resource is built at the
+`to_spec()` never carries an auto-instantiated component. Attribute access reads bindings only:
+`asset.connection` is `None` while nothing is bound, where the same relation injected into
+`data()` goes through `resolve()` and receives the fallback. Because a resource is built at the
 moment it is read, a credential that is neither bound nor in the environment surfaces as a
 pydantic validation error from the read that needed it, not at build time.
 
