@@ -7,7 +7,6 @@ from typing import ClassVar
 from pydantic import Field
 
 from interloper.asset.base import Asset
-from interloper.component.base import RelationDefinition
 from interloper.errors import ConfigError
 from interloper.hook.base import Hook, HookContext
 from interloper.job.base import Job
@@ -26,9 +25,6 @@ class TriggerHook(Hook):
     hooks act on other components, so only their definitions advertise it.
     """
 
-    relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "target": RelationDefinition(kinds=["source", "asset", "job"], field="targets"),
-    }
     internal_fields: ClassVar[frozenset[str]] = frozenset({"watches", "targets"})
 
     targets: list[Source | Asset | Job] = Field(default_factory=list)

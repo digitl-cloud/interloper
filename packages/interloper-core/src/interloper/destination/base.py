@@ -5,9 +5,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, ClassVar
 
-from interloper.component import Component, ComponentDefinition, RelationDefinition
+from interloper.component import Component, ComponentDefinition
 from interloper.destination.context import IOContext
-from interloper.resource import Resource
 from interloper.utils.text import to_label
 
 
@@ -45,9 +44,6 @@ class Destination(Component):
     """
 
     tags: ClassVar[list[str]] = []
-    relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "resource": RelationDefinition(kinds=["connection", "config", "resource"], field="resources", slotted=True),
-    }
 
     @classmethod
     def definition(cls) -> DestinationDefinition:
@@ -61,11 +57,8 @@ class Destination(Component):
         from interloper.resource.fields import validate_fetch_field_providers
         from interloper.utils.imports import get_object_path
 
-        # Resolved resource map (includes annotation-declared slots, not just
-        # ``__dict__``) so the DestinationDefinition's ``resources`` and its
-        # FetchField pickers work for both declaration styles.
-        resource_types: dict[str, type[Resource]] = cls.resource_types
-        validate_fetch_field_providers(cls, resource_types)
+        validate_fetch_field_providers(cls, cls.relations)
+
         return DestinationDefinition(
             kind=cls.kind,
             key=cls.key,
@@ -75,7 +68,7 @@ class Destination(Component):
             description=cls.__doc__ or "",
             tags=list(cls.tags),
             config_schema=cls.config_schema(),
-            relations=cls.relation_definitions(),
+            relations=dict(cls.relations),
         )
 
     @abstractmethod

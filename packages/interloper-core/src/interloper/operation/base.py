@@ -29,7 +29,7 @@ from interloper.errors import format_exception
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from interloper.component.base import Dependency
+    from interloper.component.base import Relation
     from interloper.dag.base import DAG
     from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
     from interloper.serializable import Spec
@@ -158,7 +158,7 @@ class Operation(Workload):
         """
         return partition_or_window if self.partitioning is not None else None
 
-    def declared_upstreams(self) -> dict[str, Dependency]:
+    def declared_upstreams(self) -> dict[str, Relation]:
         """The node's declared upstream contract.
 
         The default declares nothing; ``Asset`` returns its ``depends_on``.

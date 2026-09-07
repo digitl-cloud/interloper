@@ -6,8 +6,8 @@ from interloper.component import (
     KINDS,
     Component,
     ComponentDefinition,
-    Dependency,
-    RelationDefinition,
+    ComponentIdentity,
+    Relation,
 )
 from interloper.config import Config, config
 from interloper.connection import (
@@ -45,7 +45,7 @@ from interloper.partitioning import (
     TimePartitionWindow,
 )
 from interloper.registry import Registry
-from interloper.resource import Resource, ResourceDefinition, ResourceRef
+from interloper.resource import Resource, ResourceDefinition
 from interloper.resource.fields import (
     CronField,
     FetchField,
@@ -94,12 +94,12 @@ __all__ = [
     "Catalog",
     "Component",
     "ComponentDefinition",
+    "ComponentIdentity",
     "Config",
     "Connection",
     "ConnectionState",
     "CronField",
     "CronJob",
-    "Dependency",
     "Destination",
     "DestinationDefinition",
     "Event",
@@ -144,11 +144,10 @@ __all__ = [
     "RefreshTokenOAuthConnection",
     "RefreshTokenResponse",
     "Registry",
-    "RelationDefinition",
+    "Relation",
     "Renewal",
     "Resource",
     "ResourceDefinition",
-    "ResourceRef",
     "RunResult",
     "Runner",
     "Schema",

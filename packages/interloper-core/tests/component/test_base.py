@@ -13,9 +13,9 @@ import interloper as il
 from interloper.component.base import (
     Component,
     ComponentDefinition,
-    RelationDefinition,
     _adopt_kind,
 )
+from interloper.errors import ConfigError
 from interloper.serializable import Spec
 
 # -- Fixtures ------------------------------------------------------------------
@@ -34,12 +34,6 @@ class FakeResource(il.Resource):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
-class FakeAltResource(il.Resource):
-    """Second Resource type, used to exercise type-mismatch scenarios."""
-
-    token: str = ""
-
-
 class FakeComponent(Component):
     """Primary test component covering every serialization shape the base layer handles."""
 
@@ -48,6 +42,7 @@ class FakeComponent(Component):
     date: dt.date | None = None
     child: Component | None = None
     children: list[Component] | None = None
+    resources: dict[str, Any] = Field(default_factory=dict)
     labels: list[str] = Field(default_factory=list)
 
 
@@ -58,14 +53,9 @@ class FakeOtherComponent(Component):
 
 
 class FakeKind(Component):
-    """A satellite-style kind with its own relation vocabulary."""
+    """A satellite-style kind, subclassed to exercise anchor resolution."""
 
     sensitive: ClassVar[bool] = True
-    relation_types: ClassVar[dict[str, RelationDefinition]] = {
-        "link": RelationDefinition(kinds=["asset"], field="links", slotted=True),
-    }
-
-    links: dict[str, Any] = Field(default_factory=dict)
 
 
 class FakeConcreteKind(FakeKind):
@@ -162,51 +152,6 @@ class TestAnchor:
         assert il.Resource.anchor() is il.Resource
         assert FakeComponent.anchor() is FakeComponent
 
-    def test_misdeclared_relation_field_is_rejected(self):
-        class Broken(Component):
-            relation_types: ClassVar[dict[str, RelationDefinition]] = {
-                "link": RelationDefinition(kinds=["asset"], field="linkss"),
-            }
-
-        with pytest.raises(ValueError, match="no such field"):
-            Broken.anchor()
-
-
-class TestVocabularyMerge:
-    """Subclass ``relation_types`` declarations extend, never replace."""
-
-    def test_subclass_extends_the_inherited_vocabulary(self):
-        assert set(FakeConcreteKind.relation_types) == {"link"}
-
-        class FakeExtendedKind(FakeKind):
-            relation_types: ClassVar[dict[str, RelationDefinition]] = {
-                "wire": RelationDefinition(kinds=["asset"], field="wires"),
-            }
-
-            wires: list[str] = Field(default_factory=list)
-
-        assert set(FakeExtendedKind.relation_types) == {"link", "wire"}
-        # Extend-only: the parent's vocabulary is untouched.
-        assert set(FakeKind.relation_types) == {"link"}
-
-    def test_redeclared_type_replaces_that_definition(self):
-        class FakeNarrowedKind(FakeKind):
-            relation_types: ClassVar[dict[str, RelationDefinition]] = {
-                "link": RelationDefinition(kinds=["job"], field="links", slotted=True),
-            }
-
-        assert FakeNarrowedKind.relation_types["link"].kinds == ["job"]
-        assert FakeKind.relation_types["link"].kinds == ["asset"]
-
-    def test_definition_validates_the_extended_vocabulary(self):
-        class FakeBrokenExtension(FakeKind):
-            relation_types: ClassVar[dict[str, RelationDefinition]] = {
-                "wire": RelationDefinition(kinds=["asset"], field="wiress"),
-            }
-
-        with pytest.raises(ValueError, match="no such field"):
-            FakeBrokenExtension.definition()
-
 
 class TestKinds:
     """The framework's kinds are registered on package import."""
@@ -229,10 +174,6 @@ class TestKinds:
         assert il.KINDS["config"].sensitive is True
         assert il.KINDS["source"].sensitive is False
         assert il.KINDS["job"].sensitive is False
-
-    def test_relation_vocabulary_from_anchors(self):
-        assert set(il.KINDS["asset"].relation_types) == {"resource", "destination", "upstream"}
-        assert il.KINDS["job"].relation_types["target"].kinds == ["source", "asset"]
 
     def test_unknown_kind_fails_loudly(self):
         assert il.KINDS.get("nope") is None
@@ -279,131 +220,132 @@ class TestDefinition:
         schema = FakeSerializable.definition().config_schema
         assert set(schema["properties"]) == {"value"}
 
-    def test_definition_relations_from_class_vocabulary(self):
 
-        from interloper.component.base import RelationDefinition
-
-        class FakeRelated(Component):
-            """Component declaring a relation vocabulary."""
-
-            relation_types: ClassVar[dict[str, RelationDefinition]] = {
-                "wires": RelationDefinition(kinds=["fake_component"], field="wires", slotted=True)
-            }
-
-            wires: dict[str, Any] = Field(default_factory=dict)
-
-        relations = FakeRelated.definition().relations
-        assert relations["wires"].kinds == ["fake_component"]
-        assert relations["wires"].slotted is True
+# -- Relation declaration and binding ------------------------------------------
 
 
-# -- Resource slot inference and trickle-down ----------------------------------
+class Conn(il.Connection):
+    """Connection for binding tests; the required secret keeps it from self-filling."""
+
+    api_secret: str = il.SecretField()
 
 
-class FakeConsumer(Component):
-    """Component with a Resource-typed annotation to exercise ``_infer_resource_refs``.
+class Cfg(il.Config):
+    """Config for binding tests; every field is defaulted, so the relation fills itself."""
 
-    The ``resource`` annotation is rewritten to a ``ResourceRef`` descriptor by
-    ``Component.__init_subclass__``, so it is not a Pydantic field at runtime
-    (hence the ``# type: ignore[call-arg]`` below when constructing instances).
-    """
-
-    resource: FakeResource
+    threshold: int = il.InputField(default=1)
 
 
-class TestResources:
-    def test_resource_annotation_becomes_resource_ref(self):
-        from interloper.resource.ref import ResourceRef
+class Dest(il.Destination):
+    """Destination declaring its connection by annotation."""
 
-        assert isinstance(FakeConsumer.__dict__["resource"], ResourceRef)
-        assert FakeConsumer.resource_types["resource"] is FakeResource
+    connection: Conn
 
-    def test_explicit_resource_types_entry_not_overwritten(self):
-        """When ``resource_types`` already has the slot, the annotation loop skips it."""
+    def read(self, context: Any) -> Any:  # pragma: no cover
+        return None
 
-        class FakeExplicitConsumer(Component):
-            resource_types: ClassVar[dict[str, type]] = {"slot": FakeResource}
-            slot: FakeResource  # annotation would normally add a ref
+    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
+        pass
 
-        # Slot is still present, and no ResourceRef descriptor was installed for it.
-        assert FakeExplicitConsumer.resource_types["slot"] is FakeResource
-        assert "slot" not in FakeExplicitConsumer.__dict__
 
-    def test_trickle_fills_slot_by_name(self):
-        shared = FakeResource(text="shared")
-        parent = FakeConsumer(resources={"resource": shared})  # ty: ignore[missing-argument]
-        child = FakeConsumer()  # ty: ignore[missing-argument]
-        parent.trickle_resources(child)
-        assert child.resources["resource"] is shared
+class Widget(il.Source):
+    """Source with an annotated connection, an explicit optional config, and a self-filling config."""
 
-    def test_trickle_falls_back_to_type_match(self):
-        shared = FakeResource(text="shared")
-        # Parent holds the resource under a different slot name so name-match fails.
-        parent = FakeConsumer(resources={"other": shared})  # ty: ignore[missing-argument]
-        child = FakeConsumer()  # ty: ignore[missing-argument]
-        parent.trickle_resources(child)
-        assert child.resources["resource"] is shared
+    connection: Conn
+    config = il.Relation(Cfg, optional=True)
+    fallback = il.Relation(Cfg)
 
-    def test_trickle_does_not_overwrite_existing_slot(self):
-        existing = FakeResource(text="existing")
-        override = FakeResource(text="override")
-        parent = FakeConsumer(resources={"resource": override})  # ty: ignore[missing-argument]
-        child = FakeConsumer(resources={"resource": existing})  # ty: ignore[missing-argument]
-        parent.trickle_resources(child)
-        assert child.resources["resource"] is existing
 
-    def test_trickle_by_name_skipped_on_type_mismatch(self):
-        """A same-named resource of the wrong type must not fill the slot."""
-        parent = FakeConsumer(resources={"resource": FakeAltResource()})  # ty: ignore[missing-argument]
-        child = FakeConsumer()  # ty: ignore[missing-argument]
-        parent.trickle_resources(child)
-        assert "resource" not in child.resources
+class TestCollect:
+    def test_annotation_becomes_relation(self):
+        assert Widget.relations["connection"].kind == "connection"
+        assert Widget.relations["connection"].key == "conn"
+        assert "connection" not in Widget.model_fields
 
-    def test_trickle_by_name_mismatch_falls_back_to_type_match(self):
-        shared = FakeResource(text="shared")
-        parent = FakeConsumer(resources={"resource": FakeAltResource(), "other": shared})  # ty: ignore[missing-argument]
-        child = FakeConsumer()  # ty: ignore[missing-argument]
-        parent.trickle_resources(child)
-        assert child.resources["resource"] is shared
+    def test_relation_attribute_keeps_flags(self):
+        assert Widget.relations["config"].optional is True
+        assert Widget.config.name == "config"
 
-    def test_init_kwarg_routed_into_resources(self):
-        """A Resource passed under a ResourceRef slot name lands in ``resources``."""
-        resource = FakeResource(text="direct")
-        consumer = FakeConsumer(resource=resource)
-        assert consumer.resources["resource"] is resource
-        assert consumer.resource is resource
+    def test_anchor_relations_inherited(self):
+        assert Widget.relations["destinations"].many is True
 
-    def test_init_kwarg_wrong_type_rejected(self):
-        with pytest.raises(TypeError, match="resource 'resource' must be an instance of FakeResource"):
-            FakeConsumer(resource=FakeAltResource())  # ty: ignore[invalid-argument-type]
+    def test_subclass_replaces_same_name(self):
+        class Narrow(Widget):
+            connection = il.Relation(Conn, optional=True)
 
-    def test_init_kwarg_conflicting_with_resources_entry_rejected(self):
-        with pytest.raises(ValueError, match="both as a keyword argument and in 'resources'"):
-            FakeConsumer(resource=FakeResource(), resources={"resource": FakeResource()})
+        assert Narrow.relations["connection"].optional is True
+        assert Widget.relations["connection"].optional is False
 
-    def test_init_kwarg_merges_with_other_resources(self):
-        other = FakeAltResource()
-        resource = FakeResource()
-        consumer = FakeConsumer(resource=resource, resources={"extra": other})
-        assert consumer.resources == {"resource": resource, "extra": other}
+    def test_non_component_annotation_stays_a_field(self):
+        assert "dataset" in Widget.model_fields
+        assert "dataset" not in Widget.relations
 
-    def test_init_kwarg_for_explicit_model_field_untouched(self):
-        """A slot that is also a real pydantic field goes through pydantic, not ``resources``."""
 
-        class FakeExplicitFieldConsumer(Component):
-            resource_types: ClassVar[dict[str, type]] = {"slot": FakeResource}
-            slot: FakeResource | None = None
+class TestBind:
+    def test_kwargs_bind(self):
+        connection = Conn(api_secret="s")
+        widget = Widget(connection=connection)
+        assert widget.connection is connection
+        assert widget.bound("connection") is connection
+        assert widget.bound_ids()["connection"] == [connection.id]
 
-        resource = FakeResource()
-        consumer = FakeExplicitFieldConsumer(slot=resource)
-        assert consumer.slot is resource
-        assert "slot" not in consumer.resources
+    def test_unbound_single_is_none_and_many_is_empty(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        assert widget.config is None
+        assert widget.destinations == []
 
-    def test_init_kwarg_roundtrips_via_spec(self):
-        consumer = FakeConsumer(resource=FakeResource(text="abc"))
-        restored = Component.from_spec(consumer.to_spec())
-        assert isinstance(restored.resources["resource"], FakeResource)
-        assert restored.resources["resource"].text == "abc"
+    def test_self_filling_relation_is_not_bound_but_resolves(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        assert widget.fallback is None
+        assert isinstance(widget.resolve("fallback"), Cfg)
+        assert "fallback" not in widget.bound_ids()
+
+    def test_missing_required_is_a_build_error(self):
+        with pytest.raises(ConfigError, match="connection"):
+            Widget()
+
+    def test_wrong_kind_rejected(self):
+        with pytest.raises(ConfigError, match="connection"):
+            Widget(connection=Cfg())  # type: ignore[arg-type]
+
+    def test_single_relation_rejects_second_target(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        with pytest.raises(ConfigError, match="single"):
+            widget.bind("connection", Conn(api_secret="other"))
+
+    def test_many_accumulates(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        first, second = Dest(connection=Conn(api_secret="a")), Dest(connection=Conn(api_secret="b"))
+        widget.bind("destinations", first)
+        widget.bind("destinations", second)
+        assert widget.destinations == [first, second]
+
+    def test_many_ignores_a_target_it_already_holds(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        destination = Dest(connection=Conn(api_secret="a"))
+        widget.bind("destinations", destination, destination)
+        assert widget.destinations == [destination]
+
+    def test_unbind_detaches_optional(self):
+        config = Cfg()
+        widget = Widget(connection=Conn(api_secret="s"), config=config)
+        widget.unbind("config", config)
+        assert widget.config is None
+
+    def test_unbind_refuses_to_empty_required(self):
+        connection = Conn(api_secret="s")
+        widget = Widget(connection=connection)
+        with pytest.raises(ConfigError, match="non-optional"):
+            widget.unbind("connection", connection)
+
+    def test_unknown_relation_name_raises(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        with pytest.raises(KeyError, match="declares no relation 'nope'"):
+            widget.bound("nope")
+
+    def test_unknown_kwarg_is_a_type_error(self):
+        with pytest.raises(TypeError, match="unexpected"):
+            Widget(connection=Conn(api_secret="s"), nope=1)
 
 
 # -- Serialization: to_spec, from_spec, reconstruct, round-trip, discriminator ----
@@ -664,22 +606,3 @@ class TestStrictInitKwargs:
         with pytest.raises(TypeError, match="unexpected keyword argument.*nope"):
             FakeComponent(nope=1)  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
 
-    def test_resource_slot_kwargs_still_route(self):
-        consumer = FakeConsumer(resource=FakeResource(text="abc"))  # type: ignore[call-arg]
-        assert isinstance(consumer.resources["resource"], FakeResource)
-
-
-def test_dependency_defaults_and_flags():
-    """``Dependency`` defaults to a required, single-valued slot; ``RelationSlot`` is gone."""
-    dependency = il.Dependency(key="*.campaigns")
-    assert (dependency.optional, dependency.many) == (False, False)
-    fan_in = il.Dependency(key="*.campaigns", optional=True, many=True)
-    assert (fan_in.optional, fan_in.many) == (True, True)
-    assert not hasattr(il, "RelationSlot")
-
-
-def test_relation_definition_slots_are_dependencies():
-    """A relation definition's ``slots`` are ``Dependency`` instances, serialized with the flags."""
-    definition = il.RelationDefinition(kinds=["asset"], field="upstreams", slotted=True)
-    enriched = definition.model_copy(update={"slots": {"x": il.Dependency(key="a")}})
-    assert enriched.model_dump()["slots"]["x"] == {"key": "a", "optional": False, "many": False}

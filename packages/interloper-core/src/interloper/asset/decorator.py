@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, overload
 
 from interloper.asset.base import Asset
-from interloper.component import Dependency
+from interloper.component import Relation
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.partitioning import PartitionConfig
@@ -24,7 +24,7 @@ def asset(
     destinations: list[type[Destination]] = ...,
     schema: type[Schema] | None = ...,
     partitioning: PartitionConfig | None = ...,
-    depends_on: dict[str, str | Dependency] = ...,
+    depends_on: dict[str, str | Relation] = ...,
     tags: list[str] = ...,
     key: str = ...,
     name: str = ...,
@@ -40,7 +40,7 @@ def asset(
     destinations: list[type[Destination]] | None = None,
     schema: type[Schema] | None = None,
     partitioning: PartitionConfig | None = None,
-    depends_on: dict[str, str | Dependency] | None = None,
+    depends_on: dict[str, str | Relation] | None = None,
     tags: list[str] | None = None,
     key: str | None = None,
     name: str | None = None,
@@ -79,7 +79,7 @@ def asset(
         depends_on: Upstream assets, keyed by ``data()`` parameter name. A
             value is an asset key (bare, qualified or ``*.asset``) for a
             non-optional single slot, or a
-            :class:`~interloper.component.base.Dependency` for an optional or
+            :class:`~interloper.component.relation.Relation` for an optional or
             many-valued slot.
         tags: Catalog tags for the asset (e.g. ``["Report"]``).
         key: Asset key. Defaults to the decorated function's name.

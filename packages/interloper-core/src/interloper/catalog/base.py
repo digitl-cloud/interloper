@@ -38,7 +38,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from interloper.asset.base import Asset
-from interloper.component import KINDS, Component, ComponentDefinition, RelationDefinition
+from interloper.component import KINDS, Component, ComponentDefinition, Relation
 from interloper.errors import ConfigError
 from interloper.settings import AppSettings
 from interloper.source.base import Source, SourceDefinition
@@ -84,7 +84,7 @@ class Catalog(BaseModel):
                         return asset
         return self.components.get(key, default)
 
-    def vocabulary(self, kind: str, key: str, *, parent_key: str | None = None) -> dict[str, RelationDefinition]:
+    def vocabulary(self, kind: str, key: str, *, parent_key: str | None = None) -> dict[str, Relation]:
         """The relation vocabulary governing a persisted component row.
 
         The class definition is authoritative — a concrete class may extend
@@ -106,7 +106,7 @@ class Catalog(BaseModel):
         definition = self.get(key, parent_key=parent_key)
         if definition is not None and definition.kind == kind:
             return definition.relations
-        return KINDS[kind].relation_types
+        return KINDS[kind].relations
 
     def to_paths(self) -> list[str]:
         """Extract the import paths of all components in the catalog.
