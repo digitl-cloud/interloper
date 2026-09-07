@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v0.76.0 (2026-09-07)
+
+### Bug Fixes
+
+- **app**: Colour canceled timeline placeholders amber
+  ([`b2b651f`](https://github.com/digitl-cloud/interloper/commit/b2b651ffa1134e6921ce1b2385f660ca8dccb355))
+
+- **core**: Make FileDestination partition-aware
+  ([`0266d74`](https://github.com/digitl-cloud/interloper/commit/0266d74a8884f5838fae8b6ae5cdcde0cce84caa))
+
+### Testing
+
+- **api**: Raise interloper-api coverage from 74% to 99%
+  ([`ddffe4b`](https://github.com/digitl-cloud/interloper/commit/ddffe4bf51518acba9fa9c5b305c69af1f0c4e00))
+
+- **app**: Cover the static and source asset lookups
+  ([`2bc6a8a`](https://github.com/digitl-cloud/interloper/commit/2bc6a8adef37c836d96f4ad2ae43079c8a8de431))
+
+- **core**: Exercise the source decorator's normalizer parameter
+  ([`3263f14`](https://github.com/digitl-cloud/interloper/commit/3263f143d0065e0c773a96c79e77074e7dc671b1))
+
+- **core**: Raise interloper-core coverage from 82% to 99%
+  ([`deb04d4`](https://github.com/digitl-cloud/interloper/commit/deb04d43e5df6c3a2fe77ab950ec37a7b39ed93a))
+
+- **db**: Raise interloper-db coverage from 87% to 98%
+  ([`dd529e0`](https://github.com/digitl-cloud/interloper/commit/dd529e0fbb8a7e8f735a37f54a735c25a6156bc1))
+
+- **scheduler**: Raise interloper-scheduler coverage from 90% to 100%
+  ([`5260b5b`](https://github.com/digitl-cloud/interloper/commit/5260b5b1dbbf47d7ff26b500b6f1ac1d3692395a))
+
+
 ## v0.75.0 (2026-09-04)
 
 ### Bug Fixes
