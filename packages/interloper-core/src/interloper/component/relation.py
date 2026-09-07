@@ -309,16 +309,3 @@ class Bound(IgnoredDescriptor):
         if instance is None:
             return self.relation
         return instance.bound(self.relation.name)
-
-    def __set__(self, instance: Any, value: Any) -> None:
-        """Rebind this relation's slot on an instance.
-
-        Args:
-            instance: The component to rebind the relation on.
-            value: ``None`` or an empty sequence clears the binding; a single
-                component or a list/tuple of components replaces it.
-        """
-        targets = value if isinstance(value, (list, tuple)) else ([] if value is None else [value])
-        instance._bound.pop(self.relation.name, None)
-        if targets:
-            instance.bind(self.relation.name, *targets)
