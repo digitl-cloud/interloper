@@ -67,12 +67,12 @@ class SnapchatStatsNormalizer(DataFrameNormalizer):
 _ENTITY_NORMALIZER = DataFrameNormalizer(flatten_max_level=3, drop_na_columns=True)
 
 
-# -- HELPERS — HTTP / pagination -----------------------------------------------
+# -- HELPERS: HTTP / pagination ------------------------------------------------
 async def _get_pages(connection: SnapchatAdsConnection, path: str, params: dict | None = None) -> list[_RECORD]:
     """GET a Snapchat endpoint and follow ``paging.next_link``, returning each page's JSON.
 
     Pagination is cursor-based (each page links to the next), so the paginating
-    client walks it sequentially — the total page count isn't known up front.
+    client walks it sequentially; the total page count isn't known up front.
     """
     client = connection.client
     paginator = il.JSONLinkPaginator(next_url_path="paging.next_link")

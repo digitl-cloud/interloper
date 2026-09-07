@@ -322,7 +322,7 @@ class DAG:
         previous levels (Kahn's algorithm).
 
         Only materializable operations appear in the generations.  Edges from
-        non-materializable operations count as already satisfied — mirroring
+        non-materializable operations count as already satisfied, mirroring
         the runners, which mark those nodes as skipped (e.g. the parents
         in a :meth:`mini_dag`).
 
@@ -392,7 +392,7 @@ class DAG:
     ) -> RunResult:
         """Execute all operations in dependency order using a default ``AsyncRunner``.
 
-        Sync entrypoint for scripts, REPLs, and notebooks — drives
+        Sync entrypoint for scripts, REPLs, and notebooks; drives
         :meth:`materialize_async` to completion on the bridge loop
         (see :func:`interloper.run`)::
 
@@ -431,7 +431,7 @@ class DAG:
             span_attrs[attributes.PARTITION] = str(partition_or_window)
         with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attrs) as span:
             result = await AsyncRunner().run(dag=self, partition_or_window=partition_or_window)
-            # A failed run is returned, not raised — without this the trace's
+            # A failed run is returned, not raised; without this the trace's
             # root span reads OK while the failure sits on a descendant.
             if result.status is ExecutionStatus.FAILED:
                 span.set_status(StatusCode.ERROR, f"{len(result.failed_ids)} operation(s) failed")

@@ -186,7 +186,7 @@ class Spec(BaseModel):
         walked; everything else must be a JSON-able scalar.
 
         Args:
-            value: The field value to serialize — a ``Serializable``, a list
+            value: The field value to serialize: a ``Serializable``, a list
                 or dict of values to walk, or a JSON-able scalar.
 
         Returns:
@@ -210,7 +210,7 @@ class Spec(BaseModel):
         the caller can report them all at once.
 
         Args:
-            value: The loaded YAML value to walk — strings are substituted,
+            value: The loaded YAML value to walk: strings are substituted,
                 dicts and lists are recursed into, anything else passes through.
             missing: Mutable accumulator that collects the names of environment
                 variables referenced but not defined.
@@ -342,8 +342,8 @@ class Serializable(BaseModel):
 
         Pydantic merges annotations across the MRO with dict-update
         semantics, so a subclass field whose name is also *annotated* on a
-        parent — e.g. a schema column named ``name``, which every
-        Serializable declares as a ClassVar — is hoisted to the parent's
+        parent, e.g. a schema column named ``name``, which every
+        Serializable declares as a ClassVar, is hoisted to the parent's
         annotation slot, landing first in ``model_fields`` regardless of
         where the subclass declares it. Rebuild the order from each class's
         own annotations, counting only occurrences that are actual fields
@@ -375,7 +375,7 @@ class Serializable(BaseModel):
         """Validate kwargs strictly against the model's fields.
 
         Unknown kwargs are a loud error rather than pydantic's silent
-        ``extra="ignore"`` drop — a misnamed field would otherwise vanish.
+        ``extra="ignore"`` drop: a misnamed field would otherwise vanish.
 
         Args:
             **data: Field values, keyed by field name. Every key must name a
@@ -402,7 +402,7 @@ class Serializable(BaseModel):
         The decorator-support factory. The invariant: **decorators build
         classes, they never mutate finalized ones.**  Field defaults always
         pass through the Pydantic metaclass so they become real field
-        definitions — a plain ``setattr`` on a built pydantic class would
+        definitions: a plain ``setattr`` on a built pydantic class would
         leave ``model_fields`` (and therefore every instance) on the old
         default.
 
@@ -411,7 +411,7 @@ class Serializable(BaseModel):
         - The decorated class already extends the receiving class: field
           defaults (when present) produce a new subclass via
           :func:`pydantic.create_model` with the parent's annotations;
-          ClassVars are stamped on the result (plain class attributes — no
+          ClassVars are stamped on the result (plain class attributes, no
           pydantic machinery involved).
         - The decorated class does **not** extend it: a new class is
           created via ``type()`` that inherits from the receiving class and
@@ -446,7 +446,7 @@ class Serializable(BaseModel):
         if already_subclass:
             result_cls = cast("type[Self]", decorated)
             if fields:
-                # Override only the default, keeping the parent FieldInfo —
+                # Override only the default, keeping the parent FieldInfo:
                 # a bare (annotation, value) pair would build a fresh
                 # FieldInfo and silently drop the field's title, description
                 # and json_schema_extra (x-widget, x-info, …).
@@ -466,7 +466,7 @@ class Serializable(BaseModel):
                     setattr(result_cls, name, value)
             return result_cls
 
-        # Plain class — build a new class that inherits from the receiver.
+        # Plain class: build a new class that inherits from the receiver.
         namespace: dict[str, Any] = {}
 
         for name, value in decorated.__dict__.items():
@@ -629,7 +629,7 @@ class Serializable(BaseModel):
 
         Accepts dotted and composite paths (``module.Class``,
         ``module:Source.Asset``). Called on a subclass, the resolved class
-        must be of that subclass — anything else raises ``TypeError``.
+        must be of that subclass; anything else raises ``TypeError``.
 
         Args:
             path: Dotted or composite import path to resolve.
@@ -646,7 +646,7 @@ class Serializable(BaseModel):
         Args:
             path: Dotted or composite import path to import.
             ref: The reference as the caller wrote it, quoted in the error
-                message — a catalog key, say, rather than the resolved path.
+                message: a catalog key, say, rather than the resolved path.
 
         Returns:
             The resolved class.

@@ -32,7 +32,7 @@ def fetch_field_provider(fn: F) -> F:
     A ``FetchField(provider="<slot>.<method>")`` resolves its options by
     instantiating the resource in slot ``<slot>`` (from the credentials the
     form already holds) and calling the method named ``<method>``. Only
-    methods marked with this decorator may be invoked that way — it is the
+    methods marked with this decorator may be invoked that way; it is the
     allowlist that stops the browser from calling arbitrary attributes.
 
     The method runs inside the API process, which installs the connection
@@ -162,13 +162,13 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
 
     - ``label`` becomes the JSON-schema-standard ``title`` (the form label;
       ``title=`` keeps working as a plain pydantic passthrough).
-    - ``info`` becomes ``x-info`` — long explanatory text the UI renders in
+    - ``info`` becomes ``x-info``: long explanatory text the UI renders in
       an info tooltip next to the label, keeping the inline ``description``
       short.
     - ``discriminator=True`` becomes ``x-discriminator``: it marks the config
       field whose value distinguishes instances of a component, driving the
-      derived display name (:meth:`Component.instance_name`) and — for
-      sources — the per-instance asset table names (:meth:`Source.asset_table`).
+      derived display name (:meth:`Component.instance_name`) and, for
+      sources, the per-instance asset table names (:meth:`Source.asset_table`).
 
     Args:
         kwargs: The field factory's keyword arguments, mutated in place: the
@@ -351,7 +351,7 @@ def FetchField(
     The backend instantiates the resource in slot ``<slot>`` (from the
     credentials the form already holds) and calls the :func:`fetch_field_provider`
     method ``<method>`` on it. The lookup logic lives next to the credentials
-    it uses — there is no per-provider API route to hand-write.
+    it uses; there is no per-provider API route to hand-write.
 
     The dependency is the provider's own slot (the ``<slot>`` part): the
     frontend waits for that resource to be selected, then resolves via

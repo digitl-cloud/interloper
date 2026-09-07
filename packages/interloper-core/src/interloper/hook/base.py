@@ -48,7 +48,7 @@ class Hook(Component):
     """A reaction to events on watched components.
 
     A hook declares *what to observe* (``watches``), *which outcomes matter*
-    (``events``), and — like an asset's partitioning or a job's cron — the
+    (``events``), and, like an asset's partitioning or a job's cron, the
     declaration is inert intent: the framework carries it, and an operator
     (the scheduler) evaluates events and calls :meth:`fire`. Concrete hook
     classes own the side effect::
@@ -84,7 +84,7 @@ class Hook(Component):
         Subclasses must override this method.
 
         Args:
-            context: What the hook knows about the event that triggered it —
+            context: What the hook knows about the event that triggered it:
                 its identity, metadata, and the operator-injected capabilities.
 
         Raises:

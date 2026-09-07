@@ -11,7 +11,7 @@ from interloper_assets.awin.schemas import PublishersStats, Transactions
 
 # -- NORMALIZER ----------------------------------------------------------------
 
-# camelCase money object -> (amount key, currency key) — both snake-case onto the schema.
+# camelCase money object -> (amount key, currency key); both snake-case onto the schema.
 _MONEY_FIELDS = {
     "commissionAmount": ("commissionAmount", "commissionCurrency"),
     "saleAmount": ("saleAmount", "saleCurrency"),

@@ -26,8 +26,8 @@ class CampaignManager360Normalizer(DataFrameNormalizer):
 
     Headers are human-readable ("Active View: % Viewable Impressions",
     "Site (CM360)", "DV360 Cost (USD)"). The generic pass drops ``%`` outright,
-    which would collide "% Viewable Impressions" with "Viewable Impressions" —
-    so spell it out as ``pct`` first, then defer to snake-casing with digit
+    which would collide "% Viewable Impressions" with "Viewable Impressions", so
+    spell it out as ``pct`` first, then defer to snake-casing with digit
     splitting (CM360 → cm_360).
     """
 
@@ -43,7 +43,7 @@ class CampaignManager360Normalizer(DataFrameNormalizer):
         return super().column_name(name.replace("%", "pct"))
 
 
-# -- HELPERS — report definitions ------------------------------------------------
+# -- HELPERS: report definitions -----------------------------------------------
 def _standard_report_body(
     account_id: str, start_date: dt.date, end_date: dt.date, dimensions: list[str], metrics: list[str]
 ) -> dict:
@@ -74,7 +74,7 @@ def _reach_report_body(
     }
 
 
-# -- HELPERS — report execution --------------------------------------------------
+# -- HELPERS: report execution -------------------------------------------------
 def _wait_for_file(service: Any, profile_id: str, report_id: int, file_id: int) -> None:
     """Poll a report file until it is available, raising on failure or timeout.
 
@@ -146,7 +146,7 @@ def _get_report(connection: CampaignManager360Connection, profile_id: str, repor
         # One-shot report definitions; clean up best-effort so they don't pile up.
         try:
             service.reports().delete(profileId=profile_id, reportId=report_id).execute()
-        except Exception as exc:  # noqa: BLE001 — cleanup only; the data is already downloaded
+        except Exception as exc:  # noqa: BLE001 - cleanup only, the data is already downloaded
             logger.warning(f"Failed to delete report {report_id}: {exc}")
 
 

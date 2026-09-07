@@ -23,7 +23,7 @@ class Destination(Component):
     """A component that reads and writes asset data.
 
     Subclass and implement ``read()`` and ``write()``. They may be written
-    as plain sync methods (the common case — most warehouse/file clients are
+    as plain sync methods (the common case: most warehouse/file clients are
     sync) or as ``async def`` for native async I/O (e.g. asyncpg, aiofiles).
     The engine is async-native: it awaits async implementations directly and
     offloads sync ones to a worker thread, so a destination never blocks the

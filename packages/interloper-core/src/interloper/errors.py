@@ -55,10 +55,6 @@ class AssetError(InterloperError, ValueError):
     """An error in asset definition, configuration, or execution setup."""
 
 
-class DependencyContractError(AssetError):
-    """A wired upstream does not satisfy its declared key, or a single-valued slot holds several upstreams."""
-
-
 # -- Source --------------------------------------------------------------------
 
 
@@ -200,7 +196,7 @@ class ComponentDriftError(InterloperError):
     """A persisted component references a catalog key that no longer resolves.
 
     Raised when hydrating a stored source or asset whose catalog key has
-    *drifted* — the underlying class was renamed or removed from the code
+    *drifted*: the underlying class was renamed or removed from the code
     (``missing``), or is not exposed by this deployment's catalog
     (``disabled``). Distinct from :class:`HydrationError` (which signals a
     reconstruction failure for a key that *does* resolve) so callers and
@@ -216,8 +212,8 @@ def format_exception(exception: BaseException) -> str:
     """Format an exception as a non-empty, single-line error string.
 
     ``str(exception)`` alone is empty for message-less exceptions (e.g.
-    ``httpx.ReadTimeout``), which downstream consumers — event rows, run
-    results, the UI — treat as "no error". Always lead with the type name so
+    ``httpx.ReadTimeout``), which downstream consumers (event rows, run
+    results, the UI) treat as "no error". Always lead with the type name so
     the error stays identifiable either way.
 
     Pydantic's ``ValidationError`` never formats via ``str()``: its string

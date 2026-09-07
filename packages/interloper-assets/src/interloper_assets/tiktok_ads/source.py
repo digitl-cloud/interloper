@@ -30,7 +30,7 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
     Each row nests its requested dimensions under ``dimensions`` and its metrics
     under ``metrics``; merge both into a single flat record (dropping the parent
     prefix) before the base ``DataFrameNormalizer`` runs. ``stat_time_day`` comes
-    back as a midnight datetime string (``2026-01-01 00:00:00``) — coerce it to a
+    back as a midnight datetime string (``2026-01-01 00:00:00``); coerce it to a
     plain date so it lands on the ``date``-typed schema column.
     """
 
@@ -66,7 +66,7 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
 _ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 
 
-# -- HELPERS — HTTP / pagination -----------------------------------------------
+# -- HELPERS: HTTP / pagination ------------------------------------------------
 def _select_list(response: Any) -> list[dict[str, Any]]:
     """Pull ``data.list`` out of a TikTok response, raising on a non-zero API code.
 

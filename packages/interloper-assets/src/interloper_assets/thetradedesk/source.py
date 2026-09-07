@@ -36,7 +36,7 @@ class TheTradeDeskNormalizer(DataFrameNormalizer):
     """Reshape MyReports CSV rows onto the schema columns.
 
     Reports are requested in "International" format, so metric values carry
-    decimal commas ("1,5") and the date column is DD/MM/YYYY — convert both so
+    decimal commas ("1,5") and the date column is DD/MM/YYYY; convert both so
     the generic numeric/date casts succeed. Headers also spell quartiles with
     ``%`` ("Player 25% Complete" → ``player_25pct_complete``), which the generic
     snake-casing would drop.
@@ -163,7 +163,7 @@ async def _get_report(
         try:
             response = await connection.client.delete(f"/myreports/reportschedule/{schedule_id}")
             response.raise_for_status()
-        except Exception as exc:  # noqa: BLE001 — cleanup only; the data is already downloaded
+        except Exception as exc:  # noqa: BLE001 - cleanup only, the data is already downloaded
             logger.warning(f"Failed to delete report schedule {schedule_id}: {exc}")
 
 
