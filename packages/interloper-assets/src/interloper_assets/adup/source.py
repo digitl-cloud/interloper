@@ -35,7 +35,7 @@ async def get_report(client: il.AsyncRESTClient, report_type: str, start_date: d
 
 
 @il.source(
-    resources={"connection": AdupConnection},
+    relations={"connection": il.Relation(AdupConnection)},
     tags=["Advertising"],
     icon="icon:adup",
     normalizer=DataFrameNormalizer(),

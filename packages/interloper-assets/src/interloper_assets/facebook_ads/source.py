@@ -281,7 +281,7 @@ def _time_range(date: dt.date) -> dict[str, str]:
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    resources={"connection": FacebookAdsConnection},
+    relations={"connection": il.Relation(FacebookAdsConnection)},
     tags=["Advertising"],
     icon="logos:facebook",
     normalizer=FacebookActionsNormalizer(flatten_max_level=1),

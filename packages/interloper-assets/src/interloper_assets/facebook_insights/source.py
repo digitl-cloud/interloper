@@ -7,7 +7,7 @@ from interloper_assets.facebook_insights.connection import FacebookInsightsConne
 
 
 @il.source(
-    resources={"connection": FacebookInsightsConnection},
+    relations={"connection": il.Relation(FacebookInsightsConnection)},
     tags=["Social Media"],
     icon="logos:facebook",
 )

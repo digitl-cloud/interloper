@@ -104,7 +104,7 @@ class TestFetchField:
             il.FetchField(provider="things")
 
     def test_annotation_declared_slot_validates_and_is_exposed(self):
-        """A slot declared via a typed annotation (not ``resources=``) works.
+        """A slot declared via a typed annotation (not the decorator's ``relations=``) works.
 
         The relation lives on ``cls.relations``, not ``resource_types``, so
         validation and the definition's ``relations`` map must both resolve

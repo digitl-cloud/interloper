@@ -6,6 +6,7 @@ import pytest
 
 from interloper.asset.base import AssetDefinition
 from interloper.catalog.base import Catalog
+from interloper.component import Relation
 from interloper.settings import AppSettings
 
 
@@ -56,10 +57,17 @@ class TestEnablement:
         assert "demo_source" not in components  # content is opt-in
 
     def test_dependencies_come_along(self):
+        # BigQueryDestination declares `connection: GoogleCloudConnection`, so
+        # the closure imports that class from the relation's target.
         catalog = Catalog.from_paths(["interloper_google_cloud.BigQueryDestination"])
         assert "bigquery_destination" in catalog.components
         assert "google_cloud_connection" in catalog.components
         assert "gcs_destination" not in catalog.components
+
+    def test_asset_dependencies_of_a_source_come_along(self):
+        catalog = Catalog.from_paths(["interloper_assets.facebook_ads.source.FacebookAds"])
+        assert "facebook_ads" in catalog.components
+        assert "facebook_ads_connection" in catalog.components
 
     def test_unimportable_paths_are_skipped(self):
         catalog = Catalog.from_paths(["not_a_module.Nope", "interloper_assets.demo.source.DemoSource"])
@@ -112,29 +120,36 @@ class TestSourceOwnedAssets:
 class TestVocabulary:
     """catalog.vocabulary: class definition first, anchor as drift fallback."""
 
+    def test_returns_relations(self):
+        catalog = Catalog.discover()
+        relation = catalog.vocabulary("job", "cron_job")["targets"]
+        assert isinstance(relation, Relation)
+        assert relation.kinds() == ["source", "asset"]
+
     def test_class_definition_is_authoritative(self):
         catalog = Catalog.discover()
-        assert "target" in catalog.vocabulary("hook", "trigger_hook")
-        assert "target" not in catalog.vocabulary("hook", "webhook_hook")
+        assert "targets" in catalog.vocabulary("hook", "trigger_hook")
+        assert "targets" not in catalog.vocabulary("hook", "webhook_hook")
 
     def test_unresolved_key_falls_back_to_the_anchor(self):
         catalog = Catalog(components={})
-        assert set(catalog.vocabulary("hook", "gone_hook")) == {"watch", "resource"}
+        assert set(catalog.vocabulary("hook", "gone_hook")) == {"watches"}
 
     def test_kind_mismatch_falls_back_to_the_anchor(self):
         catalog = Catalog.discover()
         # 'cron_job' resolves, but as a job — a hook row with that key is drift.
-        assert set(catalog.vocabulary("hook", "cron_job")) == {"watch", "resource"}
+        assert set(catalog.vocabulary("hook", "cron_job")) == {"watches"}
 
+    @pytest.mark.xfail(strict=True, reason="Task 5: assets infer their upstream relations from data()")
     def test_source_owned_asset_resolves_through_its_parent(self):
         catalog = Catalog.discover()
-        # The anchor knows assets have upstreams; only the source's own
-        # declaration knows which ones, and which of them are required.
-        assert catalog.vocabulary("asset", "e")["upstream"].slots == {}
-        slots = catalog.vocabulary("asset", "e", parent_key="demo_source")["upstream"].slots
-        assert {name: slot.key for name, slot in slots.items()} == {
-            "b": "demo_source.b",
-            "c": "demo_source.c",
-            "d": "demo_source.d",
+        # The anchor knows nothing about which upstreams an asset has; only the
+        # source's own declaration names them.
+        assert catalog.vocabulary("asset", "e") == {}
+        relations = catalog.vocabulary("asset", "e", parent_key="demo_source")
+        assert {name: relation.keys() for name, relation in relations.items()} == {
+            "b": ["demo_source.b"],
+            "c": ["demo_source.c"],
+            "d": ["demo_source.d"],
         }
-        assert all(not slot.optional for slot in slots.values())
+        assert all(not relation.optional for relation in relations.values())

@@ -169,7 +169,7 @@ async def _get_report(
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    resources={"connection": TheTradeDeskConnection},
+    relations={"connection": il.Relation(TheTradeDeskConnection)},
     tags=["Advertising"],
     icon="icon:thetradedesk",
     normalizer=TheTradeDeskNormalizer(replace_empty_strings=True),

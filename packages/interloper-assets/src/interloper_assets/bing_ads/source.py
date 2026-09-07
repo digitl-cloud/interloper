@@ -165,7 +165,7 @@ def _ad_performance_report(connection: BingAdsConnection, account_id: str, date:
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    resources={"connection": BingAdsConnection},
+    relations={"connection": il.Relation(BingAdsConnection)},
     tags=["Advertising"],
     icon="icon:bing",
     normalizer=DataFrameNormalizer(snake_case_digits=True),

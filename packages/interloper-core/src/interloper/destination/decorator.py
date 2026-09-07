@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
+from interloper.component import Relation
 from interloper.destination.base import Destination
 from interloper.normalizer import MaterializationStrategy
-from interloper.resource import Resource
 
 # Bounded TypeVar so that classes already extending Destination preserve their
 # specific type through the decorator (e.g. BigQueryDestination stays
@@ -23,7 +23,7 @@ def destination(cls: type, /) -> type[Destination]: ...
 @overload
 def destination(
     *,
-    resources: dict[str, type[Resource]] = ...,
+    relations: dict[str, Relation] = ...,
     key: str = ...,
     tags: list[str] = ...,
     name: str = ...,
@@ -35,7 +35,7 @@ def destination(
     cls: type | None = None,
     /,
     *,
-    resources: dict[str, type[Resource]] | None = None,
+    relations: dict[str, Relation] | None = None,
     key: str | None = None,
     tags: list[str] | None = None,
     name: str | None = None,
@@ -45,7 +45,7 @@ def destination(
 ) -> type[Destination] | Callable[[type], type[Destination]]:
     """Create a Destination subclass from a decorated class.
 
-    Resource dependencies can be declared via annotations::
+    Relations can be declared via annotations::
 
         @destination
         class MyDest:
@@ -56,21 +56,20 @@ def destination(
 
     Or via explicit kwargs::
 
-        @destination(resources={"connection": PostgresConnection})
+        @destination(relations={"connection": il.Relation(PostgresConnection)})
         class MyDest:
             def read(self, context): ...
             def write(self, context, data): ...
 
-    Annotations typed as ``Resource`` subclasses are automatically extracted
-    from the class body and converted to ``ResourceRef`` descriptors.  They
-    do **not** become Pydantic model fields.
+    An annotation naming a component class declares a relation rather than a
+    Pydantic model field.
 
     Args:
         cls: The class being decorated when used bare (``@destination``);
             ``None`` when used with keyword arguments, in which case a
             decorator is returned instead.
-        resources: Resource dependencies as name → Resource type, an
-            alternative to declaring them as class annotations.
+        relations: Relation name → :class:`~interloper.component.relation.Relation`,
+            an alternative to declaring relations as class annotations.
         key: Registry key for the destination; defaults to the base class's.
         tags: Tags surfaced in the destination's definition.
         name: Human-readable name; defaults to a label built from the class name.
@@ -84,8 +83,6 @@ def destination(
         A Destination subclass.
     """
     classvars: dict[str, Any] = {}
-    if resources is not None:
-        classvars["resource_types"] = resources
     if read_representation is not None:
         classvars["read_representation"] = read_representation
 
@@ -102,9 +99,40 @@ def destination(
         classvars["icon"] = icon
 
     if cls is not None:
-        return Destination.build_class(cls, classvars=classvars, fields=fields)
+        return _build_destination(cls, classvars=classvars, fields=fields, relations=relations)
 
     def wrapper(cls: type) -> type[Destination]:
-        return Destination.build_class(cls, classvars=classvars, fields=fields)
+        return _build_destination(cls, classvars=classvars, fields=fields, relations=relations)
 
     return wrapper
+
+
+# -- Internals -----------------------------------------------------------------
+
+
+def _build_destination(
+    cls: type,
+    *,
+    classvars: dict[str, Any],
+    fields: dict[str, Any],
+    relations: dict[str, Relation] | None,
+) -> type[Destination]:
+    """Build the Destination subclass and declare the decorator's relations on it.
+
+    Args:
+        cls: The decorated class.
+        classvars: Class-level attributes to stamp on the built class.
+        fields: Field default overrides for the built class.
+        relations: Relations the decorator declares, name to relation, or
+            ``None`` when the decorator declares none.
+
+    Returns:
+        A Destination subclass.
+    """
+    destination_cls = Destination.build_class(cls, classvars=classvars, fields=fields)
+    if relations:
+        # The class already collected its relations when it was created, before
+        # the decorator had a chance to add any, so it collects again.
+        destination_cls.relations = {**destination_cls.relations, **relations}
+        destination_cls.collect()
+    return destination_cls

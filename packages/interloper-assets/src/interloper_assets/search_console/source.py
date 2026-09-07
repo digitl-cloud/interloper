@@ -7,7 +7,7 @@ from interloper_assets.search_console.connection import SearchConsoleConnection
 
 
 @il.source(
-    resources={"connection": SearchConsoleConnection},
+    relations={"connection": il.Relation(SearchConsoleConnection)},
     tags=["SEO"],
     icon="devicon:google",
 )

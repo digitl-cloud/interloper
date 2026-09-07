@@ -8,7 +8,7 @@ from interloper_assets.linkedin_ads.connection import LinkedinAdsConnection
 
 
 @il.source(
-    resources={"connection": LinkedinAdsConnection},
+    relations={"connection": il.Relation(LinkedinAdsConnection)},
     tags=["Advertising"],
     normalizer=DataFrameNormalizer(flatten_max_level=1),
     icon="devicon:linkedin",

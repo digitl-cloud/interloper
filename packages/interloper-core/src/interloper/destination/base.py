@@ -13,11 +13,9 @@ from interloper.utils.text import to_label
 class DestinationDefinition(ComponentDefinition):
     """Definition of a destination with its config schema inlined.
 
-    Cross-entity references use keys:
-    - ``resource_types`` maps resource name → component key
-
-    Same-entity data is inlined:
-    - ``config_schema`` is the destination's own JSON Schema
+    Cross-entity references use keys: ``relations`` names the kinds and keys
+    that may fill each declared link. Same-entity data is inlined:
+    ``config_schema`` is the destination's own JSON Schema.
     """
 
 
@@ -29,18 +27,17 @@ class Destination(Component):
     sync) or as ``async def`` for native async I/O (e.g. asyncpg, aiofiles).
     The engine is async-native: it awaits async implementations directly and
     offloads sync ones to a worker thread, so a destination never blocks the
-    event loop either way::
+    event loop either way. An annotation naming a component class declares a
+    relation, which the destination resolves by name::
 
         class PostgresDestination(Destination):
-            resource_types = {"connection": PostgresConnection}
+            connection: PostgresConnection
 
             def read(self, context: IOContext) -> Any:
-                connection = self.resources["connection"]
-                return query_table(connection.connection_string, context.table)
+                return query_table(self.connection.connection_string, context.table)
 
             def write(self, context: IOContext, data: Any) -> None:
-                connection = self.resources["connection"]
-                insert_into(connection.connection_string, context.table, data)
+                insert_into(self.connection.connection_string, context.table, data)
     """
 
     tags: ClassVar[list[str]] = []
@@ -49,7 +46,7 @@ class Destination(Component):
     def definition(cls) -> DestinationDefinition:
         """Produce a structured definition of this destination class.
 
-        The config schema is inlined; resource references use keys.
+        The config schema is inlined; relations reference their targets by key.
 
         Returns:
             A DestinationDefinition with metadata and JSON Schema.

@@ -10,7 +10,7 @@ from interloper_assets.search_ads_360.connection import SearchAds360Connection
     name="Search Ads 360",
     tags=["Advertising"],
     icon="devicon:google",
-    resources={"connection": SearchAds360Connection},
+    relations={"connection": il.Relation(SearchAds360Connection)},
 )
 class SearchAds360(il.Source):
     """Search Ads 360 advertising platform integration."""

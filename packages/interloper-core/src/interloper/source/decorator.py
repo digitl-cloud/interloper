@@ -7,15 +7,15 @@ from collections.abc import Callable
 from typing import Any, overload
 
 from interloper.asset import Asset
+from interloper.component import Relation
 from interloper.destination import Destination
 from interloper.normalizer import MaterializationStrategy, Normalizer
-from interloper.resource import Resource
 from interloper.source.base import Source
 
-# Mapping from decorator kwarg name → (namespace key, "classvar" | "field").
+# Mapping from decorator kwarg name → (namespace key, "classvar" | "field" | "relation").
 _SOURCE_PARAMS: dict[str, tuple[str, str]] = {
-    "resources": ("resource_types", "classvar"),
-    "destinations": ("destination_types", "classvar"),
+    "relations": ("relations", "classvar"),
+    "destinations": ("destinations", "relation"),
     "tags": ("tags", "classvar"),
     "key": ("key", "classvar"),
     "name": ("name", "classvar"),
@@ -32,7 +32,7 @@ def source(target: type | Callable[..., Any], /) -> type[Source]: ...
 @overload
 def source(
     *,
-    resources: dict[str, type[Resource]] = ...,
+    relations: dict[str, Relation] = ...,
     destinations: list[type[Destination]] = ...,
     tags: list[str] = ...,
     key: str = ...,
@@ -47,7 +47,7 @@ def source(
     target: type | Callable[..., Any] | None = None,
     /,
     *,
-    resources: dict[str, type[Resource]] | None = None,
+    relations: dict[str, Relation] | None = None,
     destinations: list[type[Destination]] | None = None,
     tags: list[str] | None = None,
     key: str | None = None,
@@ -63,9 +63,10 @@ def source(
     Args:
         target: The decorated class or function when used bare; ``None`` when
             used with arguments, in which case a decorator is returned.
-        resources: Resource slot name → Resource class, set as ``resource_types``.
-        destinations: Destination classes the source allows, set as
-            ``destination_types``.
+        relations: Relation name → :class:`~interloper.component.relation.Relation`,
+            an alternative to declaring relations as class annotations.
+        destinations: Destination classes the source allows; narrows the key
+            list of its ``destinations`` relation.
         tags: Catalog tags for the source.
         key: Overrides the auto-derived snake_cased key.
         name: Human-readable display name.
@@ -79,7 +80,7 @@ def source(
         A Source subclass with discovered assets.
     """
     kwargs = {
-        "resources": resources,
+        "relations": relations,
         "destinations": destinations,
         "tags": tags,
         "key": key,
@@ -90,13 +91,13 @@ def source(
         "normalizer": normalizer,
         "materialization_strategy": materialization_strategy,
     }
-    classvars, fields = _split_params(kwargs, _SOURCE_PARAMS)
+    classvars, fields, declared = _split_params(kwargs, _SOURCE_PARAMS)
 
     if target is not None:
-        return _build_source(target, classvars=classvars, fields=fields)
+        return _build_source(target, classvars=classvars, fields=fields, relations=declared)
 
     def wrapper(target: type | Callable[..., Any]) -> type[Source]:
-        return _build_source(target, classvars=classvars, fields=fields)
+        return _build_source(target, classvars=classvars, fields=fields, relations=declared)
 
     return wrapper
 
@@ -104,32 +105,55 @@ def source(
 # -- Internals -----------------------------------------------------------------
 
 
+def _narrowed_destinations(destinations: list[type[Destination]]) -> Relation:
+    """Build the ``destinations`` relation narrowed to the given destination classes.
+
+    Args:
+        destinations: The destination classes the source allows.
+
+    Returns:
+        The anchor's ``destinations`` relation with its key list narrowed to
+        those classes' keys.
+    """
+    return Relation("destination", [cls.key for cls in destinations], many=True, optional=True)
+
+
+# Builders for the "relation" kind: the kwarg's value to the relation it declares.
+_RELATION_BUILDERS: dict[str, Callable[[Any], Relation]] = {"destinations": _narrowed_destinations}
+
+
 def _split_params(
     kwargs: dict[str, Any],
     param_map: dict[str, tuple[str, str]],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Split decorator kwargs into classvars and fields dicts.
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Relation]]:
+    """Split decorator kwargs into classvars, fields and relations.
 
-    Skips ``None`` values (unset parameters).
+    Skips ``None`` values (unset parameters). A relation-kind kwarg is built
+    through :data:`_RELATION_BUILDERS` and merged over whatever the explicit
+    ``relations`` kwarg declared under the same name.
 
     Args:
         kwargs: Raw decorator keyword arguments.
-        param_map: Maps kwarg name → (namespace key, "classvar" | "field").
+        param_map: Maps kwarg name → (namespace key, "classvar" | "field" | "relation").
 
     Returns:
-        A (classvars, fields) tuple.
+        A (classvars, fields, relations) tuple.
     """
     classvars: dict[str, Any] = {}
     fields: dict[str, Any] = {}
+    built: dict[str, Relation] = {}
     for kwarg_name, value in kwargs.items():
         if value is None:
             continue
-        ns_key, kind = param_map[kwarg_name]
-        if kind == "classvar":
-            classvars[ns_key] = value
+        namespace_key, kind = param_map[kwarg_name]
+        if kind == "relation":
+            built[namespace_key] = _RELATION_BUILDERS[kwarg_name](value)
+        elif kind == "classvar":
+            classvars[namespace_key] = value
         else:
-            fields[ns_key] = value
-    return classvars, fields
+            fields[namespace_key] = value
+    relations = {**classvars.pop("relations", {}), **built}
+    return classvars, fields, relations
 
 
 def _build_source(
@@ -137,20 +161,29 @@ def _build_source(
     *,
     classvars: dict[str, Any],
     fields: dict[str, Any],
+    relations: dict[str, Relation],
 ) -> type[Source]:
-    """Route to class-based or function-based builder.
+    """Route to the class-based or function-based builder, then declare the relations.
 
     Args:
         target: The decorated class or function.
         classvars: Class-level attributes to stamp on the built class.
         fields: Field default overrides for the built class.
+        relations: Relations the decorator declares, name to relation.
 
     Returns:
         A dynamically created Source subclass.
     """
     if inspect.isclass(target):
-        return _build_source_from_class(target, classvars=classvars, fields=fields)
-    return _build_source_from_fn(target, classvars=classvars, fields=fields)
+        source_cls = _build_source_from_class(target, classvars=classvars, fields=fields)
+    else:
+        source_cls = _build_source_from_fn(target, classvars=classvars, fields=fields)
+    if relations:
+        # The class already collected its relations when it was created, before
+        # the decorator had a chance to add any, so it collects again.
+        source_cls.relations = {**source_cls.relations, **relations}
+        source_cls.collect()
+    return source_cls
 
 
 def _build_source_from_fn(

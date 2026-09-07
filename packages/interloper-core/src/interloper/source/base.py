@@ -1,24 +1,25 @@
-"""Source: a component that groups assets with shared resources and destinations."""
+"""Source: a component that groups assets with shared relations and destinations."""
 
 from __future__ import annotations
 
-import inspect
-from typing import Any, ClassVar
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
 from interloper.asset import Asset
-from interloper.asset.base import AssetDefinition, AssetIdentity
-from interloper.component import Component, ComponentDefinition, Relation
-from interloper.destination import Destination
+from interloper.asset.base import AssetDefinition
+from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
-from interloper.resource import Resource
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
 from interloper.serializable import IgnoredDescriptor, Spec
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label, validate_key
+
+if TYPE_CHECKING:
+    from interloper.destination import Destination
 
 
 class AssetRef(IgnoredDescriptor):
@@ -85,24 +86,23 @@ class AssetRef(IgnoredDescriptor):
 class SourceDefinition(ComponentDefinition):
     """Definition of a source including its nested asset definitions.
 
-    Cross-entity references use keys:
-    - ``resources`` maps slot name → resource catalog key
-
-    Same-entity data is inlined:
-    - ``assets`` are owned by this source, so their definitions are nested
+    Cross-entity references use keys: ``relations`` names the kinds and keys
+    that may fill each declared link. Same-entity data is inlined: ``assets``
+    are owned by this source, so their definitions are nested.
     """
 
     assets: list[AssetDefinition] = Field(default_factory=list)
 
 
 class Source(Component, Workload):
-    """A grouping component that holds assets with shared resources and destinations.
+    """A grouping component that holds assets with shared relations and destinations.
 
-    Define a source by subclassing and setting class attributes::
+    Define a source by subclassing: an annotation naming a component class
+    declares a relation the source's assets inherit, and ``asset_types``
+    (or asset classes written in the body) names what it materializes::
 
         class MySource(Source):
-            resource_types = {"config": ProdConfig}
-            destinations = [PostgresDest(connection="...")]
+            connection: MyConnection
             asset_types = [Users, Orders]
 
     Access assets by key via attribute access::
@@ -112,11 +112,16 @@ class Source(Component, Workload):
     """
 
     # Definition
-    destination_types: ClassVar[list[type[Destination]]] = []
     asset_types: ClassVar[list[type[Asset]]] = []
     tags: ClassVar[list[str]] = []
-    destinations = Relation("destination", many=True, optional=True)
-    internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "destinations", "normalizer", "select"})
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "normalizer", "select"})
+
+    if TYPE_CHECKING:
+        destinations: list[Destination]
+
+    relations: ClassVar[dict[str, Relation]] = {
+        "destinations": Relation("destination", many=True, optional=True),
+    }
 
     # State
     normalizer: Normalizer | None = Field(default=None)
@@ -148,7 +153,7 @@ class Source(Component, Workload):
     # -- Construction & resolution ---------------------------------------------
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-discover assets and infer upstreams at source definition time.
+        """Auto-discover the source's assets at definition time.
 
         Asset classes defined in the source body (via ``@asset`` on
         methods) appear as class attributes.  We collect them into
@@ -162,7 +167,6 @@ class Source(Component, Workload):
         """
         super().__init_subclass__(**kwargs)
         cls._collect_asset_types()
-        cls._infer_upstreams()
 
     @model_validator(mode="before")
     @classmethod
@@ -203,7 +207,16 @@ class Source(Component, Workload):
         return data
 
     def model_post_init(self, context: Any) -> None:
-        """Instantiate default asset types (if none were supplied) and resolve trickle-down fields.
+        """Build the source's assets, resolve their defaults and wire them to each other.
+
+        Assets defer relation validation past their own ``__init__``
+        (:attr:`~interloper.asset.base.Asset._defer_validation`): they are
+        incomplete until this source has trickled its own bindings into them,
+        which cannot happen here, since ``Component.__init__`` binds this
+        source's own relation kwargs only *after* ``model_post_init``
+        returns. :meth:`validate_relations` is what cascades into each asset
+        instead, once ``Component.__init__`` calls it with everything this
+        source can fill already bound.
 
         Args:
             context: Pydantic's post-init context, forwarded untouched to
@@ -215,6 +228,20 @@ class Source(Component, Workload):
         self._resolve()
         if self.select is not None:
             self._apply_select()
+        self._bind_siblings()
+
+    def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
+        """Check this source's own relations, then cascade into every asset.
+
+        Args:
+            nodes: Every node materializing in the same run, keyed by id,
+                forwarded to each asset's own check; see
+                :meth:`~interloper.component.base.Component.validate_relations`.
+                ``None`` skips the DAG-membership check.
+        """
+        super().validate_relations(nodes)
+        for asset in self.assets:
+            asset.validate_relations(nodes)
 
     def _apply_select(self) -> None:
         """Mark assets outside ``select`` as non-materializable.
@@ -347,30 +374,44 @@ class Source(Component, Workload):
         setattr(cls, asset_cls.__name__, ref)
 
     @classmethod
-    def _infer_upstreams(cls) -> None:
-        """Populate ``depends_on`` on asset classes from sibling parameter names.
+    def sibling_bindings(cls) -> dict[str, dict[str, str]]:
+        """Which of this source's assets each asset relation resolves to, by key.
 
-        A parameter named after a sibling asset declares an upstream on it;
-        a ``None`` default makes that upstream optional.
+        Only intra-source wiring is decided here: a declared key that resolves
+        to another source, or to a wildcard, needs the whole DAG to be
+        resolved and is left to it.
+
+        Returns:
+            Asset key to a map of relation name to the sibling asset key that
+            fills it; assets with no sibling wiring are absent.
         """
-        sibling_keys: set[str] = {a.key for a in cls.asset_types}
+        siblings = {asset_cls.key for asset_cls in cls.asset_types}
+        bindings: dict[str, dict[str, str]] = {}
         for asset_cls in cls.asset_types:
-            if not hasattr(asset_cls, "data"):
+            for name, relation in asset_cls.relations.items():
+                if "asset" not in relation.kinds():
+                    continue
+                declared_keys = relation.keys()
+                for declared in declared_keys:
+                    expected = ComponentIdentity.resolve(declared, own_source_key=cls.key)
+                    if expected.source_key == cls.key and expected.key in siblings and expected.key != asset_cls.key:
+                        bindings.setdefault(asset_cls.key, {})[name] = expected.key
+        return bindings
+
+    def _bind_siblings(self) -> None:
+        """Bind each asset's sibling relations to this source's own asset instances.
+
+        A relation the asset already holds is left alone, so a binding made by
+        hand or hydrated from persistence always wins.
+        """
+        by_key = {asset.key: asset for asset in self.assets}
+        for asset_key, names in type(self).sibling_bindings().items():
+            asset = by_key.get(asset_key)
+            if asset is None:
                 continue
-            signature = inspect.signature(asset_cls.data)
-            inferred: dict[str, str | Relation] = {}
-            for parameter_name, parameter in signature.parameters.items():
-                if parameter_name in ("self", "context", "source", "kwargs"):
-                    continue
-                if parameter_name in asset_cls.resource_types or parameter_name in asset_cls.depends_on:
-                    continue
-                if parameter_name in sibling_keys and parameter_name != asset_cls.key:
-                    qualified = str(AssetIdentity(cls.key, parameter_name))
-                    inferred[parameter_name] = (
-                        Relation("asset", qualified, optional=True) if parameter.default is None else qualified
-                    )
-            if inferred:
-                asset_cls.depends_on = {**asset_cls.depends_on, **inferred}
+            for name, sibling_key in names.items():
+                if not asset.bound(name) and sibling_key in by_key:
+                    asset.bind(name, by_key[sibling_key])
 
     @classmethod
     def asset_def(cls, key: str) -> AssetDefinition:
@@ -429,6 +470,7 @@ class Source(Component, Workload):
 
         for asset in self.assets:
             asset._source = self
+            asset.parent = self
             if not asset.dataset:
                 asset.dataset = self.dataset
             validate_key(asset.table)
@@ -441,6 +483,55 @@ class Source(Component, Workload):
                 and asset.materialization_strategy == MaterializationStrategy.AUTO
             ):
                 asset.materialization_strategy = self.materialization_strategy
+
+    def _trickle_down(self) -> None:
+        """Fill the unbound relations of this source's assets and destinations from its own.
+
+        Binding is the moment this runs: relation keyword arguments reach a
+        component after ``model_post_init`` has already built its assets, so
+        without a pass on :meth:`bind` a source's connection would never
+        reach them.
+        """
+        for asset in self.assets:
+            self.trickle(asset)
+        for destination in self.destinations:
+            self.trickle(destination)
+
+    def _trickled_asset_keys(self, name: str) -> set[str]:
+        """Which of this source's assets hold exactly what this source itself has bound.
+
+        A child receives a relation's binding only through
+        :meth:`~interloper.component.base.Component.trickle`, which passes
+        this source's own bound objects through unchanged; identity is what
+        tells that binding apart from one an asset bound on its own.
+
+        Args:
+            name: The relation name to check.
+
+        Returns:
+            Keys of the assets whose current binding for *name* is exactly
+            this source's own list of targets, in order. Empty when this
+            source itself holds nothing for *name*.
+        """
+        own = self._bound.get(name, [])
+        if not own:
+            return set()
+        return {
+            asset.key
+            for asset in self.assets
+            if len(asset._bound.get(name, [])) == len(own)
+            and all(mine is theirs for mine, theirs in zip(asset._bound.get(name, []), own))
+        }
+
+    def bind(self, name: str, *targets: Component) -> None:
+        """Bind components to one of this source's relations, then trickle them down.
+
+        Args:
+            name: The relation name as declared on the class.
+            *targets: The components to bind.
+        """
+        super().bind(name, *targets)
+        self._trickle_down()
 
     def __getattr__(self, name: str) -> Asset:
         """Instance-level asset lookup fallback.
@@ -477,26 +568,6 @@ class Source(Component, Workload):
                 return asset
         raise AttributeError(f"Source has no asset with key '{name}'")
 
-    def _resolve_upstreams(self, asset: Asset, siblings: dict[str, Asset]) -> None:
-        """Wire intra-source upstreams for a single asset.
-
-        Applies :meth:`~interloper.asset.base.Asset.sibling_upstreams` to the
-        source's assets. Qualified keys naming another source and wildcard
-        keys are left to the DAG, which sees every node.
-
-        Pre-existing ``upstreams`` entries (e.g. hydrated from persisted
-        relations) are never overwritten.
-
-        Args:
-            asset: The asset whose ``upstreams`` map is wired in place.
-            siblings: The source's assets keyed by asset key, including *asset*
-                itself.
-        """
-        for parameter_name, sibling_key in type(asset).sibling_upstreams(self.key, siblings).items():
-            if parameter_name in asset.upstreams:
-                continue
-            asset.upstreams[parameter_name] = [siblings[sibling_key].id]
-
     # -- Definition ------------------------------------------------------------
 
     @classmethod
@@ -526,23 +597,21 @@ class Source(Component, Workload):
     def __call__(
         self,
         *,
-        resources: dict[str, Resource] | None = None,
-        destinations: Destination | list[Destination] | None = None,
         dataset: str | None = None,
         default_destination_key: str | None = None,
         materializable: bool | None = None,
         normalizer: Normalizer | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
+        **relations: Any,
     ) -> Self:
         """Return a reconfigured copy of this source.
 
-        Every parameter defaults to ``None``, meaning "leave as is".
+        Every fixed parameter defaults to ``None``, meaning "leave as is". A
+        name in **relations follows a different rule: passing it at all
+        changes it, since ``None`` there clears the binding rather than
+        leaving it alone; only leaving the name out entirely leaves it as is.
 
         Args:
-            resources: Resources to merge into the copy's resource map, keyed
-                by slot name; unlisted slots keep their current resource.
-            destinations: Replacement destinations, as a single destination or
-                a list. Replaces the current list wholesale.
             dataset: Replacement dataset. Assets that inherited the source's
                 dataset are re-pointed; per-asset overrides are preserved.
             default_destination_key: Replacement key of the destination
@@ -551,31 +620,48 @@ class Source(Component, Workload):
             normalizer: Replacement normalizer for the source.
             materialization_strategy: Replacement default strategy for the
                 source.
+            **relations: Replacement targets for the copy's declared
+                relations, keyed by relation name: a single component, a list
+                of them, or ``None`` to clear the binding. Rebinding a name
+                also clears it from any asset of the copy whose current
+                binding is exactly what this source had trickled into it, so
+                the new target reaches that asset once the copy re-trickles;
+                an asset that bound the relation itself keeps its own
+                binding.
 
         Returns:
             A deep copy of this source carrying the overrides.
+
+        Raises:
+            TypeError: If a keyword argument names no declared relation.
         """
+        unknown = [name for name in relations if name not in type(self).relations]
+        if unknown:
+            raise TypeError(f"{type(self).__name__} declares no relation(s): {', '.join(sorted(unknown))}")
+        stale = {name: self._trickled_asset_keys(name) for name in relations}
         copy = self.model_copy(deep=True)
-        for a in copy.assets:
-            a._source = copy
-        if resources is not None:
-            copy.resources = {**copy.resources, **resources}
-        if destinations is not None:
-            copy.destinations = destinations if isinstance(destinations, list) else [destinations]
+        for asset in copy.assets:
+            asset._source = copy
+            asset.parent = copy
+            for name, keys in stale.items():
+                if asset.key in keys:
+                    asset._bound.pop(name, None)
+        for name, value in relations.items():
+            setattr(copy, name, value)
         if dataset is not None:
             # Assets resolved their dataset at construction: re-point those that
             # inherited the source's, preserving per-asset overrides.
-            for a in copy.assets:
-                if a.dataset == copy.dataset:
-                    a.dataset = dataset
+            for asset in copy.assets:
+                if asset.dataset == copy.dataset:
+                    asset.dataset = dataset
             copy.dataset = dataset
         if default_destination_key is not None:
             copy.default_destination_key = default_destination_key
         if materializable is not None:
-            copy.assets = [a(materializable=materializable) for a in copy.assets]
+            copy.assets = [asset(materializable=materializable) for asset in copy.assets]
         if normalizer is not None:
             copy.normalizer = normalizer
         if materialization_strategy is not None:
             copy.materialization_strategy = materialization_strategy
+        copy._trickle_down()
         return copy
-

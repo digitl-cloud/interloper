@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from interloper.asset.base import Asset
-from interloper.component.base import Component
-from interloper.destination import Destination
+from interloper.component import Component, Relation
 from interloper.operation import Operation, Workload
-from interloper.source.base import Source
+
+if TYPE_CHECKING:
+    from interloper.asset.base import Asset
+    from interloper.destination import Destination
+    from interloper.source.base import Source
 
 
 class JobState(BaseModel):
@@ -36,35 +38,25 @@ class Job(Component, Workload):
     entry point executes.
 
     A job also carries workload-level defaults, cascading to its targets the
-    way a source cascades to its assets: ``destinations`` become the
-    destinations of any target that declares none, and ``resources`` fill
-    targets' (and destinations') empty resource slots by name, then by type.
+    way a source cascades to its assets: every relation the job holds fills
+    the same relation on any target (and any destination) that leaves it
+    unbound, ``destinations`` included.
     """
 
     icon: ClassVar[str] = "carbon:event-schedule"
-    internal_fields: ClassVar[frozenset[str]] = frozenset({"targets", "destinations"})
     state_model: ClassVar[type[BaseModel] | None] = JobState
 
-    targets: list[Source | Asset] = Field(default_factory=list)
-    destinations: list[Destination] = Field(default_factory=list)
+    if TYPE_CHECKING:
+        targets: list[Source | Asset]
+        destinations: list[Destination]
+
+    relations: ClassVar[dict[str, Relation]] = {
+        "targets": Relation(["source", "asset"], many=True, optional=True, on_delete="detach"),
+        "destinations": Relation("destination", many=True, optional=True),
+    }
+
     enabled: bool = Field(default=True, description="Job will run on the configured schedule")
     tags: list[str] = Field(default_factory=list)
-
-    @field_validator("destinations", mode="before")
-    @classmethod
-    def _coerce_destinations(cls, value: Any) -> Any:
-        """Accept a single destination or ``None`` where a list is expected.
-
-        Args:
-            value: The raw field value: a single destination, a list or tuple of
-                them, or ``None``.
-
-        Returns:
-            The value as a list.
-        """
-        if value is None:
-            return []
-        return value if isinstance(value, (list, tuple)) else [value]
 
     def operations(self) -> list[Operation]:
         """The targets' operations, flattened.
@@ -74,16 +66,24 @@ class Job(Component, Workload):
         """
         return [operation for target in self.targets for operation in target.operations()]
 
-    def model_post_init(self, context: Any) -> None:
-        """Cascade workload-level defaults down to targets and destinations.
+    def _trickle_down(self) -> None:
+        """Fill the unbound relations of this job's targets and destinations from its own.
+
+        Binding is the only moment this can run: relation keyword arguments
+        reach a component after ``model_post_init``, so a job knows neither
+        its targets nor its destinations until :meth:`bind` has seen them.
+        """
+        for target in self.targets:
+            self.trickle(target)
+        for destination in self.destinations:
+            self.trickle(destination)
+
+    def bind(self, name: str, *targets: Component) -> None:
+        """Bind components to one of this job's relations, then trickle them down.
 
         Args:
-            context: Pydantic's post-init context, forwarded to ``super()``.
+            name: The relation name as declared on the class.
+            *targets: The components to bind.
         """
-        super().model_post_init(context)
-        for target in self.targets:
-            if not target.destinations and self.destinations:
-                target.destinations = list(self.destinations)
-            self.trickle_resources(target)
-        for destination in self.destinations:
-            self.trickle_resources(destination)
+        super().bind(name, *targets)
+        self._trickle_down()

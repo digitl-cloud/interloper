@@ -7,7 +7,7 @@ from interloper_assets.usercentrics.connection import UsercentricsConnection
 
 
 @il.source(
-    resources={"connection": UsercentricsConnection},
+    relations={"connection": il.Relation(UsercentricsConnection)},
     tags=["Privacy & Consent"],
     icon="fluent:connector-24-filled",
 )

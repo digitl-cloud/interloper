@@ -7,7 +7,7 @@ from interloper_assets.teads.connection import TeadsConnection
 
 
 @il.source(
-    resources={"connection": TeadsConnection},
+    relations={"connection": il.Relation(TeadsConnection)},
     tags=["Advertising"],
     icon="icon:teads",
 )

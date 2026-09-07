@@ -208,6 +208,7 @@ class Asset(Component, Operation):
     tags: ClassVar[list[str]] = []
 
     _source_type: ClassVar[type[Source] | None] = None
+    _defer_validation: ClassVar[bool] = True
 
     # State
     destinations: list[Destination] = Field(default_factory=list)

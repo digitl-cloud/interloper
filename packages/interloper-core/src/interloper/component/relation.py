@@ -231,6 +231,15 @@ class Relation(BaseModel):
     def accepts(self, kind: str, identity: ComponentIdentity, *, owner: ComponentIdentity) -> bool:
         """Whether a candidate component may fill this relation.
 
+        A bare key is scoped to the owner's source only when the *candidate*
+        is an asset: an asset is the one kind whose key is source-local.
+        Every other candidate kind is keyed globally by its catalog key, so a
+        bare key there names that class wherever it comes from. Scoping by
+        the relation's declared kinds instead of the candidate's own would
+        wrongly scope a source or destination candidate to the owner's source
+        the moment the relation also accepts assets (a job's ``targets``,
+        say).
+
         Args:
             kind: The candidate component's kind.
             identity: The candidate component's identity.
@@ -246,7 +255,8 @@ class Relation(BaseModel):
         keys = self.keys()
         if not keys:
             return True
-        return any(identity.satisfies(declared, own_source_key=owner.source_key) for declared in keys)
+        own_source_key = owner.source_key if kind == "asset" else None
+        return any(identity.satisfies(declared, own_source_key=own_source_key) for declared in keys)
 
     @property
     def self_filling(self) -> bool:

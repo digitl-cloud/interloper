@@ -8,7 +8,7 @@ from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnect
 
 
 @il.source(
-    resources={"connection": LinkedinOrganicConnection},
+    relations={"connection": il.Relation(LinkedinOrganicConnection)},
     tags=["Social Media"],
     normalizer=DataFrameNormalizer(flatten_max_level=3),
     icon="devicon:linkedin",
