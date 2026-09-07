@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 import uuid
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -58,7 +59,7 @@ class ComponentDefinition(BaseModel):
     """Read-only view of a Component class's metadata.
 
     Returned by ``Component.definition()``. Not a separate architectural
-    entity — just a structured projection of the class for API consumers.
+    entity, just a structured projection of the class for API consumers.
     Every kind is self-describing: ``config_schema`` is the JSON Schema of
     its user-configurable fields, ``relations`` the links it declares toward
     other components.
@@ -229,7 +230,61 @@ class Component(Serializable):
         if not self.id:
             self.id = str(uuid.uuid4())
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Rebind a relation on plain attribute assignment, otherwise defer to Pydantic.
+
+        Pydantic's own ``__setattr__`` only special-cases ``property``, so a
+        :class:`~interloper.component.relation.Bound` descriptor never runs on
+        assignment; this is what makes ``widget.destinations = [...]`` work.
+
+        The replacement is validated before the existing binding is touched,
+        so a rejected reassignment (wrong kind, too many targets for a
+        single-valued relation) leaves the previous binding exactly as it was.
+
+        Args:
+            name: The attribute being set.
+            value: For a relation name, ``None`` or an empty sequence clears
+                the binding, a single component or a list/tuple of components
+                replaces it; any other name is forwarded to Pydantic as a
+                field assignment.
+        """
+        if name in type(self).relations:
+            relation = self._relation(name)
+            targets = tuple(value) if isinstance(value, (list, tuple)) else (() if value is None else (value,))
+            self._check_targets(name, relation, targets)
+            self._bound[name] = list(targets)
+            return
+        super().__setattr__(name, value)
+
     # -- Relations -------------------------------------------------------------
+    def _check_targets(self, name: str, relation: Relation, targets: tuple[Component, ...]) -> None:
+        """Check that *targets* are legal for one of this component's relations.
+
+        Every target must be one the relation :meth:`~Relation.accepts`, and a
+        single-valued relation may not receive more than one target at once.
+        Performs no mutation, so both :meth:`bind` and relation reassignment
+        through ``__setattr__`` can call it before touching ``_bound``, and a
+        rejected replacement leaves the existing binding untouched.
+
+        Args:
+            name: The relation name as declared on the class.
+            relation: The declared relation *targets* are checked against.
+            targets: The candidate components to check.
+
+        Raises:
+            ConfigError: If a target's kind or key is not one the relation
+                accepts, or if a single-valued relation is given more than one target.
+        """
+        owner = self.identity
+        for target in targets:
+            if not relation.accepts(target.kind, target.identity, owner=owner):
+                raise ConfigError(
+                    f"{type(self).__name__}.{name} does not accept {target.kind} '{target.qualified_key}' "
+                    f"(declared: kind {relation.kinds()}, key {relation.keys() or 'any'})"
+                )
+        if not relation.many and len(targets) > 1:
+            raise ConfigError(f"{type(self).__name__}.{name} is single-valued; unbind before binding another target")
+
     def bind(self, name: str, *targets: Component) -> None:
         """Bind components to one of this component's declared relations.
 
@@ -249,13 +304,7 @@ class Component(Serializable):
         relation = self._relation(name)
         if not targets:
             return
-        owner = self.identity
-        for target in targets:
-            if not relation.accepts(target.kind, target.identity, owner=owner):
-                raise ConfigError(
-                    f"{type(self).__name__}.{name} does not accept {target.kind} '{target.qualified_key}' "
-                    f"(declared: kind {relation.kinds()}, key {relation.keys() or 'any'})"
-                )
+        self._check_targets(name, relation, targets)
         current = self._bound.get(name, [])
         if relation.many:
             accumulated = list(current)
@@ -263,7 +312,7 @@ class Component(Serializable):
                 if all(target is not held for held in accumulated):
                     accumulated.append(target)
             self._bound[name] = accumulated
-        elif len(targets) > 1 or (current and current[0] is not targets[0]):
+        elif current and current[0] is not targets[0]:
             raise ConfigError(f"{type(self).__name__}.{name} is single-valued; unbind before binding another target")
         else:
             self._bound[name] = list(targets)
@@ -312,6 +361,25 @@ class Component(Serializable):
         """
         return {name: [target.id for target in targets] for name, targets in self._bound.items() if targets}
 
+    def trickle(self, child: Component) -> None:
+        """Fill a child's unbound relations from this component's own bindings.
+
+        For every relation the child declares under a name this component has
+        itself bound, and that the child leaves unbound, this binds whichever
+        of the parent's targets the child's relation :meth:`~Relation.accepts`
+        (every accepted target for a ``many`` relation, the first accepted one
+        otherwise). A binding the child already holds is never touched.
+
+        Args:
+            child: The component to trickle this component's bindings into.
+        """
+        for name, relation in type(child).relations.items():
+            if child._bound.get(name) or name not in self._bound:
+                continue
+            accepted = [t for t in self._bound[name] if relation.accepts(t.kind, t.identity, owner=child.identity)]
+            if accepted:
+                child.bind(name, *(accepted if relation.many else accepted[:1]))
+
     def resolve(self, name: str) -> Any:
         """What one of this component's declared relations actually resolves to.
 
@@ -333,20 +401,48 @@ class Component(Serializable):
             return bound
         return relation.fallback()
 
-    def validate_relations(self) -> None:
-        """Check that every relation this component needs is filled.
+    def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
+        """Check that every relation this component holds is sound.
+
+        Three checks per relation: it is bound, unless it is optional or
+        self-filling; a single-valued relation holds at most one target; every
+        bound target is one the relation :meth:`~Relation.accepts`. When
+        *nodes* is given, a bound non-optional ``asset``-kind target must also
+        be one of *nodes*. This is a DAG-wide check the constructor cannot
+        make, since the DAG doesn't exist yet at construction time.
+
+        Args:
+            nodes: Every node materializing in the same run, keyed by id. When
+                ``None``, the DAG-membership check is skipped.
 
         Raises:
-            ConfigError: If a non-optional relation has nothing bound and
-                cannot fill itself.
+            ConfigError: If any relation is unbound and non-optional, holds
+                several targets while single-valued, holds a target it does
+                not accept, or (when *nodes* is given) points a non-optional
+                relation at an asset absent from *nodes*.
         """
-        missing = sorted(
-            name
-            for name, relation in type(self).relations.items()
-            if not self._bound.get(name) and not relation.optional and not relation.self_filling
-        )
-        if missing:
-            raise ConfigError(f"{type(self).__name__} is missing required relation(s): {', '.join(missing)}")
+        problems: list[str] = []
+        for name, relation in type(self).relations.items():
+            targets = self._bound.get(name, [])
+            if not targets:
+                if not relation.optional and not relation.self_filling:
+                    problems.append(f"'{name}' is unbound and non-optional")
+                continue
+            if not relation.many and len(targets) > 1:
+                problems.append(f"'{name}' is single-valued but holds {len(targets)} targets")
+            for target in targets:
+                if not relation.accepts(target.kind, target.identity, owner=self.identity):
+                    problems.append(f"'{name}' holds {target.kind} '{target.qualified_key}', which it does not accept")
+                elif (
+                    nodes is not None
+                    and not relation.optional
+                    and target.kind == "asset"
+                    and "asset" in relation.kinds()
+                    and target.id not in nodes
+                ):
+                    problems.append(f"'{name}' points at asset '{target.qualified_key}' which is not in the DAG")
+        if problems:
+            raise ConfigError(f"{type(self).__name__} '{self.qualified_key}': " + "; ".join(problems))
 
     def _relation(self, name: str) -> Relation:
         """Look up one of this component's declared relations by name.
@@ -394,7 +490,7 @@ class Component(Serializable):
     def discriminator(self) -> str | None:
         """This instance's discriminator value, if declared and set.
 
-        The value of the config field marked ``discriminator=True`` — what
+        The value of the config field marked ``discriminator=True``: what
         distinguishes instances of the same component class (an ad account
         id, a site URL, …). Drives the derived :meth:`instance_name` and, for
         sources, the per-instance asset table names.
@@ -409,8 +505,8 @@ class Component(Serializable):
         """Display name for this instance: its discriminator value.
 
         The class label is the fallback when no discriminator is declared or
-        set — the type is already visible alongside the name everywhere the
-        name is shown, so it isn't repeated in it.
+        set, since the type is already visible alongside the name everywhere
+        the name is shown, so it isn't repeated in it.
 
         A derived *default*, not an identity: the persistence layer uses it to
         seed a blank component name, and users may override it freely. It never
@@ -494,12 +590,12 @@ class Component(Serializable):
     def resolve_key(cls, key: str, catalog: Catalog | None = None) -> type[Self]:
         """Resolve a catalog key to a component class of this (sub)class.
 
-        The key is looked up in *catalog* — or the settings-configured
-        catalog, built lazily, when none is given — and the class it names
+        The key is looked up in *catalog* (or, when none is given, the
+        settings-configured catalog, built lazily), and the class it names
         is imported.
 
         Called on a subclass, the resolved class must be of that subclass
-        (``Source.resolve_key("facebook_ads")``) — anything else raises
+        (``Source.resolve_key("facebook_ads")``); anything else raises
         ``TypeError``.
 
         Args:

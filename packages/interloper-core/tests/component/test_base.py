@@ -220,6 +220,18 @@ class TestDefinition:
         schema = FakeSerializable.definition().config_schema
         assert set(schema["properties"]) == {"value"}
 
+    def test_relations_exported(self):
+        relations = Widget.definition().relations
+        assert relations["connection"].model_dump(mode="json") == {
+            "kind": "connection",
+            "key": "conn",
+            "many": False,
+            "optional": False,
+            "on_delete": "block",
+            "name": "connection",
+        }
+        assert relations["destinations"].many is True
+
 
 # -- Relation declaration and binding ------------------------------------------
 
@@ -346,6 +358,105 @@ class TestBind:
     def test_unknown_kwarg_is_a_type_error(self):
         with pytest.raises(TypeError, match="unexpected"):
             Widget(connection=Conn(api_secret="s"), nope=1)
+
+
+class TestSetAttrRelations:
+    """Attribute assignment on a relation name rebinds it.
+
+    The replacement is validated before the existing binding is cleared, so a
+    rejected reassignment leaves the previous binding intact.
+    """
+
+    def test_assigning_a_list_binds_every_element(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        dest = Dest(connection=Conn(api_secret="a"))
+        widget.destinations = [dest]
+        assert widget.destinations == [dest]
+
+    def test_assigning_none_clears_an_optional_relation(self):
+        widget = Widget(connection=Conn(api_secret="s"), config=Cfg())
+        widget.config = None
+        assert widget.config is None
+
+    def test_assigning_wrong_kind_raises(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        with pytest.raises(ConfigError, match="connection"):
+            widget.connection = Cfg()  # type: ignore[assignment]
+
+    def test_failed_reassignment_leaves_original_binding_intact(self):
+        connection = Conn(api_secret="s")
+        widget = Widget(connection=connection)
+        with pytest.raises(ConfigError, match="connection"):
+            widget.connection = Cfg()  # type: ignore[assignment]
+        assert widget.connection is connection
+
+
+# -- Relation trickle and validation --------------------------------------------
+
+
+class Child(il.Asset):
+    """Asset declaring a connection relation."""
+
+    connection = il.Relation(Conn, optional=True)
+
+    def data(self, context: il.ExecutionContext) -> list[dict]:
+        return []
+
+
+class TestTrickle:
+    def test_fills_unbound_same_name(self) -> None:
+        conn = Conn(api_secret="s")
+        parent = Widget(connection=conn)
+        child = Child()
+        parent.trickle(child)
+        assert child.connection is conn
+
+    def test_never_overrides_explicit_binding(self) -> None:
+        own = Conn(api_secret="s")
+        parent = Widget(connection=Conn(api_secret="s"))
+        child = Child(connection=own)
+        parent.trickle(child)
+        assert child.connection is own
+
+    def test_skips_targets_the_child_rejects(self) -> None:
+        class Other(il.Connection):
+            """Another connection kind."""
+
+        class Picky(il.Asset):
+            connection = il.Relation(Other, optional=True)
+
+            def data(self, context: il.ExecutionContext) -> list[dict]:
+                return []
+
+        parent = Widget(connection=Conn(api_secret="s"))
+        child = Picky()
+        parent.trickle(child)
+        assert child.connection is None
+
+
+class TestValidateRelations:
+    def test_identity_mismatch_reported(self) -> None:
+        widget = Widget(connection=Conn(api_secret="s"))
+        widget._bound["connection"] = [Cfg()]  # bypass bind to simulate a stale binding
+        with pytest.raises(ConfigError, match="connection"):
+            widget.validate_relations()
+
+    def test_asset_target_must_be_a_node_when_nodes_given(self) -> None:
+        class Up(il.Asset):
+            def data(self, context: il.ExecutionContext) -> list[dict]:
+                return []
+
+        class Down(il.Asset):
+            up = il.Relation("asset", "up")
+
+            def data(self, context: il.ExecutionContext, up: il.Upstream) -> list[dict]:
+                return []
+
+        upstream = Up()
+        down = Down(up=upstream)
+        down.validate_relations({upstream.id: upstream})
+        with pytest.raises(ConfigError, match="not in the DAG"):
+            down.validate_relations({})
 
 
 # -- Serialization: to_spec, from_spec, reconstruct, round-trip, discriminator ----
