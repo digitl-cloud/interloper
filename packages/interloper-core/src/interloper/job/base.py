@@ -63,21 +63,20 @@ class Job(Component, Workload):
     def _trickle_down(self) -> None:
         """Fill the unbound relations of this job's targets and destinations from its own.
 
-        Binding is the only moment this can run: relation keyword arguments
+        A binding is the only moment this can run: relation keyword arguments
         reach a component after ``model_post_init``, so a job knows neither
-        its targets nor its destinations until :meth:`bind` has seen them.
+        its targets nor its destinations until :meth:`_rebound` has seen them.
         """
         for target in self.targets:
             self.trickle(target)
         for destination in self.destinations:
             self.trickle(destination)
 
-    def bind(self, name: str, *targets: Component) -> None:
-        """Bind components to one of this job's relations, then trickle them down.
+    def _rebound(self, name: str) -> None:
+        """Trickle this job's bindings down whenever one of them changes.
 
         Args:
-            name: The relation name as declared on the class.
-            *targets: The components to bind.
+            name: The relation name whose binding changed; every relation the
+                job holds trickles, so the name itself is not read.
         """
-        super().bind(name, *targets)
         self._trickle_down()
