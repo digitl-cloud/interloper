@@ -170,13 +170,14 @@ def _list_remarketing_lists(service: Any, profile_id: str, advertiser_id: str) -
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     key="campaign_manager_360",
-    relations={"connection": il.Relation(CampaignManager360Connection)},
     tags=["Advertising"],
     icon="icon:cm360",
     normalizer=CampaignManager360Normalizer(snake_case_digits=True, flatten_max_level=2),
 )
 class CampaignManager360(il.Source):
     """Campaign Manager 360 advertising platform integration."""
+
+    connection: CampaignManager360Connection
 
     profile_id: str = il.FetchField(
         label="Profile ID",

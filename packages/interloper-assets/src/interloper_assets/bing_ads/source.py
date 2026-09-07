@@ -165,13 +165,14 @@ def _ad_performance_report(connection: BingAdsConnection, account_id: str, date:
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    relations={"connection": il.Relation(BingAdsConnection)},
     tags=["Advertising"],
     icon="icon:bing",
     normalizer=DataFrameNormalizer(snake_case_digits=True),
 )
 class BingAds(il.Source):
     """Bing Ads (Microsoft Advertising) platform integration."""
+
+    connection: BingAdsConnection
 
     account_id: str = il.FetchField(
         label="Account ID",

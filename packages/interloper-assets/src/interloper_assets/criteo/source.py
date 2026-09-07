@@ -41,7 +41,6 @@ async def _statistics_report(
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    relations={"connection": il.Relation(CriteoConnection)},
     tags=["Advertising"],
     icon="icon:criteo",
     normalizer=DataFrameNormalizer(
@@ -56,6 +55,8 @@ async def _statistics_report(
 )
 class Criteo(il.Source):
     """Criteo advertising platform integration."""
+
+    connection: CriteoConnection
 
     advertiser_id: str = il.FetchField(
         provider="connection.advertisers",

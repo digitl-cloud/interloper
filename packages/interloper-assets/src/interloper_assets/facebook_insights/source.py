@@ -7,12 +7,13 @@ from interloper_assets.facebook_insights.connection import FacebookInsightsConne
 
 
 @il.source(
-    relations={"connection": il.Relation(FacebookInsightsConnection)},
     tags=["Social Media"],
     icon="logos:facebook",
 )
 class FacebookInsights(il.Source):
     """Facebook Page and Post Insights integration."""
+
+    connection: FacebookInsightsConnection
 
     page_id: str = il.FetchField(
         provider="connection.pages",

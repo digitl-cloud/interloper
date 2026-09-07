@@ -8,13 +8,14 @@ from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnect
 
 
 @il.source(
-    relations={"connection": il.Relation(LinkedinOrganicConnection)},
     tags=["Social Media"],
     normalizer=DataFrameNormalizer(flatten_max_level=3),
     icon="devicon:linkedin",
 )
 class LinkedinOrganic(il.Source):
     """LinkedIn Organization page organic analytics integration."""
+
+    connection: LinkedinOrganicConnection
 
     organization_id: str = il.FetchField(
         provider="connection.organizations",

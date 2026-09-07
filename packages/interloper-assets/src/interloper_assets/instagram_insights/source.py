@@ -4,12 +4,13 @@ from interloper_assets.instagram_insights.connection import InstagramInsightsCon
 
 
 @il.source(
-    relations={"connection": il.Relation(InstagramInsightsConnection)},
     tags=["Social Media"],
     icon="skill-icons:instagram",
 )
 class InstagramInsights(il.Source):
     """Instagram Business and Creator account insights integration."""
+
+    connection: InstagramInsightsConnection
 
     account_id: str = il.FetchField(
         provider="connection.accounts",

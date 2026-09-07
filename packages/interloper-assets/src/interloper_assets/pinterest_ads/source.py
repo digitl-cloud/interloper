@@ -7,12 +7,13 @@ from interloper_assets.pinterest_ads.connection import PinterestAdsConnection
 
 
 @il.source(
-    relations={"connection": il.Relation(PinterestAdsConnection)},
     tags=["Advertising"],
     icon="logos:pinterest",
 )
 class PinterestAds(il.Source):
     """Pinterest Ads advertising platform integration."""
+
+    connection: PinterestAdsConnection
 
     account_id: str = il.FetchField(
         provider="connection.accounts",

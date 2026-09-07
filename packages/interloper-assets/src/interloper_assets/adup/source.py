@@ -35,13 +35,14 @@ async def get_report(client: il.AsyncRESTClient, report_type: str, start_date: d
 
 
 @il.source(
-    relations={"connection": il.Relation(AdupConnection)},
     tags=["Advertising"],
     icon="icon:adup",
     normalizer=DataFrameNormalizer(),
 )
 class Adup(il.Source):
     """Adup advertising platform integration."""
+
+    connection: AdupConnection
 
     @il.asset(
         partitioning=il.TimePartitionConfig(column="date"),

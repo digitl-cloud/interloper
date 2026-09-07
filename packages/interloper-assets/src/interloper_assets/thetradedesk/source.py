@@ -169,13 +169,14 @@ async def _get_report(
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    relations={"connection": il.Relation(TheTradeDeskConnection)},
     tags=["Advertising"],
     icon="icon:thetradedesk",
     normalizer=TheTradeDeskNormalizer(replace_empty_strings=True),
 )
 class TheTradeDesk(il.Source):
     """The Trade Desk programmatic advertising platform integration."""
+
+    connection: TheTradeDeskConnection
 
     partner_id: str = il.FetchField(
         label="Partner ID",

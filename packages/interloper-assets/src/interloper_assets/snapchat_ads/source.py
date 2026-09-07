@@ -120,13 +120,14 @@ def _with_date(rows: list[_RECORD], date: dt.date) -> list[_RECORD]:
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    relations={"connection": il.Relation(SnapchatAdsConnection)},
     tags=["Advertising"],
     icon="mdi:snapchat",
     normalizer=SnapchatStatsNormalizer(),
 )
 class SnapchatAds(il.Source):
     """Snapchat Ads advertising platform integration."""
+
+    connection: SnapchatAdsConnection
 
     account_id: str = il.FetchField(
         provider="connection.ad_accounts",

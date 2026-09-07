@@ -7,12 +7,13 @@ from interloper_assets.google_ads.connection import GoogleAdsConnection
 
 
 @il.source(
-    relations={"connection": il.Relation(GoogleAdsConnection)},
     tags=["Advertising"],
     icon="logos:google-ads",
 )
 class GoogleAds(il.Source):
     """Google Ads advertising platform integration."""
+
+    connection: GoogleAdsConnection
 
     customer_id: str = il.FetchField(
         provider="connection.customers",

@@ -74,7 +74,7 @@ def shop() -> list[type[il.Asset]]:
         time.sleep(random.uniform(0.05, 0.2))
         return [{"refundId": 900 + c["id"], "customerId": c["id"], "date": context.partition_date} for c in customers]
 
-    @il.asset(resources={"fx_api": FxApi}, partitioning=il.TimePartitionConfig(column="date"))
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
     def fx_rates(context: il.ExecutionContext, fx_api: FxApi) -> list[dict[str, Any]]:
         time.sleep(random.uniform(0.05, 0.4))
         # The interesting Grafana panels are the ones with failures in them.
