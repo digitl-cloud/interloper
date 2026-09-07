@@ -122,13 +122,14 @@ def _reshape(insights: dict[str, list], channel_id: str, fallback_date: dt.date)
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    relations={"connection": il.Relation(BrandwatchConnection)},
     tags=["Social Media"],
     icon="fluent:connector-24-filled",
     normalizer=DataFrameNormalizer(),
 )
 class Brandwatch(il.Source):
     """Brandwatch (Falcon.io) social media analytics integration."""
+
+    connection: BrandwatchConnection
 
     channel_id: str = il.InputField(
         label="Channel ID",

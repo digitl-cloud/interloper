@@ -49,7 +49,6 @@ async def get_report(
 
 
 @il.source(
-    relations={"connection": il.Relation(AdserviceConnection)},
     tags=["Advertising"],
     icon="carbon:analytics",
     # Adservice returns snake_case fields already; the normalizer coerces to a frame.
@@ -57,6 +56,8 @@ async def get_report(
 )
 class Adservice(il.Source):
     """Adservice advertising platform integration."""
+
+    connection: AdserviceConnection
 
     @il.asset(
         schema=CampaignsStats,

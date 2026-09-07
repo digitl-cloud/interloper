@@ -281,13 +281,14 @@ def _time_range(date: dt.date) -> dict[str, str]:
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    relations={"connection": il.Relation(FacebookAdsConnection)},
     tags=["Advertising"],
     icon="logos:facebook",
     normalizer=FacebookActionsNormalizer(flatten_max_level=1),
 )
 class FacebookAds(il.Source):
     """Facebook Ads (Meta Marketing) advertising platform integration."""
+
+    connection: FacebookAdsConnection
 
     account_id: str = il.FetchField(
         provider="connection.accounts",

@@ -130,13 +130,14 @@ def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    relations={"connection": il.Relation(TiktokAdsConnection)},
     tags=["Advertising"],
     icon="logos:tiktok-icon",
     normalizer=TiktokStatsNormalizer(),
 )
 class TiktokAds(il.Source):
     """TikTok Ads advertising platform integration."""
+
+    connection: TiktokAdsConnection
 
     advertiser_id: str = il.FetchField(
         provider="connection.advertisers",

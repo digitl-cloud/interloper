@@ -7,9 +7,10 @@ from interloper_assets.usercentrics.connection import UsercentricsConnection
 
 
 @il.source(
-    relations={"connection": il.Relation(UsercentricsConnection)},
     tags=["Privacy & Consent"],
     icon="fluent:connector-24-filled",
 )
 class Usercentrics(il.Source):
     """Usercentrics consent management analytics integration."""
+
+    connection: UsercentricsConnection

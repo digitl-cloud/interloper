@@ -51,15 +51,14 @@ def _make_destination(**overrides: Any) -> tuple[GCSDestination, MagicMock, Magi
     mock_client = MagicMock()
     mock_blob = mock_client.bucket.return_value.blob.return_value
 
-    conn = MagicMock(spec=GoogleCloudConnection)
-    conn.service_account_key = _SA_KEY
+    conn = GoogleCloudConnection(id="test-connection", service_account_key=_SA_KEY)
 
-    dest = GCSDestination(  # ty: ignore[missing-argument]
+    dest = GCSDestination(
         id="test",
         bucket="test-bucket",
         format=overrides.get("format", "parquet"),
         prefix=overrides.get("prefix", None),
-        resources={"connection": conn},
+        connection=conn,
     )
     object.__setattr__(dest, "client", mock_client)
     return dest, mock_client, mock_blob

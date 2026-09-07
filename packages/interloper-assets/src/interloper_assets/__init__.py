@@ -9,6 +9,7 @@ from interloper_assets.awin.source import Awin, AwinConnection
 from interloper_assets.bing_ads.source import BingAds, BingAdsConnection
 from interloper_assets.brandwatch.source import Brandwatch, BrandwatchConnection
 from interloper_assets.campaign_manager_360.source import CampaignManager360, CampaignManager360Connection
+from interloper_assets.campaign_matcher.source import CampaignMatcher
 from interloper_assets.campaign_performance_analysis.source import CampaignPerformanceAnalysis
 from interloper_assets.criteo.source import Criteo, CriteoConnection
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
@@ -48,6 +49,7 @@ __all__ = [
     "BrandwatchConnection",
     "CampaignManager360",
     "CampaignManager360Connection",
+    "CampaignMatcher",
     "CampaignPerformanceAnalysis",
     "Criteo",
     "CriteoConnection",

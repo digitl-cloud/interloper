@@ -10,10 +10,11 @@ from interloper_assets.search_ads_360.connection import SearchAds360Connection
     name="Search Ads 360",
     tags=["Advertising"],
     icon="devicon:google",
-    relations={"connection": il.Relation(SearchAds360Connection)},
 )
 class SearchAds360(il.Source):
     """Search Ads 360 advertising platform integration."""
+
+    connection: SearchAds360Connection
 
     manager_customer_id: str = il.InputField(description="SA360 manager account customer ID")
     customer_client_id: str = il.InputField(description="SA360 customer client ID to report on", discriminator=True)

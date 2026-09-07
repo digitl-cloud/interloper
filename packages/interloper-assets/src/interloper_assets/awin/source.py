@@ -106,13 +106,14 @@ async def get_advertiser_reports_by_publisher(
 
 
 @il.source(
-    relations={"connection": il.Relation(AwinConnection)},
     tags=["Affiliate"],
     icon="icon:awin",
     normalizer=DataFrameNormalizer(),
 )
 class Awin(il.Source):
     """Awin affiliate network integration for transaction and publisher reporting."""
+
+    connection: AwinConnection
 
     advertiser_id: str = il.FetchField(
         provider="connection.advertisers",
