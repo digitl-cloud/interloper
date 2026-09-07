@@ -18,8 +18,8 @@ from collections.abc import Iterable
 from uuid import UUID
 
 import interloper as il
-from interloper.component.relation import ComponentIdentity
 from interloper.catalog.base import Catalog
+from interloper.component.relation import ComponentIdentity
 from interloper.errors import ConfigError, NotFoundError
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
