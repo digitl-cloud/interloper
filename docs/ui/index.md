@@ -61,8 +61,8 @@ The selection becomes the source's children; assets left out stay available as d
 ![Source wizard, connection step](../assets/ui/source-wizard-connection-light.png#only-light)
 ![Source wizard, connection step](../assets/ui/source-wizard-connection-dark.png#only-dark)
 
-One step per resource slot the source declares. It lists the existing connections of the required
-type or creates one inline; the connection form is the same as on the Connections page.
+One step per resource relation the source declares. It lists the existing connections of the
+required key or creates one inline; the connection form is the same as on the Connections page.
 
 ![Source wizard, details step](../assets/ui/source-wizard-details-light.png#only-light)
 ![Source wizard, details step](../assets/ui/source-wizard-details-dark.png#only-dark)
@@ -95,7 +95,7 @@ because the class is renewable; a "Test connection" action appears when it imple
 ![Destinations](../assets/ui/destinations-dark.png#only-dark)
 
 Where data lands. A destination's form comes from its configuration fields, and its connection
-slot, when it has one, is a picker over the matching connections.
+relation, when it declares one, is a picker over the matching connections.
 
 ## Jobs
 

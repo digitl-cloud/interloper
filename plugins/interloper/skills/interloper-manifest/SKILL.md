@@ -24,27 +24,28 @@ https://docs.interloper.dev/guide/jobs/
    init:
      destinations:
        - path: interloper.destination.csv.CSVDestination
+         id: out                             # parentless: written out once, referenced afterwards
          init:
            base_path: ./data
-     # a qualified `depends_on` key wires itself when exactly one match is in the job
+     # a qualified relation key wires itself when exactly one match is in the job
      targets:
        - path: shop.Shop
          init:
            account: acme
-           resources:
-             connection:
-               path: shop.ShopConnection
-               init:
-                 api_key: ${SHOP_API_KEY}   # block style, never inside { ... }
+           connection:                       # a relation, under its own name
+             path: shop.ShopConnection
+             init:
+               api_key: ${SHOP_API_KEY}      # block style, never inside { ... }
            assets:                           # a whitelist: only listed assets exist, so order_stats is out
              orders:
                id: shop-orders              # any unique string; the cross-source edge below points at it
        - path: finance.Finance
          init:
            currency: USD
+           destinations: [{ref: out}]        # second occurrence of a parentless component: a reference
            assets:
              revenue:
-               upstreams: {orders: [shop-orders]}   # explicit wiring; only needed when several candidates exist
+               orders: {ref: shop-orders}   # an asset has a parent: always a reference
    ```
 
 2. **Run it.** The CLI does not put the working directory on `sys.path`, and `${VAR}` is a hard
@@ -69,20 +70,26 @@ https://docs.interloper.dev/guide/jobs/
 - **`assets:` is a whitelist.** Reconstruction builds only the assets listed in the map; an
   asset left out does not exist in the run, so `assets: {order_stats: {materializable: false}}`
   removes `orders`, not `order_stats`. Use `select:` to restrict what runs. Use `assets:` only
-  for per-asset overrides (`id`, `materializable`, `destinations`, `upstreams`) and list
+  for per-asset overrides (`id`, `materializable`, `destinations`, a bound upstream) and list
   every asset the run needs.
-- **`depends_on` wires itself when unambiguous.** A qualified key (`shop.orders`) binds the
+- **One reference rule, no flags.** A component that has a parent (an asset, always under its
+  source) is `{ref: id}` wherever a relation points at it. A component without one (a
+  destination, a connection) is written out in full the first time a relation reaches it and
+  `{ref: id}` at every later one. Give it an `id` the first time so the reference has something
+  to name.
+- **A relation key wires itself when unambiguous.** A qualified key (`shop.orders`) binds the
   single matching asset in the job; two matches (two `shop` instances) fail at load time with
-  `DAGError`, and an unbound non-optional key fails at load time with
-  `DependencyNotFoundError`. Wire by id (an `id` on the upstream, `upstreams:` on the
-  downstream) only in the ambiguous case. A many-valued slot
-  (`il.Dependency(key="*.campaigns", many=True)`) takes a list:
-  `upstreams: {campaigns: [id-a, id-b]}`.
+  `DAGError`, and an unbound non-optional relation fails at load time with `ConfigError`. Write
+  the `{ref: id}` only in the ambiguous case. A many-valued relation
+  (`il.Relation("asset", "*.campaigns", many=True)`) takes a list:
+  `campaigns: [{ref: id-a}, {ref: id-b}]`.
 - **`${VAR}` is a spec-file feature.** `Spec.from_file` interpolates it; `interloper.yaml`
   (settings) does not, see the interloper-deploy skill.
 - **Connections resolve from the environment** when their fields are env-loadable
-  (`SHOP_API_KEY` for `env_prefix="shop_"`), so the `resources:` block is only needed to pin a
-  value or to name a differently-named variable (`api_key: ${SHOP_PROD_KEY}`).
+  (`SHOP_API_KEY` for `env_prefix="shop_"`), so the `connection:` block is only needed to pin a
+  value or to name a differently-named variable (`api_key: ${SHOP_PROD_KEY}`). An unbound
+  relation is built from the environment at the moment it is read, so a missing credential
+  surfaces as a validation error from the asset that needed it.
 - **`key:` instead of `path:`** needs the package installed with an `interloper.components`
   entry point; a bare module is always `path: module.Class`.
 - **Dump a spec to learn the shape**: `yaml.safe_dump(job.to_spec().model_dump(mode="json"))`
@@ -104,9 +111,9 @@ https://docs.interloper.dev/guide/jobs/
 ## Common mistakes
 
 - `materializable: false` to drop an asset: the map is a whitelist and the other assets vanish.
-- Reading `DependencyNotFoundError: ... nothing is wired in the DAG` as a bug: it means the job
-  lacks the upstream source. Reading `DAGError: ... matching assets` as a bug: it means two
-  instances match and one must be wired by id.
+- Reading `ConfigError: ... is unbound and non-optional` as a bug: it means the job lacks the
+  upstream source. Reading `DAGError: ... matching assets` as a bug: it means two instances
+  match and one must be bound by reference.
 - `il.DAG([shop, fin])`: the constructor is varargs, `il.DAG(shop, fin)`.
 - `${VAR}` inside a `{ ... }` flow mapping breaks the YAML.
 - Reading `No module named 'shop'` as a spec error: set `PYTHONPATH=.`.

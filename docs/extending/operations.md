@@ -38,12 +38,12 @@ plain defaults that make any subclass a valid node; `Asset` overrides them with 
 |--------|---------|-------|
 | `id`, `kind`, `key`, `qualified_key` | from `Component` | qualified with the source key |
 | `materializable` | `True` | field |
-| `upstreams` | `{}` | parameter name to upstream ids |
-| `declared_upstreams()` | `{}` | `depends_on` as `Dependency` objects |
+| `relations` | `{}` | every relation the class declares, by name |
+| `upstream_relations()` | `{}` | the relations whose kind is `asset`: the graph's edges |
+| `bound(name)` | from `Component` | what is bound to one relation |
 | `source` | `None` | the owning source |
 | `partitioning` | `None` | the partition config |
 | `effective_partition(scope)` | scope if partitioned else `None` | same |
-| `validate_upstreams(nodes)` | no-op | checks the signature, cardinality and identities |
 | `_event_metadata(metadata, scope)` | component identity | adds `qualified_key`, `source_id` |
 
 ## Writing an operation
@@ -71,8 +71,9 @@ class Vacuum(il.Component, il.Operation):
         return il.OperationResult(error=f"Vacuum of {self.table} failed: {type(error).__name__}")
 ```
 
-`il.DAG(vacuum)` runs it like any node; wiring it after an asset is an `upstreams` entry.
-`invoke` calls a sync or async callable uniformly.
+`il.DAG(vacuum)` runs it like any node; ordering it after an asset is an `asset`-kind relation
+bound to that asset, which is what `upstream_relations()` reports. `invoke` calls a sync or
+async callable uniformly.
 
 ## Where effects go
 

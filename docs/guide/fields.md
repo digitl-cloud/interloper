@@ -49,7 +49,7 @@ Every helper also accepts:
 
 ## Fetched options
 
-A `FetchField` resolves its options by instantiating the resource in the named slot from the
+A `FetchField` resolves its options by instantiating the resource of the named relation from the
 credentials the form already holds and calling a method on it. The method must be allow-listed
 with `@il.fetch_field_provider`; only such methods may be invoked from a form:
 
@@ -64,19 +64,20 @@ class GoogleAnalyticsConnection(il.RefreshTokenOAuthConnection):
 ```
 
 The provider returns a `list[dict]`; the field picks `label_key` and `value_key` from each item.
-The reference is `"<slot>.<method>"`, where `<slot>` is a resource slot of the component
-declaring the field. Because the method may run inside the API process, which installs
-connection classes without their heavy SDK extras, providers must use plain HTTP.
+The reference is `"<name>.<method>"`, where `<name>` is a relation of the component declaring
+the field, whose target class carries the method. Because the method may run inside the API
+process, which installs connection classes without their heavy SDK extras, providers must use
+plain HTTP.
 
-References are validated when the component's definition is built: an unknown slot, or a method
-without the decorator, raises `TypeError` at catalog-build time rather than failing silently in
-a form. `il.is_fetch_field_provider(obj)` tests whether a callable is a provider.
+References are validated when the component's definition is built: an undeclared relation, or
+a method without the decorator, raises `TypeError` at catalog-build time rather than failing
+silently in a form. `il.is_fetch_field_provider(obj)` tests whether a callable is a provider.
 
 ## What ends up in the config schema
 
 `Component.config_schema()` is the JSON Schema of the component's user-facing fields. The
-framework strips `id` and `resources`, plus anything the class lists in `internal_fields`
-(sources hide `assets`, `destinations`, `normalizer`, `select`; assets hide `destinations`,
-`normalizer`, `dependencies`). Field helpers add `x-widget`, `x-info`, `x-options`,
-`x-options-from`, `x-fetch` and `x-discriminator` extensions that forms read. The schema is
-part of every [component definition](catalog.md#definitions).
+framework strips `id`, plus anything the class lists in `internal_fields` (sources hide `assets`,
+`normalizer`, `select`; assets hide `normalizer`). Relations (`destinations`, `connection`, and
+so on) are not fields at all and never appear in the schema. Field helpers add `x-widget`,
+`x-info`, `x-options`, `x-options-from`, `x-fetch` and `x-discriminator` extensions that forms
+read. The schema is part of every [component definition](catalog.md#definitions).

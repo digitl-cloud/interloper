@@ -44,10 +44,6 @@ class CircularDependencyError(DAGError):
     """A circular dependency was detected in the DAG."""
 
 
-class DependencyNotFoundError(DAGError):
-    """A referenced dependency is not present in the DAG."""
-
-
 class AssetNotFoundError(DAGError, KeyError):
     """An asset key was not found in the DAG."""
 

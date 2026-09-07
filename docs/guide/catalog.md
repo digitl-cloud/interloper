@@ -24,9 +24,9 @@ component classes. The scan is cached for the process.
 `INTERLOPER_CATALOG`) lists import paths, the catalog holds those components, everything they
 depend on, and the framework's own components. An empty list means everything installed.
 
-**Dependencies come along.** Enabling a source pulls in its resource classes and, through its
-assets, their resources and destination classes, transitively. A catalog therefore never carries
-a relation slot whose key it cannot resolve. Framework components (`cron_job`, `trigger_hook`,
+**Dependencies come along.** Enabling a source pulls in the target class of every relation it
+declares and, through its assets, theirs, transitively. A catalog therefore never carries a
+relation whose target class it cannot resolve. Framework components (`cron_job`, `trigger_hook`,
 `webhook_hook`) are present in every catalog.
 
 Paths that fail to import are skipped with a warning. A component whose kind has no registered
@@ -49,7 +49,7 @@ or one entry per class. Nothing else is needed: installation is registration.
 catalog.components                              # key -> ComponentDefinition
 catalog.get("facebook_ads")                     # a SourceDefinition, or None
 catalog.get("ads_stats", parent_key="facebook_ads")   # a source-owned asset's definition
-catalog.vocabulary("hook", "trigger_hook")      # relation type -> RelationDefinition
+catalog.vocabulary("hook", "trigger_hook")      # relation name -> Relation
 catalog.to_paths()                              # sorted import paths, for another process
 catalog.dump()                                  # JSON-serializable definitions
 ```
@@ -67,7 +67,7 @@ Every component class describes itself through `definition()`:
 | `name`, `icon`, `description`, `tags` | Display metadata; the description is the docstring. |
 | `config_schema` | JSON Schema of the user-facing [configuration fields](fields.md). |
 | `state_schema` | JSON Schema of the machine-owned state model, when the kind has one. |
-| `relations` | The relation vocabulary with its slots (resource slots, dependency slots, allowed destination keys). |
+| `relations` | Every declared relation by name, with its `kind`, `key`, `many`, `optional` and `on_delete`. |
 
 Kind-specific definitions add to this: `SourceDefinition.assets`, `AssetDefinition.asset_schema`
 and `partitioning`, `ResourceDefinition.provider`, `checkable`, `renewable`. This metadata is

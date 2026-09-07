@@ -52,8 +52,8 @@ A non-success response raises:
 
 ## Custom hooks
 
-Subclass `il.Hook` and implement `fire(context)`. Configuration fields and resource slots work
-as on any component, so credentials ride a connection:
+Subclass `il.Hook` and implement `fire(context)`. Configuration fields and relations work as on
+any component, so credentials ride a connection:
 
 ```py
 class EmailHook(il.Hook):
@@ -76,9 +76,9 @@ class EmailHook(il.Hook):
 | `trigger` | A callable creating a run for a component id, when the operator provides it. |
 
 A hook that acts on other components extends the relation vocabulary the way `TriggerHook`
-does, adding a `target` relation and a `targets` field; the base hook only observes. Custom hook
-classes join the [catalog](catalog.md) through the `interloper.components` entry point like any
-component.
+does, declaring its own `targets` relation on the subclass; the base hook only observes. Custom
+hook classes join the [catalog](catalog.md) through the `interloper.components` entry point like
+any component.
 
 `HookState` (`last_fired_at`, `last_run_id`) is the hook's machine-owned state, stamped by the
 operator on every firing.

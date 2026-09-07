@@ -36,7 +36,7 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
 
    | Version | Old | New |
    |---------|-----|-----|
-   | 0.76.0 | `FileDestination` ignored the partition scope: one `{dataset}/{table}/data.pkl` per asset, and `{table}/{table}/` when no dataset was set | a `{column}={partition_id}` segment per partition, and no duplicated segment — same layout as `CSVDestination`. Re-materialize, or move existing pickles into the partition directories |
+   | 0.76.0 | `FileDestination` ignored the partition scope: one `{dataset}/{table}/data.pkl` per asset, and `{table}/{table}/` when no dataset was set | a `{column}={partition_id}` segment per partition, and no duplicated segment, the same layout as `CSVDestination`. Re-materialize, or move existing pickles into the partition directories |
    | 0.74.0 | a fail-fast break interrupted running operations | they finish on their own and are recorded |
    | 0.70.0 | `OAuthProvider.token_method`, `token_params`, `token_basic_auth`; `renew()` overrides | request-builder overrides on the provider; `renewable` is derived, drop `renew()` |
    | 0.68.0 | `EventType.ASSET_STARTED/COMPLETED/FAILED`, `RunResult.asset_executions` | `OPERATION_*` events filtered on `metadata["component_kind"] == "asset"`; `ASSET_DATA_*` mark only the `data()` step |
@@ -54,13 +54,39 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    | earlier | `SECRETS_ENCRYPTION_KEY` | `INTERLOPER_ENCRYPTION_KEY` |
 
    Functional `@il.source def ...` sources and `asyncio.run(...)` still work; the class-based
-   form (`@il.source(resources={...}) class X(il.Source)` with `@il.asset` methods, see the
-   interloper-source skill) is the documented one. `FileDestination` writes
+   form (`@il.source class X(il.Source)` with `@il.asset` methods, see the interloper-source
+   skill) is the documented one. `FileDestination` writes
    `{base_path}/{dataset}/{table}/data.pkl`, plus a `{column}={partition_id}` segment when the
    asset is partitioned. `AppSettings()` from the project directory
    validates an `interloper.yaml`. `runner: type: k8s` in `interloper.yaml` is still a
    valid registry key; confirm registered keys with
    `python -c "from importlib.metadata import entry_points; print([e.name for e in entry_points(group='interloper.runners')])"`.
+
+   **0.7x to the relation model.** `resource_types`, `depends_on`, `upstreams` and their
+   companions collapse into one `il.Relation` primitive, declared under the name the parameter
+   or the attribute already has. Rewrite a user's own sources with this table:
+
+   | Old | New |
+   |-----|-----|
+   | `@il.source(resources={"connection": Conn})` | `connection: Conn` on the class body, or `relations={"connection": il.Relation(Conn)}` |
+   | `@il.asset(resources={"config": Cfg})` | annotate the `data()` parameter `config: Cfg`, or `relations={"config": il.Relation(Cfg)}` |
+   | `@il.asset(depends_on={"orders": "shop.orders"})` | `relations={"orders": il.Relation("asset", "shop.orders")}` |
+   | `il.Dependency(key="k", optional=True)` | `il.Relation("asset", "k", optional=True)` |
+   | `il.Dependency(key="*.campaigns", many=True)` | `il.Relation("asset", "*.campaigns", many=True)` |
+   | a `data()` upstream annotated `list[dict]` | annotate it `il.Upstream` and read `param.data` |
+   | `Source(resources={"connection": conn})` | `Source(connection=conn)` |
+   | `asset.upstreams["orders"] = [other.id]` | `asset.bind("orders", other)`, or `asset.orders = other` |
+   | `component.resources["connection"]` | `component.connection`, or `component.bound("connection")` |
+   | `component.trickle_resources(child)` | `component.trickle(child)` |
+   | `il.ResourceRef(Conn, required=True)` | `conn: Conn = il.Relation(Conn)` (non-optional by default) |
+   | spec `resources: {connection: {...}}` | the relation's own name: `connection: {...}` |
+   | spec `upstreams: {orders: [id]}` | `orders: {ref: id}`, a list for a `many` relation |
+   | `DependencyNotFoundError` | `ConfigError` from `validate_relations` |
+
+   A relation left unbound is resolved when it is read: an explicit `default=`, else the target
+   class built from the environment. So a connection that used to resolve through the cascade
+   still resolves, but the validation error of a missing credential now surfaces from the asset
+   that needed it rather than at build time.
 
 4. **Run it** with the events visible and confirm the destination output: `python pipeline.py`
    for a script, or for a spec file:

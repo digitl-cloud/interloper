@@ -12,7 +12,6 @@ import interloper as il
 job = il.Job(
     targets=[Shop(account_id="act_1"), Finance()],
     destinations=[warehouse],
-    resources={"gcp": gcp_connection},
     tags=["daily"],
 )
 il.DAG(job).materialize(partition)
@@ -22,12 +21,12 @@ il.DAG(job).materialize(partition)
 |-------|---------|
 | `targets` | Sources and assets to materialize. Their operations are flattened into the DAG. |
 | `destinations` | Defaults for any target that declares none. |
-| `resources` | Fill the empty resource slots of targets and destinations, by name then by type. |
 | `enabled` | A disabled job is kept but not scheduled. |
 | `tags` | Free-form labels. |
 
 Cascading works exactly like a source's: a job-level destination reaches every target without
-one, and a job-level connection reaches every target and destination with a matching empty slot.
+one. A job subclass that declares a further relation (a connection, say) cascades it the same
+way, into every target and destination declaring the same relation name and leaving it unbound.
 
 `JobState` (`next_run_at`, `last_run_at`) is the job's machine-owned state, written by the
 scheduler. Editing a job's config clears `next_run_at`, so the next tick re-derives the schedule
@@ -63,20 +62,32 @@ stored.
 ## Jobs as specs
 
 A job is the natural unit for a declarative run. Its spec lists targets with their configuration
-and the workload-level defaults:
+and the workload-level defaults. A connection a target needs is not a job field, so it is nested
+under that target's own relation name, in the target's own `init`:
 
 ```yaml
 path: interloper.job.base.Job
 init:
-  resources:
-    gcp:
-      key: google_cloud_connection
-      init: { service_account_key: ${GCP_KEY} }
   destinations:
     - key: bigquery_destination
+      init:
+        project: dwh
+        location: EU
+        connection:
+          key: google_cloud_connection
+          init:
+            service_account_key: ${GCP_KEY}
   targets:
     - key: facebook_ads
-      init: { account_id: act_1, select: [campaigns, ads_stats] }
+      init:
+        account_id: act_1
+        connection:
+          key: facebook_ads_connection
+          init:
+            access_token: ${FB_TOKEN}
+            app_id: "1"
+            app_secret: ${FB_SECRET}
+        select: [campaigns, ads_stats]
 ```
 
 `interloper run -f job.yaml --date 2026-01-15` reconstructs it and runs its DAG. See
@@ -85,7 +96,7 @@ with `key: cron_job` and the trigger fields.
 
 ## Relations
 
-A job's relation vocabulary is `target` (sources and assets), `destination` and `resource`. A
-target is an orchestration pointer, not an input: deleting a target shrinks the job rather than
-blocking the deletion. Relation semantics are described in the
+A job's relation vocabulary is `targets` (sources and assets) and `destinations`. A target is an
+orchestration pointer, not an input: deleting a target shrinks the job rather than blocking the
+deletion. Relation semantics are described in the
 [component model](../extending/components.md#relations).

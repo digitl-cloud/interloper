@@ -1,8 +1,8 @@
 # Resources & configs
 
 A resource is an injectable dependency: a settings object, a credential holder, a client, a
-cache. Assets, sources and destinations declare the resources they need, and the framework
-resolves and injects them at run time.
+cache. Assets, sources and destinations declare the resources they need as **relations**, and the
+framework resolves and injects them at run time.
 
 ## Defining a resource
 
@@ -37,89 +37,114 @@ variables, as any pydantic-settings model does.
 
 ## Injecting resources into assets
 
-Annotate a parameter with the resource type:
+Annotate a parameter with the resource class. The parameter name is the relation name:
 
 ```py
-@il.asset
-def revenue(self, config: ReportingConfig, connection: ShopConnection) -> list[dict]:
-    return connection.client.get("/revenue", params={"currency": config.currency}).json()
+@il.source
+class Shop(il.Source):
+    connection: ShopConnection
+
+    @il.asset
+    def revenue(
+        self,
+        context: il.ExecutionContext,
+        config: ReportingConfig,
+        connection: ShopConnection,
+    ) -> list[dict]:
+        return connection.client.get("/revenue", params={"currency": config.currency}).json()
 ```
 
-The parameter name is the **slot name**. An explicit declaration on the decorator does the same
-and takes precedence over the annotation:
+`connection: ShopConnection` on the source body is the same declaration, one level up: an
+annotation naming a component class declares a relation rather than a pydantic field. The source
+holds one instance and [trickles](#trickling) it into every asset that declares the same name,
+which is why the asset's own `connection` parameter is filled without the asset ever being
+constructed with one.
+
+## Explicit relations
+
+`il.Relation` is what says anything beyond "a resource of this class fills this name". Use it on
+the decorator, keyed by parameter name, or as a typed class attribute:
 
 ```py
-@il.asset(resources={"config": ReportingConfig})
-def revenue(self, config): ...
-```
+@il.asset(relations={"config": il.Relation(ReportingConfig, optional=True)})
+def revenue(context: il.ExecutionContext, config: ReportingConfig | None) -> list[dict]:
+    ...
 
-## The resolution cascade
 
-When an asset runs, each slot is resolved in order:
-
-1. The asset's own `resources[slot]`.
-2. The source's `resources[slot]`, matched by name.
-3. Any resource on the source that is an instance of the slot's type.
-4. A fresh instance of the declared type, built from the environment.
-5. `None`.
-
-A resolved value that does not match the declared type raises `AssetError`. In practice this
-means a resource "just works" from environment variables in development, and production injects
-configured instances at the source or asset level:
-
-```py
-source = Shop()                                                   # everything from env
-source = Shop(resources={"connection": ShopConnection(api_key="...")})
-asset = source.revenue(resources={"config": ReportingConfig(currency="USD")})
-```
-
-## Resources on sources and destinations
-
-Components other than assets declare resource **slots** too. The cleanest way is a typed class
-attribute:
-
-```py
 @il.destination
 class WarehouseDestination(il.Destination):
-    connection: WarehouseConnection        # a slot named "connection"
+    connection: WarehouseConnection
+    config: WarehouseConfig = il.Relation(WarehouseConfig, default=lambda: WarehouseConfig(retries=5))
 
     def write(self, context, data):
         self.connection.load(context.asset.table, data)
 ```
 
-The annotation becomes a `ResourceRef` descriptor: it registers the slot in `resource_types`,
-is removed from the pydantic fields, and gives typed attribute access that reads from
-`self.resources`. Declare the descriptor directly to mark a slot as required:
+`il.Relation(ReportingConfig)` is shorthand for `il.Relation(kind="config", key="reporting_config")`
+with the class kept as the relation's `target`, which is what makes a fallback possible.
+`optional=True` allows the relation to stay unbound; `default=` is a zero-argument factory.
 
-```py
-class WarehouseDestination(il.Destination):
-    connection = il.ResourceRef(WarehouseConnection, required=True)
-```
+## Fallbacks
 
-Accessing a required slot that was never filled raises `ValueError`; an optional one returns
-`None`.
+Nothing is resolved at construction. When `data()` (or any reader) asks for a single-valued
+relation that holds no binding, `resolve(name)` falls back, in order:
 
-Slots are filled at construction, either through the `resources` dict or as keyword arguments
-named after the slot:
+1. `default()`, when the relation declares one.
+2. A fresh instance of the target class, when it is a `Resource`: its required fields come from
+   the environment, so a credential nobody bound is still constructible where it is read.
+3. A fresh instance of the target class, when every one of its fields is defaulted.
+4. `None`.
+
+A `many` relation never falls back: `resolve(name)` on it is exactly `bound(name)`, an empty list
+when nothing is bound.
+
+A fallback is never bound, so an explicit binding or a later trickle always wins over it, and
+`to_spec()` never carries an auto-instantiated component. Because a resource is built at the
+moment it is read, a credential that is neither bound nor in the environment surfaces as a
+pydantic validation error from the read that needed it, not at build time.
+
+## Relations on sources and destinations
+
+Components other than assets declare the same relations, and are constructed with them by name:
 
 ```py
 dest = WarehouseDestination(connection=WarehouseConnection(...))
-dest = WarehouseDestination(resources={"connection": WarehouseConnection(...)})
+source = Shop(connection=ShopConnection(api_key="..."), destinations=[dest])
 ```
 
-Passing a value of the wrong type, or the same slot both ways, is an error.
+A relation name accepted as a constructor keyword binds the relation instead of reaching
+pydantic; a list binds every element, `None` binds nothing. Passing a component the relation does
+not accept, or two of them to a single-valued relation, raises `ConfigError`. Attribute access
+reads what is bound (`source.connection`), and assignment rebinds atomically.
+
+Once every explicit target is in place, the component checks itself: a non-optional relation that
+is unbound and cannot fill itself is a `ConfigError`.
 
 ## Trickling
 
-A source fills the empty slots of its assets and destinations from its own resources, by slot
-name first and by type second. A [job](jobs.md) does the same for its targets. Pre-filled slots
-are never overwritten. `component.trickle_resources(child)` is the method behind it.
+A source fills the unbound relations of its assets and destinations from its own bindings, by
+relation name, keeping only the targets the child's own relation accepts. A [job](jobs.md) does
+the same for its targets. A binding the child already holds is never touched.
+
+```py
+shop = Shop(connection=ShopConnection(api_key="..."), destinations=[warehouse])
+shop.revenue.bound("connection")     # the source's connection instance
+```
+
+Trickling re-runs on every `bind()` of the parent, so a destination bound after the assets exist
+still reaches them. Reconfiguring a source repoints what it had trickled and leaves what an asset
+bound itself alone:
+
+```py
+staging = shop(connection=ShopConnection(api_key="..."))    # a copy, its assets repointed
+```
 
 ## Describing a resource
 
 `ReportingConfig.definition()` returns a `ResourceDefinition` with the JSON Schema of the
-user-facing fields (`config_schema`). Framework fields (`id`, `resources`) and anything listed in
-the class's `internal_fields` are stripped from that schema. Resources are marked `sensitive`
+user-facing fields (`config_schema`) and, in `relations`, one entry per declared relation with
+its `kind`, `key`, `many`, `optional` and `on_delete`. Framework fields (`id`) and anything listed
+in the class's `internal_fields` are stripped from the schema. Resources are marked `sensitive`
 by default, which tells the platform to encrypt their stored configuration.
 
 The [field helpers](fields.md) decide how each field is rendered in a form.

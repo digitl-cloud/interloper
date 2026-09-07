@@ -1,138 +1,182 @@
 # Dependencies
 
-An asset can consume the output of other assets. Inside a DAG, each upstream dependency is
-materialized first, read back from its destination, and passed to the downstream asset as a
-function argument.
+An asset can consume the output of other assets. Inside a DAG, each upstream is materialized
+first, read back from its destination, and handed to the downstream asset as an `il.Upstream`:
+the upstream asset plus the data read for the run's scope.
+
+An upstream is one **relation** among the others a component declares (a connection, a config, a
+destination). One primitive, `il.Relation`, declares them all; only the ones whose kind is
+`asset` become edges in the graph. See [Resources](resources.md) for the rest.
 
 ## Inside a source
 
-Name a parameter after a sibling asset and the dependency is inferred:
+Annotate a parameter `il.Upstream` and name it after a sibling asset. The source binds it when
+it builds its assets:
 
 ```py
 import interloper as il
 
 @il.source
 class Shop(il.Source):
-    @il.asset
-    def users(self) -> list[dict]:
-        return [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+    def orders(self, context: il.ExecutionContext) -> list[dict]:
+        return [{"date": context.partition_date, "id": 1, "total": 9.99}]
 
-    @il.asset
-    def user_count(self, users: list[dict]) -> list[dict]:
-        return [{"count": len(users)}]
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+    def order_stats(self, context: il.ExecutionContext, orders: il.Upstream) -> list[dict]:
+        rows = orders.data or []
+        return [{"date": context.partition_date, "count": len(rows)}]
 ```
 
-A parameter with a `None` default is an **optional** dependency:
+The parameter name is the relation name and the bare asset key it expects, so
+`orders: il.Upstream` declares `il.Relation("asset", "orders")`, a sibling of the same source
+instance. A `None` default makes the relation **optional**, meaning its wiring may be absent:
 
 ```py
-@il.asset
-def report(self, users: list[dict], segments: list[dict] | None = None) -> list[dict]:
-    ...
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+    def report(
+        self,
+        context: il.ExecutionContext,
+        orders: il.Upstream,
+        refunds: il.Upstream | None = None,
+    ) -> list[dict]:
+        ...
 ```
 
-Inference records the contract on the asset class as `depends_on` (`{"users": "shop.users"}`);
-a `None` default records `il.Dependency(key="shop.segments", optional=True)`. Parameters that
-name a resource slot or the context are never treated as dependencies.
+`self`, `context`, `source` and `**kwargs` are reserved. Any other parameter that is neither an
+`il.Upstream` nor a component class is a `TypeError` at class creation: nothing could ever fill
+it.
 
-## Explicit contracts
+## Declaring relations explicitly
 
-When the parameter name does not match, or the upstream lives in another source, declare the
-upstream on the decorator. A plain string is a single, non-optional upstream on that key;
-`il.Dependency` adds the optional and many-valued cases:
+When the parameter name is not the upstream's key, or the upstream lives in another source,
+write the relation on the decorator. `relations=` is keyed by parameter name and wins over the
+annotation:
 
 ```py
 @il.source
 class Finance(il.Source):
-    @il.asset(depends_on={"orders": "shop.orders", "fx": il.Dependency(key="rates.daily_fx", optional=True)})
-    def revenue(self, orders: list[dict], fx: list[dict] | None = None) -> list[dict]:
+    currency: str = il.InputField(default="EUR")
+
+    @il.asset(
+        partitioning=il.TimePartitionConfig(column="date"),
+        relations={
+            "orders": il.Relation("asset", "shop.orders"),
+            "fx": il.Relation("asset", "rates.daily_fx", optional=True),
+        },
+    )
+    def revenue(
+        self,
+        context: il.ExecutionContext,
+        orders: il.Upstream,
+        fx: il.Upstream | None,
+    ) -> list[dict]:
         ...
 ```
 
-Keys are bare (`orders`, a sibling), qualified (`shop.orders`, that source type, any instance) or
-wildcard (`*.orders`, that asset key from any source). `depends_on` is the contract; the wiring that
-satisfies it lives in `upstreams` on the instance (parameter name to a list of upstream ids), and
-the platform stores it as `upstream` relations.
-
-The DAG wires a qualified key when exactly one asset in the DAG satisfies it:
+A class-based asset writes the same relation as a typed class attribute:
 
 ```py
-dag = il.DAG(Shop(...), Finance(...))     # revenue.upstreams == {"orders": [shop.orders.id]}
+class Revenue(il.Asset):
+    orders: il.Asset = il.Relation("asset", "shop.orders")
+    partitioning = il.TimePartitionConfig(column="date")
+
+    def data(self, context: il.ExecutionContext, orders: il.Upstream) -> list[dict]:
+        ...
 ```
 
-Two matching assets (two `Shop` instances) raise `DAGError` and ask for explicit wiring by id;
-none raise `DependencyNotFoundError` at build time, never a `TypeError` inside `data()`. A `data()`
-parameter that is neither the context, a resource nor a declared upstream, and has no default, is
-an `AssetError` at build time for the same reason.
+The annotation is for the type checker; the relation itself says what it accepts. Keys come in
+four forms:
 
-In a spec file the same edge is an `id` on the upstream asset and an `upstreams` entry on the
-downstream one; see [Specs](specs.md).
+| Key | Selects |
+|-----|---------|
+| `orders` | The asset of that key in the declaring asset's own source instance. |
+| `shop.orders` | That asset key, in any instance of the source keyed `shop`. |
+| `*.orders` | That asset key, in any source at all. |
+| `["shop.orders", "wms.orders"]` | Any of the listed keys. |
 
 ## Many upstreams
 
-A slot can bind every asset matching a key. Declare it with `many=True`; `data()` receives a list
-of `il.Upstream`, each carrying the upstream asset and its data:
+`many=True` binds every matching asset at once, and `data()` receives a `list[il.Upstream]`:
 
 ```py
-@il.asset(
-    depends_on={"campaigns": il.Dependency(key="*.campaigns", many=True)},
-    partitioning=il.TimePartitionConfig(column="date"),
-)
-def campaign_matches(context: il.ExecutionContext, campaigns: list[il.Upstream]) -> list[dict]:
-    return [
-        {"date": context.partition_date, "provider": leg.asset.source.key, "rows": len(leg.data)}
-        for leg in campaigns
-        if leg.data is not None
-    ]
+@il.source(tags=["Analytics"])
+class CampaignMatcher(il.Source):
+    @il.asset(
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        relations={"campaigns": il.Relation("asset", "*.campaigns", many=True)},
+    )
+    def campaign_matches(
+        self,
+        context: il.ExecutionContext,
+        campaigns: list[il.Upstream],
+    ) -> list[dict]:
+        return [
+            {"date": context.partition_date, "source_key": leg.asset.source.key, **row}
+            for leg in campaigns
+            if leg.data is not None
+            for row in leg.data
+        ]
 ```
 
-The DAG binds every match it holds, and explicit wiring (`upstreams["campaigns"] = [id1, id2]`, or
-a list in a spec) is kept as is. `optional=True` allows an empty list. A bound leg arrives with
-`data` set to `None`, and a `LOG` warning event names it, when the upstream has nothing
-materialized where its destination looks: no table or object for that scope at all. An existing
-but empty scope is not that case; it arrives as whatever the destination returns for an empty
-read (an empty list or frame), not `None`. `optional` only governs wiring, never this; the asset
-decides what a missing leg means. Any other read failure fails the asset. The same rule holds for
-a single slot: it receives `None` under the same no-table-or-object condition, whether or not the
-slot is optional.
+The DAG binds every `campaigns` asset it holds, so the set of legs is decided by wiring, not by
+the class. `list[il.Upstream]` on its own infers the same relation on the parameter's bare key,
+which is a many-valued sibling; `relations=` is what reaches outside the source.
 
 ## How wiring works
 
-Each asset instance carries `upstreams`, a mapping from parameter name to the upstream
-assets' **instance ids** (a list, one entry for a single slot). The source fills it for
-intra-source contracts at construction; the DAG checks every entry at build time:
+Wiring is always an instance bound to a relation, never an id. It happens in three places:
 
-- A non-optional slot with nothing wired raises `DependencyNotFoundError`.
-- An optional slot with nothing wired is skipped: the parameter receives `None` (an empty list
-  for a many slot).
-- A wired upstream whose identity does not match the declared key raises
-  `DependencyContractError` (for example, `depends_on={"orders": "shop.orders"}` wired to an
-  asset from another source).
-
-Wiring by hand is possible, for example to connect a standalone asset:
+- **At construction**, for siblings: `Source.sibling_bindings()` says which of an asset's
+  relations resolve inside the source, and the source binds them to the instances it just built,
+  right after building them.
+- **In the DAG**, for everything a bare key cannot reach: a qualified or wildcard key is matched
+  against the DAG's other assets. A `many` relation binds every candidate, a single-valued one
+  the only candidate there is. Several candidates for a single-valued relation raise `DAGError`
+  and ask to be bound by hand.
+- **By hand**, at any point:
 
 ```py
-extra = extra_asset(destinations=dest)
-source.report.upstreams["data"] = [extra.id]
-dag = il.DAG(source, extra)
+dest = il.MemoryDestination()
+shop = Shop(destinations=[dest])
+fin = Finance(destinations=[dest])
+
+dag = il.DAG(shop, fin)          # binds fin.revenue.orders to shop.orders
+fin.revenue.bound("orders")      # the shop.orders instance
+fin.revenue.bound_ids()          # {"destinations": [...], "orders": [shop.orders.id]}
+
+fin.revenue.bind("orders", shop.orders)     # explicit; accumulates for a many relation
+fin.revenue.orders = shop.orders            # assignment replaces atomically
+fin.revenue.unbind("orders", shop.orders)   # refused if it would empty a non-optional relation
 ```
 
-Persisted upstreams (from a stored spec) are never overwritten by inference.
+Binding goes through `bind()` everywhere, so an explicit binding is never overwritten by the
+DAG, and a hydrated one is never overwritten by construction.
+
+In a spec, a bound upstream is a `{ref: id}` under the relation's name, since an asset always
+travels inside its own source's document. See [Specs](specs.md).
 
 ## Reading upstream data
 
-At run time the downstream asset reads each dependency from the destination named by the
-upstream's `default_destination_key`, or its first destination, scoped to the partition the
-upstream consumes. The read returns whatever that destination's `read()` yields: rows for the
-built-in destinations, a DataFrame for DataFrame-native ones. `optional` is a wiring rule, not a
-data rule: for every slot, optional or not, single or many, a leg is `None` (a `None` leg for a
-many slot, a `None` argument for a single slot) only when the upstream has nothing materialized
-where the destination looks: no table or object for that scope at all (`MemoryDestination` and
-the file destinations key storage per partition, so a missing partition is exactly this case;
-`BigQueryDestination` reaches it only when the table itself does not exist). An existing scope
-that simply has no rows for the partition is not this case: it returns whatever the destination
-gives back for an empty read (an empty list or frame), never `None`. Either way a `LOG` warning
-event names the upstream when the leg is `None`, since data is expected to be occasionally
-missing. Any other read failure fails the asset.
+Each leg is read from the upstream's `default_destination_key` destination, or its first, scoped
+to the partition the run consumes. `il.Upstream` carries two attributes:
+
+| Attribute | Meaning |
+|-----------|---------|
+| `asset` | The upstream asset the data came from; its `source`, `key` and `id` tell the legs apart. |
+| `data` | Whatever that destination's `read()` yields: rows for the built-in destinations, a DataFrame for DataFrame-native ones. |
+
+`data` is `None`, with a `LOG` warning naming the leg, when the upstream has nothing
+materialized where the destination looks: no table or object for that scope at all
+(`MemoryDestination` and the file destinations key storage per partition, so a missing partition
+is exactly this; `BigQueryDestination` reaches it only when the table itself does not exist). An
+existing but empty scope is not this case, and comes back as whatever the destination returns
+for an empty read, an empty list or frame. `optional` governs wiring only, never data: the asset
+decides what a missing leg means. Any other read failure fails the asset.
+
+A bound upstream the run does not hold at all is skipped with its own warning, so its leg simply
+does not exist.
 
 Reads emit `dest_read_*` events and an `interloper.destination.read` span.
 
@@ -141,21 +185,35 @@ Reads emit `dest_read_*` events and an `interloper.destination.read` span.
 | Rule | Error |
 |------|-------|
 | Every operation id is unique | `DAGError` |
-| A declared single slot matches at most one asset in the DAG | `DAGError` |
-| Every non-default `data()` parameter is the context, a resource or a declared upstream | `AssetError` |
-| Non-optional slots are wired to a node in the DAG | `DependencyNotFoundError` |
-| Wired upstreams satisfy the declared key | `DependencyContractError` |
+| A single-valued relation matches at most one asset in the DAG | `DAGError` |
+| Every `data()` parameter is fillable (`context`, `source`, a component class or `il.Upstream`) | `TypeError`, at class creation |
+| A non-optional relation is bound, unless it can fill itself | `ConfigError` |
+| A bound target is one its relation accepts | `ConfigError` |
+| A non-optional relation points at an asset the DAG holds | `ConfigError` |
 | No cycles | `CircularDependencyError` |
 | A non-partitioned asset never depends on a partitioned one | `DAGError` |
 | Time-partitioned ends of an edge share a granularity | `DAGError` |
 
-The rule that a non-partitioned asset never depends on a partitioned one exists because a
-partitioned upstream is read for one partition at a time, which an unpartitioned downstream
-cannot express. A run has one partition scope, so both ends of an edge must agree on
-granularity, read-only upstreams included.
+`validate_relations(nodes)` is the check behind the three `ConfigError` rows: the constructor
+runs it without `nodes`, which is what lets a relation reaching outside the source stay unbound
+until the graph exists, and the DAG runs it again with its own nodes.
+
+A non-partitioned asset never depends on a partitioned one because a partitioned upstream is
+read one partition at a time, which an unpartitioned downstream cannot express. A run has one
+partition scope, so both ends of an edge must agree on granularity, read-only upstreams
+included.
 
 ## Running one asset with its parents
 
-`dag.mini_dag(asset_id)` builds a DAG containing one asset and its immediate parents marked
-non-materializable. Only the target executes; parents are read, not rewritten. Sources offer the
-same idea through `select`.
+A bound upstream the run does not materialize joins the DAG anyway, as a non-materializable copy
+under the same id: it is a live instance with its own destinations, so it can be read without
+being run. That is the whole mechanism behind running one asset with its parents:
+
+```py
+mini = dag.mini_dag(fin.revenue.id)
+[(op.qualified_key, op.materializable) for op in mini.operations]
+# [("finance.revenue", True), ("shop.orders", False)]
+```
+
+Only the target executes; the parents are read, not rewritten. Partition checks still apply
+along those edges. A source offers the same idea over its own assets through `select`.
