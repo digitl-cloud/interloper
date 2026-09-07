@@ -295,6 +295,23 @@ class Relation(BaseModel):
         return any(identity.satisfies(declared, own_source_key=own_source_key) for declared in keys)
 
     @property
+    def source_local(self) -> bool:
+        """Whether every key this relation declares names a component of the owner's own source.
+
+        A bare key (``"orders"``) is scoped to the declaring component's own
+        source, so that source is the authority on what fills it; a qualified
+        or wildcard key (``"shop.orders"``, ``"*.orders"``) reaches outside it,
+        and only the graph of a run can say what fills it.
+
+        Returns:
+            True when the relation declares at least one key and none of them
+            is qualified; False for a relation declaring no key at all, which
+            accepts any key of its kinds wherever it comes from.
+        """
+        keys = self.keys()
+        return bool(keys) and all("." not in key for key in keys)
+
+    @property
     def self_filling(self) -> bool:
         """Whether this relation can be resolved without an explicit binding.
 

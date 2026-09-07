@@ -92,7 +92,10 @@ class TestRelation:
         assert isinstance(Relation(Cfg).fallback(), Cfg)
         assert Relation("destination", many=True).self_filling is False
 
-    def test_a_settings_target_always_fills_itself(self) -> None:
+    def test_a_settings_target_always_fills_itself(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("token", raising=False)
+        monkeypatch.delenv("TOKEN", raising=False)
+
         class Needy(il.Config):
             token: str = il.InputField()
 

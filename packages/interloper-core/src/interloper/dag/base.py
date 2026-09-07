@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from interloper.asset.base import Asset
 from interloper.component import Component
-from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, DependencyNotFoundError
+from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError
 from interloper.operation import Operation, Workload
 from interloper.partitioning import Partition, PartitionWindow, TimePartitionConfig
 from interloper.runner.results import ExecutionStatus, RunResult
@@ -90,13 +90,12 @@ class DAG:
         """Build the dependency graph from the workloads' operations.
 
         Args:
-            items: The DAG's constructor arguments — Workload instances or
+            items: The DAG's constructor arguments, Workload instances or
                 classes; classes are instantiated and every workload is
                 flattened into the operations it provides.
 
         Raises:
             DAGError: If the input is empty, contains duplicates, or has invalid types.
-            DependencyNotFoundError: If a dependency is not found in the DAG.
         """
         if not items:
             raise DAGError("DAG must contain at least one workload")
@@ -121,6 +120,9 @@ class DAG:
                 seen.add(operation.id)
             raise DAGError(f"Duplicate operation id found: {duplicates}")
 
+        self._resolve_declared()
+        self._include_read_only_upstreams()
+
         for operation in self.operations:
             self.successors[operation.id] = []
 
@@ -129,19 +131,91 @@ class DAG:
                 continue
 
             self.predecessors[operation.id] = []
-            for name, relation in operation.upstream_relations().items():
-                bound = operation.bound(name)
-                upstreams = bound if isinstance(bound, list) else [bound] if bound is not None else []
-                for upstream in upstreams:
-                    if upstream.id not in self.operation_map:
-                        if relation.optional:
-                            continue
-                        raise DependencyNotFoundError(
-                            f"'{operation.key}' relation '{name}' is bound to '{upstream.qualified_key}' "
-                            f"which is not in the DAG."
-                        )
-                    self.predecessors[operation.id].append(upstream.id)
-                    self.successors[upstream.id].append(operation.id)
+            for upstream in self._upstream_targets(operation):
+                self.predecessors[operation.id].append(upstream.id)
+                self.successors[upstream.id].append(operation.id)
+
+    def _upstream_targets(self, operation: Operation) -> list[Asset]:
+        """The assets bound to one operation's upstream relations.
+
+        Args:
+            operation: The node whose bindings are read.
+
+        Returns:
+            Every bound asset, ordered by declaration and then by binding.
+        """
+        targets: list[Component] = []
+        for name in operation.upstream_relations():
+            bound = operation.bound(name)
+            targets.extend(bound if isinstance(bound, list) else [] if bound is None else [bound])
+        # Bind-time validation is what makes the cast sound: only an asset is accepted here.
+        return cast("list[Asset]", targets)
+
+    def _resolve_declared(self) -> None:
+        """Bind the declared upstream keys nothing has bound yet.
+
+        For every materializing asset and every unbound upstream relation that
+        declares keys, the candidates are the DAG's other assets the relation
+        :meth:`~interloper.component.relation.Relation.accepts`; a
+        :attr:`~interloper.component.relation.Relation.source_local` key is
+        further restricted to the asset's own source instance, since it names
+        a sibling. A ``many`` relation binds every candidate and a
+        single-valued one the only candidate there is; no candidate leaves the
+        relation unbound for :meth:`_check_relations` to judge.
+
+        Binding goes through
+        :meth:`~interloper.component.base.Component.bind`, so an explicit
+        binding is never overwritten, and it writes into the asset instance,
+        so one reused across several DAGs keeps its first resolution.
+
+        Raises:
+            DAGError: If a single-valued relation has several candidates; the
+                caller has to bind it explicitly.
+        """
+        assets = [operation for operation in self.operations if isinstance(operation, Asset)]
+        for asset in assets:
+            if not asset.materializable:
+                continue
+            for name, relation in asset.upstream_relations().items():
+                if asset.bound(name) or not relation.keys():
+                    continue
+                candidates = [
+                    candidate
+                    for candidate in assets
+                    if candidate is not asset
+                    and relation.accepts("asset", candidate.identity, owner=asset.identity)
+                    and (not relation.source_local or candidate.parent is asset.parent)
+                ]
+                if not candidates:
+                    continue
+                if not relation.many and len(candidates) > 1:
+                    listed = ", ".join(f"{candidate.qualified_key}#{candidate.id[:8]}" for candidate in candidates)
+                    raise DAGError(
+                        f"'{asset.qualified_key}' relation '{name}' depends on "
+                        f"'{', '.join(relation.keys())}' and the DAG holds {len(candidates)} matching assets "
+                        f"({listed}); bind '{name}' explicitly."
+                    )
+                asset.bind(name, *candidates)
+
+    def _include_read_only_upstreams(self) -> None:
+        """Add every bound upstream the run itself does not materialize.
+
+        A materializing node reads its upstreams through the DAG's own node
+        (see :meth:`~interloper.asset.base.Asset._read_upstreams`), so an
+        upstream nobody in the run materializes still has to be one: it joins
+        as a non-materializable copy, same id, same bindings, same parent,
+        which the runners skip and the dependent reads. Those copies never
+        execute, so their own upstreams are not pulled in with them.
+        """
+        for operation in list(self.operations):
+            if not operation.materializable:
+                continue
+            for upstream in self._upstream_targets(operation):
+                if upstream.id in self.operation_map:
+                    continue
+                read_only = upstream(materializable=False)
+                self.operations.append(read_only)
+                self.operation_map[read_only.id] = read_only
 
     # -- Validation ------------------------------------------------------------
 
@@ -446,8 +520,11 @@ class DAG:
     def mini_dag(self, operation_id: str) -> DAG:
         """Create a mini-DAG with the target operation and its immediate parents.
 
-        Parents are included but marked as non-materializable so only the
-        target operation is actually executed.
+        A DAG over the target alone: its bound upstreams join as
+        non-materializable copies through the very mechanism any run uses for
+        an upstream it does not materialize
+        (:meth:`_include_read_only_upstreams`), so the parents are there,
+        under their own ids, read instead of executed.
 
         Args:
             operation_id: Id of the operation the mini-DAG is built around.
@@ -462,10 +539,5 @@ class DAG:
             raise AssetNotFoundError(f"Operation '{operation_id}' not found in DAG")
 
         target = self.operation_map[operation_id]
-        operations: list[Operation] = []
-        for upstream_id in self.get_predecessors(operation_id):
-            # Only an asset can fill an asset-kind relation, so every parent is one.
-            parent = cast(Asset, self.operation_map[upstream_id])(materializable=False)
-            operations.append(parent)
-        operations.append(target)
-        return DAG(*operations)
+        # Only an asset has upstreams to pull in, and only an asset can be re-flagged.
+        return DAG(target(materializable=True) if isinstance(target, Asset) else target)
