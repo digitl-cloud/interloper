@@ -154,7 +154,7 @@ def _to_df(records: list[_RECORD], date: dt.date) -> pd.DataFrame:
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    resources={"connection": ImpactConnection},
+    relations={"connection": il.Relation(ImpactConnection)},
     tags=["Affiliate"],
     icon="fluent:connector-24-filled",
     normalizer=DataFrameNormalizer(snake_case_digits=True, replace_empty_strings=True),

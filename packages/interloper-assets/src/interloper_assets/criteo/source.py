@@ -41,7 +41,7 @@ async def _statistics_report(
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    resources={"connection": CriteoConnection},
+    relations={"connection": il.Relation(CriteoConnection)},
     tags=["Advertising"],
     icon="icon:criteo",
     normalizer=DataFrameNormalizer(

@@ -106,7 +106,7 @@ async def get_advertiser_reports_by_publisher(
 
 
 @il.source(
-    resources={"connection": AwinConnection},
+    relations={"connection": il.Relation(AwinConnection)},
     tags=["Affiliate"],
     icon="icon:awin",
     normalizer=DataFrameNormalizer(),

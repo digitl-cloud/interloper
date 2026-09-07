@@ -159,9 +159,7 @@ def _list_audiences(dv_client: Any, scope: dict[str, str]) -> list[_Record]:
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     key="display_video_360",
-    resources={
-        "connection": DisplayVideo360Connection,
-    },
+    relations={"connection": il.Relation(DisplayVideo360Connection)},
     tags=["Advertising"],
     icon="icon:dv360",
     # Partner objects nest config two levels deep (dataAccessConfig.sdfConfig.*);

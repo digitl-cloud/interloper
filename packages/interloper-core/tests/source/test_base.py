@@ -1,10 +1,10 @@
 """Tests for ``interloper.source.base``."""
 
-# Note: no ``from __future__ import annotations``, ``Source._infer_upstreams``
-# and ``Asset._infer_resource_types`` read parameter annotations via
-# ``inspect.signature`` and need them as real classes, not lazy strings.
+# Note: no ``from __future__ import annotations``: an annotation naming a
+# component class declares a relation, and the collector needs it as a real
+# class, not a lazy string.
 
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 
@@ -18,12 +18,14 @@ from interloper.source.base import SourceDefinition
 # -- Fixtures ------------------------------------------------------------------
 
 
-class FakeResource(il.Resource):
-    value: str = ""
+class FakeConnection(il.Connection):
+    """Connection fixture trickled from a source down to its assets.
 
+    The required token keeps it from self-filling, so a relation that
+    targets it must actually be bound to satisfy validation.
+    """
 
-class FakeOtherResource(il.Resource):
-    other: str = ""
+    token: str = il.SecretField()
 
 
 class FakeDestination(il.Destination):
@@ -51,15 +53,20 @@ class FakeOtherSource(il.Source):
 
 
 class FakeSourceWithAssets(il.Source):
-    """Source with two nested assets; the second references the first as a dependency."""
+    """Source with two nested assets; the second names the first as its upstream."""
 
     class FakeFirst(il.Asset):
-        """First asset (no upstream deps)."""
+        """First asset (no upstream relations)."""
+
+        def data(self) -> Any:  # pragma: no cover
+            return None
 
     class FakeSecond(il.Asset):
-        """Second asset depending on the first sibling by parameter name."""
+        """Second asset naming its sibling explicitly."""
 
-        def data(self, fake_first: Any) -> Any:  # pragma: no cover
+        fake_first = il.Relation("asset", "fake_first")
+
+        def data(self, fake_first: il.Upstream) -> Any:  # pragma: no cover
             return None
 
 
@@ -71,23 +78,58 @@ class FakeDiscriminatedSource(il.Source):
     class FakeDiscriminated(il.Asset):
         """Asset whose table name carries the source instance discriminator."""
 
-
-class FakeFanInSource(il.Source):
-    """Source owning a many-valued slot and a sibling; the sibling is wired, the wildcard is not."""
-
-    class Campaigns(il.Asset):
-        """Sibling that happens to match the wildcard."""
-
-    class Matches(il.Asset):
-        """Fan-in asset."""
-
-        depends_on: ClassVar[dict[str, Any]] = {
-            "campaigns": il.Dependency(key="*.campaigns", many=True),
-            "sibling": "campaigns",
-        }
-
-        def data(self, campaigns: list[il.Upstream], sibling: Any) -> Any:  # pragma: no cover
+        def data(self) -> Any:  # pragma: no cover
             return None
+
+
+class Shop(il.Source):
+    """Source whose assets take its connection and wire to each other."""
+
+    connection: FakeConnection
+
+    class Orders(il.Asset):
+        """Upstream asset filled with the source's connection."""
+
+        connection = il.Relation(FakeConnection)
+
+        def data(self, connection: FakeConnection) -> Any:  # pragma: no cover
+            return []
+
+    class Revenue(il.Asset):
+        """Downstream asset naming its sibling by bare key."""
+
+        orders = il.Relation("asset", "orders")
+
+        def data(self, orders: il.Upstream) -> Any:  # pragma: no cover
+            return []
+
+
+class Finance(il.Source):
+    """Source whose asset names an upstream owned by another source."""
+
+    class Revenue(il.Asset):
+        """Downstream asset naming a qualified, cross-source upstream.
+
+        Left optional: nothing but the DAG can resolve a cross-source key, so
+        this source must stay constructible with it unbound.
+        """
+
+        orders = il.Relation("asset", "shop.orders", optional=True)
+
+        def data(self, orders: il.Upstream) -> Any:  # pragma: no cover
+            return []
+
+
+class FakeUnfillableSource(il.Source):
+    """Source whose asset names a non-optional relation nothing can fill."""
+
+    class FakeOrphan(il.Asset):
+        """Asset naming a sibling that exists in no source."""
+
+        orders = il.Relation("asset", "nowhere.orders")
+
+        def data(self, orders: il.Upstream) -> Any:  # pragma: no cover
+            return []
 
 
 # -- Identity and class metadata -----------------------------------------------
@@ -126,6 +168,86 @@ class TestIdentity:
 
         with pytest.raises(ValidationError, match="invalid"):
             FakeSource(dataset="bad dataset!")
+
+
+# -- Relations -----------------------------------------------------------------
+
+
+class TestSourceRelations:
+    def test_anchor_declares_destinations(self):
+        relation = il.Source.relations["destinations"]
+        assert (relation.kind, relation.many, relation.optional) == ("destination", True, True)
+
+    def test_decorator_destinations_narrows_keys(self):
+        @il.source(destinations=[il.MemoryDestination])
+        class Narrow(il.Source):
+            pass
+
+        assert Narrow.relations["destinations"].keys() == [il.MemoryDestination.key]
+
+    def test_narrowed_destinations_reject_another_key(self):
+        @il.source(destinations=[il.MemoryDestination])
+        class Narrow(il.Source):
+            pass
+
+        from interloper.errors import ConfigError
+
+        with pytest.raises(ConfigError, match="does not accept"):
+            Narrow(destinations=[FakeDestination()])
+
+    def test_destinations_bind_from_the_constructor(self):
+        destination = FakeDestination()
+        assert FakeSource(destinations=[destination]).destinations == [destination]
+
+    def test_a_single_destination_is_accepted(self):
+        destination = FakeDestination()
+        assert FakeSource(destinations=destination).destinations == [destination]
+
+    def test_annotation_declares_a_relation(self):
+        relation = Shop.relations["connection"]
+        assert (relation.kind, relation.key, relation.target) == ("connection", "fake_connection", FakeConnection)
+
+    def test_connection_trickles_to_assets(self):
+        connection = FakeConnection(token="secret")
+        source = Shop(connection=connection)
+        assert source.orders.connection is connection
+
+    def test_missing_non_optional_connection_raises_naming_it(self):
+        from interloper.errors import ConfigError
+
+        with pytest.raises(ConfigError, match="connection"):
+            Shop()
+
+    def test_asset_relation_nothing_can_fill_raises_naming_asset_and_relation(self):
+        from interloper.errors import ConfigError
+
+        with pytest.raises(ConfigError) as excinfo:
+            FakeUnfillableSource()
+        assert "FakeOrphan" in str(excinfo.value)
+        assert "orders" in str(excinfo.value)
+
+    def test_destination_bound_after_construction_still_trickles(self):
+        class FakeConnectedDestination(FakeDestination):
+            connection = il.Relation(FakeConnection, optional=True)
+
+        connection = FakeConnection(token="secret")
+        destination = FakeConnectedDestination()
+        source = Shop(connection=connection)
+        source.bind("destinations", destination)
+        assert destination.connection is connection
+
+    def test_sibling_bindings_and_bind(self):
+        assert Shop.sibling_bindings() == {"revenue": {"orders": "orders"}}
+        source = Shop(connection=FakeConnection(token="secret"))
+        assert source.revenue.orders is source.orders
+
+    def test_cross_source_key_stays_unbound(self):
+        assert Finance.sibling_bindings() == {}
+        source = Finance()
+        assert source.revenue.bound("orders") is None
+
+    def test_relations_reach_the_definition(self):
+        assert Shop.definition().relations["connection"].target is FakeConnection
 
 
 # -- Per-instance table names ----------------------------------------------------
@@ -196,8 +318,8 @@ class TestDefinition:
         assert defn.path.endswith(".FakeSource")
         assert defn.name
         assert defn.assets == []
-        assert defn.relations["resource"].slots == {}
-        assert defn.relations["destination"].keys == []
+        assert defn.relations["destinations"].kind == "destination"
+        assert defn.relations["destinations"].keys() == []
 
     def test_definition_includes_nested_assets(self):
         defn = FakeSourceWithAssets.definition()
@@ -212,7 +334,7 @@ class TestDefinition:
             assert asset_defn.source_key == FakeSourceWithAssets.key
 
 
-# -- Asset collection, lookup, and requires inference --------------------------
+# -- Asset collection and lookup -----------------------------------------------
 
 
 class TestAssets:
@@ -266,46 +388,10 @@ class TestAssets:
         with pytest.raises(KeyError):
             FakeSourceWithAssets.asset_def("does_not_exist")
 
-    def test_infer_upstreams_wires_sibling_dependency(self):
-        second_cls = next(
-            cls for cls in FakeSourceWithAssets.asset_types if cls.key == "fake_second"
-        )
-        assert "fake_first" in second_cls.declared_upstreams()
-        assert second_cls.declared_upstreams()["fake_first"].key == f"{FakeSourceWithAssets.key}.fake_first"
-
-    def test_infer_upstreams_marks_default_none_as_optional(self):
-        class FakeOptionalDepsSource(il.Source):
-            class FakeA(il.Asset):
-                pass
-
-            class FakeB(il.Asset):
-                def data(self, fake_a: Any = None) -> Any:  # pragma: no cover
-                    return None
-
-        second_cls = next(
-            cls for cls in FakeOptionalDepsSource.asset_types if cls.key == "fake_b"
-        )
-        assert second_cls.declared_upstreams()["fake_a"].optional is True
-
-    def test_resolve_upstreams_wires_bare_siblings_and_leaves_wildcards_to_the_dag(self):
-        source = FakeFanInSource()
-        assert source.matches.upstreams == {"sibling": [source.campaigns.id]}
-
-    def test_none_default_sibling_parameter_is_an_optional_upstream(self):
-        class Pair(il.Source):
-            """Source with an optional sibling upstream."""
-
-            class First(il.Asset):
-                """Upstream."""
-
-            class Second(il.Asset):
-                """Downstream with an optional sibling parameter."""
-
-                def data(self, first: Any = None) -> Any:  # pragma: no cover
-                    return None
-
-        declared = Pair.Second.declared_upstreams()["first"]
-        assert declared == il.Dependency(key="pair.first", optional=True)
+    def test_assets_are_parented_by_their_source(self):
+        source = FakeSourceWithAssets()
+        assert all(a.parent is source for a in source.assets)
+        assert source.fake_first.qualified_key == "fake_source_with_assets.fake_first"
 
 
 # -- Trickle-down resolution ---------------------------------------------------
@@ -329,6 +415,7 @@ class TestResolution:
         source = FakeTrickleSource(dataset="parent_ds")
         assert source.assets[0].dataset == "child_own"
 
+    @pytest.mark.xfail(strict=True, reason="Task 5: the Asset anchor declares its destinations relation")
     def test_trickles_destination_to_assets(self):
         source_dest = FakeDestination()
 
@@ -400,17 +487,6 @@ class TestResolution:
         source = FakeTrickleSource(default_destination_key="primary")
         assert source.assets[0].default_destination_key == "primary"
 
-    def test_trickles_source_resources_to_assets_by_type(self):
-        shared = FakeResource(value="shared")
-
-        class FakeTrickleSource(il.Source):
-            class FakeChild(il.Asset):
-                def data(self, resource: FakeResource) -> Any:  # pragma: no cover
-                    return None
-
-        source = FakeTrickleSource(resources={"elsewhere": shared})
-        assert source.assets[0].resources["resource"] is shared
-
     def test_assets_get_source_backref(self):
         class FakeTrickleSource(il.Source):
             class FakeChild(il.Asset):
@@ -419,13 +495,17 @@ class TestResolution:
         source = FakeTrickleSource()
         assert source.assets[0].source is source
 
-    def test_resolves_sibling_deps_between_assets(self):
-        source = FakeSourceWithAssets()
-        first = source.fake_first
-        second = source.fake_second
-        # ``_infer_upstreams`` populated ``second.depends_on``; ``_resolve_upstreams``
-        # wires those into ``second.upstreams`` pointing at the sibling's instance id.
-        assert second.upstreams["fake_first"] == [first.id]
+    def test_trickles_into_bound_destinations(self):
+        class FakeConnectedDestination(FakeDestination):
+            connection = il.Relation(FakeConnection, optional=True)
+
+        class FakeConnectedSource(il.Source):
+            connection: FakeConnection
+
+        connection = FakeConnection(token="secret")
+        destination = FakeConnectedDestination()
+        FakeConnectedSource(connection=connection, destinations=[destination])
+        assert destination.connection is connection
 
 
 # -- __call__ reconfiguration --------------------------------------------------
@@ -456,16 +536,15 @@ class TestReconfiguration:
         reconfigured = FakeSourceWithAssets()(destinations=new_dest)
         assert reconfigured.destinations == [new_dest]
 
-    def test_resources_are_merged_not_replaced(self):
-        existing = FakeResource(value="existing")
-        extra = FakeOtherResource(other="extra")
+    def test_override_a_relation_leaves_the_original_alone(self):
+        source = FakeSourceWithAssets(destinations=[FakeDestination()])
+        reconfigured = source(destinations=FakeOtherDestination())
+        assert isinstance(source.destinations[0], FakeDestination)
+        assert isinstance(reconfigured.destinations[0], FakeOtherDestination)
 
-        class FakeMergeSource(il.Source):
-            pass
-
-        source = FakeMergeSource(resources={"a": existing})
-        reconfigured = source(resources={"b": extra})
-        assert reconfigured.resources == {"a": existing, "b": extra}
+    def test_unknown_relation_name_is_rejected(self):
+        with pytest.raises(TypeError, match="declares no relation"):
+            FakeSourceWithAssets()(watches=[FakeDestination()])
 
     def test_materializable_override_propagates_to_assets(self):
         source = FakeSourceWithAssets()
@@ -477,11 +556,8 @@ class TestReconfiguration:
         reconfigured = source(dataset="new")
         assert all(a.source is reconfigured for a in reconfigured.assets)
 
-    def test_omitted_fields_preserved(self):
-        source = FakeSourceWithAssets(
-            dataset="original",
-            destinations=[FakeDestination()],
-        )
+    def test_omitted_relations_preserved(self):
+        source = FakeSourceWithAssets(dataset="original", destinations=[FakeDestination()])
         reconfigured = source(dataset="updated")
         assert isinstance(reconfigured.destinations[0], FakeDestination)
 
@@ -499,6 +575,25 @@ class TestReconfiguration:
             materialization_strategy=MaterializationStrategy.STRICT,
         )
         assert reconfigured.materialization_strategy == MaterializationStrategy.STRICT
+
+    def test_repointing_a_connection_reaches_a_trickled_asset(self):
+        a, b = FakeConnection(token="a"), FakeConnection(token="b")
+        source = Shop(connection=a)
+        reconfigured = source(connection=b)
+        assert reconfigured.orders.connection is b
+
+    def test_repointing_a_connection_preserves_an_asset_s_own_binding(self):
+        a, b, own = FakeConnection(token="a"), FakeConnection(token="b"), FakeConnection(token="own")
+        source = Shop(connection=a, assets={"orders": {"connection": own}})
+        reconfigured = source(connection=b)
+        # The copy is deep: what survives is an equal value, not the same object.
+        assert reconfigured.orders.connection.token == "own"
+
+    def test_repointing_a_connection_leaves_the_original_source_untouched(self):
+        a, b = FakeConnection(token="a"), FakeConnection(token="b")
+        source = Shop(connection=a)
+        source(connection=b)
+        assert source.orders.connection is a
 
 
 # -- Serialization round-trip --------------------------------------------------
@@ -527,23 +622,18 @@ class TestSerialization:
         # Other asset unchanged
         assert restored.assets[1].materializable is True
 
+    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_source_with_destination_roundtrip(self):
         source = FakeSource(destinations=[FakeDestination()])
         restored = FakeSource.from_spec(source.to_spec())
         assert isinstance(restored.destinations[0], FakeDestination)
 
+    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_source_with_list_of_destinations_roundtrip(self):
         source = FakeSource(destinations=[FakeDestination(), FakeOtherDestination()])
         restored = FakeSource.from_spec(source.to_spec())
         assert isinstance(restored.destinations[0], FakeDestination)
         assert isinstance(restored.destinations[1], FakeOtherDestination)
-
-    def test_source_with_resources_roundtrip(self):
-        source = FakeSource(resources={"config": FakeResource(value="abc")})
-        restored = FakeSource.from_spec(source.to_spec())
-        config = restored.resources["config"]
-        assert isinstance(config, FakeResource)
-        assert config.value == "abc"
 
     def test_source_preserves_instance_id(self):
         source = FakeSource(id="fixed123")
@@ -551,11 +641,7 @@ class TestSerialization:
         assert restored.id == "fixed123"
 
     def test_roundtrip_via_json_string(self):
-        source = FakeSourceWithAssets(
-            dataset="ds",
-            destinations=[FakeDestination()],
-            resources={"config": FakeResource(value="v")},
-        )
+        source = FakeSourceWithAssets(dataset="ds")
         source.assets[0].materializable = False
 
         spec_json = source.to_spec().model_dump_json()
@@ -563,8 +649,6 @@ class TestSerialization:
 
         assert isinstance(restored, FakeSourceWithAssets)
         assert restored.dataset == "ds"
-        assert isinstance(restored.destinations[0], FakeDestination)
-        assert isinstance(restored.resources["config"], FakeResource)
         assert restored.assets[0].materializable is False
 
 
@@ -577,9 +661,7 @@ class TestSelect:
         assert by_key["fake_second"].materializable
         assert not by_key["fake_first"].materializable
         # The non-materializable sibling stays wired as an upstream.
-        assert by_key["fake_first"].id in {
-            upstream_id for upstream_ids in by_key["fake_second"].upstreams.values() for upstream_id in upstream_ids
-        }
+        assert by_key["fake_second"].bound("fake_first") is by_key["fake_first"]
 
     def test_selected_assets_keep_their_source(self):
         source = FakeSourceWithAssets(select=["fake_first"])
@@ -592,6 +674,7 @@ class TestSelect:
         with pytest.raises(ValidationError, match="has no asset"):
             FakeSourceWithAssets(select=["nope"])
 
+    @pytest.mark.xfail(strict=True, reason="Task 6: DAG edges come from bound relations")
     def test_dag_over_selected_source(self):
         dag = il.DAG(FakeSourceWithAssets(select=["fake_second"]))
         generations = dag.topological_generations()

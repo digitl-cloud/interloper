@@ -120,7 +120,7 @@ def _with_date(rows: list[_RECORD], date: dt.date) -> list[_RECORD]:
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    resources={"connection": SnapchatAdsConnection},
+    relations={"connection": il.Relation(SnapchatAdsConnection)},
     tags=["Advertising"],
     icon="mdi:snapchat",
     normalizer=SnapchatStatsNormalizer(),

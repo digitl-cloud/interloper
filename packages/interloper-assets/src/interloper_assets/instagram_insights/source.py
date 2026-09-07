@@ -4,7 +4,7 @@ from interloper_assets.instagram_insights.connection import InstagramInsightsCon
 
 
 @il.source(
-    resources={"connection": InstagramInsightsConnection},
+    relations={"connection": il.Relation(InstagramInsightsConnection)},
     tags=["Social Media"],
     icon="skill-icons:instagram",
 )

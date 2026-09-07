@@ -115,7 +115,7 @@ def validate_fetch_field_providers(cls: type[BaseModel], relations: dict[str, Re
 
 # Internal fields that should be stripped from config schemas exposed
 # to the UI.  These are framework plumbing, not user-configurable.
-_INTERNAL_FIELDS = frozenset({"id", "resources"})
+_INTERNAL_FIELDS = frozenset({"id"})
 
 
 def strip_internal_fields(schema: dict[str, Any], extra: Iterable[str] = ()) -> dict[str, Any]:

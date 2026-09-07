@@ -130,7 +130,7 @@ def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    resources={"connection": TiktokAdsConnection},
+    relations={"connection": il.Relation(TiktokAdsConnection)},
     tags=["Advertising"],
     icon="logos:tiktok-icon",
     normalizer=TiktokStatsNormalizer(),

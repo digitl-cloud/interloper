@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from pydantic import Field
-
-from interloper.asset.base import Asset
+from interloper.component import Relation
 from interloper.errors import ConfigError
 from interloper.hook.base import Hook, HookContext
-from interloper.job.base import Job
-from interloper.source.base import Source
+
+if TYPE_CHECKING:
+    from interloper.asset.base import Asset
+    from interloper.job.base import Job
+    from interloper.source.base import Source
 
 
 class TriggerHook(Hook):
@@ -21,13 +22,17 @@ class TriggerHook(Hook):
     injected ``context.trigger`` capability, so the hook itself carries no
     persistence dependency.
 
-    The ``target`` verb lives here, not on the base hook: only trigger-style
-    hooks act on other components, so only their definitions advertise it.
+    The ``targets`` relation lives here, not on the base hook: only
+    trigger-style hooks act on other components, so only their definitions
+    advertise it.
     """
 
-    internal_fields: ClassVar[frozenset[str]] = frozenset({"watches", "targets"})
+    if TYPE_CHECKING:
+        targets: list[Source | Asset | Job]
 
-    targets: list[Source | Asset | Job] = Field(default_factory=list)
+    relations: ClassVar[dict[str, Relation]] = {
+        "targets": Relation(["source", "asset", "job"], many=True, optional=True),
+    }
 
     def fire(self, context: HookContext) -> None:
         """Trigger a run for every target.

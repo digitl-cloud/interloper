@@ -15,8 +15,8 @@ from interloper.source.decorator import _SOURCE_PARAMS
 # exercised generically. Every value must be non-None: the decorator skips
 # None-valued parameters, so one here would silently exercise nothing.
 PARAM_VALUES: dict[str, Any] = {
-    "resources": {},
-    "destinations": [],
+    "relations": {"connection": il.Relation(il.Connection)},
+    "destinations": [il.MemoryDestination],
     "tags": ["Tag"],
     "key": "custom_key",
     "name": "Custom Name",
@@ -76,6 +76,49 @@ class TestParameterSurface:
             pass
 
         assert issubclass(Probe, il.Source)
+
+
+class TestRelations:
+    """``relations=`` and ``destinations=`` declare the source's links."""
+
+    def test_relations_kwarg_declares_a_relation(self):
+        class Conn(il.Connection):
+            """Connection fixture for the decorator surface."""
+
+        @il.source(relations={"connection": il.Relation(Conn)})
+        class Probe(il.Source):
+            pass
+
+        assert Probe.relations["connection"].target is Conn
+
+    def test_declared_relations_do_not_drop_the_anchor_relations(self):
+        class Conn(il.Connection):
+            """Connection fixture for the decorator surface."""
+
+        @il.source(relations={"connection": il.Relation(Conn)})
+        class Probe(il.Source):
+            pass
+
+        assert set(Probe.relations) == {"connection", "destinations"}
+
+    def test_destinations_narrow_the_destinations_relation(self):
+        @il.source(destinations=[il.MemoryDestination])
+        class Probe(il.Source):
+            pass
+
+        relation = Probe.relations["destinations"]
+        assert relation.keys() == [il.MemoryDestination.key]
+        assert (relation.kind, relation.many, relation.optional) == ("destination", True, True)
+
+    def test_destinations_win_over_an_explicit_destinations_relation(self):
+        @il.source(
+            relations={"destinations": il.Relation("destination", "nope", many=True, optional=True)},
+            destinations=[il.MemoryDestination],
+        )
+        class Probe(il.Source):
+            pass
+
+        assert Probe.relations["destinations"].keys() == [il.MemoryDestination.key]
 
 
 class TestMaterializable:

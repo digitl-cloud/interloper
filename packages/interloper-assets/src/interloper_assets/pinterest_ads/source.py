@@ -7,7 +7,7 @@ from interloper_assets.pinterest_ads.connection import PinterestAdsConnection
 
 
 @il.source(
-    resources={"connection": PinterestAdsConnection},
+    relations={"connection": il.Relation(PinterestAdsConnection)},
     tags=["Advertising"],
     icon="logos:pinterest",
 )

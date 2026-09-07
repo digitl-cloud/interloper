@@ -235,7 +235,7 @@ async def _run_query(connection: AmazonSellingPartnerConnection, query: str) -> 
 
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
-    resources={"connection": AmazonSellingPartnerConnection},
+    relations={"connection": il.Relation(AmazonSellingPartnerConnection)},
     tags=["E-Commerce"],
     icon="icon:amazon",
     # Vendor reports return nested camelCase money objects (inventory nests

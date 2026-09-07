@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, ClassVar, Literal, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from interloper.asset.base import Asset
-from interloper.component.base import Component
-from interloper.job.base import Job
-from interloper.source.base import Source
+from interloper.component import Component, Relation
+
+if TYPE_CHECKING:
+    from interloper.asset.base import Asset
+    from interloper.job.base import Job
+    from interloper.source.base import Source
 
 #: Event types a hook may subscribe to (v1: run-terminal outcomes).
 HookEvent = Literal["run_completed", "run_failed"]
@@ -58,16 +60,20 @@ class Hook(Component):
                 post_message(self.channel, context.metadata)
 
     The base hook is only an observer. Hooks that *act on* other components
-    (``TriggerHook``) extend the vocabulary with the ``target`` verb and the
-    ``targets`` field — each class's definition advertises exactly what it
-    acts on.
+    (``TriggerHook``) extend the vocabulary with a ``targets`` relation, so
+    each class's definition advertises exactly what it acts on.
     """
 
     icon: ClassVar[str] = "carbon:lightning"
-    internal_fields: ClassVar[frozenset[str]] = frozenset({"watches"})
     state_model: ClassVar[type[BaseModel] | None] = HookState
 
-    watches: list[Source | Asset | Job] = Field(default_factory=list)
+    if TYPE_CHECKING:
+        watches: list[Source | Asset | Job]
+
+    relations: ClassVar[dict[str, Relation]] = {
+        "watches": Relation(["source", "asset", "job"], many=True, optional=True, on_delete="detach"),
+    }
+
     events: list[HookEvent] = Field(
         default=["run_failed"],
         min_length=1,

@@ -11,9 +11,9 @@ Registration is two entry-point groups, and nothing else:
 
 Installation defines the *declared universe*; ``AppSettings.catalog``
 narrows it to what a deployment *enables*. An enabled catalog holds the
-configured components, everything they depend on (their resources and, for
-sources, their assets' resources and destinations, transitively) and the
-framework's own components (the ``interloper`` package's jobs and hooks,
+configured components, everything they depend on (the target class of every
+relation they declare and, for sources, of every relation their assets
+declare, transitively) and the framework's own components (the ``interloper`` package's jobs and hooks,
 present in every catalog). No configured paths means the whole universe.
 Kind anchors are framework, not content: they live in the registry and never
 appear in the catalog.
@@ -37,7 +37,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from interloper.asset.base import Asset
 from interloper.component import KINDS, Component, ComponentDefinition, Relation
 from interloper.errors import ConfigError
 from interloper.settings import AppSettings
@@ -230,12 +229,10 @@ class Catalog(BaseModel):
     def _with_dependencies(cls, components: Iterable[type[Component]]) -> list[type[Component]]:
         """Close *components* over what they depend on.
 
-        A component's dependencies are its resource classes and, for an asset,
-        its destination classes. A source's assets are not catalog entries
-        (they are reached through their source), but their dependencies are
-        the source's too. The walk is transitive (a connection's own resources
-        come along), so the catalog never carries a relation slot whose key it
-        cannot resolve.
+        A component's dependencies are the target classes of the relations it
+        declares. A source's assets are not catalog entries (they are reached
+        through their source), but their dependencies are the source's too.
+        The walk is transitive: a connection's own relations come along too.
 
         Args:
             components: The explicitly enabled component classes.
@@ -261,17 +258,19 @@ class Catalog(BaseModel):
     def _dependencies_of(cls, component: type[Component]) -> list[type[Component]]:
         """The component classes *component* directly depends on.
 
+        A relation declared by key list rather than by class (the narrowed
+        ``destinations`` of a source, say) names no target class and so pulls
+        nothing into the closure: the keys are resolved against the catalog's
+        own entries, not imported from the declaration.
+
         Args:
-            component: The class whose declared resource (and, for an asset,
-                destination) classes are wanted.
+            component: The class whose declared relations are read.
 
         Returns:
-            The direct dependencies, resources first.
+            The target class of every relation that names one, in declaration
+            order.
         """
-        dependencies: list[type[Component]] = list(component.resource_types.values())
-        if issubclass(component, Asset):
-            dependencies.extend(component.destination_types)
-        return dependencies
+        return [relation.target for relation in component.relations.values() if relation.target is not None]
 
     @classmethod
     def _definitions_from(cls, components: Iterable[type[Component]]) -> dict[str, ComponentDefinition]:

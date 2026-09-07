@@ -7,7 +7,7 @@ from interloper_assets.google_ads.connection import GoogleAdsConnection
 
 
 @il.source(
-    resources={"connection": GoogleAdsConnection},
+    relations={"connection": il.Relation(GoogleAdsConnection)},
     tags=["Advertising"],
     icon="logos:google-ads",
 )

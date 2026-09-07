@@ -146,6 +146,14 @@ class Component(Serializable):
 
         Annotated relations are dropped from the class's own annotations before
         Pydantic collects its fields, so a relation is never also a field.
+
+        The :class:`Bound` descriptor this installs is invisible to the type
+        checker, which still sees the class-body value it replaced (a
+        ``relations`` dict, an annotation, or a bare ``Relation``). A class
+        that declares its anchors through a ``relations`` dict therefore
+        repeats each one under ``if TYPE_CHECKING:`` as the attribute its
+        callers actually see at runtime (``destinations: list[Destination]``),
+        with no comment needed at each site now that the reason lives here.
         """
         inherited: dict[str, Relation] = {}
         for base in reversed(cls.__mro__[1:]):
