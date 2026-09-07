@@ -13,7 +13,7 @@ from interloper.utils.text import to_label
 class ResourceDefinition(ComponentDefinition):
     """Definition of a resource with its config schema inlined.
 
-    The config schema is the JSON Schema of the resource's own fields —
+    The config schema is the JSON Schema of the resource's own fields:
     this is same-entity data so it's always inlined, never a key reference.
     """
 
@@ -42,8 +42,8 @@ class Resource(BaseSettings, Component):
     and resolved through a cascade: asset → source → auto-instantiate.
 
     Built-in resource types:
-    - ``Config`` — env-loaded settings
-    - ``Connection`` — credentials and client factories
+    - ``Config``: env-loaded settings
+    - ``Connection``: credentials and client factories
     """
 
     kind: ClassVar[str] = "resource"

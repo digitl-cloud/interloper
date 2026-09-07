@@ -3,8 +3,8 @@
 Two contracts, one hierarchy. A :class:`Workload` is what a run may target:
 it flattens into operations through :meth:`Workload.operations` and declares
 whether its runs bill against quotas. An :class:`Operation` is the node the
-DAG orders and a runner drives — materializing an asset is one operation,
-renewing a connection's credentials is another — and every operation is
+DAG orders and a runner drives: materializing an asset is one operation,
+renewing a connection's credentials is another, and every operation is
 trivially the workload of itself. Groupings (a source, a job) are workloads
 only: they provide operations, they never execute.
 
@@ -12,8 +12,8 @@ The runner is agnostic of what a node does: it calls
 :meth:`Operation.execute` with an :class:`OperationContext` of plain facts,
 records the returned :class:`OperationResult` effects on the node's
 execution info, and consults :meth:`Operation.failure` for a
-persistence-safe message when execution raises. Effects are values — which
-fields to merge into the component's config, which to stamp onto its state —
+persistence-safe message when execution raises. Effects are values: which
+fields to merge into the component's config, which to stamp onto its state,
 applied by the platform envelope after the run; core never holds a handle
 to the store.
 """
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 class OperationContext:
     """The facts an operation executes with.
 
-    Handed down by the runner, one per node execution — the operation-level
+    Handed down by the runner, one per node execution: the operation-level
     counterpart of the asset-level ``ExecutionContext``. ``dag`` is the graph
     the node belongs to, how an operation reaches its upstream nodes'
     outputs; operations without dependencies ignore it.
@@ -54,10 +54,10 @@ class OperationResult:
 
     ``config`` fields are merged into the target component's stored config
     (through its encryption path) and ``state`` fields onto its
-    machine-owned state — how an operation's effects reach the row without
+    machine-owned state: how an operation's effects reach the row without
     the operation knowing the store. ``error`` carries the
-    persistence-safe message of a failed execution (set by
-    :meth:`Operation.failure`; success paths leave it unset — terminal
+    persistence-safe message of a failed execution, set by
+    :meth:`Operation.failure`; success paths leave it unset (terminal
     status is the runner's, not the operation's).
     """
 
@@ -89,7 +89,7 @@ class Operation(Workload):
     """A unit of work: the node a DAG orders and a runner drives.
 
     Beyond :meth:`execute` and :meth:`failure`, this class carries the node
-    protocol the graph machinery reads — defaults that make any operation a
+    protocol the graph machinery reads: defaults that make any operation a
     valid DAG node, which ``Asset`` (the graph-structured, partitioned
     operation) overrides with its real fields and properties. They are
     deliberately plain class attributes, not pydantic fields: an operation
@@ -97,7 +97,7 @@ class Operation(Workload):
     into every subclass's config schema.
 
     ``capture_traceback`` controls whether a failed execution's traceback
-    is attached to its failure event — off for operations whose raw errors
+    is attached to its failure event; off for operations whose raw errors
     embed secrets (credential exchanges carry them in URLs).
     """
 

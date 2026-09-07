@@ -2,9 +2,9 @@
 
 Registration is two entry-point groups, and nothing else:
 
-- ``interloper.kinds`` — what kinds exist: one entry per kind, naming its
+- ``interloper.kinds``: what kinds exist, one entry per kind, naming its
   anchor class (consumed by :data:`interloper.KINDS`).
-- ``interloper.components`` — what component classes exist: every concrete
+- ``interloper.components``: what component classes exist, every concrete
   component an installed package provides, framework classes included
   (core declares ``cron_job``/``trigger_hook``/``webhook_hook`` here, the
   same way ``interloper-assets`` declares its connectors).
@@ -60,7 +60,7 @@ class Catalog(BaseModel):
         The catalog is flat, but a source's assets are not in it: they are
         declared inside their source and reachable only through
         :attr:`SourceDefinition.assets`. Pass *parent_key* to resolve such an
-        asset the way its owner declares it — the concrete
+        asset the way its owner declares it: the concrete
         :class:`AssetDefinition`, carrying the composite import path, the
         partitioning and the dependency slots the flat key cannot name. A
         parent that does not resolve, or does not declare the key, falls back
@@ -86,7 +86,7 @@ class Catalog(BaseModel):
     def vocabulary(self, kind: str, key: str, *, parent_key: str | None = None) -> dict[str, Relation]:
         """The relation vocabulary governing a persisted component row.
 
-        The class definition is authoritative — a concrete class may extend
+        The class definition is authoritative; a concrete class may extend
         its anchor's vocabulary (``TriggerHook`` adds ``target``). The
         kind's anchor is the fallback when the key does not resolve to a
         matching definition (drifted keys), keeping validation fail-closed on
@@ -135,7 +135,7 @@ class Catalog(BaseModel):
 
         Args:
             paths: Fully qualified import paths to the enabled component
-                classes — a deployment's ``catalog`` setting, or a
+                classes: a deployment's ``catalog`` setting, or a
                 ``to_paths()`` list crossing a process boundary. Paths that
                 fail to import are skipped with a warning.
 
@@ -177,7 +177,7 @@ class Catalog(BaseModel):
         """Build a catalog enabling the given component classes.
 
         Args:
-            sources_or_assets: The enabled component classes — typically
+            sources_or_assets: The enabled component classes, typically
                 sources and assets, but any component kind is accepted.
 
         Returns:
@@ -277,7 +277,7 @@ class Catalog(BaseModel):
         """Build definitions from component classes.
 
         Every class self-describes through ``definition()``; nothing is walked,
-        inferred, or registered — the catalog contains exactly what was
+        inferred, or registered; the catalog contains exactly what was
         declared, and kinds must already be registered when it loads.
 
         Args:
@@ -289,7 +289,7 @@ class Catalog(BaseModel):
 
         Raises:
             ConfigError: If a declared component's kind has no registered
-                anchor — declare it under the ``interloper.kinds`` group.
+                anchor: declare it under the ``interloper.kinds`` group.
         """
         definitions: dict[str, ComponentDefinition] = {}
         for component in components:
@@ -297,7 +297,7 @@ class Catalog(BaseModel):
                 continue
             if component.kind not in KINDS:
                 raise ConfigError(
-                    f"Component '{component.key}' declares kind '{component.kind}', which is not registered — "
+                    f"Component '{component.key}' declares kind '{component.kind}', which is not registered, "
                     "declare its anchor under the 'interloper.kinds' entry-point group"
                 )
             definitions.setdefault(component.key, component.definition())

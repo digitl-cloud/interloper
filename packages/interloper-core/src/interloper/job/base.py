@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class JobState(BaseModel):
     """Machine-owned job state (see ``Component.state_model``).
 
-    Timestamps are canonical timezone-aware ISO-8601 strings — the scheduler
+    Timestamps are canonical timezone-aware ISO-8601 strings; the scheduler
     compares them lexicographically in SQL, so they are validated here but
     never rewritten.
     """
@@ -31,7 +31,7 @@ class Job(Component, Workload):
     """A materialization workload: the anchor of the ``job`` kind.
 
     A job declares *what* to materialize (``targets``); concrete job classes
-    add *when* — :class:`~interloper.job.cron.CronJob` carries a cron trigger.
+    add *when*: :class:`~interloper.job.cron.CronJob` carries a cron trigger.
     Trigger fields are inert declarative intent: the framework carries them,
     and an operator (the scheduler) acts on them. The workload itself
     compiles to the same :class:`~interloper.dag.base.DAG` that every other

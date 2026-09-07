@@ -26,7 +26,7 @@ class AssetRef(IgnoredDescriptor):
     """Class attribute that exposes a source-owned asset.
 
     At **class access** (``FacebookAds.campaigns``) returns the asset
-    *class* — this is what makes ``import_from_path`` work on composite
+    *class*: this is what makes ``import_from_path`` work on composite
     paths like ``"module:FacebookAds.campaigns"`` without ever having to
     instantiate the source.
 
@@ -170,8 +170,8 @@ class Source(Component, Workload):
 
         Supports two shapes for the ``assets`` init kwarg:
 
-        - ``list[Asset]`` — a pre-built list; passed through untouched.
-        - ``dict[str, dict]`` — an override map keyed by asset key, where
+        - ``list[Asset]``: a pre-built list; passed through untouched.
+        - ``dict[str, dict]``: an override map keyed by asset key, where
           each value is the ``init`` payload for that asset.  The source
           is the unit of reconstruction: for every entry in
           ``asset_types`` we build ``asset_cls(**overrides)``, defaulting
@@ -606,11 +606,11 @@ class Source(Component, Workload):
         :meth:`_collect_asset_types`, so Python never reaches this
         method.  It exists for two reasons:
 
-        1. **Static analysis** — it tells type checkers that
+        1. **Static analysis**: it tells type checkers that
            ``source.<asset_key>`` yields an :class:`~interloper.Asset`,
            since the dynamically-installed descriptors aren't visible to
            them.
-        2. **Safety net** — sources built imperatively (e.g. in tests)
+        2. **Safety net**: sources built imperatively (e.g. in tests)
            that populate ``asset_types`` without going through
            :meth:`_collect_asset_types` still get ergonomic attribute
            access.

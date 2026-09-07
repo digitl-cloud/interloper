@@ -27,7 +27,7 @@ class DisplayVideo360Normalizer(DataFrameNormalizer):
 
     Report headers are human-readable ("Active View: % Viewable Impressions",
     "CM360 Placement ID"). The generic pass drops ``%`` outright, which would
-    collide "% Viewable Impressions" with "Viewable Impressions" — so spell it
+    collide "% Viewable Impressions" with "Viewable Impressions", so spell it
     out as ``pct`` first, then defer to snake-casing with digit splitting
     (CM360 → cm_360). A no-op for the entity assets' camelCase JSON payloads.
     """
@@ -44,7 +44,7 @@ class DisplayVideo360Normalizer(DataFrameNormalizer):
         return super().column_name(name.replace("%", "pct"))
 
 
-# -- HELPERS — reports (Bid Manager API) -----------------------------------------
+# -- HELPERS: reports (Bid Manager API) ----------------------------------------
 def _report_body(title: str, date: dt.date, dimensions: list[str], metrics: list[str], filters: list[dict]) -> dict:
     return {
         "metadata": {
@@ -138,11 +138,11 @@ def _get_report(
         # One-shot queries; clean up best-effort so they don't pile up.
         try:
             dbm_client.queries().delete(queryId=query_id).execute()
-        except Exception as exc:  # noqa: BLE001 — cleanup only; the data is already downloaded
+        except Exception as exc:  # noqa: BLE001 - cleanup only, the data is already downloaded
             logger.warning(f"Failed to delete query {query_id}: {exc}")
 
 
-# -- HELPERS — entities (Display & Video API) ------------------------------------
+# -- HELPERS: entities (Display & Video API) -----------------------------------
 def _list_audiences(dv_client: Any, scope: dict[str, str]) -> list[_Record]:
     """Page through the first-party/partner audiences of a partner or advertiser."""
     audiences: list[_Record] = []
@@ -182,7 +182,7 @@ class DisplayVideo360(il.Source):
         default="",
         label="Advertiser ID",
         description=(
-            "DV360 advertiser ID — narrows report assets to one advertiser and "
+            "DV360 advertiser ID, narrows report assets to one advertiser and "
             "scopes audience assets by advertiser instead of partner"
         ),
     )

@@ -18,11 +18,11 @@ _Record = dict[str, Any]
 
 # Polling cadence for async reports and Data Kiosk queries (both queue server-side).
 _POLL_INTERVAL = 60.0  # seconds between status polls
-_REPORT_TIMEOUT = 7200.0  # 2h — vendor reports can queue for a long time
+_REPORT_TIMEOUT = 7200.0  # 2h, vendor reports can queue for a long time
 _QUERY_TIMEOUT = 3600.0  # 1h for Data Kiosk queries
 
 
-# -- HELPERS — nested-dict access ----------------------------------------------
+# -- HELPERS: nested-dict access -----------------------------------------------
 def _nested(value: Any, *keys: str) -> Any:
     """Walk *keys* through nested dicts, returning ``None`` on any missing hop."""
     for key in keys:
@@ -35,7 +35,7 @@ def _scalars(row: dict[str, Any]) -> dict[str, Any]:
     return {k: (v if isinstance(v, (str, int, float)) else None) for k, v in row.items()}
 
 
-# -- HELPERS — async reports ---------------------------------------------------
+# -- HELPERS: async reports ----------------------------------------------------
 async def _request_report(
     connection: AmazonSellingPartnerConnection,
     report_type: str,
@@ -152,7 +152,7 @@ async def _get_report(
     return document
 
 
-# -- HELPERS — Data Kiosk ------------------------------------------------------
+# -- HELPERS: Data Kiosk -------------------------------------------------------
 async def _wait_for_query(connection: AmazonSellingPartnerConnection, query_id: str) -> dict:
     """Poll a Data Kiosk query until it reaches a terminal state; return its payload.
 
@@ -259,7 +259,7 @@ class AmazonSellingPartner(il.Source):
         discriminator=True,
     )
 
-    # --- Vendor Analytics — reports API ---
+    # --- Vendor Analytics: reports API ----------------------------------------
 
     @il.asset(
         schema=schemas.VendorTrafficStats,
@@ -428,7 +428,7 @@ class AmazonSellingPartner(il.Source):
     #     )
     #     return document.get("forecastByAsin", []) if document else []
 
-    # --- Vendor Analytics — Data Kiosk (GraphQL) ---
+    # --- Vendor Analytics: Data Kiosk (GraphQL) -------------------------------
 
     @il.asset(
         schema=schemas.Products,
