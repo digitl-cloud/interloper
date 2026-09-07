@@ -64,32 +64,34 @@ declares no schema, which is what a `FileDestination` storing pickles expects.
 
 ## Parameters
 
-The engine inspects the function signature and fills each parameter from one of three places.
+Every parameter of `data()` declares a **relation**, read off its annotation. `self`, `context`,
+`source` and `**kwargs` are reserved and declare nothing.
 
 **`context`**: a parameter named `context` receives an [`ExecutionContext`](#execution-context).
 
-**Resources**: a parameter annotated with a `Resource` subclass (a config, a connection, or
-your own) receives a resolved instance. Declaring the slot explicitly with
-`resources={"connection": MyConnection}` on the decorator does the same and wins over the
-annotation. See [Resources](resources.md) for the resolution cascade.
+**Resources**: a parameter annotated with a component class (a config, a connection, or your
+own) receives whatever is bound to it, or the fallback that class can fill itself with. See
+[Resources](resources.md).
 
-**Dependencies**: any other parameter is an upstream asset. Inside a source, a parameter named
-after a sibling asset is wired automatically; `depends_on` declares the rest, with
-`il.Dependency` for optional or many-valued slots. See [Dependencies](dependencies.md).
+**Upstreams**: a parameter annotated `il.Upstream` receives an upstream asset and the data read
+from it, `list[il.Upstream]` a many-valued one. The parameter name is the bare asset key it
+expects, so inside a source it names a sibling; `relations=` declares anything else. See
+[Dependencies](dependencies.md).
 
 ```py
-@il.asset(depends_on={"raw": "warehouse.raw_orders"})
+@il.asset(relations={"raw": il.Relation("asset", "warehouse.raw_orders")})
 def orders(
     self,
     context: il.ExecutionContext,      # the run's context
     connection: ShopConnection,        # a resource, by annotation
-    users: list[dict],                 # a sibling asset, by name
-    raw: list[dict],                   # a cross-source asset, by depends_on
+    users: il.Upstream,                # a sibling asset, by name
+    raw: il.Upstream,                  # a cross-source asset, by relations=
 ) -> list[dict]:
     ...
 ```
 
-`self`, `source` and `**kwargs` are ignored by the inspection.
+A parameter annotated with anything else is a `TypeError` at class creation: nothing could ever
+fill it.
 
 ## Decorator options
 
@@ -102,12 +104,21 @@ def orders(
     schema=AdsStats,                                   # output schema
     partitioning=il.TimePartitionConfig(column="date"),
     destinations=[il.CSVDestination],                  # allowed destination classes
-    resources={"connection": AdsConnection},           # explicit resource slots
-    depends_on={"campaigns": "ads.campaigns", "budget": il.Dependency(key="finance.budget", optional=True)},  # upstream assets
+    relations={                                        # explicit relations, keyed by parameter
+        "connection": il.Relation(AdsConnection),
+        "campaigns": il.Relation("asset", "ads.campaigns"),
+        "budget": il.Relation("asset", "finance.budget", optional=True),
+    },
     materialization_strategy=il.MaterializationStrategy.RECONCILE,
     normalizer=il.Normalizer(flatten_max_level=1),
 )
-def ads_stats(self, context: il.ExecutionContext, connection: AdsConnection, campaigns, budget=None):
+def ads_stats(
+    self,
+    context: il.ExecutionContext,
+    connection: AdsConnection,
+    campaigns: il.Upstream,
+    budget: il.Upstream | None = None,
+) -> list[dict]:
     ...
 ```
 
@@ -126,9 +137,11 @@ An instance carries the runtime state a definition does not know about:
 | `materializable` | `False` turns the asset into a read-only dependency: it is skipped by runners but its stored output is still readable. |
 | `materialization_strategy` | How strictly the data is checked against the schema. |
 | `normalizer` | The normalizer applied before conform. |
-| `upstreams` | Parameter name to the upstream asset **ids**, always a list. Filled by the source and the DAG; can be set by hand. |
 | `id` | Instance identity, a UUID by default. |
-| `resources` | Slot name to resource instance. |
+
+Its relations carry the rest: `connection`, `config`, `destinations`, every upstream. They are
+constructor keywords named after the relation, and `bind`, `unbind` and assignment change them
+afterwards. See [Dependencies](dependencies.md#how-wiring-works).
 
 Set them at construction, or derive a reconfigured copy by calling an existing instance:
 
@@ -140,8 +153,12 @@ strict = asset(materialization_strategy=il.MaterializationStrategy.STRICT)
 bare = asset(normalizer=None)           # None explicitly clears the normalizer
 ```
 
-Every keyword of the call means "leave unchanged" when omitted. `resources` merges over the
-existing map; `destinations` replaces the list.
+Every keyword of the call means "leave unchanged" when omitted, except a relation name: passing
+one at all changes it, since `None` there clears the binding.
+
+```py
+rewired = asset(connection=OtherConnection(...), campaigns=[fb.campaigns, tt.campaigns])
+```
 
 Unknown keyword arguments raise `TypeError` rather than being silently dropped.
 
@@ -154,8 +171,8 @@ Unknown keyword arguments raise `TypeError` rather than being silently dropped.
 | `await asset.run_async(...)`, `await asset.materialize_async(...)` | The same, for async callers. |
 
 `partition` is required for partitioned assets and ignored (with a warning) for unpartitioned
-ones. `dag` is required when the asset has mandatory dependencies, because upstream data is read
-through the DAG. `metadata` is a free-form dict (run id, backfill id) carried onto every event
+ones. `dag` is required when the asset has a bound upstream, because upstream data is read through
+the DAG's own node. `metadata` is a free-form dict (run id, backfill id) carried onto every event
 the run emits.
 
 An asset that produces no data skips its destination writes and emits a warning log event
@@ -164,7 +181,8 @@ rather than writing an empty table.
 ## What happens on materialize
 
 1. The partition scope is validated against the asset's partitioning.
-2. Resources are resolved and upstream assets are read from their destinations.
+2. Every relation is resolved: a resource to what is bound or its fallback, an upstream to an
+   `il.Upstream` read from its destination.
 3. `data()` runs, wrapped in `asset_data_*` events and a tracing span.
 4. The [normalizer](normalization.md) reshapes the result, when one is configured.
 5. The result is [conformed](schema.md) to the schema according to the materialization strategy.
@@ -197,7 +215,7 @@ daily. See [Partitioning](partitioning.md).
 |----------|-------|
 | `asset.key` | The class-level key, unique within its source. |
 | `asset.qualified_key` | `source_key.asset_key`, unique across sources; the bare key for standalone assets. |
-| `asset.identity` | The `(source_key, asset_key)` pair. |
+| `asset.identity` | The `ComponentIdentity` pair `(source_key, asset_key)`. |
 | `asset.table` | The physical table or folder name, derived by the owning source and coerced to a valid identifier. |
 | `asset.source` | The owning `Source` instance, or `None`. |
 | `Asset.classpath()` | The import path. Source-owned assets use the composite form `module:Source.Asset`. |

@@ -47,14 +47,14 @@ from the definition:
 | Step | Derived from |
 |------|--------------|
 | Type | The kind's definitions, when several classes exist and none is pinned. |
-| Assets (sources only) | `SourceDefinition.assets`: one row per asset with its schema and partitioning; the selection becomes the source's children. Cross-source `requires` are resolved against existing sources. |
-| One step per relation type | `relations` entries the page asks for, such as a job's `target` or a hook's `watch`, restricted to the `kinds` the relation allows. |
-| One step per resource slot | `relations.resource.slots`: each slot names a resource key; the step lists existing instances of that key and offers to create one inline. |
-| Destination (sources only) | `relations.destination.keys`: the destination classes the source allows. |
+| Assets (sources only) | `SourceDefinition.assets`: one row per asset with its schema and partitioning; the selection becomes the source's children. An asset relation reaching another source is resolved against existing sources. |
+| One step per orchestration relation | `relations` entries the page asks for, such as a job's `targets` or a hook's `watches`, restricted to the `kind` the relation allows. |
+| One step per resource relation | Each relation whose `kind` is `connection`, `config` or `resource`: the step lists existing instances of its `key` and offers to create one inline. |
+| Destination (sources only) | The `key` list of the `destinations` relation: the destination classes the source allows. |
 | Details | Name plus the form generated from `config_schema`. |
 
-Relation semantics are enforced the same way when the platform stores an edge: `kinds`, slot
-requirements and the `on_delete` / `on_unbind` policies described in the
+Relation semantics are enforced the same way when the platform stores an edge: `kind`, `key`,
+`many`, `optional` and the `on_delete` policy described in the
 [component model](../extending/components.md#relations).
 
 ## Forms
@@ -86,11 +86,11 @@ is only submittable when every required field has a value.
 ### Fetched options
 
 A `FetchField(provider="connection.accounts")` renders as a dropdown that fills itself once the
-`connection` slot is chosen. The form posts the component key, the field name and the slot's
-credentials to `POST /api/components/resolve`; the API reads the provider reference from its own
-copy of the schema (never from the client), instantiates the resource, calls the method, and
-returns the items. Only methods marked `@fetch_field_provider` may be called this way. Until the
-slot is filled, the field degrades to a text input.
+`connection` relation is filled. The form posts the component key, the field name and that
+component's credentials to `POST /api/components/resolve`; the API reads the provider reference
+from its own copy of the schema (never from the client), instantiates the resource, calls the
+method, and returns the items. Only methods marked `@fetch_field_provider` may be called this
+way. Until the relation is filled, the field degrades to a text input.
 
 ### OAuth sign-in
 
@@ -145,9 +145,11 @@ class ShopConnection(il.Connection):
     async def check(self) -> bool: ...
 
 
-@il.source(name="Shop", icon="carbon:shopping-cart", tags=["Commerce"], resources={"connection": ShopConnection})
+@il.source(name="Shop", icon="carbon:shopping-cart", tags=["Commerce"])
 class Shop(il.Source):
     """Orders and customers from the shop API."""
+
+    connection: ShopConnection
 
     store_id: str = il.FetchField(provider="connection.stores", label_key="name", value_key="id", discriminator=True)
     ...

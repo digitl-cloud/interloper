@@ -31,16 +31,18 @@ Decorator options: `key`, `name`, `icon`, `tags`, `oauth`.
 ## Using a connection
 
 ```py
-@il.source(resources={"connection": ShopConnection})
+@il.source
 class Shop(il.Source):
+    connection: ShopConnection
+
     @il.asset
     def orders(self, connection: ShopConnection) -> list[dict]:
         return connection.client.get("/orders").json()
 ```
 
-The `resources=` declaration on the source is optional: the asset's annotation is enough to
-create the slot. Declaring it on the source documents the dependency in the source's
-definition and lets a source-level instance trickle to every asset.
+The annotation on the source is optional: the asset's own parameter annotation already declares
+the relation. Declaring it on the source too documents it in the source's definition and lets
+one source-level instance trickle into every asset.
 
 ### REST clients and pagination
 

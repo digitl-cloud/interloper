@@ -62,7 +62,7 @@ https://docs.interloper.dev/guide/oauth/
    `label`, `icon`; non-standard token fields go on `il.OAuthConnection` with `fields={...}`.
 
 3. **Pickers.** A provider method on the connection, a `FetchField` on the source that names
-   it through the slot:
+   it through the relation:
 
    ```py
    class AcmeConnection(...):
@@ -70,14 +70,16 @@ https://docs.interloper.dev/guide/oauth/
        async def accounts(self) -> list[dict]:
            return self.client.get("/accounts").json()["accounts"]     # [{"id": ..., "name": ...}]
 
-   @il.source(name="Acme Ads", resources={"connection": AcmeConnection})
+   @il.source(name="Acme Ads")
    class AcmeAds(il.Source):
+       connection: AcmeConnection
+
        account_id: str = il.FetchField(provider="connection.accounts", label_key="name", value_key="id", discriminator=True)
    ```
 
    The wiring is validated when `definition()` runs (the catalog, the UI, your verify step): a
-   wrong slot or method name is a `TypeError` there, not at import, and the slot must appear in
-   `resources={...}`. The assets themselves (`il.Schema`, `il.ExecutionContext`,
+   wrong relation or method name is a `TypeError` there, not at import, and the name before the
+   dot must be a relation the class declares. The assets themselves (`il.Schema`, `il.ExecutionContext`,
    `context.partition_date`) are covered by the interloper-source skill.
 
 4. **Verify the definition** before touching a UI:
@@ -110,9 +112,9 @@ https://docs.interloper.dev/guide/oauth/
 
 - Writing `renew()` or redeclaring `refresh_token` on an OAuth connection: both are already there.
 - Reading `definition().schema`: use `config_schema`, `provider`, `checkable`, `renewable`.
-- `FetchField(provider="conn.accounts")` with the slot declared as `connection`; the error
-  message says `not declared in resources={}` even when other slots are declared, and it only
-  surfaces once something calls `definition()`.
+- `FetchField(provider="conn.accounts")` with the relation declared as `connection`; the error
+  message says `references relation 'conn', which is not declared`, and it only surfaces once
+  something calls `definition()`.
 - Passing `client_id=` by hand in production code; set the `INTERLOPER_<PROVIDER>_*` variables.
 - Assuming `check()` must be async, or returning `None`: return a bool, raise
   `ConnectionCheckError` for a message.

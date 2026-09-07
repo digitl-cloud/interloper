@@ -8,7 +8,7 @@ description: Use when adding or changing an Interloper source, asset, connection
 ## Overview
 
 A source is a class: configuration fields on the class, assets as `@il.asset` methods reading them
-through `self`, resources injected by type annotation. Everything the platform later shows or
+through `self`, and relations (a connection, an upstream asset) declared by annotation. Everything the platform later shows or
 validates is derived from that class, so get the declarations right and the rest follows.
 Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interloper.dev/guide/assets/
 
@@ -64,12 +64,14 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
        revenue: float
    ```
 
-3. **Source class.** Declare the connection slot on the decorator so it can be passed as a
-   keyword and trickles to every asset:
+3. **Source class.** Declare the connection as an annotation on the class body so it can be
+   passed as a keyword and trickles to every asset:
 
    ```py
-   @il.source(name="Shop", tags=["Commerce"], resources={"connection": ShopConnection})
+   @il.source(name="Shop", tags=["Commerce"])
    class Shop(il.Source):
+       connection: ShopConnection
+
        account: str = il.InputField(description="Shop account id", discriminator=True)
 
        @il.asset(schema=Order, partitioning=il.TimePartitionConfig(column="date"))
@@ -81,12 +83,15 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
            return rows
 
        @il.asset(schema=OrderStats, partitioning=il.TimePartitionConfig(column="date"))
-       def order_stats(self, context: il.ExecutionContext, orders: list[dict]) -> list[dict]:
-           return [{"date": context.partition_date, "orders": len(orders), "revenue": sum(o["total"] for o in orders)}]
+       def order_stats(self, context: il.ExecutionContext, orders: il.Upstream) -> list[dict]:
+           rows = orders.data or []
+           return [{"date": context.partition_date, "orders": len(rows), "revenue": sum(r["total"] for r in rows)}]
    ```
 
-   A parameter named after a sibling asset is a dependency. A partitioned asset may depend on
-   an unpartitioned one; the reverse is rejected when the DAG is built.
+   An `il.Upstream` parameter named after a sibling asset is bound when the source builds its
+   assets; `orders.data` is what that asset wrote, read back from its destination, and is `None`
+   when nothing is materialized there. A partitioned asset may depend on an unpartitioned one;
+   the reverse is rejected when the DAG is built.
 
 4. **Verify with one partition before anything else:**
 
@@ -119,19 +124,23 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
 | Name instances by a field | `discriminator=True` on that field (also suffixes table names) |
 | Hourly, monthly, yearly partitions | `il.TimePartitionConfig(column=..., granularity=il.TimeGranularity.MONTH)` |
 | Whole ranges in one call | `il.TimePartitionConfig(column=..., allow_window=True)`, then read `context.window` |
-| Cross-source dependency | `depends_on={"param": "other_source.asset"}` declares the contract; the DAG wires it when one match is present, otherwise wire by id |
-| Optional dependency | parameter default `None`, or `depends_on={"param": il.Dependency(key="key", optional=True)}` |
-| Fan in over every matching asset | `depends_on={"param": il.Dependency(key="*.asset_key", many=True)}`, `data()` receives `list[il.Upstream]` |
+| Cross-source dependency | `relations={"param": il.Relation("asset", "other_source.asset")}`; the DAG binds it when one match is present, otherwise bind it by hand |
+| Optional dependency | parameter default `None`, or `relations={"param": il.Relation("asset", "key", optional=True)}` |
+| Fan in over every matching asset | `relations={"param": il.Relation("asset", "*.asset_key", many=True)}`, `data()` receives `list[il.Upstream]` |
+| A config or connection per asset | annotate the parameter with the class, or `relations={"param": il.Relation(MyConfig)}` |
 | Reshape vendor payloads | `normalizer=il.Normalizer(flatten_max_level=1, snake_case_digits=True)` |
 | OAuth service | subclass `il.RefreshTokenOAuthConnection` with `@il.connection(oauth=il.OAuthConfig("google", scope=...))` |
 
 ## Common mistakes
 
 - Guessing constructor keywords (`Shop(io=...)`, `IOContext(dataset=...)`). Unknown keywords raise
-  `TypeError`; the instance keywords are `destinations`, `resources`, `dataset`, `select`, the
-  class's own fields, and any declared resource slot name.
-- Passing `connection=...` without `resources={"connection": ...}` on the decorator. Either
-  declare the slot there or pass `resources={"connection": conn}`.
+  `TypeError`; the instance keywords are `dataset`, `select`, the class's own fields, and every
+  declared relation name (`connection`, `destinations`, an upstream).
+- Passing `connection=...` with no `connection` relation declared: annotate it on the class body
+  (`connection: ShopConnection`) or write `relations={"connection": il.Relation(ShopConnection)}`
+  on the decorator.
+- Annotating an upstream parameter with the data type (`orders: list[dict]`). It must be
+  `il.Upstream`, or nothing can fill it and the class fails to build.
 - An upstream asset without a schema: its rows come back from CSV as strings and the dependent
   asset does arithmetic on text.
 - The functional `@il.source def ...` form for anything configurable; assets cannot reach the

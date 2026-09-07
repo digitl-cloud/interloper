@@ -12,6 +12,8 @@ import interloper as il
 class FacebookAds(il.Source):
     """Campaigns, ads and their daily statistics from the Marketing API."""
 
+    connection: FacebookAdsConnection
+
     account_id: str = il.InputField(description="Ad account id", discriminator=True)
 
     @il.asset(schema=Campaigns, tags=["Entity"])
@@ -23,8 +25,11 @@ class FacebookAds(il.Source):
         return connection.api.insights(self.account_id, context.partition_date)
 ```
 
-Three kinds of things live in the class body:
+Four kinds of things live in the class body:
 
+- **Relations**: an annotation naming a component class (`connection: FacebookAdsConnection`)
+  declares a link to the component that fills it, not a pydantic field. The source holds one
+  instance and trickles it into every asset declaring the same name.
 - **Configuration fields**: pydantic fields, optionally declared with the
   [field helpers](fields.md) so a UI knows how to render them. They load from the environment
   like any pydantic-settings model and can be set at construction.
@@ -43,7 +48,7 @@ keeps type checkers informed.
     name="Facebook Ads",
     icon="logos:facebook",
     tags=["Advertising"],
-    resources={"connection": FacebookAdsConnection},   # explicit resource slots
+    relations={"connection": il.Relation(FacebookAdsConnection)},   # explicit, wins over annotations
     destinations=[BigQueryDestination],                 # allowed destination classes
     dataset="raw_facebook",                             # default dataset for the assets
     default_destination_key="warehouse",
@@ -78,11 +83,12 @@ class form is preferred for anything configurable.
 ```py
 source = FacebookAds(account_id="act_123")
 source = FacebookAds(account_id="act_123", destinations=BigQueryDestination(...))
-source = FacebookAds(account_id="act_123", resources={"connection": FacebookAdsConnection(...)})
+source = FacebookAds(account_id="act_123", connection=FacebookAdsConnection(...))
 ```
 
-Resource slots can also be passed directly as keyword arguments named after the slot:
-`FacebookAds(account_id="act_123", connection=FacebookAdsConnection(...))`.
+Every declared relation is a constructor keyword under its own name; a list binds several
+targets, `None` binds nothing. Attribute access reads what is bound (`source.connection`), and
+`bind`, `unbind` and assignment change it afterwards.
 
 Assets are attributes:
 
@@ -101,9 +107,11 @@ staging = source(destinations=il.CSVDestination(base_path="./staging"))
 read_only = source(materializable=False)
 ```
 
-Accepted keywords: `resources` (merged), `destinations` (replaced), `dataset`,
-`default_destination_key`, `materializable` (applied to every asset), `normalizer`,
-`materialization_strategy`.
+Accepted keywords: `dataset`, `default_destination_key`, `materializable` (applied to every
+asset), `normalizer`, `materialization_strategy`, and any relation name. A fixed keyword left
+out means "unchanged"; a relation name passed at all changes it, since `None` there clears the
+binding. Rebinding a relation also repoints the assets that had received it by trickle, leaving
+an asset that bound the relation itself alone.
 
 ### Selecting assets
 
@@ -127,10 +135,16 @@ At construction the source fills in whatever its assets did not set themselves:
 | `default_destination_key` | the asset's is empty |
 | `normalizer` | the asset has none |
 | `materialization_strategy` | the asset is still on `AUTO` |
-| `resources` | an asset slot is empty; matched by slot name, then by type |
 
-Resources also trickle into the destinations' empty slots, so a `GoogleCloudConnection` set on
-the source reaches a `BigQueryDestination` that declares a `connection` slot.
+Relations trickle by name: for every relation the asset declares under a name the source has
+bound, and leaves unbound itself, the source binds whichever of its own targets that relation
+accepts. Destinations receive the same pass, so a `GoogleCloudConnection` set on the source
+reaches a `BigQueryDestination` that declares a `connection` relation. It re-runs on every
+`bind()`, so a destination bound after the assets exist still propagates.
+
+An asset relation that names a sibling (a bare key) is bound at construction too, from the
+source's own asset instances. Anything reaching outside the source is left to the
+[DAG](dependencies.md#how-wiring-works).
 
 ## Dataset and table naming
 
@@ -154,7 +168,7 @@ raises `TypeError`.
 ## Definitions
 
 `FacebookAds.definition()` returns a `SourceDefinition`: key, name, description, tags, the JSON
-Schema of its configuration fields, its relation vocabulary, and one `AssetDefinition` per
+Schema of its configuration fields, its declared relations, and one `AssetDefinition` per
 asset. `FacebookAds.asset_def("campaigns")` returns a single asset's definition with its
 qualified key. This is what the [catalog](catalog.md) is built from.
 

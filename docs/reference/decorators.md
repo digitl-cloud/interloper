@@ -14,9 +14,8 @@ instance field.
 | `tags` | `list[str]` | class | Catalog tags. |
 | `schema` | `type[Schema]` | class | Output schema. |
 | `partitioning` | `PartitionConfig` | class | Partition configuration. |
-| `destinations` | `list[type[Destination]]` | class | Allowed destination classes. |
-| `resources` | `dict[str, type[Resource]]` | class | Resource slots; wins over annotations. |
-| `depends_on` | `dict[str, str \| Dependency]` | class | Upstream assets, parameter to key; `il.Dependency` for optional or many-valued slots. |
+| `destinations` | `list[type[Destination]]` | class | Allowed destination classes; narrows the key list of the `destinations` relation. |
+| `relations` | `dict[str, Relation]` | class | Relations keyed by `data()` parameter name; wins over annotations. |
 | `materialization_strategy` | `MaterializationStrategy` | field | Schema enforcement. |
 | `normalizer` | `Normalizer` | field | Normalizer applied before conform. |
 
@@ -28,15 +27,15 @@ instance field.
 | `name` | `str` | class | Display name. |
 | `icon` | `str` | class | Icon identifier. |
 | `tags` | `list[str]` | class | Catalog tags. |
-| `resources` | `dict[str, type[Resource]]` | class | Resource slots. |
-| `destinations` | `list[type[Destination]]` | class | Allowed destination classes. |
+| `relations` | `dict[str, Relation]` | class | Relations by name; an alternative to class annotations. |
+| `destinations` | `list[type[Destination]]` | class | Allowed destination classes; narrows the key list of the `destinations` relation. |
 | `dataset` | `str` | field | Default dataset. Defaults to the source key when empty. |
 | `default_destination_key` | `str` | field | Preferred destination for downstream readers. |
 | `normalizer` | `Normalizer` | field | Default normalizer for the assets. |
 | `materialization_strategy` | `MaterializationStrategy` | field | Default strategy for assets still on `AUTO`. |
 
-Instance-only settings (`assets`, `select`, `destinations` instances, `resources` instances)
-are constructor arguments, not decorator options.
+Instance-only settings (`assets`, `select`, and the components bound to any relation) are
+constructor arguments, not decorator options.
 
 ## `@il.destination`
 
@@ -46,7 +45,7 @@ are constructor arguments, not decorator options.
 | `name` | `str` | class | Display name. |
 | `icon` | `str` | class | Icon identifier. |
 | `tags` | `list[str]` | class | Catalog tags. |
-| `resources` | `dict[str, type[Resource]]` | class | Resource slots. |
+| `relations` | `dict[str, Relation]` | class | Relations by name; an alternative to class annotations. |
 | `read_representation` | `str` | class | Representation reads materialize into (`"rows"`, `"dataframe"`). `DatabaseDestination` only. |
 | `materialization_strategy` | `MaterializationStrategy` | field | Write-time schema strategy. `DatabaseDestination` only. |
 
@@ -83,14 +82,12 @@ Calling an instance returns a copy; omitted keywords mean "unchanged".
 | `asset(...)` | `source(...)` |
 |--------------|---------------|
 | `id` | |
-| `resources` (merged) | `resources` (merged) |
-| `destinations` (replaced) | `destinations` (replaced) |
 | `dataset` | `dataset` (re-points assets that inherited the old value) |
 | `default_destination_key` | `default_destination_key` |
 | `materializable` | `materializable` (applied to every asset) |
 | `materialization_strategy` | `materialization_strategy` |
 | `normalizer` (`None` clears) | `normalizer` |
-| `upstreams` (replaced) | |
+| any relation name (replaced; `None` clears) | any relation name (replaced; `None` clears, and repoints what was trickled) |
 
 ## `OAuthConfig`
 

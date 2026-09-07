@@ -6,7 +6,7 @@
 |------|-------|-------|
 | `interloper.runner.run` | `Runner.run()` | Root of a run. Attributes: run metadata, `interloper.runner.type`, `interloper.partition`. Status error when the result is failed. |
 | `interloper.operation.execute` | `Operation.execute()` | One per operation. |
-| `interloper.asset.resolve_resource` | resource lookup | One per resource slot; adds `interloper.resource.name`. |
+| `interloper.asset.resolve_resource` | resource lookup | One per resource relation; adds `interloper.resource.name`. |
 | `interloper.destination.read` | `Destination.read()` | One per upstream dependency; adds `interloper.destination.key`, `interloper.upstream.key`. |
 | `interloper.asset.data` | `data()` | |
 | `interloper.normalizer.normalize` | `Normalizer.normalize()` | Only when a normalizer is configured. |

@@ -48,9 +48,10 @@ Partitioned assets always need a partition. `materialize()` on an asset with dep
    ```
 
    Connections resolve from the environment when their fields are env-loadable
-   (`SHOP_API_KEY` for a connection with `env_prefix="shop_"`); a `resources:` block is only
-   needed to pin explicit values. Write `${VAR}` placeholders in block style, never inside
-   `{ ... }` flow mappings, where the braces break the YAML.
+   (`SHOP_API_KEY` for a connection with `env_prefix="shop_"`); to pin explicit values instead,
+   nest the connection under its own relation name in the owning component's `init` (a job or a
+   source has no separate block for it). Write `${VAR}` placeholders in block style, never
+   inside `{ ... }` flow mappings, where the braces break the YAML.
 
 3. **Dry-run, then run:**
 

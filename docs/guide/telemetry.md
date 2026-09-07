@@ -59,8 +59,8 @@ Spans are named `interloper.<class>.<method>` after the call they wrap:
 ```
 interloper.runner.run                          Runner.run
 └── interloper.operation.execute               Operation.execute
-    ├── interloper.asset.resolve_resource      per resource slot
-    ├── interloper.destination.read            per upstream dependency
+    ├── interloper.asset.resolve_resource      per resource relation
+    ├── interloper.destination.read            per bound upstream
     ├── interloper.asset.data                  data()
     ├── interloper.normalizer.normalize        only when a normalizer is configured
     ├── interloper.asset.conform

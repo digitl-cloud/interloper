@@ -32,9 +32,8 @@ On top of `Serializable`:
 | `kind` | class | The component category (`source`, `asset`, `connection`, …). Set automatically for direct children of `Component`; inherited below that. |
 | `id` | instance | A UUID by default; the identity persisted relations point at. |
 | `name`, `icon` | class | Display metadata; `name` defaults to a label built from the class name. |
-| `resource_types` | class | Slot name to resource class. Filled from typed annotations and `ResourceRef` descriptors. |
-| `resources` | instance | Slot name to resource instance. |
-| `relation_types` | class | The relation vocabulary (below). |
+| `relations` | class | Relation name to `Relation`, the links this class declares (below). |
+| `parent` | instance | The component that owns this one, `None` when it stands alone. A source owns its assets. |
 | `sensitive` | class | Whether stored configuration must be encrypted. `True` for resources. |
 | `state_model` | class | A pydantic model of machine-owned state (job timestamps, renewal times). Its JSON Schema becomes `state_schema` in the definition. |
 | `internal_fields` | class | Fields hidden from the config schema. |
@@ -55,10 +54,7 @@ declares `source`, `asset`, `destination`, `resource`, `connection`, `config`, `
 class Report(il.Component):
     """A rendered document built from assets."""
 
-    relation_types = {
-        "input": il.RelationDefinition(kinds=["asset"], field="inputs"),
-    }
-    inputs: list[il.Asset] = []
+    inputs: list[il.Asset] = il.Relation("asset", many=True, optional=True)
 ```
 
 ```toml
@@ -70,29 +66,63 @@ A catalog containing a component of an unregistered kind raises `ConfigError`.
 
 ### Relations
 
-A relation type describes how instances of a kind point at other components. It is declared in
-`relation_types` and is what the platform validates when it stores an edge, and what UIs render
-pickers from:
+A relation is one declared link from a component to the components that may fill it. One class,
+`il.Relation`, declares every link on every kind: a connection an asset injects, the
+destinations a source writes to, a job's targets, an upstream asset.
 
-| `RelationDefinition` field | Meaning |
-|---------------------------|---------|
-| `kinds` | Component kinds the relation may point at. |
-| `field` | The instance field carrying the relation: a `list` for unslotted types, a `dict[slot, ...]` for slotted ones. Must exist on the class. |
-| `slotted` | Whether each relation fills a named slot (resource slots, upstream parameters). |
-| `inline` | Whether the field holds component instances (default) or bare ids resolved at run time (asset upstreams). |
-| `keys` | Allowed destination keys, as picker metadata. |
-| `slots` | The slots a concrete class declares (`Dependency(key, optional, many)`); `many` marks a slot that binds several components. |
-| `on_delete` | What deleting the relation's target does to the referrer: `block` (default, for consumption relations) or `detach` (for orchestration pointers such as a job's targets or a hook's watches). |
-| `on_unbind` | What explicitly unbinding a bound required slot does: `detach` (default) or `block` (asset upstreams). |
+| Field | Meaning |
+|-------|---------|
+| `kind` | The component kind, or kinds, the relation may point at. |
+| `key` | The keys it narrows to: an exact key, `source.asset`, `*.asset`, a list, or `""` for any key of those kinds. |
+| `many` | Whether it binds several components at once. |
+| `optional` | Whether it may stay unbound. Says nothing about data. |
+| `default` | A zero-argument factory producing the value an unbound relation resolves to. |
+| `on_delete` | What deleting the target does to the referrer: `block` (default, for consumption relations) or `detach` (for orchestration pointers such as a job's targets or a hook's watches). |
+| `name` | The relation's name, stamped by `collect()`. |
+| `target` | The class the relation was declared from, when declared from one. It is what a fallback is built from. |
 
-Declarations are **extend-only**: a subclass's `relation_types` merges over its parent's, so
-`TriggerHook` adds `target` without losing `watch` and `resource`. `relation_definitions()`
-returns the vocabulary enriched with the class's own slots: resource slots from
-`resource_types`, upstream slots from `depends_on`, allowed destination keys from
-`destination_types`.
+`il.Relation(PostgresConnection)` is shorthand for
+`il.Relation(kind="connection", key="postgres_connection")` with the class kept as `target`.
+`accepts(kind, identity, owner=...)` is the one place a candidate is judged against a
+declaration, and `ComponentIdentity.satisfies` the one place a declared key is compared to a
+concrete component. An asset's key is source-local, so a bare key is scoped to the owner's
+source; every other kind is keyed globally by its catalog key.
 
-A relation whose `field` does not exist on the class raises `ValueError` when the definition is
-built.
+**Three declaration forms**, in increasing precedence, all merged by `collect()` at class
+creation:
+
+```py
+class Widget(il.Component):
+    connection: PostgresConnection                                   # an annotation naming a class
+    config: WidgetConfig = il.Relation(WidgetConfig, optional=True)  # a typed Relation attribute
+    relations = {"cache": il.Relation(Cache)}                        # what the decorators emit
+```
+
+The map merges over every base's, so a subclass entry replaces the inherited one of the same
+name and nothing an ancestor declared is lost. Each entry is copied, stamped with its name and
+installed under it: a `Relation` is its own descriptor, so `Widget.connection` is the
+declaration and `widget.connection` what is bound to it. An annotated relation is dropped from
+the class's annotations before pydantic collects its fields, so a relation is never also a
+field.
+
+**Operations**, all of them on `Component`:
+
+| Method | What it does |
+|--------|--------------|
+| `bind(name, *targets)` | Writes bindings, together with `unbind` and attribute assignment (which routes through the same checks, see below). Checks `accepts` for each target; `many` accumulates, single-valued refuses to swap silently. |
+| `unbind(name, *targets)` | Detaches. Refused when it would empty a non-optional relation. |
+| `bound(name)` | What is explicitly bound: a list for `many`, the single component or `None`. |
+| `bound_ids()` | Relation name to bound ids, for persistence. |
+| `resolve(name)` | What a reader gets: `bound(name)`, else the relation's fallback for a single-valued relation, an empty list for a `many` one. Fallbacks are never bound. |
+| `trickle(child)` | Fills a child's unbound relations from this component's own bindings, by name, keeping only what the child's relation accepts. Never overrides an explicit binding. |
+| `validate_relations(nodes=None)` | Unbound non-optional without a fallback, several targets on a single-valued relation, a target the relation does not accept, and (with `nodes`) a non-optional asset target absent from the run. |
+
+A relation name is also a constructor keyword and an assignable attribute; assignment goes
+through `Relation.__set__`, which checks the replacement before touching the existing binding,
+so a rejected assignment leaves the previous one exactly as it was.
+
+`definition().relations` exports each relation for the catalog and the UI: `kind`, `key`,
+`many`, `optional`, `on_delete`.
 
 ### Discriminator
 

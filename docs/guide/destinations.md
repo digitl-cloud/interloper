@@ -62,8 +62,8 @@ Pickled Python objects, one file per partition:
 {base_path}/{dataset}/{table}/{column}={partition_id}/data.pkl
 ```
 
-Same layout as `CSVDestination`, but it stores whatever the asset returned, tabular or not —
-so use it for arbitrary objects, and `CSVDestination` when you want to read the files yourself.
+Same layout as `CSVDestination`, but it stores whatever the asset returned, tabular or not, so
+use it for arbitrary objects, and `CSVDestination` when you want to read the files yourself.
 Window writes are split per partition where the data's representation allows it; a non-tabular
 object, which nothing can slice, is stored whole under each partition of the window.
 
@@ -122,9 +122,10 @@ This form writes one file per asset and ignores `context.partition_or_window`: a
 rewrite replaces every partition and a window lands in one file. It suits unpartitioned assets;
 partitioned ones belong on `il.PartitionedDestination` below.
 
-Decorator options: `resources`, `key`, `name`, `icon`, `tags`, `read_representation`,
-`materialization_strategy`. Resource slots are declared as typed attributes or through
-`resources=`; see [Resources](resources.md#resources-on-sources-and-destinations).
+Decorator options: `relations`, `key`, `name`, `icon`, `tags`, `read_representation`,
+`materialization_strategy`. A destination's own connection is a relation, declared as an
+annotation or through `relations=`; see
+[Resources](resources.md#relations-on-sources-and-destinations).
 
 Override `partition_row_counts(context)` to report rows per partition; `asset.partition_row_counts()`
 and coverage tooling call it.

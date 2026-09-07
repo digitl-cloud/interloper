@@ -21,10 +21,8 @@ except InterloperError:
 | `CatalogKeyError` | `ConfigError` | A catalog key does not resolve. |
 | `DAGError` | `ValueError` | Empty DAG, non-workload item, duplicate id, unpartitioned asset downstream of a partitioned one, non-runnable component in `DAG.from_spec_file`, two assets match a single-valued declared key. |
 | `CircularDependencyError` | `DAGError` | A cycle in the graph. |
-| `DependencyNotFoundError` | `DAGError` | A mandatory dependency points at an id outside the DAG, or a non-optional upstream slot with nothing wired. |
 | `AssetNotFoundError` | `DAGError`, `KeyError` | An operation id is not in the DAG. |
-| `AssetError` | `ValueError` | Dependencies without a DAG, a failed upstream read, a resource of the wrong type, a strategy requiring a schema without one, a schema declared on non-tabular data, no destinations for row counts; raised at DAG build when a non-default `data()` parameter is neither the context, a resource nor a declared upstream. |
-| `DependencyContractError` | `AssetError` | A wired upstream does not satisfy its declared key, or a single-valued slot holds several upstreams. |
+| `AssetError` | `ValueError` | A bound upstream without a DAG, a failed upstream read, a strategy requiring a schema without one, a schema declared on non-tabular data, no destinations for row counts. |
 | `SourceError` | `ValueError` | `select` names an unknown asset. |
 | `ConnectionCheckError` | | A connection check fails with a curated message. |
 | `PartitionError` | `ValueError` | A partitioned asset run without a scope, a window against `allow_window=False`, a granularity mismatch, a scope before `start`, row counts on an unpartitioned asset. |
@@ -50,9 +48,11 @@ or a result.
 
 ## Errors that are plain built-ins
 
-Some validation raises built-ins directly: unknown constructor keyword arguments, a resource of
-the wrong type passed by slot name, a `FetchField` provider reference that does not resolve, an
-`oauth=` decorator option on a non-OAuth connection, and multiple discriminator fields raise
-`TypeError`; a required `ResourceRef` that is unset, an invalid key or identifier, a window
+Some validation raises built-ins directly: unknown constructor keyword arguments, a `FetchField`
+provider reference that does not resolve, an `oauth=` decorator option on a non-OAuth connection,
+and multiple discriminator fields raise `TypeError`; an invalid key or identifier, a window
 ending before it starts, an unsupported granularity, and `bounded_gather(limit=0)` raise
-`ValueError`; `Registry[...]` on a missing name raises `KeyError`.
+`ValueError`; `Registry[...]` on a missing name raises `KeyError`. Binding a component a relation
+does not accept raises `ConfigError` instead, e.g. `Shop(connection=B())` gives `ConfigError:
+Shop.connection does not accept connection 'b' (declared: kind ['connection'], key
+['shop_connection'])`.

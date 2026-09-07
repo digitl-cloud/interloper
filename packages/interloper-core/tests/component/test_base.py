@@ -792,3 +792,18 @@ class TestStrictInitKwargs:
         with pytest.raises(TypeError, match="unexpected keyword argument.*nope"):
             FakeComponent(nope=1)  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
 
+
+class TestPublicApi:
+    """The relation model's names are the ones the package exports."""
+
+    def test_public_relation_names(self) -> None:
+        from interloper.asset.upstream import Upstream
+        from interloper.component.relation import ComponentIdentity, Relation
+
+        assert il.Relation is Relation
+        assert il.ComponentIdentity is ComponentIdentity
+        assert il.Upstream is Upstream
+
+    def test_retired_names_are_gone(self) -> None:
+        for retired in ("Dependency", "RelationDefinition", "ResourceRef", "AssetIdentity"):
+            assert not hasattr(il, retired)
