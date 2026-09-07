@@ -869,7 +869,6 @@ class TestSerialization:
         assert restored.dataset == "ds"
         assert restored.materializable is False
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_asset_with_destination_roundtrip(self):
         asset = FakeAsset(destinations=[FakeDestination()])
         restored = Component.from_spec(asset.to_spec())

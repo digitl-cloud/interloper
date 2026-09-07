@@ -842,7 +842,6 @@ class TestSerialization:
         restored = DAG.from_spec(dag.to_spec())
         assert {asset.id for asset in restored.operations} == {a.id, b.id}
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_roundtrip_preserves_predecessor_wiring(self):
         upstream = FakeAsset()
         downstream = FakeOtherAsset(upstream=upstream)
@@ -865,7 +864,6 @@ class TestSerialization:
         for asset_id, succs in dag.successors.items():
             assert sorted(restored.successors[asset_id]) == sorted(succs)
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_roundtrip_via_json_string(self):
         upstream = FakeAsset()
         downstream = FakeOtherAsset(upstream=upstream)
@@ -930,7 +928,6 @@ class TestSerialization:
             else:
                 assert asset.materializable is False
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_roundtrip_source_mini_dag_only_one_materializable(self, dag: il.DAG):
         """Every mini-DAG round-trip should have exactly one materializable asset."""
         for asset in dag.operations:
@@ -942,6 +939,68 @@ class TestSerialization:
                 f"materializable assets after round-trip, expected 1"
             )
             assert type(materializable[0]).key == type(asset).key
+
+
+class TestDAGSpec:
+    """The document shape: one item per root, plus one per parent of a read-only upstream."""
+
+    def test_one_item_per_root_and_one_per_read_only_parent(self):
+        fb = FbLike()
+        matcher = Matcher()
+        matcher.campaign_matches.bind("campaigns", fb.campaigns)
+
+        spec = DAG(matcher).to_spec()
+        assert len(spec.items) == 2
+        fb_item = next(item for item in spec.items if item.id == fb.id)
+        assert fb_item.init is not None
+        assert set(fb_item.init["assets"]) == {"campaigns"}
+        assert fb_item.init["assets"]["campaigns"]["materializable"] is False
+
+    def test_round_trip_preserves_operation_map_and_materializable_flags(self):
+        fb = FbLike()
+        matcher = Matcher()
+        matcher.campaign_matches.bind("campaigns", fb.campaigns)
+        dag = il.DAG(matcher)
+
+        rebuilt = il.DAG.from_spec(dag.to_spec())
+
+        assert set(rebuilt.operation_map) == set(dag.operation_map)
+        for operation_id, operation in dag.operation_map.items():
+            assert rebuilt.operation_map[operation_id].materializable == operation.materializable
+        assert rebuilt.operation_map[matcher.campaign_matches.id].materializable is True
+        assert rebuilt.operation_map[fb.campaigns.id].materializable is False
+        # FbLike's own other assets, if it had any, would come along under the
+        # same read-only source item; the map staying the same size rules that out.
+        other_fb_assets = {asset.id for asset in fb.assets if asset.id != fb.campaigns.id}
+        assert not other_fb_assets & set(rebuilt.operation_map)
+
+    def test_a_cross_source_upstream_is_a_reference(self):
+        shop = ShopA()
+        finance = FinanceSingle()
+        spec = DAG(shop, finance).to_spec()
+
+        finance_item = next(item for item in spec.items if item.id == finance.id)
+        assert finance_item.init is not None
+        assert finance_item.init["assets"]["revenue"]["orders"] == {"ref": shop.orders.id}
+
+    def test_round_trip_from_a_multi_document_file(self, tmp_path):
+        import yaml
+
+        shop = ShopA()
+        finance = FinanceSingle()
+        original = DAG(shop, finance)
+        file = tmp_path / "dag.yaml"
+        file.write_text(
+            yaml.safe_dump_all(
+                [item.model_dump(mode="json", exclude_defaults=True) for item in original.to_spec().items]
+            )
+        )
+
+        rebuilt = DAG.from_spec_file(file)
+        assert set(rebuilt.operation_map) == set(original.operation_map)
+        revenue = rebuilt.operation_map[finance.revenue.id]
+        assert revenue.bound("orders").id == shop.orders.id
+        assert revenue.bound("orders") is rebuilt.operation_map[shop.orders.id]
 
 
 class TestMaterialize:
@@ -979,7 +1038,6 @@ class TestFromSpec:
 class TestFromSpecFile:
     """DAG compilation from a runnable component spec document."""
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_job_spec_compiles(self, tmp_path):
         import yaml
 

@@ -679,6 +679,51 @@ class TestSerialization:
             spec.reconstruct()
 
 
+class TestSpecRule:
+    """Relations in the wire format: inline once, then by reference."""
+
+    def test_a_relation_with_nothing_bound_is_omitted(self) -> None:
+        widget = Widget(connection=Conn(api_secret="s"))
+        init = widget.to_spec().init or {}
+        assert "config" not in init
+        assert "fallback" not in init
+        assert "destinations" not in init
+
+    def test_a_single_valued_relation_emits_one_value_and_a_many_one_a_list(self) -> None:
+        destination = Dest(connection=Conn(api_secret="s"))
+        widget = Widget(connection=Conn(api_secret="s"), destinations=[destination])
+        init = widget.to_spec().init or {}
+        assert init["connection"]["path"] == Conn.classpath()
+        assert init["destinations"] == [destination.to_spec().model_dump(mode="json", exclude_defaults=True)]
+
+    def test_a_parentless_target_is_inline_once_then_referenced(self) -> None:
+        destination = Dest(connection=Conn(api_secret="s"))
+        first = Widget(connection=Conn(api_secret="s"), destinations=[destination])
+        second = Widget(connection=Conn(api_secret="s"), destinations=[destination])
+        job = il.CronJob(cron="0 6 * * *", targets=[first, second])
+
+        init = job.to_spec().init or {}
+        assert init["targets"][0]["init"]["destinations"][0]["path"] == Dest.classpath()
+        assert init["targets"][1]["init"]["destinations"][0] == {"ref": destination.id}
+
+    def test_every_emitted_component_carries_its_id(self) -> None:
+        widget = Widget(connection=Conn(api_secret="s"))
+        spec = widget.to_spec()
+        assert spec.id == widget.id
+        assert (spec.init or {})["connection"]["id"] == widget.connection.id
+
+    def test_round_trip_shares_a_referenced_instance(self) -> None:
+        destination = Dest(connection=Conn(api_secret="s"))
+        first = Widget(connection=Conn(api_secret="s"), destinations=[destination])
+        second = Widget(connection=Conn(api_secret="s"), destinations=[destination])
+        job = il.CronJob(cron="0 6 * * *", targets=[first, second])
+
+        rebuilt = il.CronJob.from_spec(job.to_spec())
+        rebuilt_first, rebuilt_second = rebuilt.targets
+        assert rebuilt_first.destinations[0] is rebuilt_second.destinations[0]
+        assert rebuilt_first.destinations[0].id == destination.id
+
+
 class TestCatalogKeySpecs:
     """Specs reference components by import ``path`` or catalog ``key``."""
 

@@ -634,13 +634,11 @@ class TestSerialization:
         # Other asset unchanged
         assert restored.assets[1].materializable is True
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_source_with_destination_roundtrip(self):
         source = FakeSource(destinations=[FakeDestination()])
         restored = FakeSource.from_spec(source.to_spec())
         assert isinstance(restored.destinations[0], FakeDestination)
 
-    @pytest.mark.xfail(strict=True, reason="Task 7: relations are not serialised yet")
     def test_source_with_list_of_destinations_roundtrip(self):
         source = FakeSource(destinations=[FakeDestination(), FakeOtherDestination()])
         restored = FakeSource.from_spec(source.to_spec())
@@ -662,6 +660,66 @@ class TestSerialization:
         assert isinstance(restored, FakeSourceWithAssets)
         assert restored.dataset == "ds"
         assert restored.assets[0].materializable is False
+
+
+class TestSpecRule:
+    """Relations in a source's wire format: assets travel under the source, never under a relation."""
+
+    def test_an_asset_target_is_a_reference_and_lives_under_its_source(self):
+        shop = Shop(connection=FakeConnection(token="t"))
+        finance = Finance()
+        finance.revenue.bind("orders", shop.orders)
+        job = il.CronJob(cron="0 6 * * *", targets=[shop, finance])
+
+        init = job.to_spec().init or {}
+        assert init["targets"][1]["init"]["assets"]["revenue"]["orders"] == {"ref": shop.orders.id}
+        assert init["targets"][0]["init"]["assets"]["orders"]["id"] == shop.orders.id
+
+    def test_a_trickled_relation_is_omitted_from_the_asset_override(self):
+        destination = FakeDestination()
+        shop = Shop(connection=FakeConnection(token="t"), destinations=[destination])
+
+        init = shop.to_spec().init or {}
+        assert init["destinations"][0]["path"] == FakeDestination.classpath()
+        assert init["connection"]["path"] == FakeConnection.classpath()
+        assert "destinations" not in init["assets"]["orders"]
+        assert "connection" not in init["assets"]["orders"]
+
+    def test_an_asset_keeps_a_binding_of_its_own(self):
+        destination, own = FakeDestination(), FakeOtherDestination()
+        shop = Shop(connection=FakeConnection(token="t"), destinations=[destination])
+        shop.orders.bind("destinations", own)
+
+        entries = (shop.to_spec().init or {})["assets"]["orders"]["destinations"]
+        assert entries[0] == {"ref": destination.id}
+        assert entries[1]["path"] == FakeOtherDestination.classpath()
+
+        rebuilt = Shop.from_spec(shop.to_spec())
+        assert [d.id for d in rebuilt.orders.destinations] == [destination.id, own.id]
+        assert rebuilt.orders._read_destination().id == destination.id
+
+    def test_round_trip_shares_instances_across_sources(self):
+        destination = FakeDestination()
+        shop = Shop(connection=FakeConnection(token="t"), destinations=[destination])
+        finance = Finance(destinations=[destination])
+        finance.revenue.bind("orders", shop.orders)
+        job = il.CronJob(cron="0 6 * * *", targets=[shop, finance])
+
+        rebuilt = il.CronJob.from_spec(job.to_spec())
+        rebuilt_shop, rebuilt_finance = rebuilt.targets
+        assert rebuilt_finance.revenue.orders is rebuilt_shop.orders  # ty: ignore[unresolved-attribute]
+        assert rebuilt_shop.destinations[0] is rebuilt_finance.destinations[0]
+        assert rebuilt_shop.orders.destinations == [  # ty: ignore[unresolved-attribute]
+            rebuilt_shop.destinations[0]
+        ]
+
+    def test_resolve_supplies_a_reference_inside_an_asset_override(self):
+        shop = Shop(connection=FakeConnection(token="t"))
+        spec = Spec(path=Finance.classpath(), init={"assets": {"revenue": {"orders": {"ref": shop.orders.id}}}})
+
+        finance = il.Source.from_spec(spec, resolve={shop.orders.id: shop.orders}.__getitem__)
+
+        assert finance.revenue.orders is shop.orders  # ty: ignore[unresolved-attribute]
 
 
 class TestSelect:

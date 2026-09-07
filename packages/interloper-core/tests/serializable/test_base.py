@@ -39,6 +39,16 @@ with warnings.catch_warnings():
         beta: str | None = None
 
 
+class RefConn(il.Connection):
+    """Connection filled by reference in reconstruction tests."""
+
+
+class RefWidget(il.Source):
+    """Source whose connection is filled by reference in reconstruction tests."""
+
+    connection: RefConn
+
+
 # -- The Spec envelope ---------------------------------------------------------
 
 
@@ -154,6 +164,51 @@ class TestStrictInit:
     def test_unknown_kwarg_raises(self):
         with pytest.raises(TypeError, match="unexpected keyword argument.*nope"):
             FakeSerializable(nope=1)  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
+
+
+class TestReferences:
+    """``{"ref": id}`` values are bound after construction, from the document or from *resolve*."""
+
+    def test_a_reference_binds_the_instance_the_document_already_built(self):
+        widget = RefWidget(connection=RefConn())
+        rebuilt = RefWidget.from_spec(widget.to_spec())
+        assert rebuilt.connection.id == widget.connection.id
+
+    def test_an_unresolved_reference_without_resolve_is_a_spec_error(self):
+        spec = Spec(path=RefWidget.classpath(), init={"connection": {"ref": "nope"}})
+        with pytest.raises(SpecError, match="unresolved reference 'nope'"):
+            spec.reconstruct()
+
+    def test_a_resolve_callable_supplies_a_missing_reference(self):
+        connection = RefConn()
+        spec = Spec(path=RefWidget.classpath(), init={"connection": {"ref": connection.id}})
+        widget = RefWidget.from_spec(spec, resolve={connection.id: connection}.__getitem__)
+        assert widget.connection is connection
+
+    def test_a_resolve_callable_reaches_from_spec_file(self, tmp_path):
+        connection = RefConn()
+        file = tmp_path / "widget.yaml"
+        file.write_text(f"path: {RefWidget.classpath()}\ninit:\n  connection:\n    ref: {connection.id}\n")
+        widget = RefWidget.from_spec_file(file, resolve={connection.id: connection}.__getitem__)
+        assert widget.connection is connection
+
+
+class TestSpecDocuments:
+    """A spec file may hold several YAML documents."""
+
+    def test_all_from_file_loads_every_document(self, tmp_path):
+        file = tmp_path / "specs.yaml"
+        path = FakeSerializable().path()
+        file.write_text(f"path: {path}\ninit: {{text: one}}\n---\npath: {path}\ninit: {{text: two}}\n")
+        specs = Spec.all_from_file(file)
+        assert [spec.init["text"] for spec in specs if spec.init] == ["one", "two"]
+
+    def test_from_file_rejects_a_multi_document_file(self, tmp_path):
+        file = tmp_path / "specs.yaml"
+        path = FakeSerializable().path()
+        file.write_text(f"path: {path}\n---\npath: {path}\n")
+        with pytest.raises(SpecError, match="exactly one document"):
+            Spec.from_file(file)
 
 
 # -- build_class ---------------------------------------------------------------

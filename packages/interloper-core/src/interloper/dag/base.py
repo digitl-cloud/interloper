@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -35,20 +36,32 @@ class DAGSpec(BaseModel):
 
     items: list[Spec] = []
 
-    def reconstruct(self, catalog: Catalog | None = None) -> DAG:
+    def reconstruct(
+        self,
+        catalog: Catalog | None = None,
+        *,
+        resolve: Callable[[str], Component] | None = None,
+    ) -> DAG:
         """Reconstruct the DAG from its spec.
 
         Each source spec materialises a live source (with its assets
-        pre-bound through ``Source.model_post_init`` → ``_resolve``),
+        pre-bound through ``Source.model_post_init`` and ``_resolve``),
         and each standalone asset spec materialises a bare asset.  All
         reconstructed items are then handed to the :class:`DAG`
         constructor which re-infers the dependency graph from the
         preserved asset ids.
 
+        The items are one document, so they build against one shared
+        registry: a ``{"ref": id}`` in one item resolves to the component
+        another item carries, and the references are bound once every item
+        exists.
+
         Args:
             catalog: Catalog used to resolve ``key`` references, shared
                 across all items. Defaults to the settings-configured
                 catalog, built lazily.
+            resolve: Called with the id of a reference no item of the
+                document carries; ``None`` makes such a reference an error.
 
         Returns:
             A new DAG instance with the same structure as the original.
@@ -57,8 +70,10 @@ class DAGSpec(BaseModel):
             "interloper.dag_spec.reconstruct",
             attributes={attributes.DAG_SPEC_ITEMS: len(self.items)},
         ):
-            reconstructed = [Component.from_spec(spec, catalog) for spec in self.items]
-            return DAG(*reconstructed)  # ty: ignore[invalid-argument-type]
+            registry: dict[str, Component] = {}
+            roots = [spec.reconstruct(catalog, resolve=resolve, registry=registry) for spec in self.items]
+            Component._bind_references(registry, resolve)
+            return DAG(*roots)  # ty: ignore[invalid-argument-type]
 
 
 # -- DAG -----------------------------------------------------------------------
@@ -427,52 +442,93 @@ class DAG:
     def to_spec(self) -> DAGSpec:
         """Serialize this DAG to a reconstructible spec.
 
-        Assets are grouped by their parent source before serialization:
-        source-owned assets travel as part of their parent source's
-        spec (via the asset-override map), while standalone assets are
-        serialised individually.
+        One item per root of the graph: a standalone asset is an item of its
+        own, and a source-owned asset travels inside its owning source's item
+        through the asset-override map, which is what also gives the parent
+        of an upstream this run only reads an item of its own, carrying that
+        one asset and nothing else of the source.
 
         The override map is built from the DAG's **actual** asset
-        instances (which may differ from the source's originals — e.g.
-        in a mini-DAG, parents are marked ``materializable=False``).
+        instances, which may differ from the source's originals: in a
+        mini-DAG the parents are flagged ``materializable=False``, and a run
+        may hold only some of a source's assets.
+
+        Every item shares one traversal, so a destination bound to several
+        roots is written out once and referenced everywhere else, and the
+        document is closed: a binding pointing outside this graph is left
+        out rather than written as a reference nothing answers (see
+        :meth:`_unwritable_relations`).
 
         Returns:
             A DAGSpec that can reconstruct an equivalent DAG.
         """
         items: list[Spec] = []
+        seen: set[str] = set()
 
         # Group the DAG's operations by owning source, preserving their state
         source_operations: dict[str, list[Operation]] = {}
         for operation in self.operations:
             source = operation.source
             if source is None:
-                items.append(operation.to_spec())
+                node = cast("Component", operation)
+                items.append(node._to_spec(seen=seen, drop=self._unwritable_relations(operation)))
                 continue
             source_operations.setdefault(source.id, []).append(operation)
 
-        # For each source, build a spec using the DAG's asset states
-        for assets in source_operations.values():
-            source = assets[0].source
+        for operations in source_operations.values():
+            source = operations[0].source
             assert source is not None
-
-            # Build the source spec but override the assets with THIS
-            # DAG's copies (which may have modified materializable, etc.)
-            spec = source.to_spec()
-            if spec.init is not None:
-                overrides: dict[str, Any] = {}
-                for asset in assets:
-                    asset_spec = asset.to_spec()
-                    asset_init = dict(asset_spec.init or {})
-                    if asset_spec.id:
-                        asset_init["id"] = asset_spec.id
-                    overrides[asset.key] = asset_init
-                spec.init["assets"] = overrides
-            items.append(spec)
+            items.append(
+                source._source_spec(
+                    seen=seen,
+                    assets=cast("list[Asset]", operations),
+                    asset_drop={operation.key: self._unwritable_relations(operation) for operation in operations},
+                )
+            )
 
         return DAGSpec(items=items)
 
+    def _unwritable_relations(self, operation: Operation) -> dict[str, set[str]]:
+        """The target ids of one node's relations this document cannot carry.
+
+        A target that has an owner travels inside that owner's own item, so a
+        binding pointing at one this graph does not hold has nowhere to go: a
+        node the run only reads keeps the bindings of the live asset it was
+        copied from, whose own upstreams were never pulled in with it
+        (see :meth:`_include_read_only_upstreams`). Writing those out would
+        put a reference in the document that reconstruction cannot answer,
+        so they are dropped per target rather than the whole relation: a
+        relation keeping some of its targets emits a shorter list than the
+        live binding, and one losing all of them is left out of the document
+        entirely.
+
+        Args:
+            operation: The node whose bindings are read.
+
+        Returns:
+            The absent owned target ids to drop, keyed by the relation name
+            that holds them; a relation with nothing to drop is absent from
+            the mapping.
+        """
+        unwritable: dict[str, set[str]] = {}
+        for name in operation.relations:
+            bound = operation.bound(name)
+            targets = bound if isinstance(bound, list) else [] if bound is None else [bound]
+            absent = {
+                target.id for target in targets if target.parent is not None and target.id not in self.operation_map
+            }
+            if absent:
+                unwritable[name] = absent
+        return unwritable
+
     @classmethod
-    def from_spec(cls, spec: DAGSpec, catalog: Catalog | None = None) -> DAG:
+    def from_spec(
+        cls,
+        spec: DAGSpec,
+        catalog: Catalog | None = None,
+        *,
+        resolve: Callable[[str], Component] | None = None,
+    ) -> DAG:
         """Reconstruct a DAG from a spec.
 
         Args:
@@ -480,40 +536,55 @@ class DAG:
             catalog: Catalog used to resolve ``key`` references, shared
                 across the spec's items. Defaults to the settings-configured
                 catalog, built lazily.
+            resolve: Called with the id of a reference no item of the spec
+                carries; ``None`` makes such a reference an error.
 
         Returns:
             A new DAG with the same structure.
         """
-        return spec.reconstruct(catalog)
+        return spec.reconstruct(catalog, resolve=resolve)
 
     @classmethod
-    def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> DAG:
+    def from_spec_file(
+        cls,
+        path: str | Path,
+        catalog: Catalog | None = None,
+        *,
+        resolve: Callable[[str], Component] | None = None,
+    ) -> DAG:
         """Compile a runnable component spec file into a DAG.
 
-        Loads a :class:`~interloper.component.base.Spec` document
-        (with ``${VAR}`` env interpolation), reconstructs the component, and
-        compiles its DAG — the file-based counterpart of targeting a runnable
-        component by id.
+        Loads every :class:`~interloper.serializable.base.Spec` document the
+        file holds (with ``${VAR}`` env interpolation), reconstructs them
+        against one shared registry so a reference may cross documents, and
+        compiles the DAG over all of them: the file-based counterpart of
+        targeting a runnable component by id, and what
+        :meth:`to_spec` writes back.
 
         Args:
-            path: Path to the YAML spec document.
+            path: Path to the YAML spec document(s).
             catalog: Catalog used to resolve ``key`` references. Defaults to
                 the settings-configured catalog, built lazily.
+            resolve: Called with the id of a reference no document carries;
+                ``None`` makes such a reference an error.
 
         Invalid documents surface as ``SpecError`` from the spec loader.
 
         Returns:
-            The component's DAG.
+            The DAG over every root the file declares.
 
         Raises:
-            DAGError: If the component's kind declares no workload.
+            DAGError: If a root's kind declares no workload.
         """
         from interloper.component.base import Component
 
-        component = Component.from_spec_file(path, catalog)
-        if not isinstance(component, Workload):
-            raise DAGError(f"'{component.kind}' components are not runnable")
-        return cls(component)
+        registry: dict[str, Component] = {}
+        roots = [spec.reconstruct(catalog, resolve=resolve, registry=registry) for spec in Spec.all_from_file(path)]
+        Component._bind_references(registry, resolve)
+        for root in roots:
+            if not isinstance(root, Workload):
+                raise DAGError(f"'{getattr(root, 'kind', type(root).__name__)}' components are not runnable")
+        return cls(*cast("list[Workload]", roots))
 
     # -- Subgraph --------------------------------------------------------------
 

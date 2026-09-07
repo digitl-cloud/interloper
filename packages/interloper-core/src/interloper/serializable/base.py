@@ -1,9 +1,14 @@
 """Serializable: class-plus-configuration objects and their wire format.
 
 Anything whose instances are "a class plus its configuration" extends
-:class:`Serializable`; :class:`Spec` is its serialized form — an envelope
+:class:`Serializable`; :class:`Spec` is its serialized form, an envelope
 of ``path`` (or catalog ``key``), optional ``id``, and the ``init``
 payload. ``to_spec()`` / ``from_spec()`` round-trip between the two.
+
+A ``Spec`` document is also a graph, not just a tree: a component appears
+in full once and as a ``{"ref": id}`` reference everywhere else, so
+reconstruction runs in two passes, building every inline component before
+binding what the references name (see :meth:`Spec.reconstruct`).
 """
 
 from __future__ import annotations
@@ -11,6 +16,7 @@ from __future__ import annotations
 import copy
 import os
 import re
+from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -23,6 +29,7 @@ from interloper.utils.text import to_snake_case
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
+    from interloper.component.base import Component
 
 
 class IgnoredDescriptor:
@@ -42,14 +49,16 @@ class Spec(BaseModel):
 
     A component is referenced by exactly one of two names, each keeping its
     own meaning: ``path`` is a fully qualified import path (what
-    ``to_spec()`` emits), ``key`` is a catalog key — hand-authored specs may
-    reference components the way the catalog names them.
+    ``to_spec()`` emits), ``key`` is a catalog key, so hand-authored specs
+    may reference components the way the catalog names them.
     """
 
     path: str = ""
     key: str = ""
     id: str = ""
     init: dict[str, Any] | None = None
+
+    REFERENCE_KEY: ClassVar[str] = "ref"
 
     @model_validator(mode="after")
     def _check_reference(self) -> Spec:
@@ -67,11 +76,10 @@ class Spec(BaseModel):
 
     @classmethod
     def from_file(cls, path: str | Path) -> Spec:
-        """Load a spec from a YAML file, interpolating ``${VAR}`` placeholders.
+        """Load the single spec a YAML file holds, interpolating ``${VAR}`` placeholders.
 
-        ``${VAR}`` placeholders in any string value are replaced from the
-        process environment at load time, so credentials never need to live
-        in the file. Unresolved variables are a hard error.
+        Delegates to :meth:`all_from_file`, which documents the
+        interpolation and the ``SpecError`` cases a malformed file raises.
 
         Args:
             path: Filesystem path to the YAML spec document, as a string or
@@ -81,8 +89,40 @@ class Spec(BaseModel):
             The validated spec.
 
         Raises:
-            SpecError: If the file is missing, unparsable, references
-                undefined environment variables, or is not a valid spec.
+            SpecError: If the file holds anything other than exactly one
+                document.
+        """
+        from interloper.errors import SpecError
+
+        specs = cls.all_from_file(path)
+        if len(specs) != 1:
+            raise SpecError(f"Spec file '{path}' must hold exactly one document, found {len(specs)}")
+        return specs[0]
+
+    @classmethod
+    def all_from_file(cls, path: str | Path) -> list[Spec]:
+        """Load every YAML document of a file as a spec, interpolating ``${VAR}`` placeholders.
+
+        ``${VAR}`` placeholders in any string value are replaced from the
+        process environment at load time, so credentials never need to live
+        in the file. Unresolved variables are a hard error, reported for the
+        whole file at once.
+
+        Several documents are how a graph of roots travels in one file: they
+        share one id space, so a ``{"ref": id}`` in one document may name a
+        component another document carries.
+
+        Args:
+            path: Filesystem path to the YAML spec document(s), as a string
+                or ``Path``.
+
+        Returns:
+            The validated specs, in document order.
+
+        Raises:
+            SpecError: If the file is missing, unparsable, holds a document
+                that is not a mapping, references undefined environment
+                variables, or holds an invalid spec.
         """
         import yaml
         from pydantic import ValidationError
@@ -95,23 +135,47 @@ class Spec(BaseModel):
         except OSError as exception:
             raise SpecError(f"Cannot read spec file '{path}': {exception}") from exception
         try:
-            data = yaml.safe_load(text)
+            documents = list(yaml.safe_load_all(text)) or [None]
         except yaml.YAMLError as exception:
             raise SpecError(f"Invalid YAML in spec file '{path}': {exception}") from exception
-        if not isinstance(data, dict):
+        if any(not isinstance(document, dict) for document in documents):
             raise SpecError(f"Spec file '{path}' must be a YAML mapping")
 
         missing: set[str] = set()
-        data = cls._interpolate_env(data, missing)
+        documents = [cls._interpolate_env(document, missing) for document in documents]
         if missing:
             raise SpecError(
                 f"Spec file '{path}' references undefined environment variable(s): {', '.join(sorted(missing))}"
             )
 
         try:
-            return cls.model_validate(data)
+            return [cls.model_validate(document) for document in documents]
         except ValidationError as exception:
             raise SpecError(f"Invalid spec file '{path}': {exception}") from exception
+
+    @classmethod
+    def reference(cls, component_id: str) -> dict[str, str]:
+        """Build the reference value that stands in for an already-emitted component.
+
+        Args:
+            component_id: Id of the component the reference names.
+
+        Returns:
+            The reference mapping, ``{"ref": id}``.
+        """
+        return {cls.REFERENCE_KEY: component_id}
+
+    @classmethod
+    def is_reference(cls, value: Any) -> bool:
+        """Whether a loaded init value is a reference rather than a component.
+
+        Args:
+            value: The value to inspect, as the document carries it.
+
+        Returns:
+            True for a mapping whose only key is ``ref``.
+        """
+        return isinstance(value, dict) and set(value) == {cls.REFERENCE_KEY}
 
     @classmethod
     def dump_value(cls, value: Any) -> Any:
@@ -170,7 +234,13 @@ class Spec(BaseModel):
             return [cls._interpolate_env(v, missing) for v in value]
         return value
 
-    def reconstruct(self, catalog: Catalog | None = None) -> Serializable:
+    def reconstruct(
+        self,
+        catalog: Catalog | None = None,
+        *,
+        resolve: Callable[[str], Component] | None = None,
+        registry: dict[str, Component] | None = None,
+    ) -> Serializable:
         """Import the class and rebuild the instance, walking nested specs.
 
         ``key`` references resolve through the catalog and must name
@@ -178,31 +248,61 @@ class Spec(BaseModel):
         :class:`Serializable` class (a normalizer nested in an asset's config,
         for example).
 
+        Reconstruction runs in two passes over one document. This method is
+        the first: every inline component is built and registered by id, and
+        a ``{"ref": id}`` relation value is held back rather than
+        constructed with, so a component is only ever built from the targets
+        the document carries inline. The second pass binds those references
+        and validates what they complete, which is what *registry* selects:
+        without one this call owns the document and runs both passes;
+        with one it contributes to a document the caller finishes (see
+        :meth:`~interloper.component.base.Component._bind_references`).
+
         Args:
             catalog: Catalog used to resolve ``key`` references, passed down
                 to nested specs. Defaults to the settings-configured catalog,
                 built lazily when a key is first encountered.
+            resolve: Called with the id of a reference the document itself
+                does not carry, to reach a component that lives outside it.
+                ``None`` makes such a reference an error.
+            registry: The document's components by id, shared across every
+                spec of a multi-root document. ``None`` starts a document of
+                this spec alone and binds its references before returning.
 
         Returns:
             The reconstructed instance.
         """
 
-        def load(v: Any) -> Any:
-            if isinstance(v, dict):
-                if ("path" in v or "key" in v) and v.keys() <= {"path", "key", "id", "init"}:
-                    return Spec(**v).reconstruct(catalog)
-                return {k: load(x) for k, x in v.items()}
-            if isinstance(v, list):
-                return [load(x) for x in v]
-            return v
+        def load(value: Any) -> Any:
+            if isinstance(value, dict):
+                if ("path" in value or "key" in value) and value.keys() <= {"path", "key", "id", "init"}:
+                    return Spec(**value).reconstruct(catalog, resolve=resolve, registry=document)
+                return {name: load(entry) for name, entry in value.items()}
+            if isinstance(value, list):
+                return [load(entry) for entry in value]
+            return value
 
-        from interloper.component.base import Component
+        from interloper.component.base import Component, defer_relation_validation
 
+        document: dict[str, Component] = {} if registry is None else registry
         cls = Component.resolve_key(self.key, catalog) if self.key else Serializable.resolve_path(self.path)
         kwargs: dict[str, Any] = {"id": self.id} if self.id else {}
-        for k, v in (self.init or {}).items():
-            kwargs[k] = load(v)
-        return cls(**kwargs)
+        for name, value in (self.init or {}).items():
+            kwargs[name] = load(value)
+
+        if not issubclass(cls, Component):
+            return cls(**kwargs)
+
+        kwargs, pending = cls._split_references(kwargs)
+        with defer_relation_validation():
+            instance = cls(**kwargs)
+        instance._pending_references = pending
+        document[instance.id] = instance
+        for child in instance._children():
+            document[child.id] = child
+        if registry is None:
+            Component._bind_references(document, resolve)
+        return instance
 
 
 # -- Serializable --------------------------------------------------------------
@@ -481,16 +581,47 @@ class Serializable(BaseModel):
         Returns:
             A Spec capturing this instance's state.
         """
+        return self._build_spec(init=self._fields_init() or None)
+
+    def _build_spec(self, *, init: dict[str, Any] | None) -> Spec:
+        """Build the spec envelope an instance of this class serializes into.
+
+        The one construction :meth:`to_spec` and
+        :meth:`~interloper.component.base.Component._to_spec` both build
+        from, so neither writes ``Spec(path=..., ...)`` by hand: a
+        ``Component`` also carries an ``id``, which it patches onto the
+        result afterwards.
+
+        Args:
+            init: The init payload to carry, or ``None`` for an instance
+                with nothing to configure.
+
+        Returns:
+            The spec envelope, ``id`` left at its default.
+        """
+        return Spec(path=self.path(), init=init)
+
+    def _fields_init(self, *, without: Collection[str] = ()) -> dict[str, Any]:
+        """Serialize this instance's fields into a spec init payload.
+
+        Args:
+            without: Field names to leave out, for an owner that writes some
+                of them itself.
+
+        Returns:
+            Field name to JSON-able value. ``id`` rides the spec envelope
+            rather than the payload, and a ``None`` value is omitted, so
+            neither ever appears here.
+        """
         init: dict[str, Any] = {}
         for name in type(self).model_fields:
-            if name == "id":  # identity rides the spec envelope, not the init payload
+            if name == "id" or name in without:
                 continue
             value = getattr(self, name)
             if value is None:
                 continue
             init[name] = Spec.dump_value(value)
-
-        return Spec(path=self.path(), init=init or None)
+        return init
 
     @classmethod
     def resolve_path(cls, path: str) -> type[Self]:
@@ -529,7 +660,13 @@ class Serializable(BaseModel):
         return cast("type[Self]", resolved)
 
     @classmethod
-    def from_spec(cls, spec: Spec | dict[str, Any], catalog: Catalog | None = None) -> Self:
+    def from_spec(
+        cls,
+        spec: Spec | dict[str, Any],
+        catalog: Catalog | None = None,
+        *,
+        resolve: Callable[[str], Component] | None = None,
+    ) -> Self:
         """Reconstruct an instance from a spec.
 
         Called on a subclass, the reconstructed instance must be of that
@@ -539,6 +676,8 @@ class Serializable(BaseModel):
             spec: The spec (or its dict payload) to reconstruct.
             catalog: Catalog used to resolve ``key`` references. Defaults to
                 the settings-configured catalog, built lazily.
+            resolve: Called with the id of a reference the spec itself does
+                not carry; ``None`` makes such a reference an error.
 
         Returns:
             The reconstructed instance.
@@ -549,18 +688,24 @@ class Serializable(BaseModel):
         """
         if isinstance(spec, dict):
             spec = Spec(**spec)
-        instance = spec.reconstruct(catalog)
+        instance = spec.reconstruct(catalog, resolve=resolve)
         if not isinstance(instance, cls):
             raise TypeError(f"'{spec.key or spec.path}' does not reconstruct to a {cls.__name__}")
         return instance
 
     @classmethod
-    def from_spec_file(cls, path: str | Path, catalog: Catalog | None = None) -> Self:
+    def from_spec_file(
+        cls,
+        path: str | Path,
+        catalog: Catalog | None = None,
+        *,
+        resolve: Callable[[str], Component] | None = None,
+    ) -> Self:
         """Reconstruct an instance from a spec file.
 
         Loads a :class:`Spec` document from YAML (with ``${VAR}``
         env interpolation) and reconstructs it, with the same
-        subclass-scoped check as :meth:`from_spec` — invalid documents
+        subclass-scoped check as :meth:`from_spec`: invalid documents
         surface as ``SpecError``, mismatched kinds as ``TypeError``.
 
         Args:
@@ -568,11 +713,13 @@ class Serializable(BaseModel):
                 ``Path``.
             catalog: Catalog used to resolve ``key`` references. Defaults to
                 the settings-configured catalog, built lazily.
+            resolve: Called with the id of a reference the document itself
+                does not carry; ``None`` makes such a reference an error.
 
         Returns:
             The reconstructed instance.
         """
-        return cls.from_spec(Spec.from_file(path), catalog)
+        return cls.from_spec(Spec.from_file(path), catalog, resolve=resolve)
 
     # -- Definition ------------------------------------------------------------
     @classmethod
