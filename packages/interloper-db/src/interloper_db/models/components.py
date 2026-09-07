@@ -128,14 +128,12 @@ class Component(SQLModel, table=True):
 
 
 class ComponentRelation(SQLModel, table=True):
-    """A typed, directed relation between two components.
+    """A named, directed relation between two components.
 
-    ``type`` names the relation; ``slot`` disambiguates multiple relations of
-    the same type on one source component (a resource slot name, an upstream
-    parameter name, empty when the relation has no slot semantics).
-
-    Checks constrain the types the schema knows and permit any type they
-    don't, so new relation types need no schema change.
+    ``name`` is the relation name as declared on the owning class: the field
+    a ``Relation`` is bound to. Whether a given name is single-valued or
+    many-valued is a class rule the store enforces, not a schema constraint,
+    so no uniqueness is declared here.
     """
 
     __tablename__: ClassVar[str] = "component_relations"
@@ -152,36 +150,13 @@ class ComponentRelation(SQLModel, table=True):
             ondelete="CASCADE",
             name="fk_component_relations_dst",
         ),
-        # Relation shapes (which types a kind may declare, which kinds they may
-        # point at, slotted or not) are enforced by the store from the class
-        # vocabulary — an open set, so it is deliberately not mirrored in CHECKs.
-        # Resource slots are single-valued by schema. Upstream slots are
-        # single-valued only when their class says so, which the store
-        # enforces from the slot contract (a many-valued slot fans in).
-        Index(
-            "uq_component_relations_slot",
-            "src_id",
-            "type",
-            "slot",
-            unique=True,
-            postgresql_where=text("type = 'resource'"),
-            sqlite_where=text("type = 'resource'"),
-        ),
-        Index("ix_component_relations_org_id_type", "org_id", "type"),
-        Index("ix_component_relations_dst_id_type", "dst_id", "type"),
+        Index("ix_component_relations_org_id_name", "org_id", "name"),
+        Index("ix_component_relations_dst_id_name", "dst_id", "name"),
     )
 
     src_id: UUID = SQLField(primary_key=True)
-    type: str = SQLField(primary_key=True)
-    slot: str = SQLField(default="", primary_key=True)
+    name: str = SQLField(primary_key=True)
     dst_id: UUID = SQLField(primary_key=True)
     org_id: UUID
     src_kind: str
     dst_kind: str
-
-    dst: Component = Relationship(
-        sa_relationship_kwargs={
-            "primaryjoin": "foreign(ComponentRelation.dst_id) == Component.id",
-            "viewonly": True,
-        },
-    )
