@@ -70,6 +70,16 @@ function getStatusColor(status: string) {
     return isDark.value ? entry.dark : entry.light
 }
 
+/**
+ * Outline for a row with nothing to draw. Dashed either way (it never ran),
+ * but canceled reads amber so it is not mistaken for still-queued work.
+ */
+function placeholderClass(status?: string) {
+    return status === 'canceled'
+        ? 'border-warning bg-warning/10 text-warning'
+        : 'border-accented text-dimmed'
+}
+
 /**********************
  * Layout constants
  **********************/
@@ -580,7 +590,8 @@ watch(axisMax, () => {
                           :key="row.id ?? row.name">
                     <!-- Nothing to draw: a placeholder carrying the row's status -->
                     <div v-if="placeholder && !labelWidth"
-                         class="absolute flex max-w-[45%] items-center gap-1.5 overflow-hidden rounded-md border border-dashed border-accented px-2 cursor-pointer text-dimmed transition-opacity"
+                         class="absolute flex max-w-[45%] items-center gap-1.5 overflow-hidden rounded-md border border-dashed px-2 cursor-pointer transition-opacity"
+                         :class="placeholderClass(row.status)"
                          :style="{
                              top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
                              left: '0',
