@@ -13,9 +13,9 @@ from uuid import uuid4
 import pydantic
 import pytest
 from sqlalchemy import Engine
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from interloper_db.models import Component
+from interloper_db.models import Component, ComponentRelation
 
 _ORG = uuid4()
 
@@ -97,3 +97,31 @@ class TestStampState:
 
         with pytest.raises(pydantic.ValidationError):
             row.stamp_state(next_run_at=object())
+
+
+class TestComponentRelation:
+    """A relation row is keyed by ``(src_id, name, dst_id)``, no ``type``/``slot``."""
+
+    def test_relation_row_is_keyed_by_name(self, component_db: Engine) -> None:
+        with Session(component_db) as session:
+            src = Component(org_id=_ORG, kind="source", key="s")
+            dst = Component(org_id=_ORG, kind="destination", key="d")
+            session.add_all([src, dst])
+            session.flush()
+            session.add(
+                ComponentRelation(
+                    src_id=src.id,
+                    name="destinations",
+                    dst_id=dst.id,
+                    org_id=_ORG,
+                    src_kind="source",
+                    dst_kind="destination",
+                )
+            )
+            session.commit()
+
+            row = session.exec(select(ComponentRelation)).one()
+
+            assert row.name == "destinations"
+            assert not hasattr(row, "slot")
+            assert not hasattr(row, "type")

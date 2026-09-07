@@ -47,17 +47,15 @@ from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SO
 from interloper_db.store.relations import Binding, RelationStore, _add_relation
 from interloper_db.store.status import ComponentStatus, asset_status, source_status
 
-# Eager-load set for rows returned to API consumers: the parent, children
-# with their relations, and two hops (component → destination → resources).
+# Eager-load set for rows returned to API consumers: the parent and children
+# with their relations. The two-hop (component -> destination -> resources)
+# legs are dropped for now: they walked ComponentRelation.dst, a relationship
+# the relation-by-name rewrite removed. The rewritten store restores
+# whatever eager loading it needs.
 COMPONENT_LOAD_OPTIONS = [
     selectinload(Component.parent),  # ty: ignore[invalid-argument-type]
     selectinload(Component.children)  # ty: ignore[invalid-argument-type]
-    .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
-    .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
-    selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
-    .selectinload(ComponentRelation.dst)  # ty: ignore[invalid-argument-type]
-    .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
-    .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
+    .selectinload(Component.out_relations),  # ty: ignore[invalid-argument-type]
 ]
 
 
