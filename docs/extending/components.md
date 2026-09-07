@@ -109,7 +109,7 @@ field.
 
 | Method | What it does |
 |--------|--------------|
-| `bind(name, *targets)` | Writes bindings, together with `unbind` and attribute assignment (which routes through the same checks, see below). Checks `accepts` for each target; `many` accumulates, single-valued refuses to swap silently. |
+| `bind(name, *targets)` | Writes bindings, together with `unbind` and attribute assignment (which routes through the same checks, see below). Checks `accepts` for each target; `many` accumulates and collapses duplicates, single-valued replaces what it holds and refuses more than one target at a time. |
 | `unbind(name, *targets)` | Detaches. Refused when it would empty a non-optional relation. |
 | `bound(name)` | What is explicitly bound: a list for `many`, the single component or `None`. |
 | `bound_ids()` | Relation name to bound ids, for persistence. |
@@ -118,8 +118,10 @@ field.
 | `validate_relations(nodes=None)` | Unbound non-optional without a fallback, several targets on a single-valued relation, a target the relation does not accept, and (with `nodes`) a non-optional asset target absent from the run. |
 
 A relation name is also a constructor keyword and an assignable attribute; assignment goes
-through `Relation.__set__`, which checks the replacement before touching the existing binding,
-so a rejected assignment leaves the previous one exactly as it was.
+through `Relation.__set__`, which shares `bind`'s single write path: the replacement is checked
+before the existing binding is touched (so a rejected assignment leaves the previous one exactly
+as it was), duplicates collapse, clearing a non-optional relation raises `ConfigError`, and
+whatever the owner cascades into its children is cascaded again.
 
 `definition().relations` exports each relation for the catalog and the UI: `kind`, `key`,
 `many`, `optional`, `on_delete`.

@@ -249,6 +249,12 @@ class TestSourceRelations:
         source.bind("destinations", destination)
         assert destination.connection is connection
 
+    def test_destination_assigned_after_construction_still_trickles(self):
+        destination = FakeDestination()
+        source = Shop(connection=FakeConnection(token="secret"))
+        source.destinations = [destination]
+        assert source.orders.destinations == [destination]
+
     def test_sibling_bindings_and_bind(self):
         assert Shop.sibling_bindings() == {"revenue": {"orders": "orders"}}
         source = Shop(connection=FakeConnection(token="secret"))

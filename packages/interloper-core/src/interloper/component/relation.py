@@ -385,11 +385,11 @@ class Relation(BaseModel):
     def __set__(self, instance: Component, value: Any) -> None:
         """Replace what is bound to this relation on *instance*, atomically.
 
-        The replacement is checked before the existing binding is touched, so
-        a rejected assignment (wrong kind, several targets on a single-valued
-        relation) leaves the previous binding exactly as it was. This is the
-        one rebinding mechanism: :meth:`Component.__setattr__` routes a
-        relation name here rather than doing the work itself.
+        Assignment is one of the two ways a binding is written, and it goes
+        through the same write path as :meth:`Component.bind`: the same rules
+        apply (a rejected assignment leaves the previous binding exactly as it
+        was, duplicates collapse, a non-optional relation cannot be emptied)
+        and whatever the owner cascades into its children is re-cascaded.
 
         Args:
             instance: The component the assignment was made on.
@@ -397,5 +397,4 @@ class Relation(BaseModel):
                 component binds it, a list or tuple binds every element.
         """
         targets = tuple(value) if isinstance(value, (list, tuple)) else (() if value is None else (value,))
-        instance._check_targets(self.name, self, targets)
-        instance._bound[self.name] = list(targets)
+        instance._replace_binding(self.name, targets)

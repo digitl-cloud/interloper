@@ -162,6 +162,19 @@ class TestWorkloadDefaults:
         job.bind("destinations", destination)
         assert job.targets[0].destinations == [destination]
 
+    def test_a_destination_assigned_after_construction_still_cascades(self):
+        destination = FakeJobDestination()
+        job = il.Job(targets=[FakeSource()])
+        job.destinations = [destination]
+        assert job.targets[0].destinations == [destination]
+
+    def test_targets_assigned_after_construction_receive_the_cascade(self):
+        destination = FakeJobDestination()
+        target = FakeSource()
+        job = il.Job(destinations=[destination])
+        job.targets = [target]
+        assert target.destinations == [destination]
+
     def test_destinations_cascade_to_asset_targets(self):
         destination = FakeJobDestination()
         job = il.Job(targets=[FakeStandaloneAsset()], destinations=[destination])

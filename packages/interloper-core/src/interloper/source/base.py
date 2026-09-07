@@ -552,9 +552,9 @@ class Source(Component, Workload):
     def _trickle_down(self) -> None:
         """Fill the unbound relations of this source's assets and destinations from its own.
 
-        Binding is the moment this runs: relation keyword arguments reach a
+        A binding is the moment this runs: relation keyword arguments reach a
         component after ``model_post_init`` has already built its assets, so
-        without a pass on :meth:`bind` a source's connection would never
+        without a pass on :meth:`_rebound` a source's connection would never
         reach them.
         """
         for asset in self.assets:
@@ -588,14 +588,13 @@ class Source(Component, Workload):
             and all(mine is theirs for mine, theirs in zip(asset._bound.get(name, []), own))
         }
 
-    def bind(self, name: str, *targets: Component) -> None:
-        """Bind components to one of this source's relations, then trickle them down.
+    def _rebound(self, name: str) -> None:
+        """Trickle this source's bindings down whenever one of them changes.
 
         Args:
-            name: The relation name as declared on the class.
-            *targets: The components to bind.
+            name: The relation name whose binding changed; every relation the
+                source holds trickles, so the name itself is not read.
         """
-        super().bind(name, *targets)
         self._trickle_down()
 
     def __getattr__(self, name: str) -> Asset:
@@ -727,5 +726,4 @@ class Source(Component, Workload):
             copy.normalizer = normalizer
         if materialization_strategy is not None:
             copy.materialization_strategy = materialization_strategy
-        copy._trickle_down()
         return copy

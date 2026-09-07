@@ -349,10 +349,17 @@ class TestBind:
         with pytest.raises(ConfigError, match="connection"):
             Widget(connection=Cfg())  # ty: ignore[invalid-argument-type]
 
-    def test_single_relation_rejects_second_target(self):
+    def test_single_relation_rejects_two_targets_at_once(self):
         widget = Widget(connection=Conn(api_secret="s"))
         with pytest.raises(ConfigError, match="single"):
-            widget.bind("connection", Conn(api_secret="other"))
+            widget.bind("connection", Conn(api_secret="a"), Conn(api_secret="b"))
+
+    def test_a_second_bind_replaces_a_single_relation(self):
+        original = Conn(api_secret="s")
+        widget = Widget(connection=original)
+        replacement = Conn(api_secret="other")
+        widget.bind("connection", replacement)
+        assert widget.connection is replacement
 
     def test_many_accumulates(self):
         widget = Widget(connection=Conn(api_secret="s"))
@@ -406,6 +413,19 @@ class TestSetAttrRelations:
         widget = Widget(connection=Conn(api_secret="s"), config=Cfg())
         widget.config = None
         assert widget.config is None
+
+    def test_assigning_none_to_a_non_optional_relation_raises(self):
+        connection = Conn(api_secret="s")
+        widget = Widget(connection=connection)
+        with pytest.raises(ConfigError, match="non-optional"):
+            widget.connection = None  # ty: ignore[invalid-assignment]
+        assert widget.connection is connection
+
+    def test_assigning_duplicates_collapses_them(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        dest = Dest(connection=Conn(api_secret="a"))
+        widget.destinations = [dest, dest]
+        assert widget.destinations == [dest]
 
     def test_assigning_wrong_kind_raises(self):
         widget = Widget(connection=Conn(api_secret="s"))

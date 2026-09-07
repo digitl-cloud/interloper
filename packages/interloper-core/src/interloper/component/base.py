@@ -296,9 +296,9 @@ class Component(Serializable):
 
         Every target must be one the relation :meth:`~Relation.accepts`, and a
         single-valued relation may not receive more than one target at once.
-        Performs no mutation, so both :meth:`bind` and relation reassignment
-        through ``__setattr__`` can call it before touching ``_bound``, and a
-        rejected replacement leaves the existing binding untouched.
+        Performs no mutation, so :meth:`_replace_binding` can call it before
+        touching ``_bound`` and a rejected replacement leaves the existing
+        binding untouched.
 
         Args:
             name: The relation name as declared on the class.
@@ -317,39 +317,66 @@ class Component(Serializable):
                     f"(declared: kind {relation.kinds()}, key {relation.keys() or 'any'})"
                 )
         if not relation.many and len(targets) > 1:
-            raise ConfigError(f"{type(self).__name__}.{name} is single-valued; unbind before binding another target")
+            raise ConfigError(f"{type(self).__name__}.{name} is single-valued and takes one target at a time")
+
+    def _replace_binding(self, name: str, targets: tuple[Component, ...]) -> None:
+        """Replace what is bound to one of this component's relations, atomically.
+
+        The one write path: :meth:`bind` and :meth:`Relation.__set__` both
+        land here, so the rules hold whichever way a binding is written.
+        Everything is checked before ``_bound`` is touched, so a rejected
+        write leaves the previous binding exactly as it was, and
+        :meth:`_rebound` runs once the new binding is in place.
+
+        Args:
+            name: The relation name as declared on the class.
+            targets: The components to hold, replacing whatever is held now;
+                duplicates collapse to the first occurrence.
+
+        Raises:
+            ConfigError: If a target's kind or key is not one the relation
+                accepts, if a single-valued relation is given more than one
+                target, or if a non-optional relation would be left empty.
+        """
+        relation = self._relation(name)
+        self._check_targets(name, relation, targets)
+        if not targets and not relation.optional:
+            raise ConfigError(f"{type(self).__name__}.{name} is non-optional and cannot be emptied")
+        deduplicated: list[Component] = []
+        for target in targets:
+            if all(target is not held for held in deduplicated):
+                deduplicated.append(target)
+        self._bound[name] = deduplicated
+        self._rebound(name)
+
+    def _rebound(self, name: str) -> None:
+        """React to a binding of *name* having just changed.
+
+        The hook every write path calls once the new binding is in place; it
+        does nothing here, and a component that cascades its bindings
+        (a source into its assets, a job into its targets) overrides it.
+
+        Args:
+            name: The relation name whose binding changed.
+        """
 
     def bind(self, name: str, *targets: Component) -> None:
         """Bind components to one of this component's declared relations.
 
         A ``many`` relation accumulates, skipping targets it already holds; a
-        single-valued one accepts exactly one target and refuses to swap it
-        silently, so repointing is an explicit :meth:`unbind` first.
+        single-valued one replaces what it holds, so repointing it is a second
+        :meth:`bind` and needs no :meth:`unbind` first.
 
         Args:
             name: The relation name as declared on the class.
             *targets: The components to bind. Binding nothing is a no-op, so a
                 caller may splat an empty list.
-
-        Raises:
-            ConfigError: If a target's kind or key is not one the relation
-                accepts, or if a single-valued relation would hold two targets.
         """
-        relation = self._relation(name)
         if not targets:
             return
-        self._check_targets(name, relation, targets)
-        current = self._bound.get(name, [])
-        if relation.many:
-            accumulated = list(current)
-            for target in targets:
-                if all(target is not held for held in accumulated):
-                    accumulated.append(target)
-            self._bound[name] = accumulated
-        elif current and current[0] is not targets[0]:
-            raise ConfigError(f"{type(self).__name__}.{name} is single-valued; unbind before binding another target")
-        else:
-            self._bound[name] = list(targets)
+        relation = self._relation(name)
+        held = tuple(self._bound.get(name, [])) if relation.many else ()
+        self._replace_binding(name, held + targets)
 
     def unbind(self, name: str, *targets: Component) -> None:
         """Detach components from one of this component's declared relations.
