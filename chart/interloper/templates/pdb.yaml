@@ -1,0 +1,21 @@
+{{/*
+Guards the serving components against voluntary disruption (node upgrades,
+drains), which bypasses the Deployment's rollout strategy entirely.
+*/}}
+{{- range $component := list "api" "frontend" "mcp" }}
+{{- $cfg := index $.Values $component }}
+{{- if and $cfg.enabled $cfg.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "interloper.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "interloper.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  maxUnavailable: {{ $cfg.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "interloper.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}

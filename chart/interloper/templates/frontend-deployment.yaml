@@ -7,6 +7,7 @@ metadata:
     {{- include "interloper.componentLabels" (dict "root" . "component" "frontend") | nindent 4 }}
 spec:
   replicas: {{ .Values.frontend.replicaCount }}
+  strategy: {{- toYaml .Values.frontend.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "interloper.selectorLabels" (dict "root" . "component" "frontend") | nindent 6 }}
@@ -24,6 +25,7 @@ spec:
       {{- with .Values.podSecurityContext }}
       securityContext: {{- toYaml . | nindent 8 }}
       {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.frontend.terminationGracePeriodSeconds }}
       containers:
         - name: frontend
           image: {{ include "interloper.image" (dict "root" . "component" "frontend" "image" .Values.frontend.image) }}
@@ -48,6 +50,9 @@ spec:
               port: http
             initialDelaySeconds: 2
             periodSeconds: 10
+          {{- with .Values.frontend.lifecycle }}
+          lifecycle: {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources: {{- toYaml .Values.frontend.resources | nindent 12 }}
       {{- with .Values.frontend.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}

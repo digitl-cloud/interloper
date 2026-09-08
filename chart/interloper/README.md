@@ -159,6 +159,40 @@ where your ingress implementation expects it:
   and bind it via `api.service.annotations`:
   `cloud.google.com/backend-config: '{"default": "<name>"}'`.
 
+### Zero-downtime rollouts
+
+Cloud L7 load balancers route to pod IPs directly (GKE NEGs, AWS ALB
+target groups) and deprogram a removed endpoint *asynchronously*, with
+no signal back into the cluster.  A pod that exits as soon as it is
+deleted therefore keeps receiving traffic at an address nothing is
+listening on.  The api/frontend/mcp defaults account for that:
+
+| Value | Default | Purpose |
+|-------|---------|---------|
+| `replicaCount` | `2` | The backend never drops to a single endpoint whose loss empties it. |
+| `strategy.rollingUpdate.maxUnavailable` | `0` | Set explicitly: the Kubernetes `25%` default only *floors* to 0 below five replicas. |
+| `lifecycle.preStop` | `sleep 120` | The pod keeps serving through the deprogramming window instead of racing it. |
+| `terminationGracePeriodSeconds` | `150` | Wraps the drain, with headroom for shutdown. |
+| `podDisruptionBudget` | `maxUnavailable: 1` | Node upgrades and drains evict pods without consulting the rollout strategy. |
+
+The drain has to outlast your load balancer's deprogramming, so size it
+per implementation:
+
+- **ingress-nginx**, and in-cluster proxies generally — endpoint changes
+  converge in about a second, so `10` is already generous.
+- **GKE Gateway API / Ingress** — container-native load balancing
+  programs endpoints across the load balancer fleet; windows above 100 s
+  have been observed on the global external ALB.  The NEG readiness gate
+  does not remove the need for a drain — it gates a pod becoming *ready*,
+  never its termination.
+- **AWS ALB** — align with the target group's
+  `deregistration_delay.timeout_seconds` (default `300`).
+
+If rollouts still drop requests, the load balancer's own logs separate
+the two causes: a failure to *connect* to a backend means the drain is
+too short, while a failure to *select* one means the backend was emptied,
+which points at `replicaCount` or `maxUnavailable` instead.
+
 ### RBAC (Kubernetes launcher)
 
 `rbac.create: true` (the default) creates a ServiceAccount + Role +

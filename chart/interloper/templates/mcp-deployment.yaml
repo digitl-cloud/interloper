@@ -7,6 +7,7 @@ metadata:
     {{- include "interloper.componentLabels" (dict "root" . "component" "mcp") | nindent 4 }}
 spec:
   replicas: {{ .Values.mcp.replicaCount }}
+  strategy: {{- toYaml .Values.mcp.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "interloper.selectorLabels" (dict "root" . "component" "mcp") | nindent 6 }}
@@ -26,6 +27,7 @@ spec:
       {{- with .Values.podSecurityContext }}
       securityContext: {{- toYaml . | nindent 8 }}
       {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.mcp.terminationGracePeriodSeconds }}
       containers:
         - name: mcp
           image: {{ include "interloper.image" (dict "root" . "component" "mcp" "image" .Values.mcp.image) }}
@@ -72,6 +74,9 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+          {{- with .Values.mcp.lifecycle }}
+          lifecycle: {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources: {{- toYaml .Values.mcp.resources | nindent 12 }}
       volumes:
         - name: config
