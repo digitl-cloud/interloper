@@ -14,6 +14,7 @@ from interloper.component.base import (
     Component,
     ComponentDefinition,
     _adopt_kind,
+    defer_relation_validation,
 )
 from interloper.errors import ConfigError
 from interloper.serializable import Spec
@@ -522,6 +523,31 @@ class TestValidateRelations:
         down = Down(up=upstream)
         down.validate_relations({upstream.id: upstream})
         with pytest.raises(ConfigError, match="not in the DAG"):
+            down.validate_relations({})
+
+    def test_construction_validates_unless_deferred(self) -> None:
+        class Needy(il.Asset):
+            connection: il.Connection = il.Relation("connection", "conn")
+
+            def data(self, context: il.ExecutionContext, connection: il.Connection) -> list[dict]:
+                return []
+
+        with pytest.raises(ConfigError, match="'connection' is unbound and non-optional"):
+            Needy()
+        with defer_relation_validation():
+            deferred = Needy()
+        with pytest.raises(ConfigError, match="connection"):
+            deferred.validate_relations()
+
+    def test_parentless_owner_leaves_sibling_upstreams_to_the_graph(self) -> None:
+        # A standalone asset has no source to fill a bare-key upstream; the DAG wires it.
+        class Down(il.Asset):
+            def data(self, context: il.ExecutionContext, up: il.Upstream) -> list[dict]:
+                return []
+
+        down = Down()
+        assert down.bound("up") is None
+        with pytest.raises(ConfigError, match="'up' is unbound and non-optional"):
             down.validate_relations({})
 
 

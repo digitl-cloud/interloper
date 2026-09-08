@@ -11,6 +11,7 @@ from typing_extensions import Self
 from interloper.asset import Asset
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation
+from interloper.component.base import defer_relation_validation
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
@@ -204,7 +205,8 @@ class Source(Component, Workload):
             if asset_cls.key not in assets:
                 continue
             overrides, pending = asset_cls._split_references(assets[asset_cls.key])
-            instance = asset_cls(**overrides)
+            with defer_relation_validation():
+                instance = asset_cls(**overrides)
             instance._pending_references = pending
             instances.append(instance)
         data["assets"] = instances
@@ -213,8 +215,8 @@ class Source(Component, Workload):
     def model_post_init(self, context: Any) -> None:
         """Build the source's assets, resolve their defaults and wire them to each other.
 
-        Assets defer relation validation past their own ``__init__``
-        (:attr:`~interloper.asset.base.Asset._defer_validation`): they are
+        The assets are constructed under
+        :func:`~interloper.component.base.defer_relation_validation`: they are
         incomplete until this source has trickled its own bindings into them,
         which cannot happen here, since ``Component.__init__`` binds this
         source's own relation kwargs only *after* ``model_post_init``
@@ -228,7 +230,8 @@ class Source(Component, Workload):
         """
         super().model_post_init(context)
         if not self.assets:
-            self.assets = [cls() for cls in self.asset_types]
+            with defer_relation_validation():
+                self.assets = [cls() for cls in self.asset_types]
         self._resolve()
         if self.select is not None:
             self._apply_select()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import inspect
 from collections.abc import Callable
 from typing import Any, overload
@@ -94,10 +95,12 @@ def _build_asset_class(
     as a **method asset**: at materialization time, the source instance
     is passed as ``self``.  Otherwise it's a standalone function asset.
 
-    The decorated function is kept on the class as ``_data_fn``: the generated
-    ``data()`` is a ``**kwargs`` wrapper, so the original is what relation
-    inference reads its annotations from (see
-    :meth:`~interloper.asset.base.Asset.collect`).
+    The generated ``data()`` is a ``**kwargs`` wrapper that translates ``self``
+    (the asset) into what the function expects, so it wraps the function in
+    the :func:`functools.wraps` sense: relation inference resolves the
+    original's annotations through ``__wrapped__`` (see
+    :meth:`~interloper.asset.base.Asset.collect`), and the stamped
+    ``__signature__`` is what the parameters read as.
 
     Args:
         fn: The sync or async function (or method) backing the asset's ``data()``.
@@ -133,7 +136,6 @@ def _build_asset_class(
             def data(self: Asset, **kwargs: Any) -> Any:
                 return fn(self.source, **kwargs)
 
-        data.__signature__ = data_sig  # ty: ignore[invalid-assignment]
     else:
         # Standalone function asset: prepend `self` for bound method compat.
         self_param = inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)
@@ -148,9 +150,10 @@ def _build_asset_class(
             def data(self: Asset, **kwargs: Any) -> Any:
                 return fn(**kwargs)
 
-        data.__signature__ = data_sig  # ty: ignore[invalid-assignment]
+    functools.update_wrapper(data, fn)
+    data.__signature__ = data_sig  # ty: ignore[invalid-assignment]
 
-    namespace: dict[str, Any] = {"data": data, "_data_fn": fn, **classvars, **fields}
+    namespace: dict[str, Any] = {"data": data, **classvars, **fields}
     if relations:
         namespace["relations"] = relations
     namespace["__module__"] = fn.__module__
