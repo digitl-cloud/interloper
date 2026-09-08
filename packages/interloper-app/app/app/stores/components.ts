@@ -15,8 +15,8 @@ export const useComponentsStore = defineStore('components', () => {
     /**********************
      * Getters
      **********************/
-    /** All relations of type `upstream` (asset → upstream asset edges). */
-    const upstreams = computed(() => relations.value.filter(r => r.type === 'upstream'))
+    /** All asset-to-asset relations (an asset's declared upstreams). */
+    const upstreams = computed(() => relations.value.filter(r => r.src_kind === 'asset' && r.dst_kind === 'asset'))
 
     /**********************
      * Internals
@@ -112,15 +112,15 @@ export const useComponentsStore = defineStore('components', () => {
     }
 
     /**
-     * Fetch relations, optionally narrowed to a type (replaces that type only).
+     * Fetch relations, optionally narrowed to a name (replaces that name only).
      * Reported rather than thrown: pages fire it without awaiting, so a
      * rejection would otherwise surface nowhere but the console.
      */
-    async function fetchRelations(type?: string) {
-        const query = type ? `?type=${type}` : ''
+    async function fetchRelations(name?: string) {
+        const query = name ? `?name=${name}` : ''
         try {
             const fetched = await apiFetch<Relation[]>(`/components/relations${query}`)
-            if (type) relations.value = [...relations.value.filter(r => r.type !== type), ...fetched]
+            if (name) relations.value = [...relations.value.filter(r => r.name !== name), ...fetched]
             else relations.value = fetched
         }
         catch (e) {
@@ -128,22 +128,24 @@ export const useComponentsStore = defineStore('components', () => {
         }
     }
 
-    async function addRelation(id: string, input: { type: string } & RelationInput): Promise<Relation> {
+    /** Add one relation binding (`{ name, dst_id }`), replacing any prior binding of the same name and dst. */
+    async function addRelation(id: string, input: { name: string } & RelationInput): Promise<Relation> {
         const relation = await apiFetch<Relation>(`/components/${id}/relations`, {
             method: 'POST',
             body: input,
         })
         relations.value = [
-            ...relations.value.filter(r => !(r.src_id === id && r.type === input.type && r.dst_id === input.dst_id)),
+            ...relations.value.filter(r => !(r.src_id === id && r.name === input.name && r.dst_id === input.dst_id)),
             relation,
         ]
         return relation
     }
 
-    async function removeRelation(id: string, type: string, dstId: string) {
-        await apiFetch(`/components/${id}/relations/${type}/${dstId}`, { method: 'DELETE' })
+    /** Remove one relation binding by name and destination id. */
+    async function removeRelation(id: string, name: string, dstId: string) {
+        await apiFetch(`/components/${id}/relations/${name}/${dstId}`, { method: 'DELETE' })
         relations.value = relations.value.filter(
-            r => !(r.src_id === id && r.type === type && r.dst_id === dstId),
+            r => !(r.src_id === id && r.name === name && r.dst_id === dstId),
         )
     }
 
@@ -169,8 +171,9 @@ export const useComponentsStore = defineStore('components', () => {
     /**
      * Whether a relation detaches (rather than blocks) when its destination
      * is deleted — the referrer's vocabulary decides: `on_delete: 'detach'`
-     * types (job targets, hook watches) and optional slots detach; anything
-     * unresolvable blocks, matching the backend guard's fail-closed default.
+     * names (job targets, hook watches) and optional relations detach;
+     * anything unresolvable blocks, matching the backend guard's fail-closed
+     * default.
      */
     function _relationDetaches(src: ComponentRecord | undefined, r: Relation): boolean {
         if (!src) return false
@@ -181,11 +184,9 @@ export const useComponentsStore = defineStore('components', () => {
             const assetDefn = parent && catalogStore.getSourceDefinition(parent.key)?.assets?.find(a => a.key === src.key)
             if (assetDefn) vocabulary = assetDefn.relations
         }
-        const defn = vocabulary?.[r.type]
+        const defn = vocabulary?.[r.name]
         if (!defn) return false
-        if (defn.on_delete === 'detach') return true
-        const slot = defn.slots?.[r.slot]
-        return !!slot && slot.optional
+        return defn.on_delete === 'detach' || defn.optional
     }
 
     /**
@@ -270,15 +271,14 @@ export const useComponentsStore = defineStore('components', () => {
         table: 'component_relations',
         scope: () => orgStore.organisation?.id,
         onInsert: (record: Record<string, any>) => {
-            const key = (r: Relation) => `${r.src_id}|${r.type}|${r.slot}|${r.dst_id}`
+            const key = (r: Relation) => `${r.src_id}|${r.name}|${r.dst_id}`
             const incoming = record as Relation
             if (!relations.value.some(r => key(r) === key(incoming))) relations.value.push(incoming)
         },
         onUpdate: () => {},
         onDelete: (record: Record<string, any>) => {
             relations.value = relations.value.filter(
-                r => !(r.src_id === record.src_id && r.type === record.type
-                    && r.slot === record.slot && r.dst_id === record.dst_id),
+                r => !(r.src_id === record.src_id && r.name === record.name && r.dst_id === record.dst_id),
             )
         },
     })
