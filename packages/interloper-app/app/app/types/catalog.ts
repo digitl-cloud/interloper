@@ -56,6 +56,9 @@ export type Catalog = Record<string, ComponentDefinition>
 /** Resource kinds: connection/config/resource relations carry secrets or settings, not data. */
 export const RESOURCE_KINDS = ['connection', 'config', 'resource'] as const
 
+/** Source part of a relation key that accepts a match from any source (`*.campaigns`). */
+export const ANY_SOURCE = '*'
+
 /** A relation's dst kind(s) as an array, whether declared singular or plural. */
 export function kindsOf(r: RelationDefinition): string[] {
     return Array.isArray(r.kind) ? r.kind : [r.kind]

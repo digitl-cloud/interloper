@@ -122,7 +122,7 @@ const columns: TableColumn<ComponentRecord>[] = [
         accessorKey: 'destinations',
         header: 'Destinations',
         cell: ({ row }) => {
-            const dests = relationIds(row.original, 'destination')
+            const dests = relationIds(row.original, 'destinations')
                 .map(id => componentsStore.byId(id))
                 .filter((d): d is ComponentRecord => !!d)
             if (dests.length === 0) return h('span', { class: 'text-muted' }, '—')

@@ -141,7 +141,7 @@ export function jobLastRunAt(c: ComponentRecord): string | null {
 
 /** A job's target ids of a given kind ('source' | 'asset'). */
 export function jobTargetIds(c: ComponentRecord, kind: string): string[] {
-    return relationRefs(c, 'target')
+    return relationRefs(c, 'targets')
         .filter(r => r.dst_kind === kind)
         .map(r => r.dst_id)
 }
