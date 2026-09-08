@@ -1,11 +1,12 @@
 """Run executor: the envelope that assembles a run's operations and drives the runner.
 
 The executor owns the run lifecycle — load, mark running, trace, terminal
-status, failure event — and the platform side of graph assembly: flattening
-the hydrated target workload into its operations, joining upstream
-dependencies from the store as non-materializable context, and skipping the
-retry lineage's prior successes. The runner executes the operations; their
-returned effects (config and state fields) are applied generically to each
+status, failure event — and skipping the retry lineage's prior successes.
+Flattening the hydrated target workload into its operations and joining
+bound upstreams the run itself does not materialize are the framework's own
+concern (``Workload.operations()``, ``DAG._include_read_only_upstreams()``),
+not the executor's. The runner executes the operations; their returned
+effects (config and state fields) are applied generically to each
 operation's component row after the run.
 """
 
@@ -14,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 import interloper as il
@@ -117,7 +118,6 @@ class RunExecutor:
                     self._store.runs.complete(run_id, success=True)
                     return True
 
-                self._resolve_upstream(operations)
                 if retry_of:
                     successes = self._prior_successes(retry_of)
                     for operation in operations:
@@ -160,33 +160,6 @@ class RunExecutor:
         db_run.started_at = dt.datetime.now(dt.timezone.utc)
         session.add(db_run)
         session.commit()
-
-    def _resolve_upstream(self, operations: list[il.Operation]) -> None:
-        """Add transitive upstream dependencies to *operations* as non-materializable.
-
-        Platform-side graph assembly: hydrated nodes carry their dependencies
-        as row ids, so the walk loads each unseen id from the store and
-        follows the dependencies it declares in turn. Joined upstream nodes
-        are read from their destinations, never recomputed.
-
-        Args:
-            operations: The nodes to walk from, extended in place.
-        """
-        visited = {operation.id for operation in operations}
-        frontier = list(operations)
-        while frontier:
-            next_frontier: list[il.Operation] = []
-            for operation in frontier:
-                for upstream_ids in operation.upstreams.values():
-                    for dependency_id in upstream_ids:
-                        if dependency_id in visited:
-                            continue
-                        visited.add(dependency_id)
-                        upstream = cast(il.Asset, self._store.components.load(UUID(dependency_id)))
-                        upstream.materializable = False
-                        operations.append(upstream)
-                        next_frontier.append(upstream)
-            frontier = next_frontier
 
     def _prior_successes(self, retry_of: UUID) -> set[UUID]:
         """Node row ids that already succeeded in the retry lineage.

@@ -129,7 +129,7 @@ class TestHookEvaluation:
         hook = store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="Cascade",
             config={"events": ["run_completed"]},
-            relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},
+            relations={"watches": [leaf.id], "targets": [root.id]},
         )
         run = _terminal_run(store, leaf.id)
 
@@ -155,7 +155,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="Cascade",
             config={"events": ["run_completed"]},
-            relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},
+            relations={"watches": [leaf.id], "targets": [root.id]},
         )
         _terminal_run(store, leaf.id)
 
@@ -174,7 +174,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="OnFailureOnly",
             config={"events": ["run_failed"]},
-            relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},
+            relations={"watches": [leaf.id], "targets": [root.id]},
         )
         _terminal_run(store, leaf.id, status="success")
 
@@ -200,7 +200,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="OnAnyAsset",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
-            relations={"watch": [(source.id, "")]},
+            relations={"watches": [source.id]},
         )
         _terminal_run(store, child.id)
 
@@ -220,7 +220,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_failed"], "url": "https://example.test/x"},
-            relations={"watch": [(source.id, "")]},
+            relations={"watches": [source.id]},
         )
         run = _terminal_run(store, source.id, status="failed")
 
@@ -240,7 +240,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="Ouroboros",
             config={"events": ["run_completed"]},
-            relations={"watch": [(source.id, "")], "target": [(source.id, "")]},
+            relations={"watches": [source.id], "targets": [source.id]},
         )
         _terminal_run(store, source.id)
 
@@ -259,7 +259,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
-            relations={"watch": [(source.id, "")]},
+            relations={"watches": [source.id]},
         )
         _terminal_run(store, source.id)
 
@@ -278,7 +278,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
-            relations={"watch": [(source.id, "")]},
+            relations={"watches": [source.id]},
         )
         # components.create always derives a name, so the nullable column is
         # the only way the fallback is reachable.
@@ -301,7 +301,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_failed"], "url": "https://example.test/n"},
-            relations={"watch": [(source.id, "")]},
+            relations={"watches": [source.id]},
         )
         run = _terminal_run(store, source.id, status="failed")
         # The error text lives on the run's event rows, not the run itself.
@@ -318,7 +318,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="webhook_hook", name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
-            relations={"watch": [(source.id, "")]},
+            relations={"watches": [source.id]},
         )
         _terminal_run(store, source.id)
 
@@ -336,7 +336,7 @@ class TestHookEvaluation:
         store.components.create(
             _ORG, kind="hook", key="trigger_hook", name="Chain",
             config={"events": ["run_completed"]},
-            relations={"watch": [(leaf.id, "")], "target": [(root.id, "")]},
+            relations={"watches": [leaf.id], "targets": [root.id]},
         )
         _terminal_run(store, leaf.id)
 
