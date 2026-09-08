@@ -13,8 +13,10 @@ genuinely owns are applied where the row's ``kind`` demands them:
   status cascades through the parent's.
 - **job**: hydration drift-checks every target before reconstruction.
 
-Relation reads and writes live in the :class:`RelationMixin` layer this
-mixin builds on — see :mod:`interloper_db.store.relations`.
+Relation reads and writes are not here at all: this store composes a
+:class:`~interloper_db.store.relations.RelationStore` and delegates to it,
+so the acceptance rules a relation name carries live in one place (see
+:mod:`interloper_db.store.relations`).
 """
 
 from __future__ import annotations

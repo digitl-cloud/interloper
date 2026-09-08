@@ -39,8 +39,9 @@ from uuid import UUID
 
 from interloper.catalog.base import Catalog
 from interloper.component import KINDS
-from interloper.errors import CatalogKeyError, HydrationError, format_exception
+from interloper.errors import CatalogKeyError, ComponentDriftError, HydrationError, format_exception
 from interloper.serializable import Spec
+from interloper.source.base import SourceDefinition
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
@@ -146,7 +147,11 @@ class Hydrator:
         under that name, a list when the declared relation is ``many`` and a
         single value otherwise. Children are the one non-relation
         contribution: they embed as the ``assets`` override map, since the
-        parent source is the unit of reconstruction.
+        parent source is the unit of reconstruction. A child the parent's
+        declaration has dropped is refused as drift by :meth:`_check_declared`
+        before its own relations are read: those rows are declared by the
+        class the child no longer belongs to, so reading them would report
+        the parent's drift as an undeclared relation name on the child.
 
         Args:
             session: Active DB session, used to read relations and children.
@@ -196,12 +201,41 @@ class Hydrator:
         children = session.exec(
             select(Component).where(Component.parent_id == db_component.id).order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
         ).all()
-        if assets := {
-            child.key: {"id": str(child.id), **self._build_init(session, child, seen=seen)} for child in children
-        }:
+        assets: dict[str, Any] = {}
+        for child in children:
+            self._check_declared(db_component, child)
+            assets[child.key] = {"id": str(child.id), **self._build_init(session, child, seen=seen)}
+        if assets:
             init["assets"] = assets
 
         return init
+
+    def _check_declared(self, db_parent: Component, db_child: Component) -> None:
+        """Refuse a child row whose key its parent no longer declares.
+
+        The same question :func:`~interloper_db.store.status.asset_status`
+        asks of an asset row, asked here of the parent's whole child set: the
+        catalog's own declaration of the parent is authoritative, and a child
+        outside it has drifted out of the source. A parent that does not
+        resolve as a source declares nothing to check against, and is left to
+        :meth:`_resolve_path` to report.
+
+        Args:
+            db_parent: The owning component row, whose declaration decides.
+            db_child: The child row whose key is checked.
+
+        Raises:
+            ComponentDriftError: If the parent's declaration does not name
+                the child's key.
+        """
+        definition = self._catalog.get(db_parent.key)
+        if not isinstance(definition, SourceDefinition):
+            return
+        if db_child.key not in {asset.key for asset in definition.assets}:
+            raise ComponentDriftError(
+                f"Asset '{db_child.key}' ({db_child.id}) is no longer declared by source "
+                f"'{db_parent.key}' ({db_parent.id}); its catalog key has drifted."
+            )
 
     def _relations_by_name(self, session: Session, src_id: UUID | None) -> dict[str, list[ComponentRelation]]:
         """Group a component's outgoing relations by name, ordered stably.

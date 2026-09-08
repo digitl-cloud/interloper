@@ -110,6 +110,18 @@ class WireDownSource(il.Source):
             return []
 
 
+class WireUpNarrowedSource(il.Source):
+    """``wire_up_source`` as a later release declares it: no ``totals``."""
+
+    key = "wire_up_source"
+
+    class Rows(il.Asset):
+        """The one asset the narrowed class still declares."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
 class WireDownOptionalSource(il.Source):
     """Downstream source whose asset optionally reads ``wire_up_source.rows``."""
 
@@ -951,6 +963,18 @@ class TestLoadDrift:
 
         with pytest.raises(ComponentDriftError, match="is no longer declared by source"):
             store.components.load(orphan_id)
+
+    def test_a_child_the_class_dropped_drifts_the_whole_source(self, component_db: Engine):
+        # The dropped child's own relation rows are declared by the class it
+        # fell out of, so reading them would report this drift as an
+        # undeclared relation name on the child.
+        writer = Store(catalog=il.Catalog.from_assets([WireUpSource]))
+        source = writer.components.create(_ORG, kind="source", key="wire_up_source")
+        assert sorted(child.key for child in source.children) == ["rows", "totals"]
+        reader = Store(catalog=il.Catalog.from_assets([WireUpNarrowedSource]))
+
+        with pytest.raises(ComponentDriftError, match="Asset 'totals' .* is no longer declared by source"):
+            reader.components.load(source.id)
 
 
 class TestEnsureChildrenDrift:
