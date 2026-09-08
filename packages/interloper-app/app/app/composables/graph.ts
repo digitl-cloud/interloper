@@ -1,5 +1,5 @@
 import type { Connection } from '@vue-flow/core'
-import { upstreamSlots, qualifiedKey } from '~/types/catalog'
+import { ANY_SOURCE, keysOf, parseQualifiedKey, qualifiedKey, upstreamRelations } from '~/types/catalog'
 import type { ComponentRecord, Relation } from '~/types/component'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -178,11 +178,32 @@ export function useGraphLayout() {
 // ─── Connection Rules ────────────────────────────────────────────────
 
 export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions) {
-    /** Check if a dependency already exists. */
-    function depExists(downstreamId: string, upstreamId: string): boolean {
+    /**
+     * Whether a relation binding named `name` already blocks this pair.
+     * A `many` relation only blocks the exact same upstream (it otherwise
+     * fans in from several); a single-valued relation blocks on any prior
+     * binding under that name, since it can only ever hold one.
+     */
+    function depExists(downstreamId: string, upstreamId: string, name: string, many: boolean): boolean {
         return options.assetDependencies.value.some(
-            d => d.src_id === downstreamId && d.dst_id === upstreamId,
+            d => d.src_id === downstreamId && d.name === name && (many ? d.dst_id === upstreamId : true),
         )
+    }
+
+    /** The relation name a candidate upstream's qualified key satisfies, if any. */
+    function matchingRelationName(spec: AssetDefinition, upstreamQk: string): string | undefined {
+        for (const [name, relation] of Object.entries(upstreamRelations(spec))) {
+            for (const declared of keysOf(relation)) {
+                const { sourceKey, assetKey } = parseQualifiedKey(declared)
+                // A bare key is a same-source sibling the framework binds on its
+                // own; it never pairs assets across sources on the graph.
+                if (!sourceKey) continue
+                if (sourceKey === ANY_SOURCE ? parseQualifiedKey(upstreamQk).assetKey === assetKey : declared === upstreamQk) {
+                    return name
+                }
+            }
+        }
+        return undefined
     }
 
     function resolveConnectionPairs(connection: Connection): DependencyPair[] {
@@ -220,18 +241,17 @@ export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions)
             }
         }
 
-        // Match: for each downstream, check if any upstream satisfies its requires
+        // Match: for each downstream, check if any upstream satisfies one of its relations
         const pairs: DependencyPair[] = []
         for (const downstream of downstreamAssets) {
             const spec = options.getAssetDefinition(downstream.qk)
             if (!spec) continue
-            const allReqs = upstreamSlots(spec)
+            const relations = upstreamRelations(spec)
             for (const upstream of upstreamAssets) {
                 if (upstream.id === downstream.id) continue
-                // Find the param name that this upstream satisfies
-                const paramName = Object.entries(allReqs).find(([, slot]) => slot.key === upstream.qk)?.[0]
+                const paramName = matchingRelationName(spec, upstream.qk)
                 if (!paramName) continue
-                if (depExists(downstream.id, upstream.id)) continue
+                if (depExists(downstream.id, upstream.id, paramName, relations[paramName]!.many)) continue
                 pairs.push({ upstreamAssetId: upstream.id, downstreamAssetId: downstream.id, paramName })
             }
         }

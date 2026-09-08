@@ -70,16 +70,15 @@ export function useAssetWarnings() {
         return map
     })
 
-    /** Look up an asset definition by qualified key. */
+    /** Look up an asset definition by qualified key. A bare or wildcard (`*.x`) source scans every source. */
     function getAssetDefinition(qk: string): AssetDefinition | undefined {
         const { sourceKey, assetKey } = parseQualifiedKey(qk)
-        if (sourceKey) {
+        if (sourceKey && sourceKey !== ANY_SOURCE) {
             const src = catalogStore.sourceDefinitions.find(s => s.key === sourceKey)
             return src?.assets?.find(a => a.key === assetKey)
         }
-        // Bare key fallback: scan all sources
         for (const src of catalogStore.sourceDefinitions) {
-            const asset = src.assets?.find(a => a.key === qk)
+            const asset = src.assets?.find(a => a.key === assetKey)
             if (asset) return asset
         }
         return undefined

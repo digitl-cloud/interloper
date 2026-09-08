@@ -110,7 +110,7 @@ async function onCreateDependencies(pairs: Array<{ upstreamAssetId: string; down
     try {
         await Promise.all(
             pairs.map(({ downstreamAssetId, upstreamAssetId, paramName }) =>
-                componentsStore.addRelation(downstreamAssetId, { type: 'upstream', dst_id: upstreamAssetId, slot: paramName }),
+                componentsStore.addRelation(downstreamAssetId, { name: paramName, dst_id: upstreamAssetId }),
             ),
         )
     }
@@ -120,8 +120,19 @@ async function onCreateDependencies(pairs: Array<{ upstreamAssetId: string; down
 }
 
 async function onDeleteDependency(payload: { upstreamAssetId: string; downstreamAssetId: string }) {
+    const relation = componentsStore.upstreams.find(
+        r => r.src_id === payload.downstreamAssetId && r.dst_id === payload.upstreamAssetId,
+    )
+    if (!relation) {
+        toast.add({
+            title: 'Failed to delete dependency',
+            description: 'The relation was not found. Reload the page and try again.',
+            color: 'error',
+        })
+        return
+    }
     try {
-        await componentsStore.removeRelation(payload.downstreamAssetId, 'upstream', payload.upstreamAssetId)
+        await componentsStore.removeRelation(payload.downstreamAssetId, relation.name, payload.upstreamAssetId)
     }
     catch (e) {
         toast.add(errorToast(e, 'Failed to delete dependency'))

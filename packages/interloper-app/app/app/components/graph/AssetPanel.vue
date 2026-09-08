@@ -82,7 +82,7 @@ async function fetchPartitionCounts() {
 watch(() => props.asset.id, () => fetchPartitionCounts(), { immediate: true })
 
 const destinations = computed(() => {
-    return relationIds(props.source, 'destination')
+    return relationIds(props.source, 'destinations')
         .map(id => componentsStore.byId(id))
         .filter((d): d is ComponentRecord => !!d)
         .map((dest) => {
