@@ -19,6 +19,7 @@ mixin builds on — see :mod:`interloper_db.store.relations`.
 
 from __future__ import annotations
 
+import functools
 import json
 from typing import Any, cast
 from uuid import UUID
@@ -339,7 +340,11 @@ class ComponentStore:
         """Hydrate a framework component of any kind from its row.
 
         Source-owned assets hydrate through their parent source and are
-        extracted from it; jobs drift-check every target first. Fails closed
+        extracted from it; jobs drift-check every target first. One cache
+        backs the whole call (see :meth:`_load`), so a component reached
+        several times within the same document (a job's own target and,
+        through a cross-source upstream, that same target again) hydrates
+        once and every consumer binds the identical instance. Fails closed
         on any catalog drift: see :meth:`_load` for what a missing row, a
         drifted key or a failed reconstruction raises.
 
@@ -352,13 +357,34 @@ class ComponentStore:
         with tracer().start_as_current_span(
             "interloper.store.load", attributes={attributes.TARGET_ID: str(component_id)}
         ):
-            return self._load(component_id)
+            return self._load(component_id, {})
 
-    def _load(self, component_id: UUID) -> il.Component:
+    def _load(
+        self,
+        component_id: UUID,
+        cache: dict[UUID, il.Component],
+        chain: tuple[tuple[UUID, str], ...] = (),
+    ) -> il.Component:
         """Hydrate a component row (the traced body of :meth:`load`).
+
+        A spec reference (``{"ref": id}``) is resolved from the document
+        first, which reconstruction does on its own, and only then through
+        :meth:`_resolve_reference`, which re-enters here with the same
+        *cache* and *chain* rather than starting a fresh call: a job that
+        targets both a source and a consumer of that source's asset holds
+        one instance of it, not two, and an owned asset's parent (loaded
+        through :meth:`_load_owned_asset`) shares the cache the same way.
+        *chain* is the trail of ids currently being hydrated, paired with
+        the catalog key each was hydrated under; a reference back onto one
+        of them is a cycle, reported from the trail rather than left to
+        exhaust the stack.
 
         Args:
             component_id: The component UUID.
+            cache: Components already hydrated within this :meth:`load` call,
+                by id, consulted before doing any work.
+            chain: Ids currently being hydrated in this call, in resolution
+                order. Defaults to ``()``, the top-level call's empty trail.
 
         Returns:
             The reconstructed framework component.
@@ -366,9 +392,17 @@ class ComponentStore:
         Raises:
             NotFoundError: If the component is not found.
             ComponentDriftError: If a catalog key no longer resolves.
-            HydrationError: If the stored payload does not decrypt, or if
-                reconstruction fails.
+            HydrationError: If the stored payload does not decrypt, if
+                reconstruction fails, or if a reference revisits an id
+                already being hydrated earlier in the same call.
         """
+        if component_id in cache:
+            return cache[component_id]
+        cyclic_key = next((key for id_, key in chain if id_ == component_id), None)
+        if cyclic_key is not None:
+            trail = " -> ".join(key for _, key in chain)
+            raise HydrationError(f"Reference cycle while hydrating: {trail} -> {cyclic_key}")
+
         with session_scope(self._engine) as session:
             db_component = session.get(Component, component_id)
             if not db_component:
@@ -394,28 +428,74 @@ class ComponentStore:
 
         # Reconstruction happens outside the session: it imports classes and,
         # for owned assets, recursively loads the parent source.
+        chain = (*chain, (component_id, db_component.key))
         if owned_asset:
-            return self._load_owned_asset(db_component.parent_id, db_component.key, component_id)
-        try:
-            return il.Component.from_spec(spec)
-        except Exception as e:
-            # format_exception, never str(e): a ValidationError here carries the
-            # decrypted payload of sensitive kinds in its input_value dumps, and
-            # this message is persisted into run events and shown in the UI.
-            raise HydrationError(
-                f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): {format_exception(e)}"
-            ) from e
+            component = self._load_owned_asset(db_component.parent_id, db_component.key, component_id, cache, chain)
+        else:
+            resolve = functools.partial(self._resolve_reference, cache=cache, chain=chain)
+            try:
+                component = il.Component.from_spec(spec, resolve=resolve)
+            except (ComponentDriftError, NotFoundError):
+                # A dedicated handler (the API's drift endpoint, say) needs to
+                # tell these apart from a generic hydration failure, so they
+                # pass through untouched rather than folding into the catch-all.
+                raise
+            except Exception as e:
+                # format_exception, never str(e): a ValidationError here carries the
+                # decrypted payload of sensitive kinds in its input_value dumps, and
+                # this message is persisted into run events and shown in the UI.
+                raise HydrationError(
+                    f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): "
+                    f"{format_exception(e)}"
+                ) from e
+        cache[component_id] = component
+        return component
 
-    def _load_owned_asset(self, parent_id: UUID, key: str, asset_id: UUID) -> il.Asset:
+    def _resolve_reference(
+        self,
+        reference: str,
+        *,
+        cache: dict[UUID, il.Component],
+        chain: tuple[tuple[UUID, str], ...],
+    ) -> il.Component:
+        """Hydrate the component a spec reference names from outside its document.
+
+        Args:
+            reference: Id of the referenced component, as the spec carries it.
+            cache: Components already hydrated within the enclosing
+                :meth:`load` call, consulted (and extended) instead of
+                hydrating a fresh instance for a component reached again.
+            chain: Ids currently being hydrated in the enclosing call, for
+                :meth:`_load`'s cycle check.
+
+        Returns:
+            The referenced component, hydrated through the store.
+        """
+        return self._load(UUID(reference), cache, chain)
+
+    def _load_owned_asset(
+        self,
+        parent_id: UUID,
+        key: str,
+        asset_id: UUID,
+        cache: dict[UUID, il.Component],
+        chain: tuple[tuple[UUID, str], ...],
+    ) -> il.Asset:
         """Hydrate a source-owned asset through its parent source.
 
-        The parent source is the unit of reconstruction — loading it binds
-        all its assets — and the child is picked out by key.
+        The parent source is the unit of reconstruction: loading it binds all
+        its assets, and the child is picked out by key. The parent loads
+        through the same *cache* and *chain* as the asset itself, so a
+        source hydrates once even when several of its owned assets are each
+        reached independently within one :meth:`load` call.
 
         Args:
             parent_id: UUID of the owning source component.
             key: Catalog key of the asset to pick out of the source.
             asset_id: UUID of the asset row, for the drift error message.
+            cache: Components already hydrated within the enclosing
+                :meth:`load` call.
+            chain: Ids currently being hydrated in the enclosing call.
 
         Returns:
             The bound asset instance.
@@ -423,7 +503,7 @@ class ComponentStore:
         Raises:
             ComponentDriftError: If the source no longer declares the key.
         """
-        source = cast(il.Source, self.load(parent_id))
+        source = cast(il.Source, self._load(parent_id, cache, chain))
         for asset in source.assets:
             if asset.key == key:
                 return asset

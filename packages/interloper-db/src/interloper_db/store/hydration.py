@@ -13,10 +13,17 @@ happens at the call site via ``spec.reconstruct()``::
 
 One builder covers every kind: a component's init is its ``config`` (or its
 decrypted ``data`` for secret-bearing kinds) plus whatever its outgoing
-relations and children contribute. Relations are mapped through the row's
-own vocabulary (the catalog class's definition, anchor as drift fallback),
-so the walk needs no kind dispatch: an asset simply has no ``target``
-relations, a destination no ``upstream`` ones.
+relations and children contribute. Relations are read by name and checked
+against the row's own vocabulary (the catalog class's declaration, the
+kind's anchor as drift fallback), so the walk needs no kind dispatch: an
+asset simply holds no ``targets`` edges, a destination no upstream ones.
+
+A target is written out by the rule ``Component.to_spec`` follows: one
+owned by a source travels inside that source's own spec, so it is always a
+``{"ref": id}``, and a parentless one is written out in full the first time
+the walk reaches it and referenced afterwards. Resolving a reference the
+document does not carry is the caller's job (see
+:meth:`~interloper_db.store.components.ComponentStore._load`).
 
 The Store wraps this pattern in thin ``load_*`` convenience methods, but
 any caller can use the hydrator directly to assemble a spec (for example,
@@ -63,18 +70,28 @@ class Hydrator:
         self._catalog = catalog
         self._decrypt = decrypt
 
-    def build_component_spec(self, session: Session, db_component: Component) -> Spec:
+    def build_component_spec(
+        self,
+        session: Session,
+        db_component: Component,
+        *,
+        seen: set[str] | None = None,
+    ) -> Spec:
         """Build a spec for a component row of any kind.
 
         Args:
             session: Active DB session (used to walk relations and children).
             db_component: The component row.
+            seen: Ids the walk has already written out in full, extended with
+                this row's own. One set is shared by every spec of a document,
+                which is what turns a repeated target into a reference.
+                Defaults to ``None``, which starts a document of this row alone.
 
         Returns:
             A ``Spec`` with the row's ``id`` and a fully resolved
             init payload (nested components as nested specs).
         """
-        init = self._build_init(session, db_component)
+        init = self._build_init(session, db_component, seen=seen)
         return Spec(
             path=self._resolve_path(session, db_component),
             id=str(db_component.id) if db_component.id else "",
@@ -116,68 +133,85 @@ class Hydrator:
 
     # -- Internals -------------------------------------------------------------
 
-    def _build_init(self, session: Session, db_component: Component) -> dict[str, Any]:
+    def _build_init(
+        self,
+        session: Session,
+        db_component: Component,
+        *,
+        seen: set[str] | None = None,
+    ) -> dict[str, Any]:
         """Build the init payload for a component row.
 
-        Relations are mapped through the kind's own vocabulary: each type
-        fills its declared ``field``, shaped by its definition — slotted
-        types as ``{slot: value}``, unslotted ones as lists, carrying
-        nested specs (``inline``) or bare instance ids.
-        Children are the one non-relation contribution: they embed as the
-        ``assets`` override map, since the parent source is the unit of
-        reconstruction.
+        Each relation name the row holds edges under sits in the payload
+        under that name, a list when the declared relation is ``many`` and a
+        single value otherwise. Children are the one non-relation
+        contribution: they embed as the ``assets`` override map, since the
+        parent source is the unit of reconstruction.
 
         Args:
             session: Active DB session, used to read relations and children.
             db_component: The component row whose init payload is built.
+            seen: Ids the walk has already written out in full, extended with
+                this row's own before anything else runs (so a cycle back
+                onto it is caught the same way whether this is the top of the
+                walk or a nested call). Defaults to ``None``, which starts a
+                document of this row alone.
 
         Returns:
             A dict suitable for use as a ``Spec.init``.
 
         Raises:
-            HydrationError: If the row carries a relation type its kind's
-                vocabulary does not declare.
+            HydrationError: If the row holds edges under a relation name its
+                class does not declare, or holds more than one row under a
+                relation its class declares single-valued.
         """
+        seen = set() if seen is None else seen
+        seen.add(str(db_component.id) if db_component.id else "")
         if KINDS[db_component.kind].sensitive:
             init = self.decode_data(db_component)
         else:
             init = dict(db_component.config or {})
 
-        vocabulary = self._catalog.vocabulary(db_component.kind, db_component.key)
-        for relation_type, rels in self._relations_by_type(session, db_component.id).items():
-            definition = vocabulary.get(relation_type)
-            if definition is None:
+        vocabulary = self._catalog.vocabulary(
+            db_component.kind, db_component.key, parent_key=db_component.parent_key(session)
+        )
+        for name, rows in self._relations_by_name(session, db_component.id).items():
+            relation = vocabulary.get(name)
+            if relation is None:
                 raise HydrationError(
-                    f"Component {db_component.id} ({db_component.kind}) has '{relation_type}' relations, "
-                    "which its kind's vocabulary does not declare"
+                    f"Component {db_component.id} ({db_component.kind}) has '{name}' relations "
+                    "its class does not declare"
                 )
-            if definition.inline:
-                values = [self._dst_spec(session, rel).model_dump(mode="json") for rel in rels]
+            values = [self._dst_value(session, row, seen) for row in rows]
+            if relation.many:
+                init[name] = values
+            elif len(values) > 1:
+                raise HydrationError(
+                    f"Component {db_component.id} ({db_component.kind}) holds {len(values)} rows under "
+                    f"single-valued relation '{name}'"
+                )
             else:
-                values = [str(rel.dst_id) for rel in rels]
-            init[definition.field] = (
-                {rel.slot: value for rel, value in zip(rels, values)} if definition.slotted else values
-            )
+                init[name] = values[0]
 
         children = session.exec(
             select(Component).where(Component.parent_id == db_component.id).order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
         ).all()
         if assets := {
-            child.key: {"id": str(child.id), **self._build_init(session, child)} for child in children
+            child.key: {"id": str(child.id), **self._build_init(session, child, seen=seen)} for child in children
         }:
             init["assets"] = assets
 
         return init
 
-    def _relations_by_type(self, session: Session, src_id: UUID | None) -> dict[str, list[ComponentRelation]]:
-        """Group a component's outgoing relations by type, ordered stably.
+    def _relations_by_name(self, session: Session, src_id: UUID | None) -> dict[str, list[ComponentRelation]]:
+        """Group a component's outgoing relations by name, ordered stably.
 
         Args:
             session: Active DB session used to read the relation rows.
             src_id: The source component's id, or ``None`` for an unflushed row.
 
         Returns:
-            A ``{type: relations}`` mapping ordered by ``(slot, dst_id)``, or
+            A ``{name: relations}`` mapping ordered by ``(name, dst_id)``, or
             ``{}`` when ``src_id`` is ``None``.
         """
         if src_id is None:
@@ -185,31 +219,36 @@ class Hydrator:
         rows = session.exec(
             select(ComponentRelation)
             .where(ComponentRelation.src_id == src_id)
-            .order_by(ComponentRelation.slot, ComponentRelation.dst_id)  # ty: ignore[invalid-argument-type]
+            .order_by(ComponentRelation.name, ComponentRelation.dst_id)  # ty: ignore[invalid-argument-type]
         ).all()
         grouped: dict[str, list[ComponentRelation]] = {}
-        for rel in rows:
-            grouped.setdefault(rel.type, []).append(rel)
+        for row in rows:
+            grouped.setdefault(row.name, []).append(row)
         return grouped
 
-    def _dst_spec(self, session: Session, rel: ComponentRelation) -> Spec:
-        """Build the spec of a relation's destination component.
+    def _dst_value(self, session: Session, row: ComponentRelation, seen: set[str]) -> dict[str, Any]:
+        """Write out one edge's destination, in full or as a reference.
 
         Args:
             session: Active DB session used to load the destination row.
-            rel: The relation whose ``dst_id`` is resolved.
+            row: The edge whose ``dst_id`` is written out.
+            seen: Ids the walk has already written out in full, extended with
+                the destination's own when it is written out here.
 
         Returns:
-            The destination component's ``Spec``.
+            The destination's own spec as a JSON-able mapping, or the
+            ``{"ref": id}`` reference standing in for it.
 
         Raises:
-            HydrationError: If the relation points at a component row that
-                does not exist.
+            HydrationError: If the edge points at a component row that does
+                not exist.
         """
-        db_dst = session.get(Component, rel.dst_id)
+        db_dst = session.get(Component, row.dst_id)
         if db_dst is None:  # defensive: FKs make this unreachable
-            raise HydrationError(f"Relation {rel.src_id} -[{rel.type}]-> {rel.dst_id} points at a missing component")
-        return self.build_component_spec(session, db_dst)
+            raise HydrationError(f"Relation {row.src_id} -[{row.name}]-> {row.dst_id} points at a missing component")
+        if db_dst.parent_id is not None or str(db_dst.id) in seen:
+            return Spec.reference(str(db_dst.id))
+        return self.build_component_spec(session, db_dst, seen=seen).model_dump(mode="json")
 
     def _resolve_path(self, session: Session, db_component: Component) -> str:
         """Look up a component's import path via the catalog.
