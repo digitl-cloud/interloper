@@ -2,11 +2,13 @@
 
 import datetime
 
+import pytest
 from pydantic import Field
 
 import interloper as il
 from interloper.destination import IOContext
 from interloper.destination.csv import CSVDestination
+from interloper.errors import DataNotFoundError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 
 
@@ -50,6 +52,12 @@ class TestRoundtrip:
         context = IOContext(asset=plain_asset())
         dest.write(context, pd.DataFrame([{"a": 1}]))
         assert dest.read(context) == [{"a": "1"}]
+
+    def test_missing_scope_raises_data_not_found_error(self, tmp_path):
+        dest = CSVDestination(id="csv", base_path=str(tmp_path))
+        context = IOContext(asset=plain_asset())
+        with pytest.raises(DataNotFoundError, match="Data file not found"):
+            dest.read(context)
 
 
 class TestWindowWrites:
