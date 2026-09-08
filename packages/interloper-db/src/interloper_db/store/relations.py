@@ -7,11 +7,14 @@ fallback. Every write asks the declared
 :class:`~interloper.component.relation.Relation` whether it accepts the
 candidate, so the database enforces exactly what the framework enforces in
 memory: the declared kinds, and the identity the declared keys expect
-(bare, qualified or wildcard). Single-valued names hold one edge and
-repoint on rewrite; ``many`` names accumulate. A non-optional name cannot
-be emptied, only repointed. Rows are stamped with the denormalized
-``org_id``/``src_kind``/``dst_kind`` triple the composite foreign keys
-verify.
+(bare, qualified or wildcard). No component fills its own relation, and a
+bare key stays inside the owner's own source instance, which identities
+alone cannot tell apart. Single-valued names hold one edge and repoint on
+rewrite; ``many`` names accumulate. A non-optional name cannot be
+emptied, only repointed. Every write takes the source row's lock, so the
+guards cannot be read around concurrently. Rows are stamped with the
+denormalized ``org_id``/``src_kind``/``dst_kind`` triple the composite
+foreign keys verify.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ import interloper as il
 from interloper.catalog.base import Catalog
 from interloper.errors import ConfigError, NotFoundError
 from sqlalchemy import Engine
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
@@ -115,6 +118,11 @@ class RelationStore:
     def remove(self, component_id: UUID, *, name: str, dst_id: UUID) -> None:
         """Detach one component from another under a declared relation name.
 
+        Takes the source row's lock before reading the edges, so the
+        non-optional guard below cannot be read around by a concurrent write.
+        A missing source propagates as a ``NotFoundError`` from
+        :meth:`_lock`.
+
         Args:
             component_id: Source component the relation originates from.
             name: Relation name the edge is filed under.
@@ -126,24 +134,72 @@ class RelationStore:
                 relation, which may be repointed but not emptied.
         """
         with session_scope(self._engine) as session:
-            rows = self._rows(session, component_id, name)
+            src = self._lock(session, component_id)
+            rows = self._rows(session, src.id, name)
             row = next((candidate for candidate in rows if candidate.dst_id == dst_id), None)
             if row is None:
                 return
-            src = session.get(Component, component_id)
-            relation = self._vocabulary(session, src).get(name) if src is not None else None
+            relation = self._vocabulary(session, src).get(name)
             if len(rows) == 1 and relation is not None and not relation.optional:
                 raise ConfigError(
-                    f"'{src.key if src else component_id}'.{name} is non-optional and cannot be emptied; "
+                    f"'{src.key}'.{name} is non-optional and cannot be emptied; "
                     f"repoint it or remove the dependent component instead"
                 )
             session.delete(row)
             commit(session)
 
+    def bind_siblings(
+        self,
+        session: Session,
+        source_cls: type[il.Source],
+        children_by_key: dict[str, Component],
+    ) -> None:
+        """Top up the intra-source edges a source class binds between its own assets.
+
+        The wiring is read from
+        :meth:`~interloper.source.base.Source.sibling_bindings`, the same
+        classmethod a live source binds its assets from, so a persisted source
+        holds exactly the edges its in-memory counterpart does: one edge per
+        relation name, never onto the declaring asset itself, and nothing for a
+        declared key that reaches outside the source. Idempotent over the full
+        child set, so an asset enabled after its siblings still gets the edges
+        into it wired, while a name that already holds an edge is left alone
+        and a binding made by hand survives.
+
+        Args:
+            session: Open session the edges are added to; neither flushed nor
+                committed here.
+            source_cls: Catalog class whose declaration decides the wiring.
+            children_by_key: The source's enabled child rows, keyed by asset key.
+        """
+        bound = {
+            (row[0], row[1])
+            for row in session.exec(
+                select(ComponentRelation.src_id, ComponentRelation.name).where(
+                    col(ComponentRelation.src_id).in_([child.id for child in children_by_key.values()])
+                )
+            ).all()
+        }
+        for asset_key, names in source_cls.sibling_bindings().items():
+            child = children_by_key.get(asset_key)
+            if child is None:
+                continue
+            for name, sibling_key in names.items():
+                sibling = children_by_key.get(sibling_key)
+                if sibling is None or (child.id, name) in bound:
+                    continue
+                self._insert(session, child, sibling, name)
+
     # -- Internals -------------------------------------------------------------
 
     def _sync_relations(self, session: Session, src: Component, bindings: dict[str, list[Binding]] | None) -> None:
         """Replace the relation names present in *bindings* (empty list clears).
+
+        Takes the source row's lock, like every other write path, so two
+        concurrent replacements of one name cannot interleave their deletes
+        and inserts. An undeclared name and a destination the declared
+        relation refuses both propagate from the checks this delegates to
+        (:meth:`_relation`, :meth:`_resolve`).
 
         Args:
             session: Open session the replacement is written through; deletes
@@ -154,12 +210,14 @@ class RelationStore:
                 None leaves every relation untouched.
 
         Raises:
-            ConfigError: If a name is not declared by the source's class, if a
-                single-valued name is given several destinations, if the
-                relation does not accept one of them, or if the replacement
-                would empty a non-optional relation.
+            ConfigError: If a single-valued name is given several
+                destinations, or if the replacement would empty a
+                non-optional relation.
         """
-        for name, dst_ids in (bindings or {}).items():
+        if not bindings:
+            return
+        src = self._lock(session, src.id)
+        for name, dst_ids in bindings.items():
             relation = self._relation(session, src, name)
             if not relation.many and len(dst_ids) > 1:
                 raise ConfigError(f"'{src.key}'.{name} is single-valued and takes one target at a time")
@@ -255,6 +313,13 @@ class RelationStore:
     def _resolve(self, session: Session, src: Component, relation: il.Relation, name: str, dst_id: UUID) -> Component:
         """Load a relation destination and check the declared relation accepts it.
 
+        Two rules the identity match cannot see are checked here. A component
+        never fills its own relation, whatever the declared keys match. And a
+        bare declared key names a component of the owner's *own* source
+        instance, while identities carry only the catalog key of the owning
+        source: two instances of one source have the same identity, so the
+        instance is compared by parent row.
+
         Args:
             session: Open session the destination row is loaded through.
             src: Source component the relation originates from.
@@ -268,17 +333,23 @@ class RelationStore:
         Raises:
             NotFoundError: If the destination is missing or belongs to another
                 organisation.
-            ConfigError: If the relation does not accept the destination's kind
-                or identity.
+            ConfigError: If the destination is the source itself, if the
+                relation does not accept the destination's kind or identity,
+                or if a sibling relation is pointed at another source
+                instance's component.
         """
         dst = session.get(Component, dst_id)
         if dst is None or dst.org_id != src.org_id:
             raise NotFoundError(f"Component {dst_id} not found (relation '{name}')")
+        if dst.id == src.id:
+            raise ConfigError(f"'{src.key}'.{name} cannot point at the component itself")
         if not relation.accepts(dst.kind, self._identity(session, dst), owner=self._identity(session, src)):
             raise ConfigError(
                 f"'{src.key}'.{name} does not accept {dst.kind} '{dst.key}' "
                 f"(declared: kind {relation.kinds()}, key {relation.keys() or 'any'})"
             )
+        if relation.source_local and src.parent_id is not None and dst.parent_id != src.parent_id:
+            raise ConfigError(f"'{src.key}'.{name} names a sibling; '{dst.key}' belongs to another source instance")
         return dst
 
     def _lock(self, session: Session, component_id: UUID) -> Component:
@@ -286,8 +357,10 @@ class RelationStore:
 
         The row lock serializes concurrent writes to the same source, so two
         rebinds of one single-valued name cannot both read an empty edge set
-        and both insert. SQLite has no row locks and needs none: its writes
-        are serialized database-wide.
+        and both insert. Every write path goes through here, which is the
+        only guarantee available to a reader: SQLite, what the tests run on,
+        has no row locks and needs none, since its writes are serialized
+        database-wide, so no test can observe the lock being taken.
 
         Args:
             session: Open session the row is loaded through.

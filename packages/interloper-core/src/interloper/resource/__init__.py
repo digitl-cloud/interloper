@@ -1,4 +1,4 @@
-"""Resources: injectable dependencies, their typed slots, and their field helpers."""
+"""Resources: injectable dependencies, their typed relations, and their field helpers."""
 
 from interloper.resource.base import Resource, ResourceDefinition
 from interloper.resource.fields import (

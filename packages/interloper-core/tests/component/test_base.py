@@ -274,6 +274,12 @@ class Gadget(il.Source):
     store: NeedyDest = il.Relation(NeedyDest)
 
 
+class Peer(il.Source):
+    """Source whose ``peers`` relation declares no key, so it would accept itself."""
+
+    peers: list[il.Source] = il.Relation("source", many=True, optional=True)
+
+
 class TestCollect:
     def test_annotation_becomes_relation(self):
         assert Widget.relations["connection"].kind == "connection"
@@ -352,6 +358,15 @@ class TestBind:
     def test_wrong_kind_rejected(self):
         with pytest.raises(ConfigError, match="connection"):
             Widget(connection=Cfg())  # ty: ignore[invalid-argument-type]
+
+    def test_a_relation_refuses_the_component_itself(self):
+        peer = Peer()
+        other = Peer()
+
+        with pytest.raises(ConfigError, match="cannot point at the component itself"):
+            peer.bind("peers", peer)
+        peer.bind("peers", other)
+        assert peer.peers == [other]
 
     def test_single_relation_rejects_two_targets_at_once(self):
         widget = Widget(connection=Conn(api_secret="s"))
