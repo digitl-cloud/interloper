@@ -346,10 +346,10 @@ class Component(Serializable):
         single-valued one replaces what it holds, so repointing it is a second
         :meth:`bind` and needs no :meth:`unbind` first.
 
-        A target whose kind or key the relation does not accept, and more than
-        one target at once on a single-valued relation, are both refused with a
-        ``ConfigError`` from :meth:`_replace_binding`, which every write path
-        goes through.
+        A target whose kind or key the relation does not accept, this
+        component itself, and more than one target at once on a single-valued
+        relation are all refused with a ``ConfigError`` from
+        :meth:`_replace_binding`, which every write path goes through.
 
         Args:
             name: The relation name as declared on the class.
@@ -688,11 +688,14 @@ class Component(Serializable):
     def _check_targets(self, name: str, relation: Relation, targets: tuple[Component, ...]) -> None:
         """Check that *targets* are legal for one of this component's relations.
 
-        Every target must be one the relation :meth:`~Relation.accepts`, and a
-        single-valued relation may not receive more than one target at once.
-        Performs no mutation, so :meth:`_replace_binding` can call it before
-        touching ``_bound`` and a rejected replacement leaves the existing
-        binding untouched.
+        Every target must be one the relation :meth:`~Relation.accepts` and
+        must be another component: a relation whose declared keys match the
+        declaring component's own key (a wildcard, or an asset named after
+        the key it reads) would otherwise let it fill itself. A single-valued
+        relation may not receive more than one target at once. Performs no
+        mutation, so :meth:`_replace_binding` can call it before touching
+        ``_bound`` and a rejected replacement leaves the existing binding
+        untouched.
 
         Args:
             name: The relation name as declared on the class.
@@ -700,11 +703,14 @@ class Component(Serializable):
             targets: The candidate components to check.
 
         Raises:
-            ConfigError: If a target's kind or key is not one the relation
-                accepts, or if a single-valued relation is given more than one target.
+            ConfigError: If a target is this component itself, if a target's
+                kind or key is not one the relation accepts, or if a
+                single-valued relation is given more than one target.
         """
         owner = self.identity
         for target in targets:
+            if target is self:
+                raise ConfigError(f"{type(self).__name__}.{name} cannot point at the component itself")
             if not relation.accepts(target.kind, target.identity, owner=owner):
                 raise ConfigError(
                     f"{type(self).__name__}.{name} does not accept {target.kind} '{target.qualified_key}' "

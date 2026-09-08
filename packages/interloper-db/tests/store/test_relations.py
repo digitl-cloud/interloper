@@ -134,6 +134,112 @@ class SecondCampaignSource(il.Source):
             return []
 
 
+class TwoKeySource(il.Source):
+    """Source naming two of its own assets on one single-valued relation."""
+
+    class First(il.Asset):
+        """One of the two candidate siblings."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Second(il.Asset):
+        """The other candidate sibling."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Totals(il.Asset):
+        """Asset declaring both sibling keys under one single-valued name."""
+
+        rows = il.Relation("asset", ["first", "second"])
+
+        def data(self, context: il.ExecutionContext, rows: il.Upstream) -> list[dict]:
+            return []
+
+
+class SelfKeySource(il.Source):
+    """Source whose only asset declares a bare key naming its own key."""
+
+    class Rows(il.Asset):
+        """Asset whose ``peers`` relation names ``rows``, which is its own key."""
+
+        peers: list[il.Asset] = il.Relation("asset", "rows", many=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+class MixedKeySource(il.Source):
+    """Source mixing a bare sibling key and a qualified cross-source one on one relation."""
+
+    class Rows(il.Asset):
+        """The sibling the bare key names."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Totals(il.Asset):
+        """Asset fanning in its own source's ``rows`` and another source's."""
+
+        rows: list[il.Asset] = il.Relation("asset", ["rows", "wire_up_source.rows"], many=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+class SelfCampaignSource(il.Source):
+    """Source whose ``campaigns`` asset fans in every source's ``campaigns``, its own included."""
+
+    class Campaigns(il.Asset):
+        """Asset whose wildcard relation matches its own identity."""
+
+        peers: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+class InstanceSource(il.Source):
+    """Discriminated source, so two of its instances coexist in one organisation."""
+
+    account_id: str = il.InputField(default="", discriminator=True)
+
+    class Rows(il.Asset):
+        """Root asset of the instance."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Totals(il.Asset):
+        """Asset reading its own instance's ``rows``."""
+
+        rows = il.Relation("asset", "rows")
+
+        def data(self, context: il.ExecutionContext, rows: il.Upstream) -> list[dict]:
+            return []
+
+
+class ConsumerSource(il.Source):
+    """Source reading another source's ``rows`` by qualified key and by wildcard."""
+
+    class Qualified(il.Asset):
+        """Asset pinned to ``instance_source.rows``, whichever instance it comes from."""
+
+        rows: list[il.Asset] = il.Relation("asset", "instance_source.rows", many=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Wild(il.Asset):
+        """Asset fanning in the ``rows`` asset of any source."""
+
+        rows: list[il.Asset] = il.Relation("asset", "*.rows", many=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
 @pytest.fixture
 def store(component_db: Engine) -> Store:
     """A store whose catalog carries every class the relation tests declare.
@@ -153,6 +259,12 @@ def store(component_db: Engine) -> Store:
             WireDownSource,
             FirstCampaignSource,
             SecondCampaignSource,
+            TwoKeySource,
+            SelfKeySource,
+            MixedKeySource,
+            SelfCampaignSource,
+            InstanceSource,
+            ConsumerSource,
         ]
     )
     return Store(catalog=catalog)
@@ -382,11 +494,87 @@ class TestSyncRelations:
             )
 
 
+class TestSelfEdge:
+    """No component fills its own relation, whatever the declared keys match."""
+
+    def test_add_refuses_the_component_itself(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="self_campaign_source")
+        campaigns = _child(source, "campaigns")
+
+        with pytest.raises(ConfigError, match="cannot point at the component itself"):
+            store.relations.add(campaigns.id, name="peers", dst_id=campaigns.id)
+
+    def test_a_replacement_refuses_the_component_itself(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="self_campaign_source")
+        campaigns = _child(source, "campaigns")
+
+        with pytest.raises(ConfigError, match="cannot point at the component itself"):
+            store.components.update(campaigns.id, relations={"peers": [campaigns.id]})
+
+
+class TestSiblingInstanceScope:
+    """A relation declaring only bare keys stays inside the owner's own source instance."""
+
+    def test_refuses_another_instances_asset(self, store: Store):
+        first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
+
+        with pytest.raises(ConfigError, match="belongs to another source instance"):
+            store.relations.add(_child(first, "totals").id, name="rows", dst_id=_child(second, "rows").id)
+
+    def test_a_qualified_key_accepts_either_instance(self, store: Store, component_db: Engine):
+        first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
+        qualified = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "qualified")
+
+        store.relations.add(qualified.id, name="rows", dst_id=_child(first, "rows").id)
+        store.relations.add(qualified.id, name="rows", dst_id=_child(second, "rows").id)
+
+        with Session(component_db) as session:
+            assert {row.dst_id for row in _relations(session, qualified.id, "rows")} == {
+                _child(first, "rows").id,
+                _child(second, "rows").id,
+            }
+
+    def test_a_wildcard_key_accepts_either_instance(self, store: Store, component_db: Engine):
+        first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
+        wild = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "wild")
+
+        store.relations.add(wild.id, name="rows", dst_id=_child(first, "rows").id)
+        store.relations.add(wild.id, name="rows", dst_id=_child(second, "rows").id)
+
+        with Session(component_db) as session:
+            assert {row.dst_id for row in _relations(session, wild.id, "rows")} == {
+                _child(first, "rows").id,
+                _child(second, "rows").id,
+            }
+
+
 class TestIntraSourceWiring:
-    """A source's own sibling relations are wired from the class declaration."""
+    """A source's own sibling edges come from ``Source.sibling_bindings``."""
 
     def test_creating_a_source_wires_its_sibling_relations(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
+
+        (row,) = store.relations.list_all(_ORG, name="rows")
+        assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, "rows").id)
+
+    def test_two_declared_keys_on_a_single_valued_relation_wire_one_edge(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="two_key_source")
+
+        (row,) = store.relations.list_all(_ORG, name="rows")
+        sibling_key = TwoKeySource.sibling_bindings()["totals"]["rows"]
+        assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, sibling_key).id)
+
+    def test_a_key_naming_the_assets_own_key_wires_no_self_edge(self, store: Store):
+        store.components.create(_ORG, kind="source", key="self_key_source")
+
+        assert SelfKeySource.sibling_bindings() == {}
+        assert store.relations.list_all(_ORG) == []
+
+    def test_a_relation_mixing_bare_and_qualified_keys_wires_the_bare_one(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="mixed_key_source")
 
         (row,) = store.relations.list_all(_ORG, name="rows")
         assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, "rows").id)

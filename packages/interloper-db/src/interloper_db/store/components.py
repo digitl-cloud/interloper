@@ -785,45 +785,7 @@ class ComponentStore:
             session.add(children[key])
         session.flush()
 
-        self._wire_intra_upstreams(session, source_cls, children)
-
-    @staticmethod
-    def _wire_intra_upstreams(
-        session: Session,
-        source_cls: type[il.Source],
-        children_by_key: dict[str, Component],
-    ) -> None:
-        """Top up missing intra-source asset relations from class metadata.
-
-        Idempotent over the full child set — assets enabled after their
-        siblings still get the edges *into* them wired. Names that already
-        hold an edge are never touched, so manual bindings survive.
-
-        Args:
-            session: Open session the relations are added to.
-            source_cls: The catalog class declaring the relations.
-            children_by_key: The source's enabled child rows, keyed by asset key.
-        """
-        child_ids = [child.id for child in children_by_key.values()]
-        bound = {
-            (row[0], row[1])
-            for row in session.exec(
-                select(ComponentRelation.src_id, ComponentRelation.name).where(
-                    col(ComponentRelation.src_id).in_(child_ids)
-                )
-            ).all()
-        }
-        for asset_type in source_cls.asset_types:
-            child = children_by_key.get(asset_type.key)
-            if child is None:
-                continue
-            for name, relation in asset_type.relations.items():
-                if (child.id, name) in bound or "asset" not in relation.kinds() or not relation.source_local:
-                    continue
-                declared_keys = relation.keys()
-                for sibling_key in declared_keys:
-                    if (sibling := children_by_key.get(sibling_key)) is not None:
-                        RelationStore._insert(session, child, sibling, name)
+        self._relations.bind_siblings(session, source_cls, children)
 
     def job_partition_granularity(self, session: Session, job_id: UUID) -> TimeGranularity | None:
         """Resolve the granularity a job's partitioned targets share.
