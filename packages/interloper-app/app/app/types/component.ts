@@ -1,3 +1,6 @@
+import type { ComponentDefinition } from '~/types/catalog'
+import { resourceRelations } from '~/types/catalog'
+
 /**
  * Usability state of a persisted component in this deployment.
  *
@@ -11,19 +14,18 @@
  */
 export type ComponentStatus = 'ok' | 'disabled' | 'missing' | 'unreadable'
 
-/** A relation entry embedded on a component (`component.relations[type]`). */
+/** A relation entry embedded on a component (`component.relations[name]`). */
 export interface RelationRef {
     dst_id: string
-    slot: string
     dst_kind: string
 }
 
 /** A standalone relation row from `GET /components/relations`. */
 export interface Relation {
     src_id: string
+    name: string
     dst_id: string
-    type: string
-    slot: string
+    src_kind: string
     dst_kind: string
 }
 
@@ -58,10 +60,9 @@ export interface ComponentRecord {
 /** Relation entry in create/update payloads. */
 export interface RelationInput {
     dst_id: string
-    slot?: string
 }
 
-/** Create/update payload. Each relations type listed is fully replaced. */
+/** Create/update payload. Each relations name listed is fully replaced. */
 export interface ComponentInput {
     kind?: string
     key?: string
@@ -80,20 +81,24 @@ export function materializable(c: ComponentRecord): boolean {
     return c.config?.materializable ?? true
 }
 
-/** Relation refs of a given type, e.g. `relationRefs(c, 'destination')`. */
-export function relationRefs(c: ComponentRecord, type: string): RelationRef[] {
-    return c.relations?.[type] ?? []
+/** Relation refs under a given name, e.g. `relationRefs(c, 'destinations')`. */
+export function relationRefs(c: ComponentRecord, name: string): RelationRef[] {
+    return c.relations?.[name] ?? []
 }
 
-/** Destination ids of a given relation type. */
-export function relationIds(c: ComponentRecord, type: string): string[] {
-    return relationRefs(c, type).map(r => r.dst_id)
+/** Destination ids under a given relation name. */
+export function relationIds(c: ComponentRecord, name: string): string[] {
+    return relationRefs(c, name).map(r => r.dst_id)
 }
 
-/** Resource relations as a {slot: dst_id} map (the old `resources` field). */
-export function resourceMap(c: ComponentRecord): Record<string, string> {
+/** Resource relations as a {name: dst_id} map (the old `resources` field). */
+export function resourceMap(c: ComponentRecord, defn: ComponentDefinition | undefined): Record<string, string> {
+    if (!defn) return {}
     const map: Record<string, string> = {}
-    for (const ref of relationRefs(c, 'resource')) map[ref.slot] = ref.dst_id
+    for (const name of Object.keys(resourceRelations(defn))) {
+        const [ref] = relationRefs(c, name)
+        if (ref) map[name] = ref.dst_id
+    }
     return map
 }
 

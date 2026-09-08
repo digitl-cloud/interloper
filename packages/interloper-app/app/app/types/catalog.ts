@@ -1,37 +1,20 @@
-/** A declared dependency: a slot on a slotted relation type. Mirrors `interloper.component.base.Dependency`. */
-export interface Dependency {
-    /** Expected dst component key. `''` accepts any component of the relation's kinds. */
-    key: string
-    /** Whether the slot may stay unbound. */
-    optional: boolean
-    /** Whether the slot binds several components (a fan-in). */
-    many: boolean
-}
-
-/** One relation type a component kind may declare toward other components. */
+/** One relation a component kind may declare toward other components, named by its record key. */
 export interface RelationDefinition {
-    /** Allowed dst component kinds. */
-    kinds: string[]
-    slotted: boolean
-    /** Allowed dst component keys. Empty = any of `kinds`. Set for `destination`. */
-    keys: string[]
-    /**
-     * Declared slots. Set for `resource` (slot → resource key) and
-     * `upstream` (param → upstream asset key, possibly qualified
-     * `source_key.asset_key`; `optional` and `many` flags meaningful).
-     */
-    slots: Record<string, Dependency>
+    /** Allowed dst component kind(s). */
+    kind: string | string[]
+    /** Allowed dst component key(s). '' accepts any component of the relation's kind(s). */
+    key: string | string[]
+    /** Whether the relation binds several components (a fan-in). */
+    many: boolean
+    /** Whether the relation may stay unbound. */
+    optional: boolean
     /**
      * What deleting the relation's destination does to the referrer:
      * `block` refuses the deletion, `detach` cascades the relation away
-     * (job targets, hook watches). Optional slots detach regardless.
+     * (job targets, hook watches). Optional relations detach regardless.
      */
     on_delete: 'block' | 'detach'
-    /**
-     * What explicitly unbinding a bound required slot does: `block` refuses
-     * it (asset dependencies — repoint instead), `detach` allows it.
-     */
-    on_unbind: 'block' | 'detach'
+    name: string
 }
 
 export interface ComponentDefinition {
@@ -45,7 +28,7 @@ export interface ComponentDefinition {
     config_schema: Record<string, unknown>
     /** JSON Schema of the kind's machine-owned state (`{}` = stateless). */
     state_schema: Record<string, unknown>
-    /** Relation vocabulary: type → allowed dst kinds, keys and slots. */
+    /** Relation vocabulary: name → allowed dst kind(s), key(s) and cardinality. */
     relations: Record<string, RelationDefinition>
     provider?: string
     /** Whether the type implements a live connection check (resources only). */
@@ -70,29 +53,48 @@ export type Catalog = Record<string, ComponentDefinition>
 
 // ─── Relation helpers ────────────────────────────────────────────────
 
-/** Slot name → resource catalog key, from the definition's `resource` relation. */
-export function resourceSlots(defn: ComponentDefinition): Record<string, string> {
-    const slots = defn.relations?.resource?.slots ?? {}
-    return Object.fromEntries(Object.entries(slots).map(([slot, s]) => [slot, s.key]))
+/** Resource kinds: connection/config/resource relations carry secrets or settings, not data. */
+export const RESOURCE_KINDS = ['connection', 'config', 'resource'] as const
+
+/** A relation's dst kind(s) as an array, whether declared singular or plural. */
+export function kindsOf(r: RelationDefinition): string[] {
+    return Array.isArray(r.kind) ? r.kind : [r.kind]
 }
 
-/** Upstream slots: param name → upstream asset key + optional/many flags. */
-export function upstreamSlots(defn: ComponentDefinition): Record<string, Dependency> {
-    return defn.relations?.upstream?.slots ?? {}
+/** A relation's dst key(s) as an array, `''` (any key) filtered out. */
+export function keysOf(r: RelationDefinition): string[] {
+    const keys = Array.isArray(r.key) ? r.key : [r.key]
+    return keys.filter(k => k !== '')
 }
 
-/** Required (non-optional) upstream params → upstream asset key (bare or qualified). */
-export function requiredUpstreams(defn: ComponentDefinition): Record<string, string> {
+/** Relations whose kind is a resource kind (connection/config/resource), keyed by name. */
+export function resourceRelations(defn: ComponentDefinition): Record<string, RelationDefinition> {
     return Object.fromEntries(
-        Object.entries(upstreamSlots(defn))
-            .filter(([, s]) => !s.optional)
-            .map(([param, s]) => [param, s.key]),
+        Object.entries(defn.relations ?? {})
+            .filter(([, r]) => kindsOf(r).some(k => (RESOURCE_KINDS as readonly string[]).includes(k))),
     )
 }
 
-/** Compatible destination keys from the `destination` relation. Empty = all compatible. */
+/** Relations whose kind includes 'asset' (a component's declared upstreams), keyed by name. */
+export function upstreamRelations(defn: ComponentDefinition): Record<string, RelationDefinition> {
+    return Object.fromEntries(
+        Object.entries(defn.relations ?? {}).filter(([, r]) => kindsOf(r).includes('asset')),
+    )
+}
+
+/** Required (non-optional) upstream relations → upstream asset key (first key, bare or qualified). */
+export function requiredUpstreams(defn: ComponentDefinition): Record<string, string> {
+    return Object.fromEntries(
+        Object.entries(upstreamRelations(defn))
+            .filter(([, r]) => !r.optional)
+            .map(([name, r]) => [name, keysOf(r)[0] ?? '']),
+    )
+}
+
+/** Compatible destination keys from the `destinations` relation. Empty = all compatible. */
 export function allowedDestinationKeys(defn: ComponentDefinition): string[] {
-    return defn.relations?.destination?.keys ?? []
+    const destinations = defn.relations?.destinations
+    return destinations ? keysOf(destinations) : []
 }
 
 // ─── State schema ────────────────────────────────────────────────────
