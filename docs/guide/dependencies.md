@@ -129,24 +129,9 @@ which is a many-valued sibling; `relations=` is what reaches outside the source.
 
 ### Fan-in across sources
 
-The relation above is not hypothetical: `interloper_assets.campaign_matcher.CampaignMatcher`
-declares exactly this wildcard, matching campaigns across every advertising connector into one
-canonical lookup table:
-
-```py
-@il.asset(
-    schema=schemas.CampaignMatches,
-    partitioning=il.TimePartitionConfig(column="date"),
-    tags=["Entity"],
-    relations={"campaigns": il.Relation("asset", "*.campaigns", many=True)},
-)
-def campaign_matches(
-    self,
-    context: il.ExecutionContext,
-    campaigns: list[il.Upstream],
-) -> list[dict[str, Any]]:
-    ...
-```
+The relation above is not hypothetical: `interloper_assets.CampaignMatcher` declares exactly this
+wildcard (same `campaign_matches` decorator shown above, plus `schema=schemas.CampaignMatches`),
+matching campaigns across every advertising connector into one canonical lookup table.
 
 Building a DAG over both connectors and the matcher wires every `campaigns` asset held into the
 `campaigns` relation, one leg per connector:
