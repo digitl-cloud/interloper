@@ -161,7 +161,7 @@ function destLabel(key: string) {
                                          noun="Destination"
                                          :component="null"
                                          :definitions="compatibleDefinitions"
-                                         resource-slot-steps
+                                         resource-relation-steps
                                          name-optional
                                          @created="handleCreated" />
             </template>

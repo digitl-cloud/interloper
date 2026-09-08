@@ -24,7 +24,7 @@ import type { FormError, TabsItem } from '@nuxt/ui'
 import cronstrue from 'cronstrue'
 
 interface FetchMeta {
-    /** `<slot>.<method>` resolved via `/components/resolve`. */
+    /** `<relation>.<method>` resolved via `/components/resolve`. */
     provider: string
     label_key: string
     value_key: string
@@ -73,15 +73,15 @@ const props = defineProps<{
     /** When set, render only these fields (exclude still applies). */
     include?: string[]
     /**
-     * Resource data from sibling steps, keyed by slot name.
+     * Resource data from sibling steps, keyed by relation name.
      * Used by `x-fetch` fields, which resolve options from the resource in
-     * their provider's slot.
+     * their provider's relation.
      * Each value is the resource's stored `data` object (credentials, config, etc.).
-     * Takes precedence over `resourceIds` for the same slot.
+     * Takes precedence over `resourceIds` for the same relation.
      */
     resourceContext?: Record<string, Record<string, unknown>>
     /**
-     * Resource IDs keyed by slot name. SchemaForm fetches the resource
+     * Resource IDs keyed by relation name. SchemaForm fetches the resource
      * detail internally to resolve `x-fetch` dependencies.
      * Used in edit mode where only IDs are known.
      */
@@ -180,17 +180,17 @@ watch(
     () => props.resourceIds,
     async (ids) => {
         if (!ids) return
-        for (const [slotName, resourceId] of Object.entries(ids)) {
+        for (const [relationName, resourceId] of Object.entries(ids)) {
             if (!resourceId) continue
             // Skip if already provided via resourceContext
-            if (props.resourceContext?.[slotName]) continue
+            if (props.resourceContext?.[relationName]) continue
             // Skip if already resolved for this ID
-            if ((resolvedResources.value[slotName] as any)?._id === resourceId) continue
+            if ((resolvedResources.value[relationName] as any)?._id === resourceId) continue
             try {
                 const detail = await componentsStore.fetchOne(resourceId)
                 resolvedResources.value = {
                     ...resolvedResources.value,
-                    [slotName]: { ...detail.config, _id: resourceId },
+                    [relationName]: { ...detail.config, _id: resourceId },
                 }
             }
             catch {
@@ -208,9 +208,9 @@ watch(
 const mergedResourceContext = computed<Record<string, Record<string, unknown>>>(() => {
     const ctx: Record<string, Record<string, unknown>> = {}
     // Layer 1: internally resolved (strip _id marker)
-    for (const [slotName, data] of Object.entries(resolvedResources.value)) {
+    for (const [relationName, data] of Object.entries(resolvedResources.value)) {
         const { _id, ...rest } = data
-        ctx[slotName] = rest
+        ctx[relationName] = rest
     }
     // Layer 2: explicit resourceContext overrides
     if (props.resourceContext) {
@@ -247,8 +247,8 @@ function updateFetchState(fieldKey: string, patch: Partial<{ options: { label: s
     }
 }
 
-/** The resource slot a fetch field depends on — the provider's `<slot>`. */
-function fetchSlot(meta: FetchMeta): string {
+/** The relation a fetch field depends on — the provider's `<relation>`. */
+function fetchRelationName(meta: FetchMeta): string {
     return meta.provider.split('.')[0] ?? ''
 }
 
@@ -256,13 +256,13 @@ function fetchSlot(meta: FetchMeta): string {
 async function fetchOptions(fieldKey: string, meta: FetchMeta) {
     ensureFetchState(fieldKey)
 
-    // Backend instantiates the resource in the provider's slot and calls the
-    // provider method. Credentials are sent keyed by slot.
-    const slot = fetchSlot(meta)
+    // Backend instantiates the resource in the provider's relation and calls
+    // the provider method. Credentials are sent keyed by relation name.
+    const relation = fetchRelationName(meta)
     const deps: Record<string, unknown> = {}
-    const resourceData = mergedResourceContext.value[slot]
-    if (resourceData) deps[slot] = resourceData
-    else if (data.value[slot] !== undefined && data.value[slot] !== '') deps[slot] = data.value[slot]
+    const resourceData = mergedResourceContext.value[relation]
+    if (resourceData) deps[relation] = resourceData
+    else if (data.value[relation] !== undefined && data.value[relation] !== '') deps[relation] = data.value[relation]
 
     updateFetchState(fieldKey, { loading: true, error: null })
     try {
@@ -289,24 +289,24 @@ async function fetchOptions(fieldKey: string, meta: FetchMeta) {
 }
 
 /**
- * Check if the dependency (the provider's slot) for a fetch field is satisfied.
+ * Check if the dependency (the provider's relation) for a fetch field is satisfied.
  */
 function fetchDepsReady(meta: FetchMeta): boolean {
-    const slot = fetchSlot(meta)
-    if (mergedResourceContext.value[slot]) return true
-    if (data.value[slot] !== undefined && data.value[slot] !== '') return true
+    const relation = fetchRelationName(meta)
+    if (mergedResourceContext.value[relation]) return true
+    if (data.value[relation] !== undefined && data.value[relation] !== '') return true
     return false
 }
 
 /**
  * Build a fingerprint for a fetch field's dependency.
- * Used to detect when the slot's value actually changes and a re-fetch is needed.
+ * Used to detect when the relation's value actually changes and a re-fetch is needed.
  */
 function depsFingerprint(meta: FetchMeta): string {
-    const slot = fetchSlot(meta)
-    const resourceData = mergedResourceContext.value[slot]
-    if (resourceData) return `${slot}:resource`
-    if (data.value[slot] !== undefined) return `${slot}:${data.value[slot]}`
+    const relation = fetchRelationName(meta)
+    const resourceData = mergedResourceContext.value[relation]
+    if (resourceData) return `${relation}:resource`
+    if (data.value[relation] !== undefined) return `${relation}:${data.value[relation]}`
     return ''
 }
 

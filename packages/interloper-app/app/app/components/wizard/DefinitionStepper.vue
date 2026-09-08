@@ -7,7 +7,7 @@
  *      via `definitionKey` (create mode only; `initialTypeKey` preselects).
  *   2. Page-injected extra steps with `placement: 'start'` (e.g. source assets).
  *   3. One picker step per `relationSteps` entry the selected class declares.
- *   4. One step per declared resource relation (when `resourceSlotSteps`).
+ *   4. One step per declared resource relation (when `resourceRelationSteps`).
  *   5. Extra steps with `placement: 'end'` (e.g. source destinations).
  *   6. Details: name + SchemaForm generated from `config_schema`, plus the
  *      `#details` extension slot whose `extra.config`/`extra.input` merge
@@ -64,7 +64,7 @@ const props = withDefaults(defineProps<{
     initialTypeKey?: string
     relationSteps?: RelationStep[]
     /** Render one picker step per declared resource relation. */
-    resourceSlotSteps?: boolean
+    resourceRelationSteps?: boolean
     extraSteps?: ExtraStep[]
     /** Config fields kept out of the generated form (owned by the `#details` slot). */
     exclude?: string[]
@@ -83,7 +83,7 @@ const props = withDefaults(defineProps<{
     definitions: undefined,
     initialTypeKey: undefined,
     relationSteps: () => [],
-    resourceSlotSteps: false,
+    resourceRelationSteps: false,
     extraSteps: () => [],
     exclude: () => [],
     nameOptional: false,
@@ -188,7 +188,7 @@ function relationCandidates(step: RelationStep): ComponentRecord[] {
 // ── Resource relation steps ──────────────────────────────────────
 
 const resourceSteps = computed(() => {
-    if (!props.resourceSlotSteps || !definition.value) return []
+    if (!props.resourceRelationSteps || !definition.value) return []
     return Object.entries(resourceRelations(definition.value)).map(([name, relation]) => {
         const resourceKey = keysOf(relation)[0] ?? ''
         return { name, resourceKey, optional: relation.optional, definition: catalogStore.catalog[resourceKey] }
@@ -199,17 +199,17 @@ const resourceSteps = computed(() => {
 const resourceDataCache = ref<Record<string, Record<string, unknown>>>({})
 
 watch(resourceSelections, async (selections) => {
-    for (const [slotName, resourceId] of Object.entries(selections)) {
+    for (const [relationName, resourceId] of Object.entries(selections)) {
         if (!resourceId) {
             resourceDataCache.value = Object.fromEntries(
-                Object.entries(resourceDataCache.value).filter(([k]) => k !== slotName),
+                Object.entries(resourceDataCache.value).filter(([k]) => k !== relationName),
             )
             continue
         }
-        if (resourceDataCache.value[slotName]?._id === resourceId) continue
+        if (resourceDataCache.value[relationName]?._id === resourceId) continue
         try {
             const detail = await componentsStore.fetchOne(resourceId)
-            resourceDataCache.value[slotName] = { ...detail.config, _id: resourceId }
+            resourceDataCache.value[relationName] = { ...detail.config, _id: resourceId }
         }
         catch { /* don't block the form on a failed fetch */ }
     }
@@ -217,9 +217,9 @@ watch(resourceSelections, async (selections) => {
 
 const resourceContext = computed<Record<string, Record<string, unknown>>>(() => {
     const ctx: Record<string, Record<string, unknown>> = {}
-    for (const [slotName, data] of Object.entries(resourceDataCache.value)) {
+    for (const [relationName, data] of Object.entries(resourceDataCache.value)) {
         const { _id, ...rest } = data
-        ctx[slotName] = rest
+        ctx[relationName] = rest
     }
     return ctx
 })
@@ -311,7 +311,7 @@ const steps = computed<StepperItem[]>(() => [
     })),
     ...resourceSteps.value.map(rs => ({
         title: rs.name.charAt(0).toUpperCase() + rs.name.slice(1),
-        icon: resourceSlotIcon(rs.name),
+        icon: resourceRelationIcon(rs.name),
         slot: `resource-${rs.name}`,
     })),
     ...props.extraSteps.filter(s => s.placement === 'end')
@@ -501,7 +501,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                        v-bind="summaryCard"
                                        @change="activeStep = 0" />
                 <SourcesResourceStep v-model="resourceSelections[rs.name]"
-                                     :slot-name="rs.name"
+                                     :relation-name="rs.name"
                                      :definition="rs.definition!"
                                      :resource-context="resourceContext" />
             </div>
