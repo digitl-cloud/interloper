@@ -1,4 +1,4 @@
-"""The leg object handed to ``data()`` for many-valued upstream slots."""
+"""The leg object handed to ``data()`` for many-valued upstream relations."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Upstream:
-    """One leg of a many-valued slot as handed to ``data()``.
+    """One leg of a many-valued relation as handed to ``data()``.
 
     Attributes:
         asset: The upstream asset the data was read from; its ``source``,

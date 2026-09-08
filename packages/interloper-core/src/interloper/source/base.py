@@ -396,6 +396,8 @@ class Source(Component, Workload):
         name in **relations follows a different rule: passing it at all
         changes it, since ``None`` there clears the binding rather than
         leaving it alone; only leaving the name out entirely leaves it as is.
+        Clearing a non-optional relation is refused with a ``ConfigError``,
+        since it cannot be left empty.
 
         Args:
             dataset: Replacement dataset. Assets that inherited the source's

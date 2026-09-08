@@ -346,6 +346,11 @@ class Component(Serializable):
         single-valued one replaces what it holds, so repointing it is a second
         :meth:`bind` and needs no :meth:`unbind` first.
 
+        A target whose kind or key the relation does not accept, and more than
+        one target at once on a single-valued relation, are both refused with a
+        ``ConfigError`` from :meth:`_replace_binding`, which every write path
+        goes through.
+
         Args:
             name: The relation name as declared on the class.
             *targets: The components to bind. Binding nothing is a no-op, so a

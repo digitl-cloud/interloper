@@ -62,7 +62,7 @@ class Catalog(BaseModel):
         :attr:`SourceDefinition.assets`. Pass *parent_key* to resolve such an
         asset the way its owner declares it: the concrete
         :class:`AssetDefinition`, carrying the composite import path, the
-        partitioning and the dependency slots the flat key cannot name. A
+        partitioning and the relations the flat key cannot name. A
         parent that does not resolve, or does not declare the key, falls back
         to the flat lookup.
 
@@ -96,11 +96,11 @@ class Catalog(BaseModel):
             kind: The row's component kind.
             key: The row's catalog key.
             parent_key: Key of the owning source, for a source-owned asset,
-                whose declaration carries the dependency slots. Defaults to
+                whose declaration carries the asset's relations. Defaults to
                 ``None``, a flat lookup.
 
         Returns:
-            Relation type → definition.
+            The declared relations keyed by name.
         """
         definition = self.get(key, parent_key=parent_key)
         if definition is not None and definition.kind == kind:
