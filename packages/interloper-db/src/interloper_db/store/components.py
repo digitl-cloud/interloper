@@ -7,7 +7,8 @@ genuinely owns are applied where the row's ``kind`` demands them:
   encrypted into the ``data`` column (fail-closed without a key) and decoded
   on read — callers only ever see ``config``.
 - **source**: child asset rows are kept in sync with the catalog class's
-  ``asset_types`` after every write, including intra-source dependency wiring.
+  ``asset_types`` after every write, including the sibling relations the
+  class declares between its own assets.
 - **asset**: a source-owned asset hydrates through its parent; its drift
   status cascades through the parent's.
 - **job**: hydration drift-checks every target before reconstruction.
@@ -44,16 +45,15 @@ from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
 from interloper_db.store.hydration import Hydrator
 from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES, QuotaStore
-from interloper_db.store.relations import Binding, RelationStore
+from interloper_db.store.relations import RelationStore
 from interloper_db.store.status import ComponentStatus, asset_status, source_status
 
-# Eager-load set for rows returned to API consumers: the parent and children
-# with their relations. The two-hop (component -> destination -> resources)
-# legs are dropped for now: they walked ComponentRelation.dst, a relationship
-# the relation-by-name rewrite removed. The rewritten store restores
-# whatever eager loading it needs.
+# Eager-load set for rows returned to API consumers: the parent, the row's
+# own relations, and the children with theirs, so the whole unit reads off a
+# detached row.
 COMPONENT_LOAD_OPTIONS = [
     selectinload(Component.parent),  # ty: ignore[invalid-argument-type]
+    selectinload(Component.out_relations),  # ty: ignore[invalid-argument-type]
     selectinload(Component.children)  # ty: ignore[invalid-argument-type]
     .selectinload(Component.out_relations),  # ty: ignore[invalid-argument-type]
 ]
@@ -100,7 +100,7 @@ class ComponentStore:
         config: dict[str, Any] | None = None,
         encrypted: bool | None = None,
         children: list[str] | None = None,
-        relations: dict[str, list[Binding]] | None = None,
+        relations: dict[str, list[UUID]] | None = None,
     ) -> Component:
         """Create a component of any kind.
 
@@ -185,7 +185,7 @@ class ComponentStore:
         config: dict[str, Any] | None = None,
         encrypted: bool | None = None,
         children: list[str] | None = None,
-        relations: dict[str, list[Binding]] | None = None,
+        relations: dict[str, list[UUID]] | None = None,
     ) -> Component:
         """Update a component's spec. ``None`` leaves a facet untouched.
 
@@ -194,7 +194,7 @@ class ComponentStore:
         ``state`` column is left alone, with one exception: a job whose config
         changes has its cached ``next_run_at`` cleared, so the scheduler
         re-derives the schedule from the new spec on its next tick instead of
-        firing once more at the slot the old spec produced.
+        firing once more at the moment the old spec produced.
 
         Args:
             component_id: The component UUID.
@@ -240,11 +240,12 @@ class ComponentStore:
     def delete(self, component_id: UUID) -> None:
         """Delete a component. Children and out-bound relations cascade via FK.
 
-        In-bound relations follow their declared ``on_delete`` semantics:
-        consumption relations (a bound connection, a required dependency)
-        block the deletion; orchestration pointers (a job's ``target``, a
-        hook's ``watch``, optional dependency slots) detach — the relation
-        row cascades away and the referrer keeps working with reduced scope.
+        In-bound relations follow the semantics the referrer's class
+        declares for the name they are filed under: a consuming relation (a
+        bound ``connection``, a required upstream) blocks the deletion; one
+        declared ``on_delete="detach"`` or optional (a job's ``targets``, a
+        hook's ``watches``) detaches, its row cascading away while the
+        referrer keeps working with reduced scope.
 
         Args:
             component_id: The component UUID.
@@ -274,13 +275,13 @@ class ComponentStore:
     def _blocking_referrers(self, session: Session, db_component: Component) -> list[dict[str, str | None]]:
         """Components outside a component's subtree whose relations into it block deletion.
 
-        Deleting a relation destination cascades the binding row, which would
-        leave a *consuming* referrer silently broken at its next run — those
-        relations refuse the deletion. Relations whose vocabulary declares
-        ``on_delete="detach"`` (and optional slots) are skipped: cascading
-        them is the intended outcome. Relations internal to the subtree (a
-        source's own asset dependencies) don't count, and a referrer that is
-        a source-owned asset is reported as its parent source — the unit the
+        Deleting a relation destination cascades the edge row, which would
+        leave a *consuming* referrer silently broken at its next run, so
+        those relations refuse the deletion. An edge whose name the referrer
+        declares ``on_delete="detach"`` or optional is skipped: cascading it
+        is the intended outcome. Edges internal to the subtree (a source's
+        own sibling relations) don't count, and a referrer that is a
+        source-owned asset is reported as its parent source, the unit the
         user can act on.
 
         Args:
@@ -720,10 +721,10 @@ class ComponentStore:
         When ``child_keys`` is provided, only those assets will exist —
         missing ones are created, extra ones are removed. Removal follows the
         delete guard's semantics: blocking relations from outside the source
-        (a required cross-source dependency) raise ``InUseError``; detaching
+        (a required cross-source upstream) raise ``InUseError``; detaching
         ones and intra-source edges cascade. ``None`` is the source-creation
         default and enables every asset the catalog class declares. Existing
-        rows keep their IDs (and therefore their cross-source deps, event
+        rows keep their IDs (and therefore their cross-source upstreams, event
         references, and per-asset overrides).
 
         Args:
@@ -810,7 +811,7 @@ class ComponentStore:
         """
         granularities: set[TimeGranularity] = set()
         targets = session.exec(
-            select(ComponentRelation).where(ComponentRelation.src_id == job_id, ComponentRelation.type == "target")
+            select(ComponentRelation).where(ComponentRelation.src_id == job_id, ComponentRelation.name == "targets")
         ).all()
         for relation in targets:
             target = session.get(Component, relation.dst_id)
@@ -858,7 +859,9 @@ class ComponentStore:
             ComponentDriftError: If a target's catalog key is disabled or missing.
         """
         targets = session.exec(
-            select(ComponentRelation).where(ComponentRelation.src_id == db_job.id, ComponentRelation.type == "target")
+            select(ComponentRelation).where(
+                ComponentRelation.src_id == db_job.id, ComponentRelation.name == "targets"
+            )
         ).all()
         for relation in targets:
             target = session.get(Component, relation.dst_id)
