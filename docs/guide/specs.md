@@ -84,6 +84,7 @@ init:
       id: bq
       init:
         project: dwh
+        location: EU
         connection:
           key: google_cloud_connection
           init:

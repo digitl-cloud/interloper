@@ -1,0 +1,57 @@
+# Fan-in across sources: match campaigns from two advertising connectors into
+# one canonical lookup table. See docs/guide/dependencies.md ("Fan-in across
+# sources") for how CampaignMatcher's *.campaigns wildcard relation wires this
+# without either connector knowing the matcher exists.
+#
+#   interloper run -f examples/campaign_matcher.yaml --date 2026-01-01
+#
+path: interloper.job.cron.CronJob
+init:
+  cron: "0 6 * * *"
+
+  destinations:
+    - key: bigquery_destination
+      id: bq
+      init:
+        project: dwh
+        location: EU
+        connection:
+          key: google_cloud_connection
+          init:
+            service_account_key: ${GCP_SERVICE_ACCOUNT_KEY}
+
+  targets:
+    - key: facebook_ads
+      init:
+        account_id: ${FACEBOOK_ADS_ACCOUNT_ID}
+        connection:
+          key: facebook_ads_connection
+          init:
+            access_token: ${FACEBOOK_ADS_ACCESS_TOKEN}
+            app_id: ${FACEBOOK_ADS_APP_ID}
+            app_secret: ${FACEBOOK_ADS_APP_SECRET}
+        # materializable: false keeps this asset read-only in this job: it is
+        # never run here, only read back so campaign_matches below can fan it
+        # in alongside the other connector's campaigns.
+        assets:
+          campaigns: {id: fb-campaigns, materializable: false}
+
+    - key: tiktok_ads
+      init:
+        advertiser_id: ${TIKTOK_ADS_ADVERTISER_ID}
+        connection:
+          key: tiktok_ads_connection
+          init:
+            access_token: ${TIKTOK_ADS_ACCESS_TOKEN}
+        assets:
+          campaigns: {id: tt-campaigns, materializable: false}
+
+    - key: campaign_matcher
+      init:
+        destinations: [{ref: bq}]
+        assets:
+          campaign_matches:
+            # Each ref points at a campaigns asset declared above. An asset
+            # always lives under its source, so an upstream is always a
+            # {ref: id} here, never written out in full.
+            campaigns: [{ref: fb-campaigns}, {ref: tt-campaigns}]
