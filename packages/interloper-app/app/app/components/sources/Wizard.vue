@@ -30,8 +30,8 @@ const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 
 const selectedAssetKeys = ref<string[]>(props.source ? props.source.children.map(a => a.key) : [])
-const resolvedCrossDeps = ref<Record<string, string>>({})
-const selectedDestinationIds = ref<string[]>(props.source ? relationIds(props.source, 'destination') : [])
+const resolvedCrossDeps = ref<Record<string, string[]>>({})
+const selectedDestinationIds = ref<string[]>(props.source ? relationIds(props.source, 'destinations') : [])
 
 const sources = computed(() => componentsStore.byKind('source'))
 
@@ -54,7 +54,7 @@ const extraSteps = [
         recap: () => `${selectedAssetKeys.value.length} selected`,
     },
     {
-        name: 'destination',
+        name: 'destinations',
         title: 'Destination',
         icon: 'i-lucide-hard-drive',
         placement: 'end' as const,
@@ -70,7 +70,7 @@ const extraSteps = [
 function extraInput() {
     return {
         children: selectedAssetKeys.value,
-        relations: { destination: selectedDestinationIds.value.map(id => ({ dst_id: id })) },
+        relations: { destinations: selectedDestinationIds.value.map(id => ({ dst_id: id })) },
     }
 }
 
@@ -81,12 +81,14 @@ function extraInput() {
 async function wireCrossDeps(saved: ComponentRecord) {
     const childIdByKey = new Map(saved.children.map(a => [a.key, a.id]))
     await Promise.all(
-        Object.entries(resolvedCrossDeps.value).map(async ([key, upstreamId]) => {
-            const [assetKey, paramName] = key.split('→')
+        Object.entries(resolvedCrossDeps.value).flatMap(([key, upstreamIds]) => {
+            const [assetKey, name] = key.split('→')
             const childId = assetKey ? childIdByKey.get(assetKey) : undefined
-            if (!childId || !paramName || !upstreamId) return
+            if (!childId || !name) return []
             // Tolerate re-submits of an already-wired dependency on edit.
-            await componentsStore.addRelation(childId, { type: 'upstream', dst_id: upstreamId, slot: paramName }).catch(() => { })
+            return upstreamIds.map(upstreamId =>
+                componentsStore.addRelation(childId, { name, dst_id: upstreamId }).catch(() => { }),
+            )
         }),
     )
 }
@@ -128,7 +130,7 @@ defineExpose({
                                 :all-sources="sources" />
         </template>
 
-        <template #step-destination="{ definition }">
+        <template #step-destinations="{ definition }">
             <SourcesDestinationStep v-model:selected-ids="selectedDestinationIds"
                                     :compatible-keys="definition ? allowedDestinationKeys(definition) : []" />
         </template>

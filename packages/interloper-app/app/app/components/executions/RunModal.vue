@@ -41,7 +41,7 @@ const isJob = computed(() => props.target.kind === 'job')
 const clockZone = computed(() => (isJob.value ? jobTimezone(props.target) : 'UTC'))
 // A job is partitioned iff its targets declare time partitioning (derived, never stored).
 const partitioned = computed(() =>
-    props.partitioned ?? (isJob.value && targetGranularities(relationIds(props.target, 'target')).size > 0),
+    props.partitioned ?? (isJob.value && targetGranularities(relationIds(props.target, 'targets')).size > 0),
 )
 
 const granularity = usePartitionGranularity(() => props.target)

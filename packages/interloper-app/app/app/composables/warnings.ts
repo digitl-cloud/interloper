@@ -1,7 +1,7 @@
 import type { ComponentRecord } from '~/types/component'
 import { jobTargetIds, relationRefs } from '~/types/component'
 import type { AssetDefinition } from '~/types/catalog'
-import { parseQualifiedKey, qualifiedKey, requiredUpstreams } from '~/types/catalog'
+import { ANY_SOURCE, parseQualifiedKey, qualifiedKey, requiredUpstreams } from '~/types/catalog'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -104,11 +104,13 @@ export function useAssetWarnings() {
                 // identity — a sibling of this source instance for intra-source
                 // deps, any instance of the named source for cross-source ones.
                 const { sourceKey: depSourceKey, assetKey: depAssetKey } = parseQualifiedKey(depQk)
+                const anySource = depSourceKey === ANY_SOURCE
                 const intraSource = !depSourceKey || depSourceKey === source?.key
                 const satisfied = [...recorded].some((upstreamId) => {
                     const upstream = assetById.value.get(upstreamId)
                     if (!upstream || upstream.key !== depAssetKey) return false
                     const upstreamSource = sourceByAssetId.value.get(upstreamId)
+                    if (anySource) return !!upstreamSource
                     return intraSource ? upstreamSource?.id === source?.id : upstreamSource?.key === depSourceKey
                 })
                 if (!satisfied) {
@@ -120,7 +122,7 @@ export function useAssetWarnings() {
         }
 
         // --- Destination warnings ---
-        if (source && relationRefs(source, 'destination').length === 0) {
+        if (source && relationRefs(source, 'destinations').length === 0) {
             warnings.push({ category: 'destination', message: 'No destination configured' })
         }
 

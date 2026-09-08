@@ -2,22 +2,22 @@
 /**
  * Checkbox multi-select for choosing which assets to enable on a source.
  *
- * For assets with cross-source dependencies (qualified keys in the
- * definition's `upstream` relation slots), shows a dropdown to select the
- * upstream asset instance. Auto-resolves when only one candidate exists;
- * prioritises assets within the same source.
+ * For assets with cross-source dependencies (qualified or wildcard keys on
+ * the definition's upstream relations), shows a picker for the upstream asset
+ * instance. Auto-resolves when only one candidate exists; a many-valued
+ * relation takes several.
  */
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
-import { upstreamSlots, parseQualifiedKey } from '~/types/catalog'
+import { ANY_SOURCE, keysOf, parseQualifiedKey, upstreamRelations } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 
 const selectedKeys = defineModel<string[]>('selectedKeys', { default: () => [] })
 
 /**
  * Cross-source dependency selections.
- * Keyed as `assetKey→paramName` → upstream asset instance id.
+ * Keyed as `assetKey→relationName` → chosen upstream asset instance ids.
  */
-const resolvedDeps = defineModel<Record<string, string>>('resolvedDeps', { default: () => ({}) })
+const resolvedDeps = defineModel<Record<string, string[]>>('resolvedDeps', { default: () => ({}) })
 
 const props = defineProps<{
     /** The source definition whose assets to display. */
@@ -39,48 +39,65 @@ interface DepCandidate {
 }
 
 interface AssetDep {
-    paramName: string
-    qualifiedKey: string
-    sourceKey: string
-    assetKey: string
+    /** The relation's name, which is also the binding's name on the wire. */
+    name: string
+    /** The cross-source keys the relation accepts, as declared. */
+    keys: string[]
     label: string
     isOptional: boolean
-    isCrossSource: boolean
+    many: boolean
     candidates: DepCandidate[]
 }
 
-/** Compute dependency info for a given asset definition. */
+/** The instances of `assetKey` a declared key reaches, given its source part. */
+function keyCandidates(sourceKey: string, assetKey: string, label: string): DepCandidate[] {
+    const candidates: DepCandidate[] = []
+    for (const source of props.allSources) {
+        if (sourceKey !== ANY_SOURCE && source.key !== sourceKey) continue
+        const asset = source.children.find(a => a.key === assetKey)
+        if (!asset) continue
+        candidates.push({
+            assetId: asset.id,
+            sourceId: source.id,
+            sourceName: source.name ?? source.key,
+            assetName: label,
+            sameSource: false, // cross-source by definition
+        })
+    }
+    return candidates
+}
+
+/**
+ * The cross-source dependencies a given asset definition declares.
+ *
+ * One entry per relation, not per key: a relation's keys are alternatives,
+ * so whichever of them a candidate matches, it fills the same binding.
+ */
 function getAssetDeps(assetDefn: AssetDefinition): AssetDep[] {
     const deps: AssetDep[] = []
-    for (const [paramName, slot] of Object.entries(upstreamSlots(assetDefn))) {
-        const qk = slot.key
-        const isOptional = slot.optional
-        const { sourceKey, assetKey } = parseQualifiedKey(qk)
-        const isCrossSource = !!sourceKey && sourceKey !== props.sourceDefn.key
-
-        if (!isCrossSource) continue // Intra-source: auto-resolved by framework
-
-        // Find the spec for the upstream asset
-        const upstreamSourceDefn = catalogStore.sourceDefinitions.find(s => s.key === sourceKey)
-        const upstreamAssetDefn = upstreamSourceDefn?.assets?.find(a => a.key === assetKey)
-        const label = upstreamAssetDefn?.name ?? qk
-
-        // Find candidate instances: all sources with matching key that have matching asset
+    for (const [name, relation] of Object.entries(upstreamRelations(assetDefn))) {
+        const keys: string[] = []
         const candidates: DepCandidate[] = []
-        for (const source of props.allSources) {
-            if (source.key !== sourceKey) continue
-            const asset = source.children.find(a => a.key === assetKey)
-            if (!asset) continue
-            candidates.push({
-                assetId: asset.id,
-                sourceId: source.id,
-                sourceName: source.name ?? source.key,
-                assetName: label,
-                sameSource: false, // cross-source by definition
-            })
+        let label = ''
+        for (const declared of keysOf(relation)) {
+            const { sourceKey, assetKey } = parseQualifiedKey(declared)
+            // A bare key, or one naming this very source, is a sibling the
+            // framework binds on its own.
+            if (!sourceKey || sourceKey === props.sourceDefn.key) continue
+            const upstreamAssetDefn = sourceKey === ANY_SOURCE
+                ? catalogStore.sourceDefinitions.flatMap(s => s.assets ?? []).find(a => a.key === assetKey)
+                : catalogStore.sourceDefinitions.find(s => s.key === sourceKey)?.assets?.find(a => a.key === assetKey)
+            const keyLabel = upstreamAssetDefn?.name ?? declared
+            if (!label) label = keyLabel
+            keys.push(declared)
+            // Overlapping keys ('shop.orders' and '*.orders') can reach the
+            // same instance; it is one candidate, listed once.
+            for (const candidate of keyCandidates(sourceKey, assetKey, keyLabel)) {
+                if (!candidates.some(c => c.assetId === candidate.assetId)) candidates.push(candidate)
+            }
         }
-
-        deps.push({ paramName, qualifiedKey: qk, sourceKey, assetKey, label, isOptional, isCrossSource, candidates })
+        if (!keys.length) continue
+        deps.push({ name, keys, label, isOptional: relation.optional, many: relation.many, candidates })
     }
 
     return deps
@@ -104,10 +121,10 @@ watch([() => props.allSources, selectedKeys], () => {
         const deps = depsByAsset.value.get(assetKey)
         if (!deps) continue
         for (const dep of deps) {
-            const depKey = `${assetKey}→${dep.paramName}`
-            if (resolvedDeps.value[depKey]) continue // Already resolved
+            const depKey = `${assetKey}→${dep.name}`
+            if (resolvedDeps.value[depKey]?.length) continue // Already resolved
             if (dep.candidates.length === 1) {
-                resolvedDeps.value[depKey] = dep.candidates[0]!.assetId
+                resolvedDeps.value[depKey] = [dep.candidates[0]!.assetId]
             }
         }
     }
@@ -164,8 +181,17 @@ function deselectAll() {
     )
 }
 
-function depSelectionKey(assetKey: string, paramName: string): string {
-    return `${assetKey}→${paramName}`
+function depSelectionKey(assetKey: string, name: string): string {
+    return `${assetKey}→${name}`
+}
+
+function depItems(dep: AssetDep) {
+    return dep.candidates.map(c => ({ label: c.sourceName, value: c.assetId }))
+}
+
+/** Record a picker's choice; a single-valued relation still stores a one-id list. */
+function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
+    resolvedDeps.value[depSelectionKey(assetKey, dep.name)] = Array.isArray(value) ? value : [value]
 }
 </script>
 
@@ -252,7 +278,7 @@ function depSelectionKey(assetKey: string, paramName: string): string {
                 <div v-if="selectedKeys.includes(asset.key) && depsByAsset.get(asset.key)?.length"
                      class="px-3 pb-3 pt-0 flex flex-col gap-2 border-t border-default/50 mt-0">
                     <div v-for="dep in depsByAsset.get(asset.key)"
-                         :key="dep.paramName"
+                         :key="dep.name"
                          class="flex items-center gap-2 pl-8">
                         <UIcon name="i-lucide-git-merge"
                                class="size-3.5 shrink-0"
@@ -262,7 +288,7 @@ function depSelectionKey(assetKey: string, paramName: string): string {
                         <!-- No candidates -->
                         <span v-if="dep.candidates.length === 0"
                               class="text-xs text-warning">
-                            No {{ dep.sourceKey }} source found
+                            No source found for {{ dep.keys.join(' or ') }}
                         </span>
 
                         <!-- Single candidate: auto-resolved -->
@@ -271,15 +297,25 @@ function depSelectionKey(assetKey: string, paramName: string): string {
                             {{ dep.candidates[0]!.sourceName }}
                         </span>
 
-                        <!-- Multiple candidates: dropdown -->
+                        <!-- Several candidates: a picker, multiple when the relation fans in -->
+                        <USelectMenu v-else-if="dep.many"
+                                     :model-value="resolvedDeps[depSelectionKey(asset.key, dep.name)] ?? []"
+                                     :items="depItems(dep)"
+                                     multiple
+                                     placeholder="Select sources…"
+                                     size="xs"
+                                     value-key="value"
+                                     class="min-w-[180px]"
+                                     @update:model-value="setDep(asset.key, dep, $event)" />
+
                         <USelectMenu v-else
-                                     :model-value="resolvedDeps[depSelectionKey(asset.key, dep.paramName)] ?? ''"
-                                     :items="dep.candidates.map(c => ({ label: c.sourceName, value: c.assetId }))"
+                                     :model-value="resolvedDeps[depSelectionKey(asset.key, dep.name)]?.[0] ?? ''"
+                                     :items="depItems(dep)"
                                      placeholder="Select source…"
                                      size="xs"
                                      value-key="value"
                                      class="min-w-[180px]"
-                                     @update:model-value="resolvedDeps[depSelectionKey(asset.key, dep.paramName)] = $event" />
+                                     @update:model-value="setDep(asset.key, dep, $event)" />
 
                         <UBadge v-if="dep.isOptional"
                                 color="neutral"

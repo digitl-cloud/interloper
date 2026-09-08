@@ -101,7 +101,7 @@ export function usePartitionGranularity(target: () => ComponentRecord): Computed
             granularitiesOf(catalogStore.getSourceDefinition(record.key)).forEach(g => found.add(g))
         }
         else if (record.kind === 'job') {
-            targetGranularities(relationIds(record, 'target')).forEach(g => found.add(g))
+            targetGranularities(relationIds(record, 'targets')).forEach(g => found.add(g))
         }
         const [only] = found
         return found.size === 1 && only !== undefined && only in KEY_PATTERNS

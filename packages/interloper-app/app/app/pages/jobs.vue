@@ -91,7 +91,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         accessorKey: 'target_ids',
         header: 'Targets',
         cell: ({ row }) => {
-            const targets = relationIds(row.original, 'target')
+            const targets = relationIds(row.original, 'targets')
                 .map(id => componentsStore.byId(id))
                 .filter((t): t is ComponentRecord => !!t)
             if (targets.length === 0) return h('span', { class: 'text-muted' }, '—')
@@ -196,14 +196,14 @@ async function handleDelete(ids: string[]) {
                                      definition-key="cron_job"
                                      noun="Job"
                                      :component="editingJob"
-                                     :relation-steps="[{ type: 'target', standaloneAssetsOnly: true }]"
+                                     :relation-steps="[{ name: 'targets', standaloneAssetsOnly: true }]"
                                      :exclude="['lookback', 'offset']"
                                      @created="handleSaved"
                                      @updated="handleSaved">
                 <template #details="{ relations, extra, configData }">
                     <JobsWindowSection v-model:config="extra.config"
                                        v-model:valid="extra.valid"
-                                       :target-ids="relations.target ?? []"
+                                       :target-ids="relations.targets ?? []"
                                        :job="editingJob"
                                        :timezone="typeof configData.timezone === 'string' ? configData.timezone : undefined" />
                 </template>

@@ -110,8 +110,9 @@ onMounted(async () => {
             componentsStore.byKind('source').length === 0
                 ? componentsStore.fetchAll(['source', 'asset'])
                 : Promise.resolve(),
-            // Asset upstream relations back the Graph view's edges.
-            componentsStore.upstreams.length === 0 ? componentsStore.fetchRelations('upstream') : Promise.resolve(),
+            // Asset-to-asset relations back the Graph view's edges; the store
+            // derives them from the whole set (they carry no name of their own).
+            componentsStore.upstreams.length === 0 ? componentsStore.fetchRelations() : Promise.resolve(),
             catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
         ])
         initialRun.value = fetchedRun

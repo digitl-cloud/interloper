@@ -7,7 +7,7 @@
  *      via `definitionKey` (create mode only; `initialTypeKey` preselects).
  *   2. Page-injected extra steps with `placement: 'start'` (e.g. source assets).
  *   3. One picker step per `relationSteps` entry the selected class declares.
- *   4. One step per declared resource slot (when `resourceSlotSteps`).
+ *   4. One step per declared resource relation (when `resourceSlotSteps`).
  *   5. Extra steps with `placement: 'end'` (e.g. source destinations).
  *   6. Details: name + SchemaForm generated from `config_schema`, plus the
  *      `#details` extension slot whose `extra.config`/`extra.input` merge
@@ -21,13 +21,13 @@
  */
 import type { FormError, StepperItem } from '@nuxt/ui'
 import type { ComponentDefinition } from '~/types/catalog'
-import { resourceSlots as definitionResourceSlots } from '~/types/catalog'
+import { keysOf, kindsOf, resourceRelations } from '~/types/catalog'
 import type { ComponentRecord, RelationInput } from '~/types/component'
 import { relationIds, resourceMap } from '~/types/component'
 
 interface RelationStep {
-    /** Relation type from the definition's vocabulary (e.g. 'target', 'watch'). */
-    type: string
+    /** Relation name from the definition's vocabulary (e.g. 'targets', 'watches'). */
+    name: string
     /** Whether at least one selection is needed to proceed (default true). */
     required?: boolean
     /** Copy shown above the picker. */
@@ -63,7 +63,7 @@ const props = withDefaults(defineProps<{
     /** Preselect this type and open directly on the next step (create mode). */
     initialTypeKey?: string
     relationSteps?: RelationStep[]
-    /** Render one picker step per declared resource slot. */
+    /** Render one picker step per declared resource relation. */
     resourceSlotSteps?: boolean
     extraSteps?: ExtraStep[]
     /** Config fields kept out of the generated form (owned by the `#details` slot). */
@@ -137,7 +137,7 @@ const name = ref('')
 const configData = ref<Record<string, unknown>>({})
 const configValid = ref(true)
 const relationSelections = ref<Record<string, string[]>>(
-    Object.fromEntries(props.relationSteps.map(step => [step.type, []])),
+    Object.fromEntries(props.relationSteps.map(step => [step.name, []])),
 )
 const resourceSelections = ref<Record<string, string>>({})
 /** The `#details` slot's contribution: merged into the config, gating submit. */
@@ -164,7 +164,7 @@ function applyCheckErrors(errors: FormError[]) {
 
 /** The configured relation steps the selected class actually declares. */
 const activeRelationSteps = computed(() =>
-    props.relationSteps.filter(step => !!definition.value?.relations?.[step.type]),
+    props.relationSteps.filter(step => !!definition.value?.relations?.[step.name]),
 )
 
 /**
@@ -173,27 +173,26 @@ const activeRelationSteps = computed(() =>
  * listed so editing never silently drops them.
  */
 function relationCandidates(step: RelationStep): ComponentRecord[] {
-    const kinds = definition.value?.relations?.[step.type]?.kinds ?? []
-    const natural = kinds.flatMap(kind =>
+    const relation = definition.value?.relations?.[step.name]
+    const natural = (relation ? kindsOf(relation) : []).flatMap(kind =>
         componentsStore.byKind(kind)
             .filter(c => !step.standaloneAssetsOnly || c.kind !== 'asset' || c.parent_id === null),
     )
     const naturalIds = new Set(natural.map(c => c.id))
-    const carried = (relationSelections.value[step.type] ?? [])
+    const carried = (relationSelections.value[step.name] ?? [])
         .map(id => componentsStore.byId(id))
         .filter((c): c is ComponentRecord => !!c && !naturalIds.has(c.id))
     return [...natural, ...carried]
 }
 
-// ── Resource slot steps ──────────────────────────────────────────
+// ── Resource relation steps ──────────────────────────────────────
 
-const resourceSlots = computed(() => {
+const resourceSteps = computed(() => {
     if (!props.resourceSlotSteps || !definition.value) return []
-    return Object.entries(definitionResourceSlots(definition.value)).map(([slotName, resourceKey]) => ({
-        slotName,
-        resourceKey,
-        definition: catalogStore.catalog[resourceKey],
-    })).filter(rs => !!rs.definition)
+    return Object.entries(resourceRelations(definition.value)).map(([name, relation]) => {
+        const resourceKey = keysOf(relation)[0] ?? ''
+        return { name, resourceKey, optional: relation.optional, definition: catalogStore.catalog[resourceKey] }
+    }).filter(rs => !!rs.definition)
 })
 
 // Cache the selected resources' config for SchemaForm x-fetch resolution.
@@ -247,9 +246,9 @@ onMounted(async () => {
                     .filter(([key]) => properties.has(key) && !props.exclude.includes(key)),
             )
             for (const step of props.relationSteps) {
-                relationSelections.value[step.type] = relationIds(props.component, step.type)
+                relationSelections.value[step.name] = relationIds(props.component, step.name)
             }
-            resourceSelections.value = resourceMap(props.component)
+            resourceSelections.value = resourceMap(props.component, definition.value)
         }
         catch (e) {
             // Seeding half a form is worse than seeding none: say what failed
@@ -264,7 +263,10 @@ onMounted(async () => {
         // Triggers the selection watcher below, which advances past the type step.
         selectedKey.value = props.initialTypeKey
     }
-    const kinds = [...new Set(props.relationSteps.flatMap(step => definition.value?.relations?.[step.type]?.kinds ?? []))]
+    const kinds = [...new Set(props.relationSteps.flatMap((step) => {
+        const relation = definition.value?.relations?.[step.name]
+        return relation ? kindsOf(relation) : []
+    }))]
     if (kinds.length) await componentsStore.fetchAll(kinds)
 })
 
@@ -273,7 +275,7 @@ watch(selectedKey, (newKey, oldKey) => {
     if (newKey && newKey !== oldKey && !isEditing.value && hasTypeStep.value) {
         configData.value = {}
         configValid.value = false
-        relationSelections.value = Object.fromEntries(props.relationSteps.map(step => [step.type, []]))
+        relationSelections.value = Object.fromEntries(props.relationSteps.map(step => [step.name, []]))
         resourceSelections.value = {}
         name.value = `My ${definition.value?.name ?? props.noun}`
         nextStep()
@@ -292,9 +294,10 @@ watch(discriminatorLabel, (label, old) => {
 })
 
 // ── Stepper ─────────────────────────────────────────────────────
-const RELATION_ICONS: Record<string, string> = {
-    target: 'i-lucide-crosshair',
-    watch: 'i-lucide-eye',
+/** Per-relation step chrome: the step icon and the participle the picker counts with. */
+const RELATION_CHROME: Record<string, { icon: string, noun: string }> = {
+    targets: { icon: 'i-lucide-crosshair', noun: 'targeted' },
+    watches: { icon: 'i-lucide-eye', noun: 'watched' },
 }
 
 const steps = computed<StepperItem[]>(() => [
@@ -302,14 +305,14 @@ const steps = computed<StepperItem[]>(() => [
     ...props.extraSteps.filter(s => s.placement === 'start')
         .map(s => ({ title: s.title, icon: s.icon, slot: `step-${s.name}` })),
     ...activeRelationSteps.value.map(step => ({
-        title: step.type.charAt(0).toUpperCase() + step.type.slice(1) + (step.type.endsWith('ch') ? 'es' : 's'),
-        icon: RELATION_ICONS[step.type] ?? 'i-lucide-link',
-        slot: `relation-${step.type}`,
+        title: step.name.charAt(0).toUpperCase() + step.name.slice(1),
+        icon: RELATION_CHROME[step.name]?.icon ?? 'i-lucide-link',
+        slot: `relation-${step.name}`,
     })),
-    ...resourceSlots.value.map(rs => ({
-        title: rs.slotName.charAt(0).toUpperCase() + rs.slotName.slice(1),
-        icon: resourceSlotIcon(rs.slotName),
-        slot: `resource-${rs.slotName}`,
+    ...resourceSteps.value.map(rs => ({
+        title: rs.name.charAt(0).toUpperCase() + rs.name.slice(1),
+        icon: resourceSlotIcon(rs.name),
+        slot: `resource-${rs.name}`,
     })),
     ...props.extraSteps.filter(s => s.placement === 'end')
         .map(s => ({ title: s.title, icon: s.icon, slot: `step-${s.name}` })),
@@ -358,12 +361,13 @@ const canProceed = computed(() => {
         return entry?.canProceed?.() ?? true
     }
     if (slot.startsWith('relation-')) {
-        const type = slot.slice('relation-'.length)
-        const step = props.relationSteps.find(s => s.type === type)
-        return !(step?.required ?? true) || (relationSelections.value[type] ?? []).length > 0
+        const name = slot.slice('relation-'.length)
+        const step = props.relationSteps.find(s => s.name === name)
+        return !(step?.required ?? true) || (relationSelections.value[name] ?? []).length > 0
     }
     if (slot.startsWith('resource-')) {
-        return !!resourceSelections.value[slot.slice('resource-'.length)]
+        const name = slot.slice('resource-'.length)
+        return !!resourceSelections.value[name] || (resourceSteps.value.find(rs => rs.name === name)?.optional ?? false)
     }
     return detailsValid.value
 })
@@ -378,17 +382,15 @@ async function submit() {
         const relations: Record<string, RelationInput[]> = {
             ...Object.fromEntries(
                 activeRelationSteps.value.map(step => [
-                    step.type,
-                    (relationSelections.value[step.type] ?? []).map(id => ({ dst_id: id })),
+                    step.name,
+                    (relationSelections.value[step.name] ?? []).map(id => ({ dst_id: id })),
                 ]),
             ),
-            ...(props.resourceSlotSteps
-                ? {
-                        resource: Object.entries(resourceSelections.value)
-                            .filter(([, id]) => !!id)
-                            .map(([slot, id]) => ({ dst_id: id, slot })),
-                    }
-                : {}),
+            ...Object.fromEntries(
+                Object.entries(resourceSelections.value)
+                    .filter(([, id]) => !!id)
+                    .map(([name, id]) => [name, [{ dst_id: id }]]),
+            ),
             ...contributed.relations,
         }
         const input = {
@@ -475,8 +477,8 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         </template>
 
         <template v-for="step in activeRelationSteps"
-                  :key="step.type"
-                  #[`relation-${step.type}`]>
+                  :key="step.name"
+                  #[`relation-${step.name}`]>
             <div class="flex flex-col gap-4">
                 <WizardTypeSummaryCard v-if="summaryCard"
                                        v-bind="summaryCard"
@@ -485,21 +487,21 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                    class="text-sm text-muted">
                     {{ step.description }}
                 </p>
-                <WizardComponentSelect v-model="relationSelections[step.type]"
+                <WizardComponentSelect v-model="relationSelections[step.name]"
                                        :components="relationCandidates(step)"
-                                       :noun="`${step.type}ed`" />
+                                       :noun="RELATION_CHROME[step.name]?.noun ?? 'selected'" />
             </div>
         </template>
 
-        <template v-for="rs in resourceSlots"
-                  :key="rs.slotName"
-                  #[`resource-${rs.slotName}`]>
+        <template v-for="rs in resourceSteps"
+                  :key="rs.name"
+                  #[`resource-${rs.name}`]>
             <div class="flex flex-col gap-6">
                 <WizardTypeSummaryCard v-if="summaryCard"
                                        v-bind="summaryCard"
                                        @change="activeStep = 0" />
-                <SourcesResourceStep v-model="resourceSelections[rs.slotName]"
-                                     :slot-name="rs.slotName"
+                <SourcesResourceStep v-model="resourceSelections[rs.name]"
+                                     :slot-name="rs.name"
                                      :definition="rs.definition!"
                                      :resource-context="resourceContext" />
             </div>

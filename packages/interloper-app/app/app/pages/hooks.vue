@@ -57,7 +57,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         accessorKey: 'watches',
         header: 'Watches',
         cell: ({ row }) => {
-            const watched = relationIds(row.original, 'watch')
+            const watched = relationIds(row.original, 'watches')
                 .map(id => componentsStore.byId(id))
                 .filter((w): w is ComponentRecord => !!w)
             if (watched.length === 0) return h('span', { class: 'text-muted' }, '—')
@@ -143,11 +143,11 @@ async function handleDelete(ids: string[]) {
                                      :component="editingHook"
                                      :relation-steps="[
                                          {
-                                             type: 'watch',
+                                             name: 'watches',
                                              description: 'Components this hook observes — it fires when one of their runs matches the selected events.',
                                          },
                                          {
-                                             type: 'target',
+                                             name: 'targets',
                                              required: false,
                                              description: 'Components a trigger-style hook runs when it fires. Optional — leave empty for hooks that only notify.',
                                          },

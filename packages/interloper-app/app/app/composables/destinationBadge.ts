@@ -36,7 +36,7 @@ export function useDestinationBadge() {
     }
 
     function getBadgeForSource(source: ComponentRecord): DestinationBadge | null {
-        const destinations = relationIds(source, 'destination')
+        const destinations = relationIds(source, 'destinations')
             .map(id => componentsStore.byId(id))
             .filter((d): d is ComponentRecord => !!d)
         return getBadgeForDestinations(destinations)

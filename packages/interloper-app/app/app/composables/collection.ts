@@ -2,7 +2,7 @@ import type { ComponentRecord, ComponentStatus, Relation } from '~/types/compone
 import { jobTargetIds, relationIds } from '~/types/component'
 import type { Run } from '~/types/run'
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
-import { resourceSlots } from '~/types/catalog'
+import { kindsOf, keysOf, resourceRelations } from '~/types/catalog'
 import type { AssetWarning } from '~/composables/warnings'
 import type { SourceDriftStatus } from '~/composables/drift'
 
@@ -139,15 +139,15 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
         for (const source of options.sources.value) {
             const sourceDefn = catalogStore.getSourceDefinition(source.key)
             if (!sourceDefn) continue
-            // Find the connection resource slot in the source definition
-            for (const [_slotName, resourceKey] of Object.entries(resourceSlots(sourceDefn))) {
-                if (resourceKey.endsWith('_connection') || resourceKey === 'connection') {
-                    map.set(source.id, {
-                        name: catalogStore.catalog[resourceKey]?.name ?? resourceKey,
-                        icon: componentIcon(resourceKey, 'i-lucide-plug'),
-                    })
-                    break
-                }
+            for (const relation of Object.values(resourceRelations(sourceDefn))) {
+                if (!kindsOf(relation).includes('connection')) continue
+                const resourceKey = keysOf(relation)[0]
+                if (!resourceKey) continue
+                map.set(source.id, {
+                    name: catalogStore.catalog[resourceKey]?.name ?? resourceKey,
+                    icon: componentIcon(resourceKey, 'i-lucide-plug'),
+                })
+                break
             }
         }
         return map
@@ -156,7 +156,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
     const data = computed<CollectionRow[]>(() => {
         const rows: CollectionRow[] = []
         for (const source of options.sources.value) {
-            const destInfos = relationIds(source, 'destination').map((destId) => {
+            const destInfos = relationIds(source, 'destinations').map((destId) => {
                 const dest = options.destinations.value.find(d => d.id === destId)
                 const defn = dest ? catalogStore.catalog[dest.key] : undefined
                 return {
