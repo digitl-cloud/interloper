@@ -116,7 +116,7 @@ class ComponentStore:
                 ``False`` opts into plaintext storage.
             children: Source kinds only — which child asset keys to enable
                 (``None`` enables all the catalog class declares).
-            relations: ``{name: [dst_id, …]}`` — replaced per name.
+            relations: ``{name: [dst_id, …]}``, replaced per name.
 
         Returns:
             The created component row, eager-loaded.
@@ -207,7 +207,7 @@ class ComponentStore:
                 ``False`` opts into plaintext storage.
             children: Source kinds only — the exact set of child asset keys to
                 keep enabled.
-            relations: ``{name: [dst_id, …]}`` — replaced per name.
+            relations: ``{name: [dst_id, …]}``, replaced per name.
 
         Returns:
             The updated component row, eager-loaded.

@@ -96,7 +96,7 @@ class TestFire:
 
 
 class TestDefinition:
-    def test_declares_a_connection_slot(self):
+    def test_declares_a_connection_relation(self):
         assert SlackHook.relations["connection"].target is SlackConnection
 
     def test_defaults_to_failures_only(self):
