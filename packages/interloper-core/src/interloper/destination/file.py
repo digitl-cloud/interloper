@@ -9,6 +9,7 @@ from typing import Any
 from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
 from interloper.destination.partitioned import PartitionedDestination
+from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition
 
 
@@ -89,11 +90,11 @@ class FileDestination(PartitionedDestination):
             The deserialized data.
 
         Raises:
-            FileNotFoundError: If the scope's data file does not exist.
+            DataNotFoundError: If the scope's data file does not exist.
         """
         path = self._scope_path(context, partition)
         if not path.exists():
-            raise FileNotFoundError(f"No data file for '{context.asset}': {path}")
+            raise DataNotFoundError(f"No data file for '{context.asset}': {path}")
         with path.open("rb") as f:
             return pickle.load(f)
 

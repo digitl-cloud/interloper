@@ -8,6 +8,7 @@ import pytest
 import interloper as il
 from interloper.destination import IOContext
 from interloper.destination.file import FileDestination
+from interloper.errors import DataNotFoundError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 
 
@@ -162,7 +163,7 @@ class TestMissingData:
     def test_read_names_the_missing_path(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
 
-        with pytest.raises(FileNotFoundError, match="No data file for"):
+        with pytest.raises(DataNotFoundError, match="No data file for"):
             dest.read(IOContext(asset=plain_asset()))
 
     def test_an_unwritten_partition_is_missing_on_its_own(self, tmp_path: Path):
@@ -170,7 +171,7 @@ class TestMissingData:
         asset = partitioned_asset()
         dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), [{"a": 1}])
 
-        with pytest.raises(FileNotFoundError, match="date=2024-01-02"):
+        with pytest.raises(DataNotFoundError, match="date=2024-01-02"):
             dest.read(IOContext(asset=asset, partition_or_window=_partition(2)))
 
 
