@@ -6,7 +6,6 @@ import asyncio
 import inspect
 import traceback
 import warnings
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints
 
 from pydantic import Field, PrivateAttr
@@ -128,8 +127,6 @@ class Asset(Component, Operation):
     tags: ClassVar[list[str]] = []
 
     _source_type: ClassVar[type[Source] | None] = None
-    _data_fn: ClassVar[Callable[..., Any] | None] = None
-    _defer_validation: ClassVar[bool] = True
 
     # State
     dataset: str = Field(default="")
@@ -189,22 +186,20 @@ class Asset(Component, Operation):
 
     @classmethod
     def _data_hints(cls) -> dict[str, Any]:
-        """The resolved type hints of the function backing ``data()``.
+        """The resolved type hints of ``data()``.
 
-        The ``@asset`` decorator's ``data()`` is a wrapper taking ``**kwargs``,
-        so its own annotations say nothing about the asset; the decorated
-        function is kept as ``_data_fn`` and is what the hints come from,
-        since resolving a string annotation needs the module the function was
-        written in rather than the wrapper's.
+        Resolving a string annotation needs the globals of the module the
+        function was written in. The ``@asset`` decorator's ``data()`` is a
+        wrapper, so :func:`typing.get_type_hints` follows its ``__wrapped__``
+        to the decorated function, as it does for any wrapper.
 
         Returns:
             Parameter name to resolved annotation, empty when an annotation
             cannot be resolved at all (a class local to a function body, say),
             in which case the caller falls back to the raw annotations.
         """
-        fn = cls.__dict__.get("_data_fn") or cls.data
         try:
-            return get_type_hints(fn)
+            return get_type_hints(cls.data)
         except Exception:  # noqa: BLE001 - an unresolvable annotation is handled by the caller
             return {}
 

@@ -64,12 +64,14 @@ _deferring_validation: ContextVar[bool] = ContextVar("interloper_deferring_relat
 def defer_relation_validation() -> Iterator[None]:
     """Suspend construction-time relation validation for the duration of the block.
 
-    Reconstruction builds a document's components one at a time and binds
-    what its ``{"ref": id}`` values name only once every one of them exists,
-    so a component whose non-optional relation travels as a reference is
-    incomplete the moment it is constructed. Deferring the check is what
-    lets it be constructed at all; :meth:`Component._bind_references` runs
-    the same check once the document is whole.
+    A builder that constructs a component it knows to be incomplete wraps the
+    construction in this. Reconstruction builds a document's components one
+    at a time and binds what its ``{"ref": id}`` values name only once every
+    one of them exists, then :meth:`Component._bind_references` runs the
+    check on every root, which cascades into its children. A source builds
+    its assets before its own relation kwargs are bound and trickled into
+    them, then checks them itself from its own
+    :meth:`Component.validate_relations`.
 
     Yields:
         ``None``; the block runs with the check suspended.
@@ -130,7 +132,6 @@ class Component(Serializable):
     relations: ClassVar[dict[str, Relation]] = {}
     sensitive: ClassVar[bool] = False
     state_model: ClassVar[type[BaseModel] | None] = None
-    _defer_validation: ClassVar[bool] = False
 
     id: str = Field(default="")
 
@@ -260,8 +261,9 @@ class Component(Serializable):
         reaching Pydantic, which knows nothing about relations: a list or tuple
         binds every element, ``None`` binds nothing. Nothing is bound
         implicitly, so the instance is checked once every explicit target is in
-        place, unless the class defers that check or reconstruction has
-        suspended it (see :func:`defer_relation_validation`).
+        place, unless the builder constructing it has suspended the check
+        because it knows the instance is not whole yet (see
+        :func:`defer_relation_validation`).
 
         Unknown kwargs are a loud error rather than pydantic's silent
         ``extra="ignore"`` drop: a misnamed field would otherwise vanish, and a
@@ -285,7 +287,7 @@ class Component(Serializable):
             if value is None:
                 continue
             self.bind(name, *(value if isinstance(value, (list, tuple)) else [value]))
-        if not cls._defer_validation and not _deferring_validation.get():
+        if not _deferring_validation.get():
             self.validate_relations()
 
     def model_post_init(self, context: Any) -> None:
@@ -499,10 +501,11 @@ class Component(Serializable):
         make, since the DAG doesn't exist yet at construction time.
 
         For the same reason *nodes* is also what makes an unbound
-        ``asset``-kind relation reaching outside the owner's own source
-        (:attr:`~Relation.source_local`) an error: nothing before the graph
-        can fill such a relation, so nothing before the graph can call it
-        unfilled either.
+        ``asset``-kind relation only the graph can fill an error: one reaching
+        outside the owner's own source (:attr:`~Relation.source_local`), or
+        any one on an owner that has no source to fill it from. Nothing before
+        the graph can fill such a relation, so nothing before the graph can
+        call it unfilled either.
 
         Args:
             nodes: Every node materializing in the same run, keyed by id. When
@@ -519,7 +522,11 @@ class Component(Serializable):
         for name, relation in type(self).relations.items():
             targets = self._bound.get(name, [])
             if not targets:
-                graph_filled = nodes is None and "asset" in relation.kinds() and not relation.source_local
+                graph_filled = (
+                    nodes is None
+                    and "asset" in relation.kinds()
+                    and (not relation.source_local or self.parent is None)
+                )
                 if not relation.optional and not relation.self_filling and not graph_filled:
                     problems.append(f"'{name}' is unbound and non-optional")
                 continue
@@ -818,7 +825,7 @@ class Component(Serializable):
                 ]
                 component.bind(name, *targets)
         for component in list(registry.values()):
-            if not type(component)._defer_validation:
+            if component.parent is None:
                 component.validate_relations()
 
     @staticmethod

@@ -66,8 +66,8 @@ class TestOverrideChannel:
             _route(il.Source, {name: None})
 
     def test_a_private_name_is_never_routable(self):
-        with pytest.raises(TypeError, match=r"does not accept '_data_fn'"):
-            _route(il.Asset, {"_data_fn": None})
+        with pytest.raises(TypeError, match=r"does not accept '_source_type'"):
+            _route(il.Asset, {"_source_type": None})
 
     def test_the_identity_field_is_never_routable(self):
         with pytest.raises(TypeError, match=r"does not accept 'id'"):

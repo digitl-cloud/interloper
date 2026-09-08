@@ -5,6 +5,7 @@
 # classes (not lazily-evaluated strings).
 
 import datetime as dt
+import inspect
 from typing import Any
 
 import interloper as il
@@ -83,6 +84,16 @@ class TestBareForm:
             return []
 
         assert undocumented.__doc__ is None
+
+    def test_data_wraps_the_function(self):
+        def rows(context: il.ExecutionContext, config: DecoratorConfig) -> list[dict[str, Any]]:
+            return []
+
+        cls = il.asset(rows)
+
+        assert inspect.unwrap(cls.data) is rows
+        assert cls.data.__name__ == "rows"
+        assert [*inspect.signature(cls.data).parameters] == ["self", "context", "config"]
 
 
 class TestParameterizedForm:
