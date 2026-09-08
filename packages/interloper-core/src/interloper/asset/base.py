@@ -337,7 +337,8 @@ class Asset(Component, Operation):
         Two exceptions: ``normalizer``, whose sentinel default lets an explicit
         ``None`` clear the configured normalizer, and a name in **relations,
         where ``None`` clears the binding, so only leaving the name out
-        entirely leaves it as is.
+        entirely leaves it as is. Clearing a non-optional relation is refused
+        with a ``ConfigError``, since it cannot be left empty.
 
         The copy carries this asset's own bindings and parent, so a copy made
         to flip one field (the non-materializable parents of a mini-DAG, say)
