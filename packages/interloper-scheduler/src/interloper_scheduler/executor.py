@@ -1,7 +1,7 @@
 """Run executor: the envelope that assembles a run's operations and drives the runner.
 
 The executor owns the run lifecycle — load, mark running, trace, terminal
-status, failure event — and skipping the retry lineage's prior successes.
+status, failure event, and skipping the retry lineage's prior successes.
 Flattening the hydrated target workload into its operations and joining
 bound upstreams the run itself does not materialize are the framework's own
 concern (``Workload.operations()``, ``DAG._include_read_only_upstreams()``),

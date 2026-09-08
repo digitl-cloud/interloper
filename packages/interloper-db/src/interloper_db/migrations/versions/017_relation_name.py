@@ -12,6 +12,16 @@ The four types the old vocabulary ever wrote (``resource``, ``dependency``/
 final ``DELETE ... WHERE name IS NULL`` is defensive only; production has no
 rows outside that vocabulary, so it is a no-op there.
 
+The downgrade maps every asset-kind row back to ``type = 'upstream'``, so a
+pre-017 ``dependency`` type is never recovered: that rename never shipped, so
+no row in the wild carries it. In upgrade(), ``_PLURAL`` entries match by
+``type``; in downgrade(), they match by ``name``.
+
+``upgrade`` is a no-op on a database whose ``component_relations`` table has
+no ``type`` column: ``create_all()`` always provisions the table from the
+current model, so a fresh database already has the final (``name``) shape
+before Alembic runs at all.
+
 Revision ID: 017
 Revises: 016
 """
@@ -32,6 +42,12 @@ _PLURAL = {"destination": "destinations", "target": "targets", "watch": "watches
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    columns = {column["name"] for column in sa.inspect(bind).get_columns(_TABLE)}
+    if "type" not in columns:
+        # Fresh database: create_all() already produced the final (name) shape.
+        return
+
     op.add_column(_TABLE, sa.Column("name", sa.String(), nullable=True))
     op.execute("UPDATE component_relations SET name = slot WHERE type IN ('resource', 'dependency', 'upstream')")
     for type_, name in _PLURAL.items():

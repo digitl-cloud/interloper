@@ -526,7 +526,7 @@ class TestListComponents:
 
 
 class TestListRelations:
-    """``GET /components/relations`` — optionally narrowed by name and kinds."""
+    """``GET /components/relations``, optionally narrowed by name and kinds."""
 
     def test_lists_every_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
@@ -967,7 +967,7 @@ class TestRelationGrouping:
 
 
 class TestComponentResponseRelations:
-    """``ComponentResponse.relations`` — keyed by name, dst_kind carried along."""
+    """``ComponentResponse.relations``, keyed by name, dst_kind carried along."""
 
     def test_component_response_relations_keyed_by_name(self) -> None:
         connection_id, destination_id = uuid4(), uuid4()
