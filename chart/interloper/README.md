@@ -165,19 +165,20 @@ Cloud L7 load balancers route to pod IPs directly (GKE NEGs, AWS ALB
 target groups) and deprogram a removed endpoint *asynchronously*, with
 no signal back into the cluster.  A pod that exits as soon as it is
 deleted therefore keeps receiving traffic at an address nothing is
-listening on.  The api/frontend/mcp defaults cover the half the chart
-can decide on its own:
+listening on.  The api/frontend/mcp defaults cover the part that costs
+nothing to get right:
 
 | Value | Default | Purpose |
 |-------|---------|---------|
-| `replicaCount` | `2` | The backend never drops to a single endpoint whose loss empties it. |
 | `strategy.rollingUpdate.maxUnavailable` | `0` | Set explicitly: the Kubernetes `25%` default only *floors* to 0 below five replicas. |
 | `podDisruptionBudget` | `maxUnavailable: 1` | Node upgrades and drains evict pods without consulting the rollout strategy. |
 
-The other half is draining the endpoint before the pod exits.  How long
-that takes belongs to your ingress implementation, not to the chart, so
-`lifecycle` ships empty and `terminationGracePeriodSeconds` keeps the
-Kubernetes default:
+Two things are left to the deployment, because both depend on where the
+chart runs.
+
+**The drain.** How long a pod must outlive its own deletion is a property
+of the ingress implementation, so `lifecycle` ships empty and
+`terminationGracePeriodSeconds` keeps the Kubernetes default:
 
 - **ingress-nginx**, and in-cluster proxies generally — endpoint changes
   converge in about a second, so a `preStop` of `sleep 10` is already
@@ -192,8 +193,17 @@ Kubernetes default:
 - **AWS ALB** — align with the target group's
   `deregistration_delay.timeout_seconds` (default `300`).
 
+**Replica count**, which defaults to `1` so a small install stays small.
+A drained rollout is already clean at one replica: the replacement is
+surged and ready before the outgoing pod is deleted, and the drain covers
+the deprogramming window.  What one replica has nothing to fall back on is
+*involuntary* loss — node failure, preemption, OOM kill — where no drain
+runs and the backend empties outright.  Behind a cloud load balancer, run
+at least two.
+
 ```yaml
 api:
+  replicaCount: 2
   terminationGracePeriodSeconds: 210
   lifecycle:
     preStop:
