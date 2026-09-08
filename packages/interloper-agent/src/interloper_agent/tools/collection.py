@@ -501,46 +501,87 @@ def _source_relations(
     source_key: str,
     connection_id: str | None,
     destination_ids: list[str] | None,
-) -> tuple[dict[str, list[tuple[UUID, str]]] | None, dict[str, Any] | None]:
-    """Bind the connection into the definition's resource slot, plus destinations.
+) -> tuple[dict[str, list[UUID]] | None, dict[str, Any] | None]:
+    """Bind the connection into the definition's named relation, plus destinations.
+
+    Finds the relations the definition declares whose ``kind`` includes
+    ``"connection"``. A given connection binds under whichever one it fits
+    (an empty ``key`` accepts any connection, otherwise the connection's key
+    must appear in the relation's key list); every non-optional connection
+    relation left unbound afterwards is an error naming the relation and the
+    key it expects. Destinations bind under the fixed ``"destinations"`` name
+    once each one is confirmed to belong to the organisation.
+
+    Args:
+        store: The database store, for looking up the connection and
+            destination rows.
+        org_id: Organisation UUID the connection and every destination must
+            belong to.
+        defn: The source's catalog definition, carrying its declared
+            ``relations`` (name to relation dict: ``kind``, ``key``, ``many``,
+            ``optional``, ``on_delete``, ``name``).
+        source_key: The source definition's catalog key, named in error
+            messages.
+        connection_id: UUID of the connection to bind, or ``None`` to leave
+            every connection relation unbound.
+        destination_ids: UUIDs of the destinations to attach, or ``None``.
 
     Returns:
-        ``(relations, None)`` or ``(None, error_response)``.
+        ``(relations, None)``, ``relations`` mapping relation name to the
+        UUIDs bound under it (ready for ``ComponentStore.create``'s
+        ``relations`` argument), or ``(None, error_response)``.
     """
-    slots = (((defn.get("relations") or {}).get("resource") or {}).get("slots")) or {}
+    relations_defn = defn.get("relations") or {}
+    connection_relations = {
+        name: relation
+        for name, relation in relations_defn.items()
+        if "connection" in (relation["kind"] if isinstance(relation["kind"], list) else [relation["kind"]])
+    }
+
     connection = None
     if connection_id is not None:
         connection = store.components.get(UUID(connection_id), kind="connection")
         if connection.org_id != org_id:
             return None, {"status": "error", "error": f"Connection '{connection_id}' not found"}
-    resource_bindings: list[tuple[UUID, str]] = []
-    for slot_name, spec in slots.items():
-        expected = spec.get("key")
-        if connection is not None and (not expected or connection.key == expected):
-            resource_bindings.append((connection.id, slot_name))
-            connection = None
-        elif spec.get("required"):
+
+    bindings: dict[str, list[UUID]] = {}
+    if connection is not None:
+        name = next(
+            (
+                relation_name
+                for relation_name, relation in connection_relations.items()
+                if not relation.get("key")
+                or connection.key in ([relation["key"]] if isinstance(relation["key"], str) else relation["key"])
+            ),
+            None,
+        )
+        if name is None:
+            return None, {
+                "status": "error",
+                "error": f"Connection '{connection.key}' does not fit any relation of '{source_key}'",
+            }
+        bindings[name] = [connection.id]
+
+    for name, relation in connection_relations.items():
+        if not relation.get("optional") and name not in bindings:
+            expected = relation.get("key") or "connection"
             return None, {
                 "status": "error",
                 "error": (
-                    f"'{source_key}' requires a '{expected or 'connection'}' in slot '{slot_name}' — "
+                    f"'{source_key}' requires a '{expected}' as '{name}'; "
                     "pick one from the collection or set one up first"
                 ),
             }
-    if connection is not None:
-        return None, {
-            "status": "error",
-            "error": f"Connection '{connection.key}' does not fit any slot of '{source_key}'",
-        }
 
-    destination_bindings: list[tuple[UUID, str]] = []
+    destination_bindings: list[UUID] = []
     for dest_id in destination_ids or []:
         dest = store.components.get(UUID(dest_id), kind="destination")
         if dest.org_id != org_id:
             return None, {"status": "error", "error": f"Destination '{dest_id}' not found"}
-        destination_bindings.append((dest.id, ""))
+        destination_bindings.append(dest.id)
+    bindings["destinations"] = destination_bindings
 
-    return {"resource": resource_bindings, "destination": destination_bindings}, None
+    return bindings, None
 
 
 def _unresolved_requirements(defn: dict[str, Any], row: Any) -> list[str]:
@@ -576,8 +617,8 @@ def create_source(
         name: Display name — default to the label of the chosen account /
             discriminator option.
         config: Values for the definition's config schema (e.g. account_id).
-        connection_id: UUID of the connection to bind — required when the
-            definition declares a required connection slot.
+        connection_id: UUID of the connection to bind; required when the
+            definition declares a required connection relation.
         asset_keys: Child asset keys to enable; omit to enable all.
         destination_ids: Destination UUIDs to attach (optional).
     """
@@ -619,8 +660,8 @@ def create_source(
                 "key": row.key,
                 "name": row.name,
                 "asset_count": len(row.children),
-                "connection_bound": bool(relations["resource"]),
-                "destination_count": len(relations["destination"]),
+                "connection_bound": connection_id is not None,
+                "destination_count": len(relations["destinations"]),
             },
             "unresolved_requirements": _unresolved_requirements(defn, row),
         }
@@ -765,12 +806,12 @@ def create_job(
         org_id = get_org_id(tool_context)
         store = get_store()
 
-        targets: list[tuple[UUID, str]] = []
+        targets: list[UUID] = []
         for source_id in target_source_ids:
             source = store.components.get(UUID(source_id), kind="source")
             if source.org_id != org_id:
                 return {"status": "error", "error": f"Source '{source_id}' not found"}
-            targets.append((source.id, ""))
+            targets.append(source.id)
         if not targets:
             return {"status": "error", "error": "target_source_ids must name at least one source"}
 
@@ -787,7 +828,7 @@ def create_job(
                     "lookback": lookback,
                     "offset": offset,
                 },
-                relations={"target": targets},
+                relations={"targets": targets},
             )
         except (ConfigError, CatalogKeyError) as e:
             return {"status": "error", "error": str(e)}
