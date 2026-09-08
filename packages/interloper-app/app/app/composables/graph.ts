@@ -31,6 +31,7 @@ export interface DependencyPair {
     upstreamAssetId: string
     downstreamAssetId: string
     paramName: string
+    many: boolean
 }
 
 interface UseGraphConnectionRulesOptions {
@@ -179,14 +180,14 @@ export function useGraphLayout() {
 
 export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions) {
     /**
-     * Whether a relation binding named `name` already blocks this pair.
-     * A `many` relation only blocks the exact same upstream (it otherwise
-     * fans in from several); a single-valued relation blocks on any prior
-     * binding under that name, since it can only ever hold one.
+     * Whether this exact binding is already persisted, the one pair a drag
+     * cannot change. Any other pair stays connectable: a `many` relation
+     * fans in one more upstream, and a single-valued one is repointed by the
+     * API (it drops the binding it holds and inserts the new one).
      */
-    function depExists(downstreamId: string, upstreamId: string, name: string, many: boolean): boolean {
+    function depExists(downstreamId: string, upstreamId: string, name: string): boolean {
         return options.assetDependencies.value.some(
-            d => d.src_id === downstreamId && d.name === name && (many ? d.dst_id === upstreamId : true),
+            d => d.src_id === downstreamId && d.name === name && d.dst_id === upstreamId,
         )
     }
 
@@ -251,8 +252,13 @@ export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions)
                 if (upstream.id === downstream.id) continue
                 const paramName = matchingRelationName(spec, upstream.qk)
                 if (!paramName) continue
-                if (depExists(downstream.id, upstream.id, paramName, relations[paramName]!.many)) continue
-                pairs.push({ upstreamAssetId: upstream.id, downstreamAssetId: downstream.id, paramName })
+                if (depExists(downstream.id, upstream.id, paramName)) continue
+                pairs.push({
+                    upstreamAssetId: upstream.id,
+                    downstreamAssetId: downstream.id,
+                    paramName,
+                    many: relations[paramName]!.many,
+                })
             }
         }
         return pairs

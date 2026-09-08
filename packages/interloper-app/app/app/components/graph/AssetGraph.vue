@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Connection } from '@vue-flow/core'
+import type { DependencyPair } from '~/composables/graph'
 import { qualifiedKey } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 
@@ -31,8 +32,8 @@ const emit = defineEmits<{
     'asset-click': [asset: ComponentRecord, assetDefn: AssetDefinition | undefined, source: ComponentRecord | null]
     'pane-click': []
     'delete-source': [sourceId: string]
-    'create-dependencies': [pairs: Array<{ upstreamAssetId: string; downstreamAssetId: string; paramName: string }>]
-    'delete-dependency': [payload: { upstreamAssetId: string; downstreamAssetId: string }]
+    'create-dependencies': [pairs: DependencyPair[]]
+    'delete-dependency': [payload: { upstreamAssetId: string; downstreamAssetId: string; name?: string }]
 }>()
 
 const componentsStore = useComponentsStore()

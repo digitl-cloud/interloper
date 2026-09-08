@@ -128,14 +128,28 @@ export const useComponentsStore = defineStore('components', () => {
         }
     }
 
-    /** Add one relation binding (`{ name, dst_id }`), replacing any prior binding of the same name and dst. */
-    async function addRelation(id: string, input: { name: string } & RelationInput): Promise<Relation> {
+    /**
+     * Add one relation binding (`{ name, dst_id }`).
+     *
+     * Pass `many: false` when the name is single-valued: the API repoints it,
+     * dropping the binding it held, so the mirror has to drop that row too
+     * or the old binding lingers. Otherwise only the identical binding is
+     * replaced, since a `many` name accumulates.
+     */
+    async function addRelation(
+        id: string,
+        input: { name: string } & RelationInput,
+        options?: { many: boolean },
+    ): Promise<Relation> {
         const relation = await apiFetch<Relation>(`/components/${id}/relations`, {
             method: 'POST',
             body: input,
         })
+        const repoints = options?.many === false
         relations.value = [
-            ...relations.value.filter(r => !(r.src_id === id && r.name === input.name && r.dst_id === input.dst_id)),
+            ...relations.value.filter(
+                r => !(r.src_id === id && r.name === input.name && (repoints || r.dst_id === input.dst_id)),
+            ),
             relation,
         ]
         return relation

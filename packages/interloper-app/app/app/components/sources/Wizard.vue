@@ -28,6 +28,7 @@ const emit = defineEmits<{
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
+const toast = useToast()
 
 const selectedAssetKeys = ref<string[]>(props.source ? props.source.children.map(a => a.key) : [])
 const resolvedCrossDeps = ref<Record<string, string[]>>({})
@@ -77,20 +78,36 @@ function extraInput() {
 /**
  * Cross-source deps are wired per child asset via the relations endpoint,
  * using the child ids from the save response.
+ *
+ * One leg at a time, and every failure is reported: the source itself is
+ * already saved by the time this runs, so a leg that never binds leaves an
+ * asset the user believes is wired unable to run. Re-submitting an
+ * already-wired leg on edit is not a failure, the API returns the row it
+ * holds.
  */
 async function wireCrossDeps(saved: ComponentRecord) {
     const childIdByKey = new Map(saved.children.map(a => [a.key, a.id]))
-    await Promise.all(
-        Object.entries(resolvedCrossDeps.value).flatMap(([key, upstreamIds]) => {
-            const [assetKey, name] = key.split('→')
-            const childId = assetKey ? childIdByKey.get(assetKey) : undefined
-            if (!childId || !name) return []
-            // Tolerate re-submits of an already-wired dependency on edit.
-            return upstreamIds.map(upstreamId =>
-                componentsStore.addRelation(childId, { name, dst_id: upstreamId }).catch(() => { }),
-            )
-        }),
-    )
+    const failed: string[] = []
+    for (const [key, upstreamIds] of Object.entries(resolvedCrossDeps.value)) {
+        const [assetKey, name] = key.split('→')
+        const childId = assetKey ? childIdByKey.get(assetKey) : undefined
+        if (!childId || !name) continue
+        for (const upstreamId of upstreamIds.filter(Boolean)) {
+            try {
+                await componentsStore.addRelation(childId, { name, dst_id: upstreamId })
+            }
+            catch {
+                if (!failed.includes(`${assetKey}.${name}`)) failed.push(`${assetKey}.${name}`)
+            }
+        }
+    }
+    if (failed.length) {
+        toast.add({
+            title: 'Some dependencies were not wired',
+            description: `${failed.join(', ')} could not be bound. Edit the source to wire them again.`,
+            color: 'error',
+        })
+    }
 }
 
 const stepper = useTemplateRef('stepper')

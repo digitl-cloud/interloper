@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { ComponentRecord } from '~/types/component'
+import type { DependencyPair } from '~/composables/graph'
 import { qualifiedKey } from '~/types/catalog'
 
 definePageMeta({ title: 'Graph', fullBleed: true })
@@ -106,11 +107,15 @@ async function onDeleteSource(sourceId: string) {
     }
 }
 
-async function onCreateDependencies(pairs: Array<{ upstreamAssetId: string; downstreamAssetId: string; paramName: string }>) {
+async function onCreateDependencies(pairs: DependencyPair[]) {
     try {
         await Promise.all(
-            pairs.map(({ downstreamAssetId, upstreamAssetId, paramName }) =>
-                componentsStore.addRelation(downstreamAssetId, { name: paramName, dst_id: upstreamAssetId }),
+            pairs.map(({ downstreamAssetId, upstreamAssetId, paramName, many }) =>
+                componentsStore.addRelation(
+                    downstreamAssetId,
+                    { name: paramName, dst_id: upstreamAssetId },
+                    { many },
+                ),
             ),
         )
     }
@@ -119,11 +124,8 @@ async function onCreateDependencies(pairs: Array<{ upstreamAssetId: string; down
     }
 }
 
-async function onDeleteDependency(payload: { upstreamAssetId: string; downstreamAssetId: string }) {
-    const relation = componentsStore.upstreams.find(
-        r => r.src_id === payload.downstreamAssetId && r.dst_id === payload.upstreamAssetId,
-    )
-    if (!relation) {
+async function onDeleteDependency(payload: { upstreamAssetId: string; downstreamAssetId: string; name?: string }) {
+    if (!payload.name) {
         toast.add({
             title: 'Failed to delete dependency',
             description: 'The relation was not found. Reload the page and try again.',
@@ -132,7 +134,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
         return
     }
     try {
-        await componentsStore.removeRelation(payload.downstreamAssetId, relation.name, payload.upstreamAssetId)
+        await componentsStore.removeRelation(payload.downstreamAssetId, payload.name, payload.upstreamAssetId)
     }
     catch (e) {
         toast.add(errorToast(e, 'Failed to delete dependency'))

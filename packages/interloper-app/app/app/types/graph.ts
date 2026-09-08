@@ -43,10 +43,15 @@ export type GroupBy = 'type' | 'source' | 'asset'
 /** Source health filter for the collection graph (derived states only). */
 export type StatusFilter = 'all' | 'healthy' | 'attention' | 'paused'
 
-/** A directed asset→asset dependency, normalised away from the store shape. */
+/**
+ * A directed asset→asset dependency, normalised away from the store shape.
+ * `name` is the relation name the binding is filed under, which is what the
+ * API addresses it by.
+ */
 export interface GraphDependency {
     upstreamAssetId: string
     downstreamAssetId: string
+    name: string
 }
 
 export interface GraphSourceEntry {
@@ -77,5 +82,5 @@ export interface GraphModel {
 
 /** Convert a `dependency` relation (src = downstream, dst = upstream) into the normalised graph shape. */
 export function toGraphDependency(rel: Relation): GraphDependency {
-    return { upstreamAssetId: rel.dst_id, downstreamAssetId: rel.src_id }
+    return { upstreamAssetId: rel.dst_id, downstreamAssetId: rel.src_id, name: rel.name }
 }
