@@ -414,91 +414,71 @@ class TestApplyEffects:
         assert store.stamped == []
 
 
-class TestResolveUpstream:
-    """Upstream dependencies join the graph as read-only context."""
+class _UpstreamFixture(il.Asset):
+    """Plain asset fixture standing in for a hydrated upstream."""
 
-    @staticmethod
-    def _asset(dependencies: dict[str, str] | None = None) -> il.Asset:
-        @il.asset()
-        def node() -> list[dict[str, Any]]:
-            return [{"x": 1}]
+    def data(self) -> list[dict[str, Any]]:
+        """Return one row.
 
-        instance = node(id=str(uuid4()), destinations=[il.MemoryDestination()])
-        if dependencies:
-            instance.dependencies = dependencies
-        return instance
+        Returns:
+            One row.
+        """
+        return [{"x": 1}]
 
-    def test_a_dependency_is_loaded_and_made_non_materializable(self) -> None:
-        # Joined upstream nodes are read from their destinations, never recomputed.
-        upstream = self._asset()
-        target = self._asset({"up": upstream.id})
-        store = _RecordingStore(None)
-        store.components = SimpleNamespace(load=lambda _id: upstream)
-        executor = _executor(store)
-        operations: list[il.Operation] = [target]
 
-        executor._resolve_upstream(operations)
+class _DownstreamFixture(il.Asset):
+    """Asset fixture whose optional relation accepts any asset."""
 
-        assert operations == [target, upstream]
-        assert upstream.materializable is False
+    upstream: il.Asset | None = il.Relation("asset", optional=True)
 
-    def test_the_walk_is_transitive(self) -> None:
-        grandparent = self._asset()
-        parent = self._asset({"up": grandparent.id})
-        target = self._asset({"up": parent.id})
-        by_id = {parent.id: parent, grandparent.id: grandparent}
-        store = _RecordingStore(None)
-        store.components = SimpleNamespace(load=lambda component_id: by_id[str(component_id)])
-        executor = _executor(store)
-        operations: list[il.Operation] = [target]
+    def data(self) -> list[dict[str, Any]]:
+        """Return one row.
 
-        executor._resolve_upstream(operations)
+        Returns:
+            One row.
+        """
+        return [{"y": 1}]
 
-        assert [operation.id for operation in operations] == [target.id, parent.id, grandparent.id]
 
-    def test_a_shared_dependency_is_loaded_once(self) -> None:
-        shared = self._asset()
-        first = self._asset({"up": shared.id})
-        second = self._asset({"up": shared.id})
-        loads: list[str] = []
-        store = _RecordingStore(None)
+class TestUpstreamJoinsReadOnly:
+    """A bound upstream the run itself does not materialize joins the DAG read-only.
 
-        def load(component_id: Any) -> il.Asset:
-            loads.append(str(component_id))
-            return shared
+    The hydrator (Task 4) binds the upstream on the hydrated component
+    directly; the DAG (phase 1 Task 6) is what joins it as a read-only node.
+    The executor no longer walks anything itself, so this exercises the real
+    ``RunExecutor.execute`` path, capturing the assembled DAG through
+    ``_run_dag`` to inspect what it built.
+    """
 
-        store.components = SimpleNamespace(load=load)
-        executor = _executor(store)
-        operations: list[il.Operation] = [first, second]
-
-        executor._resolve_upstream(operations)
-
-        assert loads == [shared.id]
-
-    def test_a_dependency_already_in_the_graph_is_not_reloaded(self) -> None:
-        upstream = self._asset()
-        target = self._asset({"up": upstream.id})
-        store = _RecordingStore(None)
-        store.components = SimpleNamespace(
-            load=lambda _id: pytest.fail("an in-graph dependency must not be reloaded")
+    def test_a_bound_upstream_is_joined_and_made_non_materializable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        il.MemoryDestination.clear()
+        upstream = _UpstreamFixture(id=str(uuid4()), destinations=[il.MemoryDestination()])
+        target = _DownstreamFixture(
+            id=str(uuid4()), destinations=[il.MemoryDestination()], upstream=upstream
         )
+
+        run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
+        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
+
+        built: list[il.DAG] = []
+        real_run_dag = RunExecutor._run_dag
+
+        def _capturing_run_dag(self: RunExecutor, dag: il.DAG, *args: Any, **kwargs: Any) -> il.RunResult:
+            built.append(dag)
+            return real_run_dag(self, dag, *args, **kwargs)
+
+        monkeypatch.setattr(RunExecutor, "_run_dag", _capturing_run_dag)
+
+        store = _RecordingStore(target)
         executor = _executor(store)
-        operations: list[il.Operation] = [target, upstream]
 
-        executor._resolve_upstream(operations)
+        assert executor.execute(run.id) is True
 
-        assert len(operations) == 2
-
-    def test_no_dependencies_is_a_no_op(self) -> None:
-        target = self._asset()
-        store = _RecordingStore(None)
-        store.components = SimpleNamespace(load=lambda _id: pytest.fail("nothing to load"))
-        executor = _executor(store)
-        operations: list[il.Operation] = [target]
-
-        executor._resolve_upstream(operations)
-
-        assert operations == [target]
+        (dag,) = built
+        assert dag.operation_map[upstream.id].materializable is False
+        assert dag.predecessors[target.id] == [upstream.id]
 
 
 class TestRetrySkipsPriorSuccesses:

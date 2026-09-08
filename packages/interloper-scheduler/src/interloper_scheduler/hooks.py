@@ -188,7 +188,7 @@ class HookController(Controller):
                 .join(ComponentRelation, onclause=ComponentRelation.src_id == Component.id)  # ty: ignore[invalid-argument-type]
                 .where(Component.kind == "hook")
                 .where(Component.org_id == run.org_id)
-                .where(ComponentRelation.type == "watch")
+                .where(ComponentRelation.name == "watches")
                 .where(col(ComponentRelation.dst_id).in_(watched_ids))
                 .distinct()
             ).all()

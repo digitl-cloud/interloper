@@ -269,7 +269,7 @@ def _job_targeting(store: Store, *source_keys: str, config: dict[str, Any]) -> U
         key="cron_job",
         name="J",
         config=config,
-        relations={"target": [(tid, "") for tid in targets]},
+        relations={"targets": targets},
     )
     with Session(store.engine) as session:
         db_job = session.get(Component, row.id)

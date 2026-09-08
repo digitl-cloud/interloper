@@ -97,7 +97,7 @@ class TestFire:
 
 class TestDefinition:
     def test_declares_a_connection_slot(self):
-        assert SlackHook.resource_types["connection"] is SlackConnection
+        assert SlackHook.relations["connection"].target is SlackConnection
 
     def test_defaults_to_failures_only(self):
         assert _hook().events == ["run_failed"]
@@ -105,4 +105,4 @@ class TestDefinition:
     def test_is_a_catalogued_hook(self):
         definition = SlackHook.definition()
         assert (definition.kind, definition.key, definition.name) == ("hook", "slack_hook", "Slack")
-        assert definition.relations["resource"].slots["connection"].key == "slack_connection"
+        assert definition.relations["connection"].key == "slack_connection"
