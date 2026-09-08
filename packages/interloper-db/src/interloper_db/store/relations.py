@@ -250,11 +250,12 @@ class RelationStore:
     def _relation_detaches(self, session: Session, referrer: Component, relation_row: ComponentRelation) -> bool:
         """Whether an edge detaches (rather than blocks) when its destination is deleted.
 
-        Consults the referrer's own vocabulary: a name declared
-        ``on_delete="detach"`` detaches, as does an optional one, since the
-        referrer keeps working with nothing bound there. Anything
-        unresolvable (an undeclared name, a drifted key) blocks, keeping the
-        guard fail-closed.
+        Consults the referrer's own vocabulary, where ``on_delete`` is the
+        sole authority: only a name declared ``on_delete="detach"`` detaches.
+        Whether the name is ``optional`` is a separate question, about leaving
+        it unbound or emptying it, and does not license deleting a target the
+        referrer holds. Anything unresolvable (an undeclared name, a drifted
+        key) blocks, keeping the guard fail-closed.
 
         Args:
             session: Open session the referrer's vocabulary is resolved
@@ -268,7 +269,7 @@ class RelationStore:
         relation = self._vocabulary(session, referrer).get(relation_row.name)
         if relation is None:
             return False
-        return relation.on_delete == "detach" or relation.optional
+        return relation.on_delete == "detach"
 
     def _vocabulary(self, session: Session, row: Component) -> dict[str, il.Relation]:
         """The relation vocabulary governing a component row.

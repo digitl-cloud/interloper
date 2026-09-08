@@ -70,7 +70,16 @@ class GuardRequired(il.Asset):
 
 
 class GuardOptional(il.Asset):
-    """Asset whose optional ``up`` relation detaches when its upstream goes."""
+    """Asset whose ``up`` relation detaches when its upstream goes."""
+
+    up = il.Relation("asset", "guard_upstream", optional=True, on_delete="detach")
+
+    def data(self, context: il.ExecutionContext, up: il.Upstream | None) -> list[dict]:
+        return []
+
+
+class GuardOptionalBlocking(il.Asset):
+    """Asset whose ``up`` relation is optional yet keeps the default ``block``."""
 
     up = il.Relation("asset", "guard_upstream", optional=True)
 
@@ -123,12 +132,12 @@ class WireUpNarrowedSource(il.Source):
 
 
 class WireDownOptionalSource(il.Source):
-    """Downstream source whose asset optionally reads ``wire_up_source.rows``."""
+    """Downstream source whose asset reads ``wire_up_source.rows`` detachably."""
 
     class Reader(il.Asset):
-        """Asset with an optional cross-source upstream."""
+        """Asset with a detaching cross-source upstream."""
 
-        rows = il.Relation("asset", "wire_up_source.rows", optional=True)
+        rows = il.Relation("asset", "wire_up_source.rows", optional=True, on_delete="detach")
 
         def data(self, context: il.ExecutionContext) -> list[dict]:
             return []
@@ -158,6 +167,7 @@ def store(component_db: Engine) -> Store:
             GuardUpstream,
             GuardRequired,
             GuardOptional,
+            GuardOptionalBlocking,
             WireUpSource,
             WireDownSource,
             WireDownOptionalSource,
@@ -277,6 +287,24 @@ class TestDeleteInUseGuard:
         ]
         assert "in use by Down" in str(excinfo.value)
 
+    def test_bound_destination_blocks_delete_and_names_referrer(self, store: Store, connection: Component):
+        destination = store.components.create(_ORG, kind="destination", key="dest")
+        source = store.components.create(
+            _ORG,
+            kind="source",
+            key="wire_down_source",
+            name="Down",
+            relations={"connection": [connection.id], "destinations": [destination.id]},
+        )
+
+        # ``destinations`` is optional and many-valued yet keeps the default
+        # ``block``: a source writing to a destination consumes it, so the
+        # destination may not be deleted from under it.
+        with pytest.raises(InUseError) as excinfo:
+            store.components.delete(destination.id)
+        assert [r["id"] for r in excinfo.value.referrers] == [str(source.id)]
+        assert "in use by Down" in str(excinfo.value)
+
     def test_delete_succeeds_after_repointing(self, store: Store, connection: Component):
         other = store.components.create(_ORG, kind="connection", key="wire_connection", config={}, encrypted=False)
         source = store.components.create(
@@ -340,26 +368,38 @@ class TestDeleteInUseGuard:
 
 
 class TestUpstreamDeleteSemantics:
-    """A required upstream relation blocks deletion; an optional one detaches."""
+    """``on_delete`` alone decides: a ``block`` upstream relation refuses the deletion, a ``detach`` one gives way."""
 
-    def test_delete_blocks_on_required_referrer_and_detaches_optional(self, store: Store):
+    def test_delete_blocks_on_blocking_referrer_and_detaches_the_detaching_one(self, store: Store):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
-        required = store.components.create(
+        blocking = store.components.create(
             _ORG, kind="asset", key="guard_required", name="Req", relations={"up": [upstream.id]}
         )
-        optional = store.components.create(
+        detaching = store.components.create(
             _ORG, kind="asset", key="guard_optional", name="Opt", relations={"up": [upstream.id]}
         )
 
         with pytest.raises(InUseError) as excinfo:
             store.components.delete(upstream.id)
-        assert [r["id"] for r in excinfo.value.referrers] == [str(required.id)]
+        assert [r["id"] for r in excinfo.value.referrers] == [str(blocking.id)]
 
-        store.components.delete(required.id)
+        store.components.delete(blocking.id)
         store.components.delete(upstream.id)
 
-        assert store.components.get(optional.id).id == optional.id
+        assert store.components.get(detaching.id).id == detaching.id
         assert store.relations.list_all(_ORG, name="up") == []
+
+    def test_an_optional_relation_keeping_the_default_policy_blocks(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
+        referrer = store.components.create(
+            _ORG, kind="asset", key="guard_optional_blocking", name="Opt", relations={"up": [upstream.id]}
+        )
+
+        # The two knobs are independent: the relation may be left unbound
+        # (``optional``), which says nothing about deleting what it holds.
+        with pytest.raises(InUseError) as excinfo:
+            store.components.delete(upstream.id)
+        assert [r["id"] for r in excinfo.value.referrers] == [str(referrer.id)]
 
 
 class TestIntraSourceWiring:
@@ -420,7 +460,7 @@ class TestChildRemovalGuard:
         assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
         assert store.relations.list_all(_ORG, name="rows") != []
 
-    def test_removing_child_with_optional_external_upstream_detaches(self, store: Store):
+    def test_removing_child_with_detaching_external_upstream_detaches(self, store: Store):
         up = store.components.create(_ORG, kind="source", key="wire_up_source")
         down = store.components.create(_ORG, kind="source", key="wire_down_optional_source")
         store.relations.add(_child(down, "reader").id, name="rows", dst_id=_child(up, "rows").id)

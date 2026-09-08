@@ -243,11 +243,12 @@ class ComponentStore:
     def delete(self, component_id: UUID) -> None:
         """Delete a component. Children and out-bound relations cascade via FK.
 
-        In-bound relations follow the semantics the referrer's class
-        declares for the name they are filed under: a consuming relation (a
-        bound ``connection``, a required upstream) blocks the deletion; one
-        declared ``on_delete="detach"`` or optional (a job's ``targets``, a
-        hook's ``watches``) detaches, its row cascading away while the
+        In-bound relations follow the ``on_delete`` the referrer's class
+        declares for the name they are filed under, and nothing else: a
+        consuming relation (a bound ``connection``, a bound ``destination``,
+        a required upstream) blocks the deletion; one declared
+        ``on_delete="detach"`` (a job's ``targets``, a hook's ``watches``, an
+        optional upstream) detaches, its row cascading away while the
         referrer keeps working with reduced scope.
 
         Args:
@@ -281,8 +282,8 @@ class ComponentStore:
         Deleting a relation destination cascades the edge row, which would
         leave a *consuming* referrer silently broken at its next run, so
         those relations refuse the deletion. An edge whose name the referrer
-        declares ``on_delete="detach"`` or optional is skipped: cascading it
-        is the intended outcome. Edges internal to the subtree (a source's
+        declares ``on_delete="detach"`` is skipped: cascading it is the
+        intended outcome. Edges internal to the subtree (a source's
         own sibling relations) don't count, and a referrer that is a
         source-owned asset is reported as its parent source, the unit the
         user can act on.
