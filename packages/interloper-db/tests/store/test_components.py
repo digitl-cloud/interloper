@@ -374,7 +374,7 @@ class TestIntraSourceWiring:
         """
         return Store(catalog=il.Catalog.from_assets([DemoSource]))
 
-    def test_create_source_binds_sibling_upstreams(self, store: Store):
+    def test_create_source_binds_sibling_relations(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
 
         rows = store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")

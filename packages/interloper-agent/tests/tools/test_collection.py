@@ -226,6 +226,18 @@ def test_source_relations_requires_missing_connection():
     assert "requires a 'facebook_ads_connection' as 'connection'" in error["error"]
 
 
+def test_source_relations_rejects_a_connection_a_source_cannot_hold():
+    connection = _relation_row()
+    store = _RelationsStore({connection.id: connection})
+    defn = {"relations": {"destinations": {"kind": "destination", "many": True, "optional": True}}}
+    relations, error = collection._source_relations(
+        store, ORG_ID, defn, "static_source", str(connection.id), None
+    )
+    assert relations is None
+    assert error is not None
+    assert "does not fit any relation of 'static_source'" in error["error"]
+
+
 def test_source_relations_allows_optional_connection_unbound():
     store = _RelationsStore({})
     defn = {"relations": {"connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": True}}}

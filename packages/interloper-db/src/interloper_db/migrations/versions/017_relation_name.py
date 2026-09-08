@@ -7,10 +7,13 @@ slot for slotted rows and the plural field name for the others. Whether a
 relation is single-valued is a class rule the store enforces, so the partial
 unique index on resource slots goes.
 
-The four types the old vocabulary ever wrote (``resource``, ``dependency``/
-``upstream``, ``target``, ``watch``) are backfilled into ``name`` below; the
-final ``DELETE ... WHERE name IS NULL`` is defensive only; production has no
-rows outside that vocabulary, so it is a no-op there.
+The types the old vocabulary ever wrote (``resource``, ``dependency``/
+``upstream``, and the three ``_PLURAL`` maps: ``destination``, ``target``,
+``watch``) are backfilled into ``name`` below. The final ``DELETE`` is
+defensive only: it drops a row left with a NULL ``name`` (a ``type`` outside
+that vocabulary) or an empty one (a ``resource`` row whose ``slot`` was
+never filled, which the store had no path to write). Production holds
+neither, so it is a no-op there.
 
 The downgrade maps every asset-kind row back to ``type = 'upstream'``, so a
 pre-017 ``dependency`` type is never recovered: that rename never shipped, so
