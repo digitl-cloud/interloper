@@ -170,10 +170,12 @@ export const useComponentsStore = defineStore('components', () => {
 
     /**
      * Whether a relation detaches (rather than blocks) when its destination
-     * is deleted — the referrer's vocabulary decides: `on_delete: 'detach'`
-     * names (job targets, hook watches) and optional relations detach;
-     * anything unresolvable blocks, matching the backend guard's fail-closed
-     * default.
+     * is deleted, decided by the referrer's vocabulary and `on_delete`
+     * alone: `'detach'` drops the row, `'block'` refuses. `optional` only
+     * says the relation may be left empty or unbound, it has no say over
+     * deletion (an optional relation can still be `on_delete: 'block'`,
+     * e.g. `destinations`). Anything unresolvable blocks, matching the
+     * backend guard's fail-closed default.
      */
     function _relationDetaches(src: ComponentRecord | undefined, r: Relation): boolean {
         if (!src) return false
@@ -186,7 +188,7 @@ export const useComponentsStore = defineStore('components', () => {
         }
         const defn = vocabulary?.[r.name]
         if (!defn) return false
-        return defn.on_delete === 'detach' || defn.optional
+        return defn.on_delete === 'detach'
     }
 
     /**
