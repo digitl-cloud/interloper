@@ -247,7 +247,7 @@ function updateFetchState(fieldKey: string, patch: Partial<{ options: { label: s
     }
 }
 
-/** The relation a fetch field depends on — the provider's `<relation>`. */
+/** The relation a fetch field depends on: the `<relation>` part of its provider. */
 function fetchRelationName(meta: FetchMeta): string {
     return meta.provider.split('.')[0] ?? ''
 }

@@ -1,5 +1,4 @@
-import type { ComponentDefinition } from '~/types/catalog'
-import { resourceRelations } from '~/types/catalog'
+import { RESOURCE_KINDS } from '~/types/catalog'
 
 /**
  * Usability state of a persisted component in this deployment.
@@ -91,13 +90,18 @@ export function relationIds(c: ComponentRecord, name: string): string[] {
     return relationRefs(c, name).map(r => r.dst_id)
 }
 
-/** Resource relations as a {name: dst_id} map (the old `resources` field). */
-export function resourceMap(c: ComponentRecord, defn: ComponentDefinition | undefined): Record<string, string> {
-    if (!defn) return {}
+/**
+ * Resource relations as a {name: dst_id} map (the old `resources` field).
+ *
+ * Read off the bindings' own `dst_kind`, not the definition's vocabulary, so
+ * a component whose key has drifted out of the catalog still reports what it
+ * is bound to.
+ */
+export function resourceMap(c: ComponentRecord): Record<string, string> {
     const map: Record<string, string> = {}
-    for (const name of Object.keys(resourceRelations(defn))) {
-        const [ref] = relationRefs(c, name)
-        if (ref) map[name] = ref.dst_id
+    for (const [name, refs] of Object.entries(c.relations ?? {})) {
+        const [ref] = refs
+        if (ref && RESOURCE_KINDS.some(kind => kind === ref.dst_kind)) map[name] = ref.dst_id
     }
     return map
 }

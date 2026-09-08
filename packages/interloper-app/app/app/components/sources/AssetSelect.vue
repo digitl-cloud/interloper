@@ -32,10 +32,7 @@ const catalogStore = useCatalogStore()
 
 interface DepCandidate {
     assetId: string
-    sourceId: string
     sourceName: string
-    assetName: string
-    sameSource: boolean
 }
 
 interface AssetDep {
@@ -50,19 +47,13 @@ interface AssetDep {
 }
 
 /** The instances of `assetKey` a declared key reaches, given its source part. */
-function keyCandidates(sourceKey: string, assetKey: string, label: string): DepCandidate[] {
+function keyCandidates(sourceKey: string, assetKey: string): DepCandidate[] {
     const candidates: DepCandidate[] = []
     for (const source of props.allSources) {
         if (sourceKey !== ANY_SOURCE && source.key !== sourceKey) continue
         const asset = source.children.find(a => a.key === assetKey)
         if (!asset) continue
-        candidates.push({
-            assetId: asset.id,
-            sourceId: source.id,
-            sourceName: source.name ?? source.key,
-            assetName: label,
-            sameSource: false, // cross-source by definition
-        })
+        candidates.push({ assetId: asset.id, sourceName: source.name ?? source.key })
     }
     return candidates
 }
@@ -92,7 +83,7 @@ function getAssetDeps(assetDefn: AssetDefinition): AssetDep[] {
             keys.push(declared)
             // Overlapping keys ('shop.orders' and '*.orders') can reach the
             // same instance; it is one candidate, listed once.
-            for (const candidate of keyCandidates(sourceKey, assetKey, keyLabel)) {
+            for (const candidate of keyCandidates(sourceKey, assetKey)) {
                 if (!candidates.some(c => c.assetId === candidate.assetId)) candidates.push(candidate)
             }
         }
