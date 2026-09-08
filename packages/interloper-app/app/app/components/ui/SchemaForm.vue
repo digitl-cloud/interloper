@@ -91,6 +91,8 @@ const props = defineProps<{
      * (e.g. `"destinations"`). Each value is a list of `{label, value}` options.
      */
     optionsContext?: Record<string, { label: string; value: string }[]>
+    /** Heading above the form's fields (e.g. 'Credentials'). */
+    credentialsLabel?: string
 }>()
 
 const data = defineModel<Record<string, any>>('data', { default: () => ({}) })
@@ -502,6 +504,12 @@ watch(
     { deep: true, immediate: true },
 )
 
+/**
+ * Whether the sign-in chrome belongs on this form: an `include`-restricted
+ * form that renders none of the fields the flow fills has nothing to toggle.
+ */
+const showOAuth = computed(() => oauthAvailable.value && fields.value.some(f => f.isOAuthField))
+
 /** Fields visible in the current mode. */
 const visibleFields = computed(() => {
     if (oauthAvailable.value && activeTab.value === 'oauth') {
@@ -604,8 +612,11 @@ defineExpose({ setErrors })
     <UForm ref="form"
            :state="data"
            class="flex flex-col gap-4">
+        <USeparator v-if="credentialsLabel"
+                    :label="credentialsLabel" />
+
         <!-- OAuth tabs toggle -->
-        <UTabs v-if="oauthAvailable"
+        <UTabs v-if="showOAuth"
                v-model="activeTab"
                :items="oauthTabs"
                :content="false"
@@ -751,7 +762,7 @@ defineExpose({ setErrors })
         </UFormField>
 
         <!-- OAuth sign-in content -->
-        <UFormField v-if="oauthAvailable && activeTab === 'oauth'"
+        <UFormField v-if="showOAuth && activeTab === 'oauth'"
                     label="OAuth"
                     description="Sign in with the OAuth provider to automatically fill in your credentials."
                     required>

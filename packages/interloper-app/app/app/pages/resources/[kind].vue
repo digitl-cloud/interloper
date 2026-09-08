@@ -277,7 +277,8 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
                                      :component="editingResource"
                                      :initial-type-key="presetTypeKey"
                                      :definitions="definitions"
-                                     :config-label="kind === 'connection' ? 'Credentials' : 'Configuration'"
+                                     :config-label="kind === 'connection' ? 'Config' : 'Configuration'"
+                                     :credentials-label="kind === 'connection' ? 'Credentials' : undefined"
                                      @created="handleSaved"
                                      @updated="handleSaved" />
         </WizardDrawer>

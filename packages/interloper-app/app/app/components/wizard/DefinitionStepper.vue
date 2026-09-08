@@ -9,9 +9,11 @@
  *   3. One picker step per `relationSteps` entry the selected class declares.
  *   4. One step per declared resource slot (when `resourceSlotSteps`).
  *   5. Extra steps with `placement: 'end'` (e.g. source destinations).
- *   6. Details: name + SchemaForm generated from `config_schema`, plus the
- *      `#details` extension slot whose `extra.config`/`extra.input` merge
- *      into the payload and whose `extra.valid` gates submit.
+ *   6. Details: name, a SchemaForm generated from `config_schema`, the
+ *      kind's own action (a connection's check), then a second SchemaForm
+ *      for the schema's public fields, plus the `#details` extension slot
+ *      whose `extra.config`/`extra.input` merge into the payload and whose
+ *      `extra.valid` gates submit.
  *
  * Extra steps render through `#step-<name>` slots; their gating and recap
  * live in the entry's `canProceed`/`recap` callbacks so the page owns the
@@ -70,8 +72,13 @@ const props = withDefaults(defineProps<{
     exclude?: string[]
     /** Allow an empty name (falls back to the type's display name). */
     nameOptional?: boolean
-    /** Separator label above the generated form (e.g. 'Credentials'). */
+    /** Separator label above the name, and above the form when it isn't split. */
     configLabel?: string
+    /**
+     * Separator label splitting the generated form off under its own heading
+     * (e.g. 'Credentials'). Omit for kinds that hold no credentials.
+     */
+    credentialsLabel?: string
     /** Dynamic options for `x-options-from` fields, forwarded to SchemaForm. */
     optionsContext?: Record<string, { label: string, value: string }[]>
     /** Page-owned payload contributions (children, extra relations), read at submit. */
@@ -88,6 +95,7 @@ const props = withDefaults(defineProps<{
     exclude: () => [],
     nameOptional: false,
     configLabel: 'Configuration',
+    credentialsLabel: undefined,
     optionsContext: undefined,
     extraInput: undefined,
     afterSave: undefined,
@@ -122,6 +130,18 @@ const hasConfigFields = computed(() => {
     return Object.keys(properties).some(key => key !== 'id')
 })
 
+/**
+ * Fields the schema marks public (a connection's `auto_renew`): settings
+ * rather than credentials, so they render in their own trailing section
+ * below the generated form and whatever action follows it.
+ */
+const publicFieldKeys = computed(() => {
+    const properties = (schema.value?.properties ?? {}) as Record<string, { 'x-public'?: boolean }>
+    return Object.entries(properties)
+        .filter(([key, prop]) => prop['x-public'] === true && !props.exclude.includes(key))
+        .map(([key]) => key)
+})
+
 /** Selected-type summary card shown on every post-type step. */
 const summaryCard = computed(() => hasTypeStep.value || isEditing.value
     ? definition.value && {
@@ -136,6 +156,8 @@ const summaryCard = computed(() => hasTypeStep.value || isEditing.value
 const name = ref('')
 const configData = ref<Record<string, unknown>>({})
 const configValid = ref(true)
+/** Validity of the trailing public-field section, which is its own form. */
+const publicValid = ref(true)
 const relationSelections = ref<Record<string, string[]>>(
     Object.fromEntries(props.relationSteps.map(step => [step.type, []])),
 )
@@ -346,7 +368,7 @@ const recapRows = computed(() => {
 // ── Validation ──────────────────────────────────────────────────
 const detailsValid = computed(() =>
     (props.nameOptional || !!name.value.trim())
-    && (!hasConfigFields.value || configValid.value)
+    && (!hasConfigFields.value || (configValid.value && publicValid.value))
     && extra.valid,
 )
 
@@ -537,9 +559,10 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                             v-model:discriminator-label="discriminatorLabel"
                             :schema="schema"
                             :component-key="selectedKey"
-                            :exclude="exclude"
+                            :exclude="[...exclude, ...publicFieldKeys]"
                             :resource-context="resourceContext"
-                            :options-context="optionsContext" />
+                            :options-context="optionsContext"
+                            :credentials-label="credentialsLabel" />
                 <div v-else
                      class="text-sm text-muted italic">
                     No configuration required for this type.
@@ -550,6 +573,13 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                           :config="configData"
                                           manual
                                           @field-errors="applyCheckErrors" />
+
+                <SchemaForm v-if="schema && publicFieldKeys.length"
+                            v-model:data="configData"
+                            v-model:is-valid="publicValid"
+                            :schema="schema"
+                            :component-key="selectedKey"
+                            :include="publicFieldKeys" />
 
                 <!-- Extension point: derived display and hand-built sections a
                      kind keeps outside the generated form. -->
