@@ -14,12 +14,12 @@ import type { ComponentRecord } from '~/types/component'
 const selectedId = defineModel<string>({ default: '' })
 
 const props = withDefaults(defineProps<{
-    /** The slot name (e.g. "connection"). */
-    slotName: string
+    /** The relation name (e.g. "connection"). */
+    relationName: string
     /** The resource definition from the catalog. */
     definition: ComponentDefinition
     /**
-     * Resource data from sibling steps, keyed by slot name.
+     * Resource data from sibling steps, keyed by relation name.
      * Passed through to SchemaForm for x-fetch field resolution.
      */
     resourceContext?: Record<string, Record<string, unknown>> | undefined
@@ -56,13 +56,13 @@ const loadingInstances = ref(false)
 const schema = computed(() => (props.definition as any).config_schema ?? null)
 
 const kindLabel = computed(() => {
-    const s = props.slotName
+    const s = props.relationName
     return s.charAt(0).toUpperCase() + s.slice(1)
 })
 
 // ── Instance loading ─────────────────────────────────────────────
 
-/** Matching resource instances for this slot's key. */
+/** Matching resource instances for this relation's key. */
 const instances = computed(() =>
     componentsStore.byKind(props.definition.kind).filter(r => r.key === props.definition.key),
 )

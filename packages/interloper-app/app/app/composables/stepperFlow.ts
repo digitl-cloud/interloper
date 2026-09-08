@@ -8,9 +8,9 @@ export function useCheckedSteps(steps: MaybeRefOrGetter<StepperItem[]>, activeSt
     })))
 }
 
-/** Icon for a wizard resource-slot step or recap row. */
-export function resourceSlotIcon(slotName: string): string {
-    return slotName === 'connection' ? 'i-lucide-key-round' : 'i-lucide-settings'
+/** Icon for a wizard resource-relation step or recap row. */
+export function resourceRelationIcon(relationName: string): string {
+    return relationName === 'connection' ? 'i-lucide-key-round' : 'i-lucide-settings'
 }
 
 export function useStepperFlow(stepsCount: MaybeRefOrGetter<number>) {

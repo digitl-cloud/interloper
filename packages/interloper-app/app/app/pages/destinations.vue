@@ -159,7 +159,7 @@ function handleSaved() {
                                      :component="editingDestination"
                                      :initial-type-key="presetTypeKey"
                                      :definitions="catalogStore.destinationDefinitions"
-                                     resource-slot-steps
+                                     resource-relation-steps
                                      name-optional
                                      @created="handleSaved"
                                      @updated="handleSaved" />
