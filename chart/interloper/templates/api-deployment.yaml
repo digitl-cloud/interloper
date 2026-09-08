@@ -7,6 +7,7 @@ metadata:
     {{- include "interloper.componentLabels" (dict "root" . "component" "api") | nindent 4 }}
 spec:
   replicas: {{ .Values.api.replicaCount }}
+  strategy: {{- toYaml .Values.api.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "interloper.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
@@ -26,6 +27,7 @@ spec:
       {{- with .Values.podSecurityContext }}
       securityContext: {{- toYaml . | nindent 8 }}
       {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.api.terminationGracePeriodSeconds }}
       containers:
         - name: api
           image: {{ include "interloper.image" (dict "root" . "component" "api" "image" .Values.api.image "flavor" (include "interloper.apiFlavor" .)) }}
@@ -79,6 +81,9 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+          {{- with .Values.api.lifecycle }}
+          lifecycle: {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources: {{- toYaml .Values.api.resources | nindent 12 }}
       volumes:
         - name: config

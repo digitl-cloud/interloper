@@ -57,7 +57,21 @@ worker:
 # ── API (REST + websocket backend) ─────────────────────────────────────────
 api:
   enabled: true
-  replicaCount: 1
+  # Rollout safety, see "Zero-downtime rollouts" in the README.
+  replicaCount: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  terminationGracePeriodSeconds: 150
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 120"]
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
   image:
     repository: ""  # defaults to {image.registry}/interloper-api
     tag: ""
@@ -93,7 +107,21 @@ api:
 # ── Frontend (nginx serving the pre-built Nuxt SPA) ────────────────────────
 frontend:
   enabled: true
-  replicaCount: 1
+  # Rollout safety, see "Zero-downtime rollouts" in the README.
+  replicaCount: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  terminationGracePeriodSeconds: 150
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 120"]
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
   image:
     repository: ""  # defaults to {image.registry}/interloper-frontend
     tag: ""
@@ -120,7 +148,21 @@ frontend:
 # and /.well-known/oauth-protected-resource on the app hostnames to it.
 mcp:
   enabled: false
-  replicaCount: 1
+  # Rollout safety, see "Zero-downtime rollouts" in the README.
+  replicaCount: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  terminationGracePeriodSeconds: 150
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 120"]
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
   image:
     repository: ""  # defaults to {image.registry}/interloper-mcp
     tag: ""
