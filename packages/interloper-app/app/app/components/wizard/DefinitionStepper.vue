@@ -248,7 +248,7 @@ onMounted(async () => {
             for (const step of props.relationSteps) {
                 relationSelections.value[step.name] = relationIds(props.component, step.name)
             }
-            resourceSelections.value = resourceMap(props.component, definition.value)
+            resourceSelections.value = resourceMap(props.component)
         }
         catch (e) {
             // Seeding half a form is worse than seeding none: say what failed

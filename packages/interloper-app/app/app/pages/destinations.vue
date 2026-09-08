@@ -63,7 +63,7 @@ const columns: TableColumn<ComponentRecord>[] = [
         accessorKey: 'resources',
         header: 'Connection',
         cell: ({ row }) => {
-            const connId = resourceMap(row.original, catalogStore.catalog[row.original.key]).connection
+            const connId = resourceMap(row.original).connection
             if (!connId) return h('span', { class: 'text-muted' }, '—')
             const resource = componentsStore.byId(connId)
             if (!resource) return h('span', { class: 'text-muted' }, '—')

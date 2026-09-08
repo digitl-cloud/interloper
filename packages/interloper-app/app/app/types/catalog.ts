@@ -9,9 +9,10 @@ export interface RelationDefinition {
     /** Whether the relation may stay unbound. */
     optional: boolean
     /**
-     * What deleting the relation's destination does to the referrer:
-     * `block` refuses the deletion, `detach` cascades the relation away
-     * (job targets, hook watches). Optional relations detach regardless.
+     * What deleting the relation's destination does to the referrer, and the
+     * only thing that decides it: `block` refuses the deletion, `detach`
+     * drops the relation and lets it through (job targets, hook watches).
+     * `optional` has no say here, it governs unbinding.
      */
     on_delete: 'block' | 'detach'
     name: string
@@ -78,8 +79,13 @@ export function resourceRelations(defn: ComponentDefinition): Record<string, Rel
     )
 }
 
-/** Relations whose kind includes 'asset' (a component's declared upstreams), keyed by name. */
+/**
+ * An asset's declared upstreams: its relations whose kind includes 'asset',
+ * keyed by name. Guarded on the definition's own kind, since a job's
+ * `targets` and a hook's `watches` accept assets too without being upstreams.
+ */
 export function upstreamRelations(defn: ComponentDefinition): Record<string, RelationDefinition> {
+    if (defn.kind !== 'asset') return {}
     return Object.fromEntries(
         Object.entries(defn.relations ?? {}).filter(([, r]) => kindsOf(r).includes('asset')),
     )
