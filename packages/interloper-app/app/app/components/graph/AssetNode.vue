@@ -23,6 +23,7 @@ const { getWarnings } = useAssetWarnings()
 const { getBadgeForAssetId } = useDestinationBadge()
 const { statusBadge } = useDrift()
 const { confirm } = useConfirm()
+const toast = useToast()
 
 const isMissing = computed(() => props.asset.status === 'missing')
 const driftBadge = computed(() => statusBadge(props.asset.status))
@@ -125,7 +126,15 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                     })
                     if (confirmed) {
                         const deps = componentsStore.upstreams.filter(d => d.src_id === props.asset.id)
-                        await Promise.all(deps.map(d => componentsStore.removeRelation(d.src_id, 'upstream', d.dst_id)))
+                        // Sequential, not concurrent: a non-optional relation refuses to
+                        // reach zero bindings, and parallel deletes make which leg keeps
+                        // it (and so which call 400s) a race.
+                        try {
+                            for (const d of deps) await componentsStore.removeRelation(d.src_id, d.name, d.dst_id)
+                        }
+                        catch (e) {
+                            toast.add(errorToast(e, 'Failed to disconnect upstream'))
+                        }
                     }
                 },
             },
