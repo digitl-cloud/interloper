@@ -52,7 +52,7 @@ const emit = defineEmits<{
     'pane-click': []
     'delete-source': [sourceId: string]
     'connect': [connection: Connection]
-    'delete-dependency': [payload: { upstreamAssetId: string; downstreamAssetId: string }]
+    'delete-dependency': [payload: { upstreamAssetId: string; downstreamAssetId: string; name?: string }]
 }>()
 
 const flowId = `asset-graph-${useId()}`
@@ -613,7 +613,7 @@ function onConnect(connection: Connection) {
 // ── Edge context menu ──
 const edgeMenuOpen = ref(false)
 const edgeMenuVirtual = ref({ getBoundingClientRect: () => new DOMRect() })
-const edgeMenuEdge = ref<{ source: string; target: string } | null>(null)
+const edgeMenuEdge = ref<{ source: string; target: string; name?: string } | null>(null)
 
 const { confirm } = useConfirm()
 
@@ -635,6 +635,7 @@ const edgeMenuItems = computed<ContextMenuItem[][]>(() => {
                         emit('delete-dependency', {
                             downstreamAssetId: edge.target,
                             upstreamAssetId: edge.source,
+                            name: edge.name,
                         })
                     }
                 },
@@ -696,7 +697,13 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
     const isTargetAsset = assetToSource.value.has(edge.target)
     if (!isSourceAsset || !isTargetAsset) return
 
-    edgeMenuEdge.value = { source: edge.source, target: edge.target }
+    edgeMenuEdge.value = {
+        source: edge.source,
+        target: edge.target,
+        name: dependencies.value.find(
+            d => d.upstreamAssetId === edge.source && d.downstreamAssetId === edge.target,
+        )?.name,
+    }
 
     const { clientX: x, clientY: y } = event
     edgeMenuVirtual.value = {
