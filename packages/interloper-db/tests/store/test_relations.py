@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
 from interloper.errors import ConfigError, NotFoundError
-from interloper_assets.demo.source import DemoSource
-from interloper_assets.facebook_ads.source import FacebookAds
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
@@ -19,20 +16,10 @@ from interloper_db.store import Store
 _ORG = uuid4()
 
 
-@pytest.fixture
-def store(component_db: Engine) -> Store:
-    """A store over the in-memory database (no catalog needed for these).
-
-    Returns:
-        A store with an empty catalog, reading and writing the fixture database.
-    """
-    return Store(catalog=il.Catalog(components={}))
-
-
-def _relations(session: Session, src_id, type: str | None = None) -> list[ComponentRelation]:
+def _relations(session: Session, src_id: UUID, name: str | None = None) -> list[ComponentRelation]:
     statement = select(ComponentRelation).where(ComponentRelation.src_id == src_id)
-    if type:
-        statement = statement.where(ComponentRelation.type == type)
+    if name:
+        statement = statement.where(ComponentRelation.name == name)
     return list(session.exec(statement).all())
 
 
@@ -40,292 +27,366 @@ def _child(source: Component, key: str) -> Component:
     return next(child for child in source.children if child.key == key)
 
 
+class WireConnection(il.Connection):
+    """Connection the wire sources bind."""
+
+
 class GuardUpstream(il.Asset):
-    """Upstream asset for the unbind-guard dependency tests."""
+    """Upstream asset for the unbind-guard tests."""
+
+    def data(self, context: il.ExecutionContext) -> list[dict]:
+        return []
+
+
+class GuardOther(il.Asset):
+    """Asset no guard relation declares a key for."""
+
+    def data(self, context: il.ExecutionContext) -> list[dict]:
+        return []
 
 
 class GuardRequired(il.Asset):
-    """Asset with a required dependency on ``guard_upstream``."""
+    """Asset with a required upstream on ``guard_upstream``."""
 
-    depends_on: ClassVar[dict[str, Any]] = {"up": "guard_upstream"}
+    up = il.Relation("asset", "guard_upstream")
+
+    def data(self, context: il.ExecutionContext, up: il.Upstream) -> list[dict]:
+        return []
 
 
 class GuardOptional(il.Asset):
-    """Asset with an optional dependency on ``guard_upstream``."""
+    """Asset with an optional upstream on ``guard_upstream``."""
 
-    depends_on: ClassVar[dict[str, Any]] = {"up": il.Dependency(key="guard_upstream", optional=True)}
+    up = il.Relation("asset", "guard_upstream", optional=True)
+
+    def data(self, context: il.ExecutionContext, up: il.Upstream | None) -> list[dict]:
+        return []
+
+
+class Matcher(il.Asset):
+    """Asset fanning in the ``campaigns`` asset of every source."""
+
+    campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True)
+
+    def data(self, context: il.ExecutionContext) -> list[dict]:
+        return []
 
 
 class WireUpSource(il.Source):
-    """Upstream source for the cross-source dependency tests."""
+    """Upstream source whose ``totals`` reads its sibling ``rows``."""
 
     class Rows(il.Asset):
-        """Upstream asset (key ``rows``)."""
+        """Root asset of the source."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Totals(il.Asset):
+        """Asset reading the source's own ``rows``."""
+
+        rows = il.Relation("asset", "rows")
+
+        def data(self, context: il.ExecutionContext, rows: il.Upstream) -> list[dict]:
+            return []
+
+
+class WireOtherSource(il.Source):
+    """Another source declaring a ``rows`` asset, of a different source key."""
+
+    class Rows(il.Asset):
+        """Homonym of ``WireUpSource.Rows``, owned by another source."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
 
 
 class WireDownSource(il.Source):
-    """Downstream source whose asset requires ``wire_up_source.rows``."""
+    """Downstream source: a bound connection and a cross-source upstream."""
+
+    connection: WireConnection
 
     class Consumer(il.Asset):
-        """Asset with a required cross-source dependency."""
+        """Asset reading ``wire_up_source.rows``."""
 
-        depends_on: ClassVar[dict[str, Any]] = {"rows": "wire_up_source.rows"}
+        rows = il.Relation("asset", "wire_up_source.rows")
+
+        def data(self, context: il.ExecutionContext, rows: il.Upstream) -> list[dict]:
+            return []
 
 
-class TestRelations:
-    """Replace semantics, vocabulary validation, denormalized stamping."""
+class FirstCampaignSource(il.Source):
+    """Source declaring a ``campaigns`` asset."""
 
-    def test_sync_stamps_org_and_kinds(self, store: Store, component_db: Engine):
-        dest = store.components.create(_ORG, kind="destination", key="dest")
-        asset = store.components.create(_ORG, kind="asset", key="a", relations={"destination": [(dest.id, "")]})
+    class Campaigns(il.Asset):
+        """Campaign entities of the first provider."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+class SecondCampaignSource(il.Source):
+    """Another source declaring a ``campaigns`` asset."""
+
+    class Campaigns(il.Asset):
+        """Campaign entities of the second provider."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+@pytest.fixture
+def store(component_db: Engine) -> Store:
+    """A store whose catalog carries every class the relation tests declare.
+
+    Returns:
+        A store reading and writing the fixture database.
+    """
+    catalog = il.Catalog.from_assets(
+        [
+            GuardUpstream,
+            GuardOther,
+            GuardRequired,
+            GuardOptional,
+            Matcher,
+            WireUpSource,
+            WireOtherSource,
+            WireDownSource,
+            FirstCampaignSource,
+            SecondCampaignSource,
+        ]
+    )
+    return Store(catalog=catalog)
+
+
+@pytest.fixture
+def connection(store: Store) -> Component:
+    """A plaintext connection row the wire sources accept.
+
+    Returns:
+        The created connection component.
+    """
+    return store.components.create(_ORG, kind="connection", key="wire_connection", config={}, encrypted=False)
+
+
+class TestAdd:
+    """``add`` binds by name, through the declared relation's acceptance rule."""
+
+    def test_single_valued_relation_repoints(self, store: Store, connection: Component, component_db: Engine):
+        other = store.components.create(_ORG, kind="connection", key="wire_connection", config={}, encrypted=False)
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
+
+        store.relations.add(source.id, name="connection", dst_id=connection.id)
+        store.relations.add(source.id, name="connection", dst_id=other.id)
 
         with Session(component_db) as session:
-            (relation,) = _relations(session, asset.id)
-            assert (relation.type, relation.slot, relation.dst_id) == ("destination", "", dest.id)
-            assert (relation.org_id, relation.src_kind, relation.dst_kind) == (_ORG, "asset", "destination")
+            assert [r.dst_id for r in _relations(session, source.id, "connection")] == [other.id]
 
-    def test_update_replaces_only_the_given_type(self, store: Store, component_db: Engine):
-        dest = store.components.create(_ORG, kind="destination", key="dest")
-        first = store.components.create(_ORG, kind="connection", key="first", config={}, encrypted=False)
-        second = store.components.create(_ORG, kind="connection", key="second", config={}, encrypted=False)
-        asset = store.components.create(
-            _ORG,
-            kind="asset",
-            key="a",
-            relations={"destination": [(dest.id, "")], "resource": [(first.id, "conn")]},
-        )
+    def test_many_valued_relation_accumulates(self, store: Store, component_db: Engine):
+        matcher = store.components.create(_ORG, kind="asset", key="matcher")
+        first = store.components.create(_ORG, kind="source", key="first_campaign_source")
+        second = store.components.create(_ORG, kind="source", key="second_campaign_source")
 
-        store.components.update(asset.id, relations={"resource": [(second.id, "conn")]})
+        store.relations.add(matcher.id, name="campaigns", dst_id=_child(first, "campaigns").id)
+        store.relations.add(matcher.id, name="campaigns", dst_id=_child(second, "campaigns").id)
 
         with Session(component_db) as session:
-            assert [r.dst_id for r in _relations(session, asset.id, "resource")] == [second.id]
-            assert len(_relations(session, asset.id, "destination")) == 1
+            assert len(_relations(session, matcher.id, "campaigns")) == 2
 
-    def test_empty_list_clears_the_type(self, store: Store, component_db: Engine):
-        dest = store.components.create(_ORG, kind="destination", key="dest")
-        asset = store.components.create(_ORG, kind="asset", key="a", relations={"destination": [(dest.id, "")]})
-        store.components.update(asset.id, relations={"destination": []})
-        with Session(component_db) as session:
-            assert _relations(session, asset.id) == []
+    def test_wildcard_key_refuses_a_parentless_asset(self, store: Store):
+        matcher = store.components.create(_ORG, kind="asset", key="matcher")
+        standalone = store.components.create(_ORG, kind="asset", key="campaigns")
 
-    def test_rejects_types_outside_the_kind_vocabulary(self, store: Store):
-        dest = store.components.create(_ORG, kind="destination", key="dest")
-        with pytest.raises(ConfigError):
-            store.components.create(_ORG, kind="destination", key="d2", relations={"target": [(dest.id, "")]})
+        with pytest.raises(ConfigError, match="does not accept"):
+            store.relations.add(matcher.id, name="campaigns", dst_id=standalone.id)
 
-    def test_rejects_missing_and_cross_org_destinations(self, store: Store):
-        other = store.components.create(uuid4(), kind="destination", key="dest")
-        with pytest.raises(NotFoundError):
-            store.components.create(_ORG, kind="asset", key="a", relations={"destination": [(uuid4(), "")]})
-        with pytest.raises(NotFoundError):
-            store.components.create(_ORG, kind="asset", key="b", relations={"destination": [(other.id, "")]})
+    def test_rejects_a_kind_the_relation_does_not_declare(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
+        destination = store.components.create(_ORG, kind="destination", key="dest")
 
-    def test_add_and_remove_relation(self, store: Store):
-        upstream = store.components.create(_ORG, kind="asset", key="a")
-        downstream = store.components.create(_ORG, kind="asset", key="b")
+        with pytest.raises(ConfigError, match="does not accept"):
+            store.relations.add(source.id, name="connection", dst_id=destination.id)
 
-        relation = store.relations.add(downstream.id, type="upstream", dst_id=upstream.id, slot="a")
-        assert (relation.src_id, relation.dst_id, relation.slot) == (downstream.id, upstream.id, "a")
-        assert len(store.relations.list_all(_ORG, type="upstream")) == 1
+    def test_rejects_an_undeclared_name(self, store: Store, connection: Component):
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
 
-        store.relations.remove(downstream.id, type="upstream", dst_id=upstream.id)
-        assert store.relations.list_all(_ORG) == []
+        with pytest.raises(ConfigError, match="declares no relation 'nope'"):
+            store.relations.add(source.id, name="nope", dst_id=connection.id)
 
+    def test_rejects_an_undeclared_key(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_other")
+        required = store.components.create(_ORG, kind="asset", key="guard_required")
 
-class TestRelationKindEnforcement:
-    """Relation writes are checked against the vocabulary's allowed kinds."""
+        with pytest.raises(ConfigError, match="does not accept"):
+            store.relations.add(required.id, name="up", dst_id=upstream.id)
 
-    @pytest.fixture
-    def demo_store(self, component_db: Engine) -> Store:
-        from interloper_assets.demo.source import DemoSource, demo_asset
-
-        return Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
-
-    def test_class_vocabulary_governs_writes(self, demo_store: Store):
-        db_job = demo_store.components.create(_ORG, kind="job", key="cron_job", name="J")
-        # TriggerHook declares `target`; WebhookHook does not.
-        ok = demo_store.components.create(
-            _ORG, kind="hook", key="trigger_hook", name="T", relations={"target": [(db_job.id, "")]}
-        )
-        assert ok.id is not None
-        with pytest.raises(ConfigError, match="'webhook_hook'.*declare no 'target' relations"):
-            demo_store.components.create(
-                _ORG, kind="hook", key="webhook_hook", name="W", relations={"target": [(db_job.id, "")]}
-            )
-
-    def test_relation_to_disallowed_kind_rejected(self, demo_store: Store):
-        db_source = demo_store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
-        db_job = demo_store.components.create(_ORG, kind="job", key="cron_job", name="Job")
-        # A job's 'target' may point at sources/assets — never at another job.
-        with pytest.raises(ConfigError, match="may not point at a 'job'"):
-            demo_store.components.create(
-                _ORG, kind="job", key="cron_job", name="Bad", relations={"target": [(db_job.id, "")]}
-            )
-        # Sanity: the allowed kind passes.
-        ok = demo_store.components.create(
-            _ORG, kind="job", key="cron_job", name="Good", relations={"target": [(db_source.id, "")]}
-        )
-        assert ok.id is not None
-
-
-class TestDependencySlotValidation:
-    """Dependency writes are checked against the declared slots and their target identity."""
-
-    @pytest.fixture
-    def demo_store(self, component_db: Engine) -> Store:
-        from interloper_assets.demo.source import DemoSource
-
-        return Store(catalog=il.Catalog.from_assets([DemoSource]))
-
-    @pytest.fixture
-    def wire_store(self, component_db: Engine) -> Store:
-        return Store(catalog=il.Catalog.from_assets([WireUpSource, WireDownSource]))
-
-    def test_undeclared_slot_rejected(self, demo_store: Store):
-        source = demo_store.components.create(_ORG, kind="source", key="demo_source")
-        with pytest.raises(ConfigError, match="declares no slot 'nope'"):
-            demo_store.relations.add(
-                _child(source, "b").id, type="upstream", dst_id=_child(source, "a").id, slot="nope"
-            )
-
-    def test_wrong_target_key_rejected(self, demo_store: Store):
-        source = demo_store.components.create(_ORG, kind="source", key="demo_source")
-        with pytest.raises(ConfigError, match="expects asset 'demo_source.a', got 'e'"):
-            demo_store.relations.add(
-                _child(source, "b").id, type="upstream", dst_id=_child(source, "e").id, slot="a"
-            )
-
-    def test_self_edge_rejected(self, store: Store):
-        asset = store.components.create(_ORG, kind="asset", key="a")
-        with pytest.raises(ConfigError, match="itself"):
-            store.relations.add(asset.id, type="upstream", dst_id=asset.id, slot="x")
-
-    def test_cross_instance_sibling_rejected(self, demo_store: Store):
-        first = demo_store.components.create(_ORG, kind="source", key="demo_source")
-        second = demo_store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "other"})
-        with pytest.raises(ConfigError, match="sibling asset of the same source instance"):
-            demo_store.relations.add(
-                _child(first, "b").id, type="upstream", dst_id=_child(second, "a").id, slot="a"
-            )
-
-    def test_cross_source_dep_accepts_any_instance(self, wire_store: Store):
-        up_two = wire_store.components.create(_ORG, kind="source", key="wire_up_source", config={"dataset": "two"})
-        down = wire_store.components.create(_ORG, kind="source", key="wire_down_source")
-        relation = wire_store.relations.add(
-            _child(down, "consumer").id, type="upstream", dst_id=_child(up_two, "rows").id, slot="rows"
-        )
-        assert relation.dst_id == _child(up_two, "rows").id
-
-    def test_cross_source_dep_rejects_wrong_source(self, component_db: Engine):
-        from interloper_assets.demo.source import DemoSource
-
-        store = Store(catalog=il.Catalog.from_assets([DemoSource, WireDownSource]))
-        demo = store.components.create(_ORG, kind="source", key="demo_source")
-        down = store.components.create(_ORG, kind="source", key="wire_down_source")
-        with pytest.raises(ConfigError, match="expects asset 'wire_up_source.rows'"):
-            store.relations.add(
-                _child(down, "consumer").id, type="upstream", dst_id=_child(demo, "a").id, slot="rows"
-            )
-
-
-class TestRelationUpsert:
-    """Slotted relation writes upsert per slot."""
-
-    @pytest.fixture
-    def wire_store(self, component_db: Engine) -> Store:
-        return Store(catalog=il.Catalog.from_assets([WireUpSource, WireDownSource]))
-
-    def test_rebinding_a_slot_repoints_it(self, wire_store: Store):
-        up_one = wire_store.components.create(_ORG, kind="source", key="wire_up_source")
-        up_two = wire_store.components.create(_ORG, kind="source", key="wire_up_source", config={"dataset": "two"})
-        down = wire_store.components.create(_ORG, kind="source", key="wire_down_source")
+    def test_checks_a_declared_key_against_the_parent_source(self, store: Store):
+        wire_up = store.components.create(_ORG, kind="source", key="wire_up_source")
+        other = store.components.create(_ORG, kind="source", key="wire_other_source")
+        down = store.components.create(_ORG, kind="source", key="wire_down_source", config={})
         consumer = _child(down, "consumer")
 
-        wire_store.relations.add(consumer.id, type="upstream", dst_id=_child(up_one, "rows").id, slot="rows")
-        wire_store.relations.add(consumer.id, type="upstream", dst_id=_child(up_two, "rows").id, slot="rows")
+        with pytest.raises(ConfigError, match="does not accept"):
+            store.relations.add(consumer.id, name="rows", dst_id=_child(other, "rows").id)
 
-        (edge,) = wire_store.relations.list_all(_ORG, type="upstream")
-        assert edge.dst_id == _child(up_two, "rows").id
+        relation = store.relations.add(consumer.id, name="rows", dst_id=_child(wire_up, "rows").id)
+        assert relation.dst_id == _child(wire_up, "rows").id
 
-    def test_identical_add_is_a_noop(self, wire_store: Store):
-        up = wire_store.components.create(_ORG, kind="source", key="wire_up_source")
-        down = wire_store.components.create(_ORG, kind="source", key="wire_down_source")
-        consumer, rows = _child(down, "consumer"), _child(up, "rows")
+    def test_identical_add_returns_the_existing_row(self, store: Store, connection: Component):
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
 
-        first = wire_store.relations.add(consumer.id, type="upstream", dst_id=rows.id, slot="rows")
-        second = wire_store.relations.add(consumer.id, type="upstream", dst_id=rows.id, slot="rows")
+        first = store.relations.add(source.id, name="connection", dst_id=connection.id)
+        second = store.relations.add(source.id, name="connection", dst_id=connection.id)
 
-        assert (second.src_id, second.dst_id, second.slot) == (first.src_id, first.dst_id, first.slot)
-        assert len(wire_store.relations.list_all(_ORG, type="upstream")) == 1
+        assert (second.src_id, second.name, second.dst_id) == (first.src_id, first.name, first.dst_id)
+        assert len(store.relations.list_all(_ORG, name="connection")) == 1
 
+    def test_stamps_the_denormalized_org_and_kinds(self, store: Store, connection: Component):
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
 
-class TestRequiredDependencyUnbindGuard:
-    """Bound required dependency slots refuse unbinding (repoint instead)."""
+        relation = store.relations.add(source.id, name="connection", dst_id=connection.id)
 
-    @pytest.fixture
-    def dep_store(self, component_db: Engine) -> Store:
-        return Store(catalog=il.Catalog.from_assets([GuardUpstream, GuardRequired, GuardOptional]))
+        assert (relation.org_id, relation.src_kind, relation.dst_kind) == (_ORG, "source", "connection")
 
-    def test_remove_required_dependency_refused(self, dep_store: Store):
-        up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
-        down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_required", relations={"upstream": [(up.id, "up")]}
-        )
-        with pytest.raises(ConfigError, match="cannot be unbound"):
-            dep_store.relations.remove(down.id, type="upstream", dst_id=up.id)
-        assert len(dep_store.relations.list_all(_ORG, type="upstream")) == 1
-
-    def test_remove_optional_dependency_allowed(self, dep_store: Store):
-        up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
-        down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_optional", relations={"upstream": [(up.id, "up")]}
-        )
-        dep_store.relations.remove(down.id, type="upstream", dst_id=up.id)
-        assert dep_store.relations.list_all(_ORG, type="upstream") == []
-
-    def test_sync_clear_of_required_dependency_refused(self, dep_store: Store):
-        up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
-        down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_required", relations={"upstream": [(up.id, "up")]}
-        )
-        with pytest.raises(ConfigError, match="cannot be unbound"):
-            dep_store.components.update(down.id, relations={"upstream": []})
-
-    def test_sync_repoint_of_required_dependency_allowed(self, dep_store: Store):
-        up_one = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
-        up_two = dep_store.components.create(_ORG, kind="asset", key="guard_upstream")
-        down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_required", relations={"upstream": [(up_one.id, "up")]}
-        )
-        dep_store.components.update(down.id, relations={"upstream": [(up_two.id, "up")]})
-        (edge,) = dep_store.relations.list_all(_ORG, type="upstream")
-        assert edge.dst_id == up_two.id
-
-
-class TestAddValidation:
-    """``add`` vets the source, the vocabulary and the slot before writing."""
-
-    def test_a_missing_source_raises(self, store: Store):
+    def test_a_missing_source_raises(self, store: Store, connection: Component):
         missing = uuid4()
 
         with pytest.raises(NotFoundError, match=f"Component {missing} not found"):
-            store.relations.add(missing, type="resource", dst_id=uuid4(), slot="connection")
+            store.relations.add(missing, name="connection", dst_id=connection.id)
 
-    def test_a_slot_on_an_unslotted_relation_is_refused(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        source = store.components.create(_ORG, kind="source", key="demo_source")
+    def test_a_cross_org_target_raises(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
+        foreign = store.components.create(uuid4(), kind="connection", key="wire_connection", config={}, encrypted=False)
+
+        with pytest.raises(NotFoundError, match=f"Component {foreign.id} not found"):
+            store.relations.add(source.id, name="connection", dst_id=foreign.id)
+
+
+class TestRemove:
+    """``remove`` refuses to empty a non-optional relation."""
+
+    def test_last_row_of_a_required_relation_is_refused(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        required = store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
+
+        with pytest.raises(ConfigError, match="non-optional"):
+            store.relations.remove(required.id, name="up", dst_id=upstream.id)
+        assert len(store.relations.list_all(_ORG, name="up")) == 1
+
+    def test_last_row_of_an_optional_relation_detaches(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        optional = store.components.create(_ORG, kind="asset", key="guard_optional", relations={"up": [upstream.id]})
+
+        store.relations.remove(optional.id, name="up", dst_id=upstream.id)
+
+        assert store.relations.list_all(_ORG, name="up") == []
+
+    def test_an_absent_row_is_a_no_op(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        required = store.components.create(_ORG, kind="asset", key="guard_required")
+
+        store.relations.remove(required.id, name="up", dst_id=upstream.id)
+
+        assert store.relations.list_all(_ORG) == []
+
+
+class TestListAll:
+    """``list_all`` filters by name and by either endpoint's kind."""
+
+    def test_filters_by_kinds(self, store: Store, connection: Component):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
+        store.relations.add(source.id, name="connection", dst_id=connection.id)
+
+        rows = store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")
+
+        assert {row.name for row in rows} == {"up"}
+
+    def test_filters_by_name(self, store: Store, connection: Component):
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
+        store.relations.add(source.id, name="connection", dst_id=connection.id)
+
+        assert len(store.relations.list_all(_ORG, name="connection")) == 1
+        assert store.relations.list_all(_ORG, name="up") == []
+
+    def test_is_scoped_to_the_organisation(self, store: Store, connection: Component):
+        source = store.components.create(_ORG, kind="source", key="wire_down_source")
+        store.relations.add(source.id, name="connection", dst_id=connection.id)
+
+        assert store.relations.list_all(uuid4()) == []
+
+
+class TestSyncRelations:
+    """``_sync_relations`` replaces each listed name wholesale."""
+
+    def test_replaces_a_many_valued_relation_wholesale(self, store: Store, component_db: Engine):
+        first = store.components.create(_ORG, kind="source", key="first_campaign_source")
+        second = store.components.create(_ORG, kind="source", key="second_campaign_source")
+        matcher = store.components.create(
+            _ORG,
+            kind="asset",
+            key="matcher",
+            relations={"campaigns": [_child(first, "campaigns").id, _child(second, "campaigns").id]},
+        )
+
+        store.components.update(matcher.id, relations={"campaigns": [_child(second, "campaigns").id]})
+
+        with Session(component_db) as session:
+            assert [r.dst_id for r in _relations(session, matcher.id, "campaigns")] == [_child(second, "campaigns").id]
+
+    def test_leaves_the_names_it_is_not_given_alone(self, store: Store, connection: Component, component_db: Engine):
         destination = store.components.create(_ORG, kind="destination", key="dest")
+        source = store.components.create(
+            _ORG,
+            kind="source",
+            key="wire_down_source",
+            relations={"connection": [connection.id], "destinations": [destination.id]},
+        )
 
-        with pytest.raises(ConfigError, match="is not slotted"):
-            store.relations.add(source.id, type="destination", dst_id=destination.id, slot="nope")
+        store.components.update(source.id, relations={"destinations": []})
 
-    def test_a_slot_expecting_another_key_is_refused(self, component_db: Engine):
-        # The slot declares the component key it accepts; anything else would
-        # be wired into a resource the source cannot use.
-        catalog = il.Catalog.from_assets([FacebookAds])
-        store = Store(catalog=catalog, encrypt=lambda b: b, decrypt=lambda b: b)
-        source = store.components.create(_ORG, kind="source", key="facebook_ads")
-        wrong = store.components.create(_ORG, kind="destination", key="dest")
+        with Session(component_db) as session:
+            assert len(_relations(session, source.id, "connection")) == 1
+            assert _relations(session, source.id, "destinations") == []
 
-        with pytest.raises(ConfigError):
-            store.relations.add(source.id, type="resource", dst_id=wrong.id, slot="connection")
+    def test_refuses_to_empty_a_non_optional_relation(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        required = store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
+
+        with pytest.raises(ConfigError, match="non-optional"):
+            store.components.update(required.id, relations={"up": []})
+
+    def test_repointing_a_non_optional_relation_is_allowed(self, store: Store):
+        first = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        second = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        required = store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [first.id]})
+
+        store.components.update(required.id, relations={"up": [second.id]})
+
+        (row,) = store.relations.list_all(_ORG, name="up")
+        assert row.dst_id == second.id
+
+    def test_rejects_an_undeclared_name(self, store: Store, connection: Component):
+        with pytest.raises(ConfigError, match="declares no relation 'nope'"):
+            store.components.create(_ORG, kind="source", key="wire_down_source", relations={"nope": [connection.id]})
+
+    def test_rejects_several_targets_on_a_single_valued_relation(self, store: Store, connection: Component):
+        other = store.components.create(_ORG, kind="connection", key="wire_connection", config={}, encrypted=False)
+
+        with pytest.raises(ConfigError, match="single-valued"):
+            store.components.create(
+                _ORG,
+                kind="source",
+                key="wire_down_source",
+                relations={"connection": [connection.id, other.id]},
+            )
+
+
+class TestIntraSourceWiring:
+    """A source's own sibling relations are wired from the class declaration."""
+
+    def test_creating_a_source_wires_its_sibling_relations(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="wire_up_source")
+
+        (row,) = store.relations.list_all(_ORG, name="rows")
+        assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, "rows").id)
