@@ -127,6 +127,51 @@ The DAG binds every `campaigns` asset it holds, so the set of legs is decided by
 the class. `list[il.Upstream]` on its own infers the same relation on the parameter's bare key,
 which is a many-valued sibling; `relations=` is what reaches outside the source.
 
+### Fan-in across sources
+
+The relation above is not hypothetical: `interloper_assets.campaign_matcher.CampaignMatcher`
+declares exactly this wildcard, matching campaigns across every advertising connector into one
+canonical lookup table:
+
+```py
+@il.asset(
+    schema=schemas.CampaignMatches,
+    partitioning=il.TimePartitionConfig(column="date"),
+    tags=["Entity"],
+    relations={"campaigns": il.Relation("asset", "*.campaigns", many=True)},
+)
+def campaign_matches(
+    self,
+    context: il.ExecutionContext,
+    campaigns: list[il.Upstream],
+) -> list[dict[str, Any]]:
+    ...
+```
+
+Building a DAG over both connectors and the matcher wires every `campaigns` asset held into the
+`campaigns` relation, one leg per connector:
+
+```py
+fb = FacebookAds(...)   # declares a campaigns asset
+tt = TiktokAds(...)     # declares a campaigns asset
+matcher = CampaignMatcher(destinations=[dest])
+
+dag = il.DAG(fb, tt, matcher)   # binds matcher.campaign_matches.campaigns to [fb.campaigns, tt.campaigns]
+```
+
+A matcher built against upstreams already materialized elsewhere reads them read-only instead of
+running them, the same explicit-bind pattern as any other relation:
+
+```py
+matcher.campaign_matches.bind("campaigns", fb.campaigns)
+dag = il.DAG(matcher)   # fb.campaigns joins the DAG as materializable=False
+```
+
+`examples/campaign_matcher.yaml` is the same wiring written as a manifest: two connectors each
+override their `campaigns` asset to `materializable: false`, and `campaign_matches` names both by
+`{ref: ...}` since an asset always travels under its own source. See [Specs](specs.md) for the
+manifest format.
+
 ## How wiring works
 
 Wiring is always an instance bound to a relation, never an id. It happens in three places:
