@@ -153,3 +153,82 @@ def test_update_component_requires_a_change(store: FakeStore, ctx: ToolContext):
     result = collection.update_component(str(store.component.id), tool_context=ctx)
     assert result["status"] == "error"
     assert store.update_kwargs is None
+
+
+# -- _source_relations --------------------------------------------------------
+
+
+class _RelationsComponentStore:
+    """Serves fixed connection/destination rows by id for _source_relations tests."""
+
+    def __init__(self, rows: dict[Any, Any]):
+        """Bind the fake facet to the rows it serves.
+
+        Args:
+            rows: Maps component UUID to the row ``get`` returns for it.
+        """
+        self._rows = rows
+
+    def get(self, component_id: Any, *, kind: str | None = None) -> Any:
+        return self._rows[component_id]
+
+
+class _RelationsStore:
+    """Presents the ``components`` facet ``_source_relations`` reaches for."""
+
+    def __init__(self, rows: dict[Any, Any]):
+        """Bind the fake store to the rows its components facet serves.
+
+        Args:
+            rows: Maps component UUID to the row ``components.get`` returns.
+        """
+        self.components = _RelationsComponentStore(rows)
+
+
+def _relation_row(**overrides: Any) -> Any:
+    defaults: dict[str, Any] = {"id": uuid4(), "org_id": ORG_ID, "key": "facebook_ads_connection"}
+    return SimpleNamespace(**{**defaults, **overrides})
+
+
+def test_source_relations_binds_connection_by_name():
+    connection = _relation_row(key="facebook_ads_connection")
+    destination = _relation_row(key="bigquery")
+    store = _RelationsStore({connection.id: connection, destination.id: destination})
+    defn = {
+        "relations": {
+            "connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": False},
+            "destinations": {"kind": "destination", "many": True, "optional": True},
+        }
+    }
+    relations, error = collection._source_relations(
+        store, ORG_ID, defn, "facebook_ads", str(connection.id), [str(destination.id)]
+    )
+    assert error is None
+    assert relations == {"connection": [connection.id], "destinations": [destination.id]}
+
+
+def test_source_relations_rejects_connection_with_mismatched_key():
+    connection = _relation_row(key="bing_ads_connection")
+    store = _RelationsStore({connection.id: connection})
+    defn = {"relations": {"connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": False}}}
+    relations, error = collection._source_relations(store, ORG_ID, defn, "facebook_ads", str(connection.id), None)
+    assert relations is None
+    assert error is not None
+    assert "does not fit any relation of 'facebook_ads'" in error["error"]
+
+
+def test_source_relations_requires_missing_connection():
+    store = _RelationsStore({})
+    defn = {"relations": {"connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": False}}}
+    relations, error = collection._source_relations(store, ORG_ID, defn, "facebook_ads", None, None)
+    assert relations is None
+    assert error is not None
+    assert "requires a 'facebook_ads_connection' as 'connection'" in error["error"]
+
+
+def test_source_relations_allows_optional_connection_unbound():
+    store = _RelationsStore({})
+    defn = {"relations": {"connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": True}}}
+    relations, error = collection._source_relations(store, ORG_ID, defn, "facebook_ads", None, None)
+    assert error is None
+    assert relations == {"destinations": []}
