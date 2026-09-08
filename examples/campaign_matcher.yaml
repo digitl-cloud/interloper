@@ -3,6 +3,7 @@
 # sources") for how CampaignMatcher's *.campaigns wildcard relation wires this
 # without either connector knowing the matcher exists.
 #
+#   interloper run -f examples/campaign_matcher.yaml --dry-run             # validate + print the plan
 #   interloper run -f examples/campaign_matcher.yaml --date 2026-01-01
 #
 path: interloper.job.cron.CronJob
