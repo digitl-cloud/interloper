@@ -123,6 +123,11 @@ class RelationStore:
         A missing source propagates as a ``NotFoundError`` from
         :meth:`_lock`.
 
+        Unlike every other write path this takes no undeclared-name guard,
+        deliberately: a name the class no longer declares is exactly the row
+        someone needs to clear, and refusing it would leave the component
+        unloadable with no way out.
+
         Args:
             component_id: Source component the relation originates from.
             name: Relation name the edge is filed under.
@@ -222,6 +227,9 @@ class RelationStore:
             if not relation.many and len(dst_ids) > 1:
                 raise ConfigError(f"'{src.key}'.{name} is single-valued and takes one target at a time")
             existing = self._rows(session, src.id, name)
+            # Gated on existing rows: creation may leave a non-optional name
+            # unbound, which only hydration refuses; an update that clears
+            # one is a removal.
             if existing and not dst_ids and not relation.optional:
                 raise ConfigError(
                     f"'{src.key}'.{name} is non-optional and cannot be emptied; "

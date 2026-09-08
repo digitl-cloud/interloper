@@ -249,6 +249,33 @@ class TestBuildInit:
         with pytest.raises(HydrationError, match="has 'mystery' relations its class does not declare"):
             _init(store, shop.id)
 
+    def test_two_rows_under_a_single_valued_relation_is_an_actionable_error(
+        self, store: Store, component_db: Engine
+    ):
+        shop = store.components.create(_ORG, kind="source", key="shop")
+        # Hand-inserted: the store's own writes repoint a single-valued name
+        # instead of accumulating, so only a rogue writer produces this row.
+        connections = [
+            store.components.create(_ORG, kind="connection", key="shop_connection", config={}, encrypted=False)
+            for _ in range(2)
+        ]
+        with Session(component_db) as session:
+            for connection in connections:
+                session.add(
+                    ComponentRelation(
+                        src_id=shop.id,
+                        name="connection",
+                        dst_id=connection.id,
+                        org_id=_ORG,
+                        src_kind="source",
+                        dst_kind="connection",
+                    )
+                )
+            session.commit()
+
+        with pytest.raises(HydrationError, match="holds 2 rows under single-valued relation 'connection'"):
+            _init(store, shop.id)
+
 
 class TestSourceRoundTrip:
     """Sources with child assets, intra-source deps, and overrides."""
