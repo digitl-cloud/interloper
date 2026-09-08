@@ -84,7 +84,8 @@ def bind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: str
     Works on any kind: a source's connection, a job's watched assets, a
     destination target, whatever the component's own class declares under
     that name. A ``many`` name accumulates; a single-valued one repoints, so
-    rebinding it needs no prior unbind_relation call.
+    rebinding it needs no prior unbind_relation call. Recap what the binding
+    changes and get the user's explicit confirmation BEFORE calling this.
 
     Args:
         component_id: UUID of the component the relation originates from.
@@ -101,6 +102,10 @@ def bind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: str
 
 def unbind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: str) -> UnbindResult | ToolError:
     """Detach one component from another under a declared relation name.
+
+    A non-optional relation cannot be emptied, only repointed with
+    bind_relation. Recap what the component loses and get the user's
+    explicit confirmation BEFORE calling this.
 
     Args:
         component_id: UUID of the component the relation originates from.

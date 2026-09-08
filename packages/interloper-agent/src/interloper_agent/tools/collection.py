@@ -67,8 +67,8 @@ def update_component(
     the stored config is kept; pass null to reset a field to its default.
     Connection configs hold credentials and are never edited here: the user
     changes those in the app (renaming a connection is fine). Rebinding
-    relations (a source's connection, a job's targets) also happens in the
-    app, not through config.
+    relations (a source's connection, a job's targets) is not config either:
+    use bind_relation and unbind_relation.
 
     Args:
         component_id: UUID of the component, from list_components.
@@ -142,6 +142,41 @@ def update_component(
         return result
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+
+# -- Relations (generic over kinds) -----------------------------------------------
+
+
+def bind_relation(
+    component_id: str,
+    name: str,
+    dst_id: str,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    # Thin ADK wrapper: the implementation (and LLM-facing docstring, adopted
+    # below) lives in the shared toolkit, which the MCP server deliberately
+    # does not register, since it writes.
+    return toolkit_collection.bind_relation(toolkit_ctx(tool_context), component_id, name, dst_id).model_dump(
+        mode="json"
+    )
+
+
+bind_relation.__doc__ = toolkit_collection.bind_relation.__doc__
+
+
+def unbind_relation(
+    component_id: str,
+    name: str,
+    dst_id: str,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    # Thin ADK wrapper: see bind_relation above.
+    return toolkit_collection.unbind_relation(toolkit_ctx(tool_context), component_id, name, dst_id).model_dump(
+        mode="json"
+    )
+
+
+unbind_relation.__doc__ = toolkit_collection.unbind_relation.__doc__
 
 
 # -- Connection operations (kind-specific by nature) ------------------------------

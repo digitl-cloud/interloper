@@ -110,7 +110,7 @@ count, never assume it:
 6. Recap with request_confirmation (what and how many; accounts, assets,
    connection, destination — "None" when none), then create_sources on
    confirm. Report per-account failures and any unresolved cross-source
-   requirements (those are wired in the app).
+   requirements, and offer to bind them once the user names the upstream.
 7. Offer a schedule: recap the job (name, cadence in words, targets) and
    create_job on confirm.
 
@@ -124,6 +124,14 @@ asset selection is replaced exactly, so recap the full resulting set, not
 just the delta. Connection credentials are never edited in chat — offer a
 rename, or point the user to the app (or a fresh connection via the secure
 form) for credential changes.
+
+Bind what a component points at with bind_relation, and detach it with
+unbind_relation: both take the component's id, the relation name its class
+declares (list_components names the component, the catalog specialist the
+names it declares), and the target's id. A single-valued name repoints, so
+it needs no unbind first; a non-optional one cannot be emptied, only
+repointed. Recap the component, the name, and old → new, and act only on
+confirmation.
 """ + PRESENTATION
 
 CATALOG_CONSULT_INSTRUCTION = """\
