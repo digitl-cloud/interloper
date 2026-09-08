@@ -64,11 +64,8 @@ api:
     rollingUpdate:
       maxUnavailable: 0
       maxSurge: 1
-  terminationGracePeriodSeconds: 150
-  lifecycle:
-    preStop:
-      exec:
-        command: ["/bin/sh", "-c", "sleep 120"]
+  terminationGracePeriodSeconds: 30
+  lifecycle: {}
   podDisruptionBudget:
     enabled: true
     maxUnavailable: 1
@@ -114,11 +111,8 @@ frontend:
     rollingUpdate:
       maxUnavailable: 0
       maxSurge: 1
-  terminationGracePeriodSeconds: 150
-  lifecycle:
-    preStop:
-      exec:
-        command: ["/bin/sh", "-c", "sleep 120"]
+  terminationGracePeriodSeconds: 30
+  lifecycle: {}
   podDisruptionBudget:
     enabled: true
     maxUnavailable: 1
@@ -155,11 +149,8 @@ mcp:
     rollingUpdate:
       maxUnavailable: 0
       maxSurge: 1
-  terminationGracePeriodSeconds: 150
-  lifecycle:
-    preStop:
-      exec:
-        command: ["/bin/sh", "-c", "sleep 120"]
+  terminationGracePeriodSeconds: 30
+  lifecycle: {}
   podDisruptionBudget:
     enabled: true
     maxUnavailable: 1
