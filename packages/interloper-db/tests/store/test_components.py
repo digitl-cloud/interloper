@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import Any, ClassVar
+from typing import ClassVar
 from uuid import uuid4
 
 import interloper as il
@@ -24,7 +24,7 @@ from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from sqlalchemy import Engine, create_engine
 from sqlmodel import Session, select
 
-from interloper_db.models import Component, ComponentRelation
+from interloper_db.models import Component
 from interloper_db.store import Store
 from interloper_db.store.components import ComponentStore
 from interloper_db.store.status import ComponentStatus
@@ -32,21 +32,141 @@ from interloper_db.store.status import ComponentStatus
 _ORG = uuid4()
 
 
+# -- Test components -----------------------------------------------------------
+
+
+class WireConnection(il.Connection):
+    """Connection the wire sources bind."""
+
+
+class PublicToggleConnection(il.Connection):
+    """Renewable test connection whose ``auto_renew`` is schema-marked public."""
+
+    api_key: str = il.SecretField()
+
+    def renew(self) -> il.Renewal:
+        """Keep the class renewable so ``auto_renew`` stays in its schema.
+
+        Returns:
+            An effectless renewal.
+        """
+        return il.Renewal()
+
+
+class GuardUpstream(il.Asset):
+    """Upstream asset of the delete-guard tests."""
+
+    def data(self, context: il.ExecutionContext) -> list[dict]:
+        return []
+
+
+class GuardRequired(il.Asset):
+    """Asset whose required ``up`` relation blocks its upstream's deletion."""
+
+    up = il.Relation("asset", "guard_upstream")
+
+    def data(self, context: il.ExecutionContext, up: il.Upstream) -> list[dict]:
+        return []
+
+
+class GuardOptional(il.Asset):
+    """Asset whose optional ``up`` relation detaches when its upstream goes."""
+
+    up = il.Relation("asset", "guard_upstream", optional=True)
+
+    def data(self, context: il.ExecutionContext, up: il.Upstream | None) -> list[dict]:
+        return []
+
+
+class WireUpSource(il.Source):
+    """Upstream source whose ``totals`` reads its sibling ``rows``."""
+
+    class Rows(il.Asset):
+        """Root asset of the source."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Totals(il.Asset):
+        """Asset reading the source's own ``rows``."""
+
+        rows = il.Relation("asset", "rows")
+
+        def data(self, context: il.ExecutionContext, rows: il.Upstream) -> list[dict]:
+            return []
+
+
+class WireDownSource(il.Source):
+    """Downstream source: a required connection and a required cross-source upstream."""
+
+    connection: WireConnection
+
+    class Consumer(il.Asset):
+        """Asset reading ``wire_up_source.rows``."""
+
+        rows = il.Relation("asset", "wire_up_source.rows")
+
+        def data(self, context: il.ExecutionContext, rows: il.Upstream) -> list[dict]:
+            return []
+
+
+class WireDownOptionalSource(il.Source):
+    """Downstream source whose asset optionally reads ``wire_up_source.rows``."""
+
+    class Reader(il.Asset):
+        """Asset with an optional cross-source upstream."""
+
+        rows = il.Relation("asset", "wire_up_source.rows", optional=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+class DiscriminatedSource(il.Source):
+    """Source class whose instances are discriminated by ``account_id``."""
+
+    account_id: str = il.InputField(default="", discriminator=True)
+
+    class DiscriminatedRows(il.Asset):
+        """Asset whose table name carries the instance discriminator."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
 @pytest.fixture
 def store(component_db: Engine) -> Store:
-    """A store over the in-memory database (no catalog needed for these).
+    """A store whose catalog carries every class declared in this module.
 
     Returns:
-        A store with an empty catalog, reading and writing the fixture database.
+        A store reading and writing the fixture database.
     """
-    return Store(catalog=il.Catalog(components={}))
+    catalog = il.Catalog.from_assets(
+        [
+            GuardUpstream,
+            GuardRequired,
+            GuardOptional,
+            WireUpSource,
+            WireDownSource,
+            WireDownOptionalSource,
+            DiscriminatedSource,
+        ]
+    )
+    return Store(catalog=catalog)
 
 
-def _relations(session: Session, src_id, type: str | None = None) -> list[ComponentRelation]:
-    statement = select(ComponentRelation).where(ComponentRelation.src_id == src_id)
-    if type:
-        statement = statement.where(ComponentRelation.type == type)
-    return list(session.exec(statement).all())
+@pytest.fixture
+def connection(store: Store) -> Component:
+    """A plaintext connection row the wire sources accept.
+
+    Returns:
+        The created connection component.
+    """
+    return store.components.create(_ORG, kind="connection", key="wire_connection", config={}, encrypted=False)
+
+
+def _child(source: Component, key: str) -> Component:
+    return next(child for child in source.children if child.key == key)
 
 
 class TestCrud:
@@ -68,11 +188,21 @@ class TestCrud:
             store.components.create(_ORG, kind="destination", key="dest", children=["a"])
 
     def test_unknown_child_keys_rejected(self, component_db: Engine):
-        from interloper_assets.demo.source import DemoSource
-
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         with pytest.raises(ConfigError, match=r"declares no asset\(s\) \['typo'\]"):
             store.components.create(_ORG, kind="source", key="demo_source", children=["a", "typo"])
+
+    def test_create_with_relations_by_name(self, store: Store, connection: Component):
+        destination = store.components.create(_ORG, kind="destination", key="dest")
+
+        source = store.components.create(
+            _ORG,
+            kind="source",
+            key="wire_down_source",
+            relations={"connection": [connection.id], "destinations": [destination.id]},
+        )
+
+        assert {relation.name for relation in source.out_relations} == {"connection", "destinations"}
 
     def test_delete_refuses_source_owned_assets(self, store: Store, component_db: Engine):
         job = store.components.create(_ORG, kind="job", key="cron_job")  # any parentable stand-in row
@@ -85,8 +215,6 @@ class TestCrud:
             store.components.delete(child_id)
 
     def test_delete_source_removes_child_rows(self, component_db: Engine):
-        from interloper_assets.demo.source import DemoSource
-
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         source = store.components.create(_ORG, kind="source", key="demo_source")
         assert source.children
@@ -100,8 +228,8 @@ class TestCrud:
 
     def test_delete_cascades_outbound_relations(self, store: Store):
         job = store.components.create(_ORG, kind="job", key="cron_job", name="J")
-        asset = store.components.create(_ORG, kind="asset", key="a")
-        store.relations.add(job.id, type="target", dst_id=asset.id)
+        asset = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        store.relations.add(job.id, name="targets", dst_id=asset.id)
 
         store.components.delete(job.id)
         assert store.relations.list_all(_ORG) == []
@@ -123,193 +251,143 @@ class TestCrud:
 
 
 class TestDeleteInUseGuard:
-    """A relation destination cannot be deleted while external referrers exist."""
+    """A relation destination cannot be deleted while consuming referrers exist."""
 
-    def _connection(self, store: Store) -> Component:
-        return store.components.create(_ORG, kind="connection", key="conn", name="Conn", config={}, encrypted=False)
-
-    def test_bound_connection_blocks_delete_and_names_referrer(self, store: Store):
-        conn = self._connection(store)
-        asset = store.components.create(_ORG, kind="asset", key="a", name="A", relations={"resource": [(conn.id, "c")]})
+    def test_bound_connection_blocks_delete_and_names_referrer(self, store: Store, connection: Component):
+        source = store.components.create(
+            _ORG, kind="source", key="wire_down_source", name="Down", relations={"connection": [connection.id]}
+        )
 
         with pytest.raises(InUseError) as excinfo:
-            store.components.delete(conn.id)
-        assert excinfo.value.referrers == [{"id": str(asset.id), "kind": "asset", "key": "a", "name": "A"}]
-        assert "in use by A" in str(excinfo.value)
+            store.components.delete(connection.id)
+        assert excinfo.value.referrers == [
+            {"id": str(source.id), "kind": "source", "key": "wire_down_source", "name": "Down"}
+        ]
+        assert "in use by Down" in str(excinfo.value)
 
-    def test_delete_succeeds_after_unbinding(self, store: Store):
-        conn = self._connection(store)
-        asset = store.components.create(_ORG, kind="asset", key="a", relations={"resource": [(conn.id, "c")]})
-
-        store.relations.remove(asset.id, type="resource", dst_id=conn.id)
-        store.components.delete(conn.id)
-        with pytest.raises(NotFoundError):
-            store.components.get(conn.id)
-
-    def test_job_target_detaches(self, store: Store):
-        asset = store.components.create(_ORG, kind="asset", key="a")
-        job = store.components.create(
-            _ORG, kind="job", key="cron_job", name="J", relations={"target": [(asset.id, "")]}
+    def test_delete_succeeds_after_repointing(self, store: Store, connection: Component):
+        other = store.components.create(_ORG, kind="connection", key="wire_connection", config={}, encrypted=False)
+        source = store.components.create(
+            _ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]}
         )
+
+        # A required relation is repointed rather than emptied, which is what
+        # releases the connection the source used to consume.
+        store.relations.add(source.id, name="connection", dst_id=other.id)
+
+        store.components.delete(connection.id)
+        with pytest.raises(NotFoundError):
+            store.components.get(connection.id)
+
+    def test_job_targets_detach(self, store: Store):
+        asset = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        job = store.components.create(_ORG, kind="job", key="cron_job", name="J", relations={"targets": [asset.id]})
 
         store.components.delete(asset.id)
         assert store.components.get(job.id).id == job.id
         assert store.relations.list_all(_ORG) == []
 
-    def test_hook_watch_detaches(self, store: Store):
-        asset = store.components.create(_ORG, kind="asset", key="a")
-        hook = store.components.create(
-            _ORG, kind="hook", key="webhook", name="H", relations={"watch": [(asset.id, "")]}
-        )
+    def test_hook_watches_detach(self, store: Store):
+        asset = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        hook = store.components.create(_ORG, kind="hook", key="webhook", name="H", relations={"watches": [asset.id]})
 
         store.components.delete(asset.id)
         assert store.components.get(hook.id).id == hook.id
         assert store.relations.list_all(_ORG) == []
 
     def test_blocking_relation_wins_over_detaching(self, store: Store):
-        conn = self._connection(store)
-        asset = store.components.create(_ORG, kind="asset", key="a", name="A", relations={"resource": [(conn.id, "c")]})
-        store.components.create(_ORG, kind="job", key="cron_job", relations={"target": [(asset.id, "")]})
-
-        # The asset both consumes the connection (blocks its deletion) and is
-        # a job target (detachable) — deleting the asset succeeds, deleting
-        # the connection does not.
-        with pytest.raises(InUseError):
-            store.components.delete(conn.id)
-        store.components.delete(asset.id)
-
-    def test_referrer_through_child_reports_parent(self, store: Store, component_db: Engine):
-        conn = self._connection(store)
-        parent = store.components.create(_ORG, kind="job", key="cron_job", name="P")  # parentable stand-in
-        with Session(component_db) as session:
-            child = Component(org_id=_ORG, kind="asset", key="a", parent_id=parent.id)
-            session.add(child)
-            session.commit()
-            child_id = child.id
-        store.relations.add(child_id, type="resource", dst_id=conn.id, slot="c")
-
-        with pytest.raises(InUseError) as excinfo:
-            store.components.delete(conn.id)
-        assert [r["id"] for r in excinfo.value.referrers] == [str(parent.id)]
-
-    def test_intra_subtree_relations_do_not_block(self, store: Store, component_db: Engine):
-        parent = store.components.create(_ORG, kind="job", key="cron_job", name="P")  # parentable stand-in
-        with Session(component_db) as session:
-            a = Component(org_id=_ORG, kind="asset", key="a", parent_id=parent.id)
-            b = Component(org_id=_ORG, kind="asset", key="b", parent_id=parent.id)
-            session.add(a)
-            session.add(b)
-            session.commit()
-            a_id, b_id = a.id, b.id
-        store.relations.add(b_id, type="upstream", dst_id=a_id, slot="a")
-
-        store.components.delete(parent.id)
-        with pytest.raises(NotFoundError):
-            store.components.get(parent.id)
-
-
-class GuardUpstream(il.Asset):
-    """Upstream asset for the delete-guard dependency tests."""
-
-
-class GuardRequired(il.Asset):
-    """Asset with a required dependency on ``guard_upstream``."""
-
-    depends_on: ClassVar[dict[str, Any]] = {"up": "guard_upstream"}
-
-
-class GuardOptional(il.Asset):
-    """Asset with an optional dependency on ``guard_upstream``."""
-
-    depends_on: ClassVar[dict[str, Any]] = {"up": il.Dependency(key="guard_upstream", optional=True)}
-
-
-class TestDependencyDeleteSemantics:
-    """Required dependency slots block deletion; optional slots detach."""
-
-    @pytest.fixture
-    def dep_store(self, component_db: Engine) -> Store:
-        return Store(catalog=il.Catalog.from_assets([GuardUpstream, GuardRequired, GuardOptional]))
-
-    def test_required_dependency_blocks(self, dep_store: Store):
-        up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
-        down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_required", relations={"upstream": [(up.id, "up")]}
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
+        consumer = store.components.create(
+            _ORG, kind="asset", key="guard_required", name="A", relations={"up": [upstream.id]}
         )
+        store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [consumer.id]})
+
+        # The consumer both requires the upstream (blocking its deletion) and
+        # is a job target (detachable), so deleting the consumer succeeds
+        # while deleting the upstream does not.
+        with pytest.raises(InUseError):
+            store.components.delete(upstream.id)
+        store.components.delete(consumer.id)
+
+    def test_referrer_through_child_reports_parent(self, store: Store):
+        up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
+        down = store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
+        store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
 
         with pytest.raises(InUseError) as excinfo:
-            dep_store.components.delete(up.id)
+            store.components.delete(up.id)
         assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
 
-    def test_optional_dependency_detaches(self, dep_store: Store):
-        up = dep_store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
-        down = dep_store.components.create(
-            _ORG, kind="asset", key="guard_optional", relations={"upstream": [(up.id, "up")]}
+    def test_intra_subtree_relations_do_not_block(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="wire_up_source")
+        assert store.relations.list_all(_ORG, name="rows") != []  # the source's own sibling edge
+
+        store.components.delete(source.id)
+        with pytest.raises(NotFoundError):
+            store.components.get(source.id)
+
+
+class TestUpstreamDeleteSemantics:
+    """A required upstream relation blocks deletion; an optional one detaches."""
+
+    def test_delete_blocks_on_required_referrer_and_detaches_optional(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
+        required = store.components.create(
+            _ORG, kind="asset", key="guard_required", name="Req", relations={"up": [upstream.id]}
+        )
+        optional = store.components.create(
+            _ORG, kind="asset", key="guard_optional", name="Opt", relations={"up": [upstream.id]}
         )
 
-        dep_store.components.delete(up.id)
-        assert dep_store.components.get(down.id).id == down.id
-        assert dep_store.relations.list_all(_ORG) == []
+        with pytest.raises(InUseError) as excinfo:
+            store.components.delete(upstream.id)
+        assert [r["id"] for r in excinfo.value.referrers] == [str(required.id)]
 
+        store.components.delete(required.id)
+        store.components.delete(upstream.id)
 
-class WireUpSource(il.Source):
-    """Upstream source for the cross-source dependency tests."""
-
-    class Rows(il.Asset):
-        """Upstream asset (key ``rows``)."""
-
-
-class WireDownSource(il.Source):
-    """Downstream source whose asset requires ``wire_up_source.rows``."""
-
-    class Consumer(il.Asset):
-        """Asset with a required cross-source dependency."""
-
-        depends_on: ClassVar[dict[str, Any]] = {"rows": "wire_up_source.rows"}
-
-
-class WireDownOptionalSource(il.Source):
-    """Downstream source whose asset optionally consumes ``wire_up_source.rows``."""
-
-    class Reader(il.Asset):
-        """Asset with an optional cross-source dependency."""
-
-        depends_on: ClassVar[dict[str, Any]] = {"rows": il.Dependency(key="wire_up_source.rows", optional=True)}
-
-
-def _child(source: Component, key: str) -> Component:
-    return next(child for child in source.children if child.key == key)
+        assert store.components.get(optional.id).id == optional.id
+        assert store.relations.list_all(_ORG, name="up") == []
 
 
 class TestIntraSourceWiring:
-    """Intra-source dependency edges are derived idempotently over the full child set."""
+    """Sibling relation edges are derived idempotently over the full child set."""
 
     @pytest.fixture
     def demo_store(self, component_db: Engine) -> Store:
-        from interloper_assets.demo.source import DemoSource
+        """A store whose catalog carries the demo source's ``a -> b,c,d -> e`` DAG.
 
+        Returns:
+            A store reading and writing the fixture database.
+        """
         return Store(catalog=il.Catalog.from_assets([DemoSource]))
+
+    def test_create_source_binds_sibling_upstreams(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="wire_up_source")
+
+        rows = store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")
+        assert {(row.name, row.dst_id) for row in rows} == {("rows", _child(source, "rows").id)}
 
     def test_full_dag_wired_on_create(self, demo_store: Store):
         demo_store.components.create(_ORG, kind="source", key="demo_source")
-        edges = demo_store.relations.list_all(_ORG, type="upstream")
+        edges = demo_store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")
         assert len(edges) == 6  # b,c,d -> a and e -> b,c,d
 
     def test_children_enabled_later_get_inbound_edges(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
-        assert [r.slot for r in demo_store.relations.list_all(_ORG, type="upstream")] == ["b"]  # only e -> b
+        assert [row.name for row in demo_store.relations.list_all(_ORG)] == ["b"]  # only e -> b
 
         updated = demo_store.components.update(source.id, children=["a", "b", "e"])
-        edges = demo_store.relations.list_all(_ORG, type="upstream")
-        by_slot = {r.slot: (r.src_id, r.dst_id) for r in edges}
-        assert set(by_slot) == {"a", "b"}
-        assert by_slot["a"] == (_child(updated, "b").id, _child(updated, "a").id)
+        edges = demo_store.relations.list_all(_ORG)
+        by_name = {row.name: (row.src_id, row.dst_id) for row in edges}
+        assert set(by_name) == {"a", "b"}
+        assert by_name["a"] == (_child(updated, "b").id, _child(updated, "a").id)
 
     def test_wiring_is_idempotent(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source")
         demo_store.components.update(source.id, name="renamed")
         demo_store.components.update(source.id, children=["a", "b", "c", "d", "e"])
-        assert len(demo_store.relations.list_all(_ORG, type="upstream")) == 6
+        assert len(demo_store.relations.list_all(_ORG)) == 6
 
     def test_update_without_children_leaves_child_set_untouched(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
@@ -320,50 +398,31 @@ class TestIntraSourceWiring:
 class TestChildRemovalGuard:
     """Narrowing a source's child set honors the delete guard's semantics."""
 
-    @pytest.fixture
-    def wire_store(self, component_db: Engine) -> Store:
-        return Store(catalog=il.Catalog.from_assets([WireUpSource, WireDownSource, WireDownOptionalSource]))
-
-    def test_removing_child_with_required_external_dep_blocked(self, wire_store: Store):
-        up = wire_store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
-        down = wire_store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
-        wire_store.relations.add(
-            _child(down, "consumer").id, type="upstream", dst_id=_child(up, "rows").id, slot="rows"
-        )
+    def test_removing_child_with_required_external_upstream_blocked(self, store: Store):
+        up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
+        down = store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
+        store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
 
         with pytest.raises(InUseError) as excinfo:
-            wire_store.components.update(up.id, children=[])
+            store.components.update(up.id, children=[])
         assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
-        assert wire_store.relations.list_all(_ORG, type="upstream") != []
+        assert store.relations.list_all(_ORG, name="rows") != []
 
-    def test_removing_child_with_optional_external_dep_detaches(self, wire_store: Store):
-        up = wire_store.components.create(_ORG, kind="source", key="wire_up_source")
-        down = wire_store.components.create(_ORG, kind="source", key="wire_down_optional_source")
-        wire_store.relations.add(
-            _child(down, "reader").id, type="upstream", dst_id=_child(up, "rows").id, slot="rows"
-        )
+    def test_removing_child_with_optional_external_upstream_detaches(self, store: Store):
+        up = store.components.create(_ORG, kind="source", key="wire_up_source")
+        down = store.components.create(_ORG, kind="source", key="wire_down_optional_source")
+        store.relations.add(_child(down, "reader").id, name="rows", dst_id=_child(up, "rows").id)
 
-        updated = wire_store.components.update(up.id, children=[])
+        updated = store.components.update(up.id, children=[])
         assert updated.children == []
-        assert wire_store.relations.list_all(_ORG, type="upstream") == []
+        assert store.relations.list_all(_ORG, name="rows") == []
 
     def test_intra_source_reshape_not_blocked(self, component_db: Engine):
-        from interloper_assets.demo.source import DemoSource
-
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         source = store.components.create(_ORG, kind="source", key="demo_source")
         updated = store.components.update(source.id, children=["a"])
         assert [child.key for child in updated.children] == ["a"]
-        assert store.relations.list_all(_ORG, type="upstream") == []
-
-
-class DiscriminatedSource(il.Source):
-    """Source class whose instances are discriminated by ``account_id``."""
-
-    account_id: str = il.InputField(default="", discriminator=True)
-
-    class DiscriminatedRows(il.Asset):
-        """Asset whose table name carries the instance discriminator."""
+        assert store.relations.list_all(_ORG) == []
 
 
 class TestSourceCollisionGuard:
@@ -371,8 +430,11 @@ class TestSourceCollisionGuard:
 
     @pytest.fixture
     def guard_store(self, component_db: Engine) -> Store:
-        from interloper_assets.demo.source import DemoSource
+        """A store carrying one discriminated and one undiscriminated source.
 
+        Returns:
+            A store reading and writing the fixture database.
+        """
         return Store(catalog=il.Catalog.from_assets([DemoSource, DiscriminatedSource]))
 
     def test_same_alias_rejected(self, guard_store: Store):
@@ -422,6 +484,11 @@ class TestDerivedNames:
 
     @pytest.fixture
     def name_store(self, component_db: Engine) -> Store:
+        """A store carrying the discriminated source, whose name is derivable.
+
+        Returns:
+            A store reading and writing the fixture database.
+        """
         return Store(catalog=il.Catalog.from_assets([DiscriminatedSource]))
 
     def test_blank_name_defaults_to_instance_name(self, name_store: Store):
@@ -455,13 +522,32 @@ class TestDerivedNames:
         row = store.components.create(_ORG, kind="destination", key="ghost")
         assert row.name is None
 
+    def test_a_drifted_key_derives_no_name(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = writer.components.create(_ORG, kind="source", key="demo_source", config={})
+        reader = Store(catalog=il.Catalog(components={}))
+
+        assert reader.components._derived_name(row, row.config) is None
+
+    def test_a_kind_mismatch_derives_no_name(self, component_db: Engine):
+        # The stored kind and the catalog class disagree, so nothing is derivable.
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = store.components.create(_ORG, kind="source", key="demo_source")
+        row.kind = "destination"
+
+        assert store.components._derived_name(row, {}) is None
+
+    def test_an_unconstructable_config_derives_no_name(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = store.components.create(_ORG, kind="source", key="demo_source")
+
+        assert store.components._derived_name(row, {"random_failure_probability": "not-a-float"}) is None
+
 
 class TestTelemetry:
     """Hydration is traced where it happens."""
 
     def test_load_emits_a_span_per_hydration(self, component_db: Engine, span_exporter):
-        from interloper_assets.demo.source import DemoSource
-
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         source = store.components.create(_ORG, kind="source", key="demo_source")
 
@@ -478,8 +564,6 @@ class TestQuotaGates:
 
     def _store(self, **limits: int | None) -> Store:
         from types import SimpleNamespace
-
-        from interloper_assets.demo.source import DemoSource
 
         return Store(catalog=il.Catalog.from_assets([DemoSource]), quota_defaults=SimpleNamespace(**limits))
 
@@ -532,6 +616,11 @@ class TestStatus:
 
     @pytest.fixture
     def demo_store(self, component_db: Engine) -> Store:
+        """A store carrying the demo source.
+
+        Returns:
+            A store reading and writing the fixture database.
+        """
         return Store(catalog=il.Catalog.from_assets([DemoSource]))
 
     def test_live_source_is_ok(self, demo_store: Store):
@@ -720,22 +809,8 @@ class TestUpdatedAt:
         assert updated.updated_at >= updated.created_at
 
 
-class PublicToggleConnection(il.Connection):
-    """Renewable test connection whose ``auto_renew`` is schema-marked public."""
-
-    api_key: str = il.SecretField()
-
-    def renew(self) -> il.Renewal:
-        """Keep the class renewable so ``auto_renew`` stays in its schema.
-
-        Returns:
-            An effectless renewal.
-        """
-        return il.Renewal()
-
-
 class TestPublicConfig:
-    """The x-public projection over a secret payload."""
+    """The ``x-public`` subset a collection response may disclose."""
 
     def test_public_subset_disclosed_from_encrypted_payload(self, component_db: Engine):
         catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
@@ -749,11 +824,24 @@ class TestPublicConfig:
 
         assert store.components.public_config(row) == {"auto_renew": False}
 
-    def test_drifted_key_discloses_nothing(self, component_db: Engine):
+    def test_a_schema_without_public_fields_discloses_nothing(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = store.components.create(_ORG, kind="source", key="demo_source")
+
+        assert store.components.public_config(row) == {}
+
+    def test_a_drifted_key_discloses_nothing(self, component_db: Engine):
         store = Store(catalog=il.Catalog(components={}), encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
         row = store.components.create(_ORG, kind="connection", key="gone", config={"token": "s3cret"})
 
         assert store.components.public_config(row) == {}
+
+    def test_a_drifted_source_key_discloses_nothing(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = writer.components.create(_ORG, kind="source", key="demo_source")
+        reader = Store(catalog=il.Catalog(components={}))
+
+        assert reader.components.public_config(row) == {}
 
 
 class TestHydrateUnreadable:
@@ -835,9 +923,7 @@ class TestLoadDrift:
 
     def test_an_unreadable_payload_raises_hydration_error(self, component_db: Engine):
         # A different remedy from drift: the config needs re-entering or re-keying.
-        catalog = il.Catalog(
-            components={FacebookAdsConnection.key: FacebookAdsConnection.definition()}
-        )
+        catalog = il.Catalog(components={FacebookAdsConnection.key: FacebookAdsConnection.definition()})
         writer = Store(catalog=catalog, encrypt=lambda b: b, decrypt=lambda b: b)
         row = writer.components.create(
             _ORG,
@@ -867,71 +953,6 @@ class TestLoadDrift:
             store.components.load(orphan_id)
 
 
-class TestPublicConfig:
-    """The ``x-public`` subset a collection response may disclose."""
-
-    def test_a_schema_without_public_fields_discloses_nothing(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        row = store.components.create(_ORG, kind="source", key="demo_source")
-
-        assert store.components.public_config(row) == {}
-
-    def test_a_drifted_key_discloses_nothing(self, component_db: Engine):
-        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        row = writer.components.create(_ORG, kind="source", key="demo_source")
-        reader = Store(catalog=il.Catalog(components={}))
-
-        assert reader.components.public_config(row) == {}
-
-
-class TestDerivedName:
-    """The display name derived from a component's own config."""
-
-    def test_a_drifted_key_derives_no_name(self, component_db: Engine):
-        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        row = writer.components.create(_ORG, kind="source", key="demo_source", config={})
-        reader = Store(catalog=il.Catalog(components={}))
-
-        assert reader.components._derived_name(row, row.config) is None
-
-    def test_a_kind_mismatch_derives_no_name(self, component_db: Engine):
-        # The stored kind and the catalog class disagree, so nothing is derivable.
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        row = store.components.create(_ORG, kind="source", key="demo_source")
-        row.kind = "destination"
-
-        assert store.components._derived_name(row, {}) is None
-
-    def test_an_unconstructable_config_derives_no_name(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        row = store.components.create(_ORG, kind="source", key="demo_source")
-
-        assert store.components._derived_name(row, {"random_failure_probability": "not-a-float"}) is None
-
-
-class TestSourceCollision:
-    """Two instances of one source must not silently share a materialization target."""
-
-    def test_colliding_datasets_are_refused(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "shared"})
-
-        with pytest.raises(ConfigError):
-            store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "shared"})
-
-    def test_distinct_datasets_are_allowed(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "one"})
-
-        store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "two"})
-
-    def test_another_org_is_not_a_collision(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "shared"})
-
-        store.components.create(uuid4(), kind="source", key="demo_source", config={"dataset": "shared"})
-
-
 class TestEnsureChildrenDrift:
     """A source whose key no longer resolves cannot have its children reconciled."""
 
@@ -957,9 +978,7 @@ class TestJobPartitionGranularity:
     def test_a_partitioned_source_target_reports_its_granularity(self, component_db: Engine):
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         source = store.components.create(_ORG, kind="source", key="demo_source")
-        job = store.components.create(
-            _ORG, kind="job", key="cron_job", relations={"target": [(source.id, "")]}
-        )
+        job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
 
         with Session(component_db) as session:
             assert store.components.job_partition_granularity(session, job.id) is TimeGranularity.DAY
@@ -970,9 +989,7 @@ class TestJobPartitionGranularity:
         with Session(component_db) as session:
             asset = session.exec(select(Component).where(Component.parent_id == source.id)).one()
             asset_id = asset.id
-        job = store.components.create(
-            _ORG, kind="job", key="cron_job", relations={"target": [(asset_id, "")]}
-        )
+        job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [asset_id]})
 
         with Session(component_db) as session:
             assert store.components.job_partition_granularity(session, job.id) is TimeGranularity.DAY
@@ -983,10 +1000,7 @@ class TestJobPartitionGranularity:
         daily = store.components.create(_ORG, kind="source", key="demo_source")
         monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
         job = store.components.create(
-            _ORG,
-            kind="job",
-            key="cron_job",
-            relations={"target": [(daily.id, ""), (monthly.id, "")]},
+            _ORG, kind="job", key="cron_job", relations={"targets": [daily.id, monthly.id]}
         )
 
         with Session(component_db) as session, pytest.raises(
@@ -998,9 +1012,7 @@ class TestJobPartitionGranularity:
         # Drift is the run path's problem, not the scheduler's.
         writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
         source = writer.components.create(_ORG, kind="source", key="demo_source")
-        job = writer.components.create(
-            _ORG, kind="job", key="cron_job", relations={"target": [(source.id, "")]}
-        )
+        job = writer.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
         reader = Store(catalog=il.Catalog(components={}))
 
         with Session(component_db) as session:
@@ -1013,9 +1025,7 @@ class TestCheckJobTargets:
     def test_a_drifted_target_raises(self, component_db: Engine):
         writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
         source = writer.components.create(_ORG, kind="source", key="demo_source")
-        job = writer.components.create(
-            _ORG, kind="job", key="cron_job", relations={"target": [(source.id, "")]}
-        )
+        job = writer.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
         reader = Store(catalog=il.Catalog(components={}))
 
         with Session(component_db) as session:
