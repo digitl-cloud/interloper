@@ -117,8 +117,8 @@ collection_agent = Agent(
     description=(
         "The organisation's collection of component instances: lists their sources, connections, and "
         "destinations, checks connection health, sets up new connections via the app's secure form "
-        "(never collecting credentials in chat), creates sources conversationally — resolving "
-        "provider-backed options like the account to use through an existing connection — edits "
+        "(never collecting credentials in chat), creates sources conversationally (resolving "
+        "provider-backed options like the account to use through an existing connection), edits "
         "existing components (rename, config changes, a source's enabled assets), and binds or "
         "unbinds a component's relations by name (a source's connection, a job's targets)."
     ),
