@@ -122,7 +122,7 @@ def list_definitions(
 def get_definition(ctx: ToolkitContext, key: str) -> DefinitionDetail | ToolError:
     """Get a component definition's full catalog detail.
 
-    For a source this includes the config schema, resource slots,
+    For a source this includes the config schema, declared relations,
     destination types, and all its assets with their schemas. This is the
     catalog definition (the component *type*), not an instance from the
     org's collection.

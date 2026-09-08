@@ -1,8 +1,10 @@
-"""Tests for the shared read-only toolkit (``interloper_toolkit``).
+"""Tests for the shared toolkit (``interloper_toolkit``).
 
 A real Store over in-memory SQLite plus a hand-built dumped catalog; the
 properties under test are the structured ``status`` contract, org scoping,
-and the pure logic (lineage traversal, coverage math, schema search).
+and the pure logic (lineage traversal, coverage math, schema search), plus
+the two write tools (``bind_relation``, ``unbind_relation``) against a
+catalog that declares real relations.
 """
 
 from __future__ import annotations
@@ -16,17 +18,48 @@ from uuid import uuid4
 import interloper as il
 import pytest
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Run
+from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run
 from interloper_db.store import Store
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
-from interloper_toolkit import ToolkitContext, analytics, lineage, scheduling
+from interloper_toolkit import ToolkitContext, analytics, collection, lineage, scheduling
 from interloper_toolkit import catalog as catalog_tools
 
 ORG_ID = uuid4()
 OTHER_ORG_ID = uuid4()
+
+
+class DemoConnection(il.Connection):
+    """Connection the lineage-by-name test sources bind."""
+
+
+class ShopSource(il.Source):
+    """Source owning the asset a cross-source relation points at by name."""
+
+    connection: DemoConnection
+
+    class Orders(il.Asset):
+        """Order rows another source's asset depends on."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+class FinanceSource(il.Source):
+    """Source whose report asset depends on shop_source's orders by name."""
+
+    connection: DemoConnection
+
+    class Revenue(il.Asset):
+        """Revenue rows, computed from shop_source's orders."""
+
+        orders = il.Relation("asset", "shop_source.orders")
+
+        def data(self, context: il.ExecutionContext, orders: il.Upstream) -> list[dict]:
+            return []
+
 
 CATALOG_DUMP: dict[str, Any] = {
     "facebook_ads": {
@@ -72,7 +105,7 @@ CATALOG_DUMP: dict[str, Any] = {
 
 @pytest.fixture
 def toolkit_db() -> Iterator[Engine]:
-    """A fresh in-memory database with component, relation, and run tables.
+    """A fresh in-memory database with component, relation, run, and quota tables.
 
     Yields:
         The engine bound to that database, disposed once the test finishes.
@@ -89,7 +122,7 @@ def toolkit_db() -> Iterator[Engine]:
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Backfill, Run):
+    for model in (Component, ComponentRelation, Backfill, Run, Quota):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield eng
@@ -99,8 +132,18 @@ def toolkit_db() -> Iterator[Engine]:
 
 
 @pytest.fixture
-def ctx(toolkit_db: Engine) -> ToolkitContext:
-    store = Store(catalog=il.Catalog(components={}))
+def store(toolkit_db: Engine) -> Store:
+    """A store whose catalog knows the lineage-by-name test sources.
+
+    Returns:
+        A store reading and writing the fixture database.
+
+    """
+    return Store(catalog=il.Catalog.from_assets([ShopSource, FinanceSource]))
+
+
+@pytest.fixture
+def ctx(store: Store) -> ToolkitContext:
     return ToolkitContext(store=store, catalog=CATALOG_DUMP, org_id=ORG_ID)
 
 
@@ -116,12 +159,8 @@ def _seed_chain(org_id: Any = ORG_ID) -> dict[str, Any]:
     b = Component(org_id=org_id, kind="asset", key="b", parent_id=source.id)
     c = Component(org_id=org_id, kind="asset", key="c", parent_id=source.id)
     deps = [
-        ComponentRelation(
-            src_id=b.id, dst_id=a.id, type="upstream", slot="a", org_id=org_id, src_kind="asset", dst_kind="asset"
-        ),
-        ComponentRelation(
-            src_id=c.id, dst_id=b.id, type="upstream", slot="b", org_id=org_id, src_kind="asset", dst_kind="asset"
-        ),
+        ComponentRelation(src_id=b.id, dst_id=a.id, name="a", org_id=org_id, src_kind="asset", dst_kind="asset"),
+        ComponentRelation(src_id=c.id, dst_id=b.id, name="b", org_id=org_id, src_kind="asset", dst_kind="asset"),
     ]
     ids = {"source": source.id, "a": a.id, "b": b.id, "c": c.id}
     with Session(engine_module.get_engine()) as session:
@@ -156,6 +195,68 @@ class TestLineage:
 
         assert result.status == "success"
         assert result.lineage_count == 0
+
+    def test_get_upstream_reports_relation_name(self, ctx: ToolkitContext, store: Store):
+        shop = store.components.create(ORG_ID, kind="source", key="shop_source")
+        finance = store.components.create(ORG_ID, kind="source", key="finance_source")
+        orders = next(child for child in shop.children if child.key == "orders")
+        revenue = next(child for child in finance.children if child.key == "revenue")
+        store.relations.add(revenue.id, name="orders", dst_id=orders.id)
+
+        result = lineage.get_upstream(ctx, str(revenue.id))
+
+        assert result.status == "success"
+        assert [(edge.param_name, edge.asset_id) for edge in result.upstream] == [("orders", str(orders.id))]
+
+    def test_lineage_ignores_non_asset_relations(self, ctx: ToolkitContext, store: Store):
+        shop = store.components.create(ORG_ID, kind="source", key="shop_source")
+        finance = store.components.create(ORG_ID, kind="source", key="finance_source")
+        orders = next(child for child in shop.children if child.key == "orders")
+        revenue = next(child for child in finance.children if child.key == "revenue")
+        bq = store.components.create(ORG_ID, kind="destination", key="bq")
+        store.relations.add(revenue.id, name="orders", dst_id=orders.id)
+        store.relations.add(finance.id, name="destinations", dst_id=bq.id)
+
+        result = lineage.get_full_lineage(ctx, str(revenue.id), direction="upstream")
+
+        assert result.status == "success"
+        assert result.lineage_count == 1
+        assert all(item.asset_key for item in result.lineage)
+
+
+class TestBindRelation:
+    def test_bind_relation_creates_row(self, ctx: ToolkitContext, store: Store):
+        source = store.components.create(ORG_ID, kind="source", key="shop_source")
+        bq = store.components.create(ORG_ID, kind="destination", key="bq")
+
+        result = collection.bind_relation(ctx, str(source.id), "destinations", str(bq.id))
+
+        assert result.status == "success"
+        assert (result.name, result.dst_kind) == ("destinations", "destination")
+
+    def test_bind_relation_wrong_kind_is_tool_error(self, ctx: ToolkitContext, store: Store):
+        source = store.components.create(ORG_ID, kind="source", key="shop_source")
+        bq = store.components.create(ORG_ID, kind="destination", key="bq")
+
+        result = collection.bind_relation(ctx, str(source.id), "connection", str(bq.id))
+
+        assert result.status == "error"
+        assert "does not accept" in result.error
+
+    def test_bind_relation_bad_uuid_is_tool_error(self, ctx: ToolkitContext):
+        result = collection.bind_relation(ctx, "not-a-uuid", "destinations", "also-not-a-uuid")
+
+        assert result.status == "error"
+
+    def test_unbind_relation_removes_row(self, ctx: ToolkitContext, store: Store):
+        source = store.components.create(ORG_ID, kind="source", key="shop_source")
+        bq = store.components.create(ORG_ID, kind="destination", key="bq")
+        store.relations.add(source.id, name="destinations", dst_id=bq.id)
+
+        result = collection.unbind_relation(ctx, str(source.id), "destinations", str(bq.id))
+
+        assert result.status == "success"
+        assert store.relations.list_all(ORG_ID, name="destinations") == []
 
 
 class TestCatalog:
