@@ -20,6 +20,12 @@ class CampaignsSchema(il.Schema):
     name: str
 
 
+class TiktokLikeCampaignsSchema(il.Schema):
+    date: dt.date | None
+    campaign_id: str
+    campaign_name: str
+
+
 def _connector(source_key: str, names: list[str]) -> type[il.Source]:
     @il.source(key=source_key)
     class Connector(il.Source):
@@ -27,6 +33,19 @@ def _connector(source_key: str, names: list[str]) -> type[il.Source]:
         def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
             return [
                 {"date": context.partition_date, "id": f"{source_key}-{i}", "name": name}
+                for i, name in enumerate(names)
+            ]
+
+    return Connector
+
+
+def _tiktok_like_connector(source_key: str, names: list[str]) -> type[il.Source]:
+    @il.source(key=source_key)
+    class Connector(il.Source):
+        @il.asset(schema=TiktokLikeCampaignsSchema, partitioning=PARTITION, tags=["Entity"])
+        def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+            return [
+                {"date": context.partition_date, "campaign_id": f"{source_key}-{i}", "campaign_name": name}
                 for i, name in enumerate(names)
             ]
 
@@ -85,3 +104,18 @@ def test_matcher_alone_reads_bound_upstreams_read_only() -> None:
 def test_matcher_with_no_campaigns_in_dag_is_a_build_error() -> None:
     with pytest.raises(ConfigError, match="campaigns"):
         il.DAG(CampaignMatcher(destinations=[il.MemoryDestination()]))
+
+
+def test_matches_across_connector_schemas_with_different_field_names() -> None:
+    memory = il.MemoryDestination()
+    fb = _connector("fb_like", ["Summer Sale"])(destinations=[memory])
+    tt = _tiktok_like_connector("tt_like", ["Brand Awareness"])(destinations=[memory])
+    matcher = CampaignMatcher(destinations=[memory])
+    partition = il.TimePartition(dt.date(2026, 9, 1))
+    il.DAG(fb, tt, matcher).materialize(partition)
+    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
+    by_source = {r["source_key"]: r for r in rows}
+    assert by_source["fb_like"]["campaign_id"] == "fb_like-0"
+    assert by_source["fb_like"]["canonical_name"] == "summer sale"
+    assert by_source["tt_like"]["campaign_id"] == "tt_like-0"
+    assert by_source["tt_like"]["canonical_name"] == "brand awareness"
