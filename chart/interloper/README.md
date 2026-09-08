@@ -165,33 +165,48 @@ Cloud L7 load balancers route to pod IPs directly (GKE NEGs, AWS ALB
 target groups) and deprogram a removed endpoint *asynchronously*, with
 no signal back into the cluster.  A pod that exits as soon as it is
 deleted therefore keeps receiving traffic at an address nothing is
-listening on.  The api/frontend/mcp defaults account for that:
+listening on.  The api/frontend/mcp defaults cover the half the chart
+can decide on its own:
 
 | Value | Default | Purpose |
 |-------|---------|---------|
 | `replicaCount` | `2` | The backend never drops to a single endpoint whose loss empties it. |
 | `strategy.rollingUpdate.maxUnavailable` | `0` | Set explicitly: the Kubernetes `25%` default only *floors* to 0 below five replicas. |
-| `lifecycle.preStop` | `sleep 120` | The pod keeps serving through the deprogramming window instead of racing it. |
-| `terminationGracePeriodSeconds` | `150` | Wraps the drain, with headroom for shutdown. |
 | `podDisruptionBudget` | `maxUnavailable: 1` | Node upgrades and drains evict pods without consulting the rollout strategy. |
 
-The drain has to outlast your load balancer's deprogramming, so size it
-per implementation:
+The other half is draining the endpoint before the pod exits.  How long
+that takes belongs to your ingress implementation, not to the chart, so
+`lifecycle` ships empty and `terminationGracePeriodSeconds` keeps the
+Kubernetes default:
 
 - **ingress-nginx**, and in-cluster proxies generally — endpoint changes
-  converge in about a second, so `10` is already generous.
-- **GKE Gateway API / Ingress** — container-native load balancing
-  programs endpoints across the load balancer fleet; windows above 100 s
-  have been observed on the global external ALB.  The NEG readiness gate
-  does not remove the need for a drain — it gates a pod becoming *ready*,
+  converge in about a second, so a `preStop` of `sleep 10` is already
+  generous.
+- **GKE Gateway API / Ingress** — follow [Addressing 500 series errors
+  with NEGs during workload scaling][gke-neg-500], which prescribes a
+  60 s BackendService drain timeout (via `GCPBackendPolicy` for Gateway,
+  `BackendConfig` for Ingress), `terminationGracePeriodSeconds: 210`,
+  and a `preStop` of `sleep 120` on every container.  Note that the NEG
+  readiness gate does not cover this: it gates a pod becoming *ready*,
   never its termination.
 - **AWS ALB** — align with the target group's
   `deregistration_delay.timeout_seconds` (default `300`).
+
+```yaml
+api:
+  terminationGracePeriodSeconds: 210
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 120"]
+```
 
 If rollouts still drop requests, the load balancer's own logs separate
 the two causes: a failure to *connect* to a backend means the drain is
 too short, while a failure to *select* one means the backend was emptied,
 which points at `replicaCount` or `maxUnavailable` instead.
+
+[gke-neg-500]: https://docs.cloud.google.com/kubernetes-engine/docs/troubleshooting/load-balancing#500-series-errors
 
 ### RBAC (Kubernetes launcher)
 
