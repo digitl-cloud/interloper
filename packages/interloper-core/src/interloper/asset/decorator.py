@@ -7,11 +7,8 @@ from collections.abc import Callable
 from typing import Any, overload
 
 from interloper.asset.base import Asset
-from interloper.component import Relation
-from interloper.destination import Destination
-from interloper.normalizer import MaterializationStrategy, Normalizer
-from interloper.partitioning import PartitionConfig
-from interloper.schema import Schema
+from interloper.component.decorator import decorate
+from interloper.component.relation import Relation
 
 
 @overload
@@ -19,31 +16,15 @@ def asset(fn: Callable[..., Any], /) -> type[Asset]: ...
 @overload
 def asset(
     *,
-    relations: dict[str, Relation] = ...,
-    destinations: list[type[Destination]] = ...,
-    schema: type[Schema] | None = ...,
-    partitioning: PartitionConfig | None = ...,
-    tags: list[str] = ...,
-    key: str = ...,
-    name: str = ...,
-    icon: str = ...,
-    materialization_strategy: MaterializationStrategy = ...,
-    normalizer: Normalizer | None = ...,
+    relations: dict[str, Any] = ...,
+    **overrides: Any,
 ) -> Callable[[Callable[..., Any]], type[Asset]]: ...
 def asset(
     fn: Callable[..., Any] | None = None,
     /,
     *,
-    relations: dict[str, Relation] | None = None,
-    destinations: list[type[Destination]] | None = None,
-    schema: type[Schema] | None = None,
-    partitioning: PartitionConfig | None = None,
-    tags: list[str] | None = None,
-    key: str | None = None,
-    name: str | None = None,
-    icon: str | None = None,
-    materialization_strategy: MaterializationStrategy | None = None,
-    normalizer: Normalizer | None = None,
+    relations: dict[str, Any] | None = None,
+    **overrides: Any,
 ) -> type[Asset] | Callable[..., type[Asset]]:
     """Create an Asset subclass from a decorated function.
 
@@ -59,9 +40,9 @@ def asset(
         async def events(**kwargs):
             return await fetch_events()
 
-        @asset
-        def other(config: MyConfig, connection: MyConn) -> Any:
-            return fetch_other()
+        @asset(tags=["Report"], schema=UsersStats, relations={"destinations": [BigQueryDestination]})
+        def users_stats(config: MyConfig, connection: MyConn) -> Any:
+            return fetch_stats()
 
     Every parameter of the decorated function declares a relation, inferred
     from its annotation (see :meth:`~interloper.asset.base.Asset.collect`);
@@ -72,58 +53,32 @@ def asset(
         fn: The function to turn into an asset, passed positionally when the
             decorator is used bare. ``None`` in the parenthesised form, which
             returns a decorator instead.
-        relations: Relation name to
-            :class:`~interloper.component.relation.Relation`, keyed by
-            ``data()`` parameter name. Explicit declarations win over the ones
+        relations: Relation name, keyed by ``data()`` parameter name, to a
+            :class:`~interloper.component.relation.Relation`, a component class
+            (the shorthand for a relation on it), or a list of component
+            classes narrowing the relation :class:`~interloper.asset.base.Asset`
+            declares under that name. Explicit declarations win over the ones
             inferred from the annotations.
-        destinations: Destination classes the asset is allowed to write to;
-            narrows the key list of its ``destinations`` relation.
-        schema: The asset's output schema. ``None`` leaves it undeclared, so
-            AUTO infers one at materialization.
-        partitioning: Partition config for the asset. ``None`` means unpartitioned.
-        tags: Catalog tags for the asset (e.g. ``["Report"]``).
-        key: Asset key. Defaults to the decorated function's name.
-        name: Human-readable display name. Defaults to a label built from the key.
-        icon: Icon identifier shown in the UI.
-        materialization_strategy: How the data is checked against the schema.
-        normalizer: Normalizer applied to the data before conform.
+        **overrides: Definition metadata and behaviour: the public ClassVars
+            and field defaults :class:`~interloper.asset.base.Asset` declares
+            (``key``, ``name``, ``icon``, ``tags``, ``schema``,
+            ``partitioning``, ``dataset``, ``normalizer``,
+            ``materialization_strategy``, ...); see the class. An unknown name
+            is a ``TypeError`` at decoration.
 
     Returns:
         An Asset subclass with the function as its ``data()`` method.
     """
-    classvars: dict[str, Any] = {}
-    fields: dict[str, Any] = {}
-
-    declared: dict[str, Relation] = dict(relations or {})
-    if destinations is not None:
-        declared["destinations"] = Relation("destination", [cls.key for cls in destinations], many=True, optional=True)
-    if declared:
-        classvars["relations"] = declared
-    if schema is not None:
-        classvars["schema"] = schema
-    if partitioning is not None:
-        classvars["partitioning"] = partitioning
-    if tags is not None:
-        classvars["tags"] = tags
-    if key is not None:
-        classvars["key"] = key
-    if name is not None:
-        classvars["name"] = name
-    if icon is not None:
-        classvars["icon"] = icon
-
-    if materialization_strategy is not None:
-        fields["materialization_strategy"] = materialization_strategy
-    if normalizer is not None:
-        fields["normalizer"] = normalizer
-
     if fn is not None:
-        return _build_asset_class(fn, classvars=classvars, fields=fields)
+        return decorate(Asset, fn, build=_build_asset_class, relations=relations, **overrides)
 
     def wrapper(fn: Callable[..., Any]) -> type[Asset]:
-        return _build_asset_class(fn, classvars=classvars, fields=fields)
+        return decorate(Asset, fn, build=_build_asset_class, relations=relations, **overrides)
 
     return wrapper
+
+
+# -- Internals -----------------------------------------------------------------
 
 
 def _build_asset_class(
@@ -131,6 +86,7 @@ def _build_asset_class(
     *,
     classvars: dict[str, Any],
     fields: dict[str, Any],
+    relations: dict[str, Relation],
 ) -> type[Asset]:
     """Build an Asset subclass from a function or method.
 
@@ -146,9 +102,12 @@ def _build_asset_class(
     Args:
         fn: The sync or async function (or method) backing the asset's ``data()``.
         classvars: Class-level attributes to set on the generated subclass
-            (``key``, ``tags``, ``relations``, …).
+            (``key``, ``tags``, ``schema``, …).
         fields: Pydantic field values to set on the generated subclass, annotated
             from ``Asset.model_fields``.
+        relations: Relations the decorator declares, name to relation. They go
+            into the class body, which is what makes them win over the
+            relations inferred from the ``data()`` annotations.
 
     Returns:
         A dynamically created Asset subclass.
@@ -192,6 +151,8 @@ def _build_asset_class(
         data.__signature__ = data_sig  # ty: ignore[invalid-assignment]
 
     namespace: dict[str, Any] = {"data": data, "_data_fn": fn, **classvars, **fields}
+    if relations:
+        namespace["relations"] = relations
     namespace["__module__"] = fn.__module__
     namespace["__qualname__"] = fn.__qualname__
 

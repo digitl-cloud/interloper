@@ -2,8 +2,15 @@
 
 import pytest
 
+from interloper.config import Config
 from interloper.connection import Connection, RefreshTokenOAuthConnection, connection
 from interloper.oauth import OAuthConfig
+
+
+class ConnectionConfig(Config):
+    """Config fixture used as a decorated connection's relation target."""
+
+    region: str = "eu"
 
 
 class TestConnectionDecorator:
@@ -44,6 +51,24 @@ class TestConnectionDecorator:
             @connection(oauth=OAuthConfig("amazon"))  # ty: ignore[invalid-argument-type]
             class MyConn:
                 host: str = "h"
+
+    def test_a_field_default_is_overridden_through_the_plain_channel(self):
+        @connection(auto_renew=True)
+        class MyConn(Connection):
+            url: str = "u"
+
+        assert MyConn.model_fields["auto_renew"].default is True
+        assert MyConn().auto_renew is True
+
+    def test_a_component_class_is_the_relation_shorthand(self):
+        @connection(relations={"config": ConnectionConfig})
+        class MyConn(Connection):
+            url: str = "u"
+
+        config = ConnectionConfig()
+
+        assert MyConn.relations["config"].target is ConnectionConfig
+        assert MyConn(config=config).config is config  # ty: ignore[unknown-argument, unresolved-attribute]
 
     def test_oauth_kwarg_does_not_become_model_field(self):
         @connection(oauth=OAuthConfig("amazon"))

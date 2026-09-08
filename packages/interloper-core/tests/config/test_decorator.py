@@ -5,6 +5,13 @@ from __future__ import annotations
 import pytest
 
 from interloper.config import Config, config
+from interloper.connection import Connection
+
+
+class ConfigConnection(Connection):
+    """Connection fixture used as a decorated config's relation target."""
+
+    token: str = ""
 
 
 class TestBareForm:
@@ -90,3 +97,33 @@ class TestParameterizedForm:
 
         assert issubclass(Scoped, Config)
         assert Scoped.key == "scoped"
+
+
+class TestFieldChannel:
+    """A field default is overridden through the plain keyword channel."""
+
+    def test_a_field_default_is_overridden(self) -> None:
+        @config(timeout=5)
+        class Timed(Config):
+            """Already a Config, its own field default overridden."""
+
+            timeout: int = 30
+
+        assert Timed.model_fields["timeout"].default == 5
+        assert Timed().timeout == 5
+
+
+class TestRelationChannel:
+    """``relations=`` declares a relation the class body does not annotate."""
+
+    def test_a_component_class_declares_the_relation(self) -> None:
+        @config(relations={"connection": ConfigConnection})
+        class Scoped(Config):
+            """Already a Config, its connection declared by the decorator."""
+
+            timeout: int = 30
+
+        connection = ConfigConnection()
+
+        assert Scoped.relations["connection"].target is ConfigConnection
+        assert Scoped(connection=connection).connection is connection  # ty: ignore[unknown-argument, unresolved-attribute]

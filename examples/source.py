@@ -25,7 +25,7 @@ class SimpleDestination(il.Destination):
 
 
 @il.source(
-    destinations=[SimpleDestination],
+    relations={"destinations": [SimpleDestination]},
 )
 def SimpleSource() -> list[type[il.Asset]]:
     @il.asset(

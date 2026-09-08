@@ -1,22 +1,18 @@
 """Tests for ``interloper.source.decorator``."""
 
-import inspect
 from typing import Any
 
 import pytest
 
 import interloper as il
 from interloper.normalizer import MaterializationStrategy, Normalizer
-from interloper.source.decorator import _SOURCE_PARAMS
 
 # -- Fixtures ------------------------------------------------------------------
 
-# A usable value per decorator parameter, so the whole advertised surface can be
-# exercised generically. Every value must be non-None: the decorator skips
-# None-valued parameters, so one here would silently exercise nothing.
-PARAM_VALUES: dict[str, Any] = {
-    "relations": {"connection": il.Relation(il.Connection)},
-    "destinations": [il.MemoryDestination],
+# A usable value per override the anchor accepts, so the whole routed surface is
+# exercised: a name the routing accepts but the build step cannot stamp crashes
+# at build.
+OVERRIDES: dict[str, Any] = {
     "tags": ["Tag"],
     "key": "custom_key",
     "name": "Custom Name",
@@ -28,50 +24,21 @@ PARAM_VALUES: dict[str, Any] = {
 }
 
 
-def advertised_params() -> list[str]:
-    """Keyword parameters the ``@source`` decorator accepts.
-
-    Returns:
-        Every keyword-only parameter name of the decorator's implementation.
-    """
-    signature = inspect.signature(il.source)
-    return [
-        name for name, parameter in signature.parameters.items() if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-    ]
-
-
 # -- Tests ---------------------------------------------------------------------
 
 
-class TestParameterSurface:
-    def test_every_advertised_parameter_has_a_test_value(self):
-        assert set(advertised_params()) == set(PARAM_VALUES)
-
-    def test_every_advertised_parameter_is_routed(self):
-        assert set(advertised_params()) == set(_SOURCE_PARAMS)
-
-    def test_no_sample_value_is_none(self):
-        """A None value is skipped by the decorator, so it would prove nothing."""
-        assert [name for name, value in PARAM_VALUES.items() if value is None] == []
-
-    @pytest.mark.parametrize("param", advertised_params())
-    def test_every_advertised_parameter_builds_a_function_source(self, param):
-        """Each parameter must actually work — a routed name with no matching field crashes at build."""
-        value = PARAM_VALUES.get(param, "__missing__")
-        assert value != "__missing__", f"add a sample value for the new {param!r} decorator parameter"
-
-        @il.source(**{param: value})
+class TestOverrides:
+    @pytest.mark.parametrize("name", sorted(OVERRIDES))
+    def test_every_override_builds_a_function_source(self, name):
+        @il.source(**{name: OVERRIDES[name]})
         def probe():
             return []
 
         assert issubclass(probe, il.Source)
 
-    @pytest.mark.parametrize("param", advertised_params())
-    def test_every_advertised_parameter_builds_a_class_source(self, param):
-        value = PARAM_VALUES.get(param, "__missing__")
-        assert value != "__missing__", f"add a sample value for the new {param!r} decorator parameter"
-
-        @il.source(**{param: value})
+    @pytest.mark.parametrize("name", sorted(OVERRIDES))
+    def test_every_override_builds_a_class_source(self, name):
+        @il.source(**{name: OVERRIDES[name]})
         class Probe:
             pass
 
@@ -79,7 +46,7 @@ class TestParameterSurface:
 
 
 class TestRelations:
-    """``relations=`` and ``destinations=`` declare the source's links."""
+    """``relations=`` declares the source's links."""
 
     def test_relations_kwarg_declares_a_relation(self):
         class Conn(il.Connection):
@@ -101,8 +68,8 @@ class TestRelations:
 
         assert set(Probe.relations) == {"connection", "destinations"}
 
-    def test_destinations_narrow_the_destinations_relation(self):
-        @il.source(destinations=[il.MemoryDestination])
+    def test_a_list_of_classes_narrows_the_destinations_relation(self):
+        @il.source(relations={"destinations": [il.MemoryDestination]})
         class Probe(il.Source):
             pass
 
@@ -110,24 +77,24 @@ class TestRelations:
         assert relation.keys() == [il.MemoryDestination.key]
         assert (relation.kind, relation.many, relation.optional) == ("destination", True, True)
 
-    def test_destinations_win_over_an_explicit_destinations_relation(self):
-        @il.source(
-            relations={"destinations": il.Relation("destination", "nope", many=True, optional=True)},
-            destinations=[il.MemoryDestination],
-        )
+    def test_a_component_class_is_the_shorthand_for_a_relation_on_it(self):
+        class Conn(il.Connection):
+            """Connection fixture for the decorator surface."""
+
+        @il.source(relations={"connection": Conn})
         class Probe(il.Source):
             pass
 
-        assert Probe.relations["destinations"].keys() == [il.MemoryDestination.key]
+        assert Probe.relations["connection"].target is Conn
 
 
 class TestMaterializable:
     """``materializable`` is an asset-level runtime flag, not a source declaration."""
 
     def test_not_accepted_by_the_decorator(self):
-        with pytest.raises(TypeError, match="materializable"):
-            # The type checker rejects this too, which is half the point of the fix.
-            @il.source(materializable=False)  # ty: ignore[no-matching-overload]
+        with pytest.raises(TypeError, match=r"Source does not accept 'materializable'"):
+
+            @il.source(materializable=False)
             def probe():
                 return []
 

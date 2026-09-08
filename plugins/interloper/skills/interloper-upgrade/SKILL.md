@@ -71,6 +71,7 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    | `@il.source(resources={"connection": Conn})` | `connection: Conn` on the class body, or `relations={"connection": il.Relation(Conn)}` |
    | `@il.asset(resources={"config": Cfg})` | annotate the `data()` parameter `config: Cfg`, or `relations={"config": il.Relation(Cfg)}` |
    | `@il.asset(depends_on={"orders": "shop.orders"})` | `relations={"orders": il.Relation("asset", "shop.orders")}` |
+   | `@il.asset(destinations=[Dest])` / `@il.source(destinations=[Dest])` | `relations={"destinations": [Dest]}` |
    | `il.Dependency(key="k", optional=True)` | `il.Relation("asset", "k", optional=True)` |
    | `il.Dependency(key="*.campaigns", many=True)` | `il.Relation("asset", "*.campaigns", many=True)` |
    | a `data()` upstream annotated `list[dict]` | annotate it `il.Upstream` and read `param.data` |

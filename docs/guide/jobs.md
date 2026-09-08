@@ -11,7 +11,7 @@ import interloper as il
 
 job = il.Job(
     targets=[Shop(account_id="act_1"), Finance()],
-    destinations=[warehouse],
+    destinations=[il.CSVDestination(base_path="./data")],
     tags=["daily"],
 )
 il.DAG(job).materialize(partition)

@@ -185,14 +185,14 @@ class TestSourceRelations:
         assert (relation.kind, relation.many, relation.optional) == ("destination", True, True)
 
     def test_decorator_destinations_narrows_keys(self):
-        @il.source(destinations=[il.MemoryDestination])
+        @il.source(relations={"destinations": [il.MemoryDestination]})
         class Narrow(il.Source):
             pass
 
         assert Narrow.relations["destinations"].keys() == [il.MemoryDestination.key]
 
     def test_narrowed_destinations_reject_another_key(self):
-        @il.source(destinations=[il.MemoryDestination])
+        @il.source(relations={"destinations": [il.MemoryDestination]})
         class Narrow(il.Source):
             pass
 

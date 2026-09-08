@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
+from interloper.component.decorator import declare, decorate
+from interloper.component.relation import Relation
 from interloper.config.base import Config
 
 # Bounded TypeVar so that classes already extending Config preserve their
@@ -21,19 +23,15 @@ def config(cls: type, /) -> type[Config]: ...
 @overload
 def config(
     *,
-    key: str = ...,
-    name: str = ...,
-    icon: str = ...,
-    tags: list[str] = ...,
+    relations: dict[str, Any] = ...,
+    **overrides: Any,
 ) -> Callable[[type[ConfigT]], type[ConfigT]]: ...
 def config(
     cls: type | None = None,
     /,
     *,
-    key: str | None = None,
-    name: str | None = None,
-    icon: str | None = None,
-    tags: list[str] | None = None,
+    relations: dict[str, Any] | None = None,
+    **overrides: Any,
 ) -> type[Config] | Callable[[type], type[Config]]:
     """Create a Config subclass from a decorated class.
 
@@ -55,28 +53,48 @@ def config(
     Args:
         cls: The decorated class when used bare; ``None`` when called with
             arguments, which returns the decorator instead.
-        key: Component key override (defaults to the derived class key).
-        name: Human-readable display name.
-        icon: Icon identifier (e.g. ``"carbon:settings"``).
-        tags: Catalog tags.
+        relations: Relation name to a
+            :class:`~interloper.component.relation.Relation`, a component class
+            (the shorthand for a relation on it), or a list of component
+            classes narrowing the relation the decorated class declares under
+            that name. Explicit declarations win over the class annotations.
+        **overrides: Definition metadata and behaviour: the public ClassVars
+            and field defaults the decorated class declares, or
+            :class:`~interloper.config.base.Config` itself for a plain class
+            (``key``, ``name``, ``icon``, ``tags``); see the class. An unknown
+            name is a ``TypeError`` at decoration.
 
     Returns:
         A Config subclass.
     """
-    classvars: dict[str, Any] = {}
-    if key is not None:
-        classvars["key"] = key
-    if name is not None:
-        classvars["name"] = name
-    if icon is not None:
-        classvars["icon"] = icon
-    if tags is not None:
-        classvars["tags"] = tags
-
     if cls is not None:
-        return Config.build_class(cls, classvars=classvars)
+        return decorate(Config, cls, build=_build_config, relations=relations, **overrides)
 
     def wrapper(cls: type) -> type[Config]:
-        return Config.build_class(cls, classvars=classvars)
+        return decorate(Config, cls, build=_build_config, relations=relations, **overrides)
 
     return wrapper
+
+
+# -- Internals -----------------------------------------------------------------
+
+
+def _build_config(
+    cls: type,
+    *,
+    classvars: dict[str, Any],
+    fields: dict[str, Any],
+    relations: dict[str, Relation],
+) -> type[Config]:
+    """Build the Config subclass and declare the decorator's relations on it.
+
+    Args:
+        cls: The decorated class.
+        classvars: Class-level attributes to stamp on the built class.
+        fields: Field default overrides for the built class.
+        relations: Relations the decorator declares, name to relation.
+
+    Returns:
+        A Config subclass.
+    """
+    return declare(Config.build_class(cls, classvars=classvars, fields=fields), relations)

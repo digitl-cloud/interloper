@@ -22,3 +22,4 @@ class Config(Resource):
     """
 
     kind: ClassVar[str] = "config"
+    tags: ClassVar[list[str]] = []

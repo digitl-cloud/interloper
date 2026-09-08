@@ -103,8 +103,8 @@ fill it.
     tags=["Report"],                                   # catalog tags
     schema=AdsStats,                                   # output schema
     partitioning=il.TimePartitionConfig(column="date"),
-    destinations=[il.CSVDestination],                  # allowed destination classes
-    relations={                                        # explicit relations, keyed by parameter
+    relations={                                        # the relation channel, keyed by parameter
+        "destinations": [il.CSVDestination],           # allowed destination classes
         "connection": il.Relation(AdsConnection),
         "campaigns": il.Relation("asset", "ads.campaigns"),
         "budget": il.Relation("asset", "finance.budget", optional=True),
@@ -122,8 +122,9 @@ def ads_stats(
     ...
 ```
 
-Every option is listed in [Decorator options](../reference/decorators.md). `destinations`
-restricts the destination **classes** an asset accepts; instances are supplied at construction.
+The three channels are described in [Decorator options](../reference/decorators.md). A list of
+classes under `relations["destinations"]` restricts the destination **classes** an asset accepts;
+instances are supplied at construction.
 
 ## Instance configuration
 

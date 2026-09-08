@@ -34,7 +34,7 @@ Decorators can restrict the destination **classes** an asset or source accepts; 
 another class raises `DestinationError` at materialization:
 
 ```py
-@il.asset(destinations=[il.CSVDestination, WarehouseDestination])
+@il.asset(relations={"destinations": [il.CSVDestination, WarehouseDestination]})
 def orders(self): ...
 ```
 
@@ -122,9 +122,9 @@ This form writes one file per asset and ignores `context.partition_or_window`: a
 rewrite replaces every partition and a window lands in one file. It suits unpartitioned assets;
 partitioned ones belong on `il.PartitionedDestination` below.
 
-Decorator options: `relations`, `key`, `name`, `icon`, `tags`, `read_representation`,
-`materialization_strategy`. A destination's own connection is a relation, declared as an
-annotation or through `relations=`; see
+The decorator accepts the class's public ClassVars and field defaults, plus `relations=`; see the
+[decorators reference](../reference/decorators.md). A destination's own connection is a relation,
+declared as an annotation or through `relations=`; see
 [Resources](resources.md#relations-on-sources-and-destinations).
 
 Override `partition_row_counts(context)` to report rows per partition; `asset.partition_row_counts()`
