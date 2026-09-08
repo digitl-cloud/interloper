@@ -137,9 +137,12 @@ class Relation(BaseModel):
     several component kinds, ``key`` (when non-empty) narrows to specific
     keys within those kinds, matched through :meth:`ComponentIdentity.satisfies`.
     ``many`` marks a relation that binds several components at once;
-    ``optional`` marks one that may stay unbound. ``default`` and
-    ``has_fallback`` together describe a relation that can be resolved
-    without an explicit binding.
+    ``optional`` marks one that may stay unbound or be left empty, and says
+    nothing else: ``on_delete`` alone decides what deleting a bound target
+    does, ``block`` refusing the deletion while this relation holds the
+    target and ``detach`` letting it through and dropping the binding.
+    ``default`` and ``has_fallback`` together describe a relation that can be
+    resolved without an explicit binding.
 
     A relation is also its own descriptor: :meth:`Component._collect` installs
     the stamped copy under the relation's name, so the class attribute reads

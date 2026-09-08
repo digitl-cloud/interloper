@@ -80,9 +80,9 @@ destinations a source writes to, a job's targets, an upstream asset.
 | `kind` | The component kind, or kinds, the relation may point at. |
 | `key` | The keys it narrows to: an exact key, `source.asset`, `*.asset`, a list, or `""` for any key of those kinds. |
 | `many` | Whether it binds several components at once. |
-| `optional` | Whether it may stay unbound. Says nothing about data. |
+| `optional` | Whether it may stay unbound, or be emptied once bound. Says nothing about data, and nothing about deletion. |
 | `default` | A zero-argument factory producing the value an unbound relation resolves to. |
-| `on_delete` | What deleting the target does to the referrer: `block` (default, for consumption relations) or `detach` (for orchestration pointers such as a job's targets or a hook's watches). |
+| `on_delete` | What deleting a bound target does, and the only field that decides it: `block` (the default) refuses the deletion while this relation holds the target, `detach` lets it through and drops the binding. Orchestration pointers (a job's `targets`, a hook's `watches`) and inferred optional upstreams declare `detach`; consumption relations keep `block`, an optional one included. |
 
 Two attributes are derived, not declared: `name` is stamped from the attribute the relation is
 declared under, and `target` is the class the `il.Relation(cls)` shorthand was written with,

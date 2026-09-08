@@ -208,6 +208,14 @@ class Asset(Component, Operation):
     def _infer_relation(cls, name: str, hint: Any, *, optional: bool) -> Relation:
         """The relation one ``data()`` parameter declares.
 
+        An optional upstream is inferred ``on_delete="detach"``: the parameter
+        already tolerates the leg being absent, so nothing is owed to it and
+        deleting the upstream must not be refused on its behalf. A parameter
+        naming a component class keeps the default ``block`` whether it is
+        optional or not: this ruling covers asset upstreams only, and a
+        connection or config a read consumes stays undeletable while it is
+        bound.
+
         Args:
             name: The parameter name, which is the relation's name and, for an
                 upstream, the bare asset key it expects.
@@ -227,10 +235,11 @@ class Asset(Component, Operation):
         """
         target, admits_none = unwrap_optional(hint, {})
         optional = optional or admits_none
+        on_delete = "detach" if optional else "block"
         if target is Upstream:
-            return Relation("asset", name, optional=optional)
+            return Relation("asset", name, optional=optional, on_delete=on_delete)
         if get_origin(target) is list and get_args(target) == (Upstream,):
-            return Relation("asset", name, many=True, optional=optional)
+            return Relation("asset", name, many=True, optional=optional, on_delete=on_delete)
         if isinstance(target, type) and issubclass(target, Component) and target.kind:
             return Relation(target, optional=optional)
         if isinstance(hint, str):
