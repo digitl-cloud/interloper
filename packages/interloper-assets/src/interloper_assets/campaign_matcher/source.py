@@ -15,19 +15,41 @@ from interloper.representation import Representation
 from interloper_assets.campaign_matcher import schemas
 
 
+def _first(row: dict[str, Any], *keys: str) -> str:
+    """Return the first non-empty value among *keys*, or an empty string.
+
+    Args:
+        row: The record to read from.
+        *keys: Field names to try, in order.
+
+    Returns:
+        The first present, non-empty value as a string, or ``""`` when none match.
+    """
+    for key in keys:
+        value = row.get(key)
+        if value:
+            return str(value)
+    return ""
+
+
 def _match(row: dict[str, Any]) -> dict[str, Any]:
     """Build the placeholder match fields for one upstream campaign row.
 
+    Different connector ``campaigns`` schemas name the same fields
+    differently (Facebook: ``id``/``name``; TikTok: ``campaign_id``/
+    ``campaign_name``), so both spellings are tried in turn.
+
     Args:
-        row: One upstream campaign record, expected to carry ``id`` and ``name``.
+        row: One upstream campaign record, expected to carry a campaign id
+            and name under either spelling.
 
     Returns:
         The ``campaign_id``, ``campaign_name``, ``canonical_name``, and
         ``similarity`` fields for :class:`~interloper_assets.campaign_matcher.schemas.CampaignMatches`.
     """
-    name = str(row.get("name", ""))
+    name = _first(row, "campaign_name", "name")
     return {
-        "campaign_id": str(row.get("id", "")),
+        "campaign_id": _first(row, "campaign_id", "id"),
         "campaign_name": name,
         "canonical_name": name.strip().lower(),
         "similarity": 1.0,
