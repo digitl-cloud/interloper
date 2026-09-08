@@ -180,11 +180,30 @@ class ComponentList(BaseModel):
     components: list[ComponentSummary]
 
 
+class BindResult(BaseModel):
+    """One relation edge created or repointed by ``bind_relation``."""
+
+    status: Literal["success"] = "success"
+    src_id: str
+    name: str
+    dst_id: str
+    dst_kind: str
+
+
+class UnbindResult(BaseModel):
+    """One relation edge removed by ``unbind_relation``."""
+
+    status: Literal["success"] = "success"
+    src_id: str
+    name: str
+    dst_id: str
+
+
 # -- Lineage --------------------------------------------------------------------
 
 
-class DependencyEdge(BaseModel):
-    """A direct dependency edge from the perspective of one asset."""
+class RelationEdge(BaseModel):
+    """A direct asset-to-asset relation edge from the perspective of one asset."""
 
     asset_id: str
     param_name: str
@@ -197,7 +216,7 @@ class UpstreamResult(BaseModel):
 
     status: Literal["success"] = "success"
     asset_id: str
-    upstream: list[DependencyEdge]
+    upstream: list[RelationEdge]
 
 
 class DownstreamResult(BaseModel):
@@ -205,7 +224,7 @@ class DownstreamResult(BaseModel):
 
     status: Literal["success"] = "success"
     asset_id: str
-    downstream: list[DependencyEdge]
+    downstream: list[RelationEdge]
 
 
 class LineageItem(BaseModel):

@@ -10,11 +10,11 @@ from interloper_toolkit.models import (
     AssetRef,
     CrossSourceDependencies,
     CrossSourceEdge,
-    DependencyEdge,
     DownstreamResult,
     ImpactAnalysis,
     LineageItem,
     LineageResult,
+    RelationEdge,
     ToolError,
     UpstreamResult,
 )
@@ -27,19 +27,19 @@ def get_upstream(ctx: ToolkitContext, asset_id: str) -> UpstreamResult | ToolErr
         asset_id: UUID of the asset to inspect.
 
     Returns the list of upstream assets that this asset depends on,
-    including the parameter name used for each dependency.
+    including the relation name used for each dependency.
     """
     try:
-        deps = ctx.store.relations.list_all(ctx.org_id, type="upstream")
+        deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
         target = UUID(asset_id)
 
         upstream = []
         for dep in deps:
             if dep.src_id == target:
                 asset = ctx.store.components.get(dep.dst_id, kind="asset")
-                upstream.append(DependencyEdge(
+                upstream.append(RelationEdge(
                     asset_id=str(dep.dst_id),
-                    param_name=dep.slot,
+                    param_name=dep.name,
                     asset_key=asset.key,
                     source_id=str(asset.parent_id),
                 ))
@@ -58,16 +58,16 @@ def get_downstream(ctx: ToolkitContext, asset_id: str) -> DownstreamResult | Too
     Returns the list of assets that directly depend on this asset.
     """
     try:
-        deps = ctx.store.relations.list_all(ctx.org_id, type="upstream")
+        deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
         target = UUID(asset_id)
 
         downstream = []
         for dep in deps:
             if dep.dst_id == target:
                 asset = ctx.store.components.get(dep.src_id, kind="asset")
-                downstream.append(DependencyEdge(
+                downstream.append(RelationEdge(
                     asset_id=str(dep.src_id),
-                    param_name=dep.slot,
+                    param_name=dep.name,
                     asset_key=asset.key,
                     source_id=str(asset.parent_id),
                 ))
@@ -165,7 +165,7 @@ def cross_source_dependencies(ctx: ToolkitContext) -> CrossSourceDependencies | 
     different sources.
     """
     try:
-        deps = ctx.store.relations.list_all(ctx.org_id, type="upstream")
+        deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
         assets = ctx.store.components.list_all(ctx.org_id, kinds=["asset"])
 
         asset_source: dict[UUID, UUID | None] = {}
@@ -186,7 +186,7 @@ def cross_source_dependencies(ctx: ToolkitContext) -> CrossSourceDependencies | 
                     downstream=asset_info.get(dep.src_id, AssetRef()),
                     upstream_asset_id=str(dep.dst_id),
                     upstream=asset_info.get(dep.dst_id, AssetRef()),
-                    param_name=dep.slot,
+                    param_name=dep.name,
                 ))
 
         return CrossSourceDependencies(cross_source_count=len(cross_deps), dependencies=cross_deps)
@@ -201,7 +201,7 @@ def _build_adjacency(
     ctx: ToolkitContext,
     direction: str,
 ) -> tuple[dict[UUID, list[UUID]], dict[UUID, dict[str, str]]]:
-    """Build an adjacency map and asset info lookup from all dependencies.
+    """Build an adjacency map and asset info lookup from all asset-to-asset relations.
 
     Args:
         ctx: The toolkit context.
@@ -211,7 +211,7 @@ def _build_adjacency(
         ``(adjacency_map, asset_info_map)`` — info values feed
         :class:`LineageItem` kwargs (asset_key, source_id, source_key).
     """
-    deps = ctx.store.relations.list_all(ctx.org_id, type="upstream")
+    deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
     assets = ctx.store.components.list_all(ctx.org_id, kinds=["asset"])
 
     asset_info: dict[UUID, dict[str, str]] = {}
