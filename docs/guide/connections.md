@@ -26,7 +26,8 @@ prefixed through `model_config`). `SecretField` marks the field as a password in
 Exposing the client as a `cached_property` means every asset sharing the connection shares one
 configured client.
 
-Decorator options: `key`, `name`, `icon`, `tags`, `oauth`.
+The decorator accepts the class's public ClassVars and field defaults, plus `relations=`; see the
+[decorators reference](../reference/decorators.md).
 
 ## Using a connection
 

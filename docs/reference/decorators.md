@@ -1,72 +1,114 @@
 # Decorator options
 
-Every decorator can be used bare (`@il.asset`) or with keyword arguments (`@il.asset(...)`).
-Options marked *class* set class-level attributes; options marked *field* set the default of an
-instance field.
+A decorator is the function form of a class body, and a class body says three kinds of thing, so
+every component decorator carries exactly three channels and nothing else. Each can be used bare
+(`@il.asset`) or with arguments (`@il.asset(...)`).
 
-## `@il.asset`
+## 1. Definition metadata and behaviour
 
-| Option | Type | Kind | Meaning |
-|--------|------|------|---------|
-| `key` | `str` | class | Asset key. Defaults to the snake_cased function name. |
-| `name` | `str` | class | Display name. |
-| `icon` | `str` | class | Icon identifier. |
-| `tags` | `list[str]` | class | Catalog tags. |
-| `schema` | `type[Schema]` | class | Output schema. |
-| `partitioning` | `PartitionConfig` | class | Partition configuration. |
-| `destinations` | `list[type[Destination]]` | class | Allowed destination classes; narrows the key list of the `destinations` relation. |
-| `relations` | `dict[str, Relation]` | class | Relations keyed by `data()` parameter name; wins over annotations. |
-| `materialization_strategy` | `MaterializationStrategy` | field | Schema enforcement. |
-| `normalizer` | `Normalizer` | field | Normalizer applied before conform. |
+Plain keyword arguments. They are routed by introspecting the kind's anchor class (`il.Asset`,
+`il.Source`, `il.Destination`, `il.Connection`, `il.Config`), or the decorated class itself when it
+already extends that anchor:
 
-## `@il.source`
+| A name that is | Becomes |
+|----------------|---------|
+| a public `ClassVar` of the anchor (`key`, `name`, `icon`, `tags`, `schema`, `partitioning`, `read_representation`, `oauth`, ...) | a class attribute of the built class |
+| a field of the anchor (`dataset`, `default_destination_key`, `normalizer`, `materialization_strategy`, `auto_renew`, ...) | the default of that field |
 
-| Option | Type | Kind | Meaning |
-|--------|------|------|---------|
-| `key` | `str` | class | Source key. Defaults to the snake_cased class name. |
-| `name` | `str` | class | Display name. |
-| `icon` | `str` | class | Icon identifier. |
-| `tags` | `list[str]` | class | Catalog tags. |
-| `relations` | `dict[str, Relation]` | class | Relations by name; an alternative to class annotations. |
-| `destinations` | `list[type[Destination]]` | class | Allowed destination classes; narrows the key list of the `destinations` relation. |
-| `dataset` | `str` | field | Default dataset. Defaults to the source key when empty. |
-| `default_destination_key` | `str` | field | Preferred destination for downstream readers. |
-| `normalizer` | `Normalizer` | field | Default normalizer for the assets. |
-| `materialization_strategy` | `MaterializationStrategy` | field | Default strategy for assets still on `AUTO`. |
+Nothing is hand-maintained per kind: the accepted names are whatever the anchor declares, so an
+unknown one is a `TypeError` at decoration listing them. Names carrying the framework's own
+machinery (`kind`, `relations`, `internal_fields`, `asset_types`, `model_config`, anything private)
+and the per-instance `id` are never routable.
 
-Instance-only settings (`assets`, `select`, and the components bound to any relation) are
-constructor arguments, not decorator options.
+```py
+@il.asset(
+    key="ads_stats",                                          # a ClassVar of il.Asset
+    tags=["Report"],
+    schema=AdsStats,
+    materialization_strategy=il.MaterializationStrategy.RECONCILE,   # a field of il.Asset
+)
+def ads_stats(self, context: il.ExecutionContext) -> list[dict]: ...
+```
 
-## `@il.destination`
+## 2. `relations=`
 
-| Option | Type | Kind | Meaning |
-|--------|------|------|---------|
-| `key` | `str` | class | Destination key. |
-| `name` | `str` | class | Display name. |
-| `icon` | `str` | class | Icon identifier. |
-| `tags` | `list[str]` | class | Catalog tags. |
-| `relations` | `dict[str, Relation]` | class | Relations by name; an alternative to class annotations. |
-| `read_representation` | `str` | class | Representation reads materialize into (`"rows"`, `"dataframe"`). `DatabaseDestination` only. |
-| `materialization_strategy` | `MaterializationStrategy` | field | Write-time schema strategy. `DatabaseDestination` only. |
+The only relation channel: a map of relation name to one of three value forms.
 
-## `@il.connection`
+| Value | Means |
+|-------|-------|
+| `il.Relation(...)` | the relation as written, which is where anything an annotation cannot express goes (a cross-source or many-valued upstream, `optional`, `on_delete`) |
+| a component class | the same shorthand the annotation form is: `il.Relation(cls)` |
+| a list of component classes | the relation the anchor already declares under this name, its key list narrowed to those classes' keys |
 
-| Option | Type | Kind | Meaning |
-|--------|------|------|---------|
-| `key` | `str` | class | Connection key. |
-| `name` | `str` | class | Display name. |
-| `icon` | `str` | class | Icon identifier. |
-| `tags` | `list[str]` | class | Catalog tags. |
-| `oauth` | `OAuthConfig` | class | OAuth configuration. Requires an `OAuthConnection` subclass; `TypeError` otherwise. |
+A list under a name the anchor declares no relation for, or holding a class of a kind that relation
+does not accept, is a `TypeError` at decoration.
 
-## `@il.config`
+```py
+@il.asset(
+    relations={
+        "destinations": [il.CSVDestination],                  # narrowed: only this class is accepted
+        "connection": AdsConnection,                          # shorthand
+        "budget": il.Relation("asset", "finance.budget", optional=True),
+    },
+)
+def ads_stats(self, connection: AdsConnection, budget: il.Upstream | None = None) -> list[dict]: ...
+```
 
-| Option | Type | Kind | Meaning |
-|--------|------|------|---------|
-| `key` | `str` | class | Config key. |
-| `name` | `str` | class | Display name. |
-| `icon` | `str` | class | Icon identifier. |
-| `tags` | `list[str]` | class | Catalog tags. |
+For an asset, the map is keyed by `data()` parameter name and wins over the relation inferred from
+that parameter's annotation. For every other kind it is keyed by attribute name and wins over the
+class annotations.
+
+## 3. The build step
+
+What the decorator does with what it decorates. This is the only part that differs per kind.
+
+### `@il.asset`
+
+Turns a function into the asset's `data()`. Sync and `async` functions are both accepted; a first
+parameter named `self` makes it a **method asset**, receiving the source instance. The key defaults
+to the function name, the docstring becomes the class docstring, and every other parameter declares
+a relation read off its annotation.
+
+```py
+@il.asset(partitioning=il.TimePartitionConfig(column="date"))
+def ads_stats(self, context: il.ExecutionContext, connection: AdsConnection) -> list[dict]: ...
+```
+
+### `@il.source`
+
+Takes a class or a function. A class declares its configuration fields, its assets (methods
+carrying `@il.asset`, collected into `asset_types`) and its helpers. A function returns the asset
+classes and turns its own annotated parameters into configuration fields.
+
+```py
+@il.source(tags=["Advertising"], dataset="raw_facebook")
+class FacebookAds(il.Source): ...
+
+
+@il.source
+def open_meteo(latitude: float = 52.52) -> list[type[il.Asset]]:
+    return [forecast]
+```
+
+### `@il.destination`, `@il.connection`, `@il.config`
+
+Take a class. One already extending the anchor is stamped in place (a field default override
+subclasses it, keeping every other field's metadata); a plain class is re-parented onto the anchor,
+carrying its annotations and attributes over. `il.Connection` and `il.Config` extend
+`BaseSettings`, so their fields still load from the environment. `oauth=` requires an
+`OAuthConnection` subclass; a plain `Connection` is a `TypeError`.
+
+```py
+@il.connection(
+    name="Amazon Ads",
+    oauth=il.OAuthConfig("amazon", scope="advertising::campaign_management"),
+)
+class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
+    location: str = il.SelectField(...)
+```
+
+A source's `assets` and `select`, and the components bound to any relation, are instance settings:
+they mean something only as constructor arguments.
 
 ## `@il.schema`
 

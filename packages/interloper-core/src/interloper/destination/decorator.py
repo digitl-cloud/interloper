@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
-from interloper.component import Relation
+from interloper.component.decorator import declare, decorate
+from interloper.component.relation import Relation
 from interloper.destination.base import Destination
-from interloper.normalizer import MaterializationStrategy
 
 # Bounded TypeVar so that classes already extending Destination preserve their
 # specific type through the decorator (e.g. BigQueryDestination stays
@@ -23,25 +23,15 @@ def destination(cls: type, /) -> type[Destination]: ...
 @overload
 def destination(
     *,
-    relations: dict[str, Relation] = ...,
-    key: str = ...,
-    tags: list[str] = ...,
-    name: str = ...,
-    icon: str = ...,
-    read_representation: str = ...,
-    materialization_strategy: MaterializationStrategy = ...,
+    relations: dict[str, Any] = ...,
+    **overrides: Any,
 ) -> Callable[[type[DestinationT]], type[DestinationT]]: ...
 def destination(
     cls: type | None = None,
     /,
     *,
-    relations: dict[str, Relation] | None = None,
-    key: str | None = None,
-    tags: list[str] | None = None,
-    name: str | None = None,
-    icon: str | None = None,
-    read_representation: str | None = None,
-    materialization_strategy: MaterializationStrategy | None = None,
+    relations: dict[str, Any] | None = None,
+    **overrides: Any,
 ) -> type[Destination] | Callable[[type], type[Destination]]:
     """Create a Destination subclass from a decorated class.
 
@@ -54,9 +44,9 @@ def destination(
             def read(self, context): ...
             def write(self, context, data): ...
 
-    Or via explicit kwargs::
+    Or through the ``relations`` channel::
 
-        @destination(relations={"connection": il.Relation(PostgresConnection)})
+        @destination(name="My destination", relations={"connection": PostgresConnection})
         class MyDest:
             def read(self, context): ...
             def write(self, context, data): ...
@@ -68,41 +58,27 @@ def destination(
         cls: The class being decorated when used bare (``@destination``);
             ``None`` when used with keyword arguments, in which case a
             decorator is returned instead.
-        relations: Relation name → :class:`~interloper.component.relation.Relation`,
-            an alternative to declaring relations as class annotations.
-        key: Registry key for the destination; defaults to the base class's.
-        tags: Tags surfaced in the destination's definition.
-        name: Human-readable name; defaults to a label built from the class name.
-        icon: Icon identifier surfaced in the destination's definition.
-        read_representation: Name of the representation reads materialize into
-            (e.g. ``"rows"``, ``"dataframe"``).
-        materialization_strategy: Default write-time schema strategy, overridable
-            per configured destination.
+        relations: Relation name to a
+            :class:`~interloper.component.relation.Relation`, a component class
+            (the shorthand for a relation on it), or a list of component
+            classes narrowing the relation the decorated class declares under
+            that name. Explicit declarations win over the class annotations.
+        **overrides: Definition metadata and behaviour: the public ClassVars
+            and field defaults the decorated class declares, or
+            :class:`~interloper.destination.base.Destination` itself for a
+            plain class (``key``, ``name``, ``icon``, ``tags``, and
+            ``read_representation`` / ``materialization_strategy`` on a
+            :class:`~interloper.destination.database.DatabaseDestination`);
+            see the class. An unknown name is a ``TypeError`` at decoration.
 
     Returns:
         A Destination subclass.
     """
-    classvars: dict[str, Any] = {}
-    if read_representation is not None:
-        classvars["read_representation"] = read_representation
-
-    fields: dict[str, Any] = {}
-    if materialization_strategy is not None:
-        fields["materialization_strategy"] = materialization_strategy
-    if tags is not None:
-        classvars["tags"] = tags
-    if key is not None:
-        classvars["key"] = key
-    if name is not None:
-        classvars["name"] = name
-    if icon is not None:
-        classvars["icon"] = icon
-
     if cls is not None:
-        return _build_destination(cls, classvars=classvars, fields=fields, relations=relations)
+        return decorate(Destination, cls, build=_build_destination, relations=relations, **overrides)
 
     def wrapper(cls: type) -> type[Destination]:
-        return _build_destination(cls, classvars=classvars, fields=fields, relations=relations)
+        return decorate(Destination, cls, build=_build_destination, relations=relations, **overrides)
 
     return wrapper
 
@@ -115,7 +91,7 @@ def _build_destination(
     *,
     classvars: dict[str, Any],
     fields: dict[str, Any],
-    relations: dict[str, Relation] | None,
+    relations: dict[str, Relation],
 ) -> type[Destination]:
     """Build the Destination subclass and declare the decorator's relations on it.
 
@@ -123,16 +99,9 @@ def _build_destination(
         cls: The decorated class.
         classvars: Class-level attributes to stamp on the built class.
         fields: Field default overrides for the built class.
-        relations: Relations the decorator declares, name to relation, or
-            ``None`` when the decorator declares none.
+        relations: Relations the decorator declares, name to relation.
 
     Returns:
         A Destination subclass.
     """
-    destination_cls = Destination.build_class(cls, classvars=classvars, fields=fields)
-    if relations:
-        # The class already collected its relations when it was created, before
-        # the decorator had a chance to add any, so it collects again.
-        destination_cls.relations = {**destination_cls.relations, **relations}
-        destination_cls.collect()
-    return destination_cls
+    return declare(Destination.build_class(cls, classvars=classvars, fields=fields), relations)

@@ -90,7 +90,6 @@ class TestParameterizedForm:
 
     def test_every_classvar_declaration_is_applied(self):
         @il.asset(
-            destinations=[DecoratorDestination],
             schema=DecoratorSchema,
             partitioning=il.TimePartitionConfig(column="date"),
             tags=["Report"],
@@ -98,6 +97,7 @@ class TestParameterizedForm:
             name="Custom Asset",
             icon="carbon:data-table",
             relations={
+                "destinations": [DecoratorDestination],
                 "upstream": il.Relation("asset", "other"),
                 "maybe": il.Relation("asset", "another", optional=True),
             },
@@ -166,8 +166,8 @@ class TestRelationInference:
 
         assert uses_config.relations["config"].optional is True
 
-    def test_destinations_narrows_the_relation_keys(self):
-        @il.asset(destinations=[DecoratorDestination])
+    def test_a_list_of_destination_classes_narrows_the_relation_keys(self):
+        @il.asset(relations={"destinations": [DecoratorDestination]})
         def narrowed() -> list[dict[str, Any]]:
             return []
 

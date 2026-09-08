@@ -655,14 +655,14 @@ class TestDestinations:
         FakeAsset()._validate_destination(FakeDestination())
 
     def test_validate_destination_accepts_a_declared_key(self):
-        @il.asset(destinations=[FakeDestination])
+        @il.asset(relations={"destinations": [FakeDestination]})
         def narrowed() -> Any:  # pragma: no cover - not exercised
             return []
 
         narrowed()._validate_destination(FakeDestination())
 
     def test_validate_destination_rejects_an_undeclared_key(self):
-        @il.asset(destinations=[FakeDestination])
+        @il.asset(relations={"destinations": [FakeDestination]})
         def narrowed() -> Any:  # pragma: no cover - not exercised
             return []
 
@@ -670,7 +670,7 @@ class TestDestinations:
             narrowed()._validate_destination(FakeOtherDestination())
 
     def test_binding_an_undeclared_destination_is_rejected(self):
-        @il.asset(destinations=[FakeDestination])
+        @il.asset(relations={"destinations": [FakeDestination]})
         def narrowed() -> Any:  # pragma: no cover - not exercised
             return []
 

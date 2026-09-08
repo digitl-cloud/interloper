@@ -39,7 +39,7 @@ class SimpleDestination:
 @il.asset(
     partitioning=il.TimePartitionConfig(column="date"),
     schema=SimpleSchema,
-    destinations=[SimpleDestination],
+    relations={"destinations": [SimpleDestination]},
 )
 def simple_asset(
     context: il.ExecutionContext,

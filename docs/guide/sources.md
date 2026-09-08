@@ -48,8 +48,10 @@ keeps type checkers informed.
     name="Facebook Ads",
     icon="logos:facebook",
     tags=["Advertising"],
-    relations={"connection": il.Relation(FacebookAdsConnection)},   # explicit, wins over annotations
-    destinations=[BigQueryDestination],                 # allowed destination classes
+    relations={
+        "connection": FacebookAdsConnection,            # wins over the class annotations
+        "destinations": [BigQueryDestination],          # allowed destination classes
+    },
     dataset="raw_facebook",                             # default dataset for the assets
     default_destination_key="warehouse",
     normalizer=il.Normalizer(),                         # default normalizer for the assets
