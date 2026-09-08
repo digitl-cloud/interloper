@@ -26,6 +26,11 @@ class TiktokLikeCampaignsSchema(il.Schema):
     campaign_name: str
 
 
+class NeitherSpellingCampaignsSchema(il.Schema):
+    date: dt.date | None
+    unrelated_field: str
+
+
 def _connector(source_key: str, names: list[str]) -> type[il.Source]:
     @il.source(key=source_key)
     class Connector(il.Source):
@@ -48,6 +53,16 @@ def _tiktok_like_connector(source_key: str, names: list[str]) -> type[il.Source]
                 {"date": context.partition_date, "campaign_id": f"{source_key}-{i}", "campaign_name": name}
                 for i, name in enumerate(names)
             ]
+
+    return Connector
+
+
+def _neither_spelling_connector(source_key: str, count: int) -> type[il.Source]:
+    @il.source(key=source_key)
+    class Connector(il.Source):
+        @il.asset(schema=NeitherSpellingCampaignsSchema, partitioning=PARTITION, tags=["Entity"])
+        def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+            return [{"date": context.partition_date, "unrelated_field": str(i)} for i in range(count)]
 
     return Connector
 
@@ -119,3 +134,16 @@ def test_matches_across_connector_schemas_with_different_field_names() -> None:
     assert by_source["fb_like"]["canonical_name"] == "summer sale"
     assert by_source["tt_like"]["campaign_id"] == "tt_like-0"
     assert by_source["tt_like"]["canonical_name"] == "brand awareness"
+
+
+def test_a_row_with_neither_spelling_is_still_emitted_with_empty_placeholders() -> None:
+    """Pins current behaviour: the placeholder matcher does not filter rows missing both id/name spellings."""
+    memory = il.MemoryDestination()
+    fb = _neither_spelling_connector("fb_like", 1)(destinations=[memory])
+    matcher = CampaignMatcher(destinations=[memory])
+    partition = il.TimePartition(dt.date(2026, 9, 1))
+    il.DAG(fb, matcher).materialize(partition)
+    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
+    assert len(rows) == 1
+    assert rows[0]["campaign_id"] == ""
+    assert rows[0]["canonical_name"] == ""

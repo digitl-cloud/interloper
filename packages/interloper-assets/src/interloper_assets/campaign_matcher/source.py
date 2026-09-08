@@ -27,6 +27,7 @@ def _first(row: dict[str, Any], *keys: str) -> str:
     """
     for key in keys:
         value = row.get(key)
+        # Falls through on "" as well as None: the shipped connector schemas type these fields as str | None.
         if value:
             return str(value)
     return ""
