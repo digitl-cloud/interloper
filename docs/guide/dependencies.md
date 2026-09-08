@@ -30,7 +30,10 @@ class Shop(il.Source):
 
 The parameter name is the relation name and the bare asset key it expects, so
 `orders: il.Upstream` declares `il.Relation("asset", "orders")`, a sibling of the same source
-instance. A `None` default makes the relation **optional**, meaning its wiring may be absent:
+instance. A `None` default makes the relation **optional**, meaning its wiring may be absent, and
+declares `on_delete="detach"` with it: a parameter that tolerates a missing leg has no claim on
+the upstream, so deleting that upstream is allowed and simply drops the wiring, where a required
+upstream refuses the deletion while it is bound.
 
 ```py
     @il.asset(partitioning=il.TimePartitionConfig(column="date"))

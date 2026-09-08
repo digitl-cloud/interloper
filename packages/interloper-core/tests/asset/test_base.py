@@ -317,6 +317,39 @@ class TestInference:
 
         assert A.relations["config"].optional is True
 
+    def test_an_optional_resource_still_blocks_its_deletion(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, config: Cfg | None = None) -> Any:  # pragma: no cover
+                return []
+
+        assert A.relations["config"].on_delete == "block"
+
+    def test_an_optional_upstream_detaches_on_delete(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, x: il.Upstream | None = None) -> Any:  # pragma: no cover
+                return []
+
+        relation = A.relations["x"]
+        assert (relation.optional, relation.on_delete) == (True, "detach")
+
+    def test_a_required_upstream_blocks_on_delete(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, orders: il.Upstream) -> Any:  # pragma: no cover
+                return []
+
+        relation = A.relations["orders"]
+        assert (relation.optional, relation.on_delete) == (False, "block")
+
+    def test_an_optional_list_upstream_detaches_on_delete(self):
+        class A(il.Asset):
+            def data(
+                self, context: il.ExecutionContext, legs: list[il.Upstream] | None = None
+            ) -> Any:  # pragma: no cover
+                return []
+
+        relation = A.relations["legs"]
+        assert (relation.many, relation.optional, relation.on_delete) == (True, True, "detach")
+
     def test_optional_annotation_makes_optional(self):
         # Written as a string on purpose: a lazily-evaluated annotation must
         # resolve the same way as a real class.

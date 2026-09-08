@@ -79,6 +79,9 @@ class WarehouseDestination(il.Destination):
 `il.Relation(ReportingConfig)` is shorthand for `il.Relation(kind="config", key="reporting_config")`
 with the class kept as the relation's `target`, which is what makes a fallback possible.
 `optional=True` allows the relation to stay unbound; `default=` is a zero-argument factory.
+Neither says anything about deletion: `on_delete` alone decides that, and a resource relation
+keeps its `block` default whether it is optional or not, so a bound connection, config or
+destination cannot be deleted while a component consumes it.
 
 ## Fallbacks
 
