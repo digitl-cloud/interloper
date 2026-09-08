@@ -205,7 +205,7 @@ def _ensure_demo_job(store: Store, org_id: UUID, source_id: UUID) -> bool:
         key="cron_job",
         name=DEMO_JOB_NAME,
         config={"cron": DEMO_JOB_CRON, "enabled": True},
-        relations={"target": [(source_id, "")]},
+        relations={"targets": [source_id]},
     )
     return True
 
