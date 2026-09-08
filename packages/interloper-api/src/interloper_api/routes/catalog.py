@@ -30,8 +30,8 @@ def list_resource_kinds(catalog: Catalog = Depends(get_catalog)) -> list[str]:
     """Return distinct resource kinds from the catalog.
 
     A resource kind is any registered kind anchored under ``Resource``
-    (currently ``connection`` and ``config``) — the kinds usable as
-    slot bindings on other components.
+    (currently ``connection`` and ``config``) - the kinds usable as
+    relation bindings on other components.
 
     Args:
         catalog: Injected catalog.

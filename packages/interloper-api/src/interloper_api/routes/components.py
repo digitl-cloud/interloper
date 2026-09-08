@@ -62,30 +62,32 @@ class RelationEntry(BaseModel):
     """One relation binding in a create/update request."""
 
     dst_id: UUID
-    slot: str = ""
 
 
 class RelationCreateRequest(RelationEntry):
     """Request body for adding one relation."""
 
-    type: str
+    name: str
 
 
 class RelationRef(BaseModel):
     """One relation binding in a component response."""
 
     dst_id: UUID
-    slot: str = ""
     dst_kind: str
 
 
 class RelationResponse(BaseModel):
-    """An org-wide relation row (graph edges, dependency lists)."""
+    """An org-wide relation row (graph edges, dependency lists).
+
+    ``src_kind`` rides along so the app's graph and upstream views can filter
+    asset-to-asset rows without a second lookup.
+    """
 
     src_id: UUID
+    name: str
     dst_id: UUID
-    type: str
-    slot: str
+    src_kind: str
     dst_kind: str
 
 
@@ -95,8 +97,8 @@ class ComponentCreateRequest(BaseModel):
     ``encrypted`` applies to secret kinds only: None encrypts whenever an
     encryption key is configured, an explicit bool forces it on or off.
     ``children`` applies to source kinds only and names the child asset keys
-    to enable (None enables all of them). Every relation type listed in
-    ``relations`` is replaced wholesale, so an empty list clears that type.
+    to enable (None enables all of them). Every relation name listed in
+    ``relations`` is replaced wholesale, so an empty list clears that name.
     """
 
     kind: str
@@ -228,35 +230,35 @@ class PartitionRowCountsResponse(BaseModel):
 
 
 def _relations_of(row: Component) -> dict[str, list[RelationRef]]:
-    """Group a component's outgoing relations by relation type.
+    """Group a component's outgoing relations by name.
 
     Args:
         row: The component row, with its ``out_relations`` eager-loaded.
 
     Returns:
-        A ``{type: [bindings]}`` map of the row's outgoing relations.
+        A ``{name: [bindings]}`` map of the row's outgoing relations.
     """
     grouped: dict[str, list[RelationRef]] = {}
     for relation in row.out_relations:
-        grouped.setdefault(relation.type, []).append(
-            RelationRef(dst_id=relation.dst_id, slot=relation.slot, dst_kind=relation.dst_kind)
+        grouped.setdefault(relation.name, []).append(
+            RelationRef(dst_id=relation.dst_id, dst_kind=relation.dst_kind)
         )
     return grouped
 
 
-def _bindings(relations: dict[str, list[RelationEntry]] | None) -> dict[str, list[tuple[UUID, str]]] | None:
-    """Flatten a request's relation entries into the tuples the store takes.
+def _bindings(relations: dict[str, list[RelationEntry]] | None) -> dict[str, list[UUID]] | None:
+    """Flatten a request's relation entries into the ids the store takes.
 
     Args:
-        relations: The request's ``{type: [entries]}`` map, or None to leave
-            every relation type untouched.
+        relations: The request's ``{name: [entries]}`` map, or None to leave
+            every relation name untouched.
 
     Returns:
-        A ``{type: [(dst_id, slot)]}`` map, or None when *relations* is None.
+        A ``{name: [dst_id, ...]}`` map, or None when *relations* is None.
     """
     if relations is None:
         return None
-    return {type_: [(entry.dst_id, entry.slot) for entry in entries] for type_, entries in relations.items()}
+    return {name: [entry.dst_id for entry in entries] for name, entries in relations.items()}
 
 
 # -- Component endpoints -------------------------------------------------------
@@ -286,15 +288,19 @@ def list_components(
 
 @router.get("/relations")
 def list_relations(
-    type: str | None = None,
+    name: str | None = None,
+    src_kind: str | None = None,
+    dst_kind: str | None = None,
     user: Profile = Depends(require_viewer),
     org_id: UUID = Depends(get_org_id),
     store: Store = Depends(get_store),
 ) -> list[RelationResponse]:
-    """List the organisation's component relations, optionally by type.
+    """List the organisation's component relations, optionally filtered.
 
     Args:
-        type: The relation type to keep; None lists every type.
+        name: The relation name to keep; None lists every name.
+        src_kind: The source kind to keep; None lists every kind.
+        dst_kind: The destination kind to keep; None lists every kind.
         user: The authenticated user.
         org_id: The active organisation UUID.
         store: The Store instance.
@@ -305,12 +311,12 @@ def list_relations(
     return [
         RelationResponse(
             src_id=relation.src_id,
+            name=relation.name,
             dst_id=relation.dst_id,
-            type=relation.type,
-            slot=relation.slot,
+            src_kind=relation.src_kind,
             dst_kind=relation.dst_kind,
         )
-        for relation in store.relations.list_all(org_id, type=type)
+        for relation in store.relations.list_all(org_id, name=name, src_kind=src_kind, dst_kind=dst_kind)
     ]
 
 
@@ -464,7 +470,7 @@ def add_relation(
 
     Args:
         component_id: The source component's UUID.
-        body: The relation to add: its type, target ``dst_id`` and slot.
+        body: The relation to add: its name and target ``dst_id``.
         user: The authenticated user.
         store: The Store instance.
 
@@ -482,45 +488,45 @@ def add_relation(
     if destination_row.org_id != source.org_id:
         raise HTTPException(status_code=404, detail=f"Component {body.dst_id} not found")
     try:
-        relation = store.relations.add(component_id, type=body.type, dst_id=body.dst_id, slot=body.slot)
+        relation = store.relations.add(component_id, name=body.name, dst_id=body.dst_id)
     except ConfigError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return RelationResponse(
         src_id=relation.src_id,
+        name=relation.name,
         dst_id=relation.dst_id,
-        type=relation.type,
-        slot=relation.slot,
+        src_kind=relation.src_kind,
         dst_kind=relation.dst_kind,
     )
 
 
-@router.delete("/{component_id}/relations/{type}/{dst_id}", status_code=204)
+@router.delete("/{component_id}/relations/{name}/{dst_id}", status_code=204)
 def remove_relation(
     component_id: UUID,
-    type: str,
+    name: str,
     dst_id: UUID,
     user: Profile = Depends(get_current_user),
     store: Store = Depends(get_store),
 ) -> None:
-    """Remove a component's relations of one type toward one destination.
+    """Remove a component's relation of one name toward one destination.
 
-    Refused (400) for required dependency slots — repoint them instead.
+    Refused (400) for required dependency names - repoint them instead.
 
     Args:
         component_id: The source component's UUID.
-        type: The relation type to remove.
+        name: The relation name to remove.
         dst_id: The target component's UUID.
         user: The authenticated user.
         store: The Store instance.
 
     Raises:
-        HTTPException: 400 for a required dependency slot.
+        HTTPException: 400 for a required dependency name.
     """
     load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
     try:
-        store.relations.remove(component_id, type=type, dst_id=dst_id)
+        store.relations.remove(component_id, name=name, dst_id=dst_id)
     except ConfigError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -608,8 +614,8 @@ def handle_error(error: Exception, context: str) -> None:
 class ResolveRequest(BaseModel):
     """A request to resolve one provider-backed FetchField's options.
 
-    ``deps`` carries the credentials the form already holds, keyed by resource
-    slot (e.g. ``{"connection": {"access_token": ...}}``).
+    ``deps`` carries the credentials the form already holds, keyed by relation
+    name (e.g. ``{"connection": {"access_token": ...}}``).
     """
 
     component_key: str
@@ -626,18 +632,18 @@ async def resolve_fetch_field(
     """Resolve the options for a ``FetchField(provider=...)`` field.
 
     One endpoint resolves any field declared with
-    ``FetchField(provider="<slot>.<method>")`` — there are no hand-written
+    ``FetchField(provider="<name>.<method>")`` - there are no hand-written
     per-provider routes. The component definition comes from the catalog
-    (authoritative — the provider reference comes from the server's schema,
-    never the client), the resource in ``<slot>`` is instantiated from the
-    credentials the form already holds, and the ``@fetch_field_provider``
-    method ``<method>`` is called on it. That marker is the allowlist: only
-    methods opted in that way may be invoked, so the browser cannot call
-    arbitrary attributes.
+    (authoritative - the provider reference comes from the server's schema,
+    never the client), the resource named by the relation is instantiated
+    from the credentials the form already holds, and the
+    ``@fetch_field_provider`` method ``<method>`` is called on it. That
+    marker is the allowlist: only methods opted in that way may be invoked,
+    so the browser cannot call arbitrary attributes.
 
     Args:
-        body: The component key, the field name, and the per-slot credentials
-            the form currently holds.
+        body: The component key, the field name, and the per-relation
+            credentials the form currently holds.
         catalog: The Catalog instance.
         _user: The authenticated user (viewer gate).
 
@@ -646,8 +652,9 @@ async def resolve_fetch_field(
 
     Raises:
         HTTPException: 404 for an unknown component key, 400 when the field is
-            not a provider-backed FetchField or names an unknown resource
-            slot, 403 when the target method is not a fetch provider.
+            not a provider-backed FetchField or names an unknown or
+            undeclared relation, 403 when the target method is not a fetch
+            provider.
     """
     defn = catalog.get(body.component_key)
     if defn is None:
@@ -660,16 +667,20 @@ async def resolve_fetch_field(
             status_code=400,
             detail=f"Field '{body.field}' on '{body.component_key}' is not a provider-backed FetchField",
         )
-    slot, _, method = str(provider).partition(".")
+    name, _, method = str(provider).partition(".")
 
     component_cls = import_from_path(defn.path)
-    resource_cls = getattr(component_cls, "resource_types", {}).get(slot)
+    relation = component_cls.relations.get(name)
+    resource_cls = relation.target if relation else None
     if resource_cls is None:
-        raise HTTPException(status_code=400, detail=f"Resource slot '{slot}' not found on '{body.component_key}'")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Relation '{name}' not found on '{body.component_key}' or not declared from a component class",
+        )
 
-    # Only pass through fields the resource actually declares — the form may
+    # Only pass through fields the resource actually declares - the form may
     # carry extra markers (e.g. an internal id) that the model would reject.
-    raw = body.deps.get(slot, {})
+    raw = body.deps.get(name, {})
     creds = {k: v for k, v in raw.items() if k in resource_cls.model_fields}
     resource = resource_cls(**creds)
 

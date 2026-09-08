@@ -447,19 +447,31 @@ class CrudStore:
             raise self.load_error
         return self.loaded
 
-    def _list_relations(self, org_id: UUID, type: str | None = None) -> list[Any]:
-        return [r for r in self.relation_rows if type is None or r.type == type]
+    def _list_relations(
+        self,
+        org_id: UUID,
+        name: str | None = None,
+        src_kind: str | None = None,
+        dst_kind: str | None = None,
+    ) -> list[Any]:
+        return [
+            r
+            for r in self.relation_rows
+            if (name is None or r.name == name)
+            and (src_kind is None or r.src_kind == src_kind)
+            and (dst_kind is None or r.dst_kind == dst_kind)
+        ]
 
-    def _add_relation(self, src_id: UUID, *, type: str, dst_id: UUID, slot: str) -> Any:
+    def _add_relation(self, src_id: UUID, *, name: str, dst_id: UUID) -> Any:
         if self.error:
             raise self.error
-        self.added_relations.append({"src_id": src_id, "type": type, "dst_id": dst_id, "slot": slot})
-        return SimpleNamespace(src_id=src_id, dst_id=dst_id, type=type, slot=slot, dst_kind="connection")
+        self.added_relations.append({"src_id": src_id, "name": name, "dst_id": dst_id})
+        return SimpleNamespace(src_id=src_id, name=name, dst_id=dst_id, src_kind="source", dst_kind="connection")
 
-    def _remove_relation(self, src_id: UUID, *, type: str, dst_id: UUID) -> None:
+    def _remove_relation(self, src_id: UUID, *, name: str, dst_id: UUID) -> None:
         if self.error:
             raise self.error
-        self.removed_relations.append({"src_id": src_id, "type": type, "dst_id": dst_id})
+        self.removed_relations.append({"src_id": src_id, "name": name, "dst_id": dst_id})
 
 
 @pytest.fixture
@@ -514,13 +526,13 @@ class TestListComponents:
 
 
 class TestListRelations:
-    """``GET /components/relations`` — optionally narrowed by type."""
+    """``GET /components/relations`` — optionally narrowed by name and kinds."""
 
     def test_lists_every_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
         crud_store.relation_rows = [
             SimpleNamespace(
-                src_id=source_id, dst_id=destination_id, type="resource", slot="connection", dst_kind="connection"
+                src_id=source_id, name="connection", dst_id=destination_id, src_kind="source", dst_kind="connection"
             )
         ]
 
@@ -529,22 +541,40 @@ class TestListRelations:
         assert response.json() == [
             {
                 "src_id": str(source_id),
+                "name": "connection",
                 "dst_id": str(destination_id),
-                "type": "resource",
-                "slot": "connection",
+                "src_kind": "source",
                 "dst_kind": "connection",
             }
         ]
 
-    def test_the_type_filter_narrows_the_result(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+    def test_the_name_filter_narrows_the_result(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         crud_store.relation_rows = [
-            SimpleNamespace(src_id=uuid4(), dst_id=uuid4(), type="resource", slot="a", dst_kind="connection"),
-            SimpleNamespace(src_id=uuid4(), dst_id=uuid4(), type="destination", slot="b", dst_kind="destination"),
+            SimpleNamespace(
+                src_id=uuid4(), name="connection", dst_id=uuid4(), src_kind="source", dst_kind="connection"
+            ),
+            SimpleNamespace(
+                src_id=uuid4(), name="destinations", dst_id=uuid4(), src_kind="source", dst_kind="destination"
+            ),
         ]
 
-        response = crud_client.get("/components/relations?type=destination")
+        response = crud_client.get("/components/relations?name=destinations")
 
-        assert [r["type"] for r in response.json()] == ["destination"]
+        assert [r["name"] for r in response.json()] == ["destinations"]
+
+    def test_list_relations_filters_by_kind(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        crud_store.relation_rows = [
+            SimpleNamespace(src_id=uuid4(), name="upstreams", dst_id=uuid4(), src_kind="asset", dst_kind="asset"),
+            SimpleNamespace(
+                src_id=uuid4(), name="connection", dst_id=uuid4(), src_kind="source", dst_kind="connection"
+            ),
+        ]
+
+        response = crud_client.get("/components/relations", params={"src_kind": "asset", "dst_kind": "asset"})
+
+        rows = response.json()
+        assert all(r["dst_kind"] == "asset" for r in rows)
+        assert [r["name"] for r in rows] == ["upstreams"]
 
 
 class TestCreateComponent:
@@ -569,12 +599,12 @@ class TestCreateComponent:
         body = {
             "kind": "source",
             "key": "fb",
-            "relations": {"resource": [{"dst_id": str(destination_id), "slot": "connection"}]},
+            "relations": {"connection": [{"dst_id": str(destination_id)}]},
         }
 
         crud_client.post("/components/", json=body)
 
-        assert crud_store.created[0]["relations"] == {"resource": [(destination_id, "connection")]}
+        assert crud_store.created[0]["relations"] == {"connection": [destination_id]}
 
     def test_omitted_relations_stay_none(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         # None means "leave every relation type untouched", which is not the
@@ -710,14 +740,27 @@ class TestAddRelation:
 
     def test_adds_the_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
-        body = {"type": "resource", "dst_id": str(destination_id), "slot": "connection"}
+        body = {"name": "connection", "dst_id": str(destination_id)}
 
         response = crud_client.post(f"/components/{source_id}/relations", json=body)
 
         assert response.status_code == 201
         assert response.json()["dst_kind"] == "connection"
         assert crud_store.added_relations == [
-            {"src_id": source_id, "type": "resource", "dst_id": destination_id, "slot": "connection"}
+            {"src_id": source_id, "name": "connection", "dst_id": destination_id}
+        ]
+
+    def test_add_relation_by_name(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        source_id, destination_id = uuid4(), uuid4()
+
+        response = crud_client.post(
+            f"/components/{source_id}/relations", json={"name": "destinations", "dst_id": str(destination_id)}
+        )
+
+        assert response.status_code == 201
+        assert response.json()["name"] == "destinations"
+        assert crud_store.added_relations == [
+            {"src_id": source_id, "name": "destinations", "dst_id": destination_id}
         ]
 
     def test_a_target_in_another_org_is_a_404(
@@ -735,7 +778,7 @@ class TestAddRelation:
 
         response = crud_client.post(
             f"/components/{source_id}/relations",
-            json={"type": "resource", "dst_id": str(destination_id), "slot": "connection"},
+            json={"name": "connection", "dst_id": str(destination_id)},
         )
 
         assert response.status_code == 404
@@ -752,30 +795,40 @@ class TestAddRelation:
 
         response = crud_client.post(
             f"/components/{uuid4()}/relations",
-            json={"type": "resource", "dst_id": str(uuid4()), "slot": "connection"},
+            json={"name": "connection", "dst_id": str(uuid4())},
         )
 
         assert response.status_code == expected
 
 
 class TestRemoveRelation:
-    """``DELETE /components/{id}/relations/{type}/{dst_id}``."""
+    """``DELETE /components/{id}/relations/{name}/{dst_id}``."""
 
     def test_removes_the_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
 
-        response = crud_client.delete(f"/components/{source_id}/relations/resource/{destination_id}")
+        response = crud_client.delete(f"/components/{source_id}/relations/connection/{destination_id}")
 
         assert response.status_code == 204
         assert crud_store.removed_relations == [
-            {"src_id": source_id, "type": "resource", "dst_id": destination_id}
+            {"src_id": source_id, "name": "connection", "dst_id": destination_id}
         ]
 
-    def test_a_required_slot_is_refused(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        # Required dependency slots are repointed, never emptied.
-        crud_store.error = ConfigError("slot 'connection' is required")
+    def test_remove_relation_route_uses_name(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        source_id, destination_id = uuid4(), uuid4()
 
-        response = crud_client.delete(f"/components/{uuid4()}/relations/resource/{uuid4()}")
+        response = crud_client.delete(f"/components/{source_id}/relations/destinations/{destination_id}")
+
+        assert response.status_code == 204
+        assert crud_store.removed_relations == [
+            {"src_id": source_id, "name": "destinations", "dst_id": destination_id}
+        ]
+
+    def test_a_required_name_is_refused(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        # Required dependency names are repointed, never emptied.
+        crud_store.error = ConfigError("'connection' is required")
+
+        response = crud_client.delete(f"/components/{uuid4()}/relations/connection/{uuid4()}")
 
         assert response.status_code == 400
 
@@ -884,33 +937,56 @@ class TestPartitionRowCounts:
 class TestRelationGrouping:
     """``_relations_of`` and ``_bindings`` — the two shape converters."""
 
-    def test_outgoing_relations_group_by_type(self) -> None:
+    def test_outgoing_relations_group_by_name(self) -> None:
         first, second = uuid4(), uuid4()
         row = _row(
             relations=[
-                SimpleNamespace(type="resource", dst_id=first, slot="connection", dst_kind="connection"),
-                SimpleNamespace(type="resource", dst_id=second, slot="other", dst_kind="connection"),
-                SimpleNamespace(type="destination", dst_id=first, slot="", dst_kind="destination"),
+                SimpleNamespace(name="connection", dst_id=first, dst_kind="connection"),
+                SimpleNamespace(name="connection", dst_id=second, dst_kind="connection"),
+                SimpleNamespace(name="destinations", dst_id=first, dst_kind="destination"),
             ]
         )
 
         grouped = components_module._relations_of(row)
 
-        assert set(grouped) == {"resource", "destination"}
-        assert [ref.dst_id for ref in grouped["resource"]] == [first, second]
+        assert set(grouped) == {"connection", "destinations"}
+        assert [ref.dst_id for ref in grouped["connection"]] == [first, second]
 
     def test_no_relations_is_an_empty_map(self) -> None:
         assert components_module._relations_of(_row()) == {}
 
-    def test_bindings_flatten_entries_to_tuples(self) -> None:
+    def test_bindings_flatten_entries_to_ids(self) -> None:
         destination_id = uuid4()
-        entries = {"resource": [components_module.RelationEntry(dst_id=destination_id, slot="connection")]}
+        entries = {"connection": [components_module.RelationEntry(dst_id=destination_id)]}
 
-        assert components_module._bindings(entries) == {"resource": [(destination_id, "connection")]}
+        assert components_module._bindings(entries) == {"connection": [destination_id]}
 
     def test_bindings_of_none_stay_none(self) -> None:
-        # None means "leave every relation type untouched".
+        # None means "leave every relation name untouched".
         assert components_module._bindings(None) is None
+
+
+class TestComponentResponseRelations:
+    """``ComponentResponse.relations`` — keyed by name, dst_kind carried along."""
+
+    def test_component_response_relations_keyed_by_name(self) -> None:
+        connection_id, destination_id = uuid4(), uuid4()
+        row = _row(
+            relations=[
+                SimpleNamespace(name="connection", dst_id=connection_id, dst_kind="connection"),
+                SimpleNamespace(name="destinations", dst_id=destination_id, dst_kind="destination"),
+            ]
+        )
+        store = cast(Store, SimpleNamespace(
+            components=SimpleNamespace(status=lambda row, parent_key=None: ComponentStatus.OK)
+        ))
+
+        response = components_module.ComponentResponse.from_row(row, store, include_config=False)
+
+        assert set(response.relations) == {"connection", "destinations"}
+        assert response.relations["connection"] == [
+            components_module.RelationRef(dst_id=connection_id, dst_kind="connection")
+        ]
 
 
 class TestHandleError:
@@ -1022,13 +1098,13 @@ class TestCheckResponseFromFailure:
 class TestResolveEdgeCases:
     """``POST /components/resolve`` — the guards between the field and the provider."""
 
-    def test_an_unknown_resource_slot_is_a_400(
+    def test_an_unknown_relation_name_is_a_400(
         self, source_catalog: il.Catalog, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The FetchField names a slot the component does not declare.
+        # The FetchField names a relation the component does not declare.
         from interloper_assets.facebook_ads.source import FacebookAds
 
-        monkeypatch.setattr(FacebookAds, "resource_types", {})
+        monkeypatch.setattr(FacebookAds, "relations", {})
 
         response = _client(source_catalog).post(
             "/components/resolve",
@@ -1036,7 +1112,8 @@ class TestResolveEdgeCases:
         )
 
         assert response.status_code == 400
-        assert "Resource slot" in response.json()["detail"]
+        assert "Relation 'connection' not found" in response.json()["detail"]
+        assert "not declared from a component class" in response.json()["detail"]
 
     def test_a_provider_failure_is_mapped_not_raised(
         self, source_catalog: il.Catalog, mock_graph
@@ -1054,7 +1131,7 @@ class TestResolveEdgeCases:
         assert response.status_code == 500
         assert response.json()["detail"].startswith("Failed resolving facebook_ads.account_id")
 
-    def test_a_slot_that_is_not_a_fetch_provider_is_a_403(
+    def test_a_relation_that_is_not_a_fetch_provider_is_a_403(
         self, source_catalog: il.Catalog, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Validated at catalog build, so this is a defensive guard.
