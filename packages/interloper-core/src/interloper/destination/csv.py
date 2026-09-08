@@ -9,6 +9,7 @@ from typing import Any
 from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
 from interloper.destination.partitioned import PartitionedDestination
+from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition
 from interloper.representation import Representation
 
@@ -122,10 +123,10 @@ class CSVDestination(PartitionedDestination):
             Rows as a list of dicts.
 
         Raises:
-            FileNotFoundError: If the CSV file does not exist.
+            DataNotFoundError: If the CSV file does not exist.
         """
         if not file_path.exists():
-            raise FileNotFoundError(f"Data file not found: {file_path}")
+            raise DataNotFoundError(f"Data file not found: {file_path}")
         with file_path.open(newline="") as f:
             reader = csv.DictReader(f)
             rows: list[dict[str, Any]] = list(reader)

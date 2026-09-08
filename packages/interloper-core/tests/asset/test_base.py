@@ -515,9 +515,20 @@ class TestInjection:
         assert result.status is ExecutionStatus.COMPLETED
         assert {leg.asset.id for leg in seen["legs"]} == {fb.campaigns.id, tt.campaigns.id}
 
-    def test_missing_partition_gives_none_data(self):
+    @pytest.mark.parametrize(
+        "make_destination",
+        [
+            lambda tmp_path: il.MemoryDestination(),
+            lambda tmp_path: il.CSVDestination(base_path=str(tmp_path)),
+        ],
+        ids=["memory", "csv"],
+    )
+    def test_missing_partition_gives_none_data(self, tmp_path, make_destination):
         # The upstream is bound but never materialised, so its leg arrives as
         # Upstream(asset, data=None) and a LOG warning names it; the asset still runs.
+        # Parametrised over destinations because each backend signals a missing
+        # scope its own way (DataNotFoundError), and only that contract converts
+        # into a None leg here.
         seen: dict[str, Any] = {}
 
         @il.asset(partitioning=PARTITION, relations={"campaigns": il.Relation("asset", "*.campaigns")})
@@ -534,7 +545,7 @@ class TestInjection:
             seen["leg"] = campaigns
             return []
 
-        memory = il.MemoryDestination()
+        memory = make_destination(tmp_path)
         fb = FbLike(destinations=[memory])
         asset = lonely(destinations=[memory], campaigns=fb.campaigns)  # ty: ignore[unknown-argument]
         warnings_seen: list[Event] = []
