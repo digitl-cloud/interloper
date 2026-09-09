@@ -4,7 +4,8 @@ Everything a developer defines in Interloper is a **component**: assets, sources
 connections, configs, jobs, hooks. Components share one base with two layers. `Serializable` is
 anything that is "a class plus its configuration"; `Component` adds kind, identity and relations
 and makes the object a catalog citizen. This page is for people writing new component classes
-or new kinds.
+or new kinds. The reference comes first; [Writing a kind](#writing-a-kind) at the end walks
+through it in the order you would do it.
 
 ## Serializable
 
@@ -150,20 +151,86 @@ whatever the owner cascades into its children is cascaded again.
 One configuration field may carry `discriminator=True`. `discriminator` and `instance_name()`
 expose it; sources use it for per-instance table names. Two marked fields raise `TypeError`.
 
+## Writing a kind
+
+A kind is an anchor class plus one entry-point line. Everything above applies to it; this is the
+order in which it comes up.
+
+1. **Subclass the anchor you extend, or `il.Component` for a new kind.** `kind` derives from the
+   class name for a direct child of `Component`; a subclass of an existing kind inherits its.
+   Give the class a docstring: it becomes the description users see.
+
+    ```py
+    class Report(il.Component):
+        """A rendered document built from assets."""
+    ```
+
+2. **Declare fields for what the user configures.** Ordinary pydantic fields, with `il.InputField`,
+   `il.SelectField`, `il.SecretField` and friends where the UI needs to know how to render them.
+   Fields the framework fills belong in `internal_fields`. One field may carry
+   `discriminator=True`; it names instances.
+
+3. **Declare relations for what fills the component.** An annotation naming a component class is
+   the shorthand; an `il.Relation` value is where anything else is said (a key filter, `many`,
+   `optional`, `on_delete`). The relation name is the constructor keyword, the attribute, and
+   what persistence and the UI call the link.
+
+    ```py
+    class Report(il.Component):
+        """A rendered document built from assets."""
+
+        title: str = il.InputField()
+        inputs: list[il.Asset] = il.Relation("asset", many=True, optional=True)
+        storage: il.Destination
+    ```
+
+4. **Override `on_rebind` only if the kind cascades its wiring.** A source pushes its connection
+   into its assets, a job its destinations into its targets. A kind whose bindings are its own
+   business leaves the base hook alone.
+
+5. **Register the anchor.** One line in `pyproject.toml`; the catalog raises `ConfigError` for a
+   component whose kind it does not know.
+
+    ```toml
+    [project.entry-points."interloper.kinds"]
+    report = "my_package.report:Report"
+    ```
+
+6. **Check `definition()`.** It is what the catalog, the API and the app read: `config_schema`
+   from the fields, `relations` from the declarations, `state_schema` from `state_model` if the
+   kind has machine-owned state. If the definition says what you meant, the kind is done.
+
+Behaviour comes last and is the kind's own: a `Workload` exposes `operations()`, an `Operation`
+exposes `run()`. See [Operations](operations.md).
+
 ## Writing a decorator
 
-A decorator for a new kind wraps `build_class`:
+A kind that wants `@il.report(...)` sugar wraps the one decorator engine,
+`interloper.component.decorator.decorate`. The engine routes three channels and nothing else:
+plain keyword arguments are matched against the anchor (a public `ClassVar` becomes a class
+attribute, a pydantic field a default, anything else a `TypeError` naming what is accepted),
+`relations=` declares relations (an `il.Relation`, a component class, or a list of classes
+narrowing a relation the anchor declares), and `build=` is the kind's own step: how the
+decorated thing becomes a class.
 
 ```py
-def report(cls=None, /, *, key=None, name=None, tags=None):
-    classvars = {k: v for k, v in {"key": key, "name": name, "tags": tags}.items() if v is not None}
+from interloper.component.decorator import declare, decorate
+
+
+def report(cls=None, /, *, relations=None, **overrides):
     if cls is not None:
-        return Report.build_class(cls, classvars=classvars)
-    return lambda cls: Report.build_class(cls, classvars=classvars)
+        return decorate(Report, cls, build=_build_report, relations=relations, **overrides)
+    return lambda cls: decorate(Report, cls, build=_build_report, relations=relations, **overrides)
+
+
+def _build_report(cls, *, classvars, fields, relations):
+    return declare(Report.build_class(cls, classvars=classvars, fields=fields), relations)
 ```
 
-`classvars` are stamped as class attributes; `fields` override defaults of existing pydantic
-fields and must name fields the receiving class has.
+`build_class` builds a subclass with the class attributes stamped and the field defaults
+overridden through the pydantic metaclass, so `model_fields` stays correct; `declare` adds the
+decorator's relations to it. Nothing is hand-listed: what the decorator accepts is what the
+anchor declares, so a new `ClassVar` on `Report` is a new decorator option with no other change.
 
 ## Definitions in the catalog
 
