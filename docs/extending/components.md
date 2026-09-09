@@ -120,6 +120,22 @@ definition rather than a component silently missing a relation.
 | `trickle(child)` | Fills a child's unbound relations from this component's own bindings, by name, keeping only what the child's relation accepts. Never overrides an explicit binding. |
 | `validate_relations(nodes=None)` | Unbound non-optional without a fallback, several targets on a single-valued relation, a target the relation does not accept, and (with `nodes`) a non-optional asset target absent from the run. |
 
+**Extension point**: `on_rebind(name)` is called once after every write to a binding, whichever
+way it was written (constructor kwarg, `bind`, `unbind`, attribute assignment, a parent's
+`trickle`), with the new binding already in place. The base does nothing. A kind that cascades its
+wiring overrides it; this is the whole of how a source's connection reaches its assets:
+
+```py
+class Source(Component):
+    def on_rebind(self, name: str) -> None:
+        for asset in self.assets:
+            self.trickle(asset)
+        for destination in self.destinations:
+            self.trickle(destination)
+```
+
+Bind on other components from inside the hook, never on `self`: that would re-enter it.
+
 A relation name is also a constructor keyword and an assignable attribute; assignment goes
 through `Relation.__set__`, which shares `bind`'s single write path: the replacement is checked
 before the existing binding is touched (so a rejected assignment leaves the previous one exactly

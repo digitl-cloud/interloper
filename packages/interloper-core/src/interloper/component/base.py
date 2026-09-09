@@ -323,7 +323,7 @@ class Component(Serializable):
         land here, so the rules hold whichever way a binding is written.
         Everything is checked before ``_bound`` is touched, so a rejected
         write leaves the previous binding exactly as it was, and
-        :meth:`_rebound` runs once the new binding is in place.
+        :meth:`on_rebind` runs once the new binding is in place.
 
         Args:
             name: The relation name as declared on the class.
@@ -344,14 +344,20 @@ class Component(Serializable):
             if all(target is not held for held in deduplicated):
                 deduplicated.append(target)
         self._bound[name] = deduplicated
-        self._rebound(name)
+        self.on_rebind(name)
 
-    def _rebound(self, name: str) -> None:
-        """React to a binding of *name* having just changed.
+    def on_rebind(self, name: str) -> None:
+        """React to one of this component's relations having been rebound.
 
-        The hook every write path calls once the new binding is in place; it
-        does nothing here, and a component that cascades its bindings
-        (a source into its assets, a job into its targets) overrides it.
+        Called once after every write to a binding, whichever way it was
+        written: a constructor kwarg, :meth:`bind`, :meth:`unbind`, attribute
+        assignment, or a parent's :meth:`trickle`. The new binding is already
+        in place, so :meth:`bound` reads it. The base does nothing; override
+        it to cascade, the way a source trickles its bindings into its assets
+        and destinations and a job into its targets.
+
+        Binding on ``self`` from inside the hook re-enters it; bind on other
+        components only.
 
         Args:
             name: The relation name whose binding changed.
@@ -378,21 +384,22 @@ class Component(Serializable):
     def unbind(self, name: str, *targets: Component) -> None:
         """Detach components from one of this component's declared relations.
 
+        Detaching nothing the relation holds is a no-op; otherwise what remains
+        goes through the same write path as :meth:`bind`, so the same checks
+        apply (a non-optional relation cannot be emptied, ``ConfigError``) and
+        :meth:`on_rebind` runs.
+
         Args:
             name: The relation name as declared on the class.
             *targets: The components to detach; ones the relation does not hold
                 are ignored.
-
-        Raises:
-            ConfigError: If detaching would leave a non-optional relation with
-                nothing bound.
         """
-        relation = self._relation(name)
+        self._relation(name)
         current = self._bound.get(name, [])
         remaining = [held for held in current if all(held is not target for target in targets)]
-        if current and not remaining and not relation.optional:
-            raise ConfigError(f"{type(self).__name__}.{name} is non-optional and cannot be emptied")
-        self._bound[name] = remaining
+        if len(remaining) == len(current):
+            return
+        self._replace_binding(name, tuple(remaining))
 
     def bound(self, name: str) -> Component | list[Component] | None:
         """What is explicitly bound to one of this component's declared relations.

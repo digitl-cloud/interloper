@@ -546,7 +546,7 @@ class Source(Component, Workload):
 
         A binding is the moment this runs: relation keyword arguments reach a
         component after ``model_post_init`` has already built its assets, so
-        without a pass on :meth:`_rebound` a source's connection would never
+        without a pass on :meth:`on_rebind` a source's connection would never
         reach them.
         """
         for asset in self.assets:
@@ -579,7 +579,7 @@ class Source(Component, Workload):
             return set()
         return {asset.key for asset in self.assets if [target.id for target in asset._bound.get(name, [])] == own}
 
-    def _rebound(self, name: str) -> None:
+    def on_rebind(self, name: str) -> None:
         """Trickle this source's bindings down whenever one of them changes.
 
         Args:
