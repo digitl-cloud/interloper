@@ -3,6 +3,8 @@
 import json
 import urllib.parse
 
+import pytest
+
 from interloper.oauth import PROVIDERS, RefreshTokenResponse
 
 
@@ -73,3 +75,18 @@ class TestTikTokDialect:
         )
         assert request.method == "POST"
         assert json.loads(request.content) == {"app_id": "cid", "secret": "cs", "auth_code": "the-code"}
+
+    def test_authorization_code_response_is_unwrapped_from_the_envelope(self):
+        payload = {
+            "code": 0,
+            "message": "OK",
+            "request_id": "req",
+            "data": {"access_token": "at", "scope": [4], "advertiser_ids": ["1"]},
+        }
+        parsed = PROVIDERS["tiktok"].parse_authorization_code_response(payload)
+        assert parsed == {"access_token": "at", "scope": [4], "advertiser_ids": ["1"]}
+
+    def test_authorization_code_rejection_raises_despite_the_200(self):
+        payload = {"code": 40002, "message": "auth_code invalid", "request_id": "req"}
+        with pytest.raises(ValueError, match="auth_code invalid"):
+            PROVIDERS["tiktok"].parse_authorization_code_response(payload)

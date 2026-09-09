@@ -197,7 +197,7 @@ class PinterestProvider(OAuthProvider):
 
 
 class TikTokProvider(OAuthProvider):
-    """TikTok Business dialect: bespoke parameter names, and no refresh flow.
+    """TikTok Business dialect: bespoke parameter names, an envelope, and no refresh flow.
 
     TikTok Business tokens do not expire, so the dialect has no
     credential-refresh flow — connections on this provider derive as
@@ -231,6 +231,27 @@ class TikTokProvider(OAuthProvider):
             self.token_url,
             json={"app_id": client_id, "secret": client_secret, "auth_code": code},
         )
+
+    def parse_authorization_code_response(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Unwrap TikTok's ``{code, message, data}`` envelope.
+
+        TikTok answers every call with HTTP 200 and reports the outcome in the
+        body: ``code`` is ``0`` on success, with the tokens under ``data``.
+
+        Args:
+            payload: The grant's JSON response body.
+
+        Returns:
+            The ``data`` object, carrying ``access_token`` at the top level.
+
+        Raises:
+            ValueError: If ``code`` is non-zero, carrying TikTok's ``message``.
+        """
+        if payload.get("code") != 0:
+            raise ValueError(
+                f"TikTok rejected the code exchange: {payload.get('message')} (code {payload.get('code')})"
+            )
+        return payload["data"]
 
 
 def _basic_authorization(client_id: str, client_secret: str) -> str:
@@ -311,7 +332,7 @@ SNAPCHAT = OAuthProvider(
 TIKTOK = TikTokProvider(
     key="tiktok",
     auth_url="https://business-api.tiktok.com/portal/auth",
-    token_url="https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token",
+    token_url="https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/",
     label="TikTok",
     icon="logos:tiktok-icon",
 )

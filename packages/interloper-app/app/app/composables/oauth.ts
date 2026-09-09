@@ -36,6 +36,17 @@ export function oauthErrorDetail(error: unknown): string {
 }
 
 /**
+ * The credential a token response carries for the connection's token field.
+ *
+ * Long-lived-token providers (TikTok, Facebook) issue only an `access_token`,
+ * so it stands in when no `refresh_token` is present.
+ */
+export function oauthToken(tokens: Record<string, unknown>): string | undefined {
+    const token = tokens.refresh_token ?? tokens.access_token
+    return typeof token === 'string' && token ? token : undefined
+}
+
+/**
  * Composable for the OAuth2 popup sign-in flow.
  */
 export function useOAuthPopup() {
