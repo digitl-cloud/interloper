@@ -131,7 +131,11 @@ which is a many-valued sibling; `relations=` is what reaches outside the source.
 
 The relation above is not hypothetical: `interloper_assets.CampaignMatcher` declares exactly this
 wildcard (same `campaign_matches` decorator shown above, plus `schema=schemas.CampaignMatches`),
-matching campaigns across every advertising connector into one canonical lookup table.
+matching campaigns across every advertising connector into one lookup table: each row names the
+campaign's `platform` and `account`, the normalised `canonical_name` it is matched on and the
+`match_id` shared by every campaign matched to it. A `key_pattern` on the source selects the part
+of a name that identifies the campaign under a naming convention, and a `similarity_threshold`
+below `1.0` also merges names that merely resemble each other.
 
 Building a DAG over both connectors and the matcher wires every `campaigns` asset held into the
 `campaigns` relation, one leg per connector:
