@@ -156,7 +156,12 @@ class BigQueryDestination(DatabaseDestination):
         time_partitioning: bigquery.TimePartitioning | None = None,
         description: str | None = None,
     ) -> None:
-        """Create a BigQuery table with an explicit schema.
+        """Create a BigQuery table with an explicit schema, unless one just appeared.
+
+        Two runs writing different partitions of the same new table race on its
+        creation (a backfill, or a queue burst after downtime): whichever loses
+        gets a 409 from BigQuery, which is not an error for it, since the table
+        it wanted now exists with the same schema, so it loads into that one.
 
         Args:
             table: Target table name.
@@ -168,7 +173,10 @@ class BigQueryDestination(DatabaseDestination):
         bq_table = bigquery.Table(self._table_ref(table, schema), schema=bq_schema)
         bq_table.time_partitioning = time_partitioning
         bq_table.description = description
-        self.client.create_table(bq_table)
+        try:
+            self.client.create_table(bq_table)
+        except Conflict:
+            pass  # Created by a concurrent run of the same asset
 
     def _sync_table_metadata(
         self,

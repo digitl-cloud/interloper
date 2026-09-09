@@ -388,6 +388,18 @@ class TestInsertData:
         created = mock_client.create_table.call_args.args[0]
         assert [(f.name, f.field_type) for f in created.schema] == [("a", "INTEGER")]
 
+    def test_a_table_created_by_a_concurrent_run_is_loaded_into_not_an_error(self):
+        from google.cloud.exceptions import Conflict, NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = NotFound("nope")
+        mock_client.create_table.side_effect = Conflict("Already Exists: Table ds.tbl")
+
+        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 2.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
+
+        assert mock_client.create_table.called
+        assert mock_client.load_table_from_json.call_args.args[0] == [{"id": 1, "cost": 2.0, "day": None}]
+
     def test_dataframe_without_schema_lets_load_job_create_table(self):
         import pandas as pd
         from google.cloud.exceptions import NotFound
