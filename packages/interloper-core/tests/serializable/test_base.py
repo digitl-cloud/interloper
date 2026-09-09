@@ -10,7 +10,7 @@ import pytest
 import interloper as il
 from interloper.errors import SpecError
 from interloper.normalizer import Normalizer
-from interloper.serializable import Serializable, Spec
+from interloper.serializable import Document, Serializable, Spec
 from interloper.source.base import Source
 
 # -- Fixtures ------------------------------------------------------------------
@@ -191,6 +191,49 @@ class TestReferences:
         file.write_text(f"path: {RefWidget.classpath()}\ninit:\n  connection:\n    ref: {connection.id}\n")
         widget = RefWidget.from_spec_file(file, resolve={connection.id: connection}.__getitem__)
         assert widget.connection is connection
+
+
+class TestDocument:
+    """The reconstruction in progress: references held back, owners pinned, bound once whole."""
+
+    def test_hold_takes_references_out_and_pins_the_owner(self):
+        init = {"connection": {"ref": "c"}, "assets": {"revenue": {"dataset": "x", "orders": [{"ref": "o"}]}}}
+        kept = Document().hold(init)
+
+        assert "connection" not in kept
+        assert kept["id"]
+        revenue = kept["assets"]["revenue"]
+        assert "orders" not in revenue
+        assert revenue["dataset"] == "x"
+        assert revenue["id"]
+
+    def test_hold_keeps_a_declared_id_and_a_value_without_references(self):
+        kept = Document().hold({"id": "root", "connection": {"ref": "c"}, "select": ["a"]})
+        assert kept == {"id": "root", "select": ["a"]}
+
+    def test_a_reference_mixed_with_an_inline_target_keeps_the_document_order(self):
+        inline = il.MemoryDestination()
+        referenced = il.MemoryDestination()
+        spec = Spec(
+            path=RefWidget.classpath(),
+            init={
+                "connection": RefConn().to_spec().model_dump(exclude_none=True),
+                "destinations": [inline.to_spec().model_dump(exclude_none=True), {"ref": referenced.id}],
+            },
+        )
+        widget = RefWidget.from_spec(spec, resolve={referenced.id: referenced}.__getitem__)
+        assert [d.id for d in widget.destinations] == [inline.id, referenced.id]
+
+    def test_a_pinned_init_that_built_no_component_is_a_spec_error(self):
+        spec = Spec(
+            path=RefWidget.classpath(),
+            init={
+                "connection": RefConn().to_spec().model_dump(exclude_none=True),
+                "assets": {"nope": {"orders": {"ref": "o"}}},
+            },
+        )
+        with pytest.raises(SpecError, match="no component was built for .* under 'orders'"):
+            spec.reconstruct()
 
 
 class TestSpecDocuments:
