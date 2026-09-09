@@ -2111,7 +2111,10 @@ the decorator, keyed by parameter name, or as a typed class attribute:</p>
 </span></code></pre></div>
 <p><code>il.Relation(ReportingConfig)</code> is shorthand for <code>il.Relation(kind="config", key="reporting_config")</code>
 with the class kept as the relation's <code>target</code>, which is what makes a fallback possible.
-<code>optional=True</code> allows the relation to stay unbound; <code>default=</code> is a zero-argument factory.</p>
+<code>optional=True</code> allows the relation to stay unbound; <code>default=</code> is a zero-argument factory.
+Neither says anything about deletion: <code>on_delete</code> alone decides that, and a resource relation
+keeps its <code>block</code> default whether it is optional or not, so a bound connection, config or
+destination cannot be deleted while a component consumes it.</p>
 <h2 id="fallbacks">Fallbacks<a class="headerlink" href="#fallbacks" title="Permanent link">&para;</a></h2>
 <p>Nothing is resolved at construction. When <code>data()</code> (or any reader) asks for a single-valued
 relation that holds no binding, <code>resolve(name)</code> falls back, in order:</p>

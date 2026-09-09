@@ -2163,7 +2163,7 @@ destinations a source writes to, a job's targets, an upstream asset.</p>
 </tr>
 <tr>
 <td><code>optional</code></td>
-<td>Whether it may stay unbound. Says nothing about data.</td>
+<td>Whether it may stay unbound, or be emptied once bound. Says nothing about data, and nothing about deletion.</td>
 </tr>
 <tr>
 <td><code>default</code></td>
@@ -2171,7 +2171,7 @@ destinations a source writes to, a job's targets, an upstream asset.</p>
 </tr>
 <tr>
 <td><code>on_delete</code></td>
-<td>What deleting the target does to the referrer: <code>block</code> (default, for consumption relations) or <code>detach</code> (for orchestration pointers such as a job's targets or a hook's watches).</td>
+<td>What deleting a bound target does, and the only field that decides it: <code>block</code> (the default) refuses the deletion while this relation holds the target, <code>detach</code> lets it through and drops the binding. Orchestration pointers (a job's <code>targets</code>, a hook's <code>watches</code>) and inferred optional upstreams declare <code>detach</code>; consumption relations keep <code>block</code>, an optional one included.</td>
 </tr>
 </tbody>
 </table>

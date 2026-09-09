@@ -2074,7 +2074,10 @@ it builds its assets:</p>
 </span></code></pre></div>
 <p>The parameter name is the relation name and the bare asset key it expects, so
 <code>orders: il.Upstream</code> declares <code>il.Relation("asset", "orders")</code>, a sibling of the same source
-instance. A <code>None</code> default makes the relation <strong>optional</strong>, meaning its wiring may be absent:</p>
+instance. A <code>None</code> default makes the relation <strong>optional</strong>, meaning its wiring may be absent, and
+declares <code>on_delete="detach"</code> with it: a parameter that tolerates a missing leg has no claim on
+the upstream, so deleting that upstream is allowed and simply drops the wiring, where a required
+upstream refuses the deletion while it is bound.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">))</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="bp">self</span><span class="p">,</span>
