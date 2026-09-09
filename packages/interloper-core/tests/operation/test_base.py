@@ -62,7 +62,7 @@ class TestUpstreamRelations:
         relations = revenue().upstream_relations()
 
         assert set(relations) == {"orders"}
-        assert relations["orders"].keys() == ["shop.orders"]
+        assert relations["orders"].keys == ["shop.orders"]
 
     def test_a_many_valued_relation_is_reported_as_declared(self):
         @il.asset(relations={"campaigns": il.Relation("asset", "*.campaigns", many=True, optional=True)})

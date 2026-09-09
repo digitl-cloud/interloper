@@ -625,7 +625,7 @@ class Asset(Component, Operation):
                 kwargs["source"] = self._parent
             elif name not in relations:
                 continue
-            elif "asset" in relations[name].kinds():
+            elif "asset" in relations[name].kinds:
                 # Bind-time validation is what makes this cast sound: only an asset is accepted here.
                 targets = cast("list[Asset]", self._bound.get(name, []))
                 if targets and dag is None:
@@ -1044,7 +1044,7 @@ class Asset(Component, Operation):
             return
         raise DestinationError(
             f"Destination '{type(destination).__name__}' is not compatible with "
-            f"asset '{self.key}'. Allowed keys: [{', '.join(relation.keys())}]"
+            f"asset '{self.key}'. Allowed keys: [{', '.join(relation.keys)}]"
         )
 
     def _destinations(self) -> list[Destination]:

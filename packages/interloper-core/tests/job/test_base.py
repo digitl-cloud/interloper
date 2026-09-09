@@ -53,7 +53,7 @@ class TestDefinition:
         defn = il.CronJob.definition()
         assert set(defn.config_schema["properties"]) == {"cron", "timezone", "enabled", "tags", "lookback", "offset"}
         assert "cron" in defn.config_schema.get("required", [])
-        assert defn.relations["targets"].kinds() == ["source", "asset"]
+        assert defn.relations["targets"].kinds == ["source", "asset"]
         assert defn.relations["targets"].many is True
 
     def test_anchor_carries_the_workload_only(self):
@@ -76,7 +76,7 @@ class TestRelations:
 
     def test_anchor_declares_targets(self):
         relation = il.Job.relations["targets"]
-        assert (relation.kinds(), relation.many, relation.optional, relation.on_delete) == (
+        assert (relation.kinds, relation.many, relation.optional, relation.on_delete) == (
             ["source", "asset"],
             True,
             True,

@@ -234,9 +234,9 @@ def _relations(anchor: type[Component], relations: dict[str, Any]) -> dict[str, 
                 f"declared: {sorted(anchor.relations)}"
             )
         for cls in classes:
-            if cls.kind not in relation.kinds():
+            if cls.kind not in relation.kinds:
                 raise TypeError(
-                    f"Relation '{name}' accepts kinds {relation.kinds()}, not '{cls.kind}' ({cls.__name__})"
+                    f"Relation '{name}' accepts kinds {relation.kinds}, not '{cls.kind}' ({cls.__name__})"
                 )
         declared[name] = relation.model_copy(update={"key": [cls.key for cls in classes]})
     return declared

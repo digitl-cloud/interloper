@@ -181,7 +181,7 @@ class Operation(Workload):
         Returns:
             Relation name to declaration, for the relations accepting assets.
         """
-        return {name: relation for name, relation in type(self).relations.items() if "asset" in relation.kinds()}
+        return {name: relation for name, relation in type(self).relations.items() if "asset" in relation.kinds}
 
     def _validate_time_partitioning(self, partitioning: Any, partition_or_window: Any) -> None:
         """Validate a time-partitioned run scope against this node.

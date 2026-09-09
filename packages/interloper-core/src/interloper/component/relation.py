@@ -138,7 +138,7 @@ class Relation(BaseModel):
     keys within those kinds, matched through :meth:`ComponentIdentity.satisfies`.
     ``many`` marks a relation that binds several components at once;
     ``optional`` marks one that may stay unbound. ``default`` and
-    ``self_filling`` together describe a relation that can be resolved
+    ``has_fallback`` together describe a relation that can be resolved
     without an explicit binding.
 
     A relation is also its own descriptor: :meth:`Component._collect` installs
@@ -264,6 +264,7 @@ class Relation(BaseModel):
             return cls(target, optional=optional)
         return None
 
+    @property
     def kinds(self) -> list[str]:
         """Normalise ``kind`` to a list.
 
@@ -272,6 +273,7 @@ class Relation(BaseModel):
         """
         return [self.kind] if isinstance(self.kind, str) else list(self.kind)
 
+    @property
     def keys(self) -> list[str]:
         """Normalise ``key`` to a list.
 
@@ -305,16 +307,16 @@ class Relation(BaseModel):
             True when ``kind`` is one of ``kinds()`` and, when ``keys()`` is
             non-empty, ``identity`` satisfies at least one of them.
         """
-        if kind not in self.kinds():
+        if kind not in self.kinds:
             return False
-        keys = self.keys()
+        keys = self.keys
         if not keys:
             return True
         own_source_key = owner.source_key if kind == "asset" else None
         return any(identity.satisfies(declared, own_source_key=own_source_key) for declared in keys)
 
     @property
-    def source_local(self) -> bool:
+    def local(self) -> bool:
         """Whether every key this relation declares names a component of the owner's own source.
 
         A bare key (``"orders"``) is scoped to the declaring component's own
@@ -327,11 +329,11 @@ class Relation(BaseModel):
             is qualified; False for a relation declaring no key at all, which
             accepts any key of its kinds wherever it comes from.
         """
-        keys = self.keys()
+        keys = self.keys
         return bool(keys) and all("." not in key for key in keys)
 
     @property
-    def self_filling(self) -> bool:
+    def has_fallback(self) -> bool:
         """Whether this relation can be resolved without an explicit binding.
 
         Three cases, all of them single-valued but for the first: a ``default``
@@ -341,7 +343,7 @@ class Relation(BaseModel):
         ``target`` (besides ``id``) is optional, so the class constructs bare.
 
         Returns:
-            True when the relation can fill itself.
+            True when :meth:`fallback` would produce a value.
         """
         if self.default is not None:
             return True
@@ -361,12 +363,12 @@ class Relation(BaseModel):
 
         Returns:
             A fresh ``default()`` when set, a fresh ``target()`` when the
-            relation is self-filling, or ``None`` when the relation cannot
-            fill itself.
+            target constructs on its own, or ``None`` when the relation has
+            no fallback.
         """
         if self.default is not None:
             return self.default()
-        if self.self_filling and self.target is not None:
+        if self.has_fallback and self.target is not None:
             return self.target()
         return None
 

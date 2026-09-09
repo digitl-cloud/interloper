@@ -123,13 +123,13 @@ class TestRelationChannel:
     def test_a_list_of_classes_narrows_the_anchors_relation(self):
         relation = _relations(il.Asset, {"destinations": [il.MemoryDestination]})["destinations"]
 
-        assert relation.keys() == [il.MemoryDestination.key]
+        assert relation.keys == [il.MemoryDestination.key]
         assert (relation.kind, relation.many, relation.optional) == ("destination", True, True)
 
     def test_a_tuple_of_classes_narrows_the_same_way(self):
         relation = _relations(il.Source, {"destinations": (il.MemoryDestination, il.CSVDestination)})["destinations"]
 
-        assert relation.keys() == [il.MemoryDestination.key, il.CSVDestination.key]
+        assert relation.keys == [il.MemoryDestination.key, il.CSVDestination.key]
 
     def test_a_narrowing_list_needs_a_relation_of_that_name(self):
         with pytest.raises(TypeError, match=r"Asset declares no relation named 'upstream'"):
@@ -165,4 +165,4 @@ class TestRelationChannel:
         def rows() -> list[dict[str, Any]]:
             return []
 
-        assert rows.relations["destinations"].keys() == [il.MemoryDestination.key]
+        assert rows.relations["destinations"].keys == [il.MemoryDestination.key]

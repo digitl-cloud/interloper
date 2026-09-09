@@ -124,7 +124,7 @@ class TestVocabulary:
         catalog = Catalog.discover()
         relation = catalog.vocabulary("job", "cron_job")["targets"]
         assert isinstance(relation, Relation)
-        assert relation.kinds() == ["source", "asset"]
+        assert relation.kinds == ["source", "asset"]
 
     def test_class_definition_is_authoritative(self):
         catalog = Catalog.discover()
@@ -147,8 +147,8 @@ class TestVocabulary:
         # bare, which is what scopes them to the parent source.
         assert set(catalog.vocabulary("asset", "e")) == {"destinations"}
         relations = catalog.vocabulary("asset", "e", parent_key="demo_source")
-        upstreams = {name: relation for name, relation in relations.items() if "asset" in relation.kinds()}
-        assert {name: relation.keys() for name, relation in upstreams.items()} == {
+        upstreams = {name: relation for name, relation in relations.items() if "asset" in relation.kinds}
+        assert {name: relation.keys for name, relation in upstreams.items()} == {
             "b": ["b"],
             "c": ["c"],
             "d": ["d"],
