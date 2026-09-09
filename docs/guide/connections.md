@@ -37,13 +37,14 @@ class Shop(il.Source):
     connection: ShopConnection
 
     @il.asset
-    def orders(self, connection: ShopConnection) -> list[dict]:
-        return connection.client.get("/orders").json()
+    def orders(self) -> list[dict]:
+        return self.connection.client.get("/orders").json()
 ```
 
-The annotation on the source is optional: the asset's own parameter annotation already declares
-the relation. Declaring it on the source too documents it in the source's definition and lets
-one source-level instance trickle into every asset.
+The annotation on the source declares the relation once, for the source and every asset it
+holds: a method asset receives the source as `self` and reads `self.connection`. A standalone
+asset, one with no source to read from, declares the connection as a `data()` parameter
+instead (`def orders(self, connection: ShopConnection)`).
 
 ### REST clients and pagination
 
@@ -51,10 +52,10 @@ one source-level instance trickle into every asset.
 
 ```py
 @il.asset
-async def orders(self, connection: ShopConnection) -> list[dict]:
+async def orders(self) -> list[dict]:
     rows: list[dict] = []
     paginator = il.PageNumberPaginator(total_path="meta.pages")
-    async for page in connection.client.paginate("/orders", paginator, data_selector="data"):
+    async for page in self.connection.client.paginate("/orders", paginator, data_selector="data"):
         rows.extend(page)
     return rows
 ```

@@ -120,24 +120,28 @@ class WeatherConnection(il.Connection):
         return il.RESTClient("https://api.example.com", auth=il.HTTPBearerAuth(self.api_key))
 ```
 
-Inject it into an asset by annotating a parameter with the connection type:
+Declare it on the source by annotating a class attribute with the connection type; every asset
+reads it as `self.connection`:
 
 ```py
 @il.source
 class Weather(il.Source):
+    connection: WeatherConnection
+
     @il.asset
-    def stations(self, connection: WeatherConnection) -> list[dict]:
-        return connection.client.get("/stations").json()
+    def stations(self) -> list[dict]:
+        return self.connection.client.get("/stations").json()
 ```
 
-Resolution is a cascade: an instance passed on the asset, then one passed on the source, then
-one built from the environment (`API_KEY=...`). For paginated endpoints the client has a
-`paginate()` method with pluggable paginators; see [Connections](guide/connections.md).
+The instance is the one passed to the source (`Weather(connection=WeatherConnection(api_key=...))`),
+or, when none is passed, one built from the environment (`API_KEY=...`) the moment an asset first
+reads it. For paginated endpoints the client has a `paginate()` method with pluggable paginators;
+see [Connections](guide/connections.md).
 
 ## 5. A dependency
 
-Add an asset that consumes another. Naming a parameter after a sibling asset declares the
-dependency:
+Add an asset that consumes another. A parameter annotated `il.Upstream` and named after a sibling
+asset declares the dependency:
 
 ```py
 @il.source
@@ -149,13 +153,13 @@ class OpenMeteo(il.Source):
         ...
 
     @il.asset
-    def daily_summary(self, forecast: list[dict]) -> list[dict]:
-        temperatures = [row["temperature_2m"] for row in forecast]
+    def daily_summary(self, forecast: il.Upstream) -> list[dict]:
+        temperatures = [row["temperature_2m"] for row in forecast.data or []]
         return [{"min": min(temperatures), "max": max(temperatures)}]
 ```
 
 When the DAG runs, `forecast` is materialized first, then read back from its destination and
-passed to `daily_summary`. Run the whole source:
+handed to `daily_summary` as `forecast.data`. Run the whole source:
 
 ```py
 dag = il.DAG(source)
@@ -326,8 +330,8 @@ class OpenMeteo(il.Source):
         return rows
 
     @il.asset(schema=DailySummary, partitioning=PARTITIONING, tags=["Report"])
-    def daily_summary(self, context: il.ExecutionContext, forecast: list[dict]) -> list[dict]:
-        temperatures = [row["temperature_2m"] for row in forecast if row["temperature_2m"] is not None]
+    def daily_summary(self, context: il.ExecutionContext, forecast: il.Upstream) -> list[dict]:
+        temperatures = [row["temperature_2m"] for row in forecast.data or [] if row["temperature_2m"] is not None]
         return [{"date": context.partition_date, "min": min(temperatures), "max": max(temperatures)}]
 
 

@@ -17,19 +17,21 @@ class FacebookAds(il.Source):
     account_id: str = il.InputField(description="Ad account id", discriminator=True)
 
     @il.asset(schema=Campaigns, tags=["Entity"])
-    def campaigns(self, connection: FacebookAdsConnection) -> list[dict]:
-        return connection.api.campaigns(self.account_id)
+    def campaigns(self) -> list[dict]:
+        return self.connection.api.campaigns(self.account_id)
 
     @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def ads_stats(self, context: il.ExecutionContext, connection: FacebookAdsConnection) -> list[dict]:
-        return connection.api.insights(self.account_id, context.partition_date)
+    def ads_stats(self, context: il.ExecutionContext) -> list[dict]:
+        return self.connection.api.insights(self.account_id, context.partition_date)
 ```
 
 Four kinds of things live in the class body:
 
 - **Relations**: an annotation naming a component class (`connection: FacebookAdsConnection`)
   declares a link to the component that fills it, not a pydantic field. The source holds one
-  instance and trickles it into every asset declaring the same name.
+  instance, and its assets read it as `self.connection`, since a method asset receives the
+  source as `self`. An asset declares a relation of its own only for what its source does not
+  hold (an upstream, a config of its own).
 - **Configuration fields**: pydantic fields, optionally declared with the
   [field helpers](fields.md) so a UI knows how to render them. They load from the environment
   like any pydantic-settings model and can be set at construction.
