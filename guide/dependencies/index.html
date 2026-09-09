@@ -761,6 +761,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Many upstreams">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fan-in-across-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Fan-in across sources
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2164,7 +2181,7 @@ four forms:</p>
 </span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>        <span class="n">campaigns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">],</span>
 </span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
 </span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>        <span class="k">return</span> <span class="p">[</span>
-</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>            <span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">,</span> <span class="s2">"source_key"</span><span class="p">:</span> <span class="n">leg</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="o">**</span><span class="n">row</span><span class="p">}</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>            <span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">,</span> <span class="o">**</span><span class="n">row</span><span class="p">}</span>
 </span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>            <span class="k">for</span> <span class="n">leg</span> <span class="ow">in</span> <span class="n">campaigns</span>
 </span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>            <span class="k">if</span> <span class="n">leg</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 </span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">leg</span><span class="o">.</span><span class="n">data</span>
@@ -2173,6 +2190,31 @@ four forms:</p>
 <p>The DAG binds every <code>campaigns</code> asset it holds, so the set of legs is decided by wiring, not by
 the class. <code>list[il.Upstream]</code> on its own infers the same relation on the parameter's bare key,
 which is a many-valued sibling; <code>relations=</code> is what reaches outside the source.</p>
+<h3 id="fan-in-across-sources">Fan-in across sources<a class="headerlink" href="#fan-in-across-sources" title="Permanent link">&para;</a></h3>
+<p>The relation above is not hypothetical: <code>interloper_assets.CampaignMatcher</code> declares exactly this
+wildcard (same <code>campaign_matches</code> decorator shown above, plus <code>schema=schemas.CampaignMatches</code>),
+matching campaigns across every advertising connector into one lookup table: each row names the
+campaign's <code>platform</code> and <code>account</code>, the normalised <code>canonical_name</code> it is matched on and the
+<code>match_id</code> shared by every campaign matched to it. A <code>key_pattern</code> on the source selects the part
+of a name that identifies the campaign under a naming convention, and a <code>similarity_threshold</code>
+below <code>1.0</code> also merges names that merely resemble each other.</p>
+<p>Building a DAG over both connectors and the matcher wires every <code>campaigns</code> asset held into the
+<code>campaigns</code> relation, one leg per connector:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">fb</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>   <span class="c1"># declares a campaigns asset</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">tt</span> <span class="o">=</span> <span class="n">TiktokAds</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>     <span class="c1"># declares a campaigns asset</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">matcher</span> <span class="o">=</span> <span class="n">CampaignMatcher</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">fb</span><span class="p">,</span> <span class="n">tt</span><span class="p">,</span> <span class="n">matcher</span><span class="p">)</span>   <span class="c1"># binds matcher.campaign_matches.campaigns to [fb.campaigns, tt.campaigns]</span>
+</span></code></pre></div>
+<p>A matcher built against upstreams already materialized elsewhere reads them read-only instead of
+running them, the same explicit-bind pattern as any other relation:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">matcher</span><span class="o">.</span><span class="n">campaign_matches</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"campaigns"</span><span class="p">,</span> <span class="n">fb</span><span class="o">.</span><span class="n">campaigns</span><span class="p">)</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">matcher</span><span class="p">)</span>   <span class="c1"># fb.campaigns joins the DAG as materializable=False</span>
+</span></code></pre></div>
+<p><code>examples/campaign_matcher.yaml</code> is the same wiring written as a manifest: two connectors each
+override their <code>campaigns</code> asset to <code>materializable: false</code>, and <code>campaign_matches</code> names both by
+<code>{ref: ...}</code> since an asset always travels under its own source. See <a href="../specs/">Specs</a> for the
+manifest format.</p>
 <h2 id="how-wiring-works">How wiring works<a class="headerlink" href="#how-wiring-works" title="Permanent link">&para;</a></h2>
 <p>Wiring is always an instance bound to a relation, never an id. It happens in three places:</p>
 <ul>
@@ -2185,16 +2227,16 @@ which is a many-valued sibling; <code>relations=</code> is what reaches outside 
   and ask to be bound by hand.</li>
 <li><strong>By hand</strong>, at any point:</li>
 </ul>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">dest</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">MemoryDestination</span><span class="p">()</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">shop</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">fin</span> <span class="o">=</span> <span class="n">Finance</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">shop</span><span class="p">,</span> <span class="n">fin</span><span class="p">)</span>          <span class="c1"># binds fin.revenue.orders to shop.orders</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bound</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">)</span>      <span class="c1"># the shop.orders instance</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">,</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span><span class="p">)</span>     <span class="c1"># explicit; accumulates for a many relation</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">orders</span> <span class="o">=</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span>            <span class="c1"># assignment replaces atomically</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">,</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span><span class="p">)</span>   <span class="c1"># refused if it would empty a non-optional relation</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">dest</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">MemoryDestination</span><span class="p">()</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">shop</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">fin</span> <span class="o">=</span> <span class="n">Finance</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">shop</span><span class="p">,</span> <span class="n">fin</span><span class="p">)</span>          <span class="c1"># binds fin.revenue.orders to shop.orders</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bound</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">)</span>      <span class="c1"># the shop.orders instance</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">,</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span><span class="p">)</span>     <span class="c1"># explicit; accumulates for a many relation</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">orders</span> <span class="o">=</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span>            <span class="c1"># assignment replaces atomically</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">,</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span><span class="p">)</span>   <span class="c1"># refused if it would empty a non-optional relation</span>
 </span></code></pre></div>
 <p>Binding goes through <code>bind()</code> everywhere, so an explicit binding is never overwritten by the
 DAG, and a hydrated one is never overwritten by construction.</p>
@@ -2292,9 +2334,9 @@ included.</p>
 <p>A bound upstream the run does not materialize joins the DAG anyway, as a non-materializable copy
 under the same id: it is a live instance with its own destinations, so it can be read without
 being run. That is the whole mechanism behind running one asset with its parents:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">mini</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">mini_dag</span><span class="p">(</span><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="p">[(</span><span class="n">op</span><span class="o">.</span><span class="n">qualified_key</span><span class="p">,</span> <span class="n">op</span><span class="o">.</span><span class="n">materializable</span><span class="p">)</span> <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">mini</span><span class="o">.</span><span class="n">operations</span><span class="p">]</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># [("finance.revenue", True), ("shop.orders", False)]</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">mini</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">mini_dag</span><span class="p">(</span><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">[(</span><span class="n">op</span><span class="o">.</span><span class="n">qualified_key</span><span class="p">,</span> <span class="n">op</span><span class="o">.</span><span class="n">materializable</span><span class="p">)</span> <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">mini</span><span class="o">.</span><span class="n">operations</span><span class="p">]</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># [("finance.revenue", True), ("shop.orders", False)]</span>
 </span></code></pre></div>
 <p>Only the target executes; the parents are read, not rewritten. Partition checks still apply
 along those edges. A source offers the same idea over its own assets through <code>select</code>.</p>
