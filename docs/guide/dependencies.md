@@ -116,7 +116,7 @@ class CampaignMatcher(il.Source):
         campaigns: list[il.Upstream],
     ) -> list[dict]:
         return [
-            {"date": context.partition_date, "source_key": leg.asset.source.key, **row}
+            {"date": context.partition_date, **row}
             for leg in campaigns
             if leg.data is not None
             for row in leg.data

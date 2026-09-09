@@ -89,7 +89,7 @@ def test_dag_binds_every_campaigns_asset_and_matches_each_leg() -> None:
     dag.materialize(partition)
     rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
     assert sorted(r["canonical_name"] for r in rows) == ["brand", "summer sale", "summer sale"]
-    assert {r["source_key"] for r in rows} == {"fb_like", "tt_like"}
+    assert {r["campaign_id"].split("-")[0] for r in rows} == {"fb_like", "tt_like"}
 
 
 def test_leg_without_data_is_skipped_not_fatal() -> None:
@@ -101,7 +101,7 @@ def test_leg_without_data_is_skipped_not_fatal() -> None:
     partition = il.TimePartition(dt.date(2026, 9, 1))
     il.DAG(fb, tt, matcher).materialize(partition)
     rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
-    assert [r["source_key"] for r in rows] == ["fb_like"]
+    assert [r["campaign_id"] for r in rows] == ["fb_like-0"]
 
 
 def test_matcher_alone_reads_bound_upstreams_read_only() -> None:
@@ -130,11 +130,9 @@ def test_matches_across_connector_schemas_with_different_field_names() -> None:
     partition = il.TimePartition(dt.date(2026, 9, 1))
     il.DAG(fb, tt, matcher).materialize(partition)
     rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
-    by_source = {r["source_key"]: r for r in rows}
-    assert by_source["fb_like"]["campaign_id"] == "fb_like-0"
-    assert by_source["fb_like"]["canonical_name"] == "summer sale"
-    assert by_source["tt_like"]["campaign_id"] == "tt_like-0"
-    assert by_source["tt_like"]["canonical_name"] == "brand awareness"
+    by_id = {r["campaign_id"]: r for r in rows}
+    assert by_id["fb_like-0"]["canonical_name"] == "summer sale"
+    assert by_id["tt_like-0"]["canonical_name"] == "brand awareness"
 
 
 def test_a_row_with_neither_spelling_is_still_emitted_with_empty_placeholders() -> None:
