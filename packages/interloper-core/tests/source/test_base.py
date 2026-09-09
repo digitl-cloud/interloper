@@ -189,7 +189,7 @@ class TestSourceRelations:
         class Narrow(il.Source):
             pass
 
-        assert Narrow.relations["destinations"].keys() == [il.MemoryDestination.key]
+        assert Narrow.relations["destinations"].keys == [il.MemoryDestination.key]
 
     def test_narrowed_destinations_reject_another_key(self):
         @il.source(relations={"destinations": [il.MemoryDestination]})
@@ -338,7 +338,7 @@ class TestDefinition:
         assert defn.name
         assert defn.assets == []
         assert defn.relations["destinations"].kind == "destination"
-        assert defn.relations["destinations"].keys() == []
+        assert defn.relations["destinations"].keys == []
 
     def test_definition_includes_nested_assets(self):
         defn = FakeSourceWithAssets.definition()

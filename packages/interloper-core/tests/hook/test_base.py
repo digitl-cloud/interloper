@@ -41,7 +41,7 @@ class TestDefinition:
         relations = il.KINDS["hook"].relations
         assert set(relations) == {"watches"}
         watches = relations["watches"]
-        assert (watches.kinds(), watches.many, watches.optional, watches.on_delete) == (
+        assert (watches.kinds, watches.many, watches.optional, watches.on_delete) == (
             ["source", "asset", "job"],
             True,
             True,
@@ -51,13 +51,13 @@ class TestDefinition:
     def test_trigger_hook_extends_the_relations(self):
         relations = il.TriggerHook.relations
         targets = relations["targets"]
-        assert (targets.kinds(), targets.many, targets.optional, targets.on_delete) == (
+        assert (targets.kinds, targets.many, targets.optional, targets.on_delete) == (
             ["source", "asset", "job"],
             True,
             True,
             "block",
         )
-        assert relations["watches"].kinds() == ["source", "asset", "job"]  # inherited, not replaced
+        assert relations["watches"].kinds == ["source", "asset", "job"]  # inherited, not replaced
 
     def test_webhook_hook_has_no_targets(self):
         assert "targets" not in il.WebhookHook.relations

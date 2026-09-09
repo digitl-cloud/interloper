@@ -116,7 +116,7 @@ class TestParameterizedForm:
         def declared(context: il.ExecutionContext, config: DecoratorConfig) -> list[dict[str, Any]]:
             return []
 
-        assert declared.relations["destinations"].keys() == [DecoratorDestination.key]
+        assert declared.relations["destinations"].keys == [DecoratorDestination.key]
         assert declared.schema is DecoratorSchema
         assert declared.partitioning is not None
         assert declared.partitioning.column == "date"
@@ -184,7 +184,7 @@ class TestRelationInference:
             return []
 
         relation = narrowed.relations["destinations"]
-        assert relation.keys() == [DecoratorDestination.key]
+        assert relation.keys == [DecoratorDestination.key]
         assert (relation.many, relation.optional) == (True, True)
 
 

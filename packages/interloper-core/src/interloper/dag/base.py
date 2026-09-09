@@ -172,7 +172,7 @@ class DAG:
         For every materializing asset and every unbound upstream relation that
         declares keys, the candidates are the DAG's other assets the relation
         :meth:`~interloper.component.relation.Relation.accepts`; a
-        :attr:`~interloper.component.relation.Relation.source_local` key is
+        :attr:`~interloper.component.relation.Relation.local` key is
         further restricted to the asset's own source instance, since it names
         a sibling. A ``many`` relation binds every candidate and a
         single-valued one the only candidate there is; no candidate leaves the
@@ -192,14 +192,14 @@ class DAG:
             if not asset.materializable:
                 continue
             for name, relation in asset.upstream_relations().items():
-                if asset.bound(name) or not relation.keys():
+                if asset.bound(name) or not relation.keys:
                     continue
                 candidates = [
                     candidate
                     for candidate in assets
                     if candidate is not asset
                     and relation.accepts("asset", candidate.identity, owner=asset.identity)
-                    and (not relation.source_local or candidate.parent is asset.parent)
+                    and (not relation.local or candidate.parent is asset.parent)
                 ]
                 if not candidates:
                     continue
@@ -207,7 +207,7 @@ class DAG:
                     listed = ", ".join(f"{candidate.qualified_key}#{candidate.id[:8]}" for candidate in candidates)
                     raise DAGError(
                         f"'{asset.qualified_key}' relation '{name}' depends on "
-                        f"'{', '.join(relation.keys())}' and the DAG holds {len(candidates)} matching assets "
+                        f"'{', '.join(relation.keys)}' and the DAG holds {len(candidates)} matching assets "
                         f"({listed}); bind '{name}' explicitly."
                     )
                 asset.bind(name, *candidates)

@@ -80,7 +80,7 @@ class FakeOtherAsset(il.Asset):
 
 
 class FakeAssetWithConfig(il.Asset):
-    """Asset whose ``data()`` signature declares a self-filling config."""
+    """Asset whose ``data()`` signature declares a config that fills itself."""
 
     def data(self, config: Cfg) -> Any:  # pragma: no cover
         return None
@@ -256,7 +256,7 @@ class TestDefinition:
         assert defn.path == FakeAsset.classpath()
         assert defn.name
         assert defn.relations["destinations"].many is True
-        assert defn.relations["destinations"].keys() == []
+        assert defn.relations["destinations"].keys == []
         assert defn.asset_schema is None
         assert defn.partitioning is None
 
@@ -524,7 +524,7 @@ class TestInjection:
         assert seen["leg"].data is None
         assert any("found no data in upstream" in e.metadata.get("message", "") for e in warnings_seen)
 
-    def test_a_self_filling_relation_is_instantiated_at_read_time(self):
+    def test_a_fallback_is_instantiated_at_read_time(self):
         seen: dict[str, Any] = {}
 
         @il.asset
@@ -532,7 +532,7 @@ class TestInjection:
             """No rows; the injected config is what the test reads.
 
             Args:
-                config: The self-filling config.
+                config: The config that fills itself.
 
             Returns:
                 No rows.

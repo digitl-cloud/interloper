@@ -74,7 +74,7 @@ class TestRelations:
             pass
 
         relation = Probe.relations["destinations"]
-        assert relation.keys() == [il.MemoryDestination.key]
+        assert relation.keys == [il.MemoryDestination.key]
         assert (relation.kind, relation.many, relation.optional) == ("destination", True, True)
 
     def test_a_component_class_is_the_shorthand_for_a_relation_on_it(self):

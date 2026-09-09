@@ -261,7 +261,7 @@ class NeedyDest(il.Destination):
 
 
 class Widget(il.Source):
-    """Source with an annotated connection, an explicit optional config, and a self-filling config."""
+    """Source with an annotated connection, an explicit optional config, and a config that fills itself."""
 
     connection: Conn
     config: Cfg | None = il.Relation(Cfg, optional=True)
@@ -328,7 +328,7 @@ class TestBind:
         assert widget.config is None
         assert widget.destinations == []
 
-    def test_self_filling_relation_is_not_bound_but_resolves(self):
+    def test_a_fallback_is_not_bound_but_resolves(self):
         widget = Widget(connection=Conn(api_secret="s"))
         assert widget.fallback is None
         assert isinstance(widget.resolve("fallback"), Cfg)

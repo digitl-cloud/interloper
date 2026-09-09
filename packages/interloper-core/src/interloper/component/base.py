@@ -414,7 +414,7 @@ class Component(Serializable):
         """What one of this component's declared relations actually resolves to.
 
         Unlike :meth:`bound`, this falls back to what the relation can fill
-        itself with when nothing is bound, so a self-filling relation (a config
+        itself with when nothing is bound, so a relation with a fallback (a config
         whose every field is defaulted, say) works without a binding.
 
         Args:
@@ -454,7 +454,7 @@ class Component(Serializable):
         """Check that every relation this component holds is sound.
 
         Three checks per relation: it is bound, unless it is optional or
-        self-filling; a single-valued relation holds at most one target; every
+        has a fallback; a single-valued relation holds at most one target; every
         bound target is one the relation :meth:`~Relation.accepts`. When
         *nodes* is given, a bound non-optional ``asset``-kind target must also
         be one of *nodes*.
@@ -464,7 +464,7 @@ class Component(Serializable):
         without *nodes* on every root of a document once its references are
         bound. Without *nodes* an unbound ``asset``-kind relation only the
         graph can fill is left alone: one reaching outside the owner's own
-        source (:attr:`~Relation.source_local`), or any one on an owner that
+        source (:attr:`~Relation.local`), or any one on an owner that
         has no source to fill it from. Nothing before the graph can fill such
         a relation, so nothing before the graph can call it unfilled either.
 
@@ -485,10 +485,10 @@ class Component(Serializable):
             if not targets:
                 graph_filled = (
                     nodes is None
-                    and "asset" in relation.kinds()
-                    and (not relation.source_local or self.parent is None)
+                    and "asset" in relation.kinds
+                    and (not relation.local or self.parent is None)
                 )
-                if not relation.optional and not relation.self_filling and not graph_filled:
+                if not relation.optional and not relation.has_fallback and not graph_filled:
                     problems.append(f"'{name}' is unbound and non-optional")
                 continue
             if not relation.many and len(targets) > 1:
@@ -500,7 +500,7 @@ class Component(Serializable):
                     nodes is not None
                     and not relation.optional
                     and target.kind == "asset"
-                    and "asset" in relation.kinds()
+                    and "asset" in relation.kinds
                     and target.id not in nodes
                 ):
                     problems.append(f"'{name}' points at asset '{target.qualified_key}' which is not in the DAG")
@@ -703,7 +703,7 @@ class Component(Serializable):
             if not relation.accepts(target.kind, target.identity, owner=owner):
                 raise ConfigError(
                     f"{type(self).__name__}.{name} does not accept {target.kind} '{target.qualified_key}' "
-                    f"(declared: kind {relation.kinds()}, key {relation.keys() or 'any'})"
+                    f"(declared: kind {relation.kinds}, key {relation.keys or 'any'})"
                 )
         if not relation.many and len(targets) > 1:
             raise ConfigError(f"{type(self).__name__}.{name} is single-valued and takes one target at a time")

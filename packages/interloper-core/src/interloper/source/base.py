@@ -504,9 +504,9 @@ class Source(Component, Workload):
         bindings: dict[str, dict[str, str]] = {}
         for asset_cls in cls.asset_types:
             for name, relation in asset_cls.relations.items():
-                if "asset" not in relation.kinds():
+                if "asset" not in relation.kinds:
                     continue
-                declared_keys = relation.keys()
+                declared_keys = relation.keys
                 for declared in declared_keys:
                     expected = ComponentIdentity.resolve(declared, own_source_key=cls.key)
                     if expected.source_key == cls.key and expected.key in siblings and expected.key != asset_cls.key:

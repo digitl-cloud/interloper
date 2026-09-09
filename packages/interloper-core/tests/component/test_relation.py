@@ -53,8 +53,8 @@ class TestRelation:
 
     def test_string_form(self) -> None:
         relation = Relation("asset", "*.campaigns", many=True)
-        assert relation.kinds() == ["asset"]
-        assert relation.keys() == ["*.campaigns"]
+        assert relation.kinds == ["asset"]
+        assert relation.keys == ["*.campaigns"]
         assert relation.many is True
 
     def test_misspelled_keyword_is_refused(self) -> None:
@@ -63,8 +63,8 @@ class TestRelation:
 
     def test_list_kinds_and_keys(self) -> None:
         relation = Relation(["source", "asset"], ["a", "b"])
-        assert relation.kinds() == ["source", "asset"]
-        assert relation.keys() == ["a", "b"]
+        assert relation.kinds == ["source", "asset"]
+        assert relation.keys == ["a", "b"]
 
     def test_accepts_checks_kind(self) -> None:
         relation = Relation("destination")
@@ -88,13 +88,13 @@ class TestRelation:
         assert relation.accepts("asset", ComponentIdentity("fb", "campaigns"), owner=owner)
         assert not relation.accepts("asset", ComponentIdentity("tt", "campaigns"), owner=owner)
 
-    def test_self_filling_and_fallback(self) -> None:
+    def test_has_fallback_and_fallback(self) -> None:
         class Cfg(il.Config):
             threshold: int = il.InputField(default=1)
 
-        assert Relation(Cfg).self_filling is True
+        assert Relation(Cfg).has_fallback is True
         assert isinstance(Relation(Cfg).fallback(), Cfg)
-        assert Relation("destination", many=True).self_filling is False
+        assert Relation("destination", many=True).has_fallback is False
 
     def test_a_settings_target_always_fills_itself(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("token", raising=False)
@@ -105,7 +105,7 @@ class TestRelation:
 
         # A resource reads its required fields from the environment, so it is
         # the read that fails, not the build.
-        assert Relation(Needy).self_filling is True
+        assert Relation(Needy).has_fallback is True
         with pytest.raises(ValidationError):
             Relation(Needy).fallback()
 
@@ -119,9 +119,9 @@ class TestRelation:
             def write(self, context: il.IOContext, data: object) -> None:
                 return None
 
-        assert Relation(Needy).self_filling is False
+        assert Relation(Needy).has_fallback is False
         assert Relation(Needy).fallback() is None
-        assert Relation(Needy, default=lambda: Needy(bucket="b")).self_filling is True
+        assert Relation(Needy, default=lambda: Needy(bucket="b")).has_fallback is True
 
     def test_target_is_the_class_of_the_shorthand_and_nothing_else(self) -> None:
         assert Relation(Conn).target is Conn
