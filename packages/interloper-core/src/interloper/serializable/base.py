@@ -282,7 +282,7 @@ class Spec(BaseModel):
                 return [load(entry) for entry in value]
             return value
 
-        from interloper.component.base import Component, defer_relation_validation
+        from interloper.component.base import Component
 
         document: dict[str, Component] = {} if registry is None else registry
         cls = Component.resolve_key(self.key, catalog) if self.key else Serializable.resolve_path(self.path)
@@ -294,8 +294,7 @@ class Spec(BaseModel):
             return cls(**kwargs)
 
         kwargs, pending = cls._split_references(kwargs)
-        with defer_relation_validation():
-            instance = cls(**kwargs)
+        instance = cls(**kwargs)
         instance._pending_references = pending
         document[instance.id] = instance
         for child in instance._children():

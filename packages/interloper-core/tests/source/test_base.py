@@ -235,7 +235,7 @@ class TestSourceRelations:
         from interloper.errors import ConfigError
 
         with pytest.raises(ConfigError) as excinfo:
-            FakeUnfillableSource()
+            il.DAG(FakeUnfillableSource())
         assert "FakeOrphan" in str(excinfo.value)
         assert "orders" in str(excinfo.value)
 

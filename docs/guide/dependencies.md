@@ -194,9 +194,12 @@ Reads emit `dest_read_*` events and an `interloper.destination.read` span.
 | A non-partitioned asset never depends on a partitioned one | `DAGError` |
 | Time-partitioned ends of an edge share a granularity | `DAGError` |
 
-`validate_relations(nodes)` is the check behind the three `ConfigError` rows: the constructor
-runs it without `nodes`, which is what lets a relation reaching outside the source stay unbound
-until the graph exists, and the DAG runs it again with its own nodes.
+`validate_relations(nodes)` is the check behind the three `ConfigError` rows. Constructing a
+component binds what it is given and checks each binding, but not that every required relation is
+bound: components are wired piecewise (a source trickles into its assets, a manifest binds its
+references once every component exists), so the check runs where the graph is whole. The DAG runs
+it with its own nodes; loading a manifest runs it without `nodes` on each root, which is what lets
+a relation only the graph can fill stay unbound until then.
 
 A non-partitioned asset never depends on a partitioned one because a partitioned upstream is
 read one partition at a time, which an unpartitioned downstream cannot express. A run has one
