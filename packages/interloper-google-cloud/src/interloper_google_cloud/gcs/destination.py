@@ -11,7 +11,7 @@ from google.cloud import storage
 from google.cloud.exceptions import NotFound
 from google.oauth2 import service_account
 from interloper.destination import IOContext, destination
-from interloper.destination.partitioned import PartitionedDestination
+from interloper.destination.base import Destination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning import Partition
 from interloper.representation import Representation
@@ -21,7 +21,7 @@ from interloper.schema import FieldSpec
 from interloper_google_cloud.connection import GoogleCloudConnection
 from interloper_google_cloud.gcs.formats import FORMATS, FileFormat
 
-# Custom blob metadata key carrying the scope's row count, so
+# Custom blob metadata key carrying the partition's row count, so
 # partition_row_counts introspects from a single list call without downloads.
 _ROW_COUNT_METADATA_KEY = "row_count"
 
@@ -32,10 +32,10 @@ _ROW_COUNT_METADATA_KEY = "row_count"
     icon="icon:gcs",
     tags=["Cloud"],
 )
-class GCSDestination(PartitionedDestination):
+class GCSDestination(Destination):
     """Google Cloud Storage destination.
 
-    Writes one object per scope in a hive-partitioned layout::
+    Writes one object per partition in a hive-partitioned layout::
 
         gs://{bucket}/{prefix}/{dataset}/{table}/data.{ext}
         gs://{bucket}/{prefix}/{dataset}/{table}/{column}={partition}/data.{ext}
@@ -43,7 +43,7 @@ class GCSDestination(PartitionedDestination):
     Following the hive convention, the partition column lives in the *path
     only*: it is dropped from partitioned file contents on write (external
     readers like BigQuery external tables and DuckDB reject a duplicate
-    partition column) and re-injected from the partition scope on read, so
+    partition column) and re-injected from the partition on read, so
     interloper round-trips stay lossless.
     """
 
@@ -110,15 +110,15 @@ class GCSDestination(PartitionedDestination):
         return "/".join(part.strip("/") for part in parts if part and part.strip("/"))
 
     def _blob_name(self, context: IOContext, partition: Partition | None) -> str:
-        """Build the object name for a scope.
+        """Build the object name for a partition.
 
         Args:
             context: The IO context naming the asset.
-            partition: The partition being addressed, when scoped.
+            partition: The partition being addressed, or ``None`` for the whole.
 
         Returns:
             ``.../data.{ext}``, inside a ``{column}={id}`` segment for
-            partition scopes.
+            partitions.
         """
         parts = [self._asset_prefix(context)]
         if partition is not None:
@@ -128,14 +128,14 @@ class GCSDestination(PartitionedDestination):
         return "/".join(parts)
 
     def _effective_specs(self, context: IOContext, partition: Partition | None) -> list[FieldSpec] | None:
-        """Return the field specs for a scope's file contents.
+        """Return the field specs for a partition's file contents.
 
-        Partition scopes exclude the partition column (its value lives in the
+        Partitions exclude the partition column (its value lives in the
         object path).
 
         Args:
             context: The IO context carrying the schema.
-            partition: The partition being addressed, when scoped.
+            partition: The partition being addressed, or ``None`` for the whole.
 
         Returns:
             The specs, or ``None`` when the context carries no schema.
@@ -148,17 +148,17 @@ class GCSDestination(PartitionedDestination):
             specs = [spec for spec in specs if spec.name != context.asset.partitioning.column]
         return specs
 
-    # -- PartitionedDestination hooks --------------------------------------------
+    # -- Partition hooks -------------------------------------------------------
 
-    def _write_scope(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Serialize one scope's data and upload it, overwriting the scope's object.
+    def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+        """Serialize one partition's data and upload it, overwriting its object.
 
         The row count is stamped as blob metadata so introspection never has
         to download data.
 
         Args:
             context: The IO context naming the asset.
-            partition: The partition being written, when scoped.
+            partition: The partition being written, or ``None`` for the whole.
             data: The rows to write.
 
         """
@@ -173,22 +173,22 @@ class GCSDestination(PartitionedDestination):
         blob.metadata = {_ROW_COUNT_METADATA_KEY: str(len(rows))}
         blob.upload_from_string(payload, content_type=self._format.content_type)
 
-    def _read_scope(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:
-        """Download and parse one scope's object.
+    def read_partition(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:
+        """Download and parse one partition's object.
 
-        The partition column is re-injected from the scope, and rows are
+        The partition column is re-injected from the partition, and rows are
         reconciled against the context schema when one is set (restoring the
         declared types — text formats read everything back as strings).
 
         Args:
             context: The IO context carrying the schema.
-            partition: The partition being read, when scoped.
+            partition: The partition being read, or ``None`` for the whole.
 
         Returns:
             Rows as a list of dicts.
 
         Raises:
-            DataNotFoundError: If the scope's object does not exist.
+            DataNotFoundError: If the partition's object does not exist.
         """
         name = self._blob_name(context, partition)
         try:
@@ -228,10 +228,10 @@ class GCSDestination(PartitionedDestination):
 
         counts: dict[str, int] = {}
         for blob in self.client.list_blobs(self.bucket, prefix=prefix):
-            scope = blob.name[len(prefix) :].split("/", 1)[0]
-            if not scope.startswith(f"{column}="):
+            segment = blob.name[len(prefix) :].split("/", 1)[0]
+            if not segment.startswith(f"{column}="):
                 continue
-            value = scope.split("=", 1)[1]
+            value = segment.split("=", 1)[1]
             row_count = (blob.metadata or {}).get(_ROW_COUNT_METADATA_KEY)
             if row_count is None:
                 row_count = len(self._format.deserialize(blob.download_as_bytes()))

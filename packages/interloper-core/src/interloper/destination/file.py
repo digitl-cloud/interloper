@@ -6,22 +6,21 @@ import pickle
 from pathlib import Path
 from typing import Any
 
+from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
-from interloper.destination.partitioned import PartitionedDestination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition
 
 
 @destination(name="File")
-class FileDestination(PartitionedDestination):
+class FileDestination(Destination):
     """Destination that reads and writes pickle files on the local filesystem.
 
     Data is stored under ``{base_path}/{dataset}/{table}/data.pkl``
     (or ``{base_path}/{table}/data.pkl`` when no dataset is set).
     Partitioned assets add a ``{column}={id}`` subdirectory; the partition
-    dispatch (including window splitting) comes from
-    :class:`PartitionedDestination`.
+    dispatch (including window splitting) is :class:`Destination`'s.
 
     Unlike :class:`~interloper.destination.csv.CSVDestination` this stores
     whatever the asset returned, tabular or not — so a window write of a
@@ -43,18 +42,18 @@ class FileDestination(PartitionedDestination):
         """
         return Path(self.base_path) / (context.asset.dataset or "") / context.asset.table
 
-    def _scope_path(self, context: IOContext, partition: Partition | None) -> Path:
-        """Return the data file path for a scope.
+    def _partition_path(self, context: IOContext, partition: Partition | None) -> Path:
+        """Return the data file path for a partition.
 
         Args:
             context: IO context whose asset supplies the dataset, table, and
                 partition column.
-            partition: The scope's partition, or ``None`` for the unpartitioned
+            partition: The partition, or ``None`` for the unpartitioned
                 whole.
 
         Returns:
             ``.../data.pkl``, inside a ``{column}={id}`` subdirectory for
-            partition scopes.
+            partitions.
         """
         base = self._asset_path(context)
         if partition is None:
@@ -62,23 +61,23 @@ class FileDestination(PartitionedDestination):
         assert context.asset.partitioning
         return base / f"{context.asset.partitioning.column}={partition.id}" / "data.pkl"
 
-    def _write_scope(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Pickle one scope's data to its file.
+    def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+        """Pickle one partition's data to its file.
 
         Args:
             context: IO context whose asset supplies the dataset, table, and
                 partition column.
             partition: The partition being written, or ``None`` for the
                 unpartitioned whole.
-            data: The scope's slice of the data, stored as-is.
+            data: The partition's slice of the data, stored as-is.
         """
-        path = self._scope_path(context, partition)
+        path = self._partition_path(context, partition)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as f:
             pickle.dump(data, f)
 
-    def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
-        """Unpickle one scope's file.
+    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+        """Unpickle one partition's file.
 
         Args:
             context: IO context whose asset supplies the dataset, table, and
@@ -90,9 +89,9 @@ class FileDestination(PartitionedDestination):
             The deserialized data.
 
         Raises:
-            DataNotFoundError: If the scope's data file does not exist.
+            DataNotFoundError: If the partition's data file does not exist.
         """
-        path = self._scope_path(context, partition)
+        path = self._partition_path(context, partition)
         if not path.exists():
             raise DataNotFoundError(f"No data file for '{context.asset}': {path}")
         with path.open("rb") as f:
@@ -102,7 +101,7 @@ class FileDestination(PartitionedDestination):
         """Return row counts grouped by partition by scanning pickle files on disk.
 
         Counts items (``len(data)`` for lists, ``1`` otherwise), since a
-        pickled scope need not be tabular.
+        pickled partition need not be tabular.
 
         Args:
             context: IO context whose asset supplies the dataset, table, and

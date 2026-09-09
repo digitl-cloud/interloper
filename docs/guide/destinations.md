@@ -88,14 +88,15 @@ Every `read()` and `write()` receives an immutable `IOContext`:
 | Field | Meaning |
 |-------|---------|
 | `asset` | The asset being read or written. `asset.table`, `asset.dataset`, `asset.partitioning` name the storage location. |
-| `partition_or_window` | The scope of this call, or `None` for an unpartitioned asset. |
+| `partition_or_window` | The partition or window of this call, or `None` for an unpartitioned asset. |
 | `schema` | The effective schema of the data: the declared one, or the one inferred during conform. `None` when none could be resolved. |
 | `metadata` | Run metadata (run id, backfill id). |
 
 ## Custom destinations
 
-Subclass `il.Destination`, or decorate a plain class with `@il.destination`, and implement
-`read()` and `write()`. Both may be sync or `async def`:
+A destination stores data one **partition** at a time, `None` standing for the whole of an
+unpartitioned asset. Subclass `il.Destination`, or decorate a plain class with `@il.destination`,
+and implement the two partition hooks. Both may be sync or `async def`:
 
 ```py
 import json
@@ -108,19 +109,28 @@ import interloper as il
 class JSONDestination(il.Destination):
     base_path: str = ""
 
-    def write(self, context: il.IOContext, data: Any) -> None:
-        path = Path(self.base_path) / context.asset.dataset / f"{context.asset.table}.json"
+    def _path(self, context: il.IOContext, partition: il.Partition | None) -> Path:
+        base = Path(self.base_path) / (context.asset.dataset or "") / context.asset.table
+        if partition is None:
+            return base / "data.json"
+        return base / f"{context.asset.partitioning.column}={partition.id}" / "data.json"
+
+    def write_partition(self, context: il.IOContext, partition: il.Partition | None, data: Any) -> None:
+        path = self._path(context, partition)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, default=str))
 
-    def read(self, context: il.IOContext) -> Any:
-        path = Path(self.base_path) / context.asset.dataset / f"{context.asset.table}.json"
-        return json.loads(path.read_text())
+    def read_partition(self, context: il.IOContext, partition: il.Partition | None) -> Any:
+        return json.loads(self._path(context, partition).read_text())
 ```
 
-This form writes one file per asset and ignores `context.partition_or_window`: a partition
-rewrite replaces every partition and a window lands in one file. It suits unpartitioned assets;
-partitioned ones belong on `il.PartitionedDestination` below.
+`write()` and `read()` are the base class's: a window write is split into one `write_partition` call
+per partition, slicing the data through its [representation](../extending/representations.md)
+on the partition column; a window read returns one result per partition, newest first. A
+destination written this way is partition-correct by construction, and `CSVDestination`,
+`FileDestination`, `MemoryDestination` and `GCSDestination` are all built exactly like this. The
+partitions a context covers are on the context itself, `context.partitions` and `context.slices(data)`,
+for a backend that needs them.
 
 The decorator accepts the class's public ClassVars and field defaults, plus `relations=`; see the
 [decorators reference](../reference/decorators.md). A destination's own connection is a relation,
@@ -130,32 +140,15 @@ declared as an annotation or through `relations=`; see
 Override `partition_row_counts(context)` to report rows per partition; `asset.partition_row_counts()`
 and coverage tooling call it.
 
-### Partition-aware destinations
-
-`il.PartitionedDestination` implements the partition dispatch once. Subclasses implement two
-scope hooks and are partition-correct by construction:
-
-```py
-class JSONDestination(il.PartitionedDestination):
-    base_path: str = ""
-
-    def _write_scope(self, context, partition, data) -> None:
-        # partition is None for the unpartitioned whole
-        ...
-
-    def _read_scope(self, context, partition):
-        ...
-```
-
-A window write is split into one `_write_scope` call per partition, slicing the data through
-its [representation](../extending/representations.md) on the partition column. A window read
-returns one result per partition, newest first. `CSVDestination` and `MemoryDestination` are
-built this way.
+A backend whose storage is not per partition may override `write()` or `read()`
+wholesale. `DatabaseDestination` below does that for writes: rows carry the partition column, so
+a window clears every partition it covers and inserts the whole batch once.
 
 ### Database destinations
 
 `DatabaseDestination` (imported from `interloper.destination`, together with
-`WriteDisposition`) targets stores addressed by table and schema. Reads and writes reduce to a
+`WriteDisposition`) targets stores addressed by table and schema. Its `write_partition` clears one
+partition and inserts; its `write` batches a window into one insert. Reads and writes reduce to a
 small set of row operations:
 
 | Hook | Called for |
@@ -176,7 +169,7 @@ representation directly (a DataFrame into a Parquet load job) using `context.sch
 Behaviour the base class owns:
 
 - **Write disposition**: `write_disposition = WriteDisposition.REPLACE` (default) deletes the
-  matching scope before inserting; `APPEND` never deletes. A class attribute, not a field.
+  matching partition before inserting; `APPEND` never deletes. A class attribute, not a field.
 - **Time partitions are scoped by bounds**, not by equality, because rows of a monthly partition
   carry daily dates.
 - **Read representation**: rows are materialized into the representation named by

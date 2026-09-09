@@ -65,7 +65,7 @@ rows, whose record coercion rejects non-tabular data with a clear error.
 - Conform resolves the conformer through `Representation.of(result)`.
 - `Partition.slice()` and `TimePartition.slice()` filter through the representation, so window
   writes split correctly for any table type.
-- `PartitionedDestination` and `DatabaseDestination` convert through `to_records` and
+- `Destination` and `DatabaseDestination` convert through `to_records` and
   `from_records`.
 - `DatabaseDestination.read_representation` and `@destination(read_representation=...)` name
   the representation reads should materialize into.

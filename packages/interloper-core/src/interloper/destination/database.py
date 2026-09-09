@@ -9,10 +9,11 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any, ClassVar
 
+from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
-from interloper.destination.partitioned import PartitionedDestination
+from interloper.errors import ConfigError
 from interloper.normalizer import MaterializationStrategy
-from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.base import Partition
 from interloper.partitioning.time import TimePartition
 from interloper.representation import REPRESENTATIONS, Representation
 from interloper.resource.fields import SelectField
@@ -32,7 +33,7 @@ class WriteDisposition(str, Enum):
     APPEND = "append"
 
 
-class DatabaseDestination(PartitionedDestination):
+class DatabaseDestination(Destination):
     """Abstract base class for database-backed destination implementations.
 
     Provides the partition-aware write/read dispatch logic that is common to any
@@ -199,11 +200,10 @@ class DatabaseDestination(PartitionedDestination):
             context: IO context whose asset supplies the table, dataset, and
                 partition column.
         """
-        assert context.asset.partitioning is not None
         return self._count_by_partition(
             context.asset.table,
             context.asset.dataset or None,
-            context.asset.partitioning.column,
+            self._partition_column(context),
         )
 
     # -- Data conversion -------------------------------------------------------
@@ -241,62 +241,101 @@ class DatabaseDestination(PartitionedDestination):
             self._insert(table, schema, rows)
 
     def write(self, context: IOContext, data: Any) -> None:
-        """Write data to the database table.
+        """Write data to the database table, a window as one batch.
 
-        Overrides the :class:`PartitionedDestination` template: database
-        backends delete per scope but insert the whole batch once (rows
-        carry the partition column), instead of storing per-partition
-        slices.  With ``REPLACE``, matching rows are deleted before
-        inserting; with ``APPEND``, rows are inserted without any prior
-        deletion.
+        Rows carry the partition column, so a database need not store per
+        partition: a window clears every partition it covers and inserts the
+        whole batch once, instead of one :meth:`write_partition` per partition
+        (one load job rather than one per day). A single partition, or the
+        whole, is one :meth:`write_partition`. The write-time schema strategy
+        is applied to the data once, before either path.
 
         Args:
-            context: IO context carrying the target asset, the partition scope,
+            context: IO context carrying the target asset, the partition or window,
                 and the effective schema.
             data: The data to write, in its native representation.
         """
-        table = context.asset.table
-        schema = context.asset.dataset or None
-
         if is_empty(data):
             return
-
         data = self._apply_materialization_strategy(data, context)
-
-        if context.partition_or_window is not None and context.asset.partitioning is not None:
-            col = context.asset.partitioning.column
-            columns = Representation.of(data).columns(data)
-            if columns and col not in columns:
-                warnings.warn(
-                    f"Partition column '{col}' not found in data for asset "
-                    f"'{context.asset.key}'. Columns present: {sorted(columns)}. "
-                    f"Downstream reads by partition will fail.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-
-        replacing = self.write_disposition is WriteDisposition.REPLACE
-
+        self._warn_missing_partition_column(data, context)
+        if not context.window:
+            self.write_partition(context, context.partitions[0], data)
+            return
+        table, schema = context.asset.table, context.asset.dataset or None
         with self._transaction():
-            if context.partition_or_window is None:
-                if replacing:
-                    self._delete_all(table, schema)
-
-            elif isinstance(context.partition_or_window, PartitionWindow):
-                assert context.asset.partitioning
-                col = context.asset.partitioning.column
-                if replacing:
-                    for partition in context.partition_or_window:
-                        self._delete_scope(table, schema, col, partition)
-
-            else:
-                assert isinstance(context.partition_or_window, Partition)
-                assert context.asset.partitioning
-                col = context.asset.partitioning.column
-                if replacing:
-                    self._delete_scope(table, schema, col, context.partition_or_window)
-
+            self._clear(table, schema, context, context.partitions)
             self._insert_data(table, schema, data, context)
+
+    def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+        """Replace one partition's rows: clear it, then insert the data.
+
+        With ``REPLACE`` the partition's rows are deleted first; with ``APPEND``
+        the data is inserted on top of whatever is there.
+
+        Args:
+            context: IO context carrying the target asset and the effective schema.
+            partition: The partition being stored, or ``None`` for the whole table.
+            data: The data to store, in its native representation.
+        """
+        table, schema = context.asset.table, context.asset.dataset or None
+        with self._transaction():
+            self._clear(table, schema, context, [partition])
+            self._insert_data(table, schema, data, context)
+
+    def _clear(self, table: str, schema: str | None, context: IOContext, partitions: list[Partition | None]) -> None:
+        """Delete the rows of the given partitions when the write disposition replaces.
+
+        Args:
+            table: Target table name.
+            schema: Database schema holding the table, or ``None`` for the backend default.
+            context: IO context whose asset supplies the partition column.
+            partitions: The partitions to clear; ``None`` clears the whole table.
+        """
+        if self.write_disposition is not WriteDisposition.REPLACE:
+            return
+        for partition in partitions:
+            if partition is None:
+                self._delete_all(table, schema)
+            else:
+                self._clear_partition(table, schema, self._partition_column(context), partition)
+
+    def _warn_missing_partition_column(self, data: Any, context: IOContext) -> None:
+        """Warn when partitioned data lacks its partition column, since reads by partition would find nothing.
+
+        Args:
+            data: The data about to be written.
+            context: IO context whose asset supplies the partition column.
+        """
+        if context.partition_or_window is None or context.asset.partitioning is None:
+            return
+        column = context.asset.partitioning.column
+        columns = Representation.of(data).columns(data)
+        if columns and column not in columns:
+            warnings.warn(
+                f"Partition column '{column}' not found in data for asset "
+                f"'{context.asset.key}'. Columns present: {sorted(columns)}. "
+                f"Downstream reads by partition will fail.",
+                UserWarning,
+                stacklevel=3,
+            )
+
+    @staticmethod
+    def _partition_column(context: IOContext) -> str:
+        """The asset's partition column, which a partitioned write or read guarantees exists.
+
+        Args:
+            context: IO context whose asset is partitioned.
+
+        Returns:
+            The partition column name.
+
+        Raises:
+            ConfigError: If the asset declares no partitioning.
+        """
+        if context.asset.partitioning is None:
+            raise ConfigError(f"Asset '{context.asset.key}' is not partitioned")
+        return context.asset.partitioning.column
 
     def _apply_materialization_strategy(self, data: Any, context: IOContext) -> Any:
         """Enforce this backend's write-time schema strategy.
@@ -326,7 +365,7 @@ class DatabaseDestination(PartitionedDestination):
         conformer.validate(data, context.schema, strict=True)
         return data
 
-    def _delete_scope(self, table: str, schema: str | None, column: str, partition: Partition) -> None:
+    def _clear_partition(self, table: str, schema: str | None, column: str, partition: Partition) -> None:
         """Delete one partition's rows: by bounds for a time partition, by id otherwise.
 
         A time partition's rows may carry values anywhere inside the period
@@ -345,8 +384,8 @@ class DatabaseDestination(PartitionedDestination):
         else:
             self._delete_partition(table, schema, column, partition.id)
 
-    def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
-        """Load one scope from the database table.
+    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+        """Load one partition from the database table.
 
         Args:
             context: IO context whose asset supplies the table, dataset, and
@@ -354,14 +393,13 @@ class DatabaseDestination(PartitionedDestination):
             partition: The partition to load, or ``None`` for the whole table.
 
         Returns:
-            The scope's rows, materialized into the read representation.
+            The partition's rows, materialized into the read representation.
         """
         table = context.asset.table
         schema = context.asset.dataset or None
         if partition is None:
             return self._from_rows(self._select_all(table, schema))
-        assert context.asset.partitioning
-        column = context.asset.partitioning.column
+        column = self._partition_column(context)
         if isinstance(partition, TimePartition):
             start, end = partition.bounds
             return self._from_rows(self._select_partition_range(table, schema, column, start, end))

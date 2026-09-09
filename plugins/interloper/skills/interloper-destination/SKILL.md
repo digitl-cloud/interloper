@@ -7,16 +7,17 @@ description: Use when writing a custom Interloper destination (files, object sto
 
 ## Overview
 
-Two base classes do the partition bookkeeping; you implement scope-level IO.
-`il.PartitionedDestination` for files and objects: one write per partition, windows split for
-you. `DatabaseDestination` for SQL: delete-then-insert by partition range. Subclassing bare
-`il.Destination` means handling `context.partition_or_window` yourself, and the usual result is
-a destination that clobbers every partition on each write.
+The base class does the partition bookkeeping; you implement partition-level IO, where the
+partition is `None` for the whole of an unpartitioned asset. `il.Destination` for files and objects:
+implement `write_partition` and `read_partition`, windows are split and gathered for you.
+`DatabaseDestination` for SQL: delete-then-insert by partition range, a window in one batch.
+Overriding `write`/`read` wholesale is for a backend whose storage is not per partition,
+and is how a destination ends up clobbering every partition on each write when done by accident.
 Reference: https://docs.interloper.dev/guide/destinations/
 
 ## Recipe
 
-1. **Files and objects**: implement `_write_scope` and `_read_scope` for one partition (or
+1. **Files and objects**: implement `write_partition` and `read_partition` for one partition (or
    `None` for unpartitioned assets), and `partition_row_counts`:
 
    ```py
@@ -27,7 +28,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
    from interloper.representation import Representation
 
    @il.destination(name="JSONL files")
-   class JSONLDestination(il.PartitionedDestination):
+   class JSONLDestination(il.Destination):
        base_path: str = ""
 
        def _path(self, context: il.IOContext, partition: il.Partition | None) -> Path:
@@ -36,13 +37,13 @@ Reference: https://docs.interloper.dev/guide/destinations/
                return base / "data.jsonl"
            return base / f"{context.asset.partitioning.column}={partition.id}" / "data.jsonl"
 
-       def _write_scope(self, context, partition, data) -> None:
+       def write_partition(self, context, partition, data) -> None:
            rows = Representation.of(data).to_records(data)          # list[dict] from any representation
            path = self._path(context, partition)
            path.parent.mkdir(parents=True, exist_ok=True)
            path.write_text("".join(json.dumps(row, default=str) + "\n" for row in rows))
 
-       def _read_scope(self, context, partition):
+       def read_partition(self, context, partition):
            rows = [json.loads(line) for line in self._path(context, partition).read_text().splitlines() if line]
            return context.schema.reconcile(rows) if context.schema is not None else rows
 
@@ -67,7 +68,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
    delete-then-insert. Ranges are half-open
    `[start, end)` with `dt.date` bounds; store dates so the comparison works (ISO text sorts
    lexically). The default `WriteDisposition.REPLACE` deletes the range before inserting, so a
-   rewrite never duplicates. The base read does not restore types: override `_read_scope` to
+   rewrite never duplicates. The base read does not restore types: override `read_partition` to
    call `context.schema.reconcile(rows)` when a schema is present.
 
 3. **Verify** with a two-asset daily source:
@@ -106,7 +107,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
 
 - Subclassing `il.Destination` and writing `{table}.json`: a partition rewrite wipes the others
   and a window lands in one file.
-- Returning raw strings from `_read_scope`; the dependent asset does arithmetic on text.
+- Returning raw strings from `read_partition`; the dependent asset does arithmetic on text.
 - Dates stored in a format that does not compare with the `dt.date` bounds of the range hooks.
 - Forgetting `allow_window=True` on the asset's `TimePartitionConfig` when testing window writes; the error is a
   `PartitionError`, not a destination problem.
