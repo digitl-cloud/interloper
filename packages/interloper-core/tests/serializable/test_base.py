@@ -10,7 +10,7 @@ import pytest
 import interloper as il
 from interloper.errors import SpecError
 from interloper.normalizer import Normalizer
-from interloper.serializable import Document, Serializable, Spec
+from interloper.serializable import Serializable, SerializationContext, Spec
 from interloper.source.base import Source
 
 # -- Fixtures ------------------------------------------------------------------
@@ -47,6 +47,14 @@ class RefWidget(il.Source):
     """Source whose connection is filled by reference in reconstruction tests."""
 
     connection: RefConn
+
+
+class OwningSource(il.Source):
+    """Source with one asset, for the ownership rules of the serialization context."""
+
+    @il.asset
+    def rows(self) -> list[dict[str, Any]]:
+        return []
 
 
 # -- The Spec envelope ---------------------------------------------------------
@@ -193,12 +201,12 @@ class TestReferences:
         assert widget.connection is connection
 
 
-class TestDocument:
+class TestSerializationContext:
     """The reconstruction in progress: references held back, owners pinned, bound once whole."""
 
     def test_hold_takes_references_out_and_pins_the_owner(self):
         init = {"connection": {"ref": "c"}, "assets": {"revenue": {"dataset": "x", "orders": [{"ref": "o"}]}}}
-        kept = Document().hold(init)
+        kept = SerializationContext().hold(init)
 
         assert "connection" not in kept
         assert kept["id"]
@@ -208,7 +216,7 @@ class TestDocument:
         assert revenue["id"]
 
     def test_hold_keeps_a_declared_id_and_a_value_without_references(self):
-        kept = Document().hold({"id": "root", "connection": {"ref": "c"}, "select": ["a"]})
+        kept = SerializationContext().hold({"id": "root", "connection": {"ref": "c"}, "select": ["a"]})
         assert kept == {"id": "root", "select": ["a"]}
 
     def test_a_reference_mixed_with_an_inline_target_keeps_the_document_order(self):
@@ -223,6 +231,30 @@ class TestDocument:
         )
         widget = RefWidget.from_spec(spec, resolve={referenced.id: referenced}.__getitem__)
         assert [d.id for d in widget.destinations] == [inline.id, referenced.id]
+
+    def test_a_parentless_target_is_written_once_then_referenced(self):
+        destination = il.MemoryDestination()
+        context = SerializationContext()
+
+        first, second = context.emit(destination), context.emit(destination)
+
+        assert first is not None and first["path"] == destination.path()
+        assert second == Spec.reference(destination.id)
+
+    def test_an_owned_target_is_referenced_when_carried_and_dropped_when_a_closed_context_is_not(self):
+        asset = OwningSource().assets[0]
+
+        assert SerializationContext().emit(asset) == Spec.reference(asset.id)
+        assert SerializationContext([asset]).emit(asset) == Spec.reference(asset.id)
+        assert SerializationContext([il.MemoryDestination()]).emit(asset) is None
+
+    def test_a_closed_context_writes_its_own_copies_of_the_owned_components(self):
+        original = OwningSource().assets[0]
+        copy = original(materializable=False)
+
+        assert SerializationContext().carried([original]) == [original]
+        assert SerializationContext([copy]).carried([original]) == [copy]
+        assert SerializationContext([il.MemoryDestination()]).carried([original]) == []
 
     def test_a_pinned_init_that_built_no_component_is_a_spec_error(self):
         spec = Spec(

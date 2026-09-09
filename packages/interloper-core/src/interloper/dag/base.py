@@ -15,7 +15,7 @@ from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGEr
 from interloper.operation import Operation, Workload
 from interloper.partitioning import Partition, PartitionWindow, TimePartitionConfig
 from interloper.runner.results import ExecutionStatus, RunResult
-from interloper.serializable import Document, Spec
+from interloper.serializable import SerializationContext, Spec
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
 
@@ -70,9 +70,9 @@ class DAGSpec(BaseModel):
             "interloper.dag_spec.reconstruct",
             attributes={attributes.DAG_SPEC_ITEMS: len(self.items)},
         ):
-            document = Document(resolve)
-            roots = [spec.reconstruct(catalog, document=document) for spec in self.items]
-            document.bind()
+            context = SerializationContext(resolve=resolve)
+            roots = [spec.reconstruct(catalog, context=context) for spec in self.items]
+            context.bind()
             return DAG(*roots)  # ty: ignore[invalid-argument-type]
 
 
@@ -443,83 +443,33 @@ class DAG:
         """Serialize this DAG to a reconstructible spec.
 
         One item per root of the graph: a standalone asset is an item of its
-        own, and a source-owned asset travels inside its owning source's item
-        through the asset-override map, which is what also gives the parent
-        of an upstream this run only reads an item of its own, carrying that
-        one asset and nothing else of the source.
+        own, and a source-owned asset travels inside its owning source's item,
+        which is what also gives the parent of an upstream this run only reads
+        an item of its own, carrying that one asset and nothing else of the
+        source.
 
-        The override map is built from the DAG's **actual** asset
-        instances, which may differ from the source's originals: in a
-        mini-DAG the parents are flagged ``materializable=False``, and a run
-        may hold only some of a source's assets.
-
-        Every item shares one traversal, so a destination bound to several
-        roots is written out once and referenced everywhere else, and the
-        document is closed: a binding pointing outside this graph is left
-        out rather than written as a reference nothing answers (see
-        :meth:`_unwritable_relations`).
+        Every item shares one closed :class:`SerializationContext` over the
+        DAG's own nodes: a destination bound to several roots is written once
+        and referenced everywhere else, a source writes the graph's copies of
+        its assets (flagged read-only in a mini-DAG, or only some of them in a
+        partial run) rather than its originals, and a binding pointing at an
+        owned component outside this graph is left out rather than written
+        as a reference nothing answers.
 
         Returns:
             A DAGSpec that can reconstruct an equivalent DAG.
         """
+        context = SerializationContext(cast("list[Component]", self.operations))
         items: list[Spec] = []
-        seen: set[str] = set()
-
-        # Group the DAG's operations by owning source, preserving their state
-        source_operations: dict[str, list[Operation]] = {}
+        written_sources: set[str] = set()
         for operation in self.operations:
             source = operation.source
             if source is None:
-                node = cast("Component", operation)
-                items.append(node._to_spec(seen=seen, drop=self._unwritable_relations(operation)))
-                continue
-            source_operations.setdefault(source.id, []).append(operation)
-
-        for operations in source_operations.values():
-            source = operations[0].source
-            assert source is not None
-            items.append(
-                source._source_spec(
-                    seen=seen,
-                    assets=cast("list[Asset]", operations),
-                    asset_drop={operation.key: self._unwritable_relations(operation) for operation in operations},
-                )
-            )
-
+                items.append(operation.to_spec(context=context))
+            elif source.id not in written_sources:
+                written_sources.add(source.id)
+                items.append(source.to_spec(context=context))
         return DAGSpec(items=items)
-
-    def _unwritable_relations(self, operation: Operation) -> dict[str, set[str]]:
-        """The target ids of one node's relations this document cannot carry.
-
-        A target that has an owner travels inside that owner's own item, so a
-        binding pointing at one this graph does not hold has nowhere to go: a
-        node the run only reads keeps the bindings of the live asset it was
-        copied from, whose own upstreams were never pulled in with it
-        (see :meth:`_include_read_only_upstreams`). Writing those out would
-        put a reference in the document that reconstruction cannot answer,
-        so they are dropped per target rather than the whole relation: a
-        relation keeping some of its targets emits a shorter list than the
-        live binding, and one losing all of them is left out of the document
-        entirely.
-
-        Args:
-            operation: The node whose bindings are read.
-
-        Returns:
-            The absent owned target ids to drop, keyed by the relation name
-            that holds them; a relation with nothing to drop is absent from
-            the mapping.
-        """
-        unwritable: dict[str, set[str]] = {}
-        for name in operation.relations:
-            bound = operation.bound(name)
-            targets = bound if isinstance(bound, list) else [] if bound is None else [bound]
-            absent = {
-                target.id for target in targets if target.parent is not None and target.id not in self.operation_map
-            }
-            if absent:
-                unwritable[name] = absent
-        return unwritable
 
     @classmethod
     def from_spec(
@@ -576,9 +526,9 @@ class DAG:
         Raises:
             DAGError: If a root's kind declares no workload.
         """
-        document = Document(resolve)
-        roots = [spec.reconstruct(catalog, document=document) for spec in Spec.all_from_file(path)]
-        document.bind()
+        context = SerializationContext(resolve=resolve)
+        roots = [spec.reconstruct(catalog, context=context) for spec in Spec.all_from_file(path)]
+        context.bind()
         for root in roots:
             if not isinstance(root, Workload):
                 raise DAGError(f"'{getattr(root, 'kind', type(root).__name__)}' components are not runnable")

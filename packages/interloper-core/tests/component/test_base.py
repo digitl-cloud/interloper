@@ -456,6 +456,18 @@ class Child(il.Asset):
         return []
 
 
+class TestOwned:
+    def test_owned_is_a_component_in_a_field_whose_parent_is_this_one(self) -> None:
+        child = FakeOtherComponent(value="c")
+        holder = FakeComponent(child=child)
+        assert holder.owned == []
+
+        child.parent = holder
+        assert holder.owned == [child]
+        init = holder.to_spec().init or {}
+        assert init["child"] == {child.key: {"value": "c", "id": child.id}}
+
+
 class TestOnRebind:
     def test_every_write_path_calls_the_hook_with_the_binding_in_place(self) -> None:
         seen: list[tuple[str, Any]] = []
