@@ -59,8 +59,8 @@ class OAuthProvider:
     The base class speaks plain RFC 6749: the authorization-code exchange
     and the refresh-token grant are POSTs to ``token_url`` with the standard
     parameters. A provider whose dialect deviates — a different method,
-    parameter names, an extra parameter, another grant entirely — overrides
-    the request builders (and, for renewal, the response parsing) on a
+    parameter names, an extra parameter, another grant entirely, a response
+    envelope — overrides the request builders and response parsers on a
     subclass; the provider is the single owner of its dialect, and the
     sign-in exchange and connection renewal consume it identically.
 
@@ -176,6 +176,22 @@ class OAuthProvider:
             refresh_token=payload.get("refresh_token"),
             expires_in=payload.get("refresh_token_expires_in"),
         )
+
+    def parse_authorization_code_response(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Read the authorization-code grant's response into the RFC token shape.
+
+        The default relays the body as is: RFC 6749 §5.1 already puts
+        ``access_token`` / ``refresh_token`` at the top level. A provider that
+        wraps them in an envelope, or reports rejections inside a 200 body,
+        overrides this to unwrap and to raise.
+
+        Args:
+            payload: The grant's JSON response body.
+
+        Returns:
+            The token response with the credentials at the top level.
+        """
+        return payload
 
     def _token_request(self, params: dict[str, str]) -> httpx.Request:
         """Build a POST to the token endpoint in the provider's body encoding.

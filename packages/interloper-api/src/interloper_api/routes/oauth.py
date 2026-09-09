@@ -107,9 +107,10 @@ async def exchange_authorization_code(
 ) -> dict[str, Any]:
     """Exchange an authorization code for tokens. Requires authentication.
 
-    Returns only the provider's token response (e.g. ``refresh_token``); the
-    in-house OAuth credentials are never included — connections resolve them
-    from env at runtime.
+    Returns only the provider's token response (e.g. ``refresh_token``), read
+    through the provider's own parser so dialect envelopes never reach the
+    browser; the in-house OAuth credentials are never included — connections
+    resolve them from env at runtime.
 
     Args:
         provider: The registry key of the provider to exchange against.
@@ -118,11 +119,12 @@ async def exchange_authorization_code(
             identity itself is not used.
 
     Returns:
-        The provider's raw token response.
+        The provider's token response, credentials at the top level.
 
     Raises:
         HTTPException: 400 when the provider is unknown or has no credentials
-            configured, 500 when the exchange itself fails.
+            configured, 500 when the exchange itself fails — including a
+            rejection the provider reports inside a 200 body.
     """
     spec = PROVIDERS.get(provider)
     if spec is None:
@@ -143,8 +145,9 @@ async def exchange_authorization_code(
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             response = await client.send(request)
         response.raise_for_status()
+        tokens = spec.parse_authorization_code_response(response.json())
         logger.info("Successfully exchanged auth code for provider %s", provider)
-        return response.json()
+        return tokens
     except httpx.HTTPStatusError as exception:
         detail = exception.response.text
         logger.error("Token exchange failed for %s: %s %s", provider, exception.response.status_code, detail)
