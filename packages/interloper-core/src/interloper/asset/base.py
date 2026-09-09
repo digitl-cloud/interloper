@@ -178,7 +178,8 @@ class Asset(Component, Operation):
             if name in _RESERVED_PARAMETERS or name in cls.relations or parameter.kind in _VARIADIC_KINDS:
                 continue
             hint = hints.get(name, parameter.annotation)
-            inferred[name] = cls._infer_relation(name, hint, optional=parameter.default is None)
+            relation = cls._infer_relation(name, hint, optional=parameter.default is None)
+            inferred[name] = relation.model_copy(update={"name": name})
         if inferred:
             cls.relations = {**cls.relations, **inferred}
             for name, relation in inferred.items():
@@ -227,11 +228,11 @@ class Asset(Component, Operation):
         target, admits_none = unwrap_optional(hint, {})
         optional = optional or admits_none
         if target is Upstream:
-            return Relation("asset", name, optional=optional, name=name)
+            return Relation("asset", name, optional=optional)
         if get_origin(target) is list and get_args(target) == (Upstream,):
-            return Relation("asset", name, many=True, optional=optional, name=name)
+            return Relation("asset", name, many=True, optional=optional)
         if isinstance(target, type) and issubclass(target, Component) and target.kind:
-            return Relation(target, optional=optional, name=name)
+            return Relation(target, optional=optional)
         if isinstance(hint, str):
             raise TypeError(f"{cls.__name__}.data() parameter '{name}': annotation '{hint}' could not be resolved")
         raise TypeError(

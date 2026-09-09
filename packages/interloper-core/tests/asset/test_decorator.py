@@ -125,8 +125,9 @@ class TestParameterizedForm:
         assert declared.name == "Custom Asset"
         assert declared.icon == "carbon:data-table"
         assert declared.relations["config"].key == DecoratorConfig.key
-        assert declared.relations["upstream"] == il.Relation("asset", "other", name="upstream")
-        assert declared.relations["maybe"] == il.Relation("asset", "another", optional=True, name="maybe")
+        upstream, maybe = declared.relations["upstream"], declared.relations["maybe"]
+        assert (upstream.kind, upstream.key, upstream.name, upstream.optional) == ("asset", "other", "upstream", False)
+        assert (maybe.kind, maybe.key, maybe.name, maybe.optional) == ("asset", "another", "maybe", True)
 
     def test_field_declarations_become_real_field_defaults(self):
         normalizer = Normalizer()

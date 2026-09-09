@@ -123,14 +123,15 @@ class TestRelation:
         assert Relation(Needy).fallback() is None
         assert Relation(Needy, default=lambda: Needy(bucket="b")).self_filling is True
 
-    def test_self_filling_false_for_target_without_model_fields(self) -> None:
-        class Plain:
-            def __init__(self, token: str) -> None:
-                self.token = token
+    def test_target_is_the_class_of_the_shorthand_and_nothing_else(self) -> None:
+        assert Relation(Conn).target is Conn
+        assert Relation("connection", "conn").target is None
+        with pytest.raises(ValidationError):
+            Relation("connection", "conn", target=Conn)
 
-        relation = Relation(kind="config", target=Plain)
-        assert relation.self_filling is False
-        assert relation.fallback() is None
+    def test_name_is_stamped_not_passed(self) -> None:
+        with pytest.raises(TypeError, match="stamped from the attribute"):
+            Relation(Conn, name="conn")
 
     def test_dump_excludes_target_and_default(self) -> None:
         dumped = Relation(Conn, default=Conn).model_dump(mode="json")
@@ -146,13 +147,13 @@ class TestRelation:
 
 class TestDescriptor:
     def test_class_access_returns_the_relation_itself(self) -> None:
-        """A relation is its own descriptor; ``_collect()`` is what stamps its name, not the descriptor."""
+        """A relation is its own descriptor; a component's ``_collect()`` stamps its name, not the descriptor."""
 
         class Owner:
-            conn: Conn = Relation(Conn, name="conn")
+            conn: Conn = Relation(Conn)
 
         assert isinstance(Owner.conn, Relation)
-        assert Owner.conn.name == "conn"
+        assert Owner.conn.name == ""
 
     def test_instance_access_returns_what_is_bound(self) -> None:
         """An instance reads through to its own bindings."""
