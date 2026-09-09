@@ -146,7 +146,7 @@ class TestRelation:
 
 class TestDescriptor:
     def test_class_access_returns_the_relation_itself(self) -> None:
-        """A relation is its own descriptor; ``collect()`` is what stamps its name, not the descriptor."""
+        """A relation is its own descriptor; ``_collect()`` is what stamps its name, not the descriptor."""
 
         class Owner:
             conn: Conn = Relation(Conn, name="conn")

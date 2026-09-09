@@ -95,7 +95,7 @@ def declare(cls: type[ComponentT], relations: dict[str, Relation]) -> type[Compo
     """
     if relations:
         cls.relations = {**cls.relations, **relations}
-        cls.collect()
+        cls._collect()
     return cls
 
 
