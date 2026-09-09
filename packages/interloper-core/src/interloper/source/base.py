@@ -247,6 +247,22 @@ class Source(Component, Workload):
             if asset.materializable:
                 asset.validate_relations(nodes)
 
+    def on_rebind(self, name: str) -> None:
+        """Trickle this source's bindings into its assets and destinations whenever one changes.
+
+        A binding is the moment this can run: relation keyword arguments reach
+        a component after ``model_post_init`` has already built its assets, so
+        without this hook a source's connection would never reach them.
+
+        Args:
+            name: The relation name whose binding changed; every relation the
+                source holds trickles, so the name itself is not read.
+        """
+        for asset in self.assets:
+            self.trickle(asset)
+        for destination in self.destinations:
+            self.trickle(destination)
+
     def _apply_select(self) -> None:
         """Mark assets outside ``select`` as non-materializable.
 
@@ -353,184 +369,6 @@ class Source(Component, Workload):
         init["assets"] = overrides
         return spec.model_copy(update={"init": init})
 
-    def _children(self) -> list[Component]:
-        """The assets this source owns, which travel inside its own spec.
-
-        Returns:
-            This source's asset instances.
-        """
-        return list(self.assets)
-
-    # -- Assets ----------------------------------------------------------------
-
-    def operations(self) -> list[Operation]:
-        """The source's own assets: the operations a run on it executes.
-
-        Returns:
-            The assets this source holds.
-        """
-        return list(self.assets)
-
-    @classmethod
-    def _collect_asset_types(cls) -> None:
-        """Collect Asset subclasses from the class namespace into ``asset_types``.
-
-        When ``@asset`` decorates a method in the source body, it
-        transforms the method into an Asset class and sets it as a class
-        attribute.  This method collects those into ``asset_types`` and
-        replaces each entry with an :class:`AssetRef` descriptor, which
-        exposes the class at class-level access and the live asset
-        instance at instance-level access.
-        """
-        from interloper.asset.base import Asset
-
-        # Only process assets defined directly on this class, not inherited.
-        own: list[tuple[str, type[Asset]]] = []
-        for attr_name, value in list(cls.__dict__.items()):
-            if isinstance(value, type) and issubclass(value, Asset) and value is not Asset:
-                own.append((attr_name, value))
-
-        if own:
-            # Merge with any asset_types already set (e.g. by the decorator).
-            existing = list(cls.__dict__.get("asset_types", []))
-            existing_keys = {a.key for a in existing}
-            for _, asset_cls in own:
-                asset_cls._source_type = cls
-                if asset_cls.key not in existing_keys:
-                    existing.append(asset_cls)
-            cls.asset_types = existing
-
-            # Replace the raw class attribute with a descriptor so that
-            # class access returns the class and instance access returns
-            # the live asset instance.
-            for attr_name, asset_cls in own:
-                ref = AssetRef(asset_cls)
-                ref.__set_name__(cls, attr_name)
-                setattr(cls, attr_name, ref)
-
-    @classmethod
-    def sibling_bindings(cls) -> dict[str, dict[str, str]]:
-        """Which of this source's assets each asset relation resolves to, by key.
-
-        Only intra-source wiring is decided here: a declared key that resolves
-        to another source, or to a wildcard, needs the whole DAG to be
-        resolved and is left to it.
-
-        Returns:
-            Asset key to a map of relation name to the sibling asset key that
-            fills it; assets with no sibling wiring are absent.
-        """
-        siblings = {asset_cls.key for asset_cls in cls.asset_types}
-        bindings: dict[str, dict[str, str]] = {}
-        for asset_cls in cls.asset_types:
-            for name, relation in asset_cls.relations.items():
-                if "asset" not in relation.kinds():
-                    continue
-                declared_keys = relation.keys()
-                for declared in declared_keys:
-                    expected = ComponentIdentity.resolve(declared, own_source_key=cls.key)
-                    if expected.source_key == cls.key and expected.key in siblings and expected.key != asset_cls.key:
-                        bindings.setdefault(asset_cls.key, {})[name] = expected.key
-        return bindings
-
-    def _bind_siblings(self) -> None:
-        """Bind each asset's sibling relations to this source's own asset instances.
-
-        A relation the asset already holds is left alone, so a binding made by
-        hand or hydrated from persistence always wins.
-        """
-        by_key = {asset.key: asset for asset in self.assets}
-        for asset_key, names in type(self).sibling_bindings().items():
-            asset = by_key.get(asset_key)
-            if asset is None:
-                continue
-            for name, sibling_key in names.items():
-                if not asset.bound(name) and sibling_key in by_key:
-                    asset.bind(name, by_key[sibling_key])
-
-    @classmethod
-    def asset_def(cls, key: str) -> AssetDefinition:
-        """Look up an asset definition by key.
-
-        Returns an :class:`AssetDefinition` with ``source_key`` set,
-        so callers can use ``.qualified_key`` for cross-source references::
-
-            FacebookAds.asset_def("campaigns").qualified_key
-            # → "facebook_ads.campaigns"
-
-        Args:
-            key: The asset key (snake_cased class name).
-
-        Returns:
-            The asset definition with source context.
-
-        Raises:
-            KeyError: If no asset matches the key.
-        """
-        for asset_cls in cls.asset_types:
-            if asset_cls.key == key:
-                defn = asset_cls.definition()
-                defn.source_key = cls.key
-                return defn
-        raise KeyError(f"Source '{cls.key}' has no asset with key '{key}'")
-
-    def asset_table(self, asset: Asset) -> str:
-        """Physical table name for one of this source's assets.
-
-        Defaults to suffixing the asset key with the instance's
-        :attr:`~interloper.component.base.Component.discriminator` (the config
-        field marked ``discriminator=True``), so instances of a multi-account
-        source materialize side by side in one dataset instead of overwriting
-        each other's data. Without a discriminator the asset key is used as-is.
-
-        Override for full control over the composition; keep the
-        ``{asset.key}__{suffix}`` shape so tables stay wildcard-queryable per
-        asset. The return value is coerced to a valid identifier by
-        :attr:`Asset.table`.
-
-        Args:
-            asset: The asset to name a table for; only its ``key`` is read.
-
-        Returns:
-            The physical table name for the asset.
-        """
-        discriminator = self.discriminator
-        return f"{asset.key}__{discriminator}" if discriminator else asset.key
-
-    def _resolve(self) -> None:
-        """Apply source-level defaults to assets that don't define their own."""
-        if not self.dataset:
-            self.dataset = self.key
-        validate_key(self.dataset)
-
-        for asset in self.assets:
-            asset.parent = self
-            if not asset.dataset:
-                asset.dataset = self.dataset
-            validate_key(asset.table)
-            if not asset.default_destination_key and self.default_destination_key:
-                asset.default_destination_key = self.default_destination_key
-            if asset.normalizer is None and self.normalizer is not None:
-                asset.normalizer = self.normalizer
-            if (
-                self.materialization_strategy is not None
-                and asset.materialization_strategy == MaterializationStrategy.AUTO
-            ):
-                asset.materialization_strategy = self.materialization_strategy
-
-    def _trickle_down(self) -> None:
-        """Fill the unbound relations of this source's assets and destinations from its own.
-
-        A binding is the moment this runs: relation keyword arguments reach a
-        component after ``model_post_init`` has already built its assets, so
-        without a pass on :meth:`on_rebind` a source's connection would never
-        reach them.
-        """
-        for asset in self.assets:
-            self.trickle(asset)
-        for destination in self.destinations:
-            self.trickle(destination)
-
     def _trickled_asset_keys(self, name: str) -> set[str]:
         """Which of this source's assets hold exactly what this source itself has bound.
 
@@ -556,14 +394,46 @@ class Source(Component, Workload):
             return set()
         return {asset.key for asset in self.assets if [target.id for target in asset._bound.get(name, [])] == own}
 
-    def on_rebind(self, name: str) -> None:
-        """Trickle this source's bindings down whenever one of them changes.
+    def _children(self) -> list[Component]:
+        """The assets this source owns, which travel inside its own spec.
+
+        Returns:
+            This source's asset instances.
+        """
+        return list(self.assets)
+
+    # -- Assets ----------------------------------------------------------------
+
+    def operations(self) -> list[Operation]:
+        """The source's own assets: the operations a run on it executes.
+
+        Returns:
+            The assets this source holds.
+        """
+        return list(self.assets)
+
+    def asset_table(self, asset: Asset) -> str:
+        """Physical table name for one of this source's assets.
+
+        Defaults to suffixing the asset key with the instance's
+        :attr:`~interloper.component.base.Component.discriminator` (the config
+        field marked ``discriminator=True``), so instances of a multi-account
+        source materialize side by side in one dataset instead of overwriting
+        each other's data. Without a discriminator the asset key is used as-is.
+
+        Override for full control over the composition; keep the
+        ``{asset.key}__{suffix}`` shape so tables stay wildcard-queryable per
+        asset. The return value is coerced to a valid identifier by
+        :attr:`Asset.table`.
 
         Args:
-            name: The relation name whose binding changed; every relation the
-                source holds trickles, so the name itself is not read.
+            asset: The asset to name a table for; only its ``key`` is read.
+
+        Returns:
+            The physical table name for the asset.
         """
-        self._trickle_down()
+        discriminator = self.discriminator
+        return f"{asset.key}__{discriminator}" if discriminator else asset.key
 
     def __getattr__(self, name: str) -> Asset:
         """Instance-level asset lookup fallback.
@@ -695,3 +565,132 @@ class Source(Component, Workload):
         if materialization_strategy is not None:
             copy.materialization_strategy = materialization_strategy
         return copy
+
+    # -- Internals -------------------------------------------------------------
+
+    @classmethod
+    def _collect_asset_types(cls) -> None:
+        """Collect Asset subclasses from the class namespace into ``asset_types``.
+
+        When ``@asset`` decorates a method in the source body, it
+        transforms the method into an Asset class and sets it as a class
+        attribute.  This method collects those into ``asset_types`` and
+        replaces each entry with an :class:`AssetRef` descriptor, which
+        exposes the class at class-level access and the live asset
+        instance at instance-level access.
+        """
+        from interloper.asset.base import Asset
+
+        # Only process assets defined directly on this class, not inherited.
+        own: list[tuple[str, type[Asset]]] = []
+        for attr_name, value in list(cls.__dict__.items()):
+            if isinstance(value, type) and issubclass(value, Asset) and value is not Asset:
+                own.append((attr_name, value))
+
+        if own:
+            # Merge with any asset_types already set (e.g. by the decorator).
+            existing = list(cls.__dict__.get("asset_types", []))
+            existing_keys = {a.key for a in existing}
+            for _, asset_cls in own:
+                asset_cls._source_type = cls
+                if asset_cls.key not in existing_keys:
+                    existing.append(asset_cls)
+            cls.asset_types = existing
+
+            # Replace the raw class attribute with a descriptor so that
+            # class access returns the class and instance access returns
+            # the live asset instance.
+            for attr_name, asset_cls in own:
+                ref = AssetRef(asset_cls)
+                ref.__set_name__(cls, attr_name)
+                setattr(cls, attr_name, ref)
+
+    @classmethod
+    def sibling_bindings(cls) -> dict[str, dict[str, str]]:
+        """Which of this source's assets each asset relation resolves to, by key.
+
+        Only intra-source wiring is decided here: a declared key that resolves
+        to another source, or to a wildcard, needs the whole DAG to be
+        resolved and is left to it. Public for the relation store, which
+        persists the same wiring; connector code never needs it.
+
+        Returns:
+            Asset key to a map of relation name to the sibling asset key that
+            fills it; assets with no sibling wiring are absent.
+        """
+        siblings = {asset_cls.key for asset_cls in cls.asset_types}
+        bindings: dict[str, dict[str, str]] = {}
+        for asset_cls in cls.asset_types:
+            for name, relation in asset_cls.relations.items():
+                if "asset" not in relation.kinds():
+                    continue
+                declared_keys = relation.keys()
+                for declared in declared_keys:
+                    expected = ComponentIdentity.resolve(declared, own_source_key=cls.key)
+                    if expected.source_key == cls.key and expected.key in siblings and expected.key != asset_cls.key:
+                        bindings.setdefault(asset_cls.key, {})[name] = expected.key
+        return bindings
+
+    def _bind_siblings(self) -> None:
+        """Bind each asset's sibling relations to this source's own asset instances.
+
+        A relation the asset already holds is left alone, so a binding made by
+        hand or hydrated from persistence always wins.
+        """
+        by_key = {asset.key: asset for asset in self.assets}
+        for asset_key, names in type(self).sibling_bindings().items():
+            asset = by_key.get(asset_key)
+            if asset is None:
+                continue
+            for name, sibling_key in names.items():
+                if not asset.bound(name) and sibling_key in by_key:
+                    asset.bind(name, by_key[sibling_key])
+
+    @classmethod
+    def asset_def(cls, key: str) -> AssetDefinition:
+        """Look up an asset definition by key.
+
+        Public for platform code that holds a key; connector code never needs it.
+
+        Returns an :class:`AssetDefinition` with ``source_key`` set,
+        so callers can use ``.qualified_key`` for cross-source references::
+
+            FacebookAds.asset_def("campaigns").qualified_key
+            # → "facebook_ads.campaigns"
+
+        Args:
+            key: The asset key (snake_cased class name).
+
+        Returns:
+            The asset definition with source context.
+
+        Raises:
+            KeyError: If no asset matches the key.
+        """
+        for asset_cls in cls.asset_types:
+            if asset_cls.key == key:
+                defn = asset_cls.definition()
+                defn.source_key = cls.key
+                return defn
+        raise KeyError(f"Source '{cls.key}' has no asset with key '{key}'")
+
+    def _resolve(self) -> None:
+        """Apply source-level defaults to assets that don't define their own."""
+        if not self.dataset:
+            self.dataset = self.key
+        validate_key(self.dataset)
+
+        for asset in self.assets:
+            asset.parent = self
+            if not asset.dataset:
+                asset.dataset = self.dataset
+            validate_key(asset.table)
+            if not asset.default_destination_key and self.default_destination_key:
+                asset.default_destination_key = self.default_destination_key
+            if asset.normalizer is None and self.normalizer is not None:
+                asset.normalizer = self.normalizer
+            if (
+                self.materialization_strategy is not None
+                and asset.materialization_strategy == MaterializationStrategy.AUTO
+            ):
+                asset.materialization_strategy = self.materialization_strategy
