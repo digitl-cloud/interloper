@@ -89,15 +89,11 @@ class FakeAssetWithConfig(il.Asset):
 class FakeParentSource(il.Source):
     """Minimal source fixture used as the parent of source-owned assets."""
 
+    class FakeSourceOwnedAsset(il.Asset):
+        """Asset owned through the class body, bypassing the ``@source`` decorator."""
 
-class FakeSourceOwnedAsset(il.Asset):
-    """Asset registered onto ``FakeParentSource`` post-hoc (bypassing the ``@source`` decorator)."""
 
-
-# Post-hoc registration installs the AssetRef descriptor on the source so
-# that the composite path ``"module:FakeParentSource.FakeSourceOwnedAsset"``
-# can be resolved without instantiating the source.
-FakeParentSource.register_asset_type(FakeSourceOwnedAsset)
+FakeSourceOwnedAsset = FakeParentSource.FakeSourceOwnedAsset
 
 
 @il.source

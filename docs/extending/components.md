@@ -115,7 +115,6 @@ definition rather than a component silently missing a relation.
 | `bind(name, *targets)` | Writes bindings, together with `unbind` and attribute assignment (which routes through the same checks, see below). Checks `accepts` for each target; `many` accumulates and collapses duplicates, single-valued replaces what it holds and refuses more than one target at a time. |
 | `unbind(name, *targets)` | Detaches. Refused when it would empty a non-optional relation. |
 | `bound(name)` | What is explicitly bound: a list for `many`, the single component or `None`. |
-| `bound_ids()` | Relation name to bound ids, for persistence. |
 | `resolve(name)` | What a reader gets: `bound(name)`, else the relation's fallback for a single-valued relation, an empty list for a `many` one. Fallbacks are never bound. |
 | `trickle(child)` | Fills a child's unbound relations from this component's own bindings, by name, keeping only what the child's relation accepts. Never overrides an explicit binding. |
 | `validate_relations(nodes=None)` | Unbound non-optional without a fallback, several targets on a single-valued relation, a target the relation does not accept, and (with `nodes`) a non-optional asset target absent from the run. |
@@ -147,9 +146,8 @@ whatever the owner cascades into its children is cascaded again.
 
 ### Discriminator
 
-One configuration field may carry `discriminator=True`. `discriminator_field()`,
-`discriminator` and `instance_name()` expose it; sources use it for per-instance table names.
-Two marked fields raise `TypeError`.
+One configuration field may carry `discriminator=True`. `discriminator` and `instance_name()`
+expose it; sources use it for per-instance table names. Two marked fields raise `TypeError`.
 
 ## Writing a decorator
 

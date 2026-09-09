@@ -144,7 +144,6 @@ fin = Finance(destinations=[dest])
 
 dag = il.DAG(shop, fin)          # binds fin.revenue.orders to shop.orders
 fin.revenue.bound("orders")      # the shop.orders instance
-fin.revenue.bound_ids()          # {"destinations": [...], "orders": [shop.orders.id]}
 
 fin.revenue.bind("orders", shop.orders)     # explicit; accumulates for a many relation
 fin.revenue.orders = shop.orders            # assignment replaces atomically

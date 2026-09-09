@@ -100,29 +100,17 @@ class TestIdentity:
         resource = FakeResource(id="abcd1234")
         assert str(resource) == "FakeResource (key: fake_resource, id: abcd1234)"
 
-    def test_has_own_field_true_for_non_none_default(self):
-        assert FakeResource.has_own_field("text")
-
-    def test_has_own_field_false_for_none_default(self):
-        # `child` defaults to None on FakeComponent.
-        assert not FakeComponent.has_own_field("child")
-
-    def test_has_own_field_false_for_missing_field(self):
-        assert not FakeResource.has_own_field("does_not_exist")
-
 
 class TestDiscriminator:
     """The config field marked ``discriminator=True`` identifies instances."""
 
     def test_none_declared_by_default(self):
-        assert FakeComponent.discriminator_field() is None
         assert FakeComponent().discriminator is None
 
     def test_marked_field_discovered_and_value_exposed(self):
         class FakeDiscriminated(Component):
             account_id: str = il.InputField(default="", discriminator=True)
 
-        assert FakeDiscriminated.discriminator_field() == "account_id"
         assert FakeDiscriminated(account_id="42").discriminator == "42"
         # An empty value means "not discriminated" rather than an empty suffix.
         assert FakeDiscriminated().discriminator is None
@@ -334,7 +322,6 @@ class TestBind:
         widget = Widget(connection=connection)
         assert widget.connection is connection
         assert widget.bound("connection") is connection
-        assert widget.bound_ids()["connection"] == [connection.id]
 
     def test_unbound_single_is_none_and_many_is_empty(self):
         widget = Widget(connection=Conn(api_secret="s"))
@@ -345,7 +332,6 @@ class TestBind:
         widget = Widget(connection=Conn(api_secret="s"))
         assert widget.fallback is None
         assert isinstance(widget.resolve("fallback"), Cfg)
-        assert "fallback" not in widget.bound_ids()
 
     def test_missing_required_is_a_build_error(self):
         gadget = Gadget()
