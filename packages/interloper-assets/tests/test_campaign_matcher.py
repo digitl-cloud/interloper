@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 from typing import Any
 
 import interloper as il
@@ -147,3 +148,30 @@ def test_a_row_with_neither_spelling_is_still_emitted_with_empty_placeholders() 
     assert len(rows) == 1
     assert rows[0]["campaign_id"] == ""
     assert rows[0]["canonical_name"] == ""
+
+
+def test_example_manifest_loads_and_wires_without_redeclaring_what_cascades(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shipped manifest is what a user writes: the job's destination reaches every asset by cascade."""
+    pytest.importorskip("interloper_google_cloud")
+    for name in (
+        "FACEBOOK_ADS_ACCESS_TOKEN",
+        "FACEBOOK_ADS_ACCOUNT_ID",
+        "FACEBOOK_ADS_APP_ID",
+        "FACEBOOK_ADS_APP_SECRET",
+        "GCP_SERVICE_ACCOUNT_KEY",
+        "TIKTOK_ADS_ACCESS_TOKEN",
+        "TIKTOK_ADS_ADVERTISER_ID",
+    ):
+        monkeypatch.setenv(name, "placeholder")
+    manifest = Path(__file__).parents[3] / "examples" / "campaign_matcher.yaml"
+
+    dag = il.DAG.from_spec_file(manifest)
+    matches = next(operation for operation in dag.operations if operation.key == "campaign_matches")
+    assert isinstance(matches, il.Asset)
+
+    assert "destinations" not in manifest.read_text().split("key: campaign_matcher")[1].split("assets:")[0]
+    assert sorted(dag.operation_map[i].qualified_key for i in dag.get_predecessors(matches.id)) == [
+        "facebook_ads.campaigns",
+        "tiktok_ads.campaigns",
+    ]
+    assert [destination.key for destination in matches.destinations] == ["bigquery_destination"]

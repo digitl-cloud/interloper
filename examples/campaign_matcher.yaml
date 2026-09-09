@@ -49,7 +49,6 @@ init:
 
     - key: campaign_matcher
       init:
-        destinations: [{ref: bq}]
         assets:
           campaign_matches:
             # Each ref points at a campaigns asset declared above. An asset
