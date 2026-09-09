@@ -312,11 +312,8 @@ class TestSourceRoundTrip:
         rows_by_key = {child.key: str(child.id) for child in db_source.children}
         assets_by_key = {asset.key: asset for asset in source.assets}
         assert {key: asset.id for key, asset in assets_by_key.items()} == rows_by_key
-        assert assets_by_key["e"].bound_ids() == {
-            "b": [rows_by_key["b"]],
-            "c": [rows_by_key["c"]],
-            "d": [rows_by_key["d"]],
-        }
+        e = assets_by_key["e"]
+        assert {name: getattr(e, name).id for name in ("b", "c", "d")} == {name: rows_by_key[name] for name in "bcd"}
 
     def test_source_owned_asset_loads_through_its_parent(self, store: Store):
         db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
@@ -366,7 +363,7 @@ class TestCrossSourceUpstream:
         revenue = store.components.load(revenue_row.id)
 
         assert isinstance(revenue, il.Asset)
-        assert revenue.bound_ids() == {"orders": [str(shop_orders.id)]}
+        assert revenue.orders.id == str(shop_orders.id)  # ty: ignore[unresolved-attribute]
 
     def test_a_shared_upstream_reached_twice_hydrates_once(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         shop = store.components.create(_ORG, kind="source", key="shop")
