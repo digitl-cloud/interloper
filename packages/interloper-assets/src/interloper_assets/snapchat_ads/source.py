@@ -140,28 +140,26 @@ class SnapchatAds(il.Source):
     # --- Time-series reports (SnapchatStatsNormalizer from the source) ---
 
     @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def ads_stats(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    async def ads_stats(self, context: il.ExecutionContext) -> list[_RECORD]:
         """Ad-level performance with core, additional, and conversion metrics."""
         rows = await _request_report(
-            connection, self.account_id, context.partition_date, _REPORT_METRICS, breakdown="ad"
+            self.connection, self.account_id, context.partition_date, _REPORT_METRICS, breakdown="ad"
         )
         return _with_date(rows, context.partition_date)
 
     @il.asset(schema=CampaignsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def campaigns_stats(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    async def campaigns_stats(self, context: il.ExecutionContext) -> list[_RECORD]:
         """Campaign-level performance with core, additional, and conversion metrics."""
         rows = await _request_report(
-            connection, self.account_id, context.partition_date, _REPORT_METRICS, breakdown="campaign"
+            self.connection, self.account_id, context.partition_date, _REPORT_METRICS, breakdown="campaign"
         )
         return _with_date(rows, context.partition_date)
 
     @il.asset(schema=AdsStatsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def ads_stats_by_country(
-        self, context: il.ExecutionContext, connection: SnapchatAdsConnection
-    ) -> list[_RECORD]:
+    async def ads_stats_by_country(self, context: il.ExecutionContext) -> list[_RECORD]:
         """Ad performance segmented by country with delivery and conversion metrics."""
         rows = await _request_report(
-            connection,
+            self.connection,
             self.account_id,
             context.partition_date,
             constants.CONVERSION_METRICS + constants.DELIVERY_METRICS,
@@ -170,12 +168,10 @@ class SnapchatAds(il.Source):
         return _with_date(rows, context.partition_date)
 
     @il.asset(schema=VideosStatsByOs, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def videos_stats_by_os(
-        self, context: il.ExecutionContext, connection: SnapchatAdsConnection
-    ) -> list[_RECORD]:
+    async def videos_stats_by_os(self, context: il.ExecutionContext) -> list[_RECORD]:
         """Video ad performance segmented by operating system."""
         rows = await _request_report(
-            connection,
+            self.connection,
             self.account_id,
             context.partition_date,
             constants.VIDEOS_METRICS,
@@ -191,10 +187,10 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def ad_account(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    async def ad_account(self, context: il.ExecutionContext) -> list[_RECORD]:
         """A single ad account with its attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
-        rows = await _entity_records(connection, path, "adaccounts", "adaccount")
+        rows = await _entity_records(self.connection, path, "adaccounts", "adaccount")
         return _with_date(rows, context.partition_date)
 
     @il.asset(
@@ -203,15 +199,15 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def ad_accounts(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    async def ad_accounts(self, context: il.ExecutionContext) -> list[_RECORD]:
         """All ad accounts in the organization owning this account."""
         account_path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
-        accounts = await _entity_records(connection, account_path, "adaccounts", "adaccount")
+        accounts = await _entity_records(self.connection, account_path, "adaccounts", "adaccount")
         organization_id = accounts[0]["organization_id"] if accounts else None
         if organization_id is None:
             return []
         path = f"/{constants.API_VERSION}/organizations/{organization_id}/adaccounts"
-        rows = await _entity_records(connection, path, "adaccounts", "adaccount")
+        rows = await _entity_records(self.connection, path, "adaccounts", "adaccount")
         return _with_date(rows, context.partition_date)
 
     @il.asset(
@@ -220,10 +216,10 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def ads(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    async def ads(self, context: il.ExecutionContext) -> list[_RECORD]:
         """All ads in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/ads"
-        rows = await _entity_records(connection, path, "ads", "ad")
+        rows = await _entity_records(self.connection, path, "ads", "ad")
         return _with_date(rows, context.partition_date)
 
     @il.asset(
@@ -232,10 +228,10 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def ad_squads(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    async def ad_squads(self, context: il.ExecutionContext) -> list[_RECORD]:
         """All ad squads in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/adsquads"
-        rows = await _entity_records(connection, path, "adsquads", "adsquad")
+        rows = await _entity_records(self.connection, path, "adsquads", "adsquad")
         return _with_date(rows, context.partition_date)
 
     @il.asset(
@@ -244,8 +240,8 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def campaigns(self, context: il.ExecutionContext, connection: SnapchatAdsConnection) -> list[_RECORD]:
+    async def campaigns(self, context: il.ExecutionContext) -> list[_RECORD]:
         """All campaigns in the ad account with their attributes."""
         path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/campaigns"
-        rows = await _entity_records(connection, path, "campaigns", "campaign")
+        rows = await _entity_records(self.connection, path, "campaigns", "campaign")
         return _with_date(rows, context.partition_date)

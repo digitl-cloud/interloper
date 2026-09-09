@@ -150,42 +150,42 @@ class Brandwatch(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def facebook_stats(self, context: il.ExecutionContext, connection: BrandwatchConnection) -> list[_Record]:
+    async def facebook_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Facebook channel performance metrics per day."""
-        return await self._network_stats(context, connection, "facebook")
+        return await self._network_stats(context, self.connection, "facebook")
 
     @il.asset(
         schema=schemas.InstagramStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def instagram_stats(self, context: il.ExecutionContext, connection: BrandwatchConnection) -> list[_Record]:
+    async def instagram_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Instagram channel performance metrics per day."""
-        return await self._network_stats(context, connection, "instagram")
+        return await self._network_stats(context, self.connection, "instagram")
 
     @il.asset(
         schema=schemas.LinkedinStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def linkedin_stats(self, context: il.ExecutionContext, connection: BrandwatchConnection) -> list[_Record]:
+    async def linkedin_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """LinkedIn channel performance metrics per day."""
-        return await self._network_stats(context, connection, "linkedin")
+        return await self._network_stats(context, self.connection, "linkedin")
 
     @il.asset(
         schema=schemas.TwitterStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def twitter_stats(self, context: il.ExecutionContext, connection: BrandwatchConnection) -> list[_Record]:
+    async def twitter_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """X (Twitter) channel performance metrics per day."""
-        return await self._network_stats(context, connection, "twitter")
+        return await self._network_stats(context, self.connection, "twitter")
 
     @il.asset(
         schema=schemas.YoutubeStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def youtube_stats(self, context: il.ExecutionContext, connection: BrandwatchConnection) -> list[_Record]:
+    async def youtube_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """YouTube channel performance metrics per day."""
-        return await self._network_stats(context, connection, "youtube")
+        return await self._network_stats(context, self.connection, "youtube")

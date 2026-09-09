@@ -266,12 +266,10 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="start_date"),
         tags=["Report"],
     )
-    async def vendor_traffic_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def vendor_traffic_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Glance views per ASIN per day."""
         document = await _get_report(
-            connection,
+            self.connection,
             report_type="GET_VENDOR_TRAFFIC_REPORT",
             marketplace=self.marketplace,
             start_date=context.partition_date,
@@ -285,12 +283,10 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="start_date"),
         tags=["Report"],
     )
-    async def vendor_sales_retail_manufacturing_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def vendor_sales_retail_manufacturing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Retail sales per ASIN per day, manufacturing (distributor) view."""
         document = await _get_report(
-            connection,
+            self.connection,
             report_type="GET_VENDOR_SALES_REPORT",
             marketplace=self.marketplace,
             start_date=context.partition_date,
@@ -304,12 +300,10 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="start_date"),
         tags=["Report"],
     )
-    async def vendor_sales_retail_sourcing_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def vendor_sales_retail_sourcing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Retail sales per ASIN per day, sourcing (distributor) view."""
         document = await _get_report(
-            connection,
+            self.connection,
             report_type="GET_VENDOR_SALES_REPORT",
             marketplace=self.marketplace,
             start_date=context.partition_date,
@@ -323,12 +317,10 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="start_date"),
         tags=["Report"],
     )
-    async def vendor_sales_business_manufacturing_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def vendor_sales_business_manufacturing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Business (B2B) sales per ASIN per day, manufacturing (distributor) view."""
         document = await _get_report(
-            connection,
+            self.connection,
             report_type="GET_VENDOR_SALES_REPORT",
             marketplace=self.marketplace,
             start_date=context.partition_date,
@@ -342,12 +334,10 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="start_date"),
         tags=["Report"],
     )
-    async def vendor_sales_business_sourcing_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def vendor_sales_business_sourcing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Business (B2B) sales per ASIN per day, sourcing (distributor) view."""
         document = await _get_report(
-            connection,
+            self.connection,
             report_type="GET_VENDOR_SALES_REPORT",
             marketplace=self.marketplace,
             start_date=context.partition_date,
@@ -361,12 +351,10 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="start_date"),
         tags=["Report"],
     )
-    async def vendor_inventory_retail_manufacturing_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def vendor_inventory_retail_manufacturing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Retail inventory health per ASIN per day, manufacturing (distributor) view."""
         document = await _get_report(
-            connection,
+            self.connection,
             report_type="GET_VENDOR_INVENTORY_REPORT",
             marketplace=self.marketplace,
             start_date=context.partition_date,
@@ -380,12 +368,10 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="start_date"),
         tags=["Report"],
     )
-    async def vendor_inventory_retail_sourcing_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def vendor_inventory_retail_sourcing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Retail inventory health per ASIN per day, sourcing (distributor) view."""
         document = await _get_report(
-            connection,
+            self.connection,
             report_type="GET_VENDOR_INVENTORY_REPORT",
             marketplace=self.marketplace,
             start_date=context.partition_date,
@@ -399,12 +385,10 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="start_date"),
         tags=["Report"],
     )
-    async def vendor_net_pure_product_margin_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def vendor_net_pure_product_margin_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Net pure product margin per ASIN per day."""
         document = await _get_report(
-            connection,
+            self.connection,
             report_type="GET_VENDOR_NET_PURE_PRODUCT_MARGIN_REPORT",
             marketplace=self.marketplace,
             start_date=context.partition_date,
@@ -418,10 +402,10 @@ class AmazonSellingPartner(il.Source):
     #     schema=schemas.VendorForecastingRetailStats,
     #     tags=["Report"],
     # )
-    # async def vendor_forecasting_retail_stats(self, connection: AmazonSellingPartnerConnection) -> list[_Record]:
+    # async def vendor_forecasting_retail_stats(self) -> list[_Record]:
     #     """Latest forward-looking demand forecast per ASIN (retail, snapshot)."""
     #     document = await _get_report(
-    #         connection,
+    #         self.connection,
     #         report_type="GET_VENDOR_FORECASTING_REPORT",
     #         marketplace=self.marketplace,
     #         options={"sellingProgram": "RETAIL"},
@@ -435,9 +419,7 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    async def products(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def products(self, context: il.ExecutionContext) -> list[_Record]:
         """Product identifier lookup (ASIN, parent ASIN, EAN, UPC, ISBN)."""
         date = context.partition_date
         query = f"""{{
@@ -449,7 +431,7 @@ class AmazonSellingPartner(il.Source):
             }}
           }}
         }}"""
-        metrics = await _run_query(connection, query)
+        metrics = await _run_query(self.connection, query)
         return [
             {
                 **_scalars(
@@ -471,9 +453,7 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def product_fulfillment_stats(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def product_fulfillment_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Vendor sourcing and fulfillment metrics per ASIN per day."""
         date = context.partition_date
         query = f"""{{
@@ -498,7 +478,7 @@ class AmazonSellingPartner(il.Source):
             }}
           }}
         }}"""
-        metrics = await _run_query(connection, query)
+        metrics = await _run_query(self.connection, query)
         rows: list[_Record] = []
         for m in metrics:
             metric = _nested(m, "metrics")
@@ -528,9 +508,7 @@ class AmazonSellingPartner(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def geo_sales_stats_by_country(
-        self, context: il.ExecutionContext, connection: AmazonSellingPartnerConnection
-    ) -> list[_Record]:
+    async def geo_sales_stats_by_country(self, context: il.ExecutionContext) -> list[_Record]:
         """Shipped sales and cost metrics per ASIN per ship-to country per day."""
         date = context.partition_date
         query = f"""{{
@@ -552,7 +530,7 @@ class AmazonSellingPartner(il.Source):
             }}
           }}
         }}"""
-        metrics = await _run_query(connection, query)
+        metrics = await _run_query(self.connection, query)
         rows: list[_Record] = []
         for m in metrics:
             metric = _nested(m, "metrics")

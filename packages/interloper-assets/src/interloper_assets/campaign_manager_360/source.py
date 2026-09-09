@@ -205,12 +205,10 @@ class CampaignManager360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def campaigns_stats(
-        self, context: il.ExecutionContext, connection: CampaignManager360Connection
-    ) -> list[_Record]:
+    def campaigns_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Campaign performance metrics per day."""
         return _get_report(
-            connection,
+            self.connection,
             self.profile_id,
             _standard_report_body(
                 self.account_id,
@@ -226,10 +224,10 @@ class CampaignManager360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def ads_stats(self, context: il.ExecutionContext, connection: CampaignManager360Connection) -> list[_Record]:
+    def ads_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Ad performance metrics per day at placement/creative grain."""
         return _get_report(
-            connection,
+            self.connection,
             self.profile_id,
             _standard_report_body(
                 self.account_id,
@@ -245,10 +243,10 @@ class CampaignManager360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def reach_stats(self, context: il.ExecutionContext, connection: CampaignManager360Connection) -> list[_Record]:
+    def reach_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Unique-reach metrics per campaign and country."""
         rows = _get_report(
-            connection,
+            self.connection,
             self.profile_id,
             _reach_report_body(
                 self.account_id,
@@ -266,9 +264,7 @@ class CampaignManager360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def custom_audiences(
-        self, context: il.ExecutionContext, connection: CampaignManager360Connection
-    ) -> list[_Record]:
+    def custom_audiences(self, context: il.ExecutionContext) -> list[_Record]:
         """Remarketing lists (custom audiences) of the configured advertiser.
 
         Raises:
@@ -277,7 +273,7 @@ class CampaignManager360(il.Source):
         """
         if not self.advertiser_id:
             raise ValueError("The custom_audiences asset requires the source's advertiser_id to be set")
-        items = _list_remarketing_lists(connection.client, self.profile_id, self.advertiser_id)
+        items = _list_remarketing_lists(self.connection.client, self.profile_id, self.advertiser_id)
         for item in items:
             rule = item.get("listPopulationRule")
             # Clauses are a nested list; JSON-encode them onto the string column.

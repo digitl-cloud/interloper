@@ -188,9 +188,9 @@ class AmazonAds(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def profiles(self, context: il.ExecutionContext, connection: AmazonAdsConnection) -> list[dict[str, Any]]:
+    def profiles(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Advertising profiles associated with the account."""
-        response = connection.client.get("/v2/profiles")
+        response = self.connection.client.get("/v2/profiles")
         response.raise_for_status()
         return [{**row, "date": context.partition_date} for row in response.json()]
 
@@ -201,12 +201,10 @@ class AmazonAds(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def products_advertised_products_stats(
-        self, context: il.ExecutionContext, connection: AmazonAdsConnection
-    ) -> list[dict[str, Any]]:
+    def products_advertised_products_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Performance of advertised products."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_PRODUCTS",
@@ -226,11 +224,10 @@ class AmazonAds(il.Source):
     def products_campaigns_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Campaign performance for sponsored products."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_PRODUCTS",
@@ -250,11 +247,10 @@ class AmazonAds(il.Source):
     def products_search_terms_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Performance of search terms in sponsored products campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_PRODUCTS",
@@ -274,11 +270,10 @@ class AmazonAds(il.Source):
     def products_targeting_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Performance based on targeting criteria in sponsored products campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_PRODUCTS",
@@ -298,11 +293,10 @@ class AmazonAds(il.Source):
     def products_purchased_products_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Products purchased through sponsored products campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_PRODUCTS",
@@ -322,11 +316,10 @@ class AmazonAds(il.Source):
     def products_gross_and_invalid_traffic_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Gross and invalid traffic metrics for sponsored products campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_PRODUCTS",
@@ -348,11 +341,10 @@ class AmazonAds(il.Source):
     def display_campaigns_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Display advertising campaign performance."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_DISPLAY",
@@ -372,11 +364,10 @@ class AmazonAds(il.Source):
     def display_advertised_products_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Performance of advertised products within display campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_DISPLAY",
@@ -396,11 +387,10 @@ class AmazonAds(il.Source):
     def display_purchased_products_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Products purchased through display campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_DISPLAY",
@@ -420,11 +410,10 @@ class AmazonAds(il.Source):
     def display_targeting_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Display campaign performance based on targeting criteria."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_DISPLAY",
@@ -444,11 +433,10 @@ class AmazonAds(il.Source):
     def display_gross_and_invalid_traffic_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Traffic quality metrics for display campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_DISPLAY",
@@ -468,11 +456,10 @@ class AmazonAds(il.Source):
     def display_ad_groups_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Ad group performance within display campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_DISPLAY",
@@ -494,11 +481,10 @@ class AmazonAds(il.Source):
     def brands_campaigns_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Brand promotion campaign performance."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_BRANDS",
@@ -518,11 +504,10 @@ class AmazonAds(il.Source):
     def brands_ads_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Individual ad performance within brand campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_BRANDS",
@@ -542,11 +527,10 @@ class AmazonAds(il.Source):
     def brands_search_terms_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Search term performance in brand campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_BRANDS",
@@ -566,11 +550,10 @@ class AmazonAds(il.Source):
     def brands_targeting_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Brand campaign performance based on targeting criteria."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_BRANDS",
@@ -590,11 +573,10 @@ class AmazonAds(il.Source):
     def brands_purchased_products_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Products purchased through brand campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_BRANDS",
@@ -614,11 +596,10 @@ class AmazonAds(il.Source):
     def brands_gross_and_invalid_traffic_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Traffic quality metrics for brand campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_BRANDS",
@@ -638,11 +619,10 @@ class AmazonAds(il.Source):
     def brands_placements_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Campaign performance by ad placement."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_BRANDS",
@@ -662,11 +642,10 @@ class AmazonAds(il.Source):
     def brands_ad_groups_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Ad group performance within brand campaigns."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_BRANDS",
@@ -687,11 +666,10 @@ class AmazonAds(il.Source):
     def television_campaigns_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Television campaign performance."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_TELEVISION",
@@ -710,11 +688,10 @@ class AmazonAds(il.Source):
     def television_targeting_stats(
         self,
         context: il.ExecutionContext,
-        connection: AmazonAdsConnection,
     ) -> list[dict[str, Any]]:
         """Television campaign performance by targeting."""
         data = request_and_download_report(
-            connection,
+            self.connection,
             self.profile_id,
             context,
             ad_product="SPONSORED_TELEVISION",

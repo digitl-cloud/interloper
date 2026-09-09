@@ -49,9 +49,9 @@ class Adup(il.Source):
         tags=["Entity"],
         schema=Account,
     )
-    async def account(self, context: il.ExecutionContext, connection: AdupConnection) -> list[dict[str, Any]]:
+    async def account(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Advertiser account information."""
-        response = await connection.client.get("/advertisers/me")
+        response = await self.connection.client.get("/advertisers/me")
         response.raise_for_status()
         return [{**response.json(), "date": context.partition_date}]
 
@@ -60,8 +60,8 @@ class Adup(il.Source):
         tags=["Report"],
         schema=AdsStats,
     )
-    async def ads_stats(self, context: il.ExecutionContext, connection: AdupConnection) -> list[dict[str, Any]]:
+    async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance insights with metrics like impressions, clicks, conversions, and cost."""
         window = context.window
-        data = await get_report(connection.client, "AD_PERFORMANCE_REPORT", window.start, window.end)
+        data = await get_report(self.connection.client, "AD_PERFORMANCE_REPORT", window.start, window.end)
         return data["rows"]

@@ -176,9 +176,9 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def actions(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    async def actions(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Conversion actions including revenue, commissions, and attribution data."""
-        records = await _get_actions(connection, self.program_id, context.partition_date)
+        records = await _get_actions(self.connection, self.program_id, context.partition_date)
         return _to_df(records, context.partition_date)
 
     @il.asset(
@@ -186,9 +186,9 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def action_updates(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    async def action_updates(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Action updates tracking changes to conversion actions over time."""
-        records = await _get_action_updates(connection, self.program_id, context.partition_date)
+        records = await _get_action_updates(self.connection, self.program_id, context.partition_date)
         return _to_df(records, context.partition_date)
 
     @il.asset(
@@ -196,9 +196,9 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def action_inquiries(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    async def action_inquiries(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Action inquiries raised against conversion actions."""
-        records = await _get_action_inquiries(connection, self.program_id, context.partition_date)
+        records = await _get_action_inquiries(self.connection, self.program_id, context.partition_date)
         return _to_df(records, context.partition_date)
 
     @il.asset(
@@ -206,10 +206,10 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def actions_by_sku(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    async def actions_by_sku(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Conversion actions broken down by product SKU."""
         records = await _report_export(
-            connection, "adv_action_list_sku_pm_only", self.program_id, context.partition_date
+            self.connection, "adv_action_list_sku_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -218,9 +218,9 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def clicks(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    async def clicks(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Click events for the program."""
-        records = await _clicks_export(connection, self.program_id, context.partition_date)
+        records = await _clicks_export(self.connection, self.program_id, context.partition_date)
         return _to_df(records, context.partition_date)
 
     @il.asset(
@@ -228,10 +228,10 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def performance_stats(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    async def performance_stats(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Daily performance metrics (clicks, actions, revenue)."""
         records = await _report_export(
-            connection, "att_adv_performance_by_day_pm_only", self.program_id, context.partition_date
+            self.connection, "att_adv_performance_by_day_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -240,10 +240,10 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def performance_stats_by_ad(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    async def performance_stats_by_ad(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Performance metrics broken down by ad."""
         records = await _report_export(
-            connection, "adv_performance_by_ad_pm_only", self.program_id, context.partition_date
+            self.connection, "adv_performance_by_ad_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -252,12 +252,10 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def performance_stats_by_domain(
-        self, context: il.ExecutionContext, connection: ImpactConnection
-    ) -> pd.DataFrame:
+    async def performance_stats_by_domain(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Performance metrics broken down by referring domain."""
         records = await _report_export(
-            connection, "att_adv_performance_by_ref_domain_pm_only", self.program_id, context.partition_date
+            self.connection, "att_adv_performance_by_ref_domain_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -266,12 +264,10 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def performance_stats_by_shared_id(
-        self, context: il.ExecutionContext, connection: ImpactConnection
-    ) -> pd.DataFrame:
+    async def performance_stats_by_shared_id(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Performance metrics broken down by shared ID."""
         records = await _report_export(
-            connection, "att_adv_performance_by_shared_id_pm_only", self.program_id, context.partition_date
+            self.connection, "att_adv_performance_by_shared_id_pm_only", self.program_id, context.partition_date
         )
         return _to_df(records, context.partition_date)
 
@@ -280,7 +276,9 @@ class Impact(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def performance_stats_by_io(self, context: il.ExecutionContext, connection: ImpactConnection) -> pd.DataFrame:
+    async def performance_stats_by_io(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Performance metrics broken down by insertion order."""
-        records = await _report_export(connection, "att_adv_performance_by_IO", self.program_id, context.partition_date)
+        records = await _report_export(
+            self.connection, "att_adv_performance_by_IO", self.program_id, context.partition_date
+        )
         return _to_df(records, context.partition_date)

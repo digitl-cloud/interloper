@@ -150,10 +150,10 @@ class TiktokAds(il.Source):
     # --- Time-series reports (TiktokStatsNormalizer from the source) ---
 
     @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def ads_stats(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad-level performance with basic metrics including spend, clicks, and conversions."""
         rows = await _request_report(
-            connection,
+            self.connection,
             self.advertiser_id,
             context.partition_date,
             report_type="BASIC",
@@ -163,12 +163,10 @@ class TiktokAds(il.Source):
         return _with_date(rows, context.partition_date)
 
     @il.asset(schema=AdsStatsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def ads_stats_by_country(
-        self, context: il.ExecutionContext, connection: TiktokAdsConnection
-    ) -> list[dict[str, Any]]:
+    async def ads_stats_by_country(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by country."""
         rows = await _request_report(
-            connection,
+            self.connection,
             self.advertiser_id,
             context.partition_date,
             report_type="AUDIENCE",
@@ -178,12 +176,10 @@ class TiktokAds(il.Source):
         return _with_date(rows, context.partition_date)
 
     @il.asset(schema=AdsStatsByAgeGender, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def ads_stats_by_age_gender(
-        self, context: il.ExecutionContext, connection: TiktokAdsConnection
-    ) -> list[dict[str, Any]]:
+    async def ads_stats_by_age_gender(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by age and gender demographics."""
         rows = await _request_report(
-            connection,
+            self.connection,
             self.advertiser_id,
             context.partition_date,
             report_type="AUDIENCE",
@@ -193,12 +189,10 @@ class TiktokAds(il.Source):
         return _with_date(rows, context.partition_date)
 
     @il.asset(schema=AdsStatsByPlatform, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def ads_stats_by_platform(
-        self, context: il.ExecutionContext, connection: TiktokAdsConnection
-    ) -> list[dict[str, Any]]:
+    async def ads_stats_by_platform(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by platform."""
         rows = await _request_report(
-            connection,
+            self.connection,
             self.advertiser_id,
             context.partition_date,
             report_type="AUDIENCE",
@@ -208,12 +202,10 @@ class TiktokAds(il.Source):
         return _with_date(rows, context.partition_date)
 
     @il.asset(schema=VideosStatsByPlatform, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def videos_stats_by_platform(
-        self, context: il.ExecutionContext, connection: TiktokAdsConnection
-    ) -> list[dict[str, Any]]:
+    async def videos_stats_by_platform(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Video ad performance segmented by platform."""
         rows = await _request_report(
-            connection,
+            self.connection,
             self.advertiser_id,
             context.partition_date,
             report_type="AUDIENCE",
@@ -230,9 +222,9 @@ class TiktokAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def ads(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    async def ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All ads in the advertiser account with their attributes."""
-        rows = await _paginate(connection, "/ad/get/", {"advertiser_id": self.advertiser_id})
+        rows = await _paginate(self.connection, "/ad/get/", {"advertiser_id": self.advertiser_id})
         return _with_date(rows, context.partition_date)
 
     @il.asset(
@@ -241,9 +233,9 @@ class TiktokAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def campaigns(self, context: il.ExecutionContext, connection: TiktokAdsConnection) -> list[dict[str, Any]]:
+    async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaigns in the advertiser account with their attributes."""
-        rows = await _paginate(connection, "/campaign/get/", {"advertiser_id": self.advertiser_id})
+        rows = await _paginate(self.connection, "/campaign/get/", {"advertiser_id": self.advertiser_id})
         return _with_date(rows, context.partition_date)
 
     @il.asset(
@@ -252,16 +244,14 @@ class TiktokAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def advertisers(
-        self, context: il.ExecutionContext, connection: TiktokAdsConnection
-    ) -> list[dict[str, Any]]:
+    async def advertisers(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The advertiser account with its attributes.
 
         Raises:
             RuntimeError: If TikTok answers with a non-zero API code.
 
         """
-        response = await connection.client.get(
+        response = await self.connection.client.get(
             "/advertiser/info/",
             params={
                 "advertiser_ids": json.dumps([self.advertiser_id]),

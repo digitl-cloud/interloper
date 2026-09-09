@@ -192,12 +192,10 @@ class TheTradeDesk(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def ad_groups_stats(
-        self, context: il.ExecutionContext, connection: TheTradeDeskConnection
-    ) -> list[_Record]:
+    async def ad_groups_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Ad-group performance metrics per day, including video-player and conversion metrics."""
         return await _get_report(
-            connection,
+            self.connection,
             template_id=constants.ADGROUPS_REPORT_TEMPLATE_ID,
             partner_id=self.partner_id,
             date=context.partition_date,
