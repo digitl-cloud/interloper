@@ -110,6 +110,7 @@ class Component(Serializable):
     _parent: Component | None = PrivateAttr(default=None)
 
     # -- Construction ----------------------------------------------------------
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-derive ``kind`` and collect the class's relations.
 
@@ -125,65 +126,6 @@ class Component(Serializable):
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
         cls._collect()
-
-    @classmethod
-    def _collect(cls) -> None:
-        """Merge the class's declared relations and install their descriptors.
-
-        The class-creation step, run from ``__init_subclass__`` and again by a
-        decorator that adds relations to a built class; never called by hand.
-        Three declaration forms feed one map, in increasing precedence:
-
-        - an annotation naming a component class
-          (``connection: PostgresConnection``), the shorthand for a relation
-          that needs nothing said beyond what fills it;
-        - a :class:`Relation` value, which is where anything else the relation
-          declares is written. Annotate it with what fills it
-          (``destinations: list[Destination] = Relation("destination", many=True)``)
-          so both the constructor kwarg and the attribute are typed; the
-          annotation is then for the type checker only, since the relation
-          itself says what it accepts. A bare ``config = Relation(BigQueryConfig)``
-          declares the same relation untyped;
-        - a ``relations`` dict written on the class body, which is what the
-          decorators emit.
-
-        The result merges over every base's map, so a subclass entry replaces
-        the inherited entry of the same name and nothing an ancestor declared
-        is ever lost.
-
-        Each entry is copied, stamped with its name and installed under that
-        name: a :class:`~interloper.component.relation.Relation` is its own
-        descriptor, so the class attribute reads as the declaration and the
-        instance attribute as what is bound to it. The copy is what keeps a
-        subclass's redeclaration off its parent's map.
-
-        Annotated relations are dropped from the class's own annotations before
-        Pydantic collects its fields, so a relation is never also a field.
-        """
-        inherited: dict[str, Relation] = {}
-        for base in reversed(cls.__mro__[1:]):
-            inherited.update(getattr(base, "relations", None) or {})
-
-        annotations: dict[str, Any] = cls.__dict__.get("__annotations__", {})
-        module = sys.modules.get(cls.__module__)
-        namespace = vars(module) if module else {}
-
-        own: dict[str, Relation] = {}
-        for name, hint in annotations.items():
-            annotated = Relation.from_annotation(hint, namespace)
-            if annotated is not None:
-                own[name] = annotated
-        own.update({name: value for name, value in cls.__dict__.items() if isinstance(value, Relation)})
-        declared = cls.__dict__.get("relations")
-        if isinstance(declared, dict):
-            own.update(declared)
-
-        cls.relations = {**inherited, **own}
-        for name, relation in cls.relations.items():
-            stamped = relation.model_copy(update={"name": name})
-            cls.relations[name] = stamped
-            setattr(cls, name, stamped)
-            annotations.pop(name, None)
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -289,81 +231,113 @@ class Component(Serializable):
             return
         super().__setattr__(name, value)
 
+    # -- Identity --------------------------------------------------------------
+
+    @property
+    def parent(self) -> Component | None:
+        """The component that owns this one, ``None`` when it stands alone.
+
+        A source owns its assets; a connection, a config or a standalone asset
+        has no owner. Ownership scopes the bare keys a relation declares, so it
+        is what :attr:`identity` reads.
+        """
+        return self._parent
+
+    @parent.setter
+    def parent(self, value: Component | None) -> None:
+        """Set the component that owns this one.
+
+        Args:
+            value: The owning component, or ``None`` to detach it.
+        """
+        self._parent = value
+
+    @property
+    def owned(self) -> list[Component]:
+        """The components this one owns, which travel inside its own spec.
+
+        Ownership is not declared: a component held in one of this
+        component's fields whose :attr:`parent` is this component is owned.
+        A source's assets are the one case today.
+
+        Returns:
+            The owned components, in field order; empty for a component that
+            owns none.
+        """
+        return [child for children in self._owned_by_field().values() for child in children]
+
+    @property
+    def identity(self) -> ComponentIdentity:
+        """What this component is for relation matching: its owner's key and its own."""
+        return ComponentIdentity.of(self)
+
+    @property
+    def qualified_key(self) -> str:
+        """This component's key, qualified by its owner's key when it has an owner."""
+        return str(self.identity)
+
+    @property
+    def discriminator(self) -> str | None:
+        """This instance's discriminator value, if declared and set.
+
+        The value of the config field marked ``discriminator=True``: what
+        distinguishes instances of the same component class (an ad account
+        id, a site URL, ...). Drives the derived :meth:`instance_name` and,
+        for sources, the per-instance asset table names.
+        """
+        marked = self._discriminator_fields()
+        if not marked:
+            return None
+        value = getattr(self, marked[0])
+        return str(value) if value else None
+
+    def instance_name(self) -> str:
+        """Display name for this instance: its discriminator value.
+
+        The class label is the fallback when no discriminator is declared or
+        set, since the type is already visible alongside the name everywhere
+        the name is shown, so it isn't repeated in it.
+
+        A derived *default*, not an identity: the persistence layer uses it to
+        seed a blank component name, and users may override it freely. It never
+        feeds physical naming.
+
+        Returns:
+            E.g. ``"act_123"``, or ``"Facebook Ads"`` without a discriminator.
+        """
+        return self.discriminator or type(self).name or to_label(type(self).__name__)
+
+    def __str__(self) -> str:
+        """Human-readable representation: ``Name (key: k, id: i)``.
+
+        Returns:
+            Formatted string with class name, key, and id.
+        """
+        return f"{type(self).__name__} (key: {self.key}, id: {self.id})"
+
+    @classmethod
+    def anchor(cls) -> type[Component]:
+        """The class anchoring this component's kind.
+
+        The anchor is the base-most class in the MRO that declares the
+        kind (``Connection`` for any connection subclass), so any component
+        class resolves to the single per-kind authority.
+
+        Returns:
+            The anchoring class.
+        """
+        anchor = cls
+        for base in cls.__mro__:
+            if (
+                base is not Component
+                and isinstance(base, type)
+                and issubclass(base, Component)
+                and getattr(base, "kind", "") == cls.kind
+            ):
+                anchor = base
+        return anchor
+
     # -- Relations -------------------------------------------------------------
-    def _check_targets(self, name: str, relation: Relation, targets: tuple[Component, ...]) -> None:
-        """Check that *targets* are legal for one of this component's relations.
-
-        Every target must be one the relation :meth:`~Relation.accepts`, and a
-        single-valued relation may not receive more than one target at once.
-        Performs no mutation, so :meth:`_replace_binding` can call it before
-        touching ``_bound`` and a rejected replacement leaves the existing
-        binding untouched.
-
-        Args:
-            name: The relation name as declared on the class.
-            relation: The declared relation *targets* are checked against.
-            targets: The candidate components to check.
-
-        Raises:
-            ConfigError: If a target's kind or key is not one the relation
-                accepts, or if a single-valued relation is given more than one target.
-        """
-        owner = self.identity
-        for target in targets:
-            if not relation.accepts(target.kind, target.identity, owner=owner):
-                raise ConfigError(
-                    f"{type(self).__name__}.{name} does not accept {target.kind} '{target.qualified_key}' "
-                    f"(declared: kind {relation.kinds()}, key {relation.keys() or 'any'})"
-                )
-        if not relation.many and len(targets) > 1:
-            raise ConfigError(f"{type(self).__name__}.{name} is single-valued and takes one target at a time")
-
-    def _replace_binding(self, name: str, targets: tuple[Component, ...]) -> None:
-        """Replace what is bound to one of this component's relations, atomically.
-
-        The one write path: :meth:`bind` and :meth:`Relation.__set__` both
-        land here, so the rules hold whichever way a binding is written.
-        Everything is checked before ``_bound`` is touched, so a rejected
-        write leaves the previous binding exactly as it was, and
-        :meth:`on_rebind` runs once the new binding is in place.
-
-        Args:
-            name: The relation name as declared on the class.
-            targets: The components to hold, replacing whatever is held now;
-                duplicates collapse to the first occurrence.
-
-        Raises:
-            ConfigError: If a target's kind or key is not one the relation
-                accepts, if a single-valued relation is given more than one
-                target, or if a non-optional relation would be left empty.
-        """
-        relation = self._relation(name)
-        self._check_targets(name, relation, targets)
-        if not targets and not relation.optional:
-            raise ConfigError(f"{type(self).__name__}.{name} is non-optional and cannot be emptied")
-        deduplicated: list[Component] = []
-        for target in targets:
-            if all(target is not held for held in deduplicated):
-                deduplicated.append(target)
-        self._bound[name] = deduplicated
-        self.on_rebind(name)
-
-    def on_rebind(self, name: str) -> None:
-        """React to one of this component's relations having been rebound.
-
-        Called once after every write to a binding, whichever way it was
-        written: a constructor kwarg, :meth:`bind`, :meth:`unbind`, attribute
-        assignment, or a parent's :meth:`trickle`. The new binding is already
-        in place, so :meth:`bound` reads it. The base does nothing; override
-        it to cascade, the way a source trickles its bindings into its assets
-        and destinations and a job into its targets.
-
-        Binding on ``self`` from inside the hook re-enters it; bind on other
-        components only.
-
-        Args:
-            name: The relation name whose binding changed.
-        """
 
     def bind(self, name: str, *targets: Component) -> None:
         """Bind components to one of this component's declared relations.
@@ -403,6 +377,23 @@ class Component(Serializable):
             return
         self._replace_binding(name, tuple(remaining))
 
+    def on_rebind(self, name: str) -> None:
+        """React to one of this component's relations having been rebound.
+
+        Called once after every write to a binding, whichever way it was
+        written: a constructor kwarg, :meth:`bind`, :meth:`unbind`, attribute
+        assignment, or a parent's :meth:`trickle`. The new binding is already
+        in place, so :meth:`bound` reads it. The base does nothing; override
+        it to cascade, the way a source trickles its bindings into its assets
+        and destinations and a job into its targets.
+
+        Binding on ``self`` from inside the hook re-enters it; bind on other
+        components only.
+
+        Args:
+            name: The relation name whose binding changed.
+        """
+
     def bound(self, name: str) -> Component | list[Component] | None:
         """What is explicitly bound to one of this component's declared relations.
 
@@ -418,25 +409,6 @@ class Component(Serializable):
         if relation.many:
             return list(values)
         return values[0] if values else None
-
-    def trickle(self, child: Component) -> None:
-        """Fill a child's unbound relations from this component's own bindings.
-
-        For every relation the child declares under a name this component has
-        itself bound, and that the child leaves unbound, this binds whichever
-        of the parent's targets the child's relation :meth:`~Relation.accepts`
-        (every accepted target for a ``many`` relation, the first accepted one
-        otherwise). A binding the child already holds is never touched.
-
-        Args:
-            child: The component to trickle this component's bindings into.
-        """
-        for name, relation in type(child).relations.items():
-            if child._bound.get(name) or name not in self._bound:
-                continue
-            accepted = [t for t in self._bound[name] if relation.accepts(t.kind, t.identity, owner=child.identity)]
-            if accepted:
-                child.bind(name, *(accepted if relation.many else accepted[:1]))
 
     def resolve(self, name: str) -> Any:
         """What one of this component's declared relations actually resolves to.
@@ -458,6 +430,25 @@ class Component(Serializable):
         if bound or relation.many:
             return bound
         return relation.fallback()
+
+    def trickle(self, child: Component) -> None:
+        """Fill a child's unbound relations from this component's own bindings.
+
+        For every relation the child declares under a name this component has
+        itself bound, and that the child leaves unbound, this binds whichever
+        of the parent's targets the child's relation :meth:`~Relation.accepts`
+        (every accepted target for a ``many`` relation, the first accepted one
+        otherwise). A binding the child already holds is never touched.
+
+        Args:
+            child: The component to trickle this component's bindings into.
+        """
+        for name, relation in type(child).relations.items():
+            if child._bound.get(name) or name not in self._bound:
+                continue
+            accepted = [t for t in self._bound[name] if relation.accepts(t.kind, t.identity, owner=child.identity)]
+            if accepted:
+                child.bind(name, *(accepted if relation.many else accepted[:1]))
 
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
         """Check that every relation this component holds is sound.
@@ -516,130 +507,8 @@ class Component(Serializable):
         if problems:
             raise ConfigError(f"{type(self).__name__} '{self.qualified_key}': " + "; ".join(problems))
 
-    def _relation(self, name: str) -> Relation:
-        """Look up one of this component's declared relations by name.
-
-        Args:
-            name: The relation name as declared on the class.
-
-        Returns:
-            The declared relation.
-
-        Raises:
-            KeyError: If the class declares no relation of that name.
-        """
-        declared = type(self).relations
-        if name not in declared:
-            raise KeyError(f"{type(self).__name__} declares no relation '{name}'; declared: {sorted(declared)}")
-        return declared[name]
-
-    # -- Instance discrimination -----------------------------------------------
-
-    @classmethod
-    def _discriminator_fields(cls) -> list[str]:
-        """Names of the config fields marked ``discriminator=True``.
-
-        Returns:
-            The marked field names (normally zero or one).
-        """
-        return [
-            name
-            for name, field in cls.model_fields.items()
-            if isinstance(field.json_schema_extra, dict) and field.json_schema_extra.get("x-discriminator")
-        ]
-
-    @property
-    def discriminator(self) -> str | None:
-        """This instance's discriminator value, if declared and set.
-
-        The value of the config field marked ``discriminator=True``: what
-        distinguishes instances of the same component class (an ad account
-        id, a site URL, ...). Drives the derived :meth:`instance_name` and,
-        for sources, the per-instance asset table names.
-        """
-        marked = self._discriminator_fields()
-        if not marked:
-            return None
-        value = getattr(self, marked[0])
-        return str(value) if value else None
-
-    def instance_name(self) -> str:
-        """Display name for this instance: its discriminator value.
-
-        The class label is the fallback when no discriminator is declared or
-        set, since the type is already visible alongside the name everywhere
-        the name is shown, so it isn't repeated in it.
-
-        A derived *default*, not an identity: the persistence layer uses it to
-        seed a blank component name, and users may override it freely. It never
-        feeds physical naming.
-
-        Returns:
-            E.g. ``"act_123"``, or ``"Facebook Ads"`` without a discriminator.
-        """
-        return self.discriminator or type(self).name or to_label(type(self).__name__)
-
-    # -- Identity --------------------------------------------------------------
-    @property
-    def parent(self) -> Component | None:
-        """The component that owns this one, ``None`` when it stands alone.
-
-        A source owns its assets; a connection, a config or a standalone asset
-        has no owner. Ownership scopes the bare keys a relation declares, so it
-        is what :attr:`identity` reads.
-        """
-        return self._parent
-
-    @parent.setter
-    def parent(self, value: Component | None) -> None:
-        """Set the component that owns this one.
-
-        Args:
-            value: The owning component, or ``None`` to detach it.
-        """
-        self._parent = value
-
-    @property
-    def identity(self) -> ComponentIdentity:
-        """What this component is for relation matching: its owner's key and its own."""
-        return ComponentIdentity.of(self)
-
-    @property
-    def qualified_key(self) -> str:
-        """This component's key, qualified by its owner's key when it has an owner."""
-        return str(self.identity)
-
-    def __str__(self) -> str:
-        """Human-readable representation: ``Name (key: k, id: i)``.
-
-        Returns:
-            Formatted string with class name, key, and id.
-        """
-        return f"{type(self).__name__} (key: {self.key}, id: {self.id})"
-
-    @classmethod
-    def anchor(cls) -> type[Component]:
-        """The class anchoring this component's kind.
-
-        The anchor is the base-most class in the MRO that declares the
-        kind (``Connection`` for any connection subclass), so any component
-        class resolves to the single per-kind authority.
-
-        Returns:
-            The anchoring class.
-        """
-        anchor = cls
-        for base in cls.__mro__:
-            if (
-                base is not Component
-                and isinstance(base, type)
-                and issubclass(base, Component)
-                and getattr(base, "kind", "") == cls.kind
-            ):
-                anchor = base
-        return anchor
-
     # -- Serialization & resolution --------------------------------------------
+
     def to_spec(self, *, context: SerializationContext | None = None) -> Spec:
         """Serialize this instance to a reconstructible spec, relations and owned components included.
 
@@ -681,19 +550,210 @@ class Component(Serializable):
                 init[field] = payload
         return self._build_spec(init=init or None).model_copy(update={"id": self.id})
 
-    @property
-    def owned(self) -> list[Component]:
-        """The components this one owns, which travel inside its own spec.
+    @classmethod
+    def resolve_key(cls, key: str, catalog: Catalog | None = None) -> type[Self]:
+        """Resolve a catalog key to a component class of this (sub)class.
 
-        Ownership is not declared: a component held in one of this
-        component's fields whose :attr:`parent` is this component is owned.
-        A source's assets are the one case today.
+        The key is looked up in *catalog* (or, when none is given, the
+        settings-configured catalog, built lazily), and the class it names
+        is imported.
+
+        Called on a subclass, the resolved class must be of that subclass
+        (``Source.resolve_key("facebook_ads")``); anything else raises
+        ``TypeError``.
+
+        Args:
+            key: The catalog key naming the component class.
+            catalog: The catalog to look the key up in. Defaults to ``None``, which builds the
+                settings-configured catalog.
 
         Returns:
-            The owned components, in field order; empty for a component that
-            owns none.
+            The resolved class.
+
+        Raises:
+            CatalogKeyError: If the key is not in the catalog.
         """
-        return [child for children in self._owned_by_field().values() for child in children]
+        if catalog is None:
+            from interloper.catalog.base import Catalog
+
+            catalog = Catalog.from_settings()
+        definition = catalog.get(key)
+        if definition is None:
+            from interloper.errors import CatalogKeyError
+
+            raise CatalogKeyError(f"Unknown catalog key '{key}'")
+        return cls._resolve_import(definition.path, ref=key)
+
+    # -- Definition ------------------------------------------------------------
+
+    @classmethod
+    def definition(cls) -> ComponentDefinition:
+        """Produce a structured definition of this component class.
+
+        Returns:
+            A ComponentDefinition with metadata derived from the class.
+        """
+        return ComponentDefinition(
+            kind=cls.kind,
+            key=cls.key,
+            path=get_object_path(cls),
+            name=cls.name or to_label(cls.__name__),
+            icon=cls.icon,
+            description=cls.__doc__ or "",
+            tags=list(getattr(cls, "tags", [])),
+            config_schema=cls.config_schema(),
+            state_schema=cls.state_model.model_json_schema() if cls.state_model else {},
+            relations=dict(cls.relations),
+        )
+
+    # -- Internals -------------------------------------------------------------
+
+    @classmethod
+    def _collect(cls) -> None:
+        """Merge the class's declared relations and install their descriptors.
+
+        The class-creation step, run from ``__init_subclass__`` and again by a
+        decorator that adds relations to a built class; never called by hand.
+        Three declaration forms feed one map, in increasing precedence:
+
+        - an annotation naming a component class
+          (``connection: PostgresConnection``), the shorthand for a relation
+          that needs nothing said beyond what fills it;
+        - a :class:`Relation` value, which is where anything else the relation
+          declares is written. Annotate it with what fills it
+          (``destinations: list[Destination] = Relation("destination", many=True)``)
+          so both the constructor kwarg and the attribute are typed; the
+          annotation is then for the type checker only, since the relation
+          itself says what it accepts. A bare ``config = Relation(BigQueryConfig)``
+          declares the same relation untyped;
+        - a ``relations`` dict written on the class body, which is what the
+          decorators emit.
+
+        The result merges over every base's map, so a subclass entry replaces
+        the inherited entry of the same name and nothing an ancestor declared
+        is ever lost.
+
+        Each entry is copied, stamped with its name and installed under that
+        name: a :class:`~interloper.component.relation.Relation` is its own
+        descriptor, so the class attribute reads as the declaration and the
+        instance attribute as what is bound to it. The copy is what keeps a
+        subclass's redeclaration off its parent's map.
+
+        Annotated relations are dropped from the class's own annotations before
+        Pydantic collects its fields, so a relation is never also a field.
+        """
+        inherited: dict[str, Relation] = {}
+        for base in reversed(cls.__mro__[1:]):
+            inherited.update(getattr(base, "relations", None) or {})
+
+        annotations: dict[str, Any] = cls.__dict__.get("__annotations__", {})
+        module = sys.modules.get(cls.__module__)
+        namespace = vars(module) if module else {}
+
+        own: dict[str, Relation] = {}
+        for name, hint in annotations.items():
+            annotated = Relation.from_annotation(hint, namespace)
+            if annotated is not None:
+                own[name] = annotated
+        own.update({name: value for name, value in cls.__dict__.items() if isinstance(value, Relation)})
+        declared = cls.__dict__.get("relations")
+        if isinstance(declared, dict):
+            own.update(declared)
+
+        cls.relations = {**inherited, **own}
+        for name, relation in cls.relations.items():
+            stamped = relation.model_copy(update={"name": name})
+            cls.relations[name] = stamped
+            setattr(cls, name, stamped)
+            annotations.pop(name, None)
+
+    @classmethod
+    def _discriminator_fields(cls) -> list[str]:
+        """Names of the config fields marked ``discriminator=True``.
+
+        Returns:
+            The marked field names (normally zero or one).
+        """
+        return [
+            name
+            for name, field in cls.model_fields.items()
+            if isinstance(field.json_schema_extra, dict) and field.json_schema_extra.get("x-discriminator")
+        ]
+
+    def _check_targets(self, name: str, relation: Relation, targets: tuple[Component, ...]) -> None:
+        """Check that *targets* are legal for one of this component's relations.
+
+        Every target must be one the relation :meth:`~Relation.accepts`, and a
+        single-valued relation may not receive more than one target at once.
+        Performs no mutation, so :meth:`_replace_binding` can call it before
+        touching ``_bound`` and a rejected replacement leaves the existing
+        binding untouched.
+
+        Args:
+            name: The relation name as declared on the class.
+            relation: The declared relation *targets* are checked against.
+            targets: The candidate components to check.
+
+        Raises:
+            ConfigError: If a target's kind or key is not one the relation
+                accepts, or if a single-valued relation is given more than one target.
+        """
+        owner = self.identity
+        for target in targets:
+            if not relation.accepts(target.kind, target.identity, owner=owner):
+                raise ConfigError(
+                    f"{type(self).__name__}.{name} does not accept {target.kind} '{target.qualified_key}' "
+                    f"(declared: kind {relation.kinds()}, key {relation.keys() or 'any'})"
+                )
+        if not relation.many and len(targets) > 1:
+            raise ConfigError(f"{type(self).__name__}.{name} is single-valued and takes one target at a time")
+
+    def _replace_binding(self, name: str, targets: tuple[Component, ...]) -> None:
+        """Replace what is bound to one of this component's relations, atomically.
+
+        The one write path: :meth:`bind` and :meth:`Relation.__set__` both
+        land here, so the rules hold whichever way a binding is written.
+        Everything is checked before ``_bound`` is touched, so a rejected
+        write leaves the previous binding exactly as it was, and
+        :meth:`on_rebind` runs once the new binding is in place.
+
+        Args:
+            name: The relation name as declared on the class.
+            targets: The components to hold, replacing whatever is held now;
+                duplicates collapse to the first occurrence.
+
+        Raises:
+            ConfigError: If a target's kind or key is not one the relation
+                accepts, if a single-valued relation is given more than one
+                target, or if a non-optional relation would be left empty.
+        """
+        relation = self._relation(name)
+        self._check_targets(name, relation, targets)
+        if not targets and not relation.optional:
+            raise ConfigError(f"{type(self).__name__}.{name} is non-optional and cannot be emptied")
+        deduplicated: list[Component] = []
+        for target in targets:
+            if all(target is not held for held in deduplicated):
+                deduplicated.append(target)
+        self._bound[name] = deduplicated
+        self.on_rebind(name)
+
+    def _relation(self, name: str) -> Relation:
+        """Look up one of this component's declared relations by name.
+
+        Args:
+            name: The relation name as declared on the class.
+
+        Returns:
+            The declared relation.
+
+        Raises:
+            KeyError: If the class declares no relation of that name.
+        """
+        declared = type(self).relations
+        if name not in declared:
+            raise KeyError(f"{type(self).__name__} declares no relation '{name}'; declared: {sorted(declared)}")
+        return declared[name]
 
     def _owned_by_field(self) -> dict[str, list[Component]]:
         """The owned components, keyed by the field that holds them.
@@ -732,58 +792,3 @@ class Component(Serializable):
             for name, targets in self._bound.items()
             if targets and [t.id for t in child._bound.get(name, [])] == [t.id for t in targets]
         }
-
-    @classmethod
-    def resolve_key(cls, key: str, catalog: Catalog | None = None) -> type[Self]:
-        """Resolve a catalog key to a component class of this (sub)class.
-
-        The key is looked up in *catalog* (or, when none is given, the
-        settings-configured catalog, built lazily), and the class it names
-        is imported.
-
-        Called on a subclass, the resolved class must be of that subclass
-        (``Source.resolve_key("facebook_ads")``); anything else raises
-        ``TypeError``.
-
-        Args:
-            key: The catalog key naming the component class.
-            catalog: The catalog to look the key up in. Defaults to ``None``, which builds the
-                settings-configured catalog.
-
-        Returns:
-            The resolved class.
-
-        Raises:
-            CatalogKeyError: If the key is not in the catalog.
-        """
-        if catalog is None:
-            from interloper.catalog.base import Catalog
-
-            catalog = Catalog.from_settings()
-        definition = catalog.get(key)
-        if definition is None:
-            from interloper.errors import CatalogKeyError
-
-            raise CatalogKeyError(f"Unknown catalog key '{key}'")
-        return cls._resolve_import(definition.path, ref=key)
-
-    # -- Definition ------------------------------------------------------------
-    @classmethod
-    def definition(cls) -> ComponentDefinition:
-        """Produce a structured definition of this component class.
-
-        Returns:
-            A ComponentDefinition with metadata derived from the class.
-        """
-        return ComponentDefinition(
-            kind=cls.kind,
-            key=cls.key,
-            path=get_object_path(cls),
-            name=cls.name or to_label(cls.__name__),
-            icon=cls.icon,
-            description=cls.__doc__ or "",
-            tags=list(getattr(cls, "tags", [])),
-            config_schema=cls.config_schema(),
-            state_schema=cls.state_model.model_json_schema() if cls.state_model else {},
-            relations=dict(cls.relations),
-        )
