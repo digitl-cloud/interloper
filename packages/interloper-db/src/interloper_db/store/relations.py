@@ -355,9 +355,9 @@ class RelationStore:
         if not relation.accepts(dst.kind, self._identity(session, dst), owner=self._identity(session, src)):
             raise ConfigError(
                 f"'{src.key}'.{name} does not accept {dst.kind} '{dst.key}' "
-                f"(declared: kind {relation.kinds()}, key {relation.keys() or 'any'})"
+                f"(declared: kind {relation.kinds}, key {relation.keys or 'any'})"
             )
-        if relation.source_local and src.parent_id is not None and dst.parent_id != src.parent_id:
+        if relation.local and src.parent_id is not None and dst.parent_id != src.parent_id:
             raise ConfigError(f"'{src.key}'.{name} names a sibling; '{dst.key}' belongs to another source instance")
         return dst
 
