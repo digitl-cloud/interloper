@@ -51,8 +51,8 @@ functions are awaited on the event loop. Either way the engine never blocks:
 
 ```py
 @il.asset
-async def events(self, connection: MyConnection) -> list[dict]:
-    return await connection.client.get("/events")
+async def events(self) -> list[dict]:
+    return await self.connection.client.get("/events")
 ```
 
 ### What an asset can return

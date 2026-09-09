@@ -77,17 +77,17 @@ class Shop(il.Source):
         return [{"id": 1, "user_id": 1, "total": 99.90, "currency": self.currency}]
 
     @il.asset
-    def order_count(self, orders: list[dict]) -> list[dict]:
-        return [{"count": len(orders)}]
+    def order_count(self, orders: il.Upstream) -> list[dict]:
+        return [{"count": len(orders.data or [])}]
 ```
 
 Two things happened here without any wiring:
 
 - `currency` became a configurable field of the source, with a default, loadable from the
   environment or set at construction: `Shop(currency="USD")`.
-- `order_count` declares a parameter named `orders`, which matches a sibling asset. That is a
-  **dependency**: when the DAG runs, `orders` is materialized first, read back from its
-  destination, and passed in.
+- `order_count` declares an `il.Upstream` parameter named `orders`, which matches a sibling
+  asset. That is a **dependency**: when the DAG runs, `orders` is materialized first, read back
+  from its destination, and handed in as `orders.data`.
 
 Assets are reachable as attributes on the instance:
 

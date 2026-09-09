@@ -47,11 +47,11 @@ does not accept, is a `TypeError` at decoration.
 @il.asset(
     relations={
         "destinations": [il.CSVDestination],                  # narrowed: only this class is accepted
-        "connection": AdsConnection,                          # shorthand
+        "config": AdsConfig,                                  # shorthand
         "budget": il.Relation("asset", "finance.budget", optional=True),
     },
 )
-def ads_stats(self, connection: AdsConnection, budget: il.Upstream | None = None) -> list[dict]: ...
+def ads_stats(self, config: AdsConfig, budget: il.Upstream | None = None) -> list[dict]: ...
 ```
 
 For an asset, the map is keyed by `data()` parameter name and wins over the relation inferred from
@@ -71,7 +71,7 @@ a relation read off its annotation.
 
 ```py
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
-def ads_stats(self, context: il.ExecutionContext, connection: AdsConnection) -> list[dict]: ...
+def ads_stats(self, context: il.ExecutionContext, campaigns: il.Upstream) -> list[dict]: ...
 ```
 
 ### `@il.source`

@@ -53,9 +53,9 @@ class ShopConnection(il.Connection):
 
 ### Sources and assets
 
-A source groups assets. Configuration fields live on the class; assets are methods and read them
-through `self`. Resources are injected by type annotation, a parameter named after a sibling
-asset is a dependency, and a schema types the data on write and on read-back.
+A source groups assets. Configuration fields and the connection live on the class; assets are
+methods and read both through `self`. A parameter annotated `il.Upstream` and named after a
+sibling asset is a dependency, and a schema types the data on write and on read-back.
 
 ```python
 import datetime as dt
@@ -72,23 +72,26 @@ class OrderStats(il.Schema):
     revenue: float | None
 
 
-@il.source(tags=["Commerce"], resources={"connection": ShopConnection})
+@il.source(tags=["Commerce"])
 class Shop(il.Source):
+    connection: ShopConnection
+
     account: str = il.InputField(description="Shop account id", discriminator=True)
 
     @il.asset(schema=Order)
-    def orders(self, connection: ShopConnection) -> list[dict]:
+    def orders(self) -> list[dict]:
         rows: list[dict] = []
         paginator = il.PageNumberPaginator(total_path="meta.pages")
-        for page in connection.client.paginate("/orders", paginator, data_selector="data"):
+        for page in self.connection.client.paginate("/orders", paginator, data_selector="data"):
             rows.extend(page)
         return rows
 
     @il.asset(schema=OrderStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    def order_stats(self, context: il.ExecutionContext, orders: list[dict]) -> list[dict]:
+    def order_stats(self, context: il.ExecutionContext, orders: il.Upstream) -> list[dict]:
         day = context.partition_date                      # also: context.partition, .window, .logger, .metadata
-        context.logger.info(f"{len(orders)} orders for {self.account}")
-        return [{"date": day, "orders": len(orders), "revenue": sum(o["total"] for o in orders)}]
+        rows = orders.data or []                          # what `orders` wrote, read back from its destination
+        context.logger.info(f"{len(rows)} orders for {self.account}")
+        return [{"date": day, "orders": len(rows), "revenue": sum(o["total"] for o in rows)}]
 ```
 
 ### Destinations

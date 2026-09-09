@@ -62,7 +62,7 @@ Reference: https://docs.interloper.dev/guide/schema/ and https://docs.interloper
            return rows
 
    @il.asset(schema=Campaigns, normalizer=PercentNormalizer(flatten_max_level=2))
-   def campaigns(self, context: il.ExecutionContext, connection: AcmeConnection) -> list[dict]:
+   def campaigns(self, context: il.ExecutionContext) -> list[dict]:
        ...
    ```
 

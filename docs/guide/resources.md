@@ -45,20 +45,16 @@ class Shop(il.Source):
     connection: ShopConnection
 
     @il.asset
-    def revenue(
-        self,
-        context: il.ExecutionContext,
-        config: ReportingConfig,
-        connection: ShopConnection,
-    ) -> list[dict]:
-        return connection.client.get("/revenue", params={"currency": config.currency}).json()
+    def revenue(self, context: il.ExecutionContext, config: ReportingConfig) -> list[dict]:
+        return self.connection.client.get("/revenue", params={"currency": config.currency}).json()
 ```
 
 `connection: ShopConnection` on the source body is the same declaration, one level up: an
 annotation naming a component class declares a relation rather than a pydantic field. The source
-holds one instance and [trickles](#trickling) it into every asset that declares the same name,
-which is why the asset's own `connection` parameter is filled without the asset ever being
-constructed with one.
+holds one instance, and a method asset reads it as `self.connection`, since it receives the source
+as `self`. An asset declares a resource of its own, like `config` above, only for what its source
+does not hold; declaring `connection: ShopConnection` on the asset as well is legal, and the
+source [trickles](#trickling) its instance into it, but it says twice what the source says once.
 
 ## Explicit relations
 

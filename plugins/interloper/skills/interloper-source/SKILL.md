@@ -64,8 +64,9 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
        revenue: float
    ```
 
-3. **Source class.** Declare the connection as an annotation on the class body so it can be
-   passed as a keyword and trickles to every asset:
+3. **Source class.** Declare the connection as an annotation on the class body; assets read it
+   as `self.connection`, since a method asset receives the source as `self`. Never redeclare it
+   as an asset parameter: that says twice what the source says once.
 
    ```py
    @il.source(name="Shop", tags=["Commerce"])
@@ -75,9 +76,9 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
        account: str = il.InputField(description="Shop account id", discriminator=True)
 
        @il.asset(schema=Order, partitioning=il.TimePartitionConfig(column="date"))
-       def orders(self, context: il.ExecutionContext, connection: ShopConnection) -> list[dict]:
+       def orders(self, context: il.ExecutionContext) -> list[dict]:
            day = context.partition_date
-           rows = connection.client.get("/orders", params={"day": day.isoformat()}).json()
+           rows = self.connection.client.get("/orders", params={"day": day.isoformat()}).json()
            for row in rows:
                row["date"] = day
            return rows
