@@ -1,18 +1,19 @@
-"""Campaign matcher: canonical campaign names across every advertising source of an organisation.
-
-The matching logic below (lower-cased, stripped name equality) is a placeholder:
-phase 3 ships it only to prove the fan-in of a many-valued wildcard upstream over
-every ``campaigns`` asset in the DAG. A real fuzzy-matching strategy is future work.
-"""
+"""Campaign matcher: one canonical campaign across every advertising source of an organisation."""
 
 from __future__ import annotations
 
+import difflib
+import re
+import unicodedata
+import uuid
 from typing import Any
 
 import interloper as il
 from interloper.representation import Representation
 
 from interloper_assets.campaign_matcher import schemas
+
+MATCH_NAMESPACE = uuid.UUID("6f1c0a2e-3b6d-4d55-9d1a-2c7a4e8b9f01")
 
 
 def _first(row: dict[str, Any], *keys: str) -> str:
@@ -33,37 +34,51 @@ def _first(row: dict[str, Any], *keys: str) -> str:
     return ""
 
 
-def _match(row: dict[str, Any]) -> dict[str, Any]:
-    """Build the placeholder match fields for one upstream campaign row.
+def normalise(name: str, key_pattern: re.Pattern[str] | None = None) -> str:
+    """Reduce a campaign name to the key it is matched on.
 
-    Different connector ``campaigns`` schemas name the same fields
-    differently (Facebook: ``id``/``name``; TikTok: ``campaign_id``/
-    ``campaign_name``), so both spellings are tried in turn.
+    Unicode is folded to its compatibility form, case and surrounding
+    whitespace dropped, punctuation removed and inner whitespace collapsed,
+    so spellings that differ only in how a platform or a person typed them
+    match. When *key_pattern* is given and matches, its ``key`` group replaces
+    the whole name first: that is how a naming convention
+    (``client_market_objective_...``) picks the part that identifies the
+    campaign.
 
     Args:
-        row: One upstream campaign record, expected to carry a campaign id
-            and name under either spelling.
+        name: The campaign name as the platform reports it.
+        key_pattern: A compiled pattern with a ``key`` group, or ``None`` to
+            match on the whole name.
 
     Returns:
-        The ``campaign_id``, ``campaign_name``, ``canonical_name``, and
-        ``similarity`` fields for :class:`~interloper_assets.campaign_matcher.schemas.CampaignMatches`.
+        The normalised key, possibly empty for a name made of punctuation only.
     """
-    name = _first(row, "campaign_name", "name")
-    return {
-        "campaign_id": _first(row, "campaign_id", "id"),
-        "campaign_name": name,
-        "canonical_name": name.strip().lower(),
-        "similarity": 1.0,
-    }
+    if key_pattern is not None:
+        found = key_pattern.search(name)
+        if found is not None and found.group("key"):
+            name = found.group("key")
+    folded = unicodedata.normalize("NFKC", name).casefold()
+    return " ".join(re.sub(r"[^\w\s]", " ", folded).split())
 
 
 @il.source(tags=["Analytics"], icon="carbon:connect")
 class CampaignMatcher(il.Source):
     """Matches campaigns across every advertising source in the organisation into one lookup table.
 
-    Every connector's ``campaigns`` asset feeds it; each campaign is reduced to
-    a canonical name so the same campaign can be recognised across platforms.
+    Every connector's ``campaigns`` asset feeds it. Each campaign name is
+    reduced to a normalised key, optionally through a naming-convention
+    pattern, and campaigns sharing a key share a match. Keys that merely
+    resemble each other can be merged too, above a similarity threshold.
     """
+
+    key_pattern: str | None = il.InputField(
+        default=None,
+        description="Regular expression with a `key` group selecting the part of a campaign name that identifies it",
+    )
+    similarity_threshold: float = il.InputField(
+        default=1.0,
+        description="Merge campaigns whose normalised names are at least this similar (0 to 1); 1.0 merges equal keys",
+    )
 
     @il.asset(
         schema=schemas.CampaignMatches,
@@ -76,14 +91,60 @@ class CampaignMatcher(il.Source):
         context: il.ExecutionContext,
         campaigns: list[il.Upstream],
     ) -> list[dict[str, Any]]:
-        """One row per campaign of every advertising source, with the canonical name it is matched on."""
+        """One row per campaign of every advertising source, with the canonical campaign it matches."""
+        pattern = re.compile(self.key_pattern) if self.key_pattern else None
         rows: list[dict[str, Any]] = []
         for leg in campaigns:
             if leg.data is None:
-                context.logger.warning(
-                    f"No data for upstream '{leg.asset.qualified_key}' in this partition; leg skipped"
-                )
+                context.logger.warning(f"No data for upstream '{leg.asset.qualified_key}' in this partition; skipped")
                 continue
+            source = leg.asset.source
             for row in Representation.of(leg.data).to_records(leg.data):
-                rows.append({"date": context.partition_date, **_match(row)})
+                name = _first(row, "campaign_name", "name", "campaign")
+                rows.append(
+                    {
+                        "date": context.partition_date,
+                        "platform": source.key if source else "",
+                        "account": (source.discriminator or source.id) if source else "",
+                        "campaign_id": _first(row, "campaign_id", "id"),
+                        "campaign_name": name,
+                        "canonical_name": normalise(name, pattern),
+                    }
+                )
+        canonical = self._merge(sorted({row["canonical_name"] for row in rows}))
+        for row in rows:
+            key = canonical[row["canonical_name"]]
+            row["similarity"] = round(difflib.SequenceMatcher(None, row["canonical_name"], key).ratio(), 4)
+            row["canonical_name"] = key
+            row["match_id"] = str(uuid.uuid5(MATCH_NAMESPACE, key))
         return rows
+
+    def _merge(self, keys: list[str]) -> dict[str, str]:
+        """Map every normalised key to the canonical key of its match.
+
+        Each key is compared to the canonical keys already accepted, in
+        sorted order, and joins the first one it resembles at least
+        ``similarity_threshold``; otherwise it becomes a canonical key
+        itself. At the default threshold of ``1.0`` only equal keys merge, so
+        the map is the identity.
+
+        Args:
+            keys: The distinct normalised keys of this partition, sorted.
+
+        Returns:
+            Normalised key to the canonical key it belongs to.
+        """
+        if self.similarity_threshold >= 1.0:
+            return {key: key for key in keys}
+        canonical: dict[str, str] = {}
+        accepted: list[str] = []
+        for key in keys:
+            match = next(
+                (c for c in accepted if difflib.SequenceMatcher(None, key, c).ratio() >= self.similarity_threshold),
+                None,
+            )
+            if match is None:
+                accepted.append(key)
+                match = key
+            canonical[key] = match
+        return canonical

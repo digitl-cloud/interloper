@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,7 @@ import interloper as il
 import pytest
 from interloper.errors import ConfigError
 
-from interloper_assets.campaign_matcher.source import CampaignMatcher
+from interloper_assets.campaign_matcher.source import CampaignMatcher, normalise
 
 PARTITION = il.TimePartitionConfig(column="date")
 
@@ -78,6 +79,13 @@ def test_relation_is_a_many_valued_wildcard() -> None:
     assert (relation.kind, relation.key, relation.many, relation.optional) == ("asset", "*.campaigns", True, False)
 
 
+def _matches(matcher: il.Source, *connectors: il.Source) -> list[dict[str, Any]]:
+    memory = matcher.destinations[0]
+    partition = il.TimePartition(dt.date(2026, 9, 1))
+    il.DAG(*connectors, matcher).materialize(partition)
+    return memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
+
+
 def test_dag_binds_every_campaigns_asset_and_matches_each_leg() -> None:
     memory = il.MemoryDestination()
     fb = _connector("fb_like", ["Summer Sale ", "brand"])(destinations=[memory])
@@ -85,11 +93,78 @@ def test_dag_binds_every_campaigns_asset_and_matches_each_leg() -> None:
     matcher = CampaignMatcher(destinations=[memory])
     dag = il.DAG(fb, tt, matcher)
     assert set(dag.get_predecessors(matcher.campaign_matches.id)) == {fb.campaigns.id, tt.campaigns.id}
-    partition = il.TimePartition(dt.date(2026, 9, 1))
-    dag.materialize(partition)
-    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
+
+    rows = _matches(matcher, fb, tt)
+
     assert sorted(r["canonical_name"] for r in rows) == ["brand", "summer sale", "summer sale"]
-    assert {r["campaign_id"].split("-")[0] for r in rows} == {"fb_like", "tt_like"}
+    assert {r["platform"] for r in rows} == {"fb_like", "tt_like"}
+    summer = [r for r in rows if r["canonical_name"] == "summer sale"]
+    assert len({r["match_id"] for r in summer}) == 1
+    assert all(r["similarity"] == 1.0 for r in rows)
+
+
+def test_platform_and_account_identify_the_campaign_owner() -> None:
+    memory = il.MemoryDestination()
+
+    @il.source(key="acct_like")
+    class Connector(il.Source):
+        account_id: str = il.InputField(default="", discriminator=True)
+
+        @il.asset(schema=CampaignsSchema, partitioning=PARTITION, tags=["Entity"])
+        def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+            return [{"date": context.partition_date, "id": "1", "name": "x"}]
+
+    connector = Connector(account_id="act_42", destinations=[memory])  # ty: ignore[unknown-argument]
+    rows = _matches(CampaignMatcher(destinations=[memory]), connector)
+
+    assert (rows[0]["platform"], rows[0]["account"], rows[0]["campaign_id"]) == ("acct_like", "act_42", "1")
+
+
+def test_match_ids_are_stable_across_runs() -> None:
+    memory = il.MemoryDestination()
+    first = _matches(CampaignMatcher(destinations=[memory]), _connector("fb_like", ["Brand"])(destinations=[memory]))
+    il.MemoryDestination.clear()
+    second = _matches(CampaignMatcher(destinations=[memory]), _connector("tt_like", ["brand"])(destinations=[memory]))
+    assert first[0]["match_id"] == second[0]["match_id"]
+
+
+class TestNormalise:
+    def test_case_whitespace_punctuation_and_unicode_fold_away(self) -> None:
+        assert normalise("  Summer   Sale!  ") == "summer sale"
+        assert normalise("Été-2026 / Brand") == "été 2026 brand"
+        assert normalise("ＢＲＡＮＤ") == "brand"
+
+    def test_key_pattern_selects_the_identifying_part(self) -> None:
+        pattern = re.compile(r"^[a-z]+_(?P<key>[a-z0-9]+)_")
+        assert normalise("acme_summer26_awareness_de", pattern) == "summer26"
+        assert normalise("no convention here", pattern) == "no convention here"
+
+
+def test_key_pattern_on_the_source_matches_by_convention() -> None:
+    memory = il.MemoryDestination()
+    fb = _connector("fb_like", ["fb_summer26_awareness"])(destinations=[memory])
+    tt = _connector("tt_like", ["tt_summer26_video"])(destinations=[memory])
+    matcher = CampaignMatcher(key_pattern=r"^[a-z]+_(?P<key>[a-z0-9]+)_", destinations=[memory])  # ty: ignore[unknown-argument]
+
+    rows = _matches(matcher, fb, tt)
+
+    assert {r["canonical_name"] for r in rows} == {"summer26"}
+    assert len({r["match_id"] for r in rows}) == 1
+
+
+def test_similarity_threshold_merges_near_duplicates() -> None:
+    memory = il.MemoryDestination()
+    fb = _connector("fb_like", ["Summer Sale 2026"])(destinations=[memory])
+    tt = _connector("tt_like", ["Summer Sale 2O26"])(destinations=[memory])
+
+    strict = _matches(CampaignMatcher(destinations=[memory]), fb, tt)
+    assert len({r["match_id"] for r in strict}) == 2
+
+    il.MemoryDestination.clear()
+    lenient = _matches(CampaignMatcher(similarity_threshold=0.9, destinations=[memory]), fb, tt)  # ty: ignore[unknown-argument]
+    assert len({r["match_id"] for r in lenient}) == 1
+    assert {r["canonical_name"] for r in lenient} == {"summer sale 2026"}
+    assert sorted(r["similarity"] for r in lenient) == [pytest.approx(0.9375), 1.0]
 
 
 def test_leg_without_data_is_skipped_not_fatal() -> None:
