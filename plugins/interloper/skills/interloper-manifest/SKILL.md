@@ -24,7 +24,7 @@ https://docs.interloper.dev/guide/jobs/
    init:
      destinations:
        - path: interloper.destination.csv.CSVDestination
-         id: out                             # parentless: written out once, referenced afterwards
+         id: out                             # parentless: written out once, {ref: out} at any later mention
          init:
            base_path: ./data
      # a qualified relation key wires itself when exactly one match is in the job
@@ -41,8 +41,7 @@ https://docs.interloper.dev/guide/jobs/
                id: shop-orders              # any unique string; the cross-source edge below points at it
        - path: finance.Finance
          init:
-           currency: USD
-           destinations: [{ref: out}]        # second occurrence of a parentless component: a reference
+           currency: USD                     # no destinations: the job's cascade into every target
            assets:
              revenue:
                orders: {ref: shop-orders}   # an asset has a parent: always a reference
@@ -77,6 +76,11 @@ https://docs.interloper.dev/guide/jobs/
   destination, a connection) is written out in full the first time a relation reaches it and
   `{ref: id}` at every later one. Give it an `id` the first time so the reference has something
   to name.
+- **Never redeclare what cascades.** A job's `destinations` reach every target that declares
+  none, and a source's `connection` and `destinations` reach every asset that declares none, at
+  bind time. `destinations: [{ref: out}]` on a target of a job that already lists `out` is
+  noise, and worse, it reads as if the target needed it. Write a relation on a target or an asset
+  only to give it something different from what it would inherit.
 - **A relation key wires itself when unambiguous.** A qualified key (`shop.orders`) binds the
   single matching asset in the job; two matches (two `shop` instances) fail at load time with
   `DAGError`, and an unbound non-optional relation fails at load time with `ConfigError`. Write
@@ -93,8 +97,9 @@ https://docs.interloper.dev/guide/jobs/
 - **`key:` instead of `path:`** needs the package installed with an `interloper.components`
   entry point; a bare module is always `path: module.Class`.
 - **Dump a spec to learn the shape**: `yaml.safe_dump(job.to_spec().model_dump(mode="json"))`
-  from a Python-built `Job(...)`. The dump is exhaustive (generated ids, defaults, destinations
-  repeated on every asset); keep only what differs from defaults.
+  from a Python-built `Job(...)`. The dump is exhaustive (generated ids, defaults, the cascaded
+  destinations repeated on every target and asset); keep only what differs from defaults and
+  from what cascades.
 - **CLI flags**: `--dry-run`, `--date KEY` (`2026-01-15`, `2026-01`, `2026`, `2026-01-15T13`),
   `--start-date/--end-date` (one windowed run), `--events json`, `-v`, `-q`, `--run-id`.
 
@@ -111,6 +116,8 @@ https://docs.interloper.dev/guide/jobs/
 ## Common mistakes
 
 - `materializable: false` to drop an asset: the map is a whitelist and the other assets vanish.
+- `destinations: [{ref: out}]` on every target: the job's destinations already cascade; write
+  a target's own only to override them.
 - Reading `ConfigError: ... is unbound and non-optional` as a bug: it means the job lacks the
   upstream source. Reading `DAGError: ... matching assets` as a bug: it means two instances
   match and one must be bound by reference.

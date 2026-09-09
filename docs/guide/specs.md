@@ -82,22 +82,37 @@ init:
   destinations:
     - key: bigquery_destination
       id: bq
-      init: {project: dwh, connection: {key: google_cloud_connection, init: {service_account_key: ${GCP_KEY}}}}
+      init:
+        project: dwh
+        connection:
+          key: google_cloud_connection
+          init:
+            service_account_key: ${GCP_KEY}    # block style: ${VAR} inside { ... } is not valid YAML
   targets:
     - key: facebook_ads
       init:
         account_id: act_1
-        connection: {key: facebook_ads_connection, init: {access_token: ${FB_TOKEN}, app_id: "1"}}
-        assets: {campaigns: {id: fb-campaigns, materializable: false}}
+        connection:
+          key: facebook_ads_connection
+          init:
+            access_token: ${FB_TOKEN}
+            app_id: "1"
+        assets:
+          campaigns:
+            id: fb-campaigns
+            materializable: false
     - key: campaign_matcher
       init:
-        destinations: [{ref: bq}]                # second occurrence of a parentless component: a reference
         assets:
           campaign_matches:
             campaigns: [{ref: fb-campaigns}]     # the asset has a parent: always a reference
 ```
 
-Without the explicit `campaigns:` line the DAG binds every `*.campaigns` node it holds.
+Without the explicit `campaigns:` line the DAG binds every `*.campaigns` node it holds. Neither
+target declares `destinations`: the job's cascade into every target that has none, so a target
+writes its own only to use something else. A parentless component mentioned a second time is a
+reference too (`destinations: [{ref: bq}]` on a target that needs the same destination as
+another one but not the job's), which is the one reference rule, with no flag.
 
 ```py
 job = il.Job.from_spec_file("daily.yaml")
