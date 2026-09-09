@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import UnionType
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get_origin, overload
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_settings import BaseSettings
 
 if TYPE_CHECKING:
@@ -155,12 +155,14 @@ class Relation(BaseModel):
     ``Relation`` (Pydantic ignores it, and :meth:`Component._collect` drops the
     annotation before fields are collected).
 
-    ``default`` (intended type ``Callable[[], Component] | None``) and
-    ``target`` (intended type ``type[Component] | None``, the class this
-    relation was declared from when class-declared) are annotated ``Any``
-    to satisfy the type checker, not Pydantic: ``Component`` is only
-    imported under ``TYPE_CHECKING``, so the annotation cannot name it
-    directly. Both fields are excluded from dumps.
+    Two attributes are not declared but derived. ``name`` is stamped from the
+    attribute the relation is declared under, and ``target`` is the class the
+    ``Relation(cls)`` shorthand was written with, the class a fallback is
+    built from; neither is a constructor argument. ``default`` (intended type
+    ``Callable[[], Component] | None``) and ``target`` (intended type
+    ``type[Component] | None``) are typed ``Any`` for the type checker, since
+    ``Component`` is only imported under ``TYPE_CHECKING``; both stay out of
+    dumps.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
@@ -172,7 +174,8 @@ class Relation(BaseModel):
     default: Any = Field(default=None, exclude=True)
     on_delete: Literal["block", "detach"] = "block"
     name: str = ""
-    target: Any = Field(default=None, exclude=True)
+
+    _target: Any = PrivateAttr(default=None)
 
     if TYPE_CHECKING:
 
@@ -198,24 +201,39 @@ class Relation(BaseModel):
 
         Args:
             kind_or_class: A component class (its ``kind`` and ``key`` class
-                attributes seed the relation and ``target`` is set to it), or
-                the relation's ``kind`` value as a string or list of strings.
+                attributes seed the relation and it becomes the ``target``),
+                or the relation's ``kind`` value as a string or list of strings.
             key: The relation's ``key`` value, ignored when ``kind_or_class``
                 is a class.
             **data: Remaining field values (``many``, ``optional``,
-                ``default``, ``on_delete``, ``name``), forwarded to Pydantic,
-                which rejects any other name rather than dropping it.
+                ``default``, ``on_delete``), forwarded to Pydantic, which
+                rejects any other name rather than dropping it.
+
+        Raises:
+            TypeError: If ``name`` is passed; it is stamped from the attribute
+                the relation is declared under.
         """
+        if "name" in data:
+            raise TypeError("Relation.name is stamped from the attribute the relation is declared under")
         if isinstance(kind_or_class, type):
             data.update(
                 kind=kind_or_class.kind,  # ty: ignore[unresolved-attribute]
                 key=kind_or_class.key,  # ty: ignore[unresolved-attribute]
-                target=kind_or_class,
             )
         else:
             data.setdefault("kind", kind_or_class)
             data.setdefault("key", key)
         super().__init__(**data)
+        self._target = kind_or_class if isinstance(kind_or_class, type) else None
+
+    @property
+    def target(self) -> Any:
+        """The component class this relation was declared from, if it was declared from one.
+
+        Returns:
+            The class given to ``Relation(cls)``, else ``None``.
+        """
+        return self._target
 
     @classmethod
     def from_annotation(cls, hint: Any, namespace: dict[str, Any]) -> Relation | None:
@@ -329,12 +347,9 @@ class Relation(BaseModel):
             return True
         if self.many or self.target is None:
             return False
-        if isinstance(self.target, type) and issubclass(self.target, BaseSettings):
+        if issubclass(self.target, BaseSettings):
             return True
-        fields = getattr(self.target, "model_fields", None)
-        if fields is None:
-            return False
-        return all(not field.is_required() for name, field in fields.items() if name != "id")
+        return all(not field.is_required() for name, field in self.target.model_fields.items() if name != "id")
 
     def fallback(self) -> Any | None:
         """Produce the value this relation resolves to when left unbound.

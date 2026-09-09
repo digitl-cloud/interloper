@@ -157,7 +157,8 @@ class TestRelationChannel:
         def rows() -> list[dict[str, Any]]:
             return []
 
-        assert rows.relations["upstream"] == il.Relation("asset", "shop.orders", name="upstream")
+        upstream = rows.relations["upstream"]
+        assert (upstream.kind, upstream.key, upstream.name) == ("asset", "shop.orders", "upstream")
 
     def test_the_decorator_narrows_destinations_through_the_channel(self):
         @il.asset(relations={"destinations": [il.MemoryDestination]})

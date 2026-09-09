@@ -78,8 +78,10 @@ destinations a source writes to, a job's targets, an upstream asset.
 | `optional` | Whether it may stay unbound. Says nothing about data. |
 | `default` | A zero-argument factory producing the value an unbound relation resolves to. |
 | `on_delete` | What deleting the target does to the referrer: `block` (default, for consumption relations) or `detach` (for orchestration pointers such as a job's targets or a hook's watches). |
-| `name` | The relation's name, stamped from the attribute it is declared under. |
-| `target` | The class the relation was declared from, when declared from one. It is what a fallback is built from. |
+
+Two attributes are derived, not declared: `name` is stamped from the attribute the relation is
+declared under, and `target` is the class the `il.Relation(cls)` shorthand was written with,
+which is what a fallback is built from. Neither is a constructor argument.
 
 `il.Relation(PostgresConnection)` is shorthand for
 `il.Relation(kind="connection", key="postgres_connection")` with the class kept as `target`.
