@@ -214,12 +214,10 @@ class DisplayVideo360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def line_items_stats(
-        self, context: il.ExecutionContext, connection: DisplayVideo360Connection
-    ) -> list[_Record]:
+    def line_items_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Line-item performance, cost and fee metrics per day."""
         return _get_report(
-            connection,
+            self.connection,
             title=f"line_items_stats_{context.partition_date.isoformat()}",
             date=context.partition_date,
             dimensions=constants.LINE_ITEM_DIMENSIONS,
@@ -232,12 +230,10 @@ class DisplayVideo360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def line_items_stats_by_country(
-        self, context: il.ExecutionContext, connection: DisplayVideo360Connection
-    ) -> list[_Record]:
+    def line_items_stats_by_country(self, context: il.ExecutionContext) -> list[_Record]:
         """Line-item performance and cost metrics per day, broken down by country."""
         return _get_report(
-            connection,
+            self.connection,
             title=f"line_items_stats_by_country_{context.partition_date.isoformat()}",
             date=context.partition_date,
             dimensions=constants.LINE_ITEM_COUNTRY_DIMENSIONS,
@@ -252,9 +248,9 @@ class DisplayVideo360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def partners(self, context: il.ExecutionContext, connection: DisplayVideo360Connection) -> list[_Record]:
+    def partners(self, context: il.ExecutionContext) -> list[_Record]:
         """DV360 partners and their configuration."""
-        items = connection._list_partners()
+        items = self.connection._list_partners()
         for item in items:
             exchange_config = item.get("exchangeConfig")
             # Enabled exchanges are a nested list; JSON-encode onto the string column.
@@ -267,9 +263,9 @@ class DisplayVideo360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def audiences(self, context: il.ExecutionContext, connection: DisplayVideo360Connection) -> list[_Record]:
+    def audiences(self, context: il.ExecutionContext) -> list[_Record]:
         """First-party and partner audiences of the configured partner or advertiser."""
-        rows = _list_audiences(connection.dv_client, self._audience_scope)
+        rows = _list_audiences(self.connection.dv_client, self._audience_scope)
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
@@ -277,9 +273,7 @@ class DisplayVideo360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def custom_audiences(
-        self, context: il.ExecutionContext, connection: DisplayVideo360Connection
-    ) -> list[_Record]:
+    def custom_audiences(self, context: il.ExecutionContext) -> list[_Record]:
         """Detail of the configured audience, including per-surface audience sizes.
 
         Raises:
@@ -289,7 +283,7 @@ class DisplayVideo360(il.Source):
         if not self.audience_id:
             raise ValueError("The custom_audiences asset requires the source's audience_id to be set")
         audience = (
-            connection.dv_client.firstPartyAndPartnerAudiences()
+            self.connection.dv_client.firstPartyAndPartnerAudiences()
             .get(**self._audience_scope, firstPartyAndPartnerAudienceId=self.audience_id)
             .execute()
         )

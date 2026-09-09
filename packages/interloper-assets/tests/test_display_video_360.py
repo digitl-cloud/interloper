@@ -70,7 +70,7 @@ class TestAudienceScope:
         src = _source()
         asset = next(a for a in src.assets if type(a).key == "custom_audiences")
         with pytest.raises(ValueError, match="audience_id"):
-            asset.data(context=object(), connection=object())
+            asset.data(context=object())
 
 
 class TestReports:

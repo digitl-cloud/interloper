@@ -71,10 +71,10 @@ class Criteo(il.Source):
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    async def ads_stats(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
+    async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad-level performance statistics with daily breakdowns."""
         return await _statistics_report(
-            connection,
+            self.connection,
             advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,
@@ -86,10 +86,10 @@ class Criteo(il.Source):
         partitioning=il.TimePartitionConfig(column="day"),
         tags=["Report"],
     )
-    async def campaigns_stats(self, context: il.ExecutionContext, connection: CriteoConnection) -> list[dict[str, Any]]:
+    async def campaigns_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign-level performance statistics with daily breakdowns."""
         return await _statistics_report(
-            connection,
+            self.connection,
             advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,

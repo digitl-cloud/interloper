@@ -64,12 +64,10 @@ class Adservice(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def campaigns_stats(
-        self, context: il.ExecutionContext, connection: AdserviceConnection
-    ) -> list[dict[str, Any]]:
+    async def campaigns_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance statistics with metrics like impressions, clicks, and conversions."""
         response = await get_report(
-            client=connection.client,
+            client=self.connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics",
@@ -84,10 +82,10 @@ class Adservice(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def conversions(self, context: il.ExecutionContext, connection: AdserviceConnection) -> list[dict[str, Any]]:
+    async def conversions(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Conversion events and attribution data."""
         response = await get_report(
-            client=connection.client,
+            client=self.connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="conversions",
@@ -99,12 +97,10 @@ class Adservice(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def conversions_stats_by_time_of_day(
-        self, context: il.ExecutionContext, connection: AdserviceConnection
-    ) -> list[dict[str, Any]]:
+    async def conversions_stats_by_time_of_day(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Conversion events broken down by time of day."""
         response = await get_report(
-            client=connection.client,
+            client=self.connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics/conversions/timeofday",
@@ -116,12 +112,10 @@ class Adservice(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def campaigns_stats_by_city(
-        self, context: il.ExecutionContext, connection: AdserviceConnection
-    ) -> list[dict[str, Any]]:
+    async def campaigns_stats_by_city(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance segmented by city."""
         response = await get_report(
-            client=connection.client,
+            client=self.connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics/devicedetails",
@@ -134,12 +128,10 @@ class Adservice(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def campaigns_stats_by_browser(
-        self, context: il.ExecutionContext, connection: AdserviceConnection
-    ) -> list[dict[str, Any]]:
+    async def campaigns_stats_by_browser(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance segmented by browser."""
         response = await get_report(
-            client=connection.client,
+            client=self.connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics/devicedetails",
@@ -152,12 +144,10 @@ class Adservice(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def campaigns_stats_by_device_type(
-        self, context: il.ExecutionContext, connection: AdserviceConnection
-    ) -> list[dict[str, Any]]:
+    async def campaigns_stats_by_device_type(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance segmented by device type."""
         response = await get_report(
-            client=connection.client,
+            client=self.connection.client,
             start_date=context.partition_date,
             end_date=context.partition_date,
             report_type="statistics/devicedetails",

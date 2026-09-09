@@ -129,10 +129,10 @@ class Awin(il.Source):
         tags=["Report"],
         normalizer=AwinTransactionsNormalizer(),
     )
-    async def transactions(self, context: il.ExecutionContext, connection: AwinConnection) -> list[dict[str, Any]]:
+    async def transactions(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Advertiser transactions including commissions, sales amounts, and click attribution."""
         data = await get_advertiser_transactions(
-            client=connection.client,
+            client=self.connection.client,
             advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,
@@ -144,10 +144,10 @@ class Awin(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    async def publishers_stats(self, context: il.ExecutionContext, connection: AwinConnection) -> list[dict[str, Any]]:
+    async def publishers_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Advertiser performance reports aggregated by publisher."""
         data = await get_advertiser_reports_by_publisher(
-            client=connection.client,
+            client=self.connection.client,
             advertiser_id=self.advertiser_id,
             start_date=context.partition_date,
             end_date=context.partition_date,

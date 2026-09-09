@@ -188,6 +188,6 @@ class BingAds(il.Source):
         partitioning=il.TimePartitionConfig(column="time_period"),
         tags=["Report"],
     )
-    def ads_stats(self, context: il.ExecutionContext, connection: BingAdsConnection) -> pd.DataFrame:
+    def ads_stats(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Ad performance report with impressions, clicks, conversions, and revenue metrics."""
-        return _ad_performance_report(connection, self.account_id, context.partition_date)
+        return _ad_performance_report(self.connection, self.account_id, context.partition_date)
