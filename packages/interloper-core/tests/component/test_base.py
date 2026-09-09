@@ -14,7 +14,6 @@ from interloper.component.base import (
     Component,
     ComponentDefinition,
     _adopt_kind,
-    defer_relation_validation,
 )
 from interloper.errors import ConfigError
 from interloper.serializable import Spec
@@ -349,8 +348,9 @@ class TestBind:
         assert "fallback" not in widget.bound_ids()
 
     def test_missing_required_is_a_build_error(self):
+        gadget = Gadget()
         with pytest.raises(ConfigError, match="store"):
-            Gadget()
+            gadget.validate_relations()
 
     def test_a_settings_relation_is_left_to_the_read(self, monkeypatch):
         # A connection's required fields come from the environment, so an
@@ -525,19 +525,19 @@ class TestValidateRelations:
         with pytest.raises(ConfigError, match="not in the DAG"):
             down.validate_relations({})
 
-    def test_construction_validates_unless_deferred(self) -> None:
+    def test_construction_binds_but_does_not_validate(self) -> None:
+        # Wiring is piecewise, so completeness is checked where the graph is whole, not in __init__.
         class Needy(il.Asset):
             connection: il.Connection = il.Relation("connection", "conn")
 
             def data(self, context: il.ExecutionContext, connection: il.Connection) -> list[dict]:
                 return []
 
+        needy = Needy()
         with pytest.raises(ConfigError, match="'connection' is unbound and non-optional"):
-            Needy()
-        with defer_relation_validation():
-            deferred = Needy()
-        with pytest.raises(ConfigError, match="connection"):
-            deferred.validate_relations()
+            needy.validate_relations()
+        with pytest.raises(ConfigError, match="'connection' is unbound and non-optional"):
+            il.DAG(needy)
 
     def test_parentless_owner_leaves_sibling_upstreams_to_the_graph(self) -> None:
         # A standalone asset has no source to fill a bare-key upstream; the DAG wires it.

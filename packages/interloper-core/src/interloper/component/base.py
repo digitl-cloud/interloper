@@ -11,9 +11,7 @@ from __future__ import annotations
 
 import sys
 import uuid
-from collections.abc import Callable, Collection, Iterator, Mapping
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Callable, Collection, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -54,33 +52,6 @@ def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
 
 
 KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)
-
-
-# -- Reconstruction ------------------------------------------------------------
-_deferring_validation: ContextVar[bool] = ContextVar("interloper_deferring_relation_validation", default=False)
-
-
-@contextmanager
-def defer_relation_validation() -> Iterator[None]:
-    """Suspend construction-time relation validation for the duration of the block.
-
-    A builder that constructs a component it knows to be incomplete wraps the
-    construction in this. Reconstruction builds a document's components one
-    at a time and binds what its ``{"ref": id}`` values name only once every
-    one of them exists, then :meth:`Component._bind_references` runs the
-    check on every root, which cascades into its children. A source builds
-    its assets before its own relation kwargs are bound and trickled into
-    them, then checks them itself from its own
-    :meth:`Component.validate_relations`.
-
-    Yields:
-        ``None``; the block runs with the check suspended.
-    """
-    token = _deferring_validation.set(True)
-    try:
-        yield
-    finally:
-        _deferring_validation.reset(token)
 
 
 # -- Definitions ---------------------------------------------------------------
@@ -259,11 +230,12 @@ class Component(Serializable):
 
         A kwarg named after a declared relation binds that relation instead of
         reaching Pydantic, which knows nothing about relations: a list or tuple
-        binds every element, ``None`` binds nothing. Nothing is bound
-        implicitly, so the instance is checked once every explicit target is in
-        place, unless the builder constructing it has suspended the check
-        because it knows the instance is not whole yet (see
-        :func:`defer_relation_validation`).
+        binds every element, ``None`` binds nothing. Each binding is checked
+        as it is made (see :meth:`bind`); whether every relation that must be
+        bound is bound is a question for whoever assembles the graph, since
+        components are wired piecewise (a source trickles into its assets,
+        reconstruction binds references once the document is whole), so
+        :meth:`validate_relations` is called at those boundaries, not here.
 
         Unknown kwargs are a loud error rather than pydantic's silent
         ``extra="ignore"`` drop: a misnamed field would otherwise vanish, and a
@@ -287,8 +259,6 @@ class Component(Serializable):
             if value is None:
                 continue
             self.bind(name, *(value if isinstance(value, (list, tuple)) else [value]))
-        if not _deferring_validation.get():
-            self.validate_relations()
 
     def model_post_init(self, context: Any) -> None:
         """Default ``id`` to a generated UUID if not provided.
@@ -497,15 +467,16 @@ class Component(Serializable):
         self-filling; a single-valued relation holds at most one target; every
         bound target is one the relation :meth:`~Relation.accepts`. When
         *nodes* is given, a bound non-optional ``asset``-kind target must also
-        be one of *nodes*. This is a DAG-wide check the constructor cannot
-        make, since the DAG doesn't exist yet at construction time.
+        be one of *nodes*.
 
-        For the same reason *nodes* is also what makes an unbound
-        ``asset``-kind relation only the graph can fill an error: one reaching
-        outside the owner's own source (:attr:`~Relation.source_local`), or
-        any one on an owner that has no source to fill it from. Nothing before
-        the graph can fill such a relation, so nothing before the graph can
-        call it unfilled either.
+        The check runs at the boundaries where a graph is whole: the DAG runs
+        it with its nodes once resolution is done, and reconstruction runs it
+        without *nodes* on every root of a document once its references are
+        bound. Without *nodes* an unbound ``asset``-kind relation only the
+        graph can fill is left alone: one reaching outside the owner's own
+        source (:attr:`~Relation.source_local`), or any one on an owner that
+        has no source to fill it from. Nothing before the graph can fill such
+        a relation, so nothing before the graph can call it unfilled either.
 
         Args:
             nodes: Every node materializing in the same run, keyed by id. When

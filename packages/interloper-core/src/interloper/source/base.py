@@ -11,7 +11,6 @@ from typing_extensions import Self
 from interloper.asset import Asset
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation
-from interloper.component.base import defer_relation_validation
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
@@ -205,8 +204,7 @@ class Source(Component, Workload):
             if asset_cls.key not in assets:
                 continue
             overrides, pending = asset_cls._split_references(assets[asset_cls.key])
-            with defer_relation_validation():
-                instance = asset_cls(**overrides)
+            instance = asset_cls(**overrides)
             instance._pending_references = pending
             instances.append(instance)
         data["assets"] = instances
@@ -215,14 +213,12 @@ class Source(Component, Workload):
     def model_post_init(self, context: Any) -> None:
         """Build the source's assets, resolve their defaults and wire them to each other.
 
-        The assets are constructed under
-        :func:`~interloper.component.base.defer_relation_validation`: they are
-        incomplete until this source has trickled its own bindings into them,
-        which cannot happen here, since ``Component.__init__`` binds this
-        source's own relation kwargs only *after* ``model_post_init``
-        returns. :meth:`validate_relations` is what cascades into each asset
-        instead, once ``Component.__init__`` calls it with everything this
-        source can fill already bound.
+        The assets are incomplete when built here: this source's own relation
+        kwargs are bound, and trickled into them, only after
+        ``model_post_init`` returns. That is why nothing is validated at
+        construction; :meth:`validate_relations` cascades into each asset
+        when the DAG or reconstruction asks, with everything this source can
+        fill already bound.
 
         Args:
             context: Pydantic's post-init context, forwarded untouched to
@@ -230,8 +226,7 @@ class Source(Component, Workload):
         """
         super().model_post_init(context)
         if not self.assets:
-            with defer_relation_validation():
-                self.assets = [cls() for cls in self.asset_types]
+            self.assets = [cls() for cls in self.asset_types]
         self._resolve()
         if self.select is not None:
             self._apply_select()
