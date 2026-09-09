@@ -26,7 +26,6 @@ from interloper.destination import (
     FileDestination,
     IOContext,
     MemoryDestination,
-    PartitionedDestination,
     destination,
 )
 from interloper.events import Event, EventBus, EventType
@@ -137,7 +136,6 @@ __all__ = [
     "Partition",
     "PartitionConfig",
     "PartitionWindow",
-    "PartitionedDestination",
     "RESTClient",
     "RangePaginator",
     "RefreshTokenOAuthConnection",

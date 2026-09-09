@@ -4,12 +4,16 @@
 # component class declares a relation, and the collector needs it as a real
 # class, not a lazy string.
 
-from typing import Any
+import datetime
+from typing import Any, ClassVar
 
 import pytest
 
 import interloper as il
+from interloper.destination import IOContext
 from interloper.destination.base import DestinationDefinition
+from interloper.partitioning.base import Partition
+from interloper.partitioning.time import TimePartition, TimePartitionWindow
 
 
 class FakeConnection(il.Connection):
@@ -113,3 +117,133 @@ class TestFetchProviderValidation:
 
         with pytest.raises(TypeError, match="not a @fetch_field_provider"):
             Unmarked.definition()
+
+
+# -- Partition dispatch ----------------------------------------------------------
+
+class RecordingPartitions(il.Destination):
+    """Destination capturing every partition-hook call."""
+
+    calls: ClassVar[list[tuple[str, Any, Any]]] = []
+
+    def model_post_init(self, context: Any) -> None:
+        super().model_post_init(context)
+        object.__setattr__(self, "calls", [])
+
+    def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+        self.calls.append(("write", partition.id if partition else None, data))
+
+    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+        self.calls.append(("read", partition.id if partition else None, None))
+        return {"partition": partition.id if partition else None}
+
+
+@il.asset(partitioning=il.TimePartitionConfig(column="date"))
+def partitioned_asset(context: il.ExecutionContext) -> list:  # noqa: D103
+    return []
+
+
+@il.asset
+def plain_asset() -> list:  # noqa: D103
+    return []
+
+
+def io_context(asset: il.Asset, partition_or_window=None) -> IOContext:  # noqa: D103
+    return IOContext(asset=asset, partition_or_window=partition_or_window)
+
+
+class TestWriteDispatch:
+    """The three-way write dispatch with window splitting."""
+
+    def test_unpartitioned_write_is_one_call(self):
+        destination = RecordingPartitions(id="d")
+        destination.write(io_context(plain_asset()), [{"a": 1}])
+        assert destination.calls == [("write", None, [{"a": 1}])]
+
+    def test_partition_write_passes_data_unsplit(self):
+        destination = RecordingPartitions(id="d")
+        rows = [{"date": "2024-01-01"}, {"date": "2024-01-02"}]
+        destination.write(io_context(partitioned_asset(), TimePartition(datetime.date(2024, 1, 1))), rows)
+        assert destination.calls == [("write", "2024-01-01", rows)]
+
+    def test_window_write_splits_per_partition(self):
+        destination = RecordingPartitions(id="d")
+        rows = [
+            {"date": "2024-01-01", "v": 1},
+            {"date": "2024-01-02", "v": 2},
+            {"date": "2024-01-02", "v": 3},
+        ]
+        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
+        destination.write(io_context(partitioned_asset(), window), rows)
+        by_partition = {partition: data for kind, partition, data in destination.calls}
+        assert by_partition["2024-01-01"] == [{"date": "2024-01-01", "v": 1}]
+        assert by_partition["2024-01-02"] == [{"date": "2024-01-02", "v": 2}, {"date": "2024-01-02", "v": 3}]
+
+    def test_monthly_window_slices_rows_by_period(self):
+        # Rows carry daily dates; each monthly partition's slice is its whole
+        # month, which id equality on the period start would miss entirely.
+        @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.MONTH))
+        def monthly(context: il.ExecutionContext) -> list:
+            return []
+
+        destination = RecordingPartitions(id="d")
+        rows = [
+            {"date": "2024-01-15", "v": 1},
+            {"date": "2024-02-10", "v": 2},
+            {"date": "2024-02-20", "v": 3},
+        ]
+        window = TimePartitionWindow(
+            datetime.date(2024, 1, 1), datetime.date(2024, 2, 1), il.TimeGranularity.MONTH
+        )
+        destination.write(io_context(monthly(), window), rows)
+        by_partition = {partition: data for kind, partition, data in destination.calls}
+        assert by_partition["2024-01"] == [{"date": "2024-01-15", "v": 1}]
+        assert by_partition["2024-02"] == [{"date": "2024-02-10", "v": 2}, {"date": "2024-02-20", "v": 3}]
+
+    def test_window_write_splits_dataframes_natively(self):
+        pd = pytest.importorskip("pandas")
+
+        destination = RecordingPartitions(id="d")
+        df = pd.DataFrame([{"date": "2024-01-01", "v": 1}, {"date": "2024-01-02", "v": 2}])
+        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
+        destination.write(io_context(partitioned_asset(), window), df)
+        for _, _, data in destination.calls:
+            assert isinstance(data, pd.DataFrame)
+            assert len(data) == 1
+
+    def test_window_write_passes_unsplittable_data_as_is(self):
+        destination = RecordingPartitions(id="d")
+        sentinel = object()
+        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 1))
+        destination.write(io_context(partitioned_asset(), window), sentinel)
+        assert destination.calls == [("write", "2024-01-01", sentinel)]
+
+
+class TestReadDispatch:
+    """The three-way read dispatch."""
+
+    def test_unpartitioned_read(self):
+        assert RecordingPartitions(id="d").read(io_context(plain_asset())) == {"partition": None}
+
+    def test_partition_read(self):
+        partition = TimePartition(datetime.date(2024, 1, 2))
+        result = RecordingPartitions(id="d").read(io_context(partitioned_asset(), partition))
+        assert result == {"partition": "2024-01-02"}
+
+    def test_window_read_returns_one_result_per_partition(self):
+        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
+        result = RecordingPartitions(id="d").read(io_context(partitioned_asset(), window))
+        assert {r["partition"] for r in result} == {"2024-01-01", "2024-01-02"}
+
+
+class TestHookContract:
+    """The partition hooks are the contract; the templates say which one is missing."""
+
+    def test_missing_hooks_raise_naming_the_hook(self):
+        class Bare(il.Destination):
+            pass
+
+        with pytest.raises(NotImplementedError, match="Bare must implement write_partition"):
+            Bare(id="b").write(io_context(plain_asset()), [])
+        with pytest.raises(NotImplementedError, match="Bare must implement read_partition"):
+            Bare(id="b").read(io_context(plain_asset()))

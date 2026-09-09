@@ -108,8 +108,9 @@ shop = Shop(
 )
 ```
 
-Your own destination is two methods, sync or async. `PartitionedDestination` and
-`DatabaseDestination` handle partition scoping for you.
+Your own destination is two methods, sync or async, each handling one partition, or the
+unpartitioned whole. Windows are split and gathered for you; `DatabaseDestination` adds the
+delete-then-insert dance for tables.
 
 ```python
 import json
@@ -120,14 +121,17 @@ from pathlib import Path
 class JSONLDestination(il.Destination):
     base_path: str = ""
 
-    def write(self, context: il.IOContext, data) -> None:
-        path = Path(self.base_path) / context.asset.dataset / f"{context.asset.table}.jsonl"
+    def _path(self, context: il.IOContext, partition: il.Partition | None) -> Path:
+        base = Path(self.base_path) / context.asset.dataset / context.asset.table
+        return base / ("data.jsonl" if partition is None else f"{partition.id}.jsonl")
+
+    def write_partition(self, context: il.IOContext, partition: il.Partition | None, data) -> None:
+        path = self._path(context, partition)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(json.dumps(row, default=str) for row in data))
 
-    def read(self, context: il.IOContext):
-        path = Path(self.base_path) / context.asset.dataset / f"{context.asset.table}.jsonl"
-        return [json.loads(line) for line in path.read_text().splitlines()]
+    def read_partition(self, context: il.IOContext, partition: il.Partition | None):
+        return [json.loads(line) for line in self._path(context, partition).read_text().splitlines()]
 ```
 
 ### Running

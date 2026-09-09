@@ -53,7 +53,7 @@ class TestRoundtrip:
         dest.write(context, pd.DataFrame([{"a": 1}]))
         assert dest.read(context) == [{"a": "1"}]
 
-    def test_missing_scope_raises_data_not_found_error(self, tmp_path):
+    def test_missing_partition_raises_data_not_found_error(self, tmp_path):
         dest = CSVDestination(id="csv", base_path=str(tmp_path))
         context = IOContext(asset=plain_asset())
         with pytest.raises(DataNotFoundError, match="Data file not found"):

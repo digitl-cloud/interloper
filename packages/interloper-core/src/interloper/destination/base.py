@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from typing import Any, ClassVar
 
 from interloper.component import Component, ComponentDefinition
 from interloper.destination.context import IOContext
+from interloper.partitioning.base import Partition
 from interloper.utils.text import to_label
 
 
@@ -20,24 +20,33 @@ class DestinationDefinition(ComponentDefinition):
 
 
 class Destination(Component):
-    """A component that reads and writes asset data.
+    """A component that reads and writes asset data, one partition at a time.
 
-    Subclass and implement ``read()`` and ``write()``. They may be written
-    as plain sync methods (the common case: most warehouse/file clients are
-    sync) or as ``async def`` for native async I/O (e.g. asyncpg, aiofiles).
-    The engine is async-native: it awaits async implementations directly and
-    offloads sync ones to a worker thread, so a destination never blocks the
-    event loop either way. An annotation naming a component class declares a
+    A destination stores data per **partition**, ``None`` standing for the
+    whole of an unpartitioned asset. Subclass and implement
+    :meth:`write_partition` and :meth:`read_partition` for a single one;
+    :meth:`write` and :meth:`read` own the rest, splitting a window write into
+    one call per partition and gathering a window read into one result per
+    partition, so a destination is partition-correct by construction. A
+    backend that does not store per partition (a database that clears each
+    partition and inserts a window in one batch) overrides :meth:`write` or
+    :meth:`read` instead.
+
+    The hooks may be plain sync methods (the common case: most warehouse and
+    file clients are sync) or ``async def`` for native async I/O. The engine
+    is async-native: it awaits async implementations directly and offloads
+    sync ones to a worker thread, so a destination never blocks the event
+    loop either way. An annotation naming a component class declares a
     relation, which the destination resolves by name::
 
-        class PostgresDestination(Destination):
-            connection: PostgresConnection
+        class JSONDestination(Destination):
+            connection: BucketConnection
 
-            def read(self, context: IOContext) -> Any:
-                return query_table(self.connection.connection_string, context.table)
+            def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+                self.connection.put(self._path(context, partition), json.dumps(data, default=str))
 
-            def write(self, context: IOContext, data: Any) -> None:
-                insert_into(self.connection.connection_string, context.table, data)
+            def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+                return json.loads(self.connection.get(self._path(context, partition)))
     """
 
     tags: ClassVar[list[str]] = []
@@ -68,25 +77,63 @@ class Destination(Component):
             relations=dict(cls.relations),
         )
 
-    @abstractmethod
-    def read(self, context: IOContext) -> Any:
-        """Read data from this destination.
+    def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+        """Store *data* for one partition.
 
         Args:
-            context: Destination context with asset, partition, and metadata.
+            context: IO context carrying the target asset and the effective schema.
+            partition: The partition being stored, or ``None`` for the
+                unpartitioned whole.
+            data: The partition's slice of the data to store.
+
+        Raises:
+            NotImplementedError: Every destination implements this, unless it
+                overrides :meth:`write` for storage that is not per partition.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement write_partition()")
+
+    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+        """Load one partition.
+
+        Args:
+            context: IO context carrying the target asset and the effective schema.
+            partition: The partition to load, or ``None`` for the unpartitioned
+                whole.
+
+        Raises:
+            NotImplementedError: Every destination implements this, unless it
+                overrides :meth:`read` for storage that is not per partition.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement read_partition()")
+
+    def write(self, context: IOContext, data: Any) -> None:
+        """Write data, one partition at a time.
+
+        A window is split into one :meth:`write_partition` call per partition,
+        each receiving its slice of the data; a single partition or the
+        unpartitioned whole is one call receiving the data as is.
+
+        Args:
+            context: IO context carrying the target asset, the partition or window,
+                and the effective schema.
+            data: The data to write, in its native representation.
+        """
+        for partition, chunk in context.slices(data):
+            self.write_partition(context, partition, chunk)
+
+    def read(self, context: IOContext) -> Any:
+        """Read data for the context's partition, or window.
+
+        Args:
+            context: IO context carrying the target asset, the partition or window,
+                and the effective schema.
 
         Returns:
-            The data read from the destination.
+            The partition's data; a window returns one result per partition, in
+            window order.
         """
-
-    @abstractmethod
-    def write(self, context: IOContext, data: Any) -> None:
-        """Write data to this destination.
-
-        Args:
-            context: Destination context with asset, partition, and metadata.
-            data: The data to write.
-        """
+        results = [self.read_partition(context, partition) for partition in context.partitions]
+        return results if context.window else results[0]
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
         """Return row counts grouped by the asset's partition column.

@@ -4,39 +4,39 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
-from interloper.destination.partitioned import PartitionedDestination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition, PartitionConfig
 
 
 @destination(name="Memory")
-class MemoryDestination(PartitionedDestination):
+class MemoryDestination(Destination):
     """Destination that stores data in a class-level dict keyed by ``{dataset}/{table}/{partition}``.
 
     All instances share a single ``_storage`` dict so data written by one
     asset is visible to others.  The partition dispatch (including window
-    splitting) comes from :class:`PartitionedDestination`.  Call
-    :meth:`clear` between test runs.
+    splitting) is :class:`Destination`'s.  Call :meth:`clear` between test
+    runs.
     """
 
     _storage: ClassVar[dict[str, Any]] = {}
 
-    def _write_scope(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Store one scope's data under its path-style key.
+    def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+        """Store one partition's data under its path-style key.
 
         Args:
             context: IO context whose asset supplies the table, dataset, and
                 partitioning.
             partition: The partition being stored, or ``None`` for the
                 unpartitioned whole.
-            data: The scope's data, stored as-is.
+            data: The partition's data, stored as-is.
         """
-        self._storage[self._scope_key(context, partition)] = data
+        self._storage[self._partition_key(context, partition)] = data
 
-    def _read_scope(self, context: IOContext, partition: Partition | None) -> Any:
-        """Retrieve one scope's data.
+    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+        """Retrieve one partition's data.
 
         Args:
             context: IO context whose asset supplies the table, dataset, and
@@ -50,18 +50,18 @@ class MemoryDestination(PartitionedDestination):
         Raises:
             DataNotFoundError: If no data exists for the resolved key.
         """
-        key = self._scope_key(context, partition)
+        key = self._partition_key(context, partition)
         if key not in self._storage:
             raise DataNotFoundError(f"No data found in memory for: {key}")
         return self._storage[key]
 
-    def _scope_key(self, context: IOContext, partition: Partition | None) -> str:
-        """Build the storage key for a scope.
+    def _partition_key(self, context: IOContext, partition: Partition | None) -> str:
+        """Build the storage key for a partition.
 
         Args:
             context: IO context whose asset supplies the table, dataset, and
                 partitioning.
-            partition: The scope's partition, or ``None`` for the
+            partition: The partition, or ``None`` for the
                 unpartitioned whole.
 
         Returns:

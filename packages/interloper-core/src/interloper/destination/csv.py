@@ -6,23 +6,22 @@ import csv
 from pathlib import Path
 from typing import Any
 
+from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
-from interloper.destination.partitioned import PartitionedDestination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition
 from interloper.representation import Representation
 
 
 @destination(name="CSV")
-class CSVDestination(PartitionedDestination):
+class CSVDestination(Destination):
     """Destination that reads and writes CSV files on the local filesystem.
 
     Data is stored under ``{base_path}/{dataset}/{table}/data.csv``
     (or ``{base_path}/{table}/data.csv`` when no dataset is set).
     Partitioned assets add a ``{column}={id}`` subdirectory; the partition
-    dispatch (including window splitting) comes from
-    :class:`PartitionedDestination`.
+    dispatch (including window splitting) is :class:`Destination`'s.
 
     Data is viewed as ``list[dict]`` records through its registered
     representation on write (each dict is a row; the keys of the first dict
@@ -43,18 +42,18 @@ class CSVDestination(PartitionedDestination):
         """
         return Path(self.base_path) / (context.asset.dataset or "") / context.asset.table
 
-    def _scope_path(self, context: IOContext, partition: Partition | None) -> Path:
-        """Return the data file path for a scope.
+    def _partition_path(self, context: IOContext, partition: Partition | None) -> Path:
+        """Return the data file path for a partition.
 
         Args:
             context: IO context whose asset supplies the dataset, table, and
                 partition column.
-            partition: The scope's partition, or ``None`` for the unpartitioned
+            partition: The partition, or ``None`` for the unpartitioned
                 whole.
 
         Returns:
             ``.../data.csv``, inside a ``{column}={id}`` subdirectory for
-            partition scopes.
+            partitions.
         """
         base = self._asset_path(context)
         if partition is None:
@@ -62,21 +61,21 @@ class CSVDestination(PartitionedDestination):
         assert context.asset.partitioning
         return base / f"{context.asset.partitioning.column}={partition.id}" / "data.csv"
 
-    def _write_scope(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Write one scope's data as CSV (converted to records through its representation).
+    def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+        """Write one partition's data as CSV (converted to records through its representation).
 
         Args:
             context: IO context whose asset supplies the dataset, table, and
                 partition column.
             partition: The partition being written, or ``None`` for the
                 unpartitioned whole.
-            data: The scope's slice of the data, in its native representation.
+            data: The partition's slice of the data, in its native representation.
         """
         rows = Representation.of(data).to_records(data)
-        self._write_csv(self._scope_path(context, partition), rows)
+        self._write_csv(self._partition_path(context, partition), rows)
 
-    def _read_scope(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:
-        """Read one scope's CSV file.
+    def read_partition(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:
+        """Read one partition's CSV file.
 
         Args:
             context: IO context whose asset supplies the dataset, table, and
@@ -87,7 +86,7 @@ class CSVDestination(PartitionedDestination):
         Returns:
             Rows as a list of dicts (typed via the context schema when set).
         """
-        return self._read_csv(self._scope_path(context, partition), context)
+        return self._read_csv(self._partition_path(context, partition), context)
 
     def _write_csv(self, file_path: Path, data: list[dict[str, Any]]) -> None:
         """Write a list of row dicts to a CSV file.

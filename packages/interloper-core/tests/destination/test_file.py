@@ -79,7 +79,7 @@ class TestRoundtrip:
 
 
 class TestWindows:
-    """Window writes are split per partition by ``PartitionedDestination``."""
+    """Window writes are split per partition by ``Destination``."""
 
     def test_tabular_rows_are_split_by_the_partition_column(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))

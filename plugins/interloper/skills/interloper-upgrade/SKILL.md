@@ -83,6 +83,7 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    | spec `resources: {connection: {...}}` | the relation's own name: `connection: {...}` |
    | spec `upstreams: {orders: [id]}` | `orders: {ref: id}`, a list for a `many` relation |
    | `DependencyNotFoundError` | `ConfigError` from `validate_relations` |
+   | `class X(il.PartitionedDestination)` with `_write_scope` / `_read_scope` | `class X(il.Destination)` with `write_partition` / `read_partition`; the partition dispatch is the base class's |
 
    A relation left unbound is resolved when it is read: an explicit `default=`, else the target
    class built from the environment. So a connection that used to resolve through the cascade
