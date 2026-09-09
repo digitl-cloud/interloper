@@ -59,11 +59,10 @@ def _match(row: dict[str, Any]) -> dict[str, Any]:
 
 @il.source(tags=["Analytics"], icon="carbon:connect")
 class CampaignMatcher(il.Source):
-    """Matches campaigns across every advertising source into one canonical lookup table.
+    """Matches campaigns across every advertising source in the organisation into one lookup table.
 
-    The matching logic is a placeholder (see module docstring); this source
-    exists to prove that a many-valued wildcard upstream (``*.campaigns``) fans
-    every ``campaigns`` asset in the DAG into a single downstream asset.
+    Every connector's ``campaigns`` asset feeds it; each campaign is reduced to
+    a canonical name so the same campaign can be recognised across platforms.
     """
 
     @il.asset(
@@ -77,7 +76,7 @@ class CampaignMatcher(il.Source):
         context: il.ExecutionContext,
         campaigns: list[il.Upstream],
     ) -> list[dict[str, Any]]:
-        """Canonical campaign name matches, one row per upstream campaign across every advertising source."""
+        """One row per campaign of every advertising source, with the canonical name it is matched on."""
         rows: list[dict[str, Any]] = []
         for leg in campaigns:
             if leg.data is None:
@@ -85,14 +84,6 @@ class CampaignMatcher(il.Source):
                     f"No data for upstream '{leg.asset.qualified_key}' in this partition; leg skipped"
                 )
                 continue
-            source = leg.asset.source
             for row in Representation.of(leg.data).to_records(leg.data):
-                rows.append(
-                    {
-                        "date": context.partition_date,
-                        "source_key": source.key if source else "",
-                        "source_id": source.id if source else "",
-                        **_match(row),
-                    }
-                )
+                rows.append({"date": context.partition_date, **_match(row)})
         return rows
