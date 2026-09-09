@@ -1,0 +1,2428 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/plans/2026-09-04-downstream-assets-phase-4-app/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.60">
+    
+    
+      
+        <title>Many-valued upstreams, phase 4 (app) Implementation Plan - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#many-valued-upstreams-phase-4-app-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Many-valued upstreams, phase 4 (app) Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/decorators/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI flags
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Event types
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Spans & metrics
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="many-valued-upstreams-phase-4-app-implementation-plan">Many-valued upstreams, phase 4 (app) Implementation Plan<a class="headerlink" href="#many-valued-upstreams-phase-4-app-implementation-plan" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>SUPERSEDED 2026-09-07</strong> by <code>2026-09-07-relation-model-phase-*.md</code> (design <code>2026-09-07-relation-model-design.md</code>). Kept for the record; phase 1 here was executed as PR #321 and is being reworked.</p>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Let a user see and edit many-valued and wildcard dependency slots in the Nuxt app: pick legs in the source wizard, see persisted bindings in the asset panel, connect legs on the graph, and get nudged when a matching asset is not bound.</p>
+<p><strong>Architecture:</strong> One shared helper <code>slotAccepts</code> mirrors core's <code>AssetIdentity.satisfies</code>. The wizard's asset step, the graph connection rules, the warnings composable and the panel all switch from exact qualified-key equality to that helper, and from definition-only views to persisted relations read through a new <code>upstreamMap</code> accessor. No new pages.</p>
+<p><strong>Tech Stack:</strong> Nuxt 4, Vue 3, @nuxt/ui, TypeScript. No unit test runner in the app; verification is <code>pnpm run lint</code>, <code>pnpm exec nuxt typecheck</code> and a headless pass on a dev instance (the <code>verify</code> project skill). Spec: <code>docs/superpowers/specs/2026-09-04-downstream-assets-design.md</code> section 2.6.</p>
+<h2 id="global-constraints">Global Constraints<a class="headerlink" href="#global-constraints" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Branch <code>feat/many-upstreams-app</code> from <code>main</code> after phases 1 to 3 merged (the matcher is the verification subject).</li>
+<li>Conventional Commits ending with <code>By Digitl</code>; commit only when asked.</li>
+<li>Frontend commands run from <code>packages/interloper-app/app/</code>: <code>pnpm run lint</code>, <code>pnpm exec nuxt typecheck</code>. Both must pass after every task.</li>
+<li>Follow <code>packages/interloper-app/app/AGENTS.md</code>. Keep components small; no attribute-level comments.</li>
+<li>Dev instance on a non-3000 port: <code>INTERLOPER_SERVER_PORT=3100 make dev-up</code>; never reset the shared dev database.</li>
+<li>No em-dashes anywhere. All paths below are relative to <code>packages/interloper-app/app/app/</code>.</li>
+</ul>
+<hr />
+<h3 id="task-1-types-and-the-slotaccepts-helper">Task 1: Types and the <code>slotAccepts</code> helper<a class="headerlink" href="#task-1-types-and-the-slotaccepts-helper" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>types/catalog.ts</code> (<code>Dependency</code> interface, new helpers)
+- Modify: <code>types/component.ts</code> (new <code>upstreamMap</code>)</p>
+<p><strong>Interfaces:</strong>
+- Produces: <code>slotAccepts(slotKey: string, upstream: { sourceKey: string; assetKey: string }, ownSourceKey: string): boolean</code>.
+- Produces: <code>outwardUpstreamSlots(defn): Record&lt;string, Dependency&gt;</code> (slots whose key names another source or the wildcard).
+- Produces: <code>upstreamMap(c: ComponentRecord): Record&lt;string, string[]&gt;</code> (slot to upstream ids, from the <code>upstream</code> relation).</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Confirm the <code>Dependency</code> interface</strong></li>
+</ul>
+<p>Phase 1 already renamed <code>RelationSlot</code> to <code>Dependency</code> with <code>optional</code> and <code>many</code> in <code>types/catalog.ts</code>; check it reads:</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="cm">/** A declared dependency: a slot on a slotted relation type. Mirrors `interloper.component.base.Dependency`. */</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">export</span><span class="w"> </span><span class="kd">interface</span><span class="w"> </span><span class="nx">Dependency</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="cm">/** Expected dst component key. `''` accepts any component of the relation's kinds. */</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nx">key</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="cm">/** Whether the slot may stay unbound. */</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nx">optional</span><span class="o">:</span><span class="w"> </span><span class="kt">boolean</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="cm">/** Whether the slot binds several components (a fan-in dependency). */</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="nx">many</span><span class="o">:</span><span class="w"> </span><span class="kt">boolean</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">}</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Add the helpers after <code>requiredUpstreams</code></strong></li>
+</ul>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">export</span><span class="w"> </span><span class="kd">const</span><span class="w"> </span><span class="nx">ANY_SOURCE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'*'</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="cm">/**</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="cm"> * Whether an upstream identity satisfies a dependency slot key.</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="cm"> * Mirrors `AssetIdentity.satisfies` in interloper-core: a bare key names a</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="cm"> * sibling of `ownSourceKey`, `source.asset` names that source type, and</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="cm"> * `*.asset` accepts that asset key from any source.</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="cm"> */</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">slotAccepts</span><span class="p">(</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="nx">slotKey</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="nx">upstream</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sourceKey</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">assetKey</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="nx">ownSourceKey</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">slotKey</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sourceKey</span><span class="p">,</span><span class="w"> </span><span class="nx">assetKey</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">parseQualifiedKey</span><span class="p">(</span><span class="nx">slotKey</span><span class="p">)</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">upstream</span><span class="p">.</span><span class="nx">assetKey</span><span class="w"> </span><span class="o">!==</span><span class="w"> </span><span class="nx">assetKey</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="kc">false</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">expectedSource</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">sourceKey</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">ownSourceKey</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">expectedSource</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">ANY_SOURCE</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">upstream</span><span class="p">.</span><span class="nx">sourceKey</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">expectedSource</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="p">}</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="cm">/** Dependency slots whose key reaches outside the declaring source (qualified or wildcard). */</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">outwardUpstreamSlots</span><span class="p">(</span><span class="nx">defn</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentDefinition</span><span class="p">,</span><span class="w"> </span><span class="nx">ownSourceKey</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">Dependency</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">fromEntries</span><span class="p">(</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="w">        </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">upstreamSlots</span><span class="p">(</span><span class="nx">defn</span><span class="p">)).</span><span class="nx">filter</span><span class="p">(([,</span><span class="w"> </span><span class="nx">slot</span><span class="p">])</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">            </span><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sourceKey</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">parseQualifiedKey</span><span class="p">(</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="p">)</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="o">!!</span><span class="nx">sourceKey</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">sourceKey</span><span class="w"> </span><span class="o">!==</span><span class="w"> </span><span class="nx">ownSourceKey</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">        </span><span class="p">}),</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">    </span><span class="p">)</span>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>parseQualifiedKey</code> is defined later in the same file; function declarations hoist, so the order is fine.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Add <code>upstreamMap</code> to <code>types/component.ts</code> after <code>resourceMap</code></strong></li>
+</ul>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="cm">/** Upstream relations as a {slot: upstream ids} map (several ids for a many-valued slot). */</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">upstreamMap</span><span class="p">(</span><span class="nx">c</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentRecord</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">map</span><span class="o">:</span><span class="w"> </span><span class="kt">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{}</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">ref</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">relationRefs</span><span class="p">(</span><span class="nx">c</span><span class="p">,</span><span class="w"> </span><span class="s1">'upstream'</span><span class="p">))</span><span class="w"> </span><span class="p">(</span><span class="nx">map</span><span class="p">[</span><span class="nx">ref</span><span class="p">.</span><span class="nx">slot</span><span class="p">]</span><span class="w"> </span><span class="o">??=</span><span class="w"> </span><span class="p">[]).</span><span class="nx">push</span><span class="p">(</span><span class="nx">ref</span><span class="p">.</span><span class="nx">dst_id</span><span class="p">)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">map</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="p">}</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Lint and typecheck</strong></li>
+</ul>
+<p>Run: <code>pnpm run lint &amp;&amp; pnpm exec nuxt typecheck</code>
+Expected: clean.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Stage (commit only if asked)</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>git<span class="w"> </span>add<span class="w"> </span>app/types/catalog.ts<span class="w"> </span>app/types/component.ts
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(app): type many-valued dependency slots and add slotAccepts</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-2-wizard-asset-step-picks-legs-for-every-outward-slot">Task 2: Wizard asset step picks legs for every outward slot<a class="headerlink" href="#task-2-wizard-asset-step-picks-legs-for-every-outward-slot" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>components/sources/AssetSelect.vue</code>
+- Modify: <code>components/sources/Wizard.vue</code></p>
+<p><strong>Interfaces:</strong>
+- <code>resolvedDeps</code> model changes to <code>Record&lt;string, string[]&gt;</code> keyed <code>assetKey→paramName</code> (one-element arrays for single slots).</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Rewrite <code>getAssetDeps</code> in <code>AssetSelect.vue</code></strong></li>
+</ul>
+<p>Replace the loop body with:</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kd">function</span><span class="w"> </span><span class="nx">getAssetDeps</span><span class="p">(</span><span class="nx">assetDefn</span><span class="o">:</span><span class="w"> </span><span class="kt">AssetDefinition</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">AssetDep</span><span class="p">[]</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">deps</span><span class="o">:</span><span class="w"> </span><span class="kt">AssetDep</span><span class="p">[]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[]</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="p">[</span><span class="nx">paramName</span><span class="p">,</span><span class="w"> </span><span class="nx">slot</span><span class="p">]</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">outwardUpstreamSlots</span><span class="p">(</span><span class="nx">assetDefn</span><span class="p">,</span><span class="w"> </span><span class="nx">props</span><span class="p">.</span><span class="nx">sourceDefn</span><span class="p">.</span><span class="nx">key</span><span class="p">)))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sourceKey</span><span class="p">,</span><span class="w"> </span><span class="nx">assetKey</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">parseQualifiedKey</span><span class="p">(</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="p">)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">label</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">catalogStore</span><span class="p">.</span><span class="nx">getAssetDefinition</span><span class="p">(</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="p">)</span><span class="o">?</span><span class="p">.</span><span class="nx">name</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">            </span><span class="o">??</span><span class="w"> </span><span class="nx">catalogStore</span><span class="p">.</span><span class="nx">sourceDefinitions</span><span class="p">.</span><span class="nx">flatMap</span><span class="p">(</span><span class="nx">s</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">assets</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[]).</span><span class="nx">find</span><span class="p">(</span><span class="nx">a</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">a</span><span class="p">.</span><span class="nx">key</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">assetKey</span><span class="p">)</span><span class="o">?</span><span class="p">.</span><span class="nx">name</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">            </span><span class="o">??</span><span class="w"> </span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">candidates</span><span class="o">:</span><span class="w"> </span><span class="kt">DepCandidate</span><span class="p">[]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[]</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">source</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">props</span><span class="p">.</span><span class="nx">allSources</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">            </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">asset</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">source</span><span class="p">.</span><span class="nx">children</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">slotAccepts</span><span class="p">(</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sourceKey</span><span class="o">:</span><span class="w"> </span><span class="kt">source.key</span><span class="p">,</span><span class="w"> </span><span class="nx">assetKey</span><span class="o">:</span><span class="w"> </span><span class="kt">asset.key</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">props</span><span class="p">.</span><span class="nx">sourceDefn</span><span class="p">.</span><span class="nx">key</span><span class="p">))</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">                </span><span class="nx">candidates</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">                    </span><span class="nx">assetId</span><span class="o">:</span><span class="w"> </span><span class="kt">asset.id</span><span class="p">,</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">                    </span><span class="nx">sourceId</span><span class="o">:</span><span class="w"> </span><span class="kt">source.id</span><span class="p">,</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">                    </span><span class="nx">sourceName</span><span class="o">:</span><span class="w"> </span><span class="kt">source.name</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="nx">source</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">                    </span><span class="nx">assetName</span><span class="o">:</span><span class="w"> </span><span class="kt">label</span><span class="p">,</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">                    </span><span class="nx">sameSource</span><span class="o">:</span><span class="w"> </span><span class="kt">false</span><span class="p">,</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">                </span><span class="p">})</span>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">            </span><span class="p">}</span>
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">        </span><span class="p">}</span>
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">        </span><span class="nx">deps</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span>
+</span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">            </span><span class="nx">paramName</span><span class="p">,</span>
+</span><span id="__span-4-25"><a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">            </span><span class="nx">qualifiedKey</span><span class="o">:</span><span class="w"> </span><span class="kt">slot.key</span><span class="p">,</span>
+</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">            </span><span class="nx">sourceKey</span><span class="p">,</span>
+</span><span id="__span-4-27"><a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="w">            </span><span class="nx">assetKey</span><span class="p">,</span>
+</span><span id="__span-4-28"><a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">            </span><span class="nx">label</span><span class="p">,</span>
+</span><span id="__span-4-29"><a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="w">            </span><span class="nx">isOptional</span><span class="o">:</span><span class="w"> </span><span class="kt">slot.optional</span><span class="p">,</span>
+</span><span id="__span-4-30"><a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="w">            </span><span class="nx">isMany</span><span class="o">:</span><span class="w"> </span><span class="kt">slot.many</span><span class="p">,</span>
+</span><span id="__span-4-31"><a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="w">            </span><span class="nx">isCrossSource</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span>
+</span><span id="__span-4-32"><a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a><span class="w">            </span><span class="nx">candidates</span><span class="p">,</span>
+</span><span id="__span-4-33"><a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="w">        </span><span class="p">})</span>
+</span><span id="__span-4-34"><a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-4-35"><a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">deps</span>
+</span><span id="__span-4-36"><a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Add <code>isMany: boolean</code> to <code>AssetDep</code>, import <code>outwardUpstreamSlots, slotAccepts</code> from <code>~/types/catalog</code>, and change the model to <code>defineModel&lt;Record&lt;string, string[]&gt;&gt;('resolvedDeps', ...)</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Auto-resolution</strong></li>
+</ul>
+<p>Replace the watcher body: a single slot with exactly one candidate resolves to <code>[candidate]</code>; a many slot with no selection yet resolves to every candidate id (bind-all by default).</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nx">watch</span><span class="p">([()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">props</span><span class="p">.</span><span class="nx">allSources</span><span class="p">,</span><span class="w"> </span><span class="nx">selectedKeys</span><span class="p">],</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">assetKey</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">selectedKeys</span><span class="p">.</span><span class="nx">value</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">dep</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">depsByAsset</span><span class="p">.</span><span class="nx">value</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">assetKey</span><span class="p">)</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[])</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">            </span><span class="kd">const</span><span class="w"> </span><span class="nx">depKey</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">depSelectionKey</span><span class="p">(</span><span class="nx">assetKey</span><span class="p">,</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">paramName</span><span class="p">)</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">resolvedDeps</span><span class="p">.</span><span class="nx">value</span><span class="p">[</span><span class="nx">depKey</span><span class="p">]</span><span class="o">?</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">dep</span><span class="p">.</span><span class="nx">isMany</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">candidates</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0</span><span class="p">)</span><span class="w"> </span><span class="nx">resolvedDeps</span><span class="p">.</span><span class="nx">value</span><span class="p">[</span><span class="nx">depKey</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">candidates</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">c</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">c</span><span class="p">.</span><span class="nx">assetId</span><span class="p">)</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">            </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">dep</span><span class="p">.</span><span class="nx">isMany</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">candidates</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="nx">resolvedDeps</span><span class="p">.</span><span class="nx">value</span><span class="p">[</span><span class="nx">depKey</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nx">dep</span><span class="p">.</span><span class="nx">candidates</span><span class="p">[</span><span class="mf">0</span><span class="p">]</span><span class="o">!</span><span class="p">.</span><span class="nx">assetId</span><span class="p">]</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">        </span><span class="p">}</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">immediate</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span><span class="w"> </span><span class="nx">deep</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="w"> </span><span class="p">})</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Template</strong></li>
+</ul>
+<p>Replace the three candidate branches (none, single, multiple) with:</p>
+<div class="language-vue highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">&lt;</span><span class="nt">span</span> <span class="na">v-if</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="p">.</span><span class="nx">candidates</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="mf">0</span><span class="s">"</span> <span class="na">class</span><span class="o">=</span><span class="s">"text-xs text-warning"</span><span class="p">&gt;</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    No matching <span class="cp">{{</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">assetKey</span><span class="w"> </span><span class="cp">}}</span> asset found
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">&lt;</span><span class="nt">USelectMenu</span> <span class="na">v-else-if</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="p">.</span><span class="nx">isMany</span><span class="s">"</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>             <span class="p">:</span><span class="na">model-value</span><span class="o">=</span><span class="s">"</span><span class="nx">resolvedDeps</span><span class="p">[</span><span class="nx">depSelectionKey</span><span class="p">(</span><span class="nx">asset</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">paramName</span><span class="p">)]</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[]</span><span class="s">"</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>             <span class="p">:</span><span class="na">items</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="p">.</span><span class="nx">candidates</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">c</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="sb">`</span><span class="si">${</span><span class="nx">c</span><span class="p">.</span><span class="nx">sourceName</span><span class="si">}</span><span class="sb">, </span><span class="si">${</span><span class="nx">c</span><span class="p">.</span><span class="nx">assetName</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span><span class="w"> </span><span class="nx">value</span><span class="o">:</span><span class="w"> </span><span class="nx">c</span><span class="p">.</span><span class="nx">assetId</span><span class="w"> </span><span class="p">}))</span><span class="s">"</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>             <span class="na">multiple</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>             <span class="na">placeholder</span><span class="o">=</span><span class="s">"Select upstreams…"</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>             <span class="na">size</span><span class="o">=</span><span class="s">"xs"</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>             <span class="na">value-key</span><span class="o">=</span><span class="s">"value"</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>             <span class="na">class</span><span class="o">=</span><span class="s">"min-w-[220px]"</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>             <span class="p">@</span><span class="na">update</span><span class="p">:</span><span class="na">model-value</span><span class="o">=</span><span class="s">"</span><span class="nx">resolvedDeps</span><span class="p">[</span><span class="nx">depSelectionKey</span><span class="p">(</span><span class="nx">asset</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">paramName</span><span class="p">)]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">$event</span><span class="s">"</span> <span class="p">/&gt;</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="p">&lt;</span><span class="nt">USelectMenu</span> <span class="na">v-else</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>             <span class="p">:</span><span class="na">model-value</span><span class="o">=</span><span class="s">"</span><span class="nx">resolvedDeps</span><span class="p">[</span><span class="nx">depSelectionKey</span><span class="p">(</span><span class="nx">asset</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">paramName</span><span class="p">)]</span><span class="o">?</span><span class="p">.[</span><span class="mf">0</span><span class="p">]</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s1">''</span><span class="s">"</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>             <span class="p">:</span><span class="na">items</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="p">.</span><span class="nx">candidates</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">c</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="sb">`</span><span class="si">${</span><span class="nx">c</span><span class="p">.</span><span class="nx">sourceName</span><span class="si">}</span><span class="sb">, </span><span class="si">${</span><span class="nx">c</span><span class="p">.</span><span class="nx">assetName</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span><span class="w"> </span><span class="nx">value</span><span class="o">:</span><span class="w"> </span><span class="nx">c</span><span class="p">.</span><span class="nx">assetId</span><span class="w"> </span><span class="p">}))</span><span class="s">"</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>             <span class="na">placeholder</span><span class="o">=</span><span class="s">"Select upstream…"</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>             <span class="na">size</span><span class="o">=</span><span class="s">"xs"</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>             <span class="na">value-key</span><span class="o">=</span><span class="s">"value"</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>             <span class="na">class</span><span class="o">=</span><span class="s">"min-w-[220px]"</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>             <span class="p">@</span><span class="na">update</span><span class="p">:</span><span class="na">model-value</span><span class="o">=</span><span class="s">"</span><span class="nx">resolvedDeps</span><span class="p">[</span><span class="nx">depSelectionKey</span><span class="p">(</span><span class="nx">asset</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">paramName</span><span class="p">)]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nx">$event</span><span class="p">]</span><span class="s">"</span> <span class="p">/&gt;</span>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="p">&lt;</span><span class="nt">UBadge</span> <span class="na">v-if</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="p">.</span><span class="nx">isMany</span><span class="s">"</span> <span class="na">color</span><span class="o">=</span><span class="s">"neutral"</span> <span class="na">size</span><span class="o">=</span><span class="s">"xs"</span><span class="p">&gt;</span>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>    <span class="cp">{{</span><span class="w"> </span><span class="p">(</span><span class="nx">resolvedDeps</span><span class="p">[</span><span class="nx">depSelectionKey</span><span class="p">(</span><span class="nx">asset</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">paramName</span><span class="p">)]</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[]).</span><span class="nx">length</span><span class="w"> </span><span class="cp">}}</span> of <span class="cp">{{</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">candidates</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="cp">}}</span>
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="p">&lt;/</span><span class="nt">UBadge</span><span class="p">&gt;</span>
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="p">&lt;</span><span class="nt">UBadge</span> <span class="na">v-if</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="p">.</span><span class="nx">isOptional</span><span class="s">"</span> <span class="na">color</span><span class="o">=</span><span class="s">"neutral"</span> <span class="na">size</span><span class="o">=</span><span class="s">"xs"</span><span class="p">&gt;</span>optional<span class="p">&lt;/</span><span class="nt">UBadge</span><span class="p">&gt;</span>
+</span></code></pre></div>
+<p>A single slot with one candidate now shows a one-item select instead of italic text, which also makes it changeable. Keep the <code>git-merge</code> icon row.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Wizard: seed from persisted bindings, replace the set on save, surface errors</strong></li>
+</ul>
+<p>In <code>Wizard.vue</code>:</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">resolvedCrossDeps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">ref</span><span class="o">&lt;</span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="nx">seedCrossDeps</span><span class="p">(</span><span class="nx">props</span><span class="p">.</span><span class="nx">source</span><span class="p">))</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="kd">function</span><span class="w"> </span><span class="nx">seedCrossDeps</span><span class="p">(</span><span class="nx">source</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentRecord</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">seeded</span><span class="o">:</span><span class="w"> </span><span class="kt">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{}</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">asset</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">source</span><span class="o">?</span><span class="p">.</span><span class="nx">children</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[])</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="p">[</span><span class="nx">slot</span><span class="p">,</span><span class="w"> </span><span class="nx">ids</span><span class="p">]</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">upstreamMap</span><span class="p">(</span><span class="nx">asset</span><span class="p">)))</span><span class="w"> </span><span class="nx">seeded</span><span class="p">[</span><span class="sb">`</span><span class="si">${</span><span class="nx">asset</span><span class="p">.</span><span class="nx">key</span><span class="si">}</span><span class="sb">→</span><span class="si">${</span><span class="nx">slot</span><span class="si">}</span><span class="sb">`</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">ids</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">seeded</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Import <code>upstreamMap</code> from <code>~/types/component</code>. Rewrite <code>wireCrossDeps</code> to send the whole dependency set per child with one <code>PUT</code> (the API replaces the listed relation type):</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">async</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">wireCrossDeps</span><span class="p">(</span><span class="nx">saved</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentRecord</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">toast</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">useToast</span><span class="p">()</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">byChild</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Map</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nb">Array</span><span class="o">&lt;</span><span class="p">{</span><span class="w"> </span><span class="nx">dst_id</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">slot</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span><span class="o">&gt;&gt;</span><span class="p">()</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="p">[</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">upstreamIds</span><span class="p">]</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">resolvedCrossDeps</span><span class="p">.</span><span class="nx">value</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="p">[</span><span class="nx">assetKey</span><span class="p">,</span><span class="w"> </span><span class="nx">paramName</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">key</span><span class="p">.</span><span class="nx">split</span><span class="p">(</span><span class="s1">'→'</span><span class="p">)</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">child</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">saved</span><span class="p">.</span><span class="nx">children</span><span class="p">.</span><span class="nx">find</span><span class="p">(</span><span class="nx">a</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">a</span><span class="p">.</span><span class="nx">key</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">assetKey</span><span class="p">)</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">child</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">!</span><span class="nx">paramName</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">dst_id</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">upstreamIds</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">byChild</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">child</span><span class="p">.</span><span class="nx">id</span><span class="p">)</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="nx">byChild</span><span class="p">.</span><span class="nx">set</span><span class="p">(</span><span class="nx">child</span><span class="p">.</span><span class="nx">id</span><span class="p">,</span><span class="w"> </span><span class="p">[]).</span><span class="nx">get</span><span class="p">(</span><span class="nx">child</span><span class="p">.</span><span class="nx">id</span><span class="p">)</span><span class="o">!</span><span class="p">).</span><span class="nx">push</span><span class="p">({</span><span class="w"> </span><span class="nx">dst_id</span><span class="p">,</span><span class="w"> </span><span class="nx">slot</span><span class="o">:</span><span class="w"> </span><span class="kt">paramName</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nb">Promise</span><span class="p">.</span><span class="nx">allSettled</span><span class="p">(</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">        </span><span class="p">[...</span><span class="nx">byChild</span><span class="p">].</span><span class="nx">map</span><span class="p">(([</span><span class="nx">childId</span><span class="p">,</span><span class="w"> </span><span class="nx">upstream</span><span class="p">])</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">componentsStore</span><span class="p">.</span><span class="nx">update</span><span class="p">(</span><span class="nx">childId</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">relations</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">upstream</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">})),</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">    </span><span class="p">)</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">failed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">results</span><span class="p">.</span><span class="nx">find</span><span class="p">((</span><span class="nx">r</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="nx">is</span><span class="w"> </span><span class="nx">PromiseRejectedResult</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">status</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">'rejected'</span><span class="p">)</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">failed</span><span class="p">)</span><span class="w"> </span><span class="nx">toast</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="nx">errorToast</span><span class="p">(</span><span class="nx">failed</span><span class="p">.</span><span class="nx">reason</span><span class="p">,</span><span class="w"> </span><span class="s1">'Failed to wire dependencies'</span><span class="p">))</span>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Check <code>componentsStore.update(id, input)</code> exists with a <code>ComponentInput</code> payload (it is what <code>DriftBanner</code> uses for <code>children</code>); if it is named differently, use that name. Only children that appear in <code>resolvedCrossDeps</code> are touched, so assets whose slots were untouched keep their edges; a child whose selection was emptied gets an empty list, which the backend refuses for a required <code>on_unbind=block</code> slot and the toast shows why.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Lint and typecheck</strong></li>
+</ul>
+<p>Run: <code>pnpm run lint &amp;&amp; pnpm exec nuxt typecheck</code>
+Expected: clean.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 6: Stage (commit only if asked)</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>git<span class="w"> </span>add<span class="w"> </span>app/components/sources/AssetSelect.vue<span class="w"> </span>app/components/sources/Wizard.vue
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(app): pick legs for many-valued and wildcard dependency slots in the source wizard</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-3-asset-panel-shows-persisted-bindings-and-the-nudge">Task 3: Asset panel shows persisted bindings and the nudge<a class="headerlink" href="#task-3-asset-panel-shows-persisted-bindings-and-the-nudge" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>components/graph/AssetPanel.vue:232-244</code> (<code>dependencyRows</code>) and the "Upstream dependencies" template block (lines 474-506)
+- Create: <code>composables/dependencyBindings.ts</code></p>
+<p><strong>Interfaces:</strong>
+- Produces: <code>useDependencyBindings()</code> returning <code>bindingsFor(asset: ComponentRecord, assetDefn: AssetDefinition | undefined, source: ComponentRecord | undefined): SlotBinding[]</code> where</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">export</span><span class="w"> </span><span class="kd">interface</span><span class="w"> </span><span class="nx">SlotBinding</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="nx">param</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nx">slot</span><span class="o">:</span><span class="w"> </span><span class="kt">Dependency</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nx">bound</span><span class="o">:</span><span class="w"> </span><span class="kt">Array</span><span class="o">&lt;</span><span class="p">{</span><span class="w"> </span><span class="nx">assetId</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">icon</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span><span class="o">&gt;</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="nx">unboundMatches</span><span class="o">:</span><span class="w"> </span><span class="kt">Array</span><span class="o">&lt;</span><span class="p">{</span><span class="w"> </span><span class="nx">assetId</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">icon</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span><span class="o">&gt;</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="p">}</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the composable</strong></li>
+</ul>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">import</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">ComponentRecord</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'~/types/component'</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">upstreamMap</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'~/types/component'</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="k">import</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">AssetDefinition</span><span class="p">,</span><span class="w"> </span><span class="nx">Dependency</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'~/types/catalog'</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">upstreamSlots</span><span class="p">,</span><span class="w"> </span><span class="nx">slotAccepts</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'~/types/catalog'</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="k">export</span><span class="w"> </span><span class="kd">interface</span><span class="w"> </span><span class="nx">SlotBinding</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="nx">param</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">    </span><span class="nx">slot</span><span class="o">:</span><span class="w"> </span><span class="kt">Dependency</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">    </span><span class="nx">bound</span><span class="o">:</span><span class="w"> </span><span class="kt">Array</span><span class="o">&lt;</span><span class="p">{</span><span class="w"> </span><span class="nx">assetId</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">icon</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span><span class="o">&gt;</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">    </span><span class="nx">unboundMatches</span><span class="o">:</span><span class="w"> </span><span class="kt">Array</span><span class="o">&lt;</span><span class="p">{</span><span class="w"> </span><span class="nx">assetId</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w"> </span><span class="nx">icon</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}</span><span class="o">&gt;</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="p">}</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="cm">/** Declared dependency slots of an asset joined with its persisted bindings and the org's matching assets. */</span>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">useDependencyBindings</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">componentsStore</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">useComponentsStore</span><span class="p">()</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">assetDisplayName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">useAssetDisplayName</span><span class="p">()</span>
+</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>
+</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="w">    </span><span class="kd">function</span><span class="w"> </span><span class="nx">describe</span><span class="p">(</span><span class="nx">assetId</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">assetDisplayName</span><span class="p">.</span><span class="nx">value</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">assetId</span><span class="p">)</span>
+</span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">assetId</span><span class="p">,</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="kt">names?.label</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="nx">assetId</span><span class="p">,</span><span class="w"> </span><span class="nx">icon</span><span class="o">:</span><span class="w"> </span><span class="kt">names?.sourceIcon</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s1">'i-lucide-box'</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-11-21"><a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-11-22"><a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a>
+</span><span id="__span-11-23"><a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a><span class="w">    </span><span class="kd">function</span><span class="w"> </span><span class="nx">bindingsFor</span><span class="p">(</span>
+</span><span id="__span-11-24"><a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a><span class="w">        </span><span class="nx">asset</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentRecord</span><span class="p">,</span>
+</span><span id="__span-11-25"><a id="__codelineno-11-25" name="__codelineno-11-25" href="#__codelineno-11-25"></a><span class="w">        </span><span class="nx">assetDefn</span><span class="o">:</span><span class="w"> </span><span class="kt">AssetDefinition</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="kc">undefined</span><span class="p">,</span>
+</span><span id="__span-11-26"><a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a><span class="w">        </span><span class="nx">source</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentRecord</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="kc">undefined</span><span class="p">,</span>
+</span><span id="__span-11-27"><a id="__codelineno-11-27" name="__codelineno-11-27" href="#__codelineno-11-27"></a><span class="w">    </span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">SlotBinding</span><span class="p">[]</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-11-28"><a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">assetDefn</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="p">[]</span>
+</span><span id="__span-11-29"><a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">upstreamMap</span><span class="p">(</span><span class="nx">asset</span><span class="p">)</span>
+</span><span id="__span-11-30"><a id="__codelineno-11-30" name="__codelineno-11-30" href="#__codelineno-11-30"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">ownSourceKey</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">source</span><span class="o">?</span><span class="p">.</span><span class="nx">key</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s1">''</span>
+</span><span id="__span-11-31"><a id="__codelineno-11-31" name="__codelineno-11-31" href="#__codelineno-11-31"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">upstreamSlots</span><span class="p">(</span><span class="nx">assetDefn</span><span class="p">)).</span><span class="nx">map</span><span class="p">(([</span><span class="nx">param</span><span class="p">,</span><span class="w"> </span><span class="nx">slot</span><span class="p">])</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-11-32"><a id="__codelineno-11-32" name="__codelineno-11-32" href="#__codelineno-11-32"></a><span class="w">            </span><span class="kd">const</span><span class="w"> </span><span class="nx">boundIds</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Set</span><span class="p">(</span><span class="nx">bound</span><span class="p">[</span><span class="nx">param</span><span class="p">]</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[])</span>
+</span><span id="__span-11-33"><a id="__codelineno-11-33" name="__codelineno-11-33" href="#__codelineno-11-33"></a><span class="w">            </span><span class="kd">const</span><span class="w"> </span><span class="nx">matches</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[]</span>
+</span><span id="__span-11-34"><a id="__codelineno-11-34" name="__codelineno-11-34" href="#__codelineno-11-34"></a><span class="w">            </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">candidateSource</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">componentsStore</span><span class="p">.</span><span class="nx">byKind</span><span class="p">(</span><span class="s1">'source'</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-11-35"><a id="__codelineno-11-35" name="__codelineno-11-35" href="#__codelineno-11-35"></a><span class="w">                </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">candidate</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">candidateSource</span><span class="p">.</span><span class="nx">children</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-11-36"><a id="__codelineno-11-36" name="__codelineno-11-36" href="#__codelineno-11-36"></a><span class="w">                    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">candidate</span><span class="p">.</span><span class="nx">id</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">asset</span><span class="p">.</span><span class="nx">id</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">boundIds</span><span class="p">.</span><span class="nx">has</span><span class="p">(</span><span class="nx">candidate</span><span class="p">.</span><span class="nx">id</span><span class="p">))</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-11-37"><a id="__codelineno-11-37" name="__codelineno-11-37" href="#__codelineno-11-37"></a><span class="w">                    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">slotAccepts</span><span class="p">(</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sourceKey</span><span class="o">:</span><span class="w"> </span><span class="kt">candidateSource.key</span><span class="p">,</span><span class="w"> </span><span class="nx">assetKey</span><span class="o">:</span><span class="w"> </span><span class="kt">candidate.key</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">ownSourceKey</span><span class="p">))</span><span class="w"> </span><span class="nx">matches</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">candidate</span><span class="p">.</span><span class="nx">id</span><span class="p">)</span>
+</span><span id="__span-11-38"><a id="__codelineno-11-38" name="__codelineno-11-38" href="#__codelineno-11-38"></a><span class="w">                </span><span class="p">}</span>
+</span><span id="__span-11-39"><a id="__codelineno-11-39" name="__codelineno-11-39" href="#__codelineno-11-39"></a><span class="w">            </span><span class="p">}</span>
+</span><span id="__span-11-40"><a id="__codelineno-11-40" name="__codelineno-11-40" href="#__codelineno-11-40"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-11-41"><a id="__codelineno-11-41" name="__codelineno-11-41" href="#__codelineno-11-41"></a><span class="w">                </span><span class="nx">param</span><span class="p">,</span>
+</span><span id="__span-11-42"><a id="__codelineno-11-42" name="__codelineno-11-42" href="#__codelineno-11-42"></a><span class="w">                </span><span class="nx">slot</span><span class="p">,</span>
+</span><span id="__span-11-43"><a id="__codelineno-11-43" name="__codelineno-11-43" href="#__codelineno-11-43"></a><span class="w">                </span><span class="nx">bound</span><span class="o">:</span><span class="w"> </span><span class="p">[...</span><span class="nx">boundIds</span><span class="p">].</span><span class="nx">map</span><span class="p">(</span><span class="nx">describe</span><span class="p">),</span>
+</span><span id="__span-11-44"><a id="__codelineno-11-44" name="__codelineno-11-44" href="#__codelineno-11-44"></a><span class="w">                </span><span class="nx">unboundMatches</span><span class="o">:</span><span class="w"> </span><span class="kt">slot.many</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="nx">matches</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">describe</span><span class="p">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="p">[],</span>
+</span><span id="__span-11-45"><a id="__codelineno-11-45" name="__codelineno-11-45" href="#__codelineno-11-45"></a><span class="w">            </span><span class="p">}</span>
+</span><span id="__span-11-46"><a id="__codelineno-11-46" name="__codelineno-11-46" href="#__codelineno-11-46"></a><span class="w">        </span><span class="p">})</span>
+</span><span id="__span-11-47"><a id="__codelineno-11-47" name="__codelineno-11-47" href="#__codelineno-11-47"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-11-48"><a id="__codelineno-11-48" name="__codelineno-11-48" href="#__codelineno-11-48"></a>
+</span><span id="__span-11-49"><a id="__codelineno-11-49" name="__codelineno-11-49" href="#__codelineno-11-49"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">bindingsFor</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-11-50"><a id="__codelineno-11-50" name="__codelineno-11-50" href="#__codelineno-11-50"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Bare (sibling) slots of a single kind list their bound sibling too, since <code>upstreamMap</code> reads the persisted intra-source edges.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Use it in <code>AssetPanel.vue</code></strong></li>
+</ul>
+<p>Replace <code>dependencyRows</code> with:</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">bindingsFor</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">useDependencyBindings</span><span class="p">()</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">slotBindings</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">computed</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">bindingsFor</span><span class="p">(</span><span class="nx">props</span><span class="p">.</span><span class="nx">asset</span><span class="p">,</span><span class="w"> </span><span class="nx">props</span><span class="p">.</span><span class="nx">assetDefn</span><span class="p">,</span><span class="w"> </span><span class="nx">props</span><span class="p">.</span><span class="nx">source</span><span class="p">))</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">unboundMatchCount</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">computed</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">slotBindings</span><span class="p">.</span><span class="nx">value</span><span class="p">.</span><span class="nx">reduce</span><span class="p">((</span><span class="nx">n</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">n</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">b</span><span class="p">.</span><span class="nx">unboundMatches</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">))</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">async</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">bindAllMatching</span><span class="p">(</span><span class="nx">binding</span><span class="o">:</span><span class="w"> </span><span class="kt">SlotBinding</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">    </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">        </span><span class="k">await</span><span class="w"> </span><span class="nb">Promise</span><span class="p">.</span><span class="nx">all</span><span class="p">(</span><span class="nx">binding</span><span class="p">.</span><span class="nx">unboundMatches</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">m</span><span class="w"> </span><span class="p">=&gt;</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">            </span><span class="nx">componentsStore</span><span class="p">.</span><span class="nx">addRelation</span><span class="p">(</span><span class="nx">props</span><span class="p">.</span><span class="nx">asset</span><span class="p">.</span><span class="nx">id</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'upstream'</span><span class="p">,</span><span class="w"> </span><span class="nx">dst_id</span><span class="o">:</span><span class="w"> </span><span class="kt">m.assetId</span><span class="p">,</span><span class="w"> </span><span class="nx">slot</span><span class="o">:</span><span class="w"> </span><span class="kt">binding.param</span><span class="w"> </span><span class="p">}),</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">        </span><span class="p">))</span>
+</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">        </span><span class="nx">toast</span><span class="p">.</span><span class="nx">add</span><span class="p">({</span><span class="w"> </span><span class="nx">title</span><span class="o">:</span><span class="w"> </span><span class="sb">`Bound </span><span class="si">${</span><span class="nx">binding</span><span class="p">.</span><span class="nx">unboundMatches</span><span class="p">.</span><span class="nx">length</span><span class="si">}</span><span class="sb"> upstream(s)`</span><span class="p">,</span><span class="w"> </span><span class="nx">color</span><span class="o">:</span><span class="w"> </span><span class="s1">'success'</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="w">    </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">        </span><span class="nx">toast</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="nx">errorToast</span><span class="p">(</span><span class="nx">e</span><span class="p">,</span><span class="w"> </span><span class="s1">'Failed to bind upstreams'</span><span class="p">))</span>
+</span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-12-15"><a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>The panel already receives <code>source: ComponentRecord</code> as a prop (both pages pass it), and <code>toast</code> plus <code>errorToast</code> are already in scope there.</p>
+<p>Template: the collapsible header badge becomes <code>{{ slotBindings.length }}</code>; body renders one block per <code>binding</code>:</p>
+<div class="language-vue highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">&lt;</span><span class="nt">div</span> <span class="na">v-for</span><span class="o">=</span><span class="s">"</span><span class="nx">binding</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="nx">slotBindings</span><span class="s">"</span> <span class="p">:</span><span class="na">key</span><span class="o">=</span><span class="s">"</span><span class="nx">binding</span><span class="p">.</span><span class="nx">param</span><span class="s">"</span> <span class="na">class</span><span class="o">=</span><span class="s">"flex flex-col gap-1.5"</span><span class="p">&gt;</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">"flex items-center gap-2"</span><span class="p">&gt;</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>        <span class="p">&lt;</span><span class="nt">UBadge</span> <span class="na">color</span><span class="o">=</span><span class="s">"neutral"</span> <span class="na">size</span><span class="o">=</span><span class="s">"sm"</span> <span class="na">class</span><span class="o">=</span><span class="s">"font-mono"</span><span class="p">&gt;</span><span class="cp">{{</span><span class="w"> </span><span class="nx">binding</span><span class="p">.</span><span class="nx">param</span><span class="w"> </span><span class="cp">}}</span><span class="p">&lt;/</span><span class="nt">UBadge</span><span class="p">&gt;</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>        <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">"text-xs text-muted"</span><span class="p">&gt;</span><span class="cp">{{</span><span class="w"> </span><span class="nx">binding</span><span class="p">.</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="w"> </span><span class="cp">}}</span><span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>        <span class="p">&lt;</span><span class="nt">UBadge</span> <span class="na">v-if</span><span class="o">=</span><span class="s">"</span><span class="nx">binding</span><span class="p">.</span><span class="nx">slot</span><span class="p">.</span><span class="nx">many</span><span class="s">"</span> <span class="na">color</span><span class="o">=</span><span class="s">"neutral"</span> <span class="na">size</span><span class="o">=</span><span class="s">"xs"</span><span class="p">&gt;</span><span class="cp">{{</span><span class="w"> </span><span class="nx">binding</span><span class="p">.</span><span class="nx">bound</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="cp">}}</span> bound<span class="p">&lt;/</span><span class="nt">UBadge</span><span class="p">&gt;</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>        <span class="p">&lt;</span><span class="nt">UBadge</span> <span class="na">v-if</span><span class="o">=</span><span class="s">"</span><span class="nx">binding</span><span class="p">.</span><span class="nx">slot</span><span class="p">.</span><span class="nx">optional</span><span class="s">"</span> <span class="na">color</span><span class="o">=</span><span class="s">"neutral"</span> <span class="na">size</span><span class="o">=</span><span class="s">"xs"</span><span class="p">&gt;</span>optional<span class="p">&lt;/</span><span class="nt">UBadge</span><span class="p">&gt;</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>        <span class="p">&lt;</span><span class="nt">UBadge</span> <span class="na">v-else-if</span><span class="o">=</span><span class="s">"</span><span class="nx">binding</span><span class="p">.</span><span class="nx">bound</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="mf">0</span><span class="s">"</span> <span class="na">color</span><span class="o">=</span><span class="s">"warning"</span> <span class="na">size</span><span class="o">=</span><span class="s">"xs"</span><span class="p">&gt;</span>unbound<span class="p">&lt;/</span><span class="nt">UBadge</span><span class="p">&gt;</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>    <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    <span class="p">&lt;</span><span class="nt">div</span> <span class="na">v-for</span><span class="o">=</span><span class="s">"</span><span class="nx">leg</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="nx">binding</span><span class="p">.</span><span class="nx">bound</span><span class="s">"</span> <span class="p">:</span><span class="na">key</span><span class="o">=</span><span class="s">"</span><span class="nx">leg</span><span class="p">.</span><span class="nx">assetId</span><span class="s">"</span> <span class="na">class</span><span class="o">=</span><span class="s">"flex items-center gap-2.5 rounded-md bg-muted px-3 py-2"</span><span class="p">&gt;</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>        <span class="p">&lt;</span><span class="nt">UIcon</span> <span class="p">:</span><span class="na">name</span><span class="o">=</span><span class="s">"</span><span class="nx">leg</span><span class="p">.</span><span class="nx">icon</span><span class="s">"</span> <span class="na">class</span><span class="o">=</span><span class="s">"size-4 shrink-0 text-muted"</span> <span class="p">/&gt;</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>        <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">"truncate text-sm"</span><span class="p">&gt;</span><span class="cp">{{</span><span class="w"> </span><span class="nx">leg</span><span class="p">.</span><span class="nx">label</span><span class="w"> </span><span class="cp">}}</span><span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>    <span class="p">&lt;</span><span class="nt">div</span> <span class="na">v-if</span><span class="o">=</span><span class="s">"</span><span class="nx">binding</span><span class="p">.</span><span class="nx">unboundMatches</span><span class="p">.</span><span class="nx">length</span><span class="s">"</span> <span class="na">class</span><span class="o">=</span><span class="s">"flex items-center justify-between rounded-md border border-dashed border-default px-3 py-2"</span><span class="p">&gt;</span>
+</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a>        <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">"text-xs text-muted"</span><span class="p">&gt;</span><span class="cp">{{</span><span class="w"> </span><span class="nx">binding</span><span class="p">.</span><span class="nx">unboundMatches</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="cp">}}</span> matching, not bound<span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+</span><span id="__span-13-15"><a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a>        <span class="p">&lt;</span><span class="nt">UButton</span> <span class="na">size</span><span class="o">=</span><span class="s">"xs"</span> <span class="na">variant</span><span class="o">=</span><span class="s">"ghost"</span> <span class="na">label</span><span class="o">=</span><span class="s">"Bind all"</span> <span class="p">:</span><span class="na">disabled</span><span class="o">=</span><span class="s">"</span><span class="nx">graphReadonly</span><span class="s">"</span> <span class="p">@</span><span class="na">click</span><span class="o">=</span><span class="s">"</span><span class="nx">bindAllMatching</span><span class="p">(</span><span class="nx">binding</span><span class="p">)</span><span class="s">"</span> <span class="p">/&gt;</span>
+</span><span id="__span-13-16"><a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a>    <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span><span id="__span-13-17"><a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span></code></pre></div>
+<p>Show the collapsible when <code>slotBindings.length &gt; 0</code> (so optional-only assets get a section too). If <code>graphReadonly</code> is not injected in the panel, drop the <code>:disabled</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Lint and typecheck</strong></li>
+</ul>
+<p>Run: <code>pnpm run lint &amp;&amp; pnpm exec nuxt typecheck</code>
+Expected: clean.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Stage (commit only if asked)</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>git<span class="w"> </span>add<span class="w"> </span>app/composables/dependencyBindings.ts<span class="w"> </span>app/components/graph/AssetPanel.vue<span class="w"> </span>app/pages/graph.vue<span class="w"> </span>app/pages/collection.vue
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(app): show persisted dependency bindings and a bind-all nudge in the asset panel</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-4-graph-connection-rules-and-handles">Task 4: Graph connection rules and handles<a class="headerlink" href="#task-4-graph-connection-rules-and-handles" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>composables/graph.ts:225-237</code> (<code>resolveConnectionPairs</code>)
+- Modify: <code>components/graph/AssetNode.vue:86-96</code> (<code>isRunnable</code>, <code>showTargetHandle</code>)</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Match slots with <code>slotAccepts</code></strong></li>
+</ul>
+<p>In <code>resolveConnectionPairs</code>, <code>upstream.qk</code> is qualified; parse it and match every slot, allowing a many slot to take further legs:</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">downstream</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">downstreamAssets</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">spec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">options</span><span class="p">.</span><span class="nx">getAssetDefinition</span><span class="p">(</span><span class="nx">downstream</span><span class="p">.</span><span class="nx">qk</span><span class="p">)</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">spec</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">ownSourceKey</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">parseQualifiedKey</span><span class="p">(</span><span class="nx">downstream</span><span class="p">.</span><span class="nx">qk</span><span class="p">).</span><span class="nx">sourceKey</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">upstream</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">upstreamAssets</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">upstream</span><span class="p">.</span><span class="nx">id</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">downstream</span><span class="p">.</span><span class="nx">id</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">identity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">parseQualifiedKey</span><span class="p">(</span><span class="nx">upstream</span><span class="p">.</span><span class="nx">qk</span><span class="p">)</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">match</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">upstreamSlots</span><span class="p">(</span><span class="nx">spec</span><span class="p">)).</span><span class="nx">find</span><span class="p">(([,</span><span class="w"> </span><span class="nx">slot</span><span class="p">])</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">slotAccepts</span><span class="p">(</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">identity</span><span class="p">,</span><span class="w"> </span><span class="nx">ownSourceKey</span><span class="p">))</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">match</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="p">[</span><span class="nx">paramName</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">match</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">depExists</span><span class="p">(</span><span class="nx">downstream</span><span class="p">.</span><span class="nx">id</span><span class="p">,</span><span class="w"> </span><span class="nx">upstream</span><span class="p">.</span><span class="nx">id</span><span class="p">))</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">        </span><span class="nx">pairs</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span><span class="w"> </span><span class="nx">upstreamAssetId</span><span class="o">:</span><span class="w"> </span><span class="kt">upstream.id</span><span class="p">,</span><span class="w"> </span><span class="nx">downstreamAssetId</span><span class="o">:</span><span class="w"> </span><span class="kt">downstream.id</span><span class="p">,</span><span class="w"> </span><span class="nx">paramName</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Import <code>parseQualifiedKey, slotAccepts</code> from <code>~/types/catalog</code>. Standalone downstreams have an empty <code>ownSourceKey</code>, so their bare keys match nothing, which is the core behaviour too.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Per-slot runnability and the target handle</strong></li>
+</ul>
+<p>In <code>AssetNode.vue</code> replace <code>requiredDepCount</code> / <code>isRunnable</code> / <code>showTargetHandle</code>:</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">declaredSlots</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">computed</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">(</span><span class="nx">props</span><span class="p">.</span><span class="nx">assetDefn</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="nx">upstreamSlots</span><span class="p">(</span><span class="nx">props</span><span class="p">.</span><span class="nx">assetDefn</span><span class="p">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="p">{}))</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">isRunnable</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">computed</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">upstreamMap</span><span class="p">(</span><span class="nx">props</span><span class="p">.</span><span class="nx">asset</span><span class="p">)</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">declaredSlots</span><span class="p">.</span><span class="nx">value</span><span class="p">).</span><span class="nx">every</span><span class="p">(([</span><span class="nx">param</span><span class="p">,</span><span class="w"> </span><span class="nx">slot</span><span class="p">])</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">slot</span><span class="p">.</span><span class="nx">optional</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">(</span><span class="nx">bound</span><span class="p">[</span><span class="nx">param</span><span class="p">]</span><span class="o">?</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="mf">0</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0</span><span class="p">)</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="p">})</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="kd">const</span><span class="w"> </span><span class="nx">showTargetHandle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">computed</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">    </span><span class="nx">hasUpstream</span><span class="p">.</span><span class="nx">value</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">declaredSlots</span><span class="p">.</span><span class="nx">value</span><span class="p">).</span><span class="nx">length</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">isValidTarget</span><span class="p">.</span><span class="nx">value</span><span class="p">,</span>
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Import <code>upstreamSlots</code> (replacing <code>requiredUpstreams</code>) from <code>~/types/catalog</code> and <code>upstreamMap</code> from <code>~/types/component</code>. <code>props.asset.relations</code> carries the embedded refs from <code>GET /components</code>, so no extra fetch is needed; if the graph's asset records lack <code>relations</code>, fall back to <code>componentsStore.upstreams.filter(d =&gt; d.src_id === props.asset.id)</code> grouped by <code>slot</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Lint and typecheck</strong></li>
+</ul>
+<p>Run: <code>pnpm run lint &amp;&amp; pnpm exec nuxt typecheck</code>
+Expected: clean.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Stage (commit only if asked)</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>git<span class="w"> </span>add<span class="w"> </span>app/composables/graph.ts<span class="w"> </span>app/components/graph/AssetNode.vue
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(app): connect legs to many-valued and wildcard slots on the graph</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-5-warnings-per-slot-and-the-matching-but-unbound-nudge">Task 5: Warnings per slot and the matching-but-unbound nudge<a class="headerlink" href="#task-5-warnings-per-slot-and-the-matching-but-unbound-nudge" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>composables/warnings.ts:99-120</code></p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Rewrite the dependency block of <code>getWarnings</code></strong></li>
+</ul>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">defn</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">asset</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">assetById</span><span class="p">.</span><span class="nx">value</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">assetId</span><span class="p">)</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">asset</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="nx">upstreamMap</span><span class="p">(</span><span class="nx">asset</span><span class="p">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="p">{}</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">ownSourceKey</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">source</span><span class="o">?</span><span class="p">.</span><span class="nx">key</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s1">''</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="p">[</span><span class="nx">param</span><span class="p">,</span><span class="w"> </span><span class="nx">slot</span><span class="p">]</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">upstreamSlots</span><span class="p">(</span><span class="nx">defn</span><span class="p">)))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">boundIds</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">bound</span><span class="p">[</span><span class="nx">param</span><span class="p">]</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[]</span>
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">slot</span><span class="p">.</span><span class="nx">optional</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">boundIds</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="mf">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-18-8"><a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">            </span><span class="kd">const</span><span class="w"> </span><span class="nx">depName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">getAssetDefinition</span><span class="p">(</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="p">)</span><span class="o">?</span><span class="p">.</span><span class="nx">name</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span>
+</span><span id="__span-18-9"><a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="w">            </span><span class="nx">warnings</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span><span class="w"> </span><span class="nx">category</span><span class="o">:</span><span class="w"> </span><span class="s1">'dependency'</span><span class="p">,</span><span class="w"> </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="sb">`Missing dependency: </span><span class="si">${</span><span class="nx">depName</span><span class="si">}</span><span class="sb"> (</span><span class="si">${</span><span class="nx">param</span><span class="si">}</span><span class="sb">)`</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-18-10"><a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="w">        </span><span class="p">}</span>
+</span><span id="__span-18-11"><a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">slot</span><span class="p">.</span><span class="nx">many</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-18-12"><a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="nx">unbound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span>
+</span><span id="__span-18-13"><a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">candidateSource</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">sources</span><span class="p">.</span><span class="nx">value</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-18-14"><a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a><span class="w">            </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">candidate</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">candidateSource</span><span class="p">.</span><span class="nx">children</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-18-15"><a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a><span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">candidate</span><span class="p">.</span><span class="nx">id</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">assetId</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">boundIds</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="nx">candidate</span><span class="p">.</span><span class="nx">id</span><span class="p">))</span><span class="w"> </span><span class="k">continue</span>
+</span><span id="__span-18-16"><a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a><span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">slotAccepts</span><span class="p">(</span><span class="nx">slot</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sourceKey</span><span class="o">:</span><span class="w"> </span><span class="kt">candidateSource.key</span><span class="p">,</span><span class="w"> </span><span class="nx">assetKey</span><span class="o">:</span><span class="w"> </span><span class="kt">candidate.key</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">ownSourceKey</span><span class="p">))</span><span class="w"> </span><span class="nx">unbound</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mf">1</span>
+</span><span id="__span-18-17"><a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a><span class="w">            </span><span class="p">}</span>
+</span><span id="__span-18-18"><a id="__codelineno-18-18" name="__codelineno-18-18" href="#__codelineno-18-18"></a><span class="w">        </span><span class="p">}</span>
+</span><span id="__span-18-19"><a id="__codelineno-18-19" name="__codelineno-18-19" href="#__codelineno-18-19"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">unbound</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-18-20"><a id="__codelineno-18-20" name="__codelineno-18-20" href="#__codelineno-18-20"></a><span class="w">            </span><span class="nx">warnings</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span><span class="w"> </span><span class="nx">category</span><span class="o">:</span><span class="w"> </span><span class="s1">'dependency'</span><span class="p">,</span><span class="w"> </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="sb">`</span><span class="si">${</span><span class="nx">unbound</span><span class="si">}</span><span class="sb"> matching asset</span><span class="si">${</span><span class="nx">unbound</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s1">'s'</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="sb"> not bound to </span><span class="si">${</span><span class="nx">param</span><span class="si">}</span><span class="sb">`</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-18-21"><a id="__codelineno-18-21" name="__codelineno-18-21" href="#__codelineno-18-21"></a><span class="w">        </span><span class="p">}</span>
+</span><span id="__span-18-22"><a id="__codelineno-18-22" name="__codelineno-18-22" href="#__codelineno-18-22"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-18-23"><a id="__codelineno-18-23" name="__codelineno-18-23" href="#__codelineno-18-23"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Import <code>upstreamMap</code> from <code>~/types/component</code> and <code>upstreamSlots, slotAccepts</code> from <code>~/types/catalog</code> (drop <code>requiredUpstreams</code> if now unused). <code>getAssetDefinition</code> in this composable already handles bare keys; for a wildcard key it returns <code>undefined</code> and the message falls back to the key. The <code>upstreamsByAssetId</code> map becomes unused; remove it.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Lint and typecheck</strong></li>
+</ul>
+<p>Run: <code>pnpm run lint &amp;&amp; pnpm exec nuxt typecheck</code></p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Stage (commit only if asked)</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>git<span class="w"> </span>add<span class="w"> </span>app/composables/warnings.ts
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(app): warn per dependency slot and nudge on matching unbound assets</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-6-collection-tooltip-and-qualified-definition-lookup">Task 6: Collection tooltip and qualified definition lookup<a class="headerlink" href="#task-6-collection-tooltip-and-qualified-definition-lookup" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>components/collection/Table.vue:360-361</code>
+- Modify: <code>composables/collection.ts:65-90</code>
+- Modify: <code>pages/collection.vue:31-37</code></p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Carry the leg label</strong></li>
+</ul>
+<p>In <code>collection.ts</code> the map already computes <code>{ name, icon }</code>; replace <code>name = defn.name</code> with the display label from <code>useAssetDisplayName()</code> (instantiate it at the top of the composable): <code>name = assetDisplayName.value.get(dep.dst_id)?.label ?? defn.name</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Tooltip on the count</strong></li>
+</ul>
+<p>Replace the bare count span in <code>Table.vue</code>:</p>
+<div class="language-vue highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="p">&lt;</span><span class="nt">UTooltip</span> <span class="na">v-else-if</span><span class="o">=</span><span class="s">"</span><span class="nx">row</span><span class="p">.</span><span class="nx">original</span><span class="p">.</span><span class="nx">dependencies</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0</span><span class="s">"</span> <span class="p">:</span><span class="na">delay-duration</span><span class="o">=</span><span class="s">"</span><span class="mf">0</span><span class="s">"</span><span class="p">&gt;</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>    <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">"text-muted"</span><span class="p">&gt;</span><span class="cp">{{</span><span class="w"> </span><span class="nx">row</span><span class="p">.</span><span class="nx">original</span><span class="p">.</span><span class="nx">dependencies</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="cp">}}</span><span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    <span class="p">&lt;</span><span class="nt">template</span> <span class="err">#</span><span class="na">content</span><span class="p">&gt;</span>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>        <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">"flex flex-col gap-1 text-xs"</span><span class="p">&gt;</span>
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>            <span class="p">&lt;</span><span class="nt">div</span> <span class="na">v-for</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="nx">row</span><span class="p">.</span><span class="nx">original</span><span class="p">.</span><span class="nx">dependencies</span><span class="s">"</span> <span class="p">:</span><span class="na">key</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="p">.</span><span class="nx">name</span><span class="s">"</span> <span class="na">class</span><span class="o">=</span><span class="s">"flex items-center gap-1.5"</span><span class="p">&gt;</span>
+</span><span id="__span-20-6"><a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>                <span class="p">&lt;</span><span class="nt">UIcon</span> <span class="p">:</span><span class="na">name</span><span class="o">=</span><span class="s">"</span><span class="nx">dep</span><span class="p">.</span><span class="nx">icon</span><span class="s">"</span> <span class="na">class</span><span class="o">=</span><span class="s">"size-3.5 shrink-0"</span> <span class="p">/&gt;</span>
+</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>                <span class="p">&lt;</span><span class="nt">span</span><span class="p">&gt;</span><span class="cp">{{</span><span class="w"> </span><span class="nx">dep</span><span class="p">.</span><span class="nx">name</span><span class="w"> </span><span class="cp">}}</span><span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>            <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span><span id="__span-20-9"><a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>        <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span><span id="__span-20-10"><a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>    <span class="p">&lt;/</span><span class="nt">template</span><span class="p">&gt;</span>
+</span><span id="__span-20-11"><a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a><span class="p">&lt;/</span><span class="nt">UTooltip</span><span class="p">&gt;</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Qualified lookup in <code>pages/collection.vue</code></strong></li>
+</ul>
+<p>Replace <code>getAssetDefinition(key)</code> with a version that takes the source key:</p>
+<div class="language-ts highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="kd">function</span><span class="w"> </span><span class="nx">getAssetDefinition</span><span class="p">(</span><span class="nx">sourceKey</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">key</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">AssetDefinition</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="kc">undefined</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">catalogStore</span><span class="p">.</span><span class="nx">getSourceDefinition</span><span class="p">(</span><span class="nx">sourceKey</span><span class="p">)</span><span class="o">?</span><span class="p">.</span><span class="nx">assets</span><span class="o">?</span><span class="p">.</span><span class="nx">find</span><span class="p">(</span><span class="nx">a</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">a</span><span class="p">.</span><span class="nx">key</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">key</span><span class="p">)</span>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>and update its call in <code>onViewAsset</code> to <code>getAssetDefinition(source.key, asset.key)</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Lint and typecheck; stage (commit only if asked)</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>git<span class="w"> </span>add<span class="w"> </span>app/components/collection/Table.vue<span class="w"> </span>app/composables/collection.ts<span class="w"> </span>app/pages/collection.vue
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"fix(app): list dependency legs in the collection tooltip and resolve definitions by source</span>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-7-headless-verification">Task 7: Headless verification<a class="headerlink" href="#task-7-headless-verification" title="Permanent link">&para;</a></h3>
+<p>Follow the <code>verify</code> project skill. Dev instance on <code>:3100</code>, session reused from <code>:3000</code>, never reset the shared database, delete every component you create.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Seed the scenario</strong></li>
+</ul>
+<p>Create two provider sources (<code>snapchat_ads</code>, <code>tiktok_ads</code>) with placeholder connections through the wizard or the API, then open "New source", pick Campaign Matcher.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Wizard</strong></li>
+</ul>
+<p>On the Assets step, <code>campaign_matches</code> shows one dependency row <code>campaigns</code> with a multi-select preselecting both <code>campaigns</code> legs and a <code>2 of 2</code> badge. Deselect one, save. <code>GET /components/relations?type=upstream</code> shows one edge. Reopen the source in edit mode: the multi-select shows the one bound leg. Screenshot both states.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Panel and nudge</strong></li>
+</ul>
+<p>Open the matcher asset on the collection page and on the graph page. The "Upstream dependencies" section shows <code>campaigns</code>, <code>1 bound</code>, the bound leg labelled "Source name, Campaigns", and "1 matching, not bound" with "Bind all". Click it; the section shows <code>2 bound</code>; the warning badge on the graph node disappears. Screenshot before and after.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Graph drag</strong></li>
+</ul>
+<p>Remove one leg with the edge context menu, then drag from the freed <code>campaigns</code> node to the matcher asset: the connection is accepted (the handle highlights) and the edge reappears. Screenshot.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Collection column</strong></li>
+</ul>
+<p>Hover the matcher's dependency count in the collection table: the tooltip lists both legs.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 6: Clean up and open the PR</strong></li>
+</ul>
+<p>Delete the matcher, then the provider sources and connections. Title <code>feat(app): many-valued dependency slots in the wizard, panel, graph and warnings</code>. Attach the screenshots, link the spec, end with <code>By Digitl</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.88ee1349.min.js"></script>
+      
+    
+  </body>
+</html>

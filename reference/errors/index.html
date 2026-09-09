@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -2011,17 +2011,12 @@ subclasses the built-in it replaces, so <code>except ValueError</code> handlers 
 <tr>
 <td><code>DAGError</code></td>
 <td><code>ValueError</code></td>
-<td>Empty DAG, non-workload item, duplicate id, unpartitioned asset downstream of a partitioned one, non-runnable component in <code>DAG.from_spec_file</code>.</td>
+<td>Empty DAG, non-workload item, duplicate id, unpartitioned asset downstream of a partitioned one, non-runnable component in <code>DAG.from_spec_file</code>, two assets match a single-valued declared key.</td>
 </tr>
 <tr>
 <td><code>CircularDependencyError</code></td>
 <td><code>DAGError</code></td>
 <td>A cycle in the graph.</td>
-</tr>
-<tr>
-<td><code>DependencyNotFoundError</code></td>
-<td><code>DAGError</code></td>
-<td>A mandatory dependency points at an id outside the DAG.</td>
 </tr>
 <tr>
 <td><code>AssetNotFoundError</code></td>
@@ -2031,12 +2026,7 @@ subclasses the built-in it replaces, so <code>except ValueError</code> handlers 
 <tr>
 <td><code>AssetError</code></td>
 <td><code>ValueError</code></td>
-<td>Dependencies without a DAG, a failed upstream read, a resource of the wrong type, a strategy requiring a schema without one, a schema declared on non-tabular data, no destinations for row counts.</td>
-</tr>
-<tr>
-<td><code>DependencyContractError</code></td>
-<td><code>AssetError</code></td>
-<td>A wired upstream does not match the <code>requires</code> contract.</td>
+<td>A bound upstream without a DAG, a failed upstream read, a strategy requiring a schema without one, a schema declared on non-tabular data, no destinations for row counts.</td>
 </tr>
 <tr>
 <td><code>SourceError</code></td>
@@ -2121,12 +2111,14 @@ subclasses the built-in it replaces, so <code>except ValueError</code> handlers 
 reason, never their input values, so a failing connection never leaks its secrets into an event
 or a result.</p>
 <h2 id="errors-that-are-plain-built-ins">Errors that are plain built-ins<a class="headerlink" href="#errors-that-are-plain-built-ins" title="Permanent link">&para;</a></h2>
-<p>Some validation raises built-ins directly: unknown constructor keyword arguments, a resource of
-the wrong type passed by slot name, a <code>FetchField</code> provider reference that does not resolve, an
-<code>oauth=</code> decorator option on a non-OAuth connection, and multiple discriminator fields raise
-<code>TypeError</code>; a required <code>ResourceRef</code> that is unset, an invalid key or identifier, a window
+<p>Some validation raises built-ins directly: unknown constructor keyword arguments, a <code>FetchField</code>
+provider reference that does not resolve, an <code>oauth=</code> decorator option on a non-OAuth connection,
+and multiple discriminator fields raise <code>TypeError</code>; an invalid key or identifier, a window
 ending before it starts, an unsupported granularity, and <code>bounded_gather(limit=0)</code> raise
-<code>ValueError</code>; <code>Registry[...]</code> on a missing name raises <code>KeyError</code>.</p>
+<code>ValueError</code>; <code>Registry[...]</code> on a missing name raises <code>KeyError</code>. Binding a component a relation
+does not accept raises <code>ConfigError</code> instead, e.g. <code>Shop(connection=B())</code> gives <code>ConfigError:
+Shop.connection does not accept connection 'b' (declared: kind ['connection'], key
+['shop_connection'])</code>.</p>
 
 
 
@@ -2234,7 +2226,7 @@ ending before it starts, an unsupported granularity, and <code>bounded_gather(li
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

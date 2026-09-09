@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -1120,6 +1120,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-reference-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The reference rule
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sources-and-their-assets" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2039,10 +2050,11 @@ and how the platform stores and rebuilds components.</p>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">spec</span><span class="o">.</span><span class="n">id</span>       <span class="c1"># the instance id</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">spec</span><span class="o">.</span><span class="n">init</span>     <span class="c1"># the constructor payload, nested specs included</span>
 </span></code></pre></div>
-<p>A component is referenced by exactly one of <code>path</code> (a fully qualified import path, what
-<code>to_spec()</code> emits) or <code>key</code> (a <a href="../catalog/">catalog</a> key, what hand-written specs may use).
-<code>init</code> holds the field values; fields set to <code>None</code> are omitted; nested serializables
-(destinations, resources, a normalizer) are nested specs.</p>
+<p>A component is named by exactly one of <code>path</code> (a fully qualified import path, what <code>to_spec()</code>
+emits) or <code>key</code> (a <a href="../catalog/">catalog</a> key, what hand-written specs may use). <code>init</code> holds
+every field's value, defaults included; only a field left at <code>None</code> is omitted. It also carries
+one entry per relation that holds a binding, under the relation's own name: a list for a <code>many</code>
+relation, a single value otherwise. <code>id</code> is required only when something references it.</p>
 <p>Round-trip:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">rebuilt</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="o">.</span><span class="n">from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>          <span class="c1"># must reconstruct to a Source</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">rebuilt</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="o">.</span><span class="n">from_spec</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">model_dump</span><span class="p">())</span>
@@ -2050,12 +2062,29 @@ and how the platform stores and rebuilds components.</p>
 <p>Calling <code>from_spec</code> on a subclass enforces the kind: a spec reconstructing to something else
 raises <code>TypeError</code>. Nested <code>key</code> references resolve through the catalog passed in, or the
 settings-configured catalog built lazily.</p>
+<h2 id="the-reference-rule">The reference rule<a class="headerlink" href="#the-reference-rule" title="Permanent link">&para;</a></h2>
+<p>One rule decides whether a bound target is written out or pointed at, and no kind knows about
+it:</p>
+<ul>
+<li>a target that <strong>has a parent</strong> is emitted under that parent and is a <code>{ref: id}</code> everywhere
+  else. An asset lives under its source, so an upstream is always a reference;</li>
+<li>a target with <strong>no parent</strong> is written out in full the first time the traversal reaches it,
+  and is a <code>{ref: id}</code> at every later one. A destination shared by two sources is inline once
+  and referenced once.</li>
+</ul>
+<p>A <code>{ref: id}</code> resolves inside the document first, then through <code>resolve=</code>:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="o">.</span><span class="n">from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">resolve</span><span class="o">=</span><span class="n">store</span><span class="o">.</span><span class="n">load</span><span class="p">)</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="o">.</span><span class="n">from_spec_file</span><span class="p">(</span><span class="s2">"daily.yaml"</span><span class="p">,</span> <span class="n">resolve</span><span class="o">=</span><span class="n">store</span><span class="o">.</span><span class="n">load</span><span class="p">)</span>
+</span></code></pre></div>
+<p>In a hand-written manifest the referenced component has to be in the tree, since there is
+nothing else to ask. In the platform, the store resolves it. A reference nobody answers raises
+<code>SpecError</code>.</p>
 <h2 id="sources-and-their-assets">Sources and their assets<a class="headerlink" href="#sources-and-their-assets" title="Permanent link">&para;</a></h2>
-<p>A source is the unit of reconstruction. Its spec carries the assets as an <strong>override map</strong>
-keyed by asset key rather than as individual specs, which keeps the document compact and lets
-per-asset state (destinations, <code>materializable</code>, dependency wiring) survive:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">Shop</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_1"</span><span class="p">)</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span><span class="o">.</span><span class="n">init</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># {"account_id": "act_1", "assets": {"orders": {"id": "...", "materializable": True, ...}, ...}}</span>
+<p>A source is the unit of reconstruction. Its spec carries the assets as an <strong>override map</strong> keyed
+by asset key rather than as individual specs, which keeps the document compact and lets
+per-asset state (its own destinations, <code>materializable</code>, its bound upstreams) survive:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">Shop</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_1"</span><span class="p">)</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span><span class="o">.</span><span class="n">init</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># {"account_id": "act_1", "assets": {"orders": {"id": "...", "materializable": True}, ...}}</span>
 </span></code></pre></div>
 <p>Reconstruction builds each asset class with its overrides. The map is also the list of assets the
 source ends up with: an asset absent from a non-empty map does not exist after reconstruction.
@@ -2063,37 +2092,64 @@ To restrict what runs while keeping every asset wired, use <code>select</code> i
 <h2 id="spec-files">Spec files<a class="headerlink" href="#spec-files" title="Permanent link">&para;</a></h2>
 <p><code>Spec.from_file(path)</code> loads a YAML document, interpolating <code>${VAR}</code> placeholders from the
 environment in every string value. Unresolved variables are a hard error, so credentials never
-need to live in the file:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># shop.yaml</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shop</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nt">init</span><span class="p">:</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">account_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">act_1</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">destinations</span><span class="p">:</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bigquery_destination</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span><span class="nt">resources</span><span class="p">:</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="nt">connection</span><span class="p">:</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shop_connection</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">        </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${SHOP_API_KEY}</span>
+need to live in the file. A manifest is one component, nested, and is exactly <code>to_spec()</code> output:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper.job.cron.CronJob</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">cron</span><span class="p">:</span><span class="w"> </span><span class="s">"0</span><span class="nv"> </span><span class="s">7</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*"</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">destinations</span><span class="p">:</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bigquery_destination</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">      </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bq</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">        </span><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dwh</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">        </span><span class="nt">connection</span><span class="p">:</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">          </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">google_cloud_connection</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">          </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">            </span><span class="nt">service_account_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${GCP_KEY}</span><span class="w">    </span><span class="c1"># block style: ${VAR} inside { ... } is not valid YAML</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">  </span><span class="nt">targets</span><span class="p">:</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">facebook_ads</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">        </span><span class="nt">account_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">act_1</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">        </span><span class="nt">connection</span><span class="p">:</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">          </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">facebook_ads_connection</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">          </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">            </span><span class="nt">access_token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${FB_TOKEN}</span>
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">            </span><span class="nt">app_id</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">        </span><span class="nt">assets</span><span class="p">:</span>
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">          </span><span class="nt">campaigns</span><span class="p">:</span>
+</span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">            </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fb-campaigns</span>
+</span><span id="__span-4-25"><a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">            </span><span class="nt">materializable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">campaign_matcher</span>
+</span><span id="__span-4-27"><a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-4-28"><a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">        </span><span class="nt">assets</span><span class="p">:</span>
+</span><span id="__span-4-29"><a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="w">          </span><span class="nt">campaign_matches</span><span class="p">:</span>
+</span><span id="__span-4-30"><a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="w">            </span><span class="nt">campaigns</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[{</span><span class="nt">ref</span><span class="p">:</span><span class="w"> </span><span class="nv">fb-campaigns</span><span class="p p-Indicator">}]</span><span class="w">     </span><span class="c1"># the asset has a parent: always a reference</span>
 </span></code></pre></div>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="o">.</span><span class="n">from_spec_file</span><span class="p">(</span><span class="s2">"shop.yaml"</span><span class="p">)</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="o">.</span><span class="n">from_spec_file</span><span class="p">(</span><span class="s2">"shop.yaml"</span><span class="p">)</span>           <span class="c1"># any runnable component</span>
+<p>Without the explicit <code>campaigns:</code> line the DAG binds every <code>*.campaigns</code> node it holds. Neither
+target declares <code>destinations</code>: the job's cascade into every target that has none, so a target
+writes its own only to use something else. A parentless component mentioned a second time is a
+reference too (<code>destinations: [{ref: bq}]</code> on a target that needs the same destination as
+another one but not the job's), which is the one reference rule, with no flag.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">job</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Job</span><span class="o">.</span><span class="n">from_spec_file</span><span class="p">(</span><span class="s2">"daily.yaml"</span><span class="p">)</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="o">.</span><span class="n">from_spec_file</span><span class="p">(</span><span class="s2">"daily.yaml"</span><span class="p">)</span>          <span class="c1"># any runnable component</span>
 </span></code></pre></div>
-<p>Invalid YAML, a missing file, undefined variables and malformed documents raise <code>SpecError</code>; a
-component kind that is not a workload raises <code>DAGError</code> from <code>DAG.from_spec_file</code>. The CLI's
-<code>interloper run -f</code> is this call.</p>
+<p>Invalid YAML, a missing file, undefined variables, malformed documents and unresolved references
+raise <code>SpecError</code>; a component kind that is not a workload raises <code>DAGError</code> from
+<code>DAG.from_spec_file</code>. The CLI's <code>interloper run -f</code> is this call.</p>
 <h2 id="dag-specs">DAG specs<a class="headerlink" href="#dag-specs" title="Permanent link">&para;</a></h2>
-<p>A <code>DAGSpec</code> is a flat list of component specs: sources with their asset override maps, plus
-standalone assets. It is what <code>MultiProcessRunner</code> ships to its workers and what
-<code>interloper run --format inline</code> accepts:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.dag</span><span class="w"> </span><span class="kn">import</span> <span class="n">DAGSpec</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">dag_spec</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">dag_spec</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">)</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="o">.</span><span class="n">from_spec</span><span class="p">(</span><span class="n">DAGSpec</span><span class="p">(</span><span class="o">**</span><span class="n">payload</span><span class="p">))</span>
+<p>A <code>DAGSpec</code> is a list of component specs, one per root of the graph: sources with their asset
+override maps, plus standalone assets. Every item shares one traversal, so the reference rule
+holds across the whole document and a destination bound to several roots is written once. As
+YAML it is one document per root, separated by <code>---</code>:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.dag</span><span class="w"> </span><span class="kn">import</span> <span class="n">DAGSpec</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">dag_spec</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">dag_spec</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">)</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="o">.</span><span class="n">from_spec</span><span class="p">(</span><span class="n">DAGSpec</span><span class="p">(</span><span class="o">**</span><span class="n">payload</span><span class="p">))</span>
 </span></code></pre></div>
-<p>The override map is built from the DAG's <strong>actual</strong> asset instances, so a mini-DAG's read-only
-parents stay read-only after the round-trip.</p>
+<p>It is what <code>MultiProcessRunner</code> ships to its workers and what <code>interloper run --format inline</code>
+accepts. The override map is built from the DAG's <strong>actual</strong> asset instances, so a parent the run
+only reads travels as its own document carrying that one asset with <code>materializable: false</code>,
+and stays read-only after the round-trip.</p>
 <h2 id="what-makes-something-serializable">What makes something serializable<a class="headerlink" href="#what-makes-something-serializable" title="Permanent link">&para;</a></h2>
 <p><code>Serializable</code> is a pydantic model with a few additions:</p>
 <ul>
@@ -2102,8 +2158,8 @@ parents stay read-only after the round-trip.</p>
 <li><code>to_spec()</code>, <code>from_spec()</code>, <code>from_spec_file()</code>, <code>classpath()</code>, <code>resolve_path()</code>;</li>
 <li><code>config_schema()</code>, the JSON Schema of the user-facing fields.</li>
 </ul>
-<p><code>Component</code> extends it with identity (<code>kind</code>, <code>id</code>), resource slots and relations. Runners,
-normalizers and schemas are serializable without being components. The full picture is in the
+<p><code>Component</code> extends it with identity (<code>kind</code>, <code>id</code>, <code>parent</code>) and relations. Runners, normalizers
+and schemas are serializable without being components. The full picture is in the
 <a href="../../extending/components/">component model</a>.</p>
 
 
@@ -2212,7 +2268,7 @@ normalizers and schemas are serializable without being components. The full pict
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

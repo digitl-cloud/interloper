@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -2133,8 +2133,8 @@ how to run it, and what happens between the function returning and the data land
 <p>The function may be sync or <code>async def</code>. Sync functions are offloaded to a worker thread; async
 functions are awaited on the event loop. Either way the engine never blocks:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">events</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">connection</span><span class="p">:</span> <span class="n">MyConnection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/events"</span><span class="p">)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">events</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/events"</span><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="what-an-asset-can-return">What an asset can return<a class="headerlink" href="#what-an-asset-can-return" title="Permanent link">&para;</a></h3>
 <p>Anything. Tabular data is what destinations and schemas are built for: a <code>list[dict]</code>, a
@@ -2142,26 +2142,28 @@ single <code>dict</code>, pydantic models or a list of them, a generator of rows
 when <code>interloper-pandas</code> is installed. Non-tabular objects pass through untouched when the asset
 declares no schema, which is what a <code>FileDestination</code> storing pickles expects.</p>
 <h2 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h2>
-<p>The engine inspects the function signature and fills each parameter from one of three places.</p>
+<p>Every parameter of <code>data()</code> declares a <strong>relation</strong>, read off its annotation. <code>self</code>, <code>context</code>,
+<code>source</code> and <code>**kwargs</code> are reserved and declare nothing.</p>
 <p><strong><code>context</code></strong>: a parameter named <code>context</code> receives an <a href="#execution-context"><code>ExecutionContext</code></a>.</p>
-<p><strong>Resources</strong>: a parameter annotated with a <code>Resource</code> subclass (a config, a connection, or
-your own) receives a resolved instance. Declaring the slot explicitly with
-<code>resources={"connection": MyConnection}</code> on the decorator does the same and wins over the
-annotation. See <a href="../resources/">Resources</a> for the resolution cascade.</p>
-<p><strong>Dependencies</strong>: any other parameter is an upstream asset. Inside a source, a parameter named
-after a sibling asset is wired automatically; <code>requires</code> and <code>optional_requires</code> declare the
-rest. See <a href="../dependencies/">Dependencies</a>.</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">requires</span><span class="o">=</span><span class="p">{</span><span class="s2">"raw"</span><span class="p">:</span> <span class="s2">"warehouse.raw_orders"</span><span class="p">})</span>
+<p><strong>Resources</strong>: a parameter annotated with a component class (a config, a connection, or your
+own) receives whatever is bound to it, or the fallback that class can fill itself with. See
+<a href="../resources/">Resources</a>.</p>
+<p><strong>Upstreams</strong>: a parameter annotated <code>il.Upstream</code> receives an upstream asset and the data read
+from it, <code>list[il.Upstream]</code> a many-valued one. The parameter name is the bare asset key it
+expects, so inside a source it names a sibling; <code>relations=</code> declares anything else. See
+<a href="../dependencies/">Dependencies</a>.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"raw"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"warehouse.raw_orders"</span><span class="p">)})</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">orders</span><span class="p">(</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="bp">self</span><span class="p">,</span>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>      <span class="c1"># the run's context</span>
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">ShopConnection</span><span class="p">,</span>        <span class="c1"># a resource, by annotation</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">users</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span>                 <span class="c1"># a sibling asset, by name</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">raw</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span>                   <span class="c1"># a cross-source asset, by requires</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">users</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">,</span>                <span class="c1"># a sibling asset, by name</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">raw</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">,</span>                  <span class="c1"># a cross-source asset, by relations=</span>
 </span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
 </span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="o">...</span>
 </span></code></pre></div>
-<p><code>self</code>, <code>source</code> and <code>**kwargs</code> are ignored by the inspection.</p>
+<p>A parameter annotated with anything else is a <code>TypeError</code> at class creation: nothing could ever
+fill it.</p>
 <h2 id="decorator-options">Decorator options<a class="headerlink" href="#decorator-options" title="Permanent link">&para;</a></h2>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">key</span><span class="o">=</span><span class="s2">"ads_stats"</span><span class="p">,</span>                                   <span class="c1"># override the derived key</span>
@@ -2170,18 +2172,27 @@ rest. See <a href="../dependencies/">Dependencies</a>.</p>
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Report"</span><span class="p">],</span>                                   <span class="c1"># catalog tags</span>
 </span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">schema</span><span class="o">=</span><span class="n">AdsStats</span><span class="p">,</span>                                   <span class="c1"># output schema</span>
 </span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">],</span>                  <span class="c1"># allowed destination classes</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">resources</span><span class="o">=</span><span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="n">AdsConnection</span><span class="p">},</span>           <span class="c1"># explicit resource slots</span>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">requires</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="s2">"ads.campaigns"</span><span class="p">},</span>           <span class="c1"># mandatory upstream assets</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">optional_requires</span><span class="o">=</span><span class="p">{</span><span class="s2">"budget"</span><span class="p">:</span> <span class="s2">"finance.budget"</span><span class="p">},</span>    <span class="c1"># optional upstream assets</span>
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">materialization_strategy</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">RECONCILE</span><span class="p">,</span>
-</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="n">normalizer</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">Normalizer</span><span class="p">(</span><span class="n">flatten_max_level</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
-</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="p">)</span>
-</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">connection</span><span class="p">:</span> <span class="n">AdsConnection</span><span class="p">,</span> <span class="n">campaigns</span><span class="p">,</span> <span class="n">budget</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>    <span class="o">...</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">relations</span><span class="o">=</span><span class="p">{</span>                                        <span class="c1"># the relation channel, keyed by parameter</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>        <span class="s2">"destinations"</span><span class="p">:</span> <span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">],</span>           <span class="c1"># allowed destination classes</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>        <span class="s2">"connection"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">AdsConnection</span><span class="p">),</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>        <span class="s2">"campaigns"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"ads.campaigns"</span><span class="p">),</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>        <span class="s2">"budget"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"finance.budget"</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="p">},</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="n">materialization_strategy</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">RECONCILE</span><span class="p">,</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>    <span class="n">normalizer</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">Normalizer</span><span class="p">(</span><span class="n">flatten_max_level</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="p">)</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>    <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>    <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">AdsConnection</span><span class="p">,</span>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>    <span class="n">campaigns</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">,</span>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>    <span class="n">budget</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>    <span class="o">...</span>
 </span></code></pre></div>
-<p>Every option is listed in <a href="../../reference/decorators/">Decorator options</a>. <code>destinations</code>
-restricts the destination <strong>classes</strong> an asset accepts; instances are supplied at construction.</p>
+<p>The three channels are described in <a href="../../reference/decorators/">Decorator options</a>. A list of
+classes under <code>relations["destinations"]</code> restricts the destination <strong>classes</strong> an asset accepts;
+instances are supplied at construction.</p>
 <h2 id="instance-configuration">Instance configuration<a class="headerlink" href="#instance-configuration" title="Permanent link">&para;</a></h2>
 <p>An instance carries the runtime state a definition does not know about:</p>
 <table>
@@ -2202,7 +2213,7 @@ restricts the destination <strong>classes</strong> an asset accepts; instances a
 </tr>
 <tr>
 <td><code>default_destination_key</code></td>
-<td>With several destinations, the one downstream readers should prefer. Carried for the platform; the core reads upstream data from the first resolved destination.</td>
+<td>With several destinations, the one downstream readers load from.</td>
 </tr>
 <tr>
 <td><code>materializable</code></td>
@@ -2217,19 +2228,14 @@ restricts the destination <strong>classes</strong> an asset accepts; instances a
 <td>The normalizer applied before conform.</td>
 </tr>
 <tr>
-<td><code>dependencies</code></td>
-<td>Parameter name to upstream asset <strong>id</strong>. Filled by the source; can be set by hand.</td>
-</tr>
-<tr>
 <td><code>id</code></td>
 <td>Instance identity, a UUID by default.</td>
 </tr>
-<tr>
-<td><code>resources</code></td>
-<td>Slot name to resource instance.</td>
-</tr>
 </tbody>
 </table>
+<p>Its relations carry the rest: <code>connection</code>, <code>config</code>, <code>destinations</code>, every upstream. They are
+constructor keywords named after the relation, and <code>bind</code>, <code>unbind</code> and assignment change them
+afterwards. See <a href="../dependencies/#how-wiring-works">Dependencies</a>.</p>
 <p>Set them at construction, or derive a reconfigured copy by calling an existing instance:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">asset</span> <span class="o">=</span> <span class="n">users</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">(</span><span class="n">base_path</span><span class="o">=</span><span class="s2">"./data"</span><span class="p">),</span> <span class="n">dataset</span><span class="o">=</span><span class="s2">"shop"</span><span class="p">)</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
@@ -2237,8 +2243,10 @@ restricts the destination <strong>classes</strong> an asset accepts; instances a
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">strict</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">materialization_strategy</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">STRICT</span><span class="p">)</span>
 </span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">bare</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">normalizer</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>           <span class="c1"># None explicitly clears the normalizer</span>
 </span></code></pre></div>
-<p>Every keyword of the call means "leave unchanged" when omitted. <code>resources</code> merges over the
-existing map; <code>destinations</code> replaces the list.</p>
+<p>Every keyword of the call means "leave unchanged" when omitted, except a relation name: passing
+one at all changes it, since <code>None</code> there clears the binding.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">rewired</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">OtherConnection</span><span class="p">(</span><span class="o">...</span><span class="p">),</span> <span class="n">campaigns</span><span class="o">=</span><span class="p">[</span><span class="n">fb</span><span class="o">.</span><span class="n">campaigns</span><span class="p">,</span> <span class="n">tt</span><span class="o">.</span><span class="n">campaigns</span><span class="p">])</span>
+</span></code></pre></div>
 <p>Unknown keyword arguments raise <code>TypeError</code> rather than being silently dropped.</p>
 <h2 id="running-and-materializing">Running and materializing<a class="headerlink" href="#running-and-materializing" title="Permanent link">&para;</a></h2>
 <table>
@@ -2264,15 +2272,16 @@ existing map; <code>destinations</code> replaces the list.</p>
 </tbody>
 </table>
 <p><code>partition</code> is required for partitioned assets and ignored (with a warning) for unpartitioned
-ones. <code>dag</code> is required when the asset has mandatory dependencies, because upstream data is read
-through the DAG. <code>metadata</code> is a free-form dict (run id, backfill id) carried onto every event
+ones. <code>dag</code> is required when the asset has a bound upstream, because upstream data is read through
+the DAG's own node. <code>metadata</code> is a free-form dict (run id, backfill id) carried onto every event
 the run emits.</p>
 <p>An asset that produces no data skips its destination writes and emits a warning log event
 rather than writing an empty table.</p>
 <h2 id="what-happens-on-materialize">What happens on materialize<a class="headerlink" href="#what-happens-on-materialize" title="Permanent link">&para;</a></h2>
 <ol>
 <li>The partition scope is validated against the asset's partitioning.</li>
-<li>Resources are resolved and upstream assets are read from their destinations.</li>
+<li>Every relation is resolved: a resource to what is bound or its fallback, an upstream to an
+   <code>il.Upstream</code> read from its destination.</li>
 <li><code>data()</code> runs, wrapped in <code>asset_data_*</code> events and a tracing span.</li>
 <li>The <a href="../normalization/">normalizer</a> reshapes the result, when one is configured.</li>
 <li>The result is <a href="../schema/">conformed</a> to the schema according to the materialization strategy.
@@ -2339,7 +2348,7 @@ daily. See <a href="../partitioning/">Partitioning</a>.</p>
 </tr>
 <tr>
 <td><code>asset.identity</code></td>
-<td>The <code>(source_key, asset_key)</code> pair.</td>
+<td>The <code>ComponentIdentity</code> pair <code>(source_key, asset_key)</code>.</td>
 </tr>
 <tr>
 <td><code>asset.table</code></td>
@@ -2469,7 +2478,7 @@ partition column. It raises when the asset is not partitioned or has no destinat
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

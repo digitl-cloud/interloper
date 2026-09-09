@@ -1,0 +1,2431 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-09-04-downstream-assets-design/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.60">
+    
+    
+      
+        <title>Downstream assets: findings and design - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#downstream-assets-findings-and-design" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Downstream assets: findings and design
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/decorators/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI flags
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Event types
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Spans & metrics
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="downstream-assets-findings-and-design">Downstream assets: findings and design<a class="headerlink" href="#downstream-assets-findings-and-design" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-09-04, revised 2026-09-05. Status: Part 1 (findings) stands; Part 2 (design) and Part 3 (phasing) are superseded by <code>2026-09-07-relation-model-design.md</code>.</p>
+<p>Scope: how an asset consumes other assets in interloper, reviewed end to end (definition, wiring
+and DAG, execution, platform and UI), and the design that makes a <strong>campaign matcher</strong> buildable.
+The matcher consumes the <code>campaigns</code> entity asset of every ad source an organisation has
+configured and produces a dated lookup table of canonical campaign names. Its defining trait is
+that the number and identity of its upstreams is not fixed at class definition time: it depends
+on which sources exist, and users add or remove providers later.</p>
+<p>Part 1 records what the review found. Part 2 is the design. Part 3 is the phasing.</p>
+<hr />
+<h2 id="part-1-findings">Part 1. Findings<a class="headerlink" href="#part-1-findings" title="Permanent link">&para;</a></h2>
+<p>Method: read the code, probe with <code>uv run --frozen python</code> in a scratchpad, and explore the
+platform layers. Severity: <strong>B</strong> blocks the matcher, <strong>D</strong> degrades DX or UX, <strong>C</strong> cosmetic.
+File references are to the worktree at commit 0266d74a.</p>
+<h3 id="11-definition">1.1 Definition<a class="headerlink" href="#11-definition" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Sev</th>
+<th>Finding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td>B</td>
+<td>One upstream per parameter, fixed at class definition. <code>Asset.dependencies</code> is <code>dict[str, str]</code> and <code>requires</code> / <code>optional_requires</code> are class-level <code>dict[str, str]</code> (asset/base.py:172-194). A parameter cannot hold several upstream ids; every provider needs its own parameter; a new provider is a code change; two instances of one source type cannot feed one parameter.</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>B</td>
+<td>No way to declare "all assets matching a predicate". Slot keys are exact identities, bare or qualified (<code>AssetIdentity.resolve</code>, asset/base.py:74-93). <code>RelationSlot</code> carries only <code>key</code> and <code>required</code> (component/base.py:56-63).</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>D</td>
+<td>Parameter-name inference is intra-source only (source/base.py:365-395). A standalone asset with a <code>campaigns</code> parameter has no slot at all.</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>D</td>
+<td>The contract reaches clients only as <code>relations.dependency.slots</code>. <code>AssetDefinition</code> has no <code>requires</code> field, yet the toolkit and the agent read <code>asset_def.get("requires", {})</code> off the dumped catalog (interloper-toolkit/catalog.py:173-174, interloper-agent/tools/collection.py:546-558), so their reported requirements are always empty.</td>
+</tr>
+<tr>
+<td>D5</td>
+<td>D</td>
+<td>Partition compatibility is one rule: <code>_check_partition_dependencies</code> (dag/base.py:186-204) forbids an unpartitioned asset downstream of a partitioned one and nothing else.</td>
+</tr>
+<tr>
+<td>D6</td>
+<td>D</td>
+<td>A fan-in asset's schema has no relation to its upstreams' schemas. Provider <code>campaigns</code> schemas disagree already (Facebook and Snapchat <code>id</code> / <code>name</code>, TikTok <code>campaign_id</code> / <code>campaign_name</code>).</td>
+</tr>
+<tr>
+<td>D7</td>
+<td>C</td>
+<td><code>optional_requires</code> conflates "may be unbound" with "any read failure yields None" (asset/base.py:708-714).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-wiring-and-dag">1.2 Wiring and DAG<a class="headerlink" href="#12-wiring-and-dag" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Sev</th>
+<th>Finding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>W1</td>
+<td>B</td>
+<td>Cross-source <code>requires</code> is checked but never wired. <code>Source._resolve_deps</code> skips foreign keys (source/base.py:551-553); the DAG validates only wired entries (dag/base.py:126-162); the store's <code>_wire_intra_deps</code> skips them too (interloper-db/store/components.py:787-827). Probe: <code>il.DAG(Shop(), Finance())</code> runs both in one generation and fails with <code>TypeError: Finance.revenue() missing 1 required positional argument: 'orders'</code>.</td>
+</tr>
+<tr>
+<td>W2</td>
+<td>B</td>
+<td>An unbound required slot is not an error at build time. <code>_build_kwargs</code> skips parameters absent from <code>dependencies</code> (asset/base.py:695-696); the failure is a <code>TypeError</code> inside <code>data()</code>.</td>
+</tr>
+<tr>
+<td>W3</td>
+<td>D</td>
+<td>Manual wiring by id works: it orders correctly, a <code>Job</code> can span sources, specs round-trip the edge, a <code>select=[]</code> source supplies read-only parents. This is the documented workaround.</td>
+</tr>
+<tr>
+<td>W4</td>
+<td>D</td>
+<td>The DAG checks slot identity, not cardinality or shape.</td>
+</tr>
+<tr>
+<td>W5</td>
+<td>D</td>
+<td>Three representations of the same fact (<code>requires</code> on the class, <code>dependencies</code> on the instance, <code>component_relations</code> rows) with no single reader. Hydration seeds from <code>config</code> before overlaying edges (interloper-db/store/hydration.py:141-160), so <code>config.dependencies</code> is a back door producing working dependencies with no edge, no lineage and no delete guard.</td>
+</tr>
+<tr>
+<td>W6</td>
+<td>C</td>
+<td>The spec <code>assets:</code> map is a whitelist (source/base.py:187-223); listing one asset drops the others.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="13-execution">1.3 Execution<a class="headerlink" href="#13-execution" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Sev</th>
+<th>Finding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E1</td>
+<td>B</td>
+<td>One partition scope per run, applied to every executing node (runner/base.py:254-304). A monthly asset cannot share a DAG with daily upstreams. With the upstream read-only, database destinations read the month's date range by accident while file and memory destinations fail (they key by partition id).</td>
+</tr>
+<tr>
+<td>E2</td>
+<td>D</td>
+<td>Window reads return one result per partition (destination/partitioned.py:94-98), so a windowed downstream receives a list of tables, newest first. The scheduler never runs windows; the CLI and Python users do.</td>
+</tr>
+<tr>
+<td>E3</td>
+<td>D</td>
+<td><code>default_destination_key</code> is never read: <code>_destination_read</code> takes <code>destinations[0]</code> (asset/base.py:811-814).</td>
+</tr>
+<tr>
+<td>E4</td>
+<td>D</td>
+<td>Granularity mismatch fails late with a per-asset message; <code>allow_window</code> is not enforced on the read side.</td>
+</tr>
+<tr>
+<td>E5</td>
+<td>D</td>
+<td>Optional reads swallow every exception (asset/base.py:713).</td>
+</tr>
+<tr>
+<td>E6</td>
+<td>D</td>
+<td><code>fail_fast=True</code> is the platform default (runner/async_runner.py:44-46) and <code>cancel_pending</code> cancels branches unrelated to the failure (runner/base.py:224, runner/state.py:253-267).</td>
+</tr>
+<tr>
+<td>E7</td>
+<td>D</td>
+<td>Upstreams outside the run are joined blind by <code>RunExecutor._resolve_upstream</code> (interloper-scheduler/executor.py:164-188): no freshness check, and job-level destinations do not cascade to joined nodes.</td>
+</tr>
+<tr>
+<td>E8</td>
+<td>D</td>
+<td>Joined and skipped legs emit no event and <code>RunResult</code> has no <code>skipped_ids</code> (runner/state.py:129-138, runner/results.py:134-147).</td>
+</tr>
+<tr>
+<td>E9</td>
+<td>D</td>
+<td>Retry re-runs cancelled dependents correctly (executor.py:121-125, 190-219); backfills cover dependents inside the targeted component only.</td>
+</tr>
+<tr>
+<td>E10</td>
+<td>C</td>
+<td>Reads are <code>SELECT *</code> with no projection; only CSV and GCS reconcile on read.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="14-platform-and-ui">1.4 Platform and UI<a class="headerlink" href="#14-platform-and-ui" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Sev</th>
+<th>Finding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1</td>
+<td>B</td>
+<td>One edge per slot at three layers: partial unique index <code>uq_component_relations_slot</code> (interloper-db/models/components.py:158-166), <code>_upsert_relation</code> repointing on rebind (interloper-db/store/relations.py:384-422), <code>dependencies: dict[str, str]</code>.</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>B</td>
+<td>Slot targets are validated against exact identities (<code>_check_slot_target</code>, relations.py:267-320); a class with no declared slots accepts any slot pointing at any asset (relations.py:256-257).</td>
+</tr>
+<tr>
+<td>P3</td>
+<td>B</td>
+<td>No UI path creates a standalone asset, and the DB allows <code>parent_id</code> on assets only. A matcher must be owned by a source to be reachable.</td>
+</tr>
+<tr>
+<td>P4</td>
+<td>B</td>
+<td>Only qualified slots get a picker, per source type (<code>AssetSelect.vue:59-61</code>); graph drag-connect matches exact qualified keys (<code>composables/graph.ts:225-237</code>); optional slots have no drag handle, no panel row and no warning (<code>AssetNode.vue:95-96</code>, <code>AssetPanel.vue:232-244</code>, <code>warnings.ts:102</code>).</td>
+</tr>
+<tr>
+<td>P5</td>
+<td>D</td>
+<td>The asset panel shows declared slots with the upstream source <em>type</em>, never the persisted bindings. The collection column renders a bare count. Edit mode shows bindings as empty (<code>Wizard.vue:33</code>) and swallows relation-write errors (<code>Wizard.vue:89</code>).</td>
+</tr>
+<tr>
+<td>P6</td>
+<td>D</td>
+<td>A vanished or disabled upstream is silent: the edge disappears from the graph model (<code>graphModel.ts:24-26</code>).</td>
+</tr>
+<tr>
+<td>P7</td>
+<td>D</td>
+<td>Neither the agent nor the toolkit can wire a dependency; <code>update_component</code> defers rebinding to the app.</td>
+</tr>
+<tr>
+<td>P8</td>
+<td>D</td>
+<td>Jobs may target several sources and assets, but the UI limits asset targets to standalone assets, and <code>select</code> is source-row state.</td>
+</tr>
+<tr>
+<td>P9</td>
+<td>C</td>
+<td>The collection panel resolves asset definitions by bare key, first match wins (<code>pages/collection.vue:31-37</code>).</td>
+</tr>
+<tr>
+<td>P10</td>
+<td>C</td>
+<td><code>campaign_matcher</code> in interloper-assets is a nine-line stub with a copied docstring and the wrong class name, unexported. No shipped asset declares a dependency.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="15-configuring-a-three-provider-matcher-today">1.5 Configuring a three-provider matcher today<a class="headerlink" href="#15-configuring-a-three-provider-matcher-today" title="Permanent link">&para;</a></h3>
+<p>Code: an asset class with one parameter and one qualified <code>optional_requires</code> entry per provider,
+owned by a source and enabled in the catalog. Platform: three source creations, three relation
+calls (<code>POST /components/{asset_id}/relations</code> with <code>type=dependency</code>, <code>slot=&lt;param&gt;</code>), one job
+on the matcher's source. Impossible: a fourth provider without a release (D1), two accounts of
+one provider (D1, P1), any predicate declaration (D2), a monthly matcher over daily snapshots in
+one DAG (E1), any of it from the UI when the matcher is standalone (P3) or its slots optional (P4).</p>
+<hr />
+<h2 id="part-2-design">Part 2. Design<a class="headerlink" href="#part-2-design" title="Permanent link">&para;</a></h2>
+<h3 id="21-decisions">2.1 Decisions<a class="headerlink" href="#21-decisions" title="Permanent link">&para;</a></h3>
+<p>Taken with Guillaume on 2026-09-04 and 2026-09-05:</p>
+<ol>
+<li><strong>Direction B</strong>: multi-valued upstream slots with a wildcard key, explicit edges kept as the
+   source of truth. A (fixed optional slots per provider) and C (predicate resolved at run time
+   with no edges) rejected: A does not scale to instances or new providers; C makes lineage
+   derived and breaks the delete and drift guards.</li>
+<li>The matcher is an <strong>Analytics-tagged source owning one daily asset</strong>. No new component kind.</li>
+<li><code>data()</code> receives <strong><code>list[il.Upstream]</code></strong> for a many-valued slot (upstream identity plus data).
+   Single slots keep receiving raw data.</li>
+<li><strong>Matching logic stays empty in v1</strong>: the asset reads its legs and emits placeholder rows.</li>
+<li>Ride-along fixes: an <strong>unbound non-optional slot fails at DAG build</strong>, and
+   <strong><code>default_destination_key</code> is honoured on read</strong>. Everything else in 1.3 is a follow-up.</li>
+<li><strong>Granularity must be equal</strong> across any upstream edge between time-partitioned assets,
+   read-only upstreams included. Roll-ups over finer legs are a designed follow-up.</li>
+<li>Slot key grammar v1: <strong>source wildcard only</strong> (<code>*.campaigns</code>). Tags and <code>source.*</code> deferred.</li>
+<li><strong>Auto-binding deferred</strong>: binding stays explicit; the UI surfaces matching-but-unbound assets
+   and offers a one-click bind-all.</li>
+<li>Scheduling v1: <strong>the matcher's own cron job</strong>, legs joined read-only by the executor.
+   <strong>Trigger-hook chaining is explored as an experiment</strong> (2.9).</li>
+<li><strong>One vocabulary, one class.</strong> <code>requires</code> and <code>optional_requires</code> become <code>depends_on</code>, holding
+    strings and <code>il.Dependency</code> values (<code>optional</code>, <code>many</code>); <code>Dependency</code> is the renamed
+    <code>RelationSlot</code>, so the class that declares a slot is the class the catalog publishes, for
+    resource slots too. Breaking for docs, tests and the <code>il.RelationSlot</code> export only.</li>
+<li><strong>No per-slot missing-data policy.</strong> A bound leg with no data for the partition is handed to
+    <code>data()</code> as <code>Upstream(asset, data=None)</code> with a warning event; the asset decides. <code>optional</code>
+    stays a wiring rule checked at DAG build. Confirmed 2026-09-06 for single slots too: a
+    non-optional slot means the wiring is mandatory, not the data; a mandatory single slot whose
+    upstream holds no data for the partition receives <code>None</code>, since data is expected to be
+    occasionally missing.</li>
+<li><strong>The relation is <code>upstream</code>, the wiring is <code>upstreams</code>.</strong> The asset-to-asset relation type
+    is renamed from <code>dependency</code> to <code>upstream</code>, a role name like <code>target</code> and <code>watch</code>, matching
+    the vocabulary the app, the MCP tools and the executor already use. The instance field
+    <code>dependencies</code> becomes <code>upstreams</code>. Every relation is a dependency of sorts; this one points
+    upstream.</li>
+<li><strong><code>upstreams</code> is always a list.</strong> <code>dict[str, list[str]]</code>, for single and many slots alike; a
+    bare string is accepted on input. No per-slot shaping, no flattening helper, no hydration
+    heuristic.</li>
+<li><strong>One read path.</strong> Every slot is read through <code>_read_upstreams</code>; a single slot is the first
+    leg. A leg with no data for the partition is <code>None</code>, for single and many slots alike; any
+    other read error fails the asset. The swallow-everything branch for optional slots is gone.</li>
+<li><strong>One contract check.</strong> <code>Asset.validate_upstreams(nodes)</code> checks signature completeness,
+    cardinality and identity; the DAG calls it once per live node.</li>
+<li><strong>Bare keys resolve within the source instance.</strong> The DAG's resolution pass restricts
+    candidates for a bare key to siblings of the same source instance, so two instances of one
+    source type never make a sibling reference ambiguous.</li>
+<li><strong>Signatures fail loudly.</strong> A <code>data()</code> parameter that is not the context, a resource, or a
+    declared upstream, and has no default, is an error at DAG build, not a <code>TypeError</code> at run time.</li>
+<li><strong>Resources stay declared by <code>resource_types</code>.</strong> Folding them into <code>depends_on</code> on <code>Component</code>
+    is compatible with every name chosen here and is recorded as a follow-up (2.8), not done now.</li>
+</ol>
+<h3 id="22-definition-layer-interloper-core">2.2 Definition layer (interloper-core)<a class="headerlink" href="#22-definition-layer-interloper-core" title="Permanent link">&para;</a></h3>
+<p><code>Dependency</code> replaces <code>RelationSlot</code> in <code>interloper/component/base.py</code> (exported as <code>il.Dependency</code>);
+a new module <code>interloper/asset/upstream.py</code> holds the leg object <code>il.Upstream</code>:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Dependency</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="sd">"""One declared dependency of a component on another: the slot on a slotted relation type."""</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>             <span class="c1"># "campaigns" (sibling), "facebook_ads.campaigns", "*.campaigns"</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">optional</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>    <span class="c1"># may stay unbound (an empty list for a many slot)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">many</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>        <span class="c1"># binds several upstreams, read into list[Upstream]</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">Upstream</span><span class="p">:</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="sd">"""One leg of a many-valued slot as handed to data()."""</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">asset</span><span class="p">:</span> <span class="n">Asset</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">data</span><span class="p">:</span> <span class="n">Any</span>        <span class="c1"># None when the upstream holds no data for the partition</span>
+</span></code></pre></div>
+<p>Declaration:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">depends_on</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Dependency</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s2">"*.campaigns"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)},</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">schema</span><span class="o">=</span><span class="n">CampaignMatches</span><span class="p">,</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Entity"</span><span class="p">],</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">campaign_matches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">campaigns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p>The vocabulary, side by side with the two relations an asset already has:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Resources</th>
+<th>Destinations</th>
+<th>Upstreams</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Declared on the class</td>
+<td><code>resource_types</code> (by Python type)</td>
+<td><code>destination_types</code> (by type)</td>
+<td><code>depends_on</code> (by asset key)</td>
+</tr>
+<tr>
+<td>Relation type</td>
+<td><code>resource</code></td>
+<td><code>destination</code></td>
+<td><code>upstream</code></td>
+</tr>
+<tr>
+<td>Wired on the instance</td>
+<td><code>resources</code></td>
+<td><code>destinations</code></td>
+<td><code>upstreams: dict[str, list[str]]</code></td>
+</tr>
+<tr>
+<td>Slot descriptor in the definition</td>
+<td><code>Dependency</code></td>
+<td>none, unslotted</td>
+<td><code>Dependency</code></td>
+</tr>
+<tr>
+<td>What <code>data()</code> receives</td>
+<td>the resource instance</td>
+<td>not passed</td>
+<td>rows, or <code>list[Upstream]</code> for a many slot</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>depends_on: ClassVar[dict[str, str | Dependency]]</code> replaces <code>requires</code> and <code>optional_requires</code>.
+  A plain string keeps today's meaning (a single, non-optional upstream on that key);
+  <code>Dependency(key=..., optional=True)</code> replaces <code>optional_requires</code>. Sibling inference stays: a
+  <code>data()</code> parameter named after a sibling asset writes the qualified key into <code>depends_on</code>, a
+  <code>None</code> default makes it optional. Inference is sugar over the one contract; nothing downstream
+  knows an entry was inferred.</li>
+<li>The relation type is <code>upstream</code>: <code>RelationDefinition(kinds=["asset"], field="upstreams",
+  slotted=True, inline=False, on_unbind="block")</code>. <code>Asset.upstreams: dict[str, list[str]]</code> is the
+  wiring, parameter name to upstream ids, always a list; a <code>mode="before"</code> validator wraps a bare
+  string so hand wiring and existing specs keep working. <code>to_spec</code> emits lists.</li>
+<li><code>RelationSlot</code> is renamed <code>Dependency</code>; <code>required: bool = True</code> becomes <code>optional: bool = False</code>
+  and <code>many: bool = False</code> is added. The catalog JSON changes accordingly (<code>optional</code>, <code>many</code>).</li>
+<li><code>Asset.declared_upstreams()</code> is the <strong>single reader</strong> of the contract: it turns <code>depends_on</code>
+  into <code>dict[str, Dependency]</code>. <code>relation_definitions()</code>, <code>validate_upstreams()</code>,
+  <code>_build_kwargs()</code>, <code>Source._resolve_upstreams()</code>, the store and the DAG all read it.</li>
+<li><code>Asset.sibling_upstreams(source_key, sibling_keys)</code> is the one sibling-wiring rule (which
+  declared keys resolve to a sibling of the declaring source), used by <code>Source._resolve_upstreams</code>
+  at construction and by the store's <code>_wire_intra_upstreams</code> at creation.</li>
+<li>Key grammar: a bare key is a sibling of the declaring source; <code>source.asset</code> is that source
+  type, any instance; <code>*.asset</code> is that asset key from any source type, standalone assets
+  included. <code>AssetIdentity.satisfies(declared_key, own_source_key=...)</code> implements the match.
+  <code>AssetIdentity.resolve</code> is unchanged and yields <code>("*", asset_key)</code> for a wildcard.</li>
+<li>Data shape: a single slot receives the upstream's data, or <code>None</code> when the slot is optional and
+  either unbound or without data for the partition; a many slot receives <code>list[il.Upstream]</code>,
+  empty when nothing is bound, with <code>data=None</code> on a leg without data for the partition.
+  <code>Upstream.asset</code> gives <code>source.key</code>, <code>source.discriminator</code>, <code>id</code> and <code>qualified_key</code>.</li>
+</ul>
+<h3 id="23-wiring-and-dag-interloper-core">2.3 Wiring and DAG (interloper-core)<a class="headerlink" href="#23-wiring-and-dag-interloper-core" title="Permanent link">&para;</a></h3>
+<p><code>DAG.__init__</code> gains a resolution step between flattening and edge building, and one contract
+check per live node:</p>
+<ol>
+<li><strong>Declared-key resolution.</strong> For every materializable asset and every slot not yet wired,
+   candidates are the other assets in the DAG whose identity satisfies the slot key; for a bare
+   key the candidates are further restricted to assets of the same source instance. A many slot
+   binds every candidate. A single slot binds exactly one; zero candidates leave the slot
+   unwired for the contract check; two or more raise <code>DAGError</code> naming the candidates and asking
+   for explicit wiring. Wiring writes <code>upstreams</code> on the asset instance, exactly as
+   <code>Source._resolve_upstreams</code> does for siblings, so specs and the CLI benefit without a new concept.</li>
+<li><strong>Contract.</strong> <code>Asset.validate_upstreams(nodes)</code>, called by the DAG for every materializable
+   node, checks in order: every <code>data()</code> parameter without a default is the context, a resource
+   or a declared upstream (<code>AssetError</code>, closing the silent inference gap); every non-optional
+   slot has at least one wired id present in the DAG (<code>DependencyNotFoundError</code>, W2); every wired
+   id present satisfies the slot key (<code>DependencyContractError</code>). Non-materializable nodes are
+   exempt.</li>
+<li><strong>Partitioning.</strong> <code>_check_partition_dependencies</code> keeps the existing rule and adds: two
+   time-partitioned ends of an edge must share <code>granularity</code>, or <code>DAGError</code>.</li>
+</ol>
+<p><code>Source._resolve_upstreams</code> reads <code>sibling_upstreams()</code> and wires siblings only; wildcard and
+foreign keys are left for the DAG. The platform path is unaffected: hydrated ids are already
+present, so resolution finds nothing to do and the contract check is the only new gate.</p>
+<p>Specs carry lists under the renamed field: <code>upstreams: {campaigns: [id1, id2]}</code>, or
+<code>upstreams: {orders: [shop-orders]}</code> for a single slot (<code>orders: shop-orders</code> is still accepted).</p>
+<h3 id="24-execution-interloper-core-interloper-scheduler">2.4 Execution (interloper-core, interloper-scheduler)<a class="headerlink" href="#24-execution-interloper-core-interloper-scheduler" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>_build_kwargs</code> reads every slot through <code>_read_upstreams</code>, which reads each wired leg with
+  <code>_destination_read</code> and collects <code>Upstream(asset, data)</code>. A read that fails because the
+  upstream has <strong>no data for the partition</strong> (<code>DataNotFoundError</code> as the cause) yields the leg
+  with <code>data=None</code> and a <code>LOG</code> warning event naming it; any other read error fails the asset. A
+  many slot receives the legs; a single slot receives the first leg's data, or <code>None</code> for an
+  optional slot with no leg.</li>
+<li><code>_destination_read</code> and <code>partition_row_counts</code> pick the destination whose key equals the
+  upstream's <code>default_destination_key</code>, falling back to the first (E3).</li>
+<li><code>RunExecutor._resolve_upstream</code> walks <code>upstreams.values()</code> lists so every leg is joined.</li>
+<li>Partition scope is unchanged: one partition per run, legs read at the same partition. With
+  equal granularity enforced, the matcher and its legs are all daily.</li>
+</ul>
+<h3 id="25-platform-interloper-db-interloper-api-interloper-toolkit-interloper-agent">2.5 Platform (interloper-db, interloper-api, interloper-toolkit, interloper-agent)<a class="headerlink" href="#25-platform-interloper-db-interloper-api-interloper-toolkit-interloper-agent" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Migration 017</strong> (ships with the core phase, because the store writes and hydrates the new
+  relation type): <code>UPDATE component_relations SET type = 'upstream' WHERE type = 'dependency'</code>,
+  and <code>uq_component_relations_slot</code> rebuilt to cover <code>resource</code> only. Single-valuedness of
+  non-many upstream slots is enforced by the store, where repoint semantics already live.</li>
+<li><strong>Store.</strong> <code>RelationStore.add</code> repoints only when the slot is not many; a many slot accumulates
+  edges. <code>_check_slot_target</code> accepts any parent (or none) for a wildcard key and keeps the
+  sibling and named-source rules otherwise. <code>remove</code> blocks a non-optional <code>on_unbind="block"</code> slot
+  only when the removal leaves it with no binding. <code>_sync_relations</code> already accepts several
+  bindings per slot once the index allows it. <code>_wire_intra_upstreams</code> uses <code>Asset.sibling_upstreams</code>.</li>
+<li><strong>Hydration.</strong> <code>_build_init</code> groups the rows of a slotted relation per slot and emits a list per
+  slot for the <code>upstream</code> relation (<code>inline=False</code>); resource slots keep one nested spec each.</li>
+<li><strong>API.</strong> No route changes. <code>POST /components/{id}/relations</code> adds a leg, <code>DELETE .../{type}/{dst_id}</code>
+  removes one, <code>PUT</code> replaces the full set. Clients pass <code>type=upstream</code>.</li>
+<li><strong>Toolkit and agent.</strong> <code>get_asset_schema</code> reports <code>depends_on</code> (parameter to <code>Dependency</code> fields)
+  read from <code>relations.upstream.slots</code> (D4), replacing the always-empty <code>requires</code> output. Lineage
+  tools read <code>type="upstream"</code>. The agent gains <code>bind_upstream</code> (asset id, upstream asset id,
+  slot) and its unresolved-requirements report reads the slots.</li>
+</ul>
+<h3 id="26-ui-interloper-app">2.6 UI (interloper-app)<a class="headerlink" href="#26-ui-interloper-app" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Types.</strong> The <code>Dependency</code> interface (<code>key</code>, <code>optional</code>, <code>many</code>, renamed from <code>RelationSlot</code>);
+  <code>upstreamMap(record)</code> returning <code>slot -&gt; upstream ids</code>; a shared
+  <code>slotAccepts(slotKey, upstreamQk, ownSourceKey)</code> helper mirroring <code>AssetIdentity.satisfies</code>.
+  Every <code>'dependency'</code> relation literal becomes <code>'upstream'</code>.</li>
+<li><strong>Wizard assets step.</strong> Every upstream slot with a non-sibling key gets a picker (qualified or
+  wildcard, optional or not). Candidates are all assets in the organisation whose key satisfies
+  the slot, labelled with the source instance name. Single slots keep the select menu; many slots
+  get a multi-select that starts with every match selected. Edit mode seeds from the persisted
+  relations. Relation writes after save surface errors instead of swallowing them.</li>
+<li><strong>Asset panel.</strong> The upstream section lists <strong>declared slots with their persisted bindings</strong>,
+  using the source instance label from <code>useAssetDisplayName</code>. A many slot shows "n bound" and a
+  "m matching, not bound" line with a bind-all action. Unbound non-optional slots are marked.</li>
+<li><strong>Graph.</strong> Drag-connect matches slots with <code>slotAccepts</code>, so bare and wildcard keys connect. A
+  many slot accepts further legs. The target handle renders whenever the asset declares any slot.
+  Runnability is per non-optional slot, not a count.</li>
+<li><strong>Warnings.</strong> Satisfaction is checked per slot from the relation's <code>slot</code> field. A many slot with
+  matching-but-unbound assets yields an attention warning (the nudge that replaces auto-binding).</li>
+<li><strong>Collection.</strong> The upstreams cell gets a tooltip listing "Source instance, Asset" per leg.
+  The panel resolves definitions by qualified key.</li>
+<li><strong>Jobs.</strong> No change; a job targets the matcher's source.</li>
+</ul>
+<h3 id="27-the-matcher-interloper-assets">2.7 The matcher (interloper-assets)<a class="headerlink" href="#27-the-matcher-interloper-assets" title="Permanent link">&para;</a></h3>
+<p><code>interloper_assets/campaign_matcher/source.py</code> replaces the stub:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Analytics"</span><span class="p">],</span> <span class="n">icon</span><span class="o">=</span><span class="s2">"carbon:connection-signal"</span><span class="p">)</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">CampaignMatcher</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="sd">"""Groups campaigns from every configured ad source under canonical names."""</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">schema</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">CampaignMatches</span><span class="p">,</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="n">depends_on</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Dependency</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s2">"*.campaigns"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)},</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Entity"</span><span class="p">],</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="p">)</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">campaign_matches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">campaigns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">        </span><span class="sd">"""One row per campaign per day with its canonical name. Placeholder matching."""</span>
+</span></code></pre></div>
+<p>Schema <code>CampaignMatches</code>: <code>date</code>, <code>source_key</code>, <code>source_id</code>, <code>campaign_id</code>, <code>campaign_name</code>,
+<code>canonical_name</code>, <code>match_method</code>. v1 emits one placeholder row per leg that has data
+(<code>match_method = "placeholder"</code>) so the fan-in is exercised end to end while the matching logic is
+designed separately. Daily partitioning, REPLACE per partition; each day is a version of the
+lookup table and "current" is the latest date downstream.</p>
+<p>Answers to the remaining brief questions: rules and manual overrides are not modelled in v1 (they
+belong to the matching design); a provider that has no data for the partition arrives as a leg
+with <code>data=None</code> (the framework emits a warning event naming it) and the matcher skips it, so the
+row set for that day simply lacks it; the matcher runs from its own cron job offset after the
+provider jobs.</p>
+<h3 id="28-out-of-scope-recorded-as-follow-ups">2.8 Out of scope, recorded as follow-ups<a class="headerlink" href="#28-out-of-scope-recorded-as-follow-ups" title="Permanent link">&para;</a></h3>
+<p>Resources as <code>depends_on</code> entries on <code>Component</code> (one declaration for everything a component
+consumes; compatible with every name chosen here), auto-binding of new matching assets, tag
+predicates, coarser-granularity roll-ups, <code>OPERATION_SKIPPED</code> events and <code>skipped_ids</code>, per-job
+<code>select</code>, <code>fail_fast</code> cancelling unrelated branches, read projection, the config back door (W5),
+matching rules and overrides.</p>
+<h3 id="29-experiment-trigger-hook-chaining">2.9 Experiment: trigger-hook chaining<a class="headerlink" href="#29-experiment-trigger-hook-chaining" title="Permanent link">&para;</a></h3>
+<p>Question: can a <code>TriggerHook</code> watching the provider jobs and targeting the matcher job replace the
+cron offset? Known from the code: the hook fires once per finished run and propagates the
+partition key, so with three provider jobs the matcher runs three times per day, each time reading
+whatever legs exist; the last run has every leg. On the dev instance: create two ad sources with
+placeholder credentials, the matcher, a job per provider and a job for the matcher, a
+<code>TriggerHook</code> with <code>watches=[provider jobs]</code>, <code>targets=[matcher job]</code>, <code>events=["run_completed"]</code>;
+trigger the provider jobs for one partition; record how many matcher runs appear, their partition
+keys and their missing-leg warnings. Outcome goes into an appendix of this document and decides
+whether a quorum or debounce on hooks is worth designing.</p>
+<hr />
+<h2 id="part-3-phasing">Part 3. Phasing<a class="headerlink" href="#part-3-phasing" title="Permanent link">&para;</a></h2>
+<p>Each phase is one branch and one PR, mergeable alone, Conventional Commits, rebase-only, commit
+messages ending with "By Digitl". Detailed task lists live in <code>docs/superpowers/plans/</code>.</p>
+<ol>
+<li><strong>Core</strong> (<code>feat/many-upstreams-core</code>, a <code>feat!:</code> PR): the <code>upstream</code> relation and <code>upstreams</code>
+   field (with migration 017 and the mechanical rename across store, toolkit, agent, scheduler and
+   app), <code>depends_on</code> and <code>il.Dependency</code> (renamed <code>RelationSlot</code>) replacing <code>requires</code> /
+   <code>optional_requires</code>, <code>il.Upstream</code>, <code>declared_upstreams()</code> and <code>sibling_upstreams()</code>, DAG
+   resolution and the single contract check, equal-granularity check, the single read path with
+   <code>None</code> for missing legs, <code>default_destination_key</code> on read, docs and the plugin skills.
+   Existing single-slot sources keep working; hand-written specs rename <code>dependencies</code> to
+   <code>upstreams</code>.</li>
+<li><strong>Platform</strong> (<code>feat/many-upstreams-platform</code>): store add/remove/target rules for many slots and
+   the wildcard, hydration lists, executor flattening, toolkit <code>depends_on</code>, agent <code>bind_upstream</code>.</li>
+<li><strong>Matcher skeleton</strong> (<code>feat/campaign-matcher-skeleton</code>): <code>CampaignMatcher</code> source with the
+   placeholder asset, schema, tests and registration. Placed before the UI phase because the UI
+   work needs a real many-slot asset in the catalog to verify against.</li>
+<li><strong>UI</strong> (<code>feat/many-upstreams-app</code>): wizard picker, panel bindings, graph rules, warnings nudge,
+   collection tooltip. Verified headless on a dev instance with the matcher.</li>
+</ol>
+<p>The trigger-hook experiment runs after phase 3 on the dev instance and only writes to this
+document.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.88ee1349.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,2499 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-09-07-relation-model-design/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.60">
+    
+    
+      
+        <title>Relation model: one primitive for every link between components - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#relation-model-one-primitive-for-every-link-between-components" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Relation model: one primitive for every link between components
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/decorators/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI flags
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Event types
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Spans & metrics
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="relation-model-one-primitive-for-every-link-between-components">Relation model: one primitive for every link between components<a class="headerlink" href="#relation-model-one-primitive-for-every-link-between-components" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-09-07. Status: approved design, implementation not started.</p>
+<p>Supersedes Part 2 (design) and Part 3 (phasing) of <code>2026-09-04-downstream-assets-design.md</code> and the
+four phase plans derived from it. Part 1 of that document (findings) stands. PR #321
+(<code>feat/many-upstreams-core</code>, the first-phase implementation of the earlier design) is unmerged and is
+reworked on top of this model before anything lands on <code>main</code>.</p>
+<p>Scope: how components relate to one another in interloper, at the component level first and then
+what each kind adds, with assets as the one kind that injects its relations into a <code>data()</code>
+function. The north star is unchanged: a <strong>campaign matcher</strong> asset fanning in every <code>campaigns</code>
+asset an organisation has configured, with the set of upstreams decided by wiring, not by the class.</p>
+<p>What the model has to achieve, in Guillaume's words: define relationships between components;
+constrain them at the definition level (kinds, keys, fields); wire them at the instance level; and
+treat assets specially, because some of their relations must be passed to <code>data()</code>.</p>
+<hr />
+<h2 id="1-decisions">1. Decisions<a class="headerlink" href="#1-decisions" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primitive</td>
+<td>One <code>Relation</code> class declares every link, on every kind. It replaces <code>relation_types</code>, <code>RelationDefinition</code>, <code>resource_types</code>, <code>ResourceRef</code>, <code>depends_on</code>, <code>Dependency</code> and <code>RelationSlot</code>.</td>
+</tr>
+<tr>
+<td>Selection</td>
+<td>Always by key: an exact key, <code>source.asset</code>, <code>*.asset</code>, or a list of keys. A class in a declaration is shorthand for its key.</td>
+</tr>
+<tr>
+<td>Bare key</td>
+<td>A bare asset key selects a sibling of the same source instance.</td>
+</tr>
+<tr>
+<td>Wiring</td>
+<td>Always an instance on the component. Ids exist only in specs and in rows.</td>
+</tr>
+<tr>
+<td>Fallback</td>
+<td>Fallbacks are resolved when a relation is read, never bound: an explicit <code>default=</code> first, otherwise the declared class when it is a <code>Resource</code> (settings may come from the environment, so it is constructed at read time and a validation error surfaces then, as today) or when all its fields are defaulted. An unbound non-optional relation with no fallback is a build error.</td>
+</tr>
+<tr>
+<td>Optional</td>
+<td>Means the wiring may be absent. It says nothing about data: a bound upstream whose partition holds nothing yields <code>data=None</code>, for every relation.</td>
+</tr>
+<tr>
+<td>Removal</td>
+<td><code>on_delete</code> is declared per relation (<code>block</code> or <code>detach</code>). Unbinding is derived: refused when it would empty a non-optional relation, detach otherwise. <code>on_unbind</code> is dropped.</td>
+</tr>
+<tr>
+<td>Declaration forms</td>
+<td>Annotation with a Component class (<code>connection: Conn</code>), a typed <code>il.Relation</code> attribute (<code>destinations: list[Destination] = il.Relation("destination", many=True, optional=True)</code>, the annotation is for the type checker), a bare <code>il.Relation</code> attribute, or <code>@il.asset(relations={...})</code>. Explicit beats annotation; a subclass replaces its parent's declaration of the same name. <code>Relation</code> is its own descriptor (class access gives the <code>Relation</code>, instance access the bound value); a <code>TYPE_CHECKING</code>-only <code>__new__</code> returning <code>Any</code> makes the typed form check under ty.</td>
+</tr>
+<tr>
+<td>Injection</td>
+<td><code>data()</code> receives the bound instance for resource relations and <code>il.Upstream</code> (single) or <code>list[il.Upstream]</code> (many) for asset relations.</td>
+</tr>
+<tr>
+<td>Serialisation</td>
+<td>A manifest is one component, nested, and is exactly <code>to_spec()</code> output. A target that has a parent is emitted under its parent and referenced as <code>{ref: id}</code> everywhere else. A target without a parent is inline at the first relation that reaches it and referenced afterwards. No flag, no kind knowledge.</td>
+</tr>
+<tr>
+<td>Containment</td>
+<td>Stays <code>parent_id</code> (assets under sources). <code>parent</code> moves onto <code>Component</code> so the serialisation rule is generic. To revisit once this lands (containment as an owned relation).</td>
+</tr>
+<tr>
+<td>Rows</td>
+<td><code>component_relations(src_id, name, dst_id, ...)</code>, primary key <code>(src_id, name, dst_id)</code>. <code>type</code> and <code>slot</code> collapse into <code>name</code>.</td>
+</tr>
+<tr>
+<td>DAG</td>
+<td>Edges from bound asset relations. A bound upstream not among the DAG's workloads is included as a read-only node.</td>
+</tr>
+<tr>
+<td>Migration</td>
+<td>Revision 017 is rewritten in place (it never shipped); no 018.</td>
+</tr>
+<tr>
+<td>Compatibility</td>
+<td>None. All consumers ship together; the manifests repo updates in lockstep.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-the-primitive">2. The primitive<a class="headerlink" href="#2-the-primitive" title="Permanent link">&para;</a></h2>
+<p><code>interloper/component/relation.py</code></p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ComponentIdentity</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">source_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="nd">@classmethod</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">of</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">component</span><span class="p">:</span> <span class="n">Component</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComponentIdentity</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">satisfies</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">declared_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">own_source_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Relation</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">kind</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">""</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">many</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">optional</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">default</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Component</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">on_delete</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"block"</span><span class="p">,</span> <span class="s2">"detach"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"block"</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>                                   <span class="c1"># set by Component.collect()</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">accepts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kind</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">identity</span><span class="p">:</span> <span class="n">ComponentIdentity</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">owner</span><span class="p">:</span> <span class="n">ComponentIdentity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="nd">@property</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">self_filling</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>              <span class="c1"># default set, or a single-valued class target with no required fields</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">fallback</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Component</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>        <span class="c1"># a fresh instance from default() or target(), or None</span>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__get__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">owner</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Component</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Component</span><span class="p">]</span> <span class="o">|</span> <span class="n">Relation</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>   <span class="c1"># Relation is its own descriptor</span>
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__set__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>                                        <span class="c1"># atomic rebind</span>
+</span></code></pre></div>
+<p><code>Relation(FacebookAdsConnection)</code> is shorthand for <code>Relation(kind="connection", key="facebook_ads_connection")</code>.
+<code>Relation("asset", "*.campaigns", many=True)</code> selects every asset with key <code>campaigns</code> in any source.</p>
+<p><code>ComponentIdentity</code> is the single place a declared key is compared to a concrete component. Its
+<code>satisfies</code> handles the four key forms. For non-asset kinds <code>source_key</code> is <code>None</code> and only the exact
+form applies. <code>accepts</code> takes identities rather than instances so the store can apply the same rule
+to rows (section 9).</p>
+<p><code>Relation</code> replaces <code>ResourceRef</code> as the descriptor too. On the class it returns itself; on an instance it
+returns the bound instance, the bound list, or <code>None</code> / <code>[]</code> when unbound.</p>
+<hr />
+<h2 id="3-component-operations">3. Component operations<a class="headerlink" href="#3-component-operations" title="Permanent link">&para;</a></h2>
+<p><code>interloper/component/base.py</code></p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Component</span><span class="p">(</span><span class="n">Serializable</span><span class="p">):</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">kind</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">relations</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Relation</span><span class="p">]]</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">parent</span><span class="p">:</span> <span class="n">Component</span> <span class="o">|</span> <span class="kc">None</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">_bound</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Component</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Component</span><span class="p">]]</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">):</span> <span class="o">...</span>              <span class="c1"># relation names accepted as kwargs</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="nd">@classmethod</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">collect</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>                    <span class="c1"># at class creation: annotations, Relation attributes, decorator</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="n">targets</span><span class="p">:</span> <span class="n">Component</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">unbind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="n">targets</span><span class="p">:</span> <span class="n">Component</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">bound</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Component</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Component</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">bound_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span> <span class="o">...</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">trickle</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">child</span><span class="p">:</span> <span class="n">Component</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">resolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Component</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Component</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>   <span class="c1"># bound(name), else relation.fallback()</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate_relations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodes</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Component</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>    <span class="nd">@property</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">identity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComponentIdentity</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="nd">@property</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">qualified_key</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>    <span class="nd">@classmethod</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">definition</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComponentDefinition</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">to_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Spec</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>    <span class="nd">@classmethod</span>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">from_spec</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">catalog</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">resolve</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Component</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<ul>
+<li><strong>collect</strong> gathers relations from annotations whose type is a Component class, from <code>Relation</code>
+  class attributes (typed or bare), and from the decorator's <code>relations=</code>. It installs the stamped
+  <code>Relation</code> as the attribute and removes the name from pydantic's fields. Explicit wins over annotation; a subclass declaration replaces
+  the parent's. No error on a double declaration, since it is always deliberate.</li>
+<li><strong>bind / unbind</strong> are the only writers of <code>_bound</code>. <code>bind</code> checks <code>relation.accepts</code> for each
+  target; <code>many</code> accumulates, single replaces. <code>unbind</code> refuses to empty a non-optional relation.</li>
+<li><strong>trickle(child)</strong> fills a child's relation only when it is still unbound, has the same name and
+  <code>accepts</code> the parent's target. An explicit child binding is never overridden. It re-runs on every
+  <code>bind</code> of the parent, so destinations bound after the assets exist still propagate.</li>
+<li><strong>resolve(name)</strong> is what injection reads: the bound value, else a fresh <code>relation.fallback()</code>.
+  Fallbacks are never bound, so an explicit binding or a later <code>trickle</code> always wins over them, and
+  <code>to_spec()</code> never carries an auto-instantiated component.</li>
+<li><strong>validate_relations(nodes)</strong> fails on an unbound non-optional relation without a fallback, on more than one target
+  for a single relation, and on a bound target whose identity does not satisfy the declared key.
+  With <code>nodes</code> it also requires every bound asset target to be a live node.</li>
+<li><strong>identity / qualified_key</strong>: <code>source.asset</code> for a contained asset, the bare key otherwise.</li>
+<li><strong>definition()</strong> exports each relation as <code>kind</code>, <code>key</code>, <code>many</code>, <code>optional</code>, <code>on_delete</code> for the
+  catalog.</li>
+<li><strong>to_spec / from_spec</strong> follow the serialisation rule of section 8. <code>resolve</code> turns an id that is
+  not in the document into an instance (the store passes <code>store.load</code>).</li>
+</ul>
+<p>Retired from <code>Component</code>: <code>resource_types</code>, <code>relation_types</code>, <code>resources</code>, <code>trickle_resources</code>,
+<code>relation_definitions()</code>, <code>RelationDefinition</code>, <code>Dependency</code>, <code>AssetIdentity</code>.</p>
+<hr />
+<h2 id="4-kinds">4. Kinds<a class="headerlink" href="#4-kinds" title="Permanent link">&para;</a></h2>
+<p>Each anchor class keeps its kind, its entry in <code>KINDS</code>, and everything unrelated to relations. The
+umbrella <code>resource</code> relation every kind declares today, together with <code>resource_types</code>, disappears:
+each resource is its own named relation with one kind, declared by annotation on the subclass.</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Anchor declares</th>
+<th>Subclasses typically add</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Resource, Connection, Config</td>
+<td>nothing</td>
+<td>nothing (leaves of the graph)</td>
+</tr>
+<tr>
+<td>Destination</td>
+<td>nothing</td>
+<td><code>connection: GoogleCloudConnection</code></td>
+</tr>
+<tr>
+<td>Source</td>
+<td><code>destinations = Relation("destination", many=True, optional=True)</code></td>
+<td><code>connection: ...</code>, <code>config: ...</code></td>
+</tr>
+<tr>
+<td>Asset</td>
+<td><code>destinations</code> as Source, filled by trickle</td>
+<td>inferred from <code>data()</code> or written in <code>relations=</code> (section 5)</td>
+</tr>
+<tr>
+<td>Job</td>
+<td><code>targets = Relation(["source", "asset"], many=True, optional=True, on_delete="detach")</code>, <code>destinations</code></td>
+<td>nothing (CronJob)</td>
+</tr>
+<tr>
+<td>Hook</td>
+<td><code>watches = Relation(["source", "asset", "job"], many=True, optional=True, on_delete="detach")</code></td>
+<td><code>connection: SlackConnection</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>destinations</code> is optional at the relation level because a source or job may exist without one, for
+example mid-wizard. Runnability is a different question: the runner refuses to materialise an asset
+with no destination.</p>
+<p>Source containment is unchanged: <code>asset_types</code> collects the asset classes, <code>__init__</code> builds the
+instances and sets <code>parent</code>, and every <code>bind</code> on the source trickles into them.
+<code>default_destination_key</code> stays a plain field that selects among the bound destinations.</p>
+<p><code>Connection</code> stays an <code>Operation</code> for <code>check()</code>. <code>Operation</code> keeps <code>materializable</code>, <code>partitioning</code>
+and <code>source</code>, and gains <code>upstream_relations()</code> (the relations whose kind is <code>asset</code>), which the DAG
+uses. It loses <code>upstreams</code>, <code>declared_upstreams</code> and <code>validate_upstreams</code>.</p>
+<hr />
+<h2 id="5-assets">5. Assets<a class="headerlink" href="#5-assets" title="Permanent link">&para;</a></h2>
+<h3 id="51-inference-one-pass-local-to-the-class">5.1 Inference, one pass, local to the class<a class="headerlink" href="#51-inference-one-pass-local-to-the-class" title="Permanent link">&para;</a></h3>
+<p><code>Asset.collect()</code> extends the generic collection with the <code>data()</code> signature. For every parameter
+other than <code>self</code>, <code>context</code>, <code>source</code> and <code>**kwargs</code> that is not already declared:</p>
+<table>
+<thead>
+<tr>
+<th>Annotation</th>
+<th>Relation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a Component class <code>C</code></td>
+<td><code>Relation(kind=C.kind, key=C.key)</code></td>
+</tr>
+<tr>
+<td><code>il.Upstream</code></td>
+<td><code>Relation("asset", key=&lt;parameter name&gt;)</code>, a bare key, so the sibling of the same source instance</td>
+</tr>
+<tr>
+<td><code>list[il.Upstream]</code></td>
+<td>the same with <code>many=True</code></td>
+</tr>
+<tr>
+<td>anything else</td>
+<td>a definition error at class creation: nothing could ever fill it</td>
+</tr>
+</tbody>
+</table>
+<p>A <code>None</code> default makes the inferred relation optional. Cross-source upstreams and wildcards are
+written in <code>relations=</code> or as a class attribute.</p>
+<p>This retires <code>Source._infer_upstreams</code>: the source no longer inspects its assets' signatures, because
+the parameter's type says what it is. The two inference passes that exist today (resources on the
+asset, upstreams on the source) become one, on <code>Asset</code>.</p>
+<h3 id="52-sibling-wiring">5.2 Sibling wiring<a class="headerlink" href="#52-sibling-wiring" title="Permanent link">&para;</a></h3>
+<p><code>Source.sibling_bindings()</code> is a pure classmethod returning <code>{asset_key: {relation_name: sibling_key}}</code>
+for every asset relation whose key resolves inside this source (bare, or qualified with the source's
+own key), using <code>ComponentIdentity.satisfies</code>. <code>Source.__init__</code> applies it to the instances it
+built; the store applies it to the rows it creates (section 9). One rule, two callers. Anything
+that does not resolve to a sibling stays unbound until an explicit bind or the DAG resolves it.</p>
+<h3 id="53-injection-and-the-read-path">5.3 Injection and the read path<a class="headerlink" href="#53-injection-and-the-read-path" title="Permanent link">&para;</a></h3>
+<p><code>_build_kwargs</code> walks the signature: <code>context</code> and <code>source</code> are injected as today, an asset relation
+gets <code>Upstream</code> or <code>list[Upstream]</code> from <code>_read_upstreams</code>, every other relation gets <code>resolve(name)</code>:
+the bound instance, else the relation's fallback (an explicit <code>default</code>, else the declared class
+instantiated without arguments, as <code>_resolve_resource</code> does today), else <code>None</code> when optional.</p>
+<p><code>_read_upstreams</code> is unchanged from PR #321: a leg whose destination has nothing for the scope
+(<code>DataNotFoundError</code> cause) is handed over as <code>Upstream(asset, data=None)</code> with a warning event; a
+bound id absent from the DAG is skipped with a warning; any other read error fails the asset. An
+existing but empty scope is whatever the destination returns for an empty read, not <code>None</code>.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Upstream</span><span class="p">:</span>            <span class="c1"># interloper/asset/upstream.py, unchanged</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">asset</span><span class="p">:</span> <span class="n">Asset</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+<h3 id="54-validation">5.4 Validation<a class="headerlink" href="#54-validation" title="Permanent link">&para;</a></h3>
+<p>Nothing asset-specific. <code>validate_relations(nodes)</code> covers unbound, cardinality and identity; the DAG
+passes its operation map so bound asset targets must be live nodes.</p>
+<h3 id="55-declaration-forms">5.5 Declaration forms<a class="headerlink" href="#55-declaration-forms" title="Permanent link">&para;</a></h3>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">FacebookAds</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">FacebookAdsConnection</span>            <span class="c1"># Relation(kind="connection", key="facebook_ads_connection")</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">account_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">InputField</span><span class="p">(</span><span class="n">discriminator</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">Campaigns</span><span class="p">,</span> <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Entity"</span><span class="p">])</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">campaigns</span><span class="p">(</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="k">return</span> <span class="p">[{</span><span class="o">**</span><span class="n">row</span><span class="p">,</span> <span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">}</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">_get_campaigns</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">account_id</span><span class="p">)]</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">CampaignsStats</span><span class="p">,</span> <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Report"</span><span class="p">])</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">campaigns_stats</span><span class="p">(</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="n">campaigns</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">,</span>                  <span class="c1"># inferred: Relation("asset", "campaigns"), the sibling</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="n">ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="s2">"id"</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">campaigns</span><span class="o">.</span><span class="n">data</span> <span class="ow">or</span> <span class="p">[]]</span>
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>        <span class="k">return</span> <span class="n">_get_stats</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">account_id</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">)</span>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>
+</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">AdsStats</span><span class="p">,</span> <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Report"</span><span class="p">])</span>
+</span><span id="__span-3-23"><a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span>
+</span><span id="__span-3-24"><a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-3-25"><a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-3-26"><a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>        <span class="n">ads</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>          <span class="c1"># inferred as optional</span>
+</span><span id="__span-3-27"><a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p>The same source written explicitly, with the connection as a declared relation of each asset
+(visible in its definition, overridable per asset, filled from the source by <code>trickle</code>):</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>        <span class="n">schema</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">CampaignsStats</span><span class="p">,</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>        <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Report"</span><span class="p">],</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="n">relations</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>            <span class="s2">"connection"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">FacebookAdsConnection</span><span class="p">),</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>            <span class="s2">"campaigns"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"facebook_ads.campaigns"</span><span class="p">),</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        <span class="p">},</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="p">)</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">campaigns_stats</span><span class="p">(</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>        <span class="n">connection</span><span class="p">:</span> <span class="n">FacebookAdsConnection</span><span class="p">,</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>        <span class="n">campaigns</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">,</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p>A cross-source consumer, the matcher, and a class-based asset with a self-filling config:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Finance</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">currency</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">InputField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"EUR"</span><span class="p">)</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>        <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>        <span class="n">relations</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>            <span class="s2">"orders"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"shop.orders"</span><span class="p">),</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>            <span class="s2">"fx"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"rates.daily_fx"</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>        <span class="p">},</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="p">)</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">revenue</span><span class="p">(</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>        <span class="n">orders</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">,</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>        <span class="n">fx</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span> <span class="o">...</span>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Analytics"</span><span class="p">])</span>
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="k">class</span><span class="w"> </span><span class="nc">CampaignMatcher</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>        <span class="n">schema</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">CampaignMatches</span><span class="p">,</span>
+</span><span id="__span-5-24"><a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>        <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
+</span><span id="__span-5-25"><a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Entity"</span><span class="p">],</span>
+</span><span id="__span-5-26"><a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>        <span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"*.campaigns"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)},</span>
+</span><span id="__span-5-27"><a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>    <span class="p">)</span>
+</span><span id="__span-5-28"><a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">campaign_matches</span><span class="p">(</span>
+</span><span id="__span-5-29"><a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-5-30"><a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-5-31"><a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>        <span class="n">campaigns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">],</span>
+</span><span id="__span-5-32"><a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-5-33"><a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a>        <span class="k">return</span> <span class="p">[</span>
+</span><span id="__span-5-34"><a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a>            <span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">,</span> <span class="s2">"source_key"</span><span class="p">:</span> <span class="n">leg</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="o">**</span><span class="n">match</span><span class="p">(</span><span class="n">row</span><span class="p">)}</span>
+</span><span id="__span-5-35"><a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a>            <span class="k">for</span> <span class="n">leg</span> <span class="ow">in</span> <span class="n">campaigns</span>
+</span><span id="__span-5-36"><a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a>            <span class="k">if</span> <span class="n">leg</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="__span-5-37"><a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a>            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">leg</span><span class="o">.</span><span class="n">data</span>
+</span><span id="__span-5-38"><a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a>        <span class="p">]</span>
+</span><span id="__span-5-39"><a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a>
+</span><span id="__span-5-40"><a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a>
+</span><span id="__span-5-41"><a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a><span class="k">class</span><span class="w"> </span><span class="nc">MatcherConfig</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Config</span><span class="p">):</span>
+</span><span id="__span-5-42"><a id="__codelineno-5-42" name="__codelineno-5-42" href="#__codelineno-5-42"></a>    <span class="n">min_similarity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">InputField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+</span><span id="__span-5-43"><a id="__codelineno-5-43" name="__codelineno-5-43" href="#__codelineno-5-43"></a>
+</span><span id="__span-5-44"><a id="__codelineno-5-44" name="__codelineno-5-44" href="#__codelineno-5-44"></a>
+</span><span id="__span-5-45"><a id="__codelineno-5-45" name="__codelineno-5-45" href="#__codelineno-5-45"></a><span class="k">class</span><span class="w"> </span><span class="nc">CampaignMatches</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">):</span>
+</span><span id="__span-5-46"><a id="__codelineno-5-46" name="__codelineno-5-46" href="#__codelineno-5-46"></a>    <span class="n">config</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">MatcherConfig</span><span class="p">)</span>          <span class="c1"># every field defaulted: instantiated at read time when unbound</span>
+</span><span id="__span-5-47"><a id="__codelineno-5-47" name="__codelineno-5-47" href="#__codelineno-5-47"></a>    <span class="n">campaigns</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"*.campaigns"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-5-48"><a id="__codelineno-5-48" name="__codelineno-5-48" href="#__codelineno-5-48"></a>    <span class="n">schema</span> <span class="o">=</span> <span class="n">schemas</span><span class="o">.</span><span class="n">CampaignMatches</span>
+</span><span id="__span-5-49"><a id="__codelineno-5-49" name="__codelineno-5-49" href="#__codelineno-5-49"></a>    <span class="n">partitioning</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">)</span>
+</span><span id="__span-5-50"><a id="__codelineno-5-50" name="__codelineno-5-50" href="#__codelineno-5-50"></a>
+</span><span id="__span-5-51"><a id="__codelineno-5-51" name="__codelineno-5-51" href="#__codelineno-5-51"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">data</span><span class="p">(</span>
+</span><span id="__span-5-52"><a id="__codelineno-5-52" name="__codelineno-5-52" href="#__codelineno-5-52"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-5-53"><a id="__codelineno-5-53" name="__codelineno-5-53" href="#__codelineno-5-53"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-5-54"><a id="__codelineno-5-54" name="__codelineno-5-54" href="#__codelineno-5-54"></a>        <span class="n">config</span><span class="p">:</span> <span class="n">MatcherConfig</span><span class="p">,</span>
+</span><span id="__span-5-55"><a id="__codelineno-5-55" name="__codelineno-5-55" href="#__codelineno-5-55"></a>        <span class="n">campaigns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">],</span>
+</span><span id="__span-5-56"><a id="__codelineno-5-56" name="__codelineno-5-56" href="#__codelineno-5-56"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span> <span class="o">...</span>
+</span></code></pre></div>
+<hr />
+<h2 id="6-dag">6. DAG<a class="headerlink" href="#6-dag" title="Permanent link">&para;</a></h2>
+<p><code>interloper/dag/base.py</code></p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">DAG</span><span class="p">:</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_build_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>            <span class="c1"># edges from upstream_relations() x bound()</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_include_read_only_upstreams</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>   <span class="c1"># bound targets outside the workloads join as materializable=False</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_declared</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>              <span class="c1"># unbound asset relations bound from the DAG's nodes</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_check_relations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>               <span class="c1"># validate_relations(operation_map) per live node</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_check_circular_dependencies</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_check_partition_dependencies</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">to_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DAGSpec</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">mini_dag</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DAG</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="k">class</span><span class="w"> </span><span class="nc">DAGSpec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="n">items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Spec</span><span class="p">]</span>                                     <span class="c1"># one document per root workload</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">reconstruct</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">catalog</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DAG</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<ul>
+<li><strong>Edges</strong> come from every bound target of every asset relation. No declared-upstream lookup, no
+  optional bookkeeping: the target is an instance and its relation knows whether it is optional.</li>
+<li><strong>Read-only upstreams.</strong> A bound asset target that is not among the DAG's workloads is included
+  as a non-materialisable node, since it is an instance with its own destinations and can be read
+  without being run. A job that targets only the matcher runs the matcher and reads the campaign
+  tables. Partition checks still apply along those edges. <code>mini_dag</code> reduces to "this operation,
+  with its parents read-only", the same mechanism.</li>
+<li><strong>Declared resolution</strong> keeps its role: for each live asset and each unbound asset relation with a
+  key, the candidates are the DAG's other assets whose identity satisfies the key, a bare key
+  restricted to the asset's own source instance. Many binds all, single binds one, several
+  candidates for a single is a <code>DAGError</code>, none leaves it unbound for validation. It writes through
+  <code>asset.bind()</code>, so explicit wiring is never overwritten. In practice this handles cross-source keys
+  and wildcards, since siblings were bound at construction.</li>
+<li><strong>Validation</strong>: <code>_check_relations</code> calls <code>validate_relations(operation_map)</code> on every live node.
+  Cycle and partition checks are unchanged (equal granularity along every edge).</li>
+<li><strong>Serialisation</strong>: <code>to_spec()</code> emits one document per root workload, multi-document YAML. A parent
+  pulled in as a read-only upstream appears as its own document with the asset marked
+  <code>materializable: false</code>. <code>from_spec_file</code> builds the DAG over the documents' roots.</li>
+</ul>
+<p>Wiring in Python:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">gcp</span> <span class="o">=</span> <span class="n">GoogleCloudConnection</span><span class="p">(</span><span class="n">service_account_key</span><span class="o">=...</span><span class="p">)</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">bq</span> <span class="o">=</span> <span class="n">BigQueryDestination</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">gcp</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="s2">"dwh"</span><span class="p">)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">fb</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_1"</span><span class="p">,</span> <span class="n">connection</span><span class="o">=</span><span class="n">FacebookAdsConnection</span><span class="p">(</span><span class="o">...</span><span class="p">),</span> <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">bq</span><span class="p">])</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">tt</span> <span class="o">=</span> <span class="n">TiktokAds</span><span class="p">(</span><span class="n">advertiser_id</span><span class="o">=</span><span class="s2">"9"</span><span class="p">,</span> <span class="n">connection</span><span class="o">=</span><span class="n">TiktokAdsConnection</span><span class="p">(</span><span class="o">...</span><span class="p">),</span> <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">bq</span><span class="p">])</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">matcher</span> <span class="o">=</span> <span class="n">CampaignMatcher</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">bq</span><span class="p">])</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">fb</span><span class="p">,</span> <span class="n">tt</span><span class="p">,</span> <span class="n">matcher</span><span class="p">)</span>            <span class="c1"># binds matcher.campaign_matches.campaigns to [fb.campaigns, tt.campaigns]</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">fb</span><span class="o">.</span><span class="n">campaigns_stats</span><span class="o">.</span><span class="n">campaigns</span>             <span class="c1"># fb.campaigns, bound by the source at construction</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="n">matcher</span><span class="o">.</span><span class="n">campaign_matches</span><span class="o">.</span><span class="n">bound_ids</span><span class="p">()</span>     <span class="c1"># {"destinations": [bq.id], "campaigns": [fb.campaigns.id, tt.campaigns.id]}</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="n">job</span> <span class="o">=</span> <span class="n">CronJob</span><span class="p">(</span><span class="n">cron</span><span class="o">=</span><span class="s2">"0 6 * * *"</span><span class="p">,</span> <span class="n">targets</span><span class="o">=</span><span class="p">[</span><span class="n">matcher</span><span class="p">],</span> <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">bq</span><span class="p">])</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="n">alert</span> <span class="o">=</span> <span class="n">SlackHook</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">slack</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="s2">"#data"</span><span class="p">,</span> <span class="n">watches</span><span class="o">=</span><span class="p">[</span><span class="n">job</span><span class="p">],</span> <span class="n">events</span><span class="o">=</span><span class="p">[</span><span class="s2">"run_failed"</span><span class="p">])</span>
+</span></code></pre></div>
+<hr />
+<h2 id="7-serialisation">7. Serialisation<a class="headerlink" href="#7-serialisation" title="Permanent link">&para;</a></h2>
+<p>A manifest is one component. Its top level identifies the class by <code>key</code> (catalog) or <code>path</code>
+(import path), and its relations sit inside <code>init</code> under their names, nested. A YAML file may hold
+several documents separated by <code>---</code>, each a component. There is no normalised or flat form: the
+document is <code>to_spec()</code> output.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Spec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>                <span class="c1"># required only when something references it</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">init</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>                 <span class="c1"># fields; a relation name holds a Spec, a {"ref": id}, or a list of either</span>
+</span></code></pre></div>
+<p><strong>The one rule.</strong> A component that has a <code>parent</code> is emitted under its parent and every relation
+that points at it emits <code>{ref: id}</code>. A component without a parent is emitted inline at the first
+relation that reaches it, and <code>{ref: id}</code> at any later one. Assets are referenced from upstreams
+because they live under a source, not because they are assets. A destination shared by two sources
+is inline once and referenced once. The rule lives in the generic <code>to_spec()</code> traversal keyed on
+<code>parent</code>, and in the hydrator keyed on <code>parent_id</code>. No kind knows about serialisation and no flag
+exists.</p>
+<p><strong>Resolution.</strong> A <code>{ref: id}</code> resolves within the document first, then through <code>resolve=</code> when a
+store or catalog is given, and fails otherwise. In a hand-written manifest the referenced component
+must be in the tree. In the platform, the store resolves it.</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper.job.cron.CronJob</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">cron</span><span class="p">:</span><span class="w"> </span><span class="s">"0</span><span class="nv"> </span><span class="s">7</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*"</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span><span class="nt">destinations</span><span class="p">:</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bigquery_destination</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">      </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bq</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="nv">dwh</span><span class="p p-Indicator">,</span><span class="nt"> connection</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="nv">google_cloud_connection</span><span class="p p-Indicator">,</span><span class="nt"> init</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">service_account_key</span><span class="p">:</span><span class="w"> </span><span class="nv">$</span><span class="p p-Indicator">{</span><span class="nv">GCP_KEY</span><span class="p p-Indicator">}}}}</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">  </span><span class="nt">targets</span><span class="p">:</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">facebook_ads</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="w">        </span><span class="nt">account_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">act_1</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">        </span><span class="nt">connection</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="nv">facebook_ads_connection</span><span class="p p-Indicator">,</span><span class="nt"> init</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">access_token</span><span class="p">:</span><span class="w"> </span><span class="nv">$</span><span class="p p-Indicator">{</span><span class="nv">FB_TOKEN</span><span class="p p-Indicator">},</span><span class="nt"> app_id</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span><span class="p p-Indicator">}}</span>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="w">        </span><span class="nt">assets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">campaigns</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="nv">fb-campaigns</span><span class="p p-Indicator">,</span><span class="nt"> materializable</span><span class="p">:</span><span class="w"> </span><span class="nv">false</span><span class="p p-Indicator">}}</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">campaign_matcher</span>
+</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="w">        </span><span class="nt">destinations</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[{</span><span class="nt">ref</span><span class="p">:</span><span class="w"> </span><span class="nv">bq</span><span class="p p-Indicator">}]</span><span class="w">                </span><span class="c1"># second occurrence of a parentless component: a reference</span>
+</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="w">        </span><span class="nt">assets</span><span class="p">:</span>
+</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="w">          </span><span class="nt">campaign_matches</span><span class="p">:</span>
+</span><span id="__span-9-19"><a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a><span class="w">            </span><span class="nt">campaigns</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[{</span><span class="nt">ref</span><span class="p">:</span><span class="w"> </span><span class="nv">fb-campaigns</span><span class="p p-Indicator">}]</span><span class="w">     </span><span class="c1"># the asset has a parent: always a reference</span>
+</span></code></pre></div>
+<p>Without the explicit <code>campaigns:</code> line the DAG binds every <code>*.campaigns</code> node it holds.</p>
+<hr />
+<h2 id="8-persistence">8. Persistence<a class="headerlink" href="#8-persistence" title="Permanent link">&para;</a></h2>
+<h3 id="81-rows">8.1 Rows<a class="headerlink" href="#81-rows" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>component_relations(src_id, name, dst_id, org_id, src_kind, dst_kind)
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>  PRIMARY KEY (src_id, name, dst_id)
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>  FK (src_id, org_id, src_kind) and (dst_id, org_id, dst_kind) as today, ON DELETE CASCADE
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>  INDEX (org_id, name), INDEX (dst_id, name)
+</span></code></pre></div>
+<p><code>type</code> and <code>slot</code> collapse into <code>name</code>, never empty. The partial unique index on resource slots goes:
+whether a relation is single-valued is a class rule the schema cannot see, so <code>RelationStore</code>
+enforces it under <code>SELECT ... FOR UPDATE</code> on the source row. <code>components.parent_id</code> and its check
+constraint are untouched.</p>
+<h3 id="82-relationstore">8.2 RelationStore<a class="headerlink" href="#82-relationstore" title="Permanent link">&para;</a></h3>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">RelationStore</span><span class="p">:</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">list_all</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">org_id</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">src_kind</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dst_kind</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ComponentRelation</span><span class="p">]:</span> <span class="o">...</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">component_id</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dst_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComponentRelation</span><span class="p">:</span> <span class="o">...</span>   <span class="c1"># accepts; many inserts, single repoints; row lock</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">component_id</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dst_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>             <span class="c1"># refused if it would empty a non-optional relation</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_relations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">bindings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">UUID</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p><code>add</code> looks up <code>relations[name]</code> on the catalog class, builds the target's <code>ComponentIdentity</code> from
+its row and parent row, and calls <code>Relation.accepts</code>. The slotted and unslotted branches, the
+vocabulary check on <code>type</code>, <code>_check_slot_target</code> and <code>_wire_intra_upstreams</code> disappear; sibling
+rows come from <code>Source.sibling_bindings()</code> in <code>_ensure_children</code>.</p>
+<h3 id="83-hydrator">8.3 Hydrator<a class="headerlink" href="#83-hydrator" title="Permanent link">&para;</a></h3>
+<p><code>_build_init</code> groups rows by <code>name</code>. Each target is its nested spec when its row has no <code>parent_id</code>
+and <code>{ref: dst_id}</code> when it has one, the same structural rule as <code>to_spec()</code>. Single or list follows
+<code>many</code>. Children still travel as the <code>assets</code> override map and <code>_load_owned_asset</code> still loads
+through the parent source. <code>from_spec</code> receives <code>resolve=store.load</code>, so a reference to an asset
+outside the document loads its source on demand. Within a document, references resolve to the
+inline instance first, so a job that targets both the Facebook source and the matcher shares one
+<code>campaigns</code> instance.</p>
+<h3 id="84-delete">8.4 Delete<a class="headerlink" href="#84-delete" title="Permanent link">&para;</a></h3>
+<p><code>_blocking_referrers</code> reads <code>on_delete</code> from the referrer's relation by name. Unchanged otherwise.</p>
+<h3 id="85-migration-017-rewritten">8.5 Migration 017, rewritten<a class="headerlink" href="#85-migration-017-rewritten" title="Permanent link">&para;</a></h3>
+<p>Production is at 016; the 017 in PR #321 never shipped and is replaced:</p>
+<ul>
+<li>add <code>name</code>; fill it from <code>slot</code> where <code>type IN ('resource', 'dependency', 'upstream')</code> and from
+  the plural field name for <code>destination</code> (<code>destinations</code>), <code>target</code> (<code>targets</code>), <code>watch</code> (<code>watches</code>);</li>
+<li>drop <code>type</code> and <code>slot</code>; rebuild the primary key as <code>(src_id, name, dst_id)</code>; drop
+  <code>uq_component_relations_slot</code>; recreate the two secondary indexes on <code>name</code>.</li>
+</ul>
+<p>Downgrade is the reverse and lossless: every old <code>type</code> is recoverable from <code>name</code> plus <code>dst_kind</code>.</p>
+<hr />
+<h2 id="9-platform-surfaces">9. Platform surfaces<a class="headerlink" href="#9-platform-surfaces" title="Permanent link">&para;</a></h2>
+<p><strong>Catalog JSON.</strong> <code>ComponentDefinition.relations</code> is <code>{name: {kind, key, many, optional, on_delete}}</code>.
+Gone from the wire: <code>slotted</code>, <code>slots</code>, <code>field</code>, <code>inline</code>, <code>on_unbind</code>, the nested <code>Dependency</code>.</p>
+<p><strong>API</strong> (<code>interloper-api/routes/components.py</code>). <code>RelationCreateRequest(name, dst_id)</code>,
+<code>RelationRef(dst_id, dst_kind)</code>, <code>RelationResponse(src_id, name, dst_id, dst_kind)</code>. A component's
+embedded <code>relations</code> is keyed by name. Delete route <code>/{id}/relations/{name}/{dst_id}</code>. The org-wide
+list gains <code>name</code>, <code>src_kind</code> and <code>dst_kind</code> filters. Fetch-field providers keep <code>"&lt;name&gt;.&lt;method&gt;"</code>.</p>
+<p><strong>App</strong> (<code>interloper-app</code>). <code>resourceSlots(defn)</code> becomes the relations whose kind is <code>connection</code>,
+<code>config</code> or <code>resource</code>; <code>upstreamSlots(defn)</code> the relations whose kind is <code>asset</code>. Types drop <code>slot</code>
+and <code>type</code> for <code>name</code>. The components store reads <code>defn.relations[name].optional</code> directly; the graph
+composable pairs assets by relation name; dedup keys drop the slot segment. Wizard, <code>AssetSelect</code> and
+the destinations page change only in which helper they call.</p>
+<p><strong>Toolkit</strong> (<code>interloper-toolkit/lineage.py</code>). Lineage tools filter rows on <code>src_kind</code> and <code>dst_kind</code>
+both <code>asset</code> and report <code>name</code> as the parameter. One generic <code>bind_relation(component_id, name, dst_id)</code>
+tool replaces the planned <code>bind_upstream</code>.</p>
+<p><strong>Agent</strong> (<code>interloper-agent/tools/collection.py</code>). <code>_source_relations</code> finds the relation whose kind
+is <code>connection</code>, binds by name, and passes <code>{connection: [...], destinations: [...]}</code> and
+<code>{targets: [...]}</code> to the store.</p>
+<p><strong>Scheduler</strong> (<code>interloper-scheduler/hooks.py</code>). The hook matcher filters on <code>name == "watches"</code>.</p>
+<p><strong>Manifests repo.</strong> YAML <code>dependencies:</code> keys become relation names; lockstep with the release.</p>
+<hr />
+<h2 id="10-retired-names">10. Retired names<a class="headerlink" href="#10-retired-names" title="Permanent link">&para;</a></h2>
+<p><code>relation_types</code>, <code>RelationDefinition</code>, <code>resource_types</code>, <code>ResourceRef</code>, <code>resources</code>,
+<code>trickle_resources</code>, <code>relation_definitions()</code>, <code>depends_on</code>, <code>Dependency</code>, <code>RelationSlot</code>,
+<code>AssetIdentity</code>, <code>upstreams</code>, <code>declared_upstreams</code>, <code>sibling_upstreams</code>, <code>validate_upstreams</code>,
+<code>_infer_resource_types</code>, <code>_infer_upstreams</code>, <code>_check_slot_target</code>, <code>_wire_intra_upstreams</code>,
+<code>slotted</code>, <code>slots</code>, <code>field</code>, <code>inline</code>, <code>on_unbind</code>, <code>embedded</code>, <code>type</code> and <code>slot</code> on rows and on the
+wire.</p>
+<hr />
+<h2 id="11-phasing">11. Phasing<a class="headerlink" href="#11-phasing" title="Permanent link">&para;</a></h2>
+<p>Each phase is one PR that leaves <code>main</code> releasable. Plans are written per phase after this spec is
+approved, replacing <code>2026-09-04-downstream-assets-phase-{1,2,3,4}-*.md</code>.</p>
+<ol>
+<li><strong>Core</strong> (<code>interloper-core</code>, <code>interloper-assets</code> connectors). Rework PR #321 on this model:
+   <code>Relation</code>, <code>ComponentIdentity</code>, <code>Bound</code>, <code>Component</code> operations, per-kind anchors, asset
+   inference and injection, DAG, serialisation rule, <code>il.Upstream</code>, decorator <code>relations=</code>, docs.
+   Every connector in <code>interloper-assets</code> moves from <code>resource_types</code> to annotations. Existing
+   <code>interloper-core</code> tests are the acceptance suite.</li>
+<li><strong>Platform</strong> (<code>interloper-db</code>, <code>interloper-api</code>, <code>interloper-toolkit</code>, <code>interloper-agent</code>,
+   <code>interloper-scheduler</code>). Rows and migration 017, <code>RelationStore</code>, hydrator, API models, toolkit
+   filters and <code>bind_relation</code>, agent <code>_source_relations</code>, hook matcher. Verified on a throwaway
+   database, never the shared dev DB.</li>
+<li><strong>Matcher</strong> (<code>interloper-assets</code>). <code>CampaignMatcher</code> with fake matching logic, its schema, tags,
+   a run through the platform reading two connectors' <code>campaigns</code>.</li>
+<li><strong>App</strong> (<code>interloper-app</code>). Types and helpers, wizard, <code>AssetSelect</code> for many-valued relations,
+   graph pairing by name, destinations page.</li>
+</ol>
+<hr />
+<h2 id="12-follow-ups-recorded">12. Follow-ups, recorded<a class="headerlink" href="#12-follow-ups-recorded" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Containment as an owned relation instead of <code>parent_id</code> (cost and benefit to be weighed after the
+  model lands; today the only child kind is asset).</li>
+<li>A literal <code>kind:</code> marker at the top of a manifest, if wanted for readability; <code>key</code> and <code>path</code>
+  already fix the class.</li>
+<li><code>roots: [...]</code> inside one document, only if one document per root proves noisy in child-pod specs.</li>
+<li>Empty-partition semantics differ per destination (BigQuery returns an empty result, others may
+  raise); a design follow-up from the earlier spec that still stands.</li>
+<li>Auto-binding a new source's <code>campaigns</code> into existing matchers in the platform (a store-side rule
+  or a UI nudge), deferred as before.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.88ee1349.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -2118,7 +2118,7 @@ Every helper is a thin wrapper around <code>pydantic.Field</code>: all standard 
 </tbody>
 </table>
 <h2 id="fetched-options">Fetched options<a class="headerlink" href="#fetched-options" title="Permanent link">&para;</a></h2>
-<p>A <code>FetchField</code> resolves its options by instantiating the resource in the named slot from the
+<p>A <code>FetchField</code> resolves its options by instantiating the resource of the named relation from the
 credentials the form already holds and calling a method on it. The method must be allow-listed
 with <code>@il.fetch_field_provider</code>; only such methods may be invoked from a form:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">connection</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Google Analytics"</span><span class="p">,</span> <span class="n">oauth</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">OAuthConfig</span><span class="p">(</span><span class="s2">"google"</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="s2">"..."</span><span class="p">))</span>
@@ -2130,19 +2130,20 @@ with <code>@il.fetch_field_provider</code>; only such methods may be invoked fro
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">"properties"</span><span class="p">]</span>
 </span></code></pre></div>
 <p>The provider returns a <code>list[dict]</code>; the field picks <code>label_key</code> and <code>value_key</code> from each item.
-The reference is <code>"&lt;slot&gt;.&lt;method&gt;"</code>, where <code>&lt;slot&gt;</code> is a resource slot of the component
-declaring the field. Because the method may run inside the API process, which installs
-connection classes without their heavy SDK extras, providers must use plain HTTP.</p>
-<p>References are validated when the component's definition is built: an unknown slot, or a method
-without the decorator, raises <code>TypeError</code> at catalog-build time rather than failing silently in
-a form. <code>il.is_fetch_field_provider(obj)</code> tests whether a callable is a provider.</p>
+The reference is <code>"&lt;name&gt;.&lt;method&gt;"</code>, where <code>&lt;name&gt;</code> is a relation of the component declaring
+the field, whose target class carries the method. Because the method may run inside the API
+process, which installs connection classes without their heavy SDK extras, providers must use
+plain HTTP.</p>
+<p>References are validated when the component's definition is built: an undeclared relation, or
+a method without the decorator, raises <code>TypeError</code> at catalog-build time rather than failing
+silently in a form. <code>il.is_fetch_field_provider(obj)</code> tests whether a callable is a provider.</p>
 <h2 id="what-ends-up-in-the-config-schema">What ends up in the config schema<a class="headerlink" href="#what-ends-up-in-the-config-schema" title="Permanent link">&para;</a></h2>
 <p><code>Component.config_schema()</code> is the JSON Schema of the component's user-facing fields. The
-framework strips <code>id</code> and <code>resources</code>, plus anything the class lists in <code>internal_fields</code>
-(sources hide <code>assets</code>, <code>destinations</code>, <code>normalizer</code>, <code>select</code>; assets hide <code>destinations</code>,
-<code>normalizer</code>, <code>dependencies</code>). Field helpers add <code>x-widget</code>, <code>x-info</code>, <code>x-options</code>,
-<code>x-options-from</code>, <code>x-fetch</code> and <code>x-discriminator</code> extensions that forms read. The schema is
-part of every <a href="../catalog/#definitions">component definition</a>.</p>
+framework strips <code>id</code>, plus anything the class lists in <code>internal_fields</code> (sources hide <code>assets</code>,
+<code>normalizer</code>, <code>select</code>; assets hide <code>normalizer</code>). Relations (<code>destinations</code>, <code>connection</code>, and
+so on) are not fields at all and never appear in the schema. Field helpers add <code>x-widget</code>,
+<code>x-info</code>, <code>x-options</code>, <code>x-options-from</code>, <code>x-fetch</code> and <code>x-discriminator</code> extensions that forms
+read. The schema is part of every <a href="../catalog/#definitions">component definition</a>.</p>
 
 
 
@@ -2250,7 +2251,7 @@ part of every <a href="../catalog/#definitions">component definition</a>.</p>
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

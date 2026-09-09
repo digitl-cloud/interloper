@@ -1,0 +1,2460 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/plans/2026-09-07-relation-model-phase-2-platform/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.60">
+    
+    
+      
+        <title>Relation model, phase 2 (platform) Implementation Plan - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#relation-model-phase-2-platform-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Relation model, phase 2 (platform) Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/decorators/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI flags
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Event types
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Spans & metrics
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="relation-model-phase-2-platform-implementation-plan">Relation model, phase 2 (platform) Implementation Plan<a class="headerlink" href="#relation-model-phase-2-platform-implementation-plan" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> The platform stores, hydrates and exposes relations by <code>name</code>: rows become <code>(src_id, name, dst_id)</code>, <code>RelationStore</code> applies <code>Relation.accepts</code> on identities built from rows, the hydrator emits the same nested-or-reference shape as <code>to_spec()</code>, the API and toolkit speak <code>name</code>, the agent binds by name, and the scheduler stops hand-rolling read-only upstreams.</p>
+<p><strong>Architecture:</strong> One migration rewrites revision 017 in place. <code>RelationStore</code> and <code>ComponentStore</code> call the core classmethods (<code>Relation.accepts</code>, <code>Source.sibling_bindings</code>) rather than reimplementing them. <code>Hydrator._build_init</code> decides nested versus <code>{"ref": id}</code> by <code>parent_id</code> and hands <code>Component.from_spec</code> a <code>resolve=store.load</code> callable. Spec: <code>docs/superpowers/specs/2026-09-07-relation-model-design.md</code>, sections 8 and 9.</p>
+<p><strong>Tech Stack:</strong> SQLModel, Alembic, FastAPI, pytest with the in-memory <code>component_db</code> fixture, plus one round trip on a throwaway Postgres database.</p>
+<h2 id="global-constraints">Global Constraints<a class="headerlink" href="#global-constraints" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Stacked PR: branch <code>feat/relation-model-platform</code> from <code>feat/many-upstreams-core</code> (phase 1, PR #321) once phase 1's final review is clean; the PR's base is <code>feat/many-upstreams-core</code>, retargeted to <code>main</code> when #321 merges. Rebase only, <code>--force-with-lease</code>. Commits use <code>--no-verify</code> until the repo-wide pre-commit pytest is green again (this phase makes it green).</li>
+<li>Conventional Commits ending <code>By Digitl</code>; the row rename is breaking: <code>feat!:</code>. Commit only when Guillaume has asked.</li>
+<li><code>uv run --frozen</code> everywhere; ruff 120; ty clean; full Google docstrings; tests mirror modules (<code>packages/interloper-db/tests/store/test_relations.py</code> for <code>store/relations.py</code>).</li>
+<li>Never run migrations or seeds against the shared dev database. Verification uses a throwaway database (<code>createdb interloper_scratch</code>), see Task 9.</li>
+<li>No em-dashes anywhere.</li>
+<li><code>packages/interloper-db/src/interloper_db/</code> is the root of every db path below.</li>
+</ul>
+<hr />
+<h3 id="task-1-rows-by-name-and-the-rewritten-migration-017">Task 1: Rows by <code>name</code> and the rewritten migration 017<a class="headerlink" href="#task-1-rows-by-name-and-the-rewritten-migration-017" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>models/components.py:130-200</code> (<code>ComponentRelation</code>: drop <code>type</code>, <code>slot</code>; add <code>name: str</code> as the second primary-key column; indexes <code>ix_component_relations_org_id_name (org_id, name)</code>, <code>ix_component_relations_dst_id_name (dst_id, name)</code>; drop <code>uq_component_relations_slot</code>)
+- Rewrite: <code>migrations/versions/017_upstream_relation.py</code> as <code>migrations/versions/017_relation_name.py</code> (same <code>revision = "017"</code>, <code>down_revision = "016"</code>; delete the old file)
+- Test: <code>packages/interloper-db/tests/models/test_components.py</code> (row shape), <code>packages/interloper-db/tests/test_migrations.py</code> if present, else add the round-trip check to Task 9</p>
+<p><strong>Interfaces:</strong>
+- Produces: <code>ComponentRelation(src_id, name, dst_id, org_id, src_kind, dst_kind)</code>; every consumer in this plan filters on <code>name</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_relation_row_is_keyed_by_name</span><span class="p">(</span><span class="n">component_db</span><span class="p">:</span> <span class="n">Engine</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">with</span> <span class="n">Session</span><span class="p">(</span><span class="n">component_db</span><span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="n">src</span> <span class="o">=</span> <span class="n">Component</span><span class="p">(</span><span class="n">org_id</span><span class="o">=</span><span class="n">_ORG</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"source"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"s"</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="n">dst</span> <span class="o">=</span> <span class="n">Component</span><span class="p">(</span><span class="n">org_id</span><span class="o">=</span><span class="n">_ORG</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"destination"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"d"</span><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">session</span><span class="o">.</span><span class="n">add_all</span><span class="p">([</span><span class="n">src</span><span class="p">,</span> <span class="n">dst</span><span class="p">]);</span> <span class="n">session</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ComponentRelation</span><span class="p">(</span><span class="n">src_id</span><span class="o">=</span><span class="n">src</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"destinations"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">dst</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">org_id</span><span class="o">=</span><span class="n">_ORG</span><span class="p">,</span> <span class="n">src_kind</span><span class="o">=</span><span class="s2">"source"</span><span class="p">,</span> <span class="n">dst_kind</span><span class="o">=</span><span class="s2">"destination"</span><span class="p">))</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="n">row</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">exec</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">ComponentRelation</span><span class="p">))</span><span class="o">.</span><span class="n">one</span><span class="p">()</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="k">assert</span> <span class="n">row</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"destinations"</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="k">assert</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="s2">"slot"</span><span class="p">)</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run it to verify it fails</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-db/tests/models -q -k keyed_by_name</code>
+Expected: FAIL (<code>unexpected keyword 'name'</code>).</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Change the model and write the migration</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># migrations/versions/017_relation_name.py</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="sd">"""Key component relations by name.</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="sd">A relation row used to carry a ``type`` (the vocabulary entry) and a ``slot``</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="sd">(empty for list-shaped types). The framework now declares one named</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="sd">``Relation`` per link, so a row is ``(src_id, name, dst_id)``: ``name`` is the</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="sd">slot for slotted rows and the plural field name for the others. Whether a</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="sd">relation is single-valued is a class rule the store enforces, so the partial</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="sd">unique index on resource slots goes.</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="sd">Revision ID: 017</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="sd">Revises: 016</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="sd">"""</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sa</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="kn">from</span><span class="w"> </span><span class="nn">alembic</span><span class="w"> </span><span class="kn">import</span> <span class="n">op</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">revision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"017"</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="n">down_revision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">"016"</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="n">branch_labels</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="n">depends_on</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="n">_TABLE</span> <span class="o">=</span> <span class="s2">"component_relations"</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="n">_PLURAL</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"destination"</span><span class="p">:</span> <span class="s2">"destinations"</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">:</span> <span class="s2">"targets"</span><span class="p">,</span> <span class="s2">"watch"</span><span class="p">:</span> <span class="s2">"watches"</span><span class="p">}</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="k">def</span><span class="w"> </span><span class="nf">upgrade</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>    <span class="n">op</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="n">_TABLE</span><span class="p">,</span> <span class="n">sa</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="s2">"name"</span><span class="p">,</span> <span class="n">sa</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"UPDATE component_relations SET name = slot WHERE type IN ('resource', 'dependency', 'upstream')"</span><span class="p">)</span>
+</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>    <span class="k">for</span> <span class="n">type_</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_PLURAL</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>        <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="sa">f</span><span class="s2">"UPDATE component_relations SET name = '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">' WHERE type = '</span><span class="si">{</span><span class="n">type_</span><span class="si">}</span><span class="s2">'"</span><span class="p">)</span>
+</span><span id="__span-1-34"><a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"DELETE FROM component_relations WHERE name IS NULL OR name = ''"</span><span class="p">)</span>
+</span><span id="__span-1-35"><a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>    <span class="n">op</span><span class="o">.</span><span class="n">alter_column</span><span class="p">(</span><span class="n">_TABLE</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-1-36"><a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_index</span><span class="p">(</span><span class="s2">"uq_component_relations_slot"</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="n">_TABLE</span><span class="p">)</span>
+</span><span id="__span-1-37"><a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_index</span><span class="p">(</span><span class="s2">"ix_component_relations_org_id_type"</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="n">_TABLE</span><span class="p">)</span>
+</span><span id="__span-1-38"><a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_index</span><span class="p">(</span><span class="s2">"ix_component_relations_dst_id_type"</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="n">_TABLE</span><span class="p">)</span>
+</span><span id="__span-1-39"><a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_constraint</span><span class="p">(</span><span class="s2">"component_relations_pkey"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="n">type_</span><span class="o">=</span><span class="s2">"primary"</span><span class="p">)</span>
+</span><span id="__span-1-40"><a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_column</span><span class="p">(</span><span class="n">_TABLE</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">)</span>
+</span><span id="__span-1-41"><a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_column</span><span class="p">(</span><span class="n">_TABLE</span><span class="p">,</span> <span class="s2">"slot"</span><span class="p">)</span>
+</span><span id="__span-1-42"><a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a>    <span class="n">op</span><span class="o">.</span><span class="n">create_primary_key</span><span class="p">(</span><span class="s2">"component_relations_pkey"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="p">[</span><span class="s2">"src_id"</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">"dst_id"</span><span class="p">])</span>
+</span><span id="__span-1-43"><a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a>    <span class="n">op</span><span class="o">.</span><span class="n">create_index</span><span class="p">(</span><span class="s2">"ix_component_relations_org_id_name"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="p">[</span><span class="s2">"org_id"</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">])</span>
+</span><span id="__span-1-44"><a id="__codelineno-1-44" name="__codelineno-1-44" href="#__codelineno-1-44"></a>    <span class="n">op</span><span class="o">.</span><span class="n">create_index</span><span class="p">(</span><span class="s2">"ix_component_relations_dst_id_name"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="p">[</span><span class="s2">"dst_id"</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">])</span>
+</span><span id="__span-1-45"><a id="__codelineno-1-45" name="__codelineno-1-45" href="#__codelineno-1-45"></a>
+</span><span id="__span-1-46"><a id="__codelineno-1-46" name="__codelineno-1-46" href="#__codelineno-1-46"></a>
+</span><span id="__span-1-47"><a id="__codelineno-1-47" name="__codelineno-1-47" href="#__codelineno-1-47"></a><span class="k">def</span><span class="w"> </span><span class="nf">downgrade</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-48"><a id="__codelineno-1-48" name="__codelineno-1-48" href="#__codelineno-1-48"></a>    <span class="n">op</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="n">_TABLE</span><span class="p">,</span> <span class="n">sa</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="s2">"type"</span><span class="p">,</span> <span class="n">sa</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</span><span id="__span-1-49"><a id="__codelineno-1-49" name="__codelineno-1-49" href="#__codelineno-1-49"></a>    <span class="n">op</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="n">_TABLE</span><span class="p">,</span> <span class="n">sa</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="s2">"slot"</span><span class="p">,</span> <span class="n">sa</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">server_default</span><span class="o">=</span><span class="s2">""</span><span class="p">))</span>
+</span><span id="__span-1-50"><a id="__codelineno-1-50" name="__codelineno-1-50" href="#__codelineno-1-50"></a>    <span class="k">for</span> <span class="n">type_</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_PLURAL</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-1-51"><a id="__codelineno-1-51" name="__codelineno-1-51" href="#__codelineno-1-51"></a>        <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="sa">f</span><span class="s2">"UPDATE component_relations SET type = '</span><span class="si">{</span><span class="n">type_</span><span class="si">}</span><span class="s2">' WHERE name = '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">'"</span><span class="p">)</span>
+</span><span id="__span-1-52"><a id="__codelineno-1-52" name="__codelineno-1-52" href="#__codelineno-1-52"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"UPDATE component_relations SET type = 'upstream', slot = name WHERE type IS NULL AND dst_kind = 'asset'"</span><span class="p">)</span>
+</span><span id="__span-1-53"><a id="__codelineno-1-53" name="__codelineno-1-53" href="#__codelineno-1-53"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"UPDATE component_relations SET type = 'resource', slot = name WHERE type IS NULL"</span><span class="p">)</span>
+</span><span id="__span-1-54"><a id="__codelineno-1-54" name="__codelineno-1-54" href="#__codelineno-1-54"></a>    <span class="n">op</span><span class="o">.</span><span class="n">alter_column</span><span class="p">(</span><span class="n">_TABLE</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-1-55"><a id="__codelineno-1-55" name="__codelineno-1-55" href="#__codelineno-1-55"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_index</span><span class="p">(</span><span class="s2">"ix_component_relations_org_id_name"</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="n">_TABLE</span><span class="p">)</span>
+</span><span id="__span-1-56"><a id="__codelineno-1-56" name="__codelineno-1-56" href="#__codelineno-1-56"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_index</span><span class="p">(</span><span class="s2">"ix_component_relations_dst_id_name"</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="n">_TABLE</span><span class="p">)</span>
+</span><span id="__span-1-57"><a id="__codelineno-1-57" name="__codelineno-1-57" href="#__codelineno-1-57"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_constraint</span><span class="p">(</span><span class="s2">"component_relations_pkey"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="n">type_</span><span class="o">=</span><span class="s2">"primary"</span><span class="p">)</span>
+</span><span id="__span-1-58"><a id="__codelineno-1-58" name="__codelineno-1-58" href="#__codelineno-1-58"></a>    <span class="n">op</span><span class="o">.</span><span class="n">drop_column</span><span class="p">(</span><span class="n">_TABLE</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">)</span>
+</span><span id="__span-1-59"><a id="__codelineno-1-59" name="__codelineno-1-59" href="#__codelineno-1-59"></a>    <span class="n">op</span><span class="o">.</span><span class="n">create_primary_key</span><span class="p">(</span><span class="s2">"component_relations_pkey"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="p">[</span><span class="s2">"src_id"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">,</span> <span class="s2">"slot"</span><span class="p">,</span> <span class="s2">"dst_id"</span><span class="p">])</span>
+</span><span id="__span-1-60"><a id="__codelineno-1-60" name="__codelineno-1-60" href="#__codelineno-1-60"></a>    <span class="n">op</span><span class="o">.</span><span class="n">create_index</span><span class="p">(</span><span class="s2">"uq_component_relations_slot"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="p">[</span><span class="s2">"src_id"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">,</span> <span class="s2">"slot"</span><span class="p">],</span> <span class="n">unique</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">postgresql_where</span><span class="o">=</span><span class="n">sa</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="s2">"type = 'resource'"</span><span class="p">))</span>
+</span><span id="__span-1-61"><a id="__codelineno-1-61" name="__codelineno-1-61" href="#__codelineno-1-61"></a>    <span class="n">op</span><span class="o">.</span><span class="n">create_index</span><span class="p">(</span><span class="s2">"ix_component_relations_org_id_type"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="p">[</span><span class="s2">"org_id"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">])</span>
+</span><span id="__span-1-62"><a id="__codelineno-1-62" name="__codelineno-1-62" href="#__codelineno-1-62"></a>    <span class="n">op</span><span class="o">.</span><span class="n">create_index</span><span class="p">(</span><span class="s2">"ix_component_relations_dst_id_type"</span><span class="p">,</span> <span class="n">_TABLE</span><span class="p">,</span> <span class="p">[</span><span class="s2">"dst_id"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">])</span>
+</span></code></pre></div>
+<p>Check the real primary-key constraint name in migration 016 (or <code>\d component_relations</code> on the scratch database) and use it. The <code>DELETE ... name IS NULL</code> line removes rows of unknown types; production has none (the four types above are the whole vocabulary), state that in the docstring.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the model tests</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-db/tests/models -q</code>
+Expected: PASS</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-db/src/interloper_db/models/components.py<span class="w"> </span>packages/interloper-db/src/interloper_db/migrations/versions
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat!(db): key component relations by name; rewrite migration 017</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-2-relationstore-by-name-with-the-core-acceptance-rule">Task 2: <code>RelationStore</code> by name, with the core acceptance rule<a class="headerlink" href="#task-2-relationstore-by-name-with-the-core-acceptance-rule" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>store/relations.py</code> (whole module)
+- Test: <code>packages/interloper-db/tests/store/test_relations.py</code></p>
+<p><strong>Interfaces:</strong>
+- Produces:
+  <div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">Binding</span> <span class="o">=</span> <span class="n">UUID</span>                                                    <span class="c1"># was tuple[UUID, str]</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">RelationStore</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org_id</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">src_kind</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dst_kind</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ComponentRelation</span><span class="p">]</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">RelationStore</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">component_id</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dst_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComponentRelation</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">RelationStore</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">component_id</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dst_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">RelationStore</span><span class="o">.</span><span class="n">_sync_relations</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">bindings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">UUID</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">RelationStore</span><span class="o">.</span><span class="n">_relation</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">src</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">]</span>   <span class="c1"># catalog vocabulary by name</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">RelationStore</span><span class="o">.</span><span class="n">_identity</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">row</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">il</span><span class="o">.</span><span class="n">ComponentIdentity</span>     <span class="c1"># (parent key or None, key)</span>
+</span></code></pre></div>
+- <code>add</code>: <code>SELECT ... FOR UPDATE</code> on the source row (Postgres; no-op on SQLite), <code>relation = vocabulary[name]</code> else <code>ConfigError</code>, <code>relation.accepts(dst.kind, identity(dst), owner=identity(src))</code> else <code>ConfigError</code>, then insert (many) or delete-others-and-insert (single). Re-adding an identical row returns it.
+- <code>remove</code>: <code>ConfigError</code> when the relation is non-optional and the row is its last one.
+- <code>_relation_detaches(row)</code> (used by the delete guard): <code>relation.on_delete == "detach"</code> or <code>relation.optional</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Rewrite the tests</strong></li>
+</ul>
+<p>Replace the fixtures' asset classes:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">GuardUpstream</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">):</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="sd">"""Upstream asset for the unbind-guard tests."""</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="k">return</span> <span class="p">[]</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">GuardRequired</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">):</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="sd">"""Asset with a required upstream on ``guard_upstream``."""</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="n">up</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"guard_upstream"</span><span class="p">)</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">up</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>        <span class="k">return</span> <span class="p">[]</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="k">class</span><span class="w"> </span><span class="nc">GuardOptional</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">):</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">    </span><span class="sd">"""Asset with an optional upstream on ``guard_upstream``."""</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>    <span class="n">up</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"guard_upstream"</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">up</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>        <span class="k">return</span> <span class="p">[]</span>
+</span></code></pre></div>
+<p>and the assertions:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_add_single_repoints</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"connection"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">conn_a</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"connection"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">conn_b</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="k">assert</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">dst_id</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">_relations</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">src</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">"connection"</span><span class="p">)]</span> <span class="o">==</span> <span class="p">[</span><span class="n">conn_b</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_add_many_accumulates</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">matcher_asset</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"campaigns"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">fb_campaigns</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">matcher_asset</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"campaigns"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">tt_campaigns</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">_relations</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">matcher_asset</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">"campaigns"</span><span class="p">))</span> <span class="o">==</span> <span class="mi">2</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_add_rejects_wrong_kind</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">ConfigError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">"does not accept"</span><span class="p">):</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>        <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"connection"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">destination</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_add_rejects_unknown_name</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">ConfigError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">"declares no relation 'nope'"</span><span class="p">):</span>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>        <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"nope"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">conn_a</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_add_checks_declared_key_against_parent</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>    <span class="c1"># GuardRequired.up accepts guard_upstream only: an asset with another key is refused</span>
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">ConfigError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">"does not accept"</span><span class="p">):</span>
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>        <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">required</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"up"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">other_asset</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>
+</span><span id="__span-5-24"><a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_remove_last_required_is_refused</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-25"><a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">ConfigError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">"non-optional"</span><span class="p">):</span>
+</span><span id="__span-5-26"><a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>        <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">required</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"up"</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">upstream</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-5-27"><a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>
+</span><span id="__span-5-28"><a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_remove_optional_detaches</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-5-29"><a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>
+</span><span id="__span-5-30"><a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_list_all_filters_by_kinds</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-31"><a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>    <span class="n">rows</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">_ORG</span><span class="p">,</span> <span class="n">src_kind</span><span class="o">=</span><span class="s2">"asset"</span><span class="p">,</span> <span class="n">dst_kind</span><span class="o">=</span><span class="s2">"asset"</span><span class="p">)</span>
+</span><span id="__span-5-32"><a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a>    <span class="k">assert</span> <span class="p">{</span><span class="n">r</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">}</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"up"</span><span class="p">}</span>
+</span></code></pre></div>
+<p>Keep the wildcard target test from PR #321's phase 2 plan: <code>campaigns = il.Relation("asset", "*.campaigns", many=True)</code> accepts a <code>campaigns</code> child of any source.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run to verify failure</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-db/tests/store/test_relations.py -q</code>
+Expected: FAIL (<code>add() got an unexpected keyword argument 'name'</code>).</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Rewrite the store</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">component_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dst_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComponentRelation</span><span class="p">:</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>        <span class="k">with</span> <span class="n">session_scope</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_engine</span><span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>            <span class="n">src</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">component_id</span><span class="p">)</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>            <span class="n">relation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_relation</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>            <span class="n">dst</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Component</span><span class="p">,</span> <span class="n">dst_id</span><span class="p">)</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>            <span class="k">if</span> <span class="n">dst</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">dst</span><span class="o">.</span><span class="n">org_id</span> <span class="o">!=</span> <span class="n">src</span><span class="o">.</span><span class="n">org_id</span><span class="p">:</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>                <span class="k">raise</span> <span class="n">NotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Component </span><span class="si">{</span><span class="n">dst_id</span><span class="si">}</span><span class="s2"> not found (relation '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">')"</span><span class="p">)</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">relation</span><span class="o">.</span><span class="n">accepts</span><span class="p">(</span><span class="n">dst</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_identity</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">dst</span><span class="p">),</span> <span class="n">owner</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_identity</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">src</span><span class="p">)):</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>                    <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">src</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s2">'.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> does not accept </span><span class="si">{</span><span class="n">dst</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2"> '</span><span class="si">{</span><span class="n">dst</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s2">' "</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>                    <span class="sa">f</span><span class="s2">"(declared: kind </span><span class="si">{</span><span class="n">relation</span><span class="o">.</span><span class="n">kinds</span><span class="p">()</span><span class="si">}</span><span class="s2">, key </span><span class="si">{</span><span class="n">relation</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">'any'</span><span class="si">}</span><span class="s2">)"</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>                <span class="p">)</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>            <span class="n">existing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">src</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">dst_id</span> <span class="o">==</span> <span class="n">dst</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">existing</span><span class="p">):</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>                <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="n">row</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">existing</span> <span class="k">if</span> <span class="n">row</span><span class="o">.</span><span class="n">dst_id</span> <span class="o">==</span> <span class="n">dst</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">relation</span><span class="o">.</span><span class="n">many</span><span class="p">:</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>                <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">existing</span><span class="p">:</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>                    <span class="n">session</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>            <span class="n">row</span> <span class="o">=</span> <span class="n">ComponentRelation</span><span class="p">(</span><span class="n">src_id</span><span class="o">=</span><span class="n">src</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">dst</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">org_id</span><span class="o">=</span><span class="n">src</span><span class="o">.</span><span class="n">org_id</span><span class="p">,</span> <span class="n">src_kind</span><span class="o">=</span><span class="n">src</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="n">dst_kind</span><span class="o">=</span><span class="n">dst</span><span class="o">.</span><span class="n">kind</span><span class="p">)</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>            <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>            <span class="n">commit</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>            <span class="k">return</span> <span class="n">row</span>
+</span></code></pre></div>
+<p><code>_lock</code> issues <code>select(Component).where(Component.id == component_id).with_for_update()</code> when the dialect is Postgres. <code>_relation(session, src, name)</code> reads <code>self._catalog.vocabulary(src.kind, src.key, parent_key=parent key when src.parent_id)</code> and raises <code>ConfigError(f"'{src.key}' ({src.kind}) declares no relation '{name}' (declared: {sorted(vocabulary)})")</code>. <code>_identity</code> returns <code>il.ComponentIdentity(parent.key if row.parent_id else None, row.key)</code>.</p>
+<p>Delete <code>_check_vocabulary</code>, <code>_resolve_dst</code>, <code>_check_slot_target</code>, <code>_blocked_unbinds</code>, <code>_upsert_relation</code>, <code>_add_relation</code> and the <code>Binding</code> tuple alias.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the tests</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-db/tests/store/test_relations.py -q</code>
+Expected: PASS</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-db/src/interloper_db/store/relations.py<span class="w"> </span>packages/interloper-db/tests/store/test_relations.py
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat!(db): RelationStore binds by name through Relation.accepts</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-3-componentstore-sibling-rows-from-the-core-rule-guards-by-name">Task 3: <code>ComponentStore</code>: sibling rows from the core rule, guards by name<a class="headerlink" href="#task-3-componentstore-sibling-rows-from-the-core-rule-guards-by-name" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>store/components.py:95-146</code> and <code>182-241</code> (<code>relations: dict[str, list[UUID]]</code>), <code>store/components.py:242-338</code> (<code>delete</code>, <code>_blocking_referrers</code>, <code>_blocking_referrers_into</code> read <code>on_delete</code>/<code>optional</code> by <code>name</code>), <code>store/components.py:719-830</code> (<code>_ensure_children</code> calls <code>_bind_siblings(session, source_cls, children)</code>; delete <code>_wire_intra_upstreams</code>)
+- Test: <code>packages/interloper-db/tests/store/test_components.py</code></p>
+<p><strong>Interfaces:</strong>
+- Produces: <code>ComponentStore._bind_siblings(session, source_cls, children_by_key)</code> using <code>source_cls.sibling_bindings()</code>; idempotent (skips names that already hold a row).</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_create_source_binds_sibling_upstreams</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">source</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">_ORG</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"source"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"wire_up_source"</span><span class="p">)</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">rows</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">_ORG</span><span class="p">,</span> <span class="n">src_kind</span><span class="o">=</span><span class="s2">"asset"</span><span class="p">,</span> <span class="n">dst_kind</span><span class="o">=</span><span class="s2">"asset"</span><span class="p">)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="k">assert</span> <span class="p">{(</span><span class="n">r</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">dst_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">}</span> <span class="o">==</span> <span class="p">{(</span><span class="s2">"rows"</span><span class="p">,</span> <span class="n">_child</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="s2">"rows"</span><span class="p">)</span><span class="o">.</span><span class="n">id</span><span class="p">)}</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_create_with_relations_by_name</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="n">source</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">_ORG</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"source"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"widget"</span><span class="p">,</span> <span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="p">[</span><span class="n">conn</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="s2">"destinations"</span><span class="p">:</span> <span class="p">[</span><span class="n">bq</span><span class="o">.</span><span class="n">id</span><span class="p">]})</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="k">assert</span> <span class="p">{</span><span class="n">r</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">out_relations</span><span class="p">}</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"connection"</span><span class="p">,</span> <span class="s2">"destinations"</span><span class="p">}</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_delete_blocks_on_required_referrer_and_detaches_optional</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>   <span class="c1"># port from today's tests, by name</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run to verify failure</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-db/tests/store/test_components.py -q</code>
+Expected: FAIL.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Implement</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>    <span class="nd">@staticmethod</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_bind_siblings</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">,</span> <span class="n">source_cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">],</span> <span class="n">children_by_key</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Component</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>        <span class="n">bound</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>            <span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">src_id</span><span class="p">,</span> <span class="n">row</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">session</span><span class="o">.</span><span class="n">exec</span><span class="p">(</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>                <span class="n">select</span><span class="p">(</span><span class="n">ComponentRelation</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">ComponentRelation</span><span class="o">.</span><span class="n">src_id</span><span class="p">)</span><span class="o">.</span><span class="n">in_</span><span class="p">([</span><span class="n">c</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">children_by_key</span><span class="o">.</span><span class="n">values</span><span class="p">()]))</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>            <span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>        <span class="p">}</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>        <span class="k">for</span> <span class="n">asset_key</span><span class="p">,</span> <span class="n">names</span> <span class="ow">in</span> <span class="n">source_cls</span><span class="o">.</span><span class="n">sibling_bindings</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>            <span class="n">child</span> <span class="o">=</span> <span class="n">children_by_key</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">asset_key</span><span class="p">)</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>            <span class="k">if</span> <span class="n">child</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>                <span class="k">continue</span>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">sibling_key</span> <span class="ow">in</span> <span class="n">names</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>                <span class="n">sibling</span> <span class="o">=</span> <span class="n">children_by_key</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">sibling_key</span><span class="p">)</span>
+</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>                <span class="k">if</span> <span class="n">sibling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="ow">in</span> <span class="n">bound</span><span class="p">:</span>
+</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>                    <span class="k">continue</span>
+</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>                <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ComponentRelation</span><span class="p">(</span><span class="n">src_id</span><span class="o">=</span><span class="n">child</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">sibling</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">org_id</span><span class="o">=</span><span class="n">child</span><span class="o">.</span><span class="n">org_id</span><span class="p">,</span> <span class="n">src_kind</span><span class="o">=</span><span class="s2">"asset"</span><span class="p">,</span> <span class="n">dst_kind</span><span class="o">=</span><span class="s2">"asset"</span><span class="p">))</span>
+</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>        <span class="n">session</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Delete guard: <code>_blocking_referrers</code> asks <code>self._relations._relation_detaches(session, referrer_row, relation_row)</code>, which resolves the referrer's vocabulary by <code>relation_row.name</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the tests</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-db/tests/store/test_components.py packages/interloper-db/tests/store/test_relations.py -q</code>
+Expected: PASS</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-db/src/interloper_db/store/components.py<span class="w"> </span>packages/interloper-db/tests/store/test_components.py
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(db): sibling upstream rows come from Source.sibling_bindings; guards read on_delete by name</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-4-hydrator-the-parent-rule-and-resolvestoreload">Task 4: Hydrator: the parent rule and <code>resolve=store.load</code><a class="headerlink" href="#task-4-hydrator-the-parent-rule-and-resolvestoreload" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>store/hydration.py:119-214</code> (<code>_build_init</code>, <code>_relations_by_name</code>, <code>_dst_value</code>)
+- Modify: <code>store/components.py:339-435</code> (<code>_load</code> passes <code>resolve=self.load</code> to <code>il.Component.from_spec</code>; <code>_load_owned_asset</code> unchanged)
+- Test: <code>packages/interloper-db/tests/store/test_hydration.py</code></p>
+<p><strong>Interfaces:</strong>
+- Produces: <code>Hydrator._build_init(session, row) -&gt; dict[str, Any]</code> where each relation name maps to a nested spec (target without <code>parent_id</code>), a <code>{"ref": "&lt;dst_id&gt;"}</code> (target with <code>parent_id</code>), or a list of those when <code>relation.many</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_parentless_target_nests</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">init</span> <span class="o">=</span> <span class="n">hydrator</span><span class="o">.</span><span class="n">_build_init</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">source_row</span><span class="p">)</span>            <span class="c1"># source with connection + destinations rows</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="k">assert</span> <span class="n">init</span><span class="p">[</span><span class="s2">"connection"</span><span class="p">][</span><span class="s2">"key"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"conn"</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">init</span><span class="p">[</span><span class="s2">"destinations"</span><span class="p">],</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="n">init</span><span class="p">[</span><span class="s2">"destinations"</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">"key"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"bq"</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_asset_target_is_a_reference</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="n">init</span> <span class="o">=</span> <span class="n">hydrator</span><span class="o">.</span><span class="n">_build_init</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">finance_row</span><span class="p">)</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="k">assert</span> <span class="n">init</span><span class="p">[</span><span class="s2">"assets"</span><span class="p">][</span><span class="s2">"revenue"</span><span class="p">][</span><span class="s2">"orders"</span><span class="p">]</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"ref"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">shop_orders_row</span><span class="o">.</span><span class="n">id</span><span class="p">)}</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_load_resolves_cross_source_upstream_through_store</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="n">finance</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">finance_row</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="k">assert</span> <span class="n">finance</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">orders</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="nb">str</span><span class="p">(</span><span class="n">shop_orders_row</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>    <span class="k">assert</span> <span class="n">finance</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">orders</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">key</span> <span class="o">==</span> <span class="s2">"shop"</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run to verify failure</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-db/tests/store/test_hydration.py -q</code>
+Expected: FAIL.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Implement</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_build_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">db_component</span><span class="p">):</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>        <span class="n">init</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decode_data</span><span class="p">(</span><span class="n">db_component</span><span class="p">)</span> <span class="k">if</span> <span class="n">KINDS</span><span class="p">[</span><span class="n">db_component</span><span class="o">.</span><span class="n">kind</span><span class="p">]</span><span class="o">.</span><span class="n">sensitive</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">db_component</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="p">{})</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>        <span class="n">vocabulary</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_catalog</span><span class="o">.</span><span class="n">vocabulary</span><span class="p">(</span><span class="n">db_component</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="n">db_component</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">parent_key</span><span class="o">=</span><span class="n">db_component</span><span class="o">.</span><span class="n">parent_key</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">rows</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_relations_by_name</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">db_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>            <span class="n">relation</span> <span class="o">=</span> <span class="n">vocabulary</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>            <span class="k">if</span> <span class="n">relation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>                <span class="k">raise</span> <span class="n">HydrationError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Component </span><span class="si">{</span><span class="n">db_component</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">db_component</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">) has '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">' relations its class does not declare"</span><span class="p">)</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>            <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_dst_value</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>            <span class="n">init</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span> <span class="k">if</span> <span class="n">relation</span><span class="o">.</span><span class="n">many</span> <span class="k">else</span> <span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>        <span class="n">children</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">exec</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">Component</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Component</span><span class="o">.</span><span class="n">parent_id</span> <span class="o">==</span> <span class="n">db_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">Component</span><span class="o">.</span><span class="n">created_at</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>        <span class="k">if</span> <span class="n">assets</span> <span class="o">:=</span> <span class="p">{</span><span class="n">child</span><span class="o">.</span><span class="n">key</span><span class="p">:</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_build_init</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">child</span><span class="p">)}</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">children</span><span class="p">}:</span>
+</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>            <span class="n">init</span><span class="p">[</span><span class="s2">"assets"</span><span class="p">]</span> <span class="o">=</span> <span class="n">assets</span>
+</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>        <span class="k">return</span> <span class="n">init</span>
+</span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>
+</span><span id="__span-12-15"><a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_dst_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">row</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+</span><span id="__span-12-16"><a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a>        <span class="n">db_dst</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Component</span><span class="p">,</span> <span class="n">row</span><span class="o">.</span><span class="n">dst_id</span><span class="p">)</span>
+</span><span id="__span-12-17"><a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a>        <span class="k">if</span> <span class="n">db_dst</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-12-18"><a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a>            <span class="k">raise</span> <span class="n">HydrationError</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span><span id="__span-12-19"><a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a>        <span class="k">if</span> <span class="n">db_dst</span><span class="o">.</span><span class="n">parent_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-12-20"><a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a>            <span class="k">return</span> <span class="p">{</span><span class="s2">"ref"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">db_dst</span><span class="o">.</span><span class="n">id</span><span class="p">)}</span>
+</span><span id="__span-12-21"><a id="__codelineno-12-21" name="__codelineno-12-21" href="#__codelineno-12-21"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_component_spec</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">db_dst</span><span class="p">)</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">)</span>
+</span></code></pre></div>
+<p>In <code>_load</code>: <code>il.Component.from_spec(spec, resolve=lambda ref: self.load(UUID(ref)))</code>. <code>from_spec</code> (phase 1) looks the reference up in the document first, so an asset referenced by a job that also targets its source is not loaded twice.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the tests</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-db -q</code>
+Expected: PASS</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-db/src/interloper_db/store/hydration.py<span class="w"> </span>packages/interloper-db/src/interloper_db/store/components.py<span class="w"> </span>packages/interloper-db/tests/store/test_hydration.py
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(db): hydrate relations by name; parented targets become references resolved through the store</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-5-api-name-on-the-wire">Task 5: API: <code>name</code> on the wire<a class="headerlink" href="#task-5-api-name-on-the-wire" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-api/src/interloper_api/routes/components.py:60-95</code> (models), <code>:230-260</code> (<code>_relations_of</code>, <code>_bindings</code>), <code>:287-320</code> (<code>list_relations(name, src_kind, dst_kind)</code>), <code>:456-530</code> (<code>add_relation</code>, <code>remove_relation</code> at <code>/{component_id}/relations/{name}/{dst_id}</code>), <code>:655-680</code> (fetch-field lookup: <code>relation = component_cls.relations.get(slot)</code>; <code>resource_cls = relation.target</code>)
+- Test: <code>packages/interloper-api/tests/test_components.py</code></p>
+<p><strong>Interfaces:</strong>
+- Produces: <code>RelationEntry(dst_id)</code>, <code>RelationCreateRequest(name, dst_id)</code>, <code>RelationRef(dst_id, dst_kind)</code>, <code>RelationResponse(src_id, name, dst_id, dst_kind)</code>; <code>ComponentResponse.relations: dict[str, list[RelationRef]]</code> keyed by name.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_add_relation_by_name</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">"/components/</span><span class="si">{</span><span class="n">source_id</span><span class="si">}</span><span class="s2">/relations"</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"destinations"</span><span class="p">,</span> <span class="s2">"dst_id"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">bq_id</span><span class="p">)})</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">201</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">"name"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"destinations"</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_remove_relation_route_uses_name</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="k">assert</span> <span class="n">client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="sa">f</span><span class="s2">"/components/</span><span class="si">{</span><span class="n">source_id</span><span class="si">}</span><span class="s2">/relations/destinations/</span><span class="si">{</span><span class="n">bq_id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">204</span>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_list_relations_filters_by_kind</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>    <span class="n">rows</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/components/relations"</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"src_kind"</span><span class="p">:</span> <span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"dst_kind"</span><span class="p">:</span> <span class="s2">"asset"</span><span class="p">})</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"dst_kind"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"asset"</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">)</span>
+</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>
+</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_component_response_relations_keyed_by_name</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>    <span class="n">body</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">"/components/</span><span class="si">{</span><span class="n">source_id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a>    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">body</span><span class="p">[</span><span class="s2">"relations"</span><span class="p">])</span> <span class="o">&lt;=</span> <span class="p">{</span><span class="s2">"connection"</span><span class="p">,</span> <span class="s2">"destinations"</span><span class="p">}</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run to verify failure</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-api/tests/test_components.py -q</code>
+Expected: FAIL.</p>
+<ul class="task-list">
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Implement</strong> the model and route changes listed above. <code>_bindings</code> returns <code>{name: [entry.dst_id ...]}</code>.</p>
+</li>
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the API suite</strong></p>
+</li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-api -q</code>
+Expected: PASS</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-api
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat!(api): relations are addressed by name; org-wide list filters by kinds</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-6-toolkit-lineage-by-kinds-one-bind_relation-tool">Task 6: Toolkit: lineage by kinds, one <code>bind_relation</code> tool<a class="headerlink" href="#task-6-toolkit-lineage-by-kinds-one-bind_relation-tool" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-toolkit/src/interloper_toolkit/lineage.py</code> (<code>list_all(org_id, src_kind="asset", dst_kind="asset")</code>; <code>param_name=dep.name</code>)
+- Modify: <code>packages/interloper-toolkit/src/interloper_toolkit/collection.py</code> (add <code>bind_relation(ctx, component_id, name, dst_id) -&gt; BindResult | ToolError</code> and <code>unbind_relation</code>), <code>models.py</code> (<code>BindResult(src_id, name, dst_id, dst_kind)</code>), register both where the other collection tools are registered
+- Test: <code>packages/interloper-toolkit/tests/test_toolkit.py</code></p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_get_upstream_reports_relation_name</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>    <span class="c1"># finance.revenue -[orders]-&gt; shop.orders, created through store.relations.add(..., name="orders", ...)</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">get_upstream</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">revenue_row</span><span class="o">.</span><span class="n">id</span><span class="p">))</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>    <span class="k">assert</span> <span class="p">[(</span><span class="n">e</span><span class="o">.</span><span class="n">param_name</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">asset_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">upstream</span><span class="p">]</span> <span class="o">==</span> <span class="p">[(</span><span class="s2">"orders"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">orders_row</span><span class="o">.</span><span class="n">id</span><span class="p">))]</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_lineage_ignores_non_asset_relations</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>    <span class="c1"># a source -[destinations]-&gt; destination row must not appear as an edge</span>
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">get_full_lineage</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">revenue_row</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="n">direction</span><span class="o">=</span><span class="s2">"upstream"</span><span class="p">)</span>
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">asset_key</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">items</span><span class="p">)</span>
+</span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>
+</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_bind_relation_creates_row</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-16-12"><a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">bind_relation</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">source_row</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="s2">"destinations"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">bq_row</span><span class="o">.</span><span class="n">id</span><span class="p">))</span>
+</span><span id="__span-16-13"><a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a>    <span class="k">assert</span> <span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">dst_kind</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="s2">"destinations"</span><span class="p">,</span> <span class="s2">"destination"</span><span class="p">)</span>
+</span><span id="__span-16-14"><a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>
+</span><span id="__span-16-15"><a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_bind_relation_wrong_kind_is_tool_error</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-16-16"><a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">bind_relation</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">source_row</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="s2">"connection"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">bq_row</span><span class="o">.</span><span class="n">id</span><span class="p">))</span>
+</span><span id="__span-16-17"><a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a>    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">ToolError</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">"does not accept"</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">error</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run to verify failure</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen pytest packages/interloper-toolkit -q</code></p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Implement</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">bind_relation</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">ToolkitContext</span><span class="p">,</span> <span class="n">component_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dst_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BindResult</span> <span class="o">|</span> <span class="n">ToolError</span><span class="p">:</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>        <span class="n">row</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">relations</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">UUID</span><span class="p">(</span><span class="n">component_id</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="n">UUID</span><span class="p">(</span><span class="n">dst_id</span><span class="p">))</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>    <span class="k">except</span> <span class="p">(</span><span class="n">ConfigError</span><span class="p">,</span> <span class="n">NotFoundError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>        <span class="k">return</span> <span class="n">ToolError</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>    <span class="k">return</span> <span class="n">BindResult</span><span class="p">(</span><span class="n">src_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">src_id</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">dst_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">dst_id</span><span class="p">),</span> <span class="n">dst_kind</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">dst_kind</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>unbind_relation</code> mirrors it over <code>remove</code>. Lineage functions call <code>ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")</code> and use <code>dep.name</code>.</p>
+<ul class="task-list">
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run</strong> <code>uv run --frozen pytest packages/interloper-toolkit -q</code></p>
+</li>
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Commit</strong> <code>feat(toolkit): lineage by asset kinds; generic bind_relation and unbind_relation tools</code>.</p>
+</li>
+</ul>
+<hr />
+<h3 id="task-7-agent-bind-the-connection-by-relation-name">Task 7: Agent: bind the connection by relation name<a class="headerlink" href="#task-7-agent-bind-the-connection-by-relation-name" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-agent/src/interloper_agent/tools/collection.py:497-540</code> (<code>_source_relations</code>), <code>:780-795</code> (<code>relations={"targets": targets}</code>)
+- Test: <code>packages/interloper-agent/tests/tools/test_collection.py</code></p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_source_relations_binds_connection_by_name</span><span class="p">(</span><span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>    <span class="n">defn</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"relations"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"kind"</span><span class="p">:</span> <span class="s2">"connection"</span><span class="p">,</span> <span class="s2">"key"</span><span class="p">:</span> <span class="s2">"facebook_ads_connection"</span><span class="p">,</span> <span class="s2">"optional"</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span> <span class="s2">"destinations"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"kind"</span><span class="p">:</span> <span class="s2">"destination"</span><span class="p">,</span> <span class="s2">"many"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"optional"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}}}</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>    <span class="n">relations</span><span class="p">,</span> <span class="n">error</span> <span class="o">=</span> <span class="n">_source_relations</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org_id</span><span class="p">,</span> <span class="n">defn</span><span class="p">,</span> <span class="s2">"facebook_ads"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">connection</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">bq</span><span class="o">.</span><span class="n">id</span><span class="p">)])</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>    <span class="k">assert</span> <span class="n">error</span> <span class="ow">is</span> <span class="kc">None</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>    <span class="k">assert</span> <span class="n">relations</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="p">[</span><span class="n">connection</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="s2">"destinations"</span><span class="p">:</span> <span class="p">[</span><span class="n">bq</span><span class="o">.</span><span class="n">id</span><span class="p">]}</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run to verify failure</strong></p>
+</li>
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Implement</strong></p>
+</li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>    <span class="n">relations_defn</span> <span class="o">=</span> <span class="n">defn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"relations"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>    <span class="n">connection_relations</span> <span class="o">=</span> <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="n">r</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">relations_defn</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="s2">"connection"</span> <span class="ow">in</span> <span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"kind"</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"kind"</span><span class="p">],</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="s2">"kind"</span><span class="p">]])}</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>    <span class="n">bindings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">UUID</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>    <span class="k">if</span> <span class="n">connection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>        <span class="n">name</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">connection_relations</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"key"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">connection</span><span class="o">.</span><span class="n">key</span> <span class="ow">in</span> <span class="p">([</span><span class="n">r</span><span class="p">[</span><span class="s2">"key"</span><span class="p">]]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"key"</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">r</span><span class="p">[</span><span class="s2">"key"</span><span class="p">])),</span> <span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="p">{</span><span class="s2">"status"</span><span class="p">:</span> <span class="s2">"error"</span><span class="p">,</span> <span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"Connection '</span><span class="si">{</span><span class="n">connection</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s2">' does not fit any relation of '</span><span class="si">{</span><span class="n">source_key</span><span class="si">}</span><span class="s2">'"</span><span class="p">}</span>
+</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>        <span class="n">bindings</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">connection</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+</span><span id="__span-19-9"><a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">connection_relations</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-19-10"><a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"optional"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">bindings</span><span class="p">:</span>
+</span><span id="__span-19-11"><a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="p">{</span><span class="s2">"status"</span><span class="p">:</span> <span class="s2">"error"</span><span class="p">,</span> <span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">source_key</span><span class="si">}</span><span class="s2">' requires a '</span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'key'</span><span class="p">)</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">'connection'</span><span class="si">}</span><span class="s2">' as '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">'; pick one from the collection or set one up first"</span><span class="p">}</span>
+</span><span id="__span-19-12"><a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a>    <span class="k">if</span> <span class="n">destination_ids</span><span class="p">:</span>
+</span><span id="__span-19-13"><a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a>        <span class="n">bindings</span><span class="p">[</span><span class="s2">"destinations"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run</strong> <code>uv run --frozen pytest packages/interloper-agent -q</code>, <strong>Step 5: Commit</strong> <code>feat(agent): bind source connections and destinations by relation name</code>.</li>
+</ul>
+<hr />
+<h3 id="task-8-scheduler-hooks-by-name-no-hand-rolled-upstream-join">Task 8: Scheduler: hooks by name, no hand-rolled upstream join<a class="headerlink" href="#task-8-scheduler-hooks-by-name-no-hand-rolled-upstream-join" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-scheduler/src/interloper_scheduler/hooks.py:183-195</code> (<code>ComponentRelation.name == "watches"</code>)
+- Modify: <code>packages/interloper-scheduler/src/interloper_scheduler/executor.py:110-190</code> (delete <code>_resolve_upstream</code> and its call; the DAG now includes bound upstreams read-only, phase 1 Task 6, and the hydrator bound them, Task 4)
+- Test: <code>packages/interloper-scheduler/tests/test_hooks.py</code>, <code>test_executor.py</code> (the existing "upstream joined as non-materializable" test must still pass through the DAG; adapt its setup to bind through the store)</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Run the scheduler suite to see the failures</strong>, <strong>Step 2: Implement</strong>, <strong>Step 3: Run</strong> <code>uv run --frozen pytest packages/interloper-scheduler -q</code>, <strong>Step 4: Commit</strong> <code>refactor(scheduler): hooks match on the watches relation; the DAG joins read-only upstreams</code>.</li>
+</ul>
+<hr />
+<h3 id="task-9-throwaway-database-round-trip-and-the-full-suite">Task 9: Throwaway-database round trip and the full suite<a class="headerlink" href="#task-9-throwaway-database-round-trip-and-the-full-suite" title="Permanent link">&para;</a></h3>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Create a scratch database and migrate to 016, seed a few rows in the old shape, upgrade, downgrade, upgrade</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>createdb<span class="w"> </span>interloper_scratch
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="nv">INTERLOPER_POSTGRES_DATABASE</span><span class="o">=</span>interloper_scratch<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--frozen<span class="w"> </span>interloper<span class="w"> </span>db<span class="w"> </span>upgrade<span class="w"> </span><span class="m">016</span>
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>psql<span class="w"> </span>interloper_scratch<span class="w"> </span>-c<span class="w"> </span><span class="s2">"INSERT INTO components ... ; INSERT INTO component_relations (src_id, type, slot, dst_id, org_id, src_kind, dst_kind) VALUES (... 'resource', 'connection' ...), (... 'destination', '' ...), (... 'upstream', 'orders' ...);"</span>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="nv">INTERLOPER_POSTGRES_DATABASE</span><span class="o">=</span>interloper_scratch<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--frozen<span class="w"> </span>interloper<span class="w"> </span>db<span class="w"> </span>upgrade<span class="w"> </span>head
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>psql<span class="w"> </span>interloper_scratch<span class="w"> </span>-c<span class="w"> </span><span class="s2">"SELECT src_kind, name, dst_kind FROM component_relations ORDER BY name;"</span>
+</span><span id="__span-20-6"><a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="nv">INTERLOPER_POSTGRES_DATABASE</span><span class="o">=</span>interloper_scratch<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--frozen<span class="w"> </span>interloper<span class="w"> </span>db<span class="w"> </span>downgrade<span class="w"> </span><span class="m">016</span>
+</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>psql<span class="w"> </span>interloper_scratch<span class="w"> </span>-c<span class="w"> </span><span class="s2">"SELECT type, slot FROM component_relations ORDER BY type;"</span>
+</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="nv">INTERLOPER_POSTGRES_DATABASE</span><span class="o">=</span>interloper_scratch<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--frozen<span class="w"> </span>interloper<span class="w"> </span>db<span class="w"> </span>upgrade<span class="w"> </span>head
+</span><span id="__span-20-9"><a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>dropdb<span class="w"> </span>interloper_scratch
+</span></code></pre></div>
+<p>Expected after upgrade: <code>connection</code>, <code>destinations</code>, <code>orders</code>. After downgrade: <code>(resource, connection)</code>, <code>(destination, '')</code>, <code>(upstream, orders)</code>. Use the exact CLI verb the repo provides for migrations (check <code>interloper db --help</code>).</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Whole-repo checks</strong></li>
+</ul>
+<p>Run: <code>uv run --frozen ruff check &amp;&amp; uv run --frozen ty check &amp;&amp; uv run --frozen pytest -q</code>
+Expected: green across every package except <code>interloper-app</code> (no Python tests) and any phase 4 owned TypeScript.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Retired-name sweep</strong></li>
+</ul>
+<p>Run: <code>grep -rn "slot\b\|\.type ==\|type=\"upstream\"\|type=\"watch\"\|relation_types\|resource_types\|slots\b" packages/interloper-db packages/interloper-api packages/interloper-toolkit packages/interloper-agent packages/interloper-scheduler --include='*.py' | grep -v "tests/\|# " || echo clean</code>
+Expected: <code>clean</code> (review any hit that is a legitimate unrelated use of the word).</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Squash, push, open PR</strong> <code>feat!: platform relations by name</code> when Guillaume asks. Deployment note for the PR body: run migration 017 before the api, scheduler and worker images roll (they read <code>name</code>), and update the <code>interloper-manifests</code> repo in lockstep (its YAML <code>dependencies:</code> keys become relation names).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.88ee1349.min.js"></script>
+      
+    
+  </body>
+</html>

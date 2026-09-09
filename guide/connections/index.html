@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -2094,24 +2094,28 @@ sign-in machinery.</p>
 prefixed through <code>model_config</code>). <code>SecretField</code> marks the field as a password in forms.
 Exposing the client as a <code>cached_property</code> means every asset sharing the connection shares one
 configured client.</p>
-<p>Decorator options: <code>key</code>, <code>name</code>, <code>icon</code>, <code>tags</code>, <code>oauth</code>.</p>
+<p>The decorator accepts the class's public ClassVars and field defaults, plus <code>relations=</code>; see the
+<a href="../../reference/decorators/">decorators reference</a>.</p>
 <h2 id="using-a-connection">Using a connection<a class="headerlink" href="#using-a-connection" title="Permanent link">&para;</a></h2>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span><span class="p">(</span><span class="n">resources</span><span class="o">=</span><span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="n">ShopConnection</span><span class="p">})</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Shop</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">orders</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">connection</span><span class="p">:</span> <span class="n">ShopConnection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="k">return</span> <span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/orders"</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">ShopConnection</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">orders</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/orders"</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 </span></code></pre></div>
-<p>The <code>resources=</code> declaration on the source is optional: the asset's annotation is enough to
-create the slot. Declaring it on the source documents the dependency in the source's
-definition and lets a source-level instance trickle to every asset.</p>
+<p>The annotation on the source declares the relation once, for the source and every asset it
+holds: a method asset receives the source as <code>self</code> and reads <code>self.connection</code>. A standalone
+asset, one with no source to read from, declares the connection as a <code>data()</code> parameter
+instead (<code>def orders(self, connection: ShopConnection)</code>).</p>
 <h3 id="rest-clients-and-pagination">REST clients and pagination<a class="headerlink" href="#rest-clients-and-pagination" title="Permanent link">&para;</a></h3>
 <p><code>il.RESTClient</code> and <code>il.AsyncRESTClient</code> extend the httpx clients with <code>paginate()</code>:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">orders</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">connection</span><span class="p">:</span> <span class="n">ShopConnection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">orders</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">paginator</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">PageNumberPaginator</span><span class="p">(</span><span class="n">total_path</span><span class="o">=</span><span class="s2">"meta.pages"</span><span class="p">)</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="k">async</span> <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">paginate</span><span class="p">(</span><span class="s2">"/orders"</span><span class="p">,</span> <span class="n">paginator</span><span class="p">,</span> <span class="n">data_selector</span><span class="o">=</span><span class="s2">"data"</span><span class="p">):</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="k">async</span> <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">paginate</span><span class="p">(</span><span class="s2">"/orders"</span><span class="p">,</span> <span class="n">paginator</span><span class="p">,</span> <span class="n">data_selector</span><span class="o">=</span><span class="s2">"data"</span><span class="p">):</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">rows</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">page</span><span class="p">)</span>
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="k">return</span> <span class="n">rows</span>
 </span></code></pre></div>
@@ -2386,7 +2390,7 @@ exchanges embed secrets in URLs.</p>
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -1628,6 +1628,40 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#1-definition-metadata-and-behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        1. Definition metadata and behaviour
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-relations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        2. <code>relations=</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-the-build-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        3. The build step
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. The build step">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#ilasset" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1637,8 +1671,8 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#ilsource" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1648,37 +1682,20 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#ildestination" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#ildestination-ilconnection-ilconfig" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code>@il.destination</code>
+        <code>@il.destination</code>, <code>@il.connection</code>, <code>@il.config</code>
       </span>
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#ilconnection" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>@il.connection</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#ilconfig" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>@il.config</code>
-      </span>
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2061,304 +2078,118 @@
 
 
 <h1 id="decorator-options">Decorator options<a class="headerlink" href="#decorator-options" title="Permanent link">&para;</a></h1>
-<p>Every decorator can be used bare (<code>@il.asset</code>) or with keyword arguments (<code>@il.asset(...)</code>).
-Options marked <em>class</em> set class-level attributes; options marked <em>field</em> set the default of an
-instance field.</p>
-<h2 id="ilasset"><code>@il.asset</code><a class="headerlink" href="#ilasset" title="Permanent link">&para;</a></h2>
+<p>A decorator is the function form of a class body, and a class body says three kinds of thing, so
+every component decorator carries exactly three channels and nothing else. Each can be used bare
+(<code>@il.asset</code>) or with arguments (<code>@il.asset(...)</code>).</p>
+<h2 id="1-definition-metadata-and-behaviour">1. Definition metadata and behaviour<a class="headerlink" href="#1-definition-metadata-and-behaviour" title="Permanent link">&para;</a></h2>
+<p>Plain keyword arguments. They are routed by introspecting the kind's anchor class (<code>il.Asset</code>,
+<code>il.Source</code>, <code>il.Destination</code>, <code>il.Connection</code>, <code>il.Config</code>), or the decorated class itself when it
+already extends that anchor:</p>
 <table>
 <thead>
 <tr>
-<th>Option</th>
-<th>Type</th>
-<th>Kind</th>
-<th>Meaning</th>
+<th>A name that is</th>
+<th>Becomes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>key</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Asset key. Defaults to the snake_cased function name.</td>
+<td>a public <code>ClassVar</code> of the anchor (<code>key</code>, <code>name</code>, <code>icon</code>, <code>tags</code>, <code>schema</code>, <code>partitioning</code>, <code>read_representation</code>, <code>oauth</code>, ...)</td>
+<td>a class attribute of the built class</td>
 </tr>
 <tr>
-<td><code>name</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Display name.</td>
-</tr>
-<tr>
-<td><code>icon</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Icon identifier.</td>
-</tr>
-<tr>
-<td><code>tags</code></td>
-<td><code>list[str]</code></td>
-<td>class</td>
-<td>Catalog tags.</td>
-</tr>
-<tr>
-<td><code>schema</code></td>
-<td><code>type[Schema]</code></td>
-<td>class</td>
-<td>Output schema.</td>
-</tr>
-<tr>
-<td><code>partitioning</code></td>
-<td><code>PartitionConfig</code></td>
-<td>class</td>
-<td>Partition configuration.</td>
-</tr>
-<tr>
-<td><code>destinations</code></td>
-<td><code>list[type[Destination]]</code></td>
-<td>class</td>
-<td>Allowed destination classes.</td>
-</tr>
-<tr>
-<td><code>resources</code></td>
-<td><code>dict[str, type[Resource]]</code></td>
-<td>class</td>
-<td>Resource slots; wins over annotations.</td>
-</tr>
-<tr>
-<td><code>requires</code></td>
-<td><code>dict[str, str]</code></td>
-<td>class</td>
-<td>Mandatory upstream assets, parameter to key.</td>
-</tr>
-<tr>
-<td><code>optional_requires</code></td>
-<td><code>dict[str, str]</code></td>
-<td>class</td>
-<td>Optional upstream assets.</td>
-</tr>
-<tr>
-<td><code>materialization_strategy</code></td>
-<td><code>MaterializationStrategy</code></td>
-<td>field</td>
-<td>Schema enforcement.</td>
-</tr>
-<tr>
-<td><code>normalizer</code></td>
-<td><code>Normalizer</code></td>
-<td>field</td>
-<td>Normalizer applied before conform.</td>
+<td>a field of the anchor (<code>dataset</code>, <code>default_destination_key</code>, <code>normalizer</code>, <code>materialization_strategy</code>, <code>auto_renew</code>, ...)</td>
+<td>the default of that field</td>
 </tr>
 </tbody>
 </table>
-<h2 id="ilsource"><code>@il.source</code><a class="headerlink" href="#ilsource" title="Permanent link">&para;</a></h2>
+<p>Nothing is hand-maintained per kind: the accepted names are whatever the anchor declares, so an
+unknown one is a <code>TypeError</code> at decoration listing them. Names carrying the framework's own
+machinery (<code>kind</code>, <code>relations</code>, <code>internal_fields</code>, <code>asset_types</code>, <code>model_config</code>, anything private)
+and the per-instance <code>id</code> are never routable.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">key</span><span class="o">=</span><span class="s2">"ads_stats"</span><span class="p">,</span>                                          <span class="c1"># a ClassVar of il.Asset</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Report"</span><span class="p">],</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">schema</span><span class="o">=</span><span class="n">AdsStats</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">materialization_strategy</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">RECONCILE</span><span class="p">,</span>   <span class="c1"># a field of il.Asset</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span> <span class="o">...</span>
+</span></code></pre></div>
+<h2 id="2-relations">2. <code>relations=</code><a class="headerlink" href="#2-relations" title="Permanent link">&para;</a></h2>
+<p>The only relation channel: a map of relation name to one of three value forms.</p>
 <table>
 <thead>
 <tr>
-<th>Option</th>
-<th>Type</th>
-<th>Kind</th>
-<th>Meaning</th>
+<th>Value</th>
+<th>Means</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>key</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Source key. Defaults to the snake_cased class name.</td>
+<td><code>il.Relation(...)</code></td>
+<td>the relation as written, which is where anything an annotation cannot express goes (a cross-source or many-valued upstream, <code>optional</code>, <code>on_delete</code>)</td>
 </tr>
 <tr>
-<td><code>name</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Display name.</td>
+<td>a component class</td>
+<td>the same shorthand the annotation form is: <code>il.Relation(cls)</code></td>
 </tr>
 <tr>
-<td><code>icon</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Icon identifier.</td>
-</tr>
-<tr>
-<td><code>tags</code></td>
-<td><code>list[str]</code></td>
-<td>class</td>
-<td>Catalog tags.</td>
-</tr>
-<tr>
-<td><code>resources</code></td>
-<td><code>dict[str, type[Resource]]</code></td>
-<td>class</td>
-<td>Resource slots.</td>
-</tr>
-<tr>
-<td><code>destinations</code></td>
-<td><code>list[type[Destination]]</code></td>
-<td>class</td>
-<td>Allowed destination classes.</td>
-</tr>
-<tr>
-<td><code>dataset</code></td>
-<td><code>str</code></td>
-<td>field</td>
-<td>Default dataset. Defaults to the source key when empty.</td>
-</tr>
-<tr>
-<td><code>default_destination_key</code></td>
-<td><code>str</code></td>
-<td>field</td>
-<td>Preferred destination for downstream readers.</td>
-</tr>
-<tr>
-<td><code>normalizer</code></td>
-<td><code>Normalizer</code></td>
-<td>field</td>
-<td>Default normalizer for the assets.</td>
-</tr>
-<tr>
-<td><code>materialization_strategy</code></td>
-<td><code>MaterializationStrategy</code></td>
-<td>field</td>
-<td>Default strategy for assets still on <code>AUTO</code>.</td>
+<td>a list of component classes</td>
+<td>the relation the anchor already declares under this name, its key list narrowed to those classes' keys</td>
 </tr>
 </tbody>
 </table>
-<p>Instance-only settings (<code>assets</code>, <code>select</code>, <code>destinations</code> instances, <code>resources</code> instances)
-are constructor arguments, not decorator options.</p>
-<h2 id="ildestination"><code>@il.destination</code><a class="headerlink" href="#ildestination" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Type</th>
-<th>Kind</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>key</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Destination key.</td>
-</tr>
-<tr>
-<td><code>name</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Display name.</td>
-</tr>
-<tr>
-<td><code>icon</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Icon identifier.</td>
-</tr>
-<tr>
-<td><code>tags</code></td>
-<td><code>list[str]</code></td>
-<td>class</td>
-<td>Catalog tags.</td>
-</tr>
-<tr>
-<td><code>resources</code></td>
-<td><code>dict[str, type[Resource]]</code></td>
-<td>class</td>
-<td>Resource slots.</td>
-</tr>
-<tr>
-<td><code>read_representation</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Representation reads materialize into (<code>"rows"</code>, <code>"dataframe"</code>). <code>DatabaseDestination</code> only.</td>
-</tr>
-<tr>
-<td><code>materialization_strategy</code></td>
-<td><code>MaterializationStrategy</code></td>
-<td>field</td>
-<td>Write-time schema strategy. <code>DatabaseDestination</code> only.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="ilconnection"><code>@il.connection</code><a class="headerlink" href="#ilconnection" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Type</th>
-<th>Kind</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>key</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Connection key.</td>
-</tr>
-<tr>
-<td><code>name</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Display name.</td>
-</tr>
-<tr>
-<td><code>icon</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Icon identifier.</td>
-</tr>
-<tr>
-<td><code>tags</code></td>
-<td><code>list[str]</code></td>
-<td>class</td>
-<td>Catalog tags.</td>
-</tr>
-<tr>
-<td><code>oauth</code></td>
-<td><code>OAuthConfig</code></td>
-<td>class</td>
-<td>OAuth configuration. Requires an <code>OAuthConnection</code> subclass; <code>TypeError</code> otherwise.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="ilconfig"><code>@il.config</code><a class="headerlink" href="#ilconfig" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Type</th>
-<th>Kind</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>key</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Config key.</td>
-</tr>
-<tr>
-<td><code>name</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Display name.</td>
-</tr>
-<tr>
-<td><code>icon</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Icon identifier.</td>
-</tr>
-<tr>
-<td><code>tags</code></td>
-<td><code>list[str]</code></td>
-<td>class</td>
-<td>Catalog tags.</td>
-</tr>
-</tbody>
-</table>
+<p>A list under a name the anchor declares no relation for, or holding a class of a kind that relation
+does not accept, is a <code>TypeError</code> at decoration.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">relations</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="s2">"destinations"</span><span class="p">:</span> <span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">],</span>                  <span class="c1"># narrowed: only this class is accepted</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="s2">"config"</span><span class="p">:</span> <span class="n">AdsConfig</span><span class="p">,</span>                                  <span class="c1"># shorthand</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="s2">"budget"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"finance.budget"</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="p">},</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">)</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">AdsConfig</span><span class="p">,</span> <span class="n">budget</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p>For an asset, the map is keyed by <code>data()</code> parameter name and wins over the relation inferred from
+that parameter's annotation. For every other kind it is keyed by attribute name and wins over the
+class annotations.</p>
+<h2 id="3-the-build-step">3. The build step<a class="headerlink" href="#3-the-build-step" title="Permanent link">&para;</a></h2>
+<p>What the decorator does with what it decorates. This is the only part that differs per kind.</p>
+<h3 id="ilasset"><code>@il.asset</code><a class="headerlink" href="#ilasset" title="Permanent link">&para;</a></h3>
+<p>Turns a function into the asset's <code>data()</code>. Sync and <code>async</code> functions are both accepted; a first
+parameter named <code>self</code> makes it a <strong>method asset</strong>, receiving the source instance. The key defaults
+to the function name, the docstring becomes the class docstring, and every other parameter declares
+a relation read off its annotation.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">))</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">campaigns</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span> <span class="o">...</span>
+</span></code></pre></div>
+<h3 id="ilsource"><code>@il.source</code><a class="headerlink" href="#ilsource" title="Permanent link">&para;</a></h3>
+<p>Takes a class or a function. A class declares its configuration fields, its assets (methods
+carrying <code>@il.asset</code>, collected into <code>asset_types</code>) and its helpers. A function returns the asset
+classes and turns its own annotated parameters into configuration fields.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Advertising"</span><span class="p">],</span> <span class="n">dataset</span><span class="o">=</span><span class="s2">"raw_facebook"</span><span class="p">)</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">FacebookAds</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">open_meteo</span><span class="p">(</span><span class="n">latitude</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">52.52</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">]]:</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">forecast</span><span class="p">]</span>
+</span></code></pre></div>
+<h3 id="ildestination-ilconnection-ilconfig"><code>@il.destination</code>, <code>@il.connection</code>, <code>@il.config</code><a class="headerlink" href="#ildestination-ilconnection-ilconfig" title="Permanent link">&para;</a></h3>
+<p>Take a class. One already extending the anchor is stamped in place (a field default override
+subclasses it, keeping every other field's metadata); a plain class is re-parented onto the anchor,
+carrying its annotations and attributes over. <code>il.Connection</code> and <code>il.Config</code> extend
+<code>BaseSettings</code>, so their fields still load from the environment. <code>oauth=</code> requires an
+<code>OAuthConnection</code> subclass; a plain <code>Connection</code> is a <code>TypeError</code>.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">connection</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">"Amazon Ads"</span><span class="p">,</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">oauth</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">OAuthConfig</span><span class="p">(</span><span class="s2">"amazon"</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="s2">"advertising::campaign_management"</span><span class="p">),</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">AmazonAdsConnection</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">RefreshTokenOAuthConnection</span><span class="p">):</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">SelectField</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span></code></pre></div>
+<p>A source's <code>assets</code> and <code>select</code>, and the components bound to any relation, are instance settings:
+they mean something only as constructor arguments.</p>
 <h2 id="ilschema"><code>@il.schema</code><a class="headerlink" href="#ilschema" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2399,14 +2230,6 @@ are constructor arguments, not decorator options.</p>
 <td></td>
 </tr>
 <tr>
-<td><code>resources</code> (merged)</td>
-<td><code>resources</code> (merged)</td>
-</tr>
-<tr>
-<td><code>destinations</code> (replaced)</td>
-<td><code>destinations</code> (replaced)</td>
-</tr>
-<tr>
 <td><code>dataset</code></td>
 <td><code>dataset</code> (re-points assets that inherited the old value)</td>
 </tr>
@@ -2427,8 +2250,8 @@ are constructor arguments, not decorator options.</p>
 <td><code>normalizer</code></td>
 </tr>
 <tr>
-<td><code>dependencies</code></td>
-<td></td>
+<td>any relation name (replaced; <code>None</code> clears)</td>
+<td>any relation name (replaced; <code>None</code> clears, and repoints what was trickled)</td>
 </tr>
 </tbody>
 </table>
@@ -2610,7 +2433,7 @@ are constructor arguments, not decorator options.</p>
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

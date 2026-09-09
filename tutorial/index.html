@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -2083,19 +2083,23 @@ client. Here is one for a hypothetical authenticated weather API:</p>
 </span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">il</span><span class="o">.</span><span class="n">RESTClient</span><span class="p">:</span>
 </span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>        <span class="k">return</span> <span class="n">il</span><span class="o">.</span><span class="n">RESTClient</span><span class="p">(</span><span class="s2">"https://api.example.com"</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">HTTPBearerAuth</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">))</span>
 </span></code></pre></div>
-<p>Inject it into an asset by annotating a parameter with the connection type:</p>
+<p>Declare it on the source by annotating a class attribute with the connection type; every asset
+reads it as <code>self.connection</code>:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Weather</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">stations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">connection</span><span class="p">:</span> <span class="n">WeatherConnection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="k">return</span> <span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/stations"</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">WeatherConnection</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">stations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/stations"</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 </span></code></pre></div>
-<p>Resolution is a cascade: an instance passed on the asset, then one passed on the source, then
-one built from the environment (<code>API_KEY=...</code>). For paginated endpoints the client has a
-<code>paginate()</code> method with pluggable paginators; see <a href="../guide/connections/">Connections</a>.</p>
+<p>The instance is the one passed to the source (<code>Weather(connection=WeatherConnection(api_key=...))</code>),
+or, when none is passed, one built from the environment (<code>API_KEY=...</code>) the moment an asset first
+reads it. For paginated endpoints the client has a <code>paginate()</code> method with pluggable paginators;
+see <a href="../guide/connections/">Connections</a>.</p>
 <h2 id="5-a-dependency">5. A dependency<a class="headerlink" href="#5-a-dependency" title="Permanent link">&para;</a></h2>
-<p>Add an asset that consumes another. Naming a parameter after a sibling asset declares the
-dependency:</p>
+<p>Add an asset that consumes another. A parameter annotated <code>il.Upstream</code> and named after a sibling
+asset declares the dependency:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">OpenMeteo</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="o">...</span>
@@ -2105,12 +2109,12 @@ dependency:</p>
 </span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>        <span class="o">...</span>
 </span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
 </span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">daily_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">forecast</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>        <span class="n">temperatures</span> <span class="o">=</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="s2">"temperature_2m"</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">forecast</span><span class="p">]</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">daily_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">forecast</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>        <span class="n">temperatures</span> <span class="o">=</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="s2">"temperature_2m"</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">forecast</span><span class="o">.</span><span class="n">data</span> <span class="ow">or</span> <span class="p">[]]</span>
 </span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>        <span class="k">return</span> <span class="p">[{</span><span class="s2">"min"</span><span class="p">:</span> <span class="nb">min</span><span class="p">(</span><span class="n">temperatures</span><span class="p">),</span> <span class="s2">"max"</span><span class="p">:</span> <span class="nb">max</span><span class="p">(</span><span class="n">temperatures</span><span class="p">)}]</span>
 </span></code></pre></div>
 <p>When the DAG runs, <code>forecast</code> is materialized first, then read back from its destination and
-passed to <code>daily_summary</code>. Run the whole source:</p>
+handed to <code>daily_summary</code> as <code>forecast.data</code>. Run the whole source:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">dag</span><span class="o">.</span><span class="n">materialize</span><span class="p">()</span>
 </span></code></pre></div>
@@ -2244,8 +2248,8 @@ as in step 7, or declare the window support described in <a href="../guide/parti
 </span><span id="__span-18-45"><a id="__codelineno-18-45" name="__codelineno-18-45" href="#__codelineno-18-45"></a>        <span class="k">return</span> <span class="n">rows</span>
 </span><span id="__span-18-46"><a id="__codelineno-18-46" name="__codelineno-18-46" href="#__codelineno-18-46"></a>
 </span><span id="__span-18-47"><a id="__codelineno-18-47" name="__codelineno-18-47" href="#__codelineno-18-47"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">DailySummary</span><span class="p">,</span> <span class="n">partitioning</span><span class="o">=</span><span class="n">PARTITIONING</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Report"</span><span class="p">])</span>
-</span><span id="__span-18-48"><a id="__codelineno-18-48" name="__codelineno-18-48" href="#__codelineno-18-48"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">daily_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">forecast</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-18-49"><a id="__codelineno-18-49" name="__codelineno-18-49" href="#__codelineno-18-49"></a>        <span class="n">temperatures</span> <span class="o">=</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="s2">"temperature_2m"</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">forecast</span> <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="s2">"temperature_2m"</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+</span><span id="__span-18-48"><a id="__codelineno-18-48" name="__codelineno-18-48" href="#__codelineno-18-48"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">daily_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">forecast</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-18-49"><a id="__codelineno-18-49" name="__codelineno-18-49" href="#__codelineno-18-49"></a>        <span class="n">temperatures</span> <span class="o">=</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="s2">"temperature_2m"</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">forecast</span><span class="o">.</span><span class="n">data</span> <span class="ow">or</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="s2">"temperature_2m"</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
 </span><span id="__span-18-50"><a id="__codelineno-18-50" name="__codelineno-18-50" href="#__codelineno-18-50"></a>        <span class="k">return</span> <span class="p">[{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">:</span> <span class="nb">min</span><span class="p">(</span><span class="n">temperatures</span><span class="p">),</span> <span class="s2">"max"</span><span class="p">:</span> <span class="nb">max</span><span class="p">(</span><span class="n">temperatures</span><span class="p">)}]</span>
 </span><span id="__span-18-51"><a id="__codelineno-18-51" name="__codelineno-18-51" href="#__codelineno-18-51"></a>
 </span><span id="__span-18-52"><a id="__codelineno-18-52" name="__codelineno-18-52" href="#__codelineno-18-52"></a>
@@ -2361,7 +2365,7 @@ as in step 7, or declare the window support described in <a href="../guide/parti
       <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

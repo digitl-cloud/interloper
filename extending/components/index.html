@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -1477,6 +1477,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#writing-a-kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Writing a kind
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#writing-a-decorator" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2030,14 +2041,18 @@
 connections, configs, jobs, hooks. Components share one base with two layers. <code>Serializable</code> is
 anything that is "a class plus its configuration"; <code>Component</code> adds kind, identity and relations
 and makes the object a catalog citizen. This page is for people writing new component classes
-or new kinds.</p>
+or new kinds. The reference comes first; <a href="#writing-a-kind">Writing a kind</a> at the end walks
+through it in the order you would do it.</p>
 <h2 id="serializable">Serializable<a class="headerlink" href="#serializable" title="Permanent link">&para;</a></h2>
 <p>A pydantic model with:</p>
 <ul>
 <li><strong><code>key</code></strong>: class-level, snake_cased from the class name unless declared.</li>
 <li><strong>Strict construction</strong>: unknown keyword arguments raise <code>TypeError</code>.</li>
 <li><strong>Specs</strong>: <code>to_spec()</code>, <code>from_spec()</code>, <code>from_spec_file()</code>, <code>classpath()</code>, <code>resolve_path()</code>.
-  See <a href="../../guide/specs/">Specs and serialization</a>.</li>
+  See <a href="../../guide/specs/">Specs and serialization</a>. Several roots written or read as one document
+  share a <code>SerializationContext</code>, which holds the one rule for inlining, referencing and dropping
+  a bound target; every public entry point starts its own, so only a multi-root container such
+  as the DAG ever passes one.</li>
 <li><strong><code>config_schema()</code></strong>: the JSON Schema of user-facing fields, with framework fields and the
   class's <code>internal_fields</code> stripped.</li>
 <li><strong><code>build_class(decorated, classvars=..., fields=...)</code></strong>: the factory behind every decorator.
@@ -2073,19 +2088,19 @@ or new kinds.</p>
 <td>Display metadata; <code>name</code> defaults to a label built from the class name.</td>
 </tr>
 <tr>
-<td><code>resource_types</code></td>
+<td><code>relations</code></td>
 <td>class</td>
-<td>Slot name to resource class. Filled from typed annotations and <code>ResourceRef</code> descriptors.</td>
+<td>Relation name to <code>Relation</code>, the links this class declares (below).</td>
 </tr>
 <tr>
-<td><code>resources</code></td>
+<td><code>parent</code></td>
 <td>instance</td>
-<td>Slot name to resource instance.</td>
+<td>The component that owns this one, <code>None</code> when it stands alone. A source owns its assets.</td>
 </tr>
 <tr>
-<td><code>relation_types</code></td>
-<td>class</td>
-<td>The relation vocabulary (below).</td>
+<td><code>owned</code></td>
+<td>instance</td>
+<td>The components this one owns: those held in one of its fields whose <code>parent</code> is this component. They travel inside its spec, under that field, as <code>{key: init}</code>. A source owns its assets.</td>
 </tr>
 <tr>
 <td><code>sensitive</code></td>
@@ -2116,82 +2131,206 @@ declares <code>source</code>, <code>asset</code>, <code>destination</code>, <cod
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Report</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="p">):</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="sd">"""A rendered document built from assets."""</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">relation_types</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="s2">"input"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">RelationDefinition</span><span class="p">(</span><span class="n">kinds</span><span class="o">=</span><span class="p">[</span><span class="s2">"asset"</span><span class="p">],</span> <span class="n">field</span><span class="o">=</span><span class="s2">"inputs"</span><span class="p">),</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="p">}</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">]</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </span></code></pre></div>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.kinds"</span><span class="k">]</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">report</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.report:Report"</span>
 </span></code></pre></div>
 <p>A catalog containing a component of an unregistered kind raises <code>ConfigError</code>.</p>
 <h3 id="relations">Relations<a class="headerlink" href="#relations" title="Permanent link">&para;</a></h3>
-<p>A relation type describes how instances of a kind point at other components. It is declared in
-<code>relation_types</code> and is what the platform validates when it stores an edge, and what UIs render
-pickers from:</p>
+<p>A relation is one declared link from a component to the components that may fill it. One class,
+<code>il.Relation</code>, declares every link on every kind: a connection an asset injects, the
+destinations a source writes to, a job's targets, an upstream asset.</p>
 <table>
 <thead>
 <tr>
-<th><code>RelationDefinition</code> field</th>
+<th>Field</th>
 <th>Meaning</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>kinds</code></td>
-<td>Component kinds the relation may point at.</td>
+<td><code>kind</code></td>
+<td>The component kind, or kinds, the relation may point at.</td>
 </tr>
 <tr>
-<td><code>field</code></td>
-<td>The instance field carrying the relation: a <code>list</code> for unslotted types, a <code>dict[slot, ...]</code> for slotted ones. Must exist on the class.</td>
+<td><code>key</code></td>
+<td>The keys it narrows to: an exact key, <code>source.asset</code>, <code>*.asset</code>, a list, or <code>""</code> for any key of those kinds.</td>
 </tr>
 <tr>
-<td><code>slotted</code></td>
-<td>Whether each relation fills a named slot (resource slots, dependency parameters).</td>
+<td><code>many</code></td>
+<td>Whether it binds several components at once.</td>
 </tr>
 <tr>
-<td><code>inline</code></td>
-<td>Whether the field holds component instances (default) or bare ids resolved at run time (asset dependencies).</td>
+<td><code>optional</code></td>
+<td>Whether it may stay unbound. Says nothing about data.</td>
 </tr>
 <tr>
-<td><code>keys</code></td>
-<td>Allowed destination keys, as picker metadata.</td>
-</tr>
-<tr>
-<td><code>slots</code></td>
-<td>The slots a concrete class declares (<code>RelationSlot(key, required)</code>).</td>
+<td><code>default</code></td>
+<td>A zero-argument factory producing the value an unbound relation resolves to.</td>
 </tr>
 <tr>
 <td><code>on_delete</code></td>
-<td>What deleting the relation's target does to the referrer: <code>block</code> (default, for consumption relations) or <code>detach</code> (for orchestration pointers such as a job's targets or a hook's watches).</td>
-</tr>
-<tr>
-<td><code>on_unbind</code></td>
-<td>What explicitly unbinding a bound required slot does: <code>detach</code> (default) or <code>block</code> (asset dependencies).</td>
+<td>What deleting the target does to the referrer: <code>block</code> (default, for consumption relations) or <code>detach</code> (for orchestration pointers such as a job's targets or a hook's watches).</td>
 </tr>
 </tbody>
 </table>
-<p>Declarations are <strong>extend-only</strong>: a subclass's <code>relation_types</code> merges over its parent's, so
-<code>TriggerHook</code> adds <code>target</code> without losing <code>watch</code> and <code>resource</code>. <code>relation_definitions()</code>
-returns the vocabulary enriched with the class's own slots: resource slots from
-<code>resource_types</code>, dependency slots from <code>requires</code>, allowed destination keys from
-<code>destination_types</code>.</p>
-<p>A relation whose <code>field</code> does not exist on the class raises <code>ValueError</code> when the definition is
-built.</p>
-<h3 id="discriminator">Discriminator<a class="headerlink" href="#discriminator" title="Permanent link">&para;</a></h3>
-<p>One configuration field may carry <code>discriminator=True</code>. <code>discriminator_field()</code>,
-<code>discriminator</code> and <code>instance_name()</code> expose it; sources use it for per-instance table names.
-Two marked fields raise <code>TypeError</code>.</p>
-<h2 id="writing-a-decorator">Writing a decorator<a class="headerlink" href="#writing-a-decorator" title="Permanent link">&para;</a></h2>
-<p>A decorator for a new kind wraps <code>build_class</code>:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span><span class="bp">cls</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">classvars</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"key"</span><span class="p">:</span> <span class="n">key</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span> <span class="s2">"tags"</span><span class="p">:</span> <span class="n">tags</span><span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="k">if</span> <span class="bp">cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        <span class="k">return</span> <span class="n">Report</span><span class="o">.</span><span class="n">build_class</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">classvars</span><span class="o">=</span><span class="n">classvars</span><span class="p">)</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="k">return</span> <span class="k">lambda</span> <span class="bp">cls</span><span class="p">:</span> <span class="n">Report</span><span class="o">.</span><span class="n">build_class</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">classvars</span><span class="o">=</span><span class="n">classvars</span><span class="p">)</span>
+<p>Two attributes are derived, not declared: <code>name</code> is stamped from the attribute the relation is
+declared under, and <code>target</code> is the class the <code>il.Relation(cls)</code> shorthand was written with,
+which is what a fallback is built from. Neither is a constructor argument.</p>
+<p><code>il.Relation(PostgresConnection)</code> is shorthand for
+<code>il.Relation(kind="connection", key="postgres_connection")</code> with the class kept as <code>target</code>.
+<code>accepts(kind, identity, owner=...)</code> is the one place a candidate is judged against a
+declaration, and <code>ComponentIdentity.satisfies</code> the one place a declared key is compared to a
+concrete component. An asset's key is source-local, so a bare key is scoped to the owner's
+source; every other kind is keyed globally by its catalog key.</p>
+<p><strong>Three declaration forms</strong>, in increasing precedence, all merged at class creation:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Widget</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="p">):</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">PostgresConnection</span>                                   <span class="c1"># an annotation naming a class</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">config</span><span class="p">:</span> <span class="n">WidgetConfig</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">WidgetConfig</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># a typed Relation attribute</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">relations</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"cache"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">Cache</span><span class="p">)}</span>                        <span class="c1"># what the decorators emit</span>
 </span></code></pre></div>
-<p><code>classvars</code> are stamped as class attributes; <code>fields</code> override defaults of existing pydantic
-fields and must name fields the receiving class has.</p>
+<p>The map merges over every base's, so a subclass entry replaces the inherited one of the same
+name and nothing an ancestor declared is lost. Each entry is copied, stamped with its name and
+installed under it: a <code>Relation</code> is its own descriptor, so <code>Widget.connection</code> is the
+declaration and <code>widget.connection</code> what is bound to it. An annotated relation is dropped from
+the class's annotations before pydantic collects its fields, so a relation is never also a
+field. The two collectors read the annotations against different namespaces (the declaring
+module here, the full defining scope in pydantic), so an annotation naming a component class
+that ends up a plain field, and one that resolves nowhere at all, are both <code>TypeError</code> at class
+definition rather than a component silently missing a relation.</p>
+<p><strong>Operations</strong>, all of them on <code>Component</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bind(name, *targets)</code></td>
+<td>Writes bindings, together with <code>unbind</code> and attribute assignment (which routes through the same checks, see below). Checks <code>accepts</code> for each target; <code>many</code> accumulates and collapses duplicates, single-valued replaces what it holds and refuses more than one target at a time.</td>
+</tr>
+<tr>
+<td><code>unbind(name, *targets)</code></td>
+<td>Detaches. Refused when it would empty a non-optional relation.</td>
+</tr>
+<tr>
+<td><code>bound(name)</code></td>
+<td>What is explicitly bound: a list for <code>many</code>, the single component or <code>None</code>.</td>
+</tr>
+<tr>
+<td><code>resolve(name)</code></td>
+<td>What a reader gets: <code>bound(name)</code>, else the relation's fallback for a single-valued relation, an empty list for a <code>many</code> one. Fallbacks are never bound.</td>
+</tr>
+<tr>
+<td><code>trickle(child)</code></td>
+<td>Fills a child's unbound relations from this component's own bindings, by name, keeping only what the child's relation accepts. Never overrides an explicit binding.</td>
+</tr>
+<tr>
+<td><code>validate_relations(nodes=None)</code></td>
+<td>Unbound non-optional without a fallback, several targets on a single-valued relation, a target the relation does not accept, and (with <code>nodes</code>) a non-optional asset target absent from the run.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Extension point</strong>: <code>on_rebind(name)</code> is called once after every write to a binding, whichever
+way it was written (constructor kwarg, <code>bind</code>, <code>unbind</code>, attribute assignment, a parent's
+<code>trickle</code>), with the new binding already in place. The base does nothing. A kind that cascades its
+wiring overrides it; this is the whole of how a source's connection reaches its assets:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Source</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_rebind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>        <span class="k">for</span> <span class="n">asset</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">assets</span><span class="p">:</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">trickle</span><span class="p">(</span><span class="n">asset</span><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        <span class="k">for</span> <span class="n">destination</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">destinations</span><span class="p">:</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">trickle</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Bind on other components from inside the hook, never on <code>self</code>: that would re-enter it.</p>
+<p>A relation name is also a constructor keyword and an assignable attribute; assignment goes
+through <code>Relation.__set__</code>, which shares <code>bind</code>'s single write path: the replacement is checked
+before the existing binding is touched (so a rejected assignment leaves the previous one exactly
+as it was), duplicates collapse, clearing a non-optional relation raises <code>ConfigError</code>, and
+whatever the owner cascades into its children is cascaded again.</p>
+<p><code>definition().relations</code> exports each relation for the catalog and the UI: <code>kind</code>, <code>key</code>,
+<code>many</code>, <code>optional</code>, <code>on_delete</code>.</p>
+<h3 id="discriminator">Discriminator<a class="headerlink" href="#discriminator" title="Permanent link">&para;</a></h3>
+<p>One configuration field may carry <code>discriminator=True</code>. <code>discriminator</code> and <code>instance_name()</code>
+expose it; sources use it for per-instance table names. Two marked fields raise <code>TypeError</code>.</p>
+<h2 id="writing-a-kind">Writing a kind<a class="headerlink" href="#writing-a-kind" title="Permanent link">&para;</a></h2>
+<p>A kind is an anchor class plus one entry-point line. Everything above applies to it; this is the
+order in which it comes up.</p>
+<ol>
+<li>
+<p><strong>Subclass the anchor you extend, or <code>il.Component</code> for a new kind.</strong> <code>kind</code> derives from the
+   class name for a direct child of <code>Component</code>; a subclass of an existing kind inherits its.
+   Give the class a docstring: it becomes the description users see.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Report</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="p">):</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="sd">"""A rendered document built from assets."""</span>
+</span></code></pre></div>
+</li>
+<li>
+<p><strong>Declare fields for what the user configures.</strong> Ordinary pydantic fields, with <code>il.InputField</code>,
+   <code>il.SelectField</code>, <code>il.SecretField</code> and friends where the UI needs to know how to render them.
+   Fields the framework fills belong in <code>internal_fields</code>. One field may carry
+   <code>discriminator=True</code>; it names instances.</p>
+</li>
+<li>
+<p><strong>Declare relations for what fills the component.</strong> An annotation naming a component class is
+   the shorthand; an <code>il.Relation</code> value is where anything else is said (a key filter, <code>many</code>,
+   <code>optional</code>, <code>on_delete</code>). The relation name is the constructor keyword, the attribute, and
+   what persistence and the UI call the link.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Report</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="p">):</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="sd">"""A rendered document built from assets."""</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">InputField</span><span class="p">()</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">]</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">storage</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Destination</span>
+</span></code></pre></div>
+</li>
+<li>
+<p><strong>Override <code>on_rebind</code> only if the kind cascades its wiring.</strong> A source pushes its connection
+   into its assets, a job its destinations into its targets. A kind whose bindings are its own
+   business leaves the base hook alone.</p>
+</li>
+<li>
+<p><strong>Register the anchor.</strong> One line in <code>pyproject.toml</code>; the catalog raises <code>ConfigError</code> for a
+   component whose kind it does not know.</p>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.kinds"</span><span class="k">]</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">report</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.report:Report"</span>
+</span></code></pre></div>
+</li>
+<li>
+<p><strong>Check <code>definition()</code>.</strong> It is what the catalog, the API and the app read: <code>config_schema</code>
+   from the fields, <code>relations</code> from the declarations, <code>state_schema</code> from <code>state_model</code> if the
+   kind has machine-owned state. If the definition says what you meant, the kind is done.</p>
+</li>
+</ol>
+<p>Behaviour comes last and is the kind's own: a <code>Workload</code> exposes <code>operations()</code>, an <code>Operation</code>
+exposes <code>run()</code>. See <a href="../operations/">Operations</a>.</p>
+<h2 id="writing-a-decorator">Writing a decorator<a class="headerlink" href="#writing-a-decorator" title="Permanent link">&para;</a></h2>
+<p>A kind that wants <code>@il.report(...)</code> sugar wraps the one decorator engine,
+<code>interloper.component.decorator.decorate</code>. The engine routes three channels and nothing else:
+plain keyword arguments are matched against the anchor (a public <code>ClassVar</code> becomes a class
+attribute, a pydantic field a default, anything else a <code>TypeError</code> naming what is accepted),
+<code>relations=</code> declares relations (an <code>il.Relation</code>, a component class, or a list of classes
+narrowing a relation the anchor declares), and <code>build=</code> is the kind's own step: how the
+decorated thing becomes a class.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.component.decorator</span><span class="w"> </span><span class="kn">import</span> <span class="n">declare</span><span class="p">,</span> <span class="n">decorate</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span><span class="bp">cls</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">overrides</span><span class="p">):</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="k">if</span> <span class="bp">cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>        <span class="k">return</span> <span class="n">decorate</span><span class="p">(</span><span class="n">Report</span><span class="p">,</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">build</span><span class="o">=</span><span class="n">_build_report</span><span class="p">,</span> <span class="n">relations</span><span class="o">=</span><span class="n">relations</span><span class="p">,</span> <span class="o">**</span><span class="n">overrides</span><span class="p">)</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="k">return</span> <span class="k">lambda</span> <span class="bp">cls</span><span class="p">:</span> <span class="n">decorate</span><span class="p">(</span><span class="n">Report</span><span class="p">,</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">build</span><span class="o">=</span><span class="n">_build_report</span><span class="p">,</span> <span class="n">relations</span><span class="o">=</span><span class="n">relations</span><span class="p">,</span> <span class="o">**</span><span class="n">overrides</span><span class="p">)</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">_build_report</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">classvars</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">relations</span><span class="p">):</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">return</span> <span class="n">declare</span><span class="p">(</span><span class="n">Report</span><span class="o">.</span><span class="n">build_class</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">classvars</span><span class="o">=</span><span class="n">classvars</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">),</span> <span class="n">relations</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>build_class</code> builds a subclass with the class attributes stamped and the field defaults
+overridden through the pydantic metaclass, so <code>model_fields</code> stays correct; <code>declare</code> adds the
+decorator's relations to it. Nothing is hand-listed: what the decorator accepts is what the
+anchor declares, so a new <code>ClassVar</code> on <code>Report</code> is a new decorator option with no other change.</p>
 <h2 id="definitions-in-the-catalog">Definitions in the catalog<a class="headerlink" href="#definitions-in-the-catalog" title="Permanent link">&para;</a></h2>
 <p>Every class reachable through the <code>interloper.components</code> entry point becomes a catalog entry
 through its <code>definition()</code>. Nothing is inferred or registered at import time: installation is
@@ -2304,7 +2443,7 @@ registration, and the catalog contains exactly what was declared. See
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

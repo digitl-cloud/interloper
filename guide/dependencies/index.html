@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -742,10 +742,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#explicit-contracts" class="md-nav__link">
+  <a href="#declaring-relations-explicitly" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Explicit contracts
+        Declaring relations explicitly
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#many-upstreams" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Many upstreams
       </span>
     </span>
   </a>
@@ -2039,73 +2050,183 @@
 
 
 <h1 id="dependencies">Dependencies<a class="headerlink" href="#dependencies" title="Permanent link">&para;</a></h1>
-<p>An asset can consume the output of other assets. Inside a DAG, each upstream dependency is
-materialized first, read back from its destination, and passed to the downstream asset as a
-function argument.</p>
+<p>An asset can consume the output of other assets. Inside a DAG, each upstream is materialized
+first, read back from its destination, and handed to the downstream asset as an <code>il.Upstream</code>:
+the upstream asset plus the data read for the run's scope.</p>
+<p>An upstream is one <strong>relation</strong> among the others a component declares (a connection, a config, a
+destination). One primitive, <code>il.Relation</code>, declares them all; only the ones whose kind is
+<code>asset</code> become edges in the graph. See <a href="../resources/">Resources</a> for the rest.</p>
 <h2 id="inside-a-source">Inside a source<a class="headerlink" href="#inside-a-source" title="Permanent link">&para;</a></h2>
-<p>Name a parameter after a sibling asset and the dependency is inferred:</p>
+<p>Annotate a parameter <code>il.Upstream</code> and name it after a sibling asset. The source binds it when
+it builds its assets:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">interloper</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">il</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Shop</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">users</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="k">return</span> <span class="p">[{</span><span class="s2">"id"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"Alice"</span><span class="p">},</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"Bob"</span><span class="p">}]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">))</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">orders</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="k">return</span> <span class="p">[{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"total"</span><span class="p">:</span> <span class="mf">9.99</span><span class="p">}]</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">user_count</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">users</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="k">return</span> <span class="p">[{</span><span class="s2">"count"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">users</span><span class="p">)}]</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">))</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">order_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">orders</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="n">rows</span> <span class="o">=</span> <span class="n">orders</span><span class="o">.</span><span class="n">data</span> <span class="ow">or</span> <span class="p">[]</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="k">return</span> <span class="p">[{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">,</span> <span class="s2">"count"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)}]</span>
 </span></code></pre></div>
-<p>A parameter with a <code>None</code> default is an <strong>optional</strong> dependency:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">users</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span> <span class="n">segments</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="o">...</span>
+<p>The parameter name is the relation name and the bare asset key it expects, so
+<code>orders: il.Upstream</code> declares <code>il.Relation("asset", "orders")</code>, a sibling of the same source
+instance. A <code>None</code> default makes the relation <strong>optional</strong>, meaning its wiring may be absent:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">))</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="n">orders</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">,</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="n">refunds</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="o">...</span>
 </span></code></pre></div>
-<p>Inference records the contract on the asset class as <code>requires</code> (<code>{"users": "shop.users"}</code>)
-and <code>optional_requires</code>. Parameters that name a resource slot or the context are never treated
-as dependencies.</p>
-<h2 id="explicit-contracts">Explicit contracts<a class="headerlink" href="#explicit-contracts" title="Permanent link">&para;</a></h2>
-<p>When the parameter name does not match, or the upstream lives in another source, declare the
-mapping on the decorator. Values are asset keys, bare (same source) or qualified
-(<code>source_key.asset_key</code>):</p>
+<p><code>self</code>, <code>context</code>, <code>source</code> and <code>**kwargs</code> are reserved. Any other parameter that is neither an
+<code>il.Upstream</code> nor a component class is a <code>TypeError</code> at class creation: nothing could ever fill
+it.</p>
+<h2 id="declaring-relations-explicitly">Declaring relations explicitly<a class="headerlink" href="#declaring-relations-explicitly" title="Permanent link">&para;</a></h2>
+<p>When the parameter name is not the upstream's key, or the upstream lives in another source,
+write the relation on the decorator. <code>relations=</code> is keyed by parameter name and wins over the
+annotation:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Finance</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">requires</span><span class="o">=</span><span class="p">{</span><span class="s2">"orders"</span><span class="p">:</span> <span class="s2">"shop.orders"</span><span class="p">},</span> <span class="n">optional_requires</span><span class="o">=</span><span class="p">{</span><span class="s2">"fx"</span><span class="p">:</span> <span class="s2">"rates.daily_fx"</span><span class="p">})</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">revenue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">orders</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span> <span class="n">fx</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="o">...</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">currency</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">InputField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"EUR"</span><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="n">relations</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>            <span class="s2">"orders"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"shop.orders"</span><span class="p">),</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>            <span class="s2">"fx"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"rates.daily_fx"</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="p">},</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="p">)</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">revenue</span><span class="p">(</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="n">orders</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">,</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>        <span class="n">fx</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>        <span class="o">...</span>
 </span></code></pre></div>
-<p>A cross-source contract is checked, not wired: the source only resolves keys that belong to
-itself, and nothing looks <code>shop.orders</code> up across sources. Wire the edge by instance id before
-building the DAG, and the DAG validates it against the contract:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">shop</span><span class="p">,</span> <span class="n">finance</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">(</span><span class="o">...</span><span class="p">),</span> <span class="n">Finance</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">finance</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">dependencies</span><span class="p">[</span><span class="s2">"orders"</span><span class="p">]</span> <span class="o">=</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span><span class="o">.</span><span class="n">id</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">shop</span><span class="p">,</span> <span class="n">finance</span><span class="p">)</span>
+<p>A class-based asset writes the same relation as a typed class attribute:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Revenue</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">):</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">orders</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Asset</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"shop.orders"</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">partitioning</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">)</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">orders</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="o">...</span>
 </span></code></pre></div>
-<p>In a spec file the same edge is an <code>id</code> on the upstream asset and a <code>dependencies</code> entry on the
-downstream one; see <a href="../specs/">Specs</a>.</p>
+<p>The annotation is for the type checker; the relation itself says what it accepts. Keys come in
+four forms:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Selects</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>orders</code></td>
+<td>The asset of that key in the declaring asset's own source instance.</td>
+</tr>
+<tr>
+<td><code>shop.orders</code></td>
+<td>That asset key, in any instance of the source keyed <code>shop</code>.</td>
+</tr>
+<tr>
+<td><code>*.orders</code></td>
+<td>That asset key, in any source at all.</td>
+</tr>
+<tr>
+<td><code>["shop.orders", "wms.orders"]</code></td>
+<td>Any of the listed keys.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="many-upstreams">Many upstreams<a class="headerlink" href="#many-upstreams" title="Permanent link">&para;</a></h2>
+<p><code>many=True</code> binds every matching asset at once, and <code>data()</code> receives a <code>list[il.Upstream]</code>:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Analytics"</span><span class="p">])</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">CampaignMatcher</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>        <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Entity"</span><span class="p">],</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"*.campaigns"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)},</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="p">)</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">campaign_matches</span><span class="p">(</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>        <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>        <span class="n">campaigns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Upstream</span><span class="p">],</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>        <span class="k">return</span> <span class="p">[</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>            <span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">,</span> <span class="s2">"source_key"</span><span class="p">:</span> <span class="n">leg</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="o">**</span><span class="n">row</span><span class="p">}</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>            <span class="k">for</span> <span class="n">leg</span> <span class="ow">in</span> <span class="n">campaigns</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>            <span class="k">if</span> <span class="n">leg</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">leg</span><span class="o">.</span><span class="n">data</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>        <span class="p">]</span>
+</span></code></pre></div>
+<p>The DAG binds every <code>campaigns</code> asset it holds, so the set of legs is decided by wiring, not by
+the class. <code>list[il.Upstream]</code> on its own infers the same relation on the parameter's bare key,
+which is a many-valued sibling; <code>relations=</code> is what reaches outside the source.</p>
 <h2 id="how-wiring-works">How wiring works<a class="headerlink" href="#how-wiring-works" title="Permanent link">&para;</a></h2>
-<p>Each asset instance carries <code>dependencies</code>, a mapping from parameter name to the upstream
-asset's <strong>instance id</strong>. The source fills it for intra-source contracts at construction; the DAG
-checks every entry at build time:</p>
+<p>Wiring is always an instance bound to a relation, never an id. It happens in three places:</p>
 <ul>
-<li>A mandatory dependency whose id is not in the DAG raises <code>DependencyNotFoundError</code>.</li>
-<li>An optional dependency whose id is missing is skipped and the parameter receives <code>None</code>.</li>
-<li>A wired upstream whose identity does not match the declared key raises
-  <code>DependencyContractError</code> (for example, <code>requires={"orders": "shop.orders"}</code> wired to an
-  asset from another source).</li>
+<li><strong>At construction</strong>, for siblings: <code>Source.sibling_bindings()</code> says which of an asset's
+  relations resolve inside the source, and the source binds them to the instances it just built,
+  right after building them.</li>
+<li><strong>In the DAG</strong>, for everything a bare key cannot reach: a qualified or wildcard key is matched
+  against the DAG's other assets. A <code>many</code> relation binds every candidate, a single-valued one
+  the only candidate there is. Several candidates for a single-valued relation raise <code>DAGError</code>
+  and ask to be bound by hand.</li>
+<li><strong>By hand</strong>, at any point:</li>
 </ul>
-<p>Wiring by hand is possible, for example to connect a standalone asset:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">extra</span> <span class="o">=</span> <span class="n">extra_asset</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="n">dest</span><span class="p">)</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">source</span><span class="o">.</span><span class="n">report</span><span class="o">.</span><span class="n">dependencies</span><span class="p">[</span><span class="s2">"data"</span><span class="p">]</span> <span class="o">=</span> <span class="n">extra</span><span class="o">.</span><span class="n">id</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">extra</span><span class="p">)</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">dest</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">MemoryDestination</span><span class="p">()</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">shop</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">fin</span> <span class="o">=</span> <span class="n">Finance</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">shop</span><span class="p">,</span> <span class="n">fin</span><span class="p">)</span>          <span class="c1"># binds fin.revenue.orders to shop.orders</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bound</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">)</span>      <span class="c1"># the shop.orders instance</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">,</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span><span class="p">)</span>     <span class="c1"># explicit; accumulates for a many relation</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">orders</span> <span class="o">=</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span>            <span class="c1"># assignment replaces atomically</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="s2">"orders"</span><span class="p">,</span> <span class="n">shop</span><span class="o">.</span><span class="n">orders</span><span class="p">)</span>   <span class="c1"># refused if it would empty a non-optional relation</span>
 </span></code></pre></div>
-<p>Persisted dependencies (from a stored spec) are never overwritten by inference.</p>
+<p>Binding goes through <code>bind()</code> everywhere, so an explicit binding is never overwritten by the
+DAG, and a hydrated one is never overwritten by construction.</p>
+<p>In a spec, a bound upstream is a <code>{ref: id}</code> under the relation's name, since an asset always
+travels inside its own source's document. See <a href="../specs/">Specs</a>.</p>
 <h2 id="reading-upstream-data">Reading upstream data<a class="headerlink" href="#reading-upstream-data" title="Permanent link">&para;</a></h2>
-<p>At run time the downstream asset reads each dependency from the upstream asset's <strong>first
-resolved destination</strong>, scoped to the partition the upstream consumes. The read returns whatever
-that destination's <code>read()</code> yields: rows for the built-in destinations, a DataFrame for
-DataFrame-native ones. A failed mandatory read raises <code>AssetError</code>; a failed optional read
-yields <code>None</code>.</p>
+<p>Each leg is read from the upstream's <code>default_destination_key</code> destination, or its first, scoped
+to the partition the run consumes. <code>il.Upstream</code> carries two attributes:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>asset</code></td>
+<td>The upstream asset the data came from; its <code>source</code>, <code>key</code> and <code>id</code> tell the legs apart.</td>
+</tr>
+<tr>
+<td><code>data</code></td>
+<td>Whatever that destination's <code>read()</code> yields: rows for the built-in destinations, a DataFrame for DataFrame-native ones.</td>
+</tr>
+</tbody>
+</table>
+<p><code>data</code> is <code>None</code>, with a <code>LOG</code> warning naming the leg, when the upstream has nothing
+materialized where the destination looks: no table or object for that scope at all
+(<code>MemoryDestination</code> and the file destinations key storage per partition, so a missing partition
+is exactly this; <code>BigQueryDestination</code> reaches it only when the table itself does not exist). An
+existing but empty scope is not this case, and comes back as whatever the destination returns
+for an empty read, an empty list or frame. <code>optional</code> governs wiring only, never data: the asset
+decides what a missing leg means. Any other read failure fails the asset.</p>
+<p>A bound upstream the run does not hold at all is skipped with its own warning, so its leg simply
+does not exist.</p>
 <p>Reads emit <code>dest_read_*</code> events and an <code>interloper.destination.read</code> span.</p>
 <h2 id="rules-the-dag-enforces">Rules the DAG enforces<a class="headerlink" href="#rules-the-dag-enforces" title="Permanent link">&para;</a></h2>
 <table>
@@ -2121,12 +2242,24 @@ yields <code>None</code>.</p>
 <td><code>DAGError</code></td>
 </tr>
 <tr>
-<td>Mandatory dependencies resolve to a node in the DAG</td>
-<td><code>DependencyNotFoundError</code></td>
+<td>A single-valued relation matches at most one asset in the DAG</td>
+<td><code>DAGError</code></td>
 </tr>
 <tr>
-<td>Wired upstreams satisfy the declared contract</td>
-<td><code>DependencyContractError</code></td>
+<td>Every <code>data()</code> parameter is fillable (<code>context</code>, <code>source</code>, a component class or <code>il.Upstream</code>)</td>
+<td><code>TypeError</code>, at class creation</td>
+</tr>
+<tr>
+<td>A non-optional relation is bound, unless it can fill itself</td>
+<td><code>ConfigError</code></td>
+</tr>
+<tr>
+<td>A bound target is one its relation accepts</td>
+<td><code>ConfigError</code></td>
+</tr>
+<tr>
+<td>A non-optional relation points at an asset the DAG holds</td>
+<td><code>ConfigError</code></td>
 </tr>
 <tr>
 <td>No cycles</td>
@@ -2136,14 +2269,32 @@ yields <code>None</code>.</p>
 <td>A non-partitioned asset never depends on a partitioned one</td>
 <td><code>DAGError</code></td>
 </tr>
+<tr>
+<td>Time-partitioned ends of an edge share a granularity</td>
+<td><code>DAGError</code></td>
+</tr>
 </tbody>
 </table>
-<p>The last rule exists because a partitioned upstream is read for one partition at a time, which
-an unpartitioned downstream cannot express.</p>
+<p><code>validate_relations(nodes)</code> is the check behind the three <code>ConfigError</code> rows. Constructing a
+component binds what it is given and checks each binding, but not that every required relation is
+bound: components are wired piecewise (a source trickles into its assets, a manifest binds its
+references once every component exists), so the check runs where the graph is whole. The DAG runs
+it with its own nodes; loading a manifest runs it without <code>nodes</code> on each root, which is what lets
+a relation only the graph can fill stay unbound until then.</p>
+<p>A non-partitioned asset never depends on a partitioned one because a partitioned upstream is
+read one partition at a time, which an unpartitioned downstream cannot express. A run has one
+partition scope, so both ends of an edge must agree on granularity, read-only upstreams
+included.</p>
 <h2 id="running-one-asset-with-its-parents">Running one asset with its parents<a class="headerlink" href="#running-one-asset-with-its-parents" title="Permanent link">&para;</a></h2>
-<p><code>dag.mini_dag(asset_id)</code> builds a DAG containing one asset and its immediate parents marked
-non-materializable. Only the target executes; parents are read, not rewritten. Sources offer the
-same idea through <code>select</code>.</p>
+<p>A bound upstream the run does not materialize joins the DAG anyway, as a non-materializable copy
+under the same id: it is a live instance with its own destinations, so it can be read without
+being run. That is the whole mechanism behind running one asset with its parents:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">mini</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">mini_dag</span><span class="p">(</span><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="p">[(</span><span class="n">op</span><span class="o">.</span><span class="n">qualified_key</span><span class="p">,</span> <span class="n">op</span><span class="o">.</span><span class="n">materializable</span><span class="p">)</span> <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">mini</span><span class="o">.</span><span class="n">operations</span><span class="p">]</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># [("finance.revenue", True), ("shop.orders", False)]</span>
+</span></code></pre></div>
+<p>Only the target executes; the parents are read, not rewritten. Partition checks still apply
+along those edges. A source offers the same idea over its own assets through <code>select</code>.</p>
 
 
 
@@ -2251,7 +2402,7 @@ same idea through <code>select</code>.</p>
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

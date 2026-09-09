@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -2136,19 +2136,19 @@ from the definition:</p>
 </tr>
 <tr>
 <td>Assets (sources only)</td>
-<td><code>SourceDefinition.assets</code>: one row per asset with its schema and partitioning; the selection becomes the source's children. Cross-source <code>requires</code> are resolved against existing sources.</td>
+<td><code>SourceDefinition.assets</code>: one row per asset with its schema and partitioning; the selection becomes the source's children. An asset relation reaching another source is resolved against existing sources.</td>
 </tr>
 <tr>
-<td>One step per relation type</td>
-<td><code>relations</code> entries the page asks for, such as a job's <code>target</code> or a hook's <code>watch</code>, restricted to the <code>kinds</code> the relation allows.</td>
+<td>One step per orchestration relation</td>
+<td><code>relations</code> entries the page asks for, such as a job's <code>targets</code> or a hook's <code>watches</code>, restricted to the <code>kind</code> the relation allows.</td>
 </tr>
 <tr>
-<td>One step per resource slot</td>
-<td><code>relations.resource.slots</code>: each slot names a resource key; the step lists existing instances of that key and offers to create one inline.</td>
+<td>One step per resource relation</td>
+<td>Each relation whose <code>kind</code> is <code>connection</code>, <code>config</code> or <code>resource</code>: the step lists existing instances of its <code>key</code> and offers to create one inline.</td>
 </tr>
 <tr>
 <td>Destination (sources only)</td>
-<td><code>relations.destination.keys</code>: the destination classes the source allows.</td>
+<td>The <code>key</code> list of the <code>destinations</code> relation: the destination classes the source allows.</td>
 </tr>
 <tr>
 <td>Details</td>
@@ -2156,8 +2156,8 @@ from the definition:</p>
 </tr>
 </tbody>
 </table>
-<p>Relation semantics are enforced the same way when the platform stores an edge: <code>kinds</code>, slot
-requirements and the <code>on_delete</code> / <code>on_unbind</code> policies described in the
+<p>Relation semantics are enforced the same way when the platform stores an edge: <code>kind</code>, <code>key</code>,
+<code>many</code>, <code>optional</code> and the <code>on_delete</code> policy described in the
 <a href="../../extending/components/#relations">component model</a>.</p>
 <h2 id="forms">Forms<a class="headerlink" href="#forms" title="Permanent link">&para;</a></h2>
 <p>The details step, the inline resource creation and the edit drawer all render <code>SchemaForm</code>, a
@@ -2244,11 +2244,11 @@ it, <code>info</code> a tooltip next to the label. <code>required</code> follows
 is only submittable when every required field has a value.</p>
 <h3 id="fetched-options">Fetched options<a class="headerlink" href="#fetched-options" title="Permanent link">&para;</a></h3>
 <p>A <code>FetchField(provider="connection.accounts")</code> renders as a dropdown that fills itself once the
-<code>connection</code> slot is chosen. The form posts the component key, the field name and the slot's
-credentials to <code>POST /api/components/resolve</code>; the API reads the provider reference from its own
-copy of the schema (never from the client), instantiates the resource, calls the method, and
-returns the items. Only methods marked <code>@fetch_field_provider</code> may be called this way. Until the
-slot is filled, the field degrades to a text input.</p>
+<code>connection</code> relation is filled. The form posts the component key, the field name and that
+component's credentials to <code>POST /api/components/resolve</code>; the API reads the provider reference
+from its own copy of the schema (never from the client), instantiates the resource, calls the
+method, and returns the items. Only methods marked <code>@fetch_field_provider</code> may be called this
+way. Until the relation is filled, the field degrades to a text input.</p>
 <h3 id="oauth-sign-in">OAuth sign-in<a class="headerlink" href="#oauth-sign-in" title="Permanent link">&para;</a></h3>
 <p>A connection with an <code>OAuthConfig</code> carries an <code>x-oauth</code> extension at the root of its schema. When
 the provider's in-house credentials are configured on the server, the form shows two tabs:
@@ -2309,12 +2309,14 @@ offers a confirmed cleanup. See <code>ComponentDriftError</code> in <a href="../
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
 </span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Shop"</span><span class="p">,</span> <span class="n">icon</span><span class="o">=</span><span class="s2">"carbon:shopping-cart"</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Commerce"</span><span class="p">],</span> <span class="n">resources</span><span class="o">=</span><span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="n">ShopConnection</span><span class="p">})</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Shop"</span><span class="p">,</span> <span class="n">icon</span><span class="o">=</span><span class="s2">"carbon:shopping-cart"</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Commerce"</span><span class="p">])</span>
 </span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="k">class</span><span class="w"> </span><span class="nc">Shop</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
 </span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="sd">"""Orders and customers from the shop API."""</span>
 </span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
-</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="n">store_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">FetchField</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">"connection.stores"</span><span class="p">,</span> <span class="n">label_key</span><span class="o">=</span><span class="s2">"name"</span><span class="p">,</span> <span class="n">value_key</span><span class="o">=</span><span class="s2">"id"</span><span class="p">,</span> <span class="n">discriminator</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="o">...</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">ShopConnection</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="n">store_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">FetchField</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">"connection.stores"</span><span class="p">,</span> <span class="n">label_key</span><span class="o">=</span><span class="s2">"name"</span><span class="p">,</span> <span class="n">value_key</span><span class="o">=</span><span class="s2">"id"</span><span class="p">,</span> <span class="n">discriminator</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="o">...</span>
 </span></code></pre></div>
 <p>gives the UI: a "Commerce" tile for the source and the connection; a connection form with a
 masked key and a working "Test connection" button; a source wizard whose connection step lists
@@ -2429,7 +2431,7 @@ change to the class flows through on the next deploy.</p>
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

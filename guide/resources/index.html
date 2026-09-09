@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -780,10 +780,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-resolution-cascade" class="md-nav__link">
+  <a href="#explicit-relations" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        The resolution cascade
+        Explicit relations
       </span>
     </span>
   </a>
@@ -791,10 +791,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resources-on-sources-and-destinations" class="md-nav__link">
+  <a href="#fallbacks" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Resources on sources and destinations
+        Fallbacks
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relations-on-sources-and-destinations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Relations on sources and destinations
       </span>
     </span>
   </a>
@@ -2040,8 +2051,8 @@
 
 <h1 id="resources-configs">Resources &amp; configs<a class="headerlink" href="#resources-configs" title="Permanent link">&para;</a></h1>
 <p>A resource is an injectable dependency: a settings object, a credential holder, a client, a
-cache. Assets, sources and destinations declare the resources they need, and the framework
-resolves and injects them at run time.</p>
+cache. Assets, sources and destinations declare the resources they need as <strong>relations</strong>, and the
+framework resolves and injects them at run time.</p>
 <h2 id="defining-a-resource">Defining a resource<a class="headerlink" href="#defining-a-resource" title="Permanent link">&para;</a></h2>
 <p>Every resource extends <code>il.Resource</code>, itself a pydantic-settings model. Fields load from
 constructor arguments, a <code>.env</code> file, or environment variables, in that order:</p>
@@ -2067,64 +2078,86 @@ constructor arguments, a <code>.env</code> file, or environment variables, in th
 <p>Set <code>model_config = SettingsConfigDict(env_prefix="reporting_")</code> to namespace the environment
 variables, as any pydantic-settings model does.</p>
 <h2 id="injecting-resources-into-assets">Injecting resources into assets<a class="headerlink" href="#injecting-resources-into-assets" title="Permanent link">&para;</a></h2>
-<p>Annotate a parameter with the resource type:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">revenue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ReportingConfig</span><span class="p">,</span> <span class="n">connection</span><span class="p">:</span> <span class="n">ShopConnection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="k">return</span> <span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/revenue"</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"currency"</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">currency</span><span class="p">})</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+<p>Annotate a parameter with the resource class. The parameter name is the relation name:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Shop</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">ShopConnection</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">revenue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ReportingConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/revenue"</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"currency"</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">currency</span><span class="p">})</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 </span></code></pre></div>
-<p>The parameter name is the <strong>slot name</strong>. An explicit declaration on the decorator does the same
-and takes precedence over the annotation:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">resources</span><span class="o">=</span><span class="p">{</span><span class="s2">"config"</span><span class="p">:</span> <span class="n">ReportingConfig</span><span class="p">})</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">revenue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span> <span class="o">...</span>
+<p><code>connection: ShopConnection</code> on the source body is the same declaration, one level up: an
+annotation naming a component class declares a relation rather than a pydantic field. The source
+holds one instance, and a method asset reads it as <code>self.connection</code>, since it receives the source
+as <code>self</code>. An asset declares a resource of its own, like <code>config</code> above, only for what its source
+does not hold; declaring <code>connection: ShopConnection</code> on the asset as well is legal, and the
+source <a href="#trickling">trickles</a> its instance into it, but it says twice what the source says once.</p>
+<h2 id="explicit-relations">Explicit relations<a class="headerlink" href="#explicit-relations" title="Permanent link">&para;</a></h2>
+<p><code>il.Relation</code> is what says anything beyond "a resource of this class fills this name". Use it on
+the decorator, keyed by parameter name, or as a typed class attribute:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"config"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">ReportingConfig</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)})</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">revenue</span><span class="p">(</span><span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ReportingConfig</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="o">...</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nd">@il</span><span class="o">.</span><span class="n">destination</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="k">class</span><span class="w"> </span><span class="nc">WarehouseDestination</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Destination</span><span class="p">):</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">WarehouseConnection</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">config</span><span class="p">:</span> <span class="n">WarehouseConfig</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">WarehouseConfig</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">WarehouseConfig</span><span class="p">(</span><span class="n">retries</span><span class="o">=</span><span class="mi">5</span><span class="p">))</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
 </span></code></pre></div>
-<h2 id="the-resolution-cascade">The resolution cascade<a class="headerlink" href="#the-resolution-cascade" title="Permanent link">&para;</a></h2>
-<p>When an asset runs, each slot is resolved in order:</p>
+<p><code>il.Relation(ReportingConfig)</code> is shorthand for <code>il.Relation(kind="config", key="reporting_config")</code>
+with the class kept as the relation's <code>target</code>, which is what makes a fallback possible.
+<code>optional=True</code> allows the relation to stay unbound; <code>default=</code> is a zero-argument factory.</p>
+<h2 id="fallbacks">Fallbacks<a class="headerlink" href="#fallbacks" title="Permanent link">&para;</a></h2>
+<p>Nothing is resolved at construction. When <code>data()</code> (or any reader) asks for a single-valued
+relation that holds no binding, <code>resolve(name)</code> falls back, in order:</p>
 <ol>
-<li>The asset's own <code>resources[slot]</code>.</li>
-<li>The source's <code>resources[slot]</code>, matched by name.</li>
-<li>Any resource on the source that is an instance of the slot's type.</li>
-<li>A fresh instance of the declared type, built from the environment.</li>
+<li><code>default()</code>, when the relation declares one.</li>
+<li>A fresh instance of the target class, when it is a <code>Resource</code>: its required fields come from
+   the environment, so a credential nobody bound is still constructible where it is read.</li>
+<li>A fresh instance of the target class, when every one of its fields is defaulted.</li>
 <li><code>None</code>.</li>
 </ol>
-<p>A resolved value that does not match the declared type raises <code>AssetError</code>. In practice this
-means a resource "just works" from environment variables in development, and production injects
-configured instances at the source or asset level:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">()</span>                                                   <span class="c1"># everything from env</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">source</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">(</span><span class="n">resources</span><span class="o">=</span><span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="n">ShopConnection</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)})</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">asset</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">revenue</span><span class="p">(</span><span class="n">resources</span><span class="o">=</span><span class="p">{</span><span class="s2">"config"</span><span class="p">:</span> <span class="n">ReportingConfig</span><span class="p">(</span><span class="n">currency</span><span class="o">=</span><span class="s2">"USD"</span><span class="p">)})</span>
+<p>A <code>many</code> relation never falls back: <code>resolve(name)</code> on it is exactly <code>bound(name)</code>, an empty list
+when nothing is bound.</p>
+<p>A fallback is never bound, so an explicit binding or a later trickle always wins over it, and
+<code>to_spec()</code> never carries an auto-instantiated component. Attribute access reads bindings only:
+<code>asset.connection</code> is <code>None</code> while nothing is bound, where the same relation injected into
+<code>data()</code> goes through <code>resolve()</code> and receives the fallback. Because a resource is built at the
+moment it is read, a credential that is neither bound nor in the environment surfaces as a
+pydantic validation error from the read that needed it, not at build time.</p>
+<h2 id="relations-on-sources-and-destinations">Relations on sources and destinations<a class="headerlink" href="#relations-on-sources-and-destinations" title="Permanent link">&para;</a></h2>
+<p>Components other than assets declare the same relations, and are constructed with them by name:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">dest</span> <span class="o">=</span> <span class="n">WarehouseDestination</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">WarehouseConnection</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">source</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">ShopConnection</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">),</span> <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
 </span></code></pre></div>
-<h2 id="resources-on-sources-and-destinations">Resources on sources and destinations<a class="headerlink" href="#resources-on-sources-and-destinations" title="Permanent link">&para;</a></h2>
-<p>Components other than assets declare resource <strong>slots</strong> too. The cleanest way is a typed class
-attribute:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">destination</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">WarehouseDestination</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Destination</span><span class="p">):</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">WarehouseConnection</span>        <span class="c1"># a slot named "connection"</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
-</span></code></pre></div>
-<p>The annotation becomes a <code>ResourceRef</code> descriptor: it registers the slot in <code>resource_types</code>,
-is removed from the pydantic fields, and gives typed attribute access that reads from
-<code>self.resources</code>. Declare the descriptor directly to mark a slot as required:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">WarehouseDestination</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Destination</span><span class="p">):</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">connection</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">ResourceRef</span><span class="p">(</span><span class="n">WarehouseConnection</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span></code></pre></div>
-<p>Accessing a required slot that was never filled raises <code>ValueError</code>; an optional one returns
-<code>None</code>.</p>
-<p>Slots are filled at construction, either through the <code>resources</code> dict or as keyword arguments
-named after the slot:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">dest</span> <span class="o">=</span> <span class="n">WarehouseDestination</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">WarehouseConnection</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">dest</span> <span class="o">=</span> <span class="n">WarehouseDestination</span><span class="p">(</span><span class="n">resources</span><span class="o">=</span><span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="n">WarehouseConnection</span><span class="p">(</span><span class="o">...</span><span class="p">)})</span>
-</span></code></pre></div>
-<p>Passing a value of the wrong type, or the same slot both ways, is an error.</p>
+<p>A relation name accepted as a constructor keyword binds the relation instead of reaching
+pydantic; a list binds every element, <code>None</code> binds nothing. Passing a component the relation does
+not accept, or two of them to a single-valued relation, raises <code>ConfigError</code>. Attribute access
+reads what is bound (<code>source.connection</code>), and assignment rebinds atomically.</p>
+<p>Once every explicit target is in place, the component checks itself: a non-optional relation that
+is unbound and cannot fill itself is a <code>ConfigError</code>.</p>
 <h2 id="trickling">Trickling<a class="headerlink" href="#trickling" title="Permanent link">&para;</a></h2>
-<p>A source fills the empty slots of its assets and destinations from its own resources, by slot
-name first and by type second. A <a href="../jobs/">job</a> does the same for its targets. Pre-filled slots
-are never overwritten. <code>component.trickle_resources(child)</code> is the method behind it.</p>
+<p>A source fills the unbound relations of its assets and destinations from its own bindings, by
+relation name, keeping only the targets the child's own relation accepts. A <a href="../jobs/">job</a> does
+the same for its targets. A binding the child already holds is never touched.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">shop</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">ShopConnection</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">),</span> <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">warehouse</span><span class="p">])</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">shop</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bound</span><span class="p">(</span><span class="s2">"connection"</span><span class="p">)</span>     <span class="c1"># the source's connection instance</span>
+</span></code></pre></div>
+<p>Trickling re-runs on every <code>bind()</code> of the parent, so a destination bound after the assets exist
+still reaches them. Reconfiguring a source repoints what it had trickled and leaves what an asset
+bound itself alone:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">staging</span> <span class="o">=</span> <span class="n">shop</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">ShopConnection</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">))</span>    <span class="c1"># a copy, its assets repointed</span>
+</span></code></pre></div>
 <h2 id="describing-a-resource">Describing a resource<a class="headerlink" href="#describing-a-resource" title="Permanent link">&para;</a></h2>
 <p><code>ReportingConfig.definition()</code> returns a <code>ResourceDefinition</code> with the JSON Schema of the
-user-facing fields (<code>config_schema</code>). Framework fields (<code>id</code>, <code>resources</code>) and anything listed in
-the class's <code>internal_fields</code> are stripped from that schema. Resources are marked <code>sensitive</code>
+user-facing fields (<code>config_schema</code>) and, in <code>relations</code>, one entry per declared relation with
+its <code>kind</code>, <code>key</code>, <code>many</code>, <code>optional</code> and <code>on_delete</code>. Framework fields (<code>id</code>) and anything listed
+in the class's <code>internal_fields</code> are stripped from the schema. Resources are marked <code>sensitive</code>
 by default, which tells the platform to encrypt their stored configuration.</p>
 <p>The <a href="../fields/">field helpers</a> decide how each field is rendered in a form.</p>
 
@@ -2234,7 +2267,7 @@ by default, which tells the platform to encrypt their stored configuration.</p>
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>

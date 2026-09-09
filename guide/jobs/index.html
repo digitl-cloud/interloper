@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.60">
     
     
       
@@ -36,7 +36,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
@@ -2025,11 +2025,10 @@ point runs. Acting on the schedule is the job of the platform scheduler, outside
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">job</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Job</span><span class="p">(</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">targets</span><span class="o">=</span><span class="p">[</span><span class="n">Shop</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_1"</span><span class="p">),</span> <span class="n">Finance</span><span class="p">()],</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">warehouse</span><span class="p">],</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">resources</span><span class="o">=</span><span class="p">{</span><span class="s2">"gcp"</span><span class="p">:</span> <span class="n">gcp_connection</span><span class="p">},</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"daily"</span><span class="p">],</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">job</span><span class="p">)</span><span class="o">.</span><span class="n">materialize</span><span class="p">(</span><span class="n">partition</span><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">(</span><span class="n">base_path</span><span class="o">=</span><span class="s2">"./data"</span><span class="p">)],</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"daily"</span><span class="p">],</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">job</span><span class="p">)</span><span class="o">.</span><span class="n">materialize</span><span class="p">(</span><span class="n">partition</span><span class="p">)</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -2048,10 +2047,6 @@ point runs. Acting on the schedule is the job of the platform scheduler, outside
 <td>Defaults for any target that declares none.</td>
 </tr>
 <tr>
-<td><code>resources</code></td>
-<td>Fill the empty resource slots of targets and destinations, by name then by type.</td>
-</tr>
-<tr>
 <td><code>enabled</code></td>
 <td>A disabled job is kept but not scheduled.</td>
 </tr>
@@ -2062,7 +2057,8 @@ point runs. Acting on the schedule is the job of the platform scheduler, outside
 </tbody>
 </table>
 <p>Cascading works exactly like a source's: a job-level destination reaches every target without
-one, and a job-level connection reaches every target and destination with a matching empty slot.</p>
+one. A job subclass that declares a further relation (a connection, say) cascades it the same
+way, into every target and destination declaring the same relation name and leaving it unbound.</p>
 <p><code>JobState</code> (<code>next_run_at</code>, <code>last_run_at</code>) is the job's machine-owned state, written by the
 scheduler. Editing a job's config clears <code>next_run_at</code>, so the next tick re-derives the schedule
 from the new spec rather than firing once more at the slot the old one produced.</p>
@@ -2114,26 +2110,38 @@ because hour ids are UTC labels. Whether a job is partitioned is derived from it
 stored.</p>
 <h2 id="jobs-as-specs">Jobs as specs<a class="headerlink" href="#jobs-as-specs" title="Permanent link">&para;</a></h2>
 <p>A job is the natural unit for a declarative run. Its spec lists targets with their configuration
-and the workload-level defaults:</p>
+and the workload-level defaults. A connection a target needs is not a job field, so it is nested
+under that target's own relation name, in the target's own <code>init</code>:</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper.job.base.Job</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">init</span><span class="p">:</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">resources</span><span class="p">:</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">gcp</span><span class="p">:</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">google_cloud_connection</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> service_account_key</span><span class="p">:</span><span class="w"> </span><span class="nv">$</span><span class="p p-Indicator">{</span><span class="nv">GCP_KEY</span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">destinations</span><span class="p">:</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bigquery_destination</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="nt">targets</span><span class="p">:</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">facebook_ads</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> account_id</span><span class="p">:</span><span class="w"> </span><span class="nv">act_1</span><span class="p p-Indicator">,</span><span class="nt"> select</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">campaigns</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ads_stats</span><span class="p p-Indicator">]</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">destinations</span><span class="p">:</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bigquery_destination</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">        </span><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dwh</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">        </span><span class="nt">location</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">EU</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">        </span><span class="nt">connection</span><span class="p">:</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">          </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">google_cloud_connection</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">          </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">            </span><span class="nt">service_account_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${GCP_KEY}</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">  </span><span class="nt">targets</span><span class="p">:</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">facebook_ads</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">        </span><span class="nt">account_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">act_1</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">        </span><span class="nt">connection</span><span class="p">:</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">          </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">facebook_ads_connection</span>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">          </span><span class="nt">init</span><span class="p">:</span>
+</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">            </span><span class="nt">access_token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${FB_TOKEN}</span>
+</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="w">            </span><span class="nt">app_id</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
+</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="w">            </span><span class="nt">app_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${FB_SECRET}</span>
+</span><span id="__span-2-22"><a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="w">        </span><span class="nt">select</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">campaigns</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ads_stats</span><span class="p p-Indicator">]</span>
 </span></code></pre></div>
 <p><code>interloper run -f job.yaml --date 2026-01-15</code> reconstructs it and runs its DAG. See
 <a href="../specs/">Specs and serialization</a> and <a href="../cli/">CLI</a>. A scheduled job is the same document
 with <code>key: cron_job</code> and the trigger fields.</p>
 <h2 id="relations">Relations<a class="headerlink" href="#relations" title="Permanent link">&para;</a></h2>
-<p>A job's relation vocabulary is <code>target</code> (sources and assets), <code>destination</code> and <code>resource</code>. A
-target is an orchestration pointer, not an input: deleting a target shrinks the job rather than
-blocking the deletion. Relation semantics are described in the
+<p>A job's relation vocabulary is <code>targets</code> (sources and assets) and <code>destinations</code>. A target is an
+orchestration pointer, not an input: deleting a target shrinks the job rather than blocking the
+deletion. Relation semantics are described in the
 <a href="../../extending/components/#relations">component model</a>.</p>
 
 
@@ -2242,7 +2250,7 @@ blocking the deletion. Relation semantics are described in the
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.6970bfe9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88ee1349.min.js"></script>
       
     
   </body>
