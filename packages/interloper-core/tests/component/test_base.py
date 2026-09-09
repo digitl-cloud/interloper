@@ -470,6 +470,31 @@ class Child(il.Asset):
         return []
 
 
+class TestOnRebind:
+    def test_every_write_path_calls_the_hook_with_the_binding_in_place(self) -> None:
+        seen: list[tuple[str, Any]] = []
+
+        class Watchful(il.Source):
+            connection: Conn
+            config: Cfg | None = il.Relation(Cfg, optional=True)
+
+            def on_rebind(self, name: str) -> None:
+                seen.append((name, self.bound(name)))
+
+        conn, cfg = Conn(api_secret="s"), Cfg()
+        widget = Watchful(connection=conn)
+        widget.bind("config", cfg)
+        widget.unbind("config", cfg)
+        widget.config = cfg
+        parent = Widget(connection=conn, config=Cfg())
+        parent.trickle(widget)
+
+        assert seen == [("connection", conn), ("config", cfg), ("config", None), ("config", cfg)]
+
+    def test_the_base_hook_does_nothing(self) -> None:
+        assert Widget(connection=Conn(api_secret="s")).on_rebind("connection") is None
+
+
 class TestTrickle:
     def test_fills_unbound_same_name(self) -> None:
         conn = Conn(api_secret="s")

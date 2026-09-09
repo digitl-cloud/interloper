@@ -65,14 +65,14 @@ class Job(Component, Workload):
 
         A binding is the only moment this can run: relation keyword arguments
         reach a component after ``model_post_init``, so a job knows neither
-        its targets nor its destinations until :meth:`_rebound` has seen them.
+        its targets nor its destinations until :meth:`on_rebind` has seen them.
         """
         for target in self.targets:
             self.trickle(target)
         for destination in self.destinations:
             self.trickle(destination)
 
-    def _rebound(self, name: str) -> None:
+    def on_rebind(self, name: str) -> None:
         """Trickle this job's bindings down whenever one of them changes.
 
         Args:
