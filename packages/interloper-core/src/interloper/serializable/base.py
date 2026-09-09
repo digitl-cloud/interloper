@@ -16,6 +16,7 @@ from __future__ import annotations
 import copy
 import os
 import re
+import uuid
 from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -239,7 +240,7 @@ class Spec(BaseModel):
         catalog: Catalog | None = None,
         *,
         resolve: Callable[[str], Component] | None = None,
-        registry: dict[str, Component] | None = None,
+        document: Document | None = None,
     ) -> Serializable:
         """Import the class and rebuild the instance, walking nested specs.
 
@@ -248,15 +249,14 @@ class Spec(BaseModel):
         :class:`Serializable` class (a normalizer nested in an asset's config,
         for example).
 
-        Reconstruction runs in two passes over one document. This method is
-        the first: every inline component is built and registered by id, and
-        a ``{"ref": id}`` relation value is held back rather than
-        constructed with, so a component is only ever built from the targets
-        the document carries inline. The second pass binds those references
-        and validates what they complete, which is what *registry* selects:
-        without one this call owns the document and runs both passes;
-        with one it contributes to a document the caller finishes (see
-        :meth:`~interloper.component.base.Component._bind_references`).
+        Reconstruction runs in two passes over one :class:`Document`. This
+        method is the first: every inline component is built and added to the
+        document, and a ``{"ref": id}`` relation value is held back rather
+        than constructed with, so a component is only ever built from the
+        targets the document carries inline. The second pass,
+        :meth:`Document.bind`, binds those references and validates what they
+        complete. Without a *document* this call owns one and runs both
+        passes; with one it contributes to a document the caller finishes.
 
         Args:
             catalog: Catalog used to resolve ``key`` references, passed down
@@ -264,19 +264,22 @@ class Spec(BaseModel):
                 built lazily when a key is first encountered.
             resolve: Called with the id of a reference the document itself
                 does not carry, to reach a component that lives outside it.
-                ``None`` makes such a reference an error.
-            registry: The document's components by id, shared across every
-                spec of a multi-root document. ``None`` starts a document of
-                this spec alone and binds its references before returning.
+                ``None`` makes such a reference an error. Only read when this
+                call starts the document; a given *document* carries its own.
+            document: The reconstruction in progress, shared across every
+                spec of a multi-root document. ``None`` starts one for this
+                spec alone and binds its references before returning.
 
         Returns:
             The reconstructed instance.
         """
+        owns = document is None
+        document = Document(resolve) if document is None else document
 
         def load(value: Any) -> Any:
             if isinstance(value, dict):
                 if ("path" in value or "key" in value) and value.keys() <= {"path", "key", "id", "init"}:
-                    return Spec(**value).reconstruct(catalog, resolve=resolve, registry=document)
+                    return Spec(**value).reconstruct(catalog, document=document)
                 return {name: load(entry) for name, entry in value.items()}
             if isinstance(value, list):
                 return [load(entry) for entry in value]
@@ -284,7 +287,6 @@ class Spec(BaseModel):
 
         from interloper.component.base import Component
 
-        document: dict[str, Component] = {} if registry is None else registry
         cls = Component.resolve_key(self.key, catalog) if self.key else Serializable.resolve_path(self.path)
         kwargs: dict[str, Any] = {"id": self.id} if self.id else {}
         for name, value in (self.init or {}).items():
@@ -293,15 +295,128 @@ class Spec(BaseModel):
         if not issubclass(cls, Component):
             return cls(**kwargs)
 
-        kwargs, pending = cls._split_references(kwargs)
-        instance = cls(**kwargs)
-        instance._pending_references = pending
-        document[instance.id] = instance
-        for child in instance._children():
-            document[child.id] = child
-        if registry is None:
-            Component._bind_references(document, resolve)
+        instance = cls(**document.hold(kwargs))
+        document.add(instance)
+        if owns:
+            document.bind()
         return instance
+
+
+# -- Document ------------------------------------------------------------------
+class Document:
+    """One reconstruction in progress: the components built so far and what they still owe.
+
+    A manifest nests each component under the one that owns it and writes any
+    other occurrence as ``{"ref": id}``, so a reference may name a component
+    that is built later, or under another root of the same file. The
+    document is what the two passes share: :meth:`hold` takes the references
+    out of an init before construction, :meth:`add` registers what got
+    built, and :meth:`bind` resolves and binds the references once every
+    component exists, then checks each root.
+    """
+
+    def __init__(self, resolve: Callable[[str], Component] | None = None) -> None:
+        """Start an empty document.
+
+        Args:
+            resolve: Called with the id of a reference the document does not
+                carry, to reach a component that lives outside it. ``None``
+                makes such a reference an error.
+        """
+        self.components: dict[str, Component] = {}
+        self._resolve = resolve
+        self._owed: list[tuple[str, str, list[Any]]] = []
+
+    def hold(self, init: dict[str, Any]) -> dict[str, Any]:
+        """Take the references out of a loaded init, at every depth.
+
+        A value holding a reference is a relation's targets, and the mapping
+        holding that value is a component's init: the value is held back
+        whole, in its original order (an inline target it mixes with stays
+        in place, so what the document put first stays first), and the
+        mapping is pinned to an id, generated when it declares none, so the
+        component built from it can be found again by :meth:`bind`. A source's
+        assets are such nested mappings, which is how an asset's reference
+        travels without the source knowing references exist.
+
+        Args:
+            init: Constructor keyword arguments as :meth:`Spec.reconstruct`
+                loaded them, every nested spec already an instance and every
+                ``{"ref": id}`` still a mapping.
+
+        Returns:
+            The keyword arguments to construct with.
+        """
+        kept: dict[str, Any] = {}
+        held: dict[str, list[Any]] = {}
+        for name, value in init.items():
+            entries = list(value) if isinstance(value, (list, tuple)) else [value]
+            if any(Spec.is_reference(entry) for entry in entries):
+                held[name] = [entry[Spec.REFERENCE_KEY] if Spec.is_reference(entry) else entry for entry in entries]
+            elif isinstance(value, dict):
+                kept[name] = self.hold(value)
+            else:
+                kept[name] = value
+        if held:
+            owner = kept.get("id") or str(uuid.uuid4())
+            kept["id"] = owner
+            self._owed.extend((owner, name, entries) for name, entries in held.items())
+        return kept
+
+    def add(self, instance: Component) -> None:
+        """Register a built component and the children that travelled inside its spec.
+
+        Args:
+            instance: The component :meth:`Spec.reconstruct` just built.
+        """
+        self.components[instance.id] = instance
+        for child in instance._children():
+            self.components[child.id] = child
+
+    def bind(self) -> None:
+        """Bind every held reference, then check each root.
+
+        The second pass. A reference resolves against the document first and
+        through *resolve* only when the document does not carry it.
+        Validation comes last, once nothing is missing, on every root: a
+        parent cascades into the children it owns.
+
+        Raises:
+            SpecError: If a pinned init built no component, or a reference
+                names one that neither the document nor *resolve* supplies.
+        """
+        from interloper.errors import SpecError
+
+        owed, self._owed = self._owed, []
+        for owner_id, name, entries in owed:
+            owner = self.components.get(owner_id)
+            if owner is None:
+                raise SpecError(f"no component was built for '{owner_id}', which holds a reference under '{name}'")
+            owner.bind(name, *(self._lookup(entry) if isinstance(entry, str) else entry for entry in entries))
+        for component in list(self.components.values()):
+            if component.parent is None:
+                component.validate_relations()
+
+    def _lookup(self, reference: str) -> Component:
+        """Find the component a reference names.
+
+        Args:
+            reference: The referenced component's id.
+
+        Returns:
+            The referenced component.
+
+        Raises:
+            SpecError: If neither the document nor *resolve* supplies it.
+        """
+        from interloper.errors import SpecError
+
+        target = self.components.get(reference)
+        if target is None and self._resolve is not None:
+            target = self._resolve(reference)
+        if target is None:
+            raise SpecError(f"unresolved reference '{reference}'")
+        return target
 
 
 # -- Serializable --------------------------------------------------------------

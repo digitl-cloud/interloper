@@ -178,13 +178,10 @@ class Source(Component, Workload):
           unmapped keys to a bare ``asset_cls()``.
 
         This is what ``Source.to_spec()`` emits and what
-        ``Spec.reconstruct()`` hands back in after the walker
-        has resolved any nested component specs inside the overrides.
-
-        An override may name a relation target by reference rather than
-        carry it: those are held back the way
-        :meth:`~interloper.serializable.base.Spec.reconstruct` holds back a
-        component's own, and bound on the asset once the document is whole.
+        ``Spec.reconstruct()`` hands back in after the walker has resolved
+        any nested component specs inside the overrides and held back any
+        ``{"ref": id}`` they carried (see
+        :class:`~interloper.serializable.base.Document`).
 
         Args:
             data: The raw model input. Anything that is not a dict, or whose
@@ -203,10 +200,7 @@ class Source(Component, Workload):
         for asset_cls in cls.asset_types:
             if asset_cls.key not in assets:
                 continue
-            overrides, pending = asset_cls._split_references(assets[asset_cls.key])
-            instance = asset_cls(**overrides)
-            instance._pending_references = pending
-            instances.append(instance)
+            instances.append(asset_cls(**assets[asset_cls.key]))
         data["assets"] = instances
         return data
 

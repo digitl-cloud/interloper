@@ -15,7 +15,7 @@ from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGEr
 from interloper.operation import Operation, Workload
 from interloper.partitioning import Partition, PartitionWindow, TimePartitionConfig
 from interloper.runner.results import ExecutionStatus, RunResult
-from interloper.serializable import Spec
+from interloper.serializable import Document, Spec
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
 
@@ -70,9 +70,9 @@ class DAGSpec(BaseModel):
             "interloper.dag_spec.reconstruct",
             attributes={attributes.DAG_SPEC_ITEMS: len(self.items)},
         ):
-            registry: dict[str, Component] = {}
-            roots = [spec.reconstruct(catalog, resolve=resolve, registry=registry) for spec in self.items]
-            Component._bind_references(registry, resolve)
+            document = Document(resolve)
+            roots = [spec.reconstruct(catalog, document=document) for spec in self.items]
+            document.bind()
             return DAG(*roots)  # ty: ignore[invalid-argument-type]
 
 
@@ -576,11 +576,9 @@ class DAG:
         Raises:
             DAGError: If a root's kind declares no workload.
         """
-        from interloper.component.base import Component
-
-        registry: dict[str, Component] = {}
-        roots = [spec.reconstruct(catalog, resolve=resolve, registry=registry) for spec in Spec.all_from_file(path)]
-        Component._bind_references(registry, resolve)
+        document = Document(resolve)
+        roots = [spec.reconstruct(catalog, document=document) for spec in Spec.all_from_file(path)]
+        document.bind()
         for root in roots:
             if not isinstance(root, Workload):
                 raise DAGError(f"'{getattr(root, 'kind', type(root).__name__)}' components are not runnable")
