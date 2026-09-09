@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.77.0 (2026-09-09)
+
+### Features
+
+- **chart**: Roll api, frontend and mcp without dropping requests
+  ([`ff070d4`](https://github.com/digitl-cloud/interloper/commit/ff070d4483d021c917858615cc69770e82174ce8))
+
+### Refactoring
+
+- **chart**: Leave the drain duration to the ingress implementation
+  ([`ea4150c`](https://github.com/digitl-cloud/interloper/commit/ea4150cbcef4783c1d3e3da1414ab6f25a1b41ef))
+
+- **chart**: Leave the replica count to the deployment
+  ([`dcee671`](https://github.com/digitl-cloud/interloper/commit/dcee671328001ce77f55c7dba32bffdcd22456d0))
+
+
 ## v0.76.0 (2026-09-07)
 
 ### Bug Fixes
