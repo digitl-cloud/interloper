@@ -417,15 +417,6 @@ class Component(Serializable):
             return list(values)
         return values[0] if values else None
 
-    def bound_ids(self) -> dict[str, list[str]]:
-        """The ids this component's bindings point at, for persistence.
-
-        Returns:
-            Relation name to bound component ids, in binding order; relations
-            with nothing bound are absent.
-        """
-        return {name: [target.id for target in targets] for name, targets in self._bound.items() if targets}
-
     def trickle(self, child: Component) -> None:
         """Fill a child's unbound relations from this component's own bindings.
 
@@ -555,29 +546,19 @@ class Component(Serializable):
             if isinstance(field.json_schema_extra, dict) and field.json_schema_extra.get("x-discriminator")
         ]
 
-    @classmethod
-    def discriminator_field(cls) -> str | None:
-        """The config field marked ``discriminator=True``, if any.
-
-        Returns:
-            The field name, or ``None`` when the class declares no discriminator.
-        """
-        marked = cls._discriminator_fields()
-        return marked[0] if marked else None
-
     @property
     def discriminator(self) -> str | None:
         """This instance's discriminator value, if declared and set.
 
         The value of the config field marked ``discriminator=True``: what
         distinguishes instances of the same component class (an ad account
-        id, a site URL, …). Drives the derived :meth:`instance_name` and, for
-        sources, the per-instance asset table names.
+        id, a site URL, ...). Drives the derived :meth:`instance_name` and,
+        for sources, the per-instance asset table names.
         """
-        field_name = self.discriminator_field()
-        if field_name is None:
+        marked = self._discriminator_fields()
+        if not marked:
             return None
-        value = getattr(self, field_name)
+        value = getattr(self, marked[0])
         return str(value) if value else None
 
     def instance_name(self) -> str:

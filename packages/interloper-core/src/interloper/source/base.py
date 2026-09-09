@@ -395,6 +395,7 @@ class Source(Component, Workload):
             existing = list(cls.__dict__.get("asset_types", []))
             existing_keys = {a.key for a in existing}
             for _, asset_cls in own:
+                asset_cls._source_type = cls
                 if asset_cls.key not in existing_keys:
                     existing.append(asset_cls)
             cls.asset_types = existing
@@ -406,30 +407,6 @@ class Source(Component, Workload):
                 ref = AssetRef(asset_cls)
                 ref.__set_name__(cls, attr_name)
                 setattr(cls, attr_name, ref)
-
-    @classmethod
-    def register_asset_type(cls, asset_cls: type[Asset]) -> None:
-        """Register an Asset subclass as a child of this source post-hoc.
-
-        Appends to ``asset_types`` (if not already present) and installs
-        an :class:`AssetRef` descriptor under the asset class's
-        ``__name__``, so that ``import_from_path`` can reach the asset
-        via the composite ``"module:Source.AssetName"`` form.
-
-        Normally assets are collected automatically from the class body
-        by :meth:`_collect_asset_types`.  This classmethod exists for
-        imperative registration (e.g. in tests or dynamic source
-        composition) where the asset isn't a class-body attribute.
-
-        Args:
-            asset_cls: The Asset subclass to register.
-        """
-        if not any(a is asset_cls for a in cls.asset_types):
-            cls.asset_types = [*cls.asset_types, asset_cls]
-        asset_cls._source_type = cls
-        ref = AssetRef(asset_cls)
-        ref.__set_name__(cls, asset_cls.__name__)
-        setattr(cls, asset_cls.__name__, ref)
 
     @classmethod
     def sibling_bindings(cls) -> dict[str, dict[str, str]]:

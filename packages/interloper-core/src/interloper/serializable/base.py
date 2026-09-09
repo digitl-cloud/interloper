@@ -650,19 +650,6 @@ class Serializable(BaseModel):
             infos[name] = info
         return infos
 
-    @classmethod
-    def has_own_field(cls, field: str) -> bool:
-        """Check if this class declares a non-None default for a field.
-
-        Args:
-            field: Name of the field to look up; an unknown name reads as False.
-
-        Returns:
-            True if the class defines a non-None default for the field.
-        """
-        info = cls.model_fields.get(field)
-        return info is not None and info.default is not None
-
     def __str__(self) -> str:
         """Human-readable representation: ``Name (key: k)``.
 

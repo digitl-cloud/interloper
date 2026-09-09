@@ -178,8 +178,3 @@ qualified key. This is what the [catalog](catalog.md) is built from.
 
 A source is a `Workload`: `il.DAG(source)` flattens it into its assets. Runners never execute a
 source, only its assets.
-
-## Imperative registration
-
-`FacebookAds.register_asset_type(SomeAsset)` attaches an asset class defined elsewhere to a
-source after the fact. Normally the class body does this for you.
