@@ -78,7 +78,7 @@ destinations a source writes to, a job's targets, an upstream asset.
 | `optional` | Whether it may stay unbound. Says nothing about data. |
 | `default` | A zero-argument factory producing the value an unbound relation resolves to. |
 | `on_delete` | What deleting the target does to the referrer: `block` (default, for consumption relations) or `detach` (for orchestration pointers such as a job's targets or a hook's watches). |
-| `name` | The relation's name, stamped by `collect()`. |
+| `name` | The relation's name, stamped from the attribute it is declared under. |
 | `target` | The class the relation was declared from, when declared from one. It is what a fallback is built from. |
 
 `il.Relation(PostgresConnection)` is shorthand for
@@ -88,8 +88,7 @@ declaration, and `ComponentIdentity.satisfies` the one place a declared key is c
 concrete component. An asset's key is source-local, so a bare key is scoped to the owner's
 source; every other kind is keyed globally by its catalog key.
 
-**Three declaration forms**, in increasing precedence, all merged by `collect()` at class
-creation:
+**Three declaration forms**, in increasing precedence, all merged at class creation:
 
 ```py
 class Widget(il.Component):

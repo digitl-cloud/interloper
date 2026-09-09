@@ -150,7 +150,7 @@ class Asset(Component, Operation):
     # -- Construction ----------------------------------------------------------
 
     @classmethod
-    def collect(cls) -> None:
+    def _collect(cls) -> None:
         """Collect the declared relations, then infer one per ``data()`` parameter.
 
         The signature is the declaration: a parameter that is neither reserved
@@ -165,7 +165,7 @@ class Asset(Component, Operation):
         nothing could ever fill is a definition error, raised from
         :meth:`_infer_relation` as the class is created.
         """
-        super().collect()
+        super()._collect()
         if "data" not in cls.__dict__:
             return
         try:

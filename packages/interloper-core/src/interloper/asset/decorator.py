@@ -46,7 +46,7 @@ def asset(
             return fetch_stats()
 
     Every parameter of the decorated function declares a relation, inferred
-    from its annotation (see :meth:`~interloper.asset.base.Asset.collect`);
+    from its annotation (see :meth:`~interloper.asset.base.Asset._collect`);
     ``relations`` is for the declarations an annotation cannot express, such as
     a cross-source or many-valued upstream.
 
@@ -99,7 +99,7 @@ def _build_asset_class(
     (the asset) into what the function expects, so it wraps the function in
     the :func:`functools.wraps` sense: relation inference resolves the
     original's annotations through ``__wrapped__`` (see
-    :meth:`~interloper.asset.base.Asset.collect`), and the stamped
+    :meth:`~interloper.asset.base.Asset._collect`), and the stamped
     ``__signature__`` is what the parameters read as.
 
     Args:

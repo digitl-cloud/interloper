@@ -124,12 +124,14 @@ class Component(Serializable):
         super().__init_subclass__(**kwargs)
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
-        cls.collect()
+        cls._collect()
 
     @classmethod
-    def collect(cls) -> None:
+    def _collect(cls) -> None:
         """Merge the class's declared relations and install their descriptors.
 
+        The class-creation step, run from ``__init_subclass__`` and again by a
+        decorator that adds relations to a built class; never called by hand.
         Three declaration forms feed one map, in increasing precedence:
 
         - an annotation naming a component class
@@ -188,10 +190,10 @@ class Component(Serializable):
         """Check the discriminator fields and the annotations Pydantic kept as fields.
 
         Runs once Pydantic has built the fields, which is the only moment the
-        two collectors can be compared: :meth:`collect` reads the annotations
+        two collectors can be compared: :meth:`_collect` reads the annotations
         against the declaring module, Pydantic reads them against the full
         defining scope. An annotation naming a component class that
-        :meth:`collect` did not turn into a relation therefore became a plain
+        :meth:`_collect` did not turn into a relation therefore became a plain
         field, silently: no trickle, no ``{ref}``, and two classes differing
         only in declaration order behaving differently. Both that and an
         annotation Pydantic could not resolve at all are refused here.

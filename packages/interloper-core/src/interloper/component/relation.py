@@ -141,7 +141,7 @@ class Relation(BaseModel):
     ``self_filling`` together describe a relation that can be resolved
     without an explicit binding.
 
-    A relation is also its own descriptor: :meth:`Component.collect` installs
+    A relation is also its own descriptor: :meth:`Component._collect` installs
     the stamped copy under the relation's name, so the class attribute reads
     as the declaration and the instance attribute as what is bound to it, and
     assignment rebinds it.
@@ -152,7 +152,7 @@ class Relation(BaseModel):
     The ``TYPE_CHECKING`` ``__new__`` is what makes that form check: the type
     checker reads a Pydantic field of the annotated type, so the constructor
     kwarg and the instance attribute are both typed, while the runtime sees a
-    ``Relation`` (Pydantic ignores it, and :meth:`Component.collect` drops the
+    ``Relation`` (Pydantic ignores it, and :meth:`Component._collect` drops the
     annotation before fields are collected).
 
     ``default`` (intended type ``Callable[[], Component] | None``) and
@@ -364,7 +364,7 @@ class Relation(BaseModel):
     def __get__(self, instance: Component | None, owner: type | None = None) -> Any:
         """Resolve to the relation itself on class access, to bound value(s) on an instance.
 
-        A relation is its own descriptor: :meth:`Component.collect` installs
+        A relation is its own descriptor: :meth:`Component._collect` installs
         the stamped copy under the relation's name, so ``Widget.connection`` is
         the declaration and ``widget.connection`` what is bound to it.
 

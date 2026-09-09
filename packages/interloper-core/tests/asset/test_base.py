@@ -1,6 +1,6 @@
 """Tests for ``interloper.asset.base``."""
 
-# Note: no ``from __future__ import annotations``. ``Asset.collect`` reads the
+# Note: no ``from __future__ import annotations``. ``Asset._collect`` reads the
 # ``data()`` parameter annotations to infer relations and needs them as real
 # classes, not lazily-evaluated strings a locally-defined fixture would leave
 # unresolvable.

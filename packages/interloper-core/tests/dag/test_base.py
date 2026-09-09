@@ -2,7 +2,7 @@
 
 # Note: no ``from __future__ import annotations``. The fixtures below define
 # ``data()`` methods whose parameter annotations must be real classes (not lazy
-# strings) for ``Asset.collect`` to infer their relations.
+# strings) for ``Asset._collect`` to infer their relations.
 
 from typing import Any, ClassVar
 
