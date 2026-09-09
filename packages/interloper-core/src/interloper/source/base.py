@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field, model_validator
@@ -14,7 +14,7 @@ from interloper.component import Component, ComponentDefinition, ComponentIdenti
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
-from interloper.serializable import IgnoredDescriptor, Spec
+from interloper.serializable import IgnoredDescriptor
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label, validate_key
 
@@ -181,7 +181,7 @@ class Source(Component, Workload):
         ``Spec.reconstruct()`` hands back in after the walker has resolved
         any nested component specs inside the overrides and held back any
         ``{"ref": id}`` they carried (see
-        :class:`~interloper.serializable.base.Document`).
+        :class:`~interloper.serializable.base.SerializationContext`).
 
         Args:
             data: The raw model input. Anything that is not a dict, or whose
@@ -285,122 +285,6 @@ class Source(Component, Workload):
         self.assets = [a if a.key in selected else a(materializable=False) for a in self.assets]
         for asset in self.assets:
             asset.parent = self
-
-    # -- Serialization ---------------------------------------------------------
-
-    def _to_spec(
-        self,
-        *,
-        seen: set[str],
-        without: Collection[str] = (),
-        drop: Mapping[str, Collection[str]] | None = None,
-    ) -> Spec:
-        """Serialize to a spec whose ``assets`` is a key to init override map.
-
-        Args:
-            seen: Ids the traversal has already written out in full; see
-                :meth:`~interloper.component.base.Component._to_spec`.
-            without: Init keys to leave out.
-            drop: Target ids to leave out of one of this source's own
-                relations, keyed by relation name, rather than the whole
-                relation; see :meth:`~interloper.component.base.Component._to_spec`.
-
-        Returns:
-            A ``Spec`` capturing this source and its assets.
-        """
-        return self._source_spec(seen=seen, without=without, assets=self.assets, drop=drop)
-
-    def _source_spec(
-        self,
-        *,
-        seen: set[str],
-        without: Collection[str] = (),
-        assets: list[Asset],
-        drop: Mapping[str, Collection[str]] | None = None,
-        asset_drop: Mapping[str, Mapping[str, Collection[str]]] | None = None,
-    ) -> Spec:
-        """Serialize this source over a given set of asset instances.
-
-        Source is the unit of reconstruction: an asset never travels under a
-        relation, only under the source that owns it, as a plain init payload
-        carrying its id and no ``path`` of its own. This mirrors
-        :meth:`_apply_asset_overrides` on the reconstruction side and keeps
-        the document compact.
-
-        A relation an asset holds only because this source trickled it down
-        is left out of its payload: the same trickle refills it when the
-        source rebinds its own target on reconstruction, so writing it out
-        would say twice what the source already says once.
-
-        *assets* and *asset_drop* are what let a graph serialise a source
-        from its own asset copies rather than the source's originals: a
-        mini-DAG flags the parents it only reads as non-materializable, a
-        run may hold just some of a source's assets, and a binding pointing
-        outside the document has nowhere to be written (see
-        :meth:`~interloper.dag.base.DAG.to_spec`).
-
-        Args:
-            seen: Ids the traversal has already written out in full.
-            without: Init keys to leave out of this source's own payload.
-            assets: The asset instances to write out under ``assets``.
-            drop: Target ids to leave out of one of this source's own
-                relations, keyed by relation name.
-            asset_drop: Target ids to leave out of one of an asset's
-                relations, keyed first by that asset's key and then by
-                relation name; the per-asset counterpart of *drop*.
-
-        Returns:
-            A ``Spec`` capturing this source and the given assets.
-        """
-        spec = super()._to_spec(seen=seen, without=(*without, "assets"), drop=drop)
-        if not assets:
-            return spec
-        trickled = {name: self._trickled_asset_keys(name) for name in self._bound}
-        overrides: dict[str, Any] = {}
-        for asset in assets:
-            skipped = {name for name, keys in trickled.items() if asset.key in keys}
-            asset_init = dict(
-                asset._to_spec(seen=seen, without=skipped, drop=(asset_drop or {}).get(asset.key)).init or {}
-            )
-            # The id is what every binding naming this asset resolves through.
-            asset_init["id"] = asset.id
-            overrides[asset.key] = asset_init
-        init = dict(spec.init or {})
-        init["assets"] = overrides
-        return spec.model_copy(update={"init": init})
-
-    def _trickled_asset_keys(self, name: str) -> set[str]:
-        """Which of this source's assets hold exactly what this source itself has bound.
-
-        A child receives a relation's binding only through
-        :meth:`~interloper.component.base.Component.trickle`, which passes
-        this source's own targets through unchanged; the target ids are what
-        tell that binding apart from one an asset bound on its own. Ids and
-        not object identity, because a deep copy rebuilds a source's own
-        bindings and its assets' separately: the copy's assets then hold
-        distinct objects carrying the same ids, and an identity comparison
-        would read every trickled binding on a copy as the asset's own.
-
-        Args:
-            name: The relation name to check.
-
-        Returns:
-            Keys of the assets whose current binding for *name* is exactly
-            this source's own list of targets, in order. Empty when this
-            source itself holds nothing for *name*.
-        """
-        own = [target.id for target in self._bound.get(name, [])]
-        if not own:
-            return set()
-        return {asset.key for asset in self.assets if [target.id for target in asset._bound.get(name, [])] == own}
-
-    def _children(self) -> list[Component]:
-        """The assets this source owns, which travel inside its own spec.
-
-        Returns:
-            This source's asset instances.
-        """
-        return list(self.assets)
 
     # -- Assets ----------------------------------------------------------------
 
@@ -540,13 +424,11 @@ class Source(Component, Workload):
         unknown = [name for name in relations if name not in type(self).relations]
         if unknown:
             raise TypeError(f"{type(self).__name__} declares no relation(s): {', '.join(sorted(unknown))}")
-        stale = {name: self._trickled_asset_keys(name) for name in relations}
         copy = self.model_copy(deep=True)
         for asset in copy.assets:
             asset.parent = copy
-            for name, keys in stale.items():
-                if asset.key in keys:
-                    asset._bound.pop(name, None)
+            for name in relations.keys() & self._trickled(asset):
+                asset._bound.pop(name, None)
         for name, value in relations.items():
             setattr(copy, name, value)
         if dataset is not None:

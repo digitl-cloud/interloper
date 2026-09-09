@@ -14,7 +14,10 @@ A pydantic model with:
 - **`key`**: class-level, snake_cased from the class name unless declared.
 - **Strict construction**: unknown keyword arguments raise `TypeError`.
 - **Specs**: `to_spec()`, `from_spec()`, `from_spec_file()`, `classpath()`, `resolve_path()`.
-  See [Specs and serialization](../guide/specs.md).
+  See [Specs and serialization](../guide/specs.md). Several roots written or read as one document
+  share a `SerializationContext`, which holds the one rule for inlining, referencing and dropping
+  a bound target; every public entry point starts its own, so only a multi-root container such
+  as the DAG ever passes one.
 - **`config_schema()`**: the JSON Schema of user-facing fields, with framework fields and the
   class's `internal_fields` stripped.
 - **`build_class(decorated, classvars=..., fields=...)`**: the factory behind every decorator.
@@ -35,6 +38,7 @@ On top of `Serializable`:
 | `name`, `icon` | class | Display metadata; `name` defaults to a label built from the class name. |
 | `relations` | class | Relation name to `Relation`, the links this class declares (below). |
 | `parent` | instance | The component that owns this one, `None` when it stands alone. A source owns its assets. |
+| `owned` | instance | The components this one owns: those held in one of its fields whose `parent` is this component. They travel inside its spec, under that field, as `{key: init}`. A source owns its assets. |
 | `sensitive` | class | Whether stored configuration must be encrypted. `True` for resources. |
 | `state_model` | class | A pydantic model of machine-owned state (job timestamps, renewal times). Its JSON Schema becomes `state_schema` in the definition. |
 | `internal_fields` | class | Fields hidden from the config schema. |

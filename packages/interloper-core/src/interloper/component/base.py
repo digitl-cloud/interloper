@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 import uuid
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -20,7 +20,7 @@ from typing_extensions import Self
 from interloper.component.relation import ComponentIdentity, Relation, unwrap_optional
 from interloper.errors import ConfigError
 from interloper.registry import Registry
-from interloper.serializable.base import IgnoredDescriptor, Serializable, Spec
+from interloper.serializable.base import IgnoredDescriptor, Serializable, SerializationContext, Spec
 from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label, to_snake_case
 
@@ -640,83 +640,98 @@ class Component(Serializable):
         return anchor
 
     # -- Serialization & resolution --------------------------------------------
-    def to_spec(self) -> Spec:
-        """Serialize this instance to a reconstructible spec, relations included.
+    def to_spec(self, *, context: SerializationContext | None = None) -> Spec:
+        """Serialize this instance to a reconstructible spec, relations and owned components included.
 
-        One traversal, one rule (see :meth:`_emit`): a target that has an
-        owner is always a reference, since it travels inside that owner's own
-        spec, and a target that has none is written out in full the first
-        time the traversal reaches it and as a reference afterwards. What a
-        relation holds sits in ``init`` under the relation's name, a list for
-        a ``many`` relation and a single value otherwise; a relation with
-        nothing bound is left out.
-
-        Returns:
-            A Spec capturing this instance's state, identity and bindings.
-        """
-        return self._to_spec(seen=set())
-
-    def _to_spec(
-        self,
-        *,
-        seen: set[str],
-        without: Collection[str] = (),
-        drop: Mapping[str, Collection[str]] | None = None,
-    ) -> Spec:
-        """Serialize this instance as one step of an ongoing traversal.
+        What a relation holds sits in ``init`` under the relation's name, a
+        list for a ``many`` relation and a single value otherwise, each target
+        written as :meth:`SerializationContext.emit` decides; a relation with
+        nothing bound is left out. The components this one owns (see
+        :attr:`children`) travel inside this spec, under the field that holds
+        them, as a map of key to init carrying the child's id: an owned
+        component never has a spec of its own. A binding a child holds that
+        is identical to this component's own is left out of the child's
+        payload, since the same trickle refills it on reconstruction.
 
         Args:
-            seen: Ids the traversal has already written out in full, extended
-                with this component's own. One set is shared by every spec of
-                a document, which is what turns a repeated target into a
-                reference.
-            without: Init keys to leave out entirely, naming a field or a
-                relation; what an owner writes out itself is passed here.
-            drop: Target ids to leave out of one relation's list rather than
-                the whole relation, keyed by relation name; a document that
-                does not hold every target a relation binds (a graph read
-                only part of a source's assets, say) uses this to keep the
-                targets it does hold instead of omitting the relation whole.
+            context: The state shared with the other roots of one document.
+                ``None`` starts a context for this component alone.
 
         Returns:
             A Spec capturing this instance's state, identity and bindings.
         """
-        seen.add(self.id)
-        init = self._fields_init(without=without)
+        context = SerializationContext() if context is None else context
+        context.add(self)
+        owned = self._owned_by_field()
+        init = self._fields_init(without=owned)
+        relations = type(self).relations
         for name, targets in self._bound.items():
-            if not targets or name in without:
-                continue
-            excluded = (drop or {}).get(name, ())
-            kept = [target for target in targets if target.id not in excluded]
-            if not kept:
-                continue
-            values = [self._emit(target, seen=seen) for target in kept]
-            init[name] = values if type(self).relations[name].many else values[0]
+            values = [value for value in (context.emit(target) for target in targets) if value is not None]
+            if values:
+                init[name] = values if relations[name].many else values[0]
+        for field, children in owned.items():
+            payload: dict[str, Any] = {}
+            for child in context.carried(children):
+                child_init = dict(child.to_spec(context=context).init or {})
+                for name in self._trickled(child):
+                    child_init.pop(name, None)
+                child_init["id"] = child.id
+                payload[child.key] = child_init
+            if payload:
+                init[field] = payload
         return self._build_spec(init=init or None).model_copy(update={"id": self.id})
 
-    @staticmethod
-    def _emit(target: Component, *, seen: set[str]) -> dict[str, Any]:
-        """Serialize one bound target, in full or as a reference.
-
-        Args:
-            target: The bound component to write out.
-            seen: Ids the traversal has already written out in full.
-
-        Returns:
-            The target's own spec as a JSON-able mapping, or the
-            ``{"ref": id}`` reference standing in for it.
-        """
-        if target.parent is not None or target.id in seen:
-            return Spec.reference(target.id)
-        return target._to_spec(seen=seen).model_dump(mode="json", exclude_defaults=True)
-
-    def _children(self) -> list[Component]:
+    @property
+    def owned(self) -> list[Component]:
         """The components this one owns, which travel inside its own spec.
 
+        Ownership is not declared: a component held in one of this
+        component's fields whose :attr:`parent` is this component is owned.
+        A source's assets are the one case today.
+
         Returns:
-            The owned components; empty for a component that owns none.
+            The owned components, in field order; empty for a component that
+            owns none.
         """
-        return []
+        return [child for children in self._owned_by_field().values() for child in children]
+
+    def _owned_by_field(self) -> dict[str, list[Component]]:
+        """The owned components, keyed by the field that holds them.
+
+        Returns:
+            Field name to the owned components it holds; fields holding none
+            are absent.
+        """
+        owned: dict[str, list[Component]] = {}
+        for name in type(self).model_fields:
+            value = getattr(self, name)
+            items = value if isinstance(value, list) else [value]
+            children = [item for item in items if isinstance(item, Component) and item.parent is self]
+            if children:
+                owned[name] = children
+        return owned
+
+    def _trickled(self, child: Component) -> set[str]:
+        """The relation names a child holds exactly as this component holds them.
+
+        A child receives a relation's binding only through :meth:`trickle`,
+        which passes this component's own targets through unchanged; the
+        target ids are what tell that binding apart from one the child bound
+        on its own. Ids and not object identity, because a deep copy rebuilds
+        an owner's own bindings and its children's separately.
+
+        Args:
+            child: An owned component.
+
+        Returns:
+            The names whose binding on the child is exactly this component's
+            own list of targets, in order.
+        """
+        return {
+            name
+            for name, targets in self._bound.items()
+            if targets and [t.id for t in child._bound.get(name, [])] == [t.id for t in targets]
+        }
 
     @classmethod
     def resolve_key(cls, key: str, catalog: Catalog | None = None) -> type[Self]:

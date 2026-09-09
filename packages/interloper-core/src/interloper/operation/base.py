@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from interloper.component.base import Relation
     from interloper.dag.base import DAG
     from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-    from interloper.serializable import Spec
+    from interloper.serializable import SerializationContext, Spec
 
 
 @dataclass
@@ -114,8 +114,11 @@ class Operation(Workload):
         source: Any | None
         partitioning: ClassVar[PartitionConfig | None]
 
-        def to_spec(self) -> Spec:
-            """Serialize this node (see ``Serializable.to_spec``).
+        def to_spec(self, *, context: SerializationContext | None = None) -> Spec:
+            """Serialize this node (see ``Component.to_spec``).
+
+            Args:
+                context: The state shared with the other roots of one document.
 
             Returns:
                 The node's spec.

@@ -17,7 +17,7 @@ import copy
 import os
 import re
 import uuid
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -240,7 +240,7 @@ class Spec(BaseModel):
         catalog: Catalog | None = None,
         *,
         resolve: Callable[[str], Component] | None = None,
-        document: Document | None = None,
+        context: SerializationContext | None = None,
     ) -> Serializable:
         """Import the class and rebuild the instance, walking nested specs.
 
@@ -249,14 +249,15 @@ class Spec(BaseModel):
         :class:`Serializable` class (a normalizer nested in an asset's config,
         for example).
 
-        Reconstruction runs in two passes over one :class:`Document`. This
-        method is the first: every inline component is built and added to the
-        document, and a ``{"ref": id}`` relation value is held back rather
-        than constructed with, so a component is only ever built from the
-        targets the document carries inline. The second pass,
-        :meth:`Document.bind`, binds those references and validates what they
-        complete. Without a *document* this call owns one and runs both
-        passes; with one it contributes to a document the caller finishes.
+        Reconstruction runs in two passes over one
+        :class:`SerializationContext`. This method is the first: every inline
+        component is built and added to the context, and a ``{"ref": id}``
+        relation value is held back rather than constructed with, so a
+        component is only ever built from the targets the document carries
+        inline. The second pass, :meth:`SerializationContext.bind`, binds
+        those references and validates what they complete. Without a
+        *context* this call owns one and runs both passes; with one it
+        contributes to a document the caller finishes.
 
         Args:
             catalog: Catalog used to resolve ``key`` references, passed down
@@ -265,21 +266,21 @@ class Spec(BaseModel):
             resolve: Called with the id of a reference the document itself
                 does not carry, to reach a component that lives outside it.
                 ``None`` makes such a reference an error. Only read when this
-                call starts the document; a given *document* carries its own.
-            document: The reconstruction in progress, shared across every
-                spec of a multi-root document. ``None`` starts one for this
-                spec alone and binds its references before returning.
+                call starts the context; a given *context* carries its own.
+            context: The state shared by every spec of a multi-root document.
+                ``None`` starts one for this spec alone and binds its
+                references before returning.
 
         Returns:
             The reconstructed instance.
         """
-        owns = document is None
-        document = Document(resolve) if document is None else document
+        owns = context is None
+        context = SerializationContext(resolve=resolve) if context is None else context
 
         def load(value: Any) -> Any:
             if isinstance(value, dict):
                 if ("path" in value or "key" in value) and value.keys() <= {"path", "key", "id", "init"}:
-                    return Spec(**value).reconstruct(catalog, document=document)
+                    return Spec(**value).reconstruct(catalog, context=context)
                 return {name: load(entry) for name, entry in value.items()}
             if isinstance(value, list):
                 return [load(entry) for entry in value]
@@ -295,38 +296,122 @@ class Spec(BaseModel):
         if not issubclass(cls, Component):
             return cls(**kwargs)
 
-        instance = cls(**document.hold(kwargs))
-        document.add(instance)
+        instance = cls(**context.hold(kwargs))
+        context.add(instance)
         if owns:
-            document.bind()
+            context.bind()
         return instance
 
 
-# -- Document ------------------------------------------------------------------
-class Document:
-    """One reconstruction in progress: the components built so far and what they still owe.
+# -- Serialization context -----------------------------------------------------
+class SerializationContext:
+    """The state one manifest's specs share, on the way out and on the way back in.
 
     A manifest nests each component under the one that owns it and writes any
-    other occurrence as ``{"ref": id}``, so a reference may name a component
-    that is built later, or under another root of the same file. The
-    document is what the two passes share: :meth:`hold` takes the references
-    out of an init before construction, :meth:`add` registers what got
-    built, and :meth:`bind` resolves and binds the references once every
-    component exists, then checks each root.
+    other occurrence as ``{"ref": id}``, so writing has to know what it has
+    already written and reading has to know what it has already built. Both
+    are the components the context carries. Writing consults them through
+    :meth:`emit`, which decides between a full spec, a reference and nothing
+    at all; reading fills them through :meth:`hold` and :meth:`add` and
+    settles the references with :meth:`bind`.
+
+    A context started with components is **closed**: it carries exactly those
+    (a graph's nodes), writes the carried instance in place of any other copy
+    of it (:meth:`carried`), and drops a reference to an owned component it
+    does not carry, since nothing in the document could answer it. A context
+    started empty is **open** and writes such a reference for whoever reads
+    the document to resolve. Every public entry point (``to_spec()``,
+    ``reconstruct()``, ``DAG.to_spec()``) starts its own context; one is
+    passed by hand only where several roots must share one, which is the
+    DAG's job.
     """
 
-    def __init__(self, resolve: Callable[[str], Component] | None = None) -> None:
-        """Start an empty document.
+    def __init__(
+        self,
+        components: Iterable[Component] = (),
+        *,
+        resolve: Callable[[str], Component] | None = None,
+    ) -> None:
+        """Start a context, closed over *components* when any are given.
 
         Args:
-            resolve: Called with the id of a reference the document does not
-                carry, to reach a component that lives outside it. ``None``
-                makes such a reference an error.
+            components: The components this context carries from the start,
+                a graph's nodes. Given, the context is closed; empty, open.
+            resolve: Called with the id of a reference the context does not
+                carry when reading, to reach a component that lives outside
+                the document. ``None`` makes such a reference an error.
         """
-        self.components: dict[str, Component] = {}
+        self.components: dict[str, Component] = {component.id: component for component in components}
+        self.closed = bool(self.components)
         self._resolve = resolve
         self._owed: list[tuple[str, str, list[Any]]] = []
 
+    # -- Both directions -------------------------------------------------------
+    def add(self, instance: Component) -> None:
+        """Record that the context carries a component and the children it owns.
+
+        Writing calls it for what it has written in full, reading for what it
+        has built; either way a later mention becomes a reference. What the
+        context already carries stays, and a closed context's owned
+        components are fixed from the start: it learns of a parentless
+        component it writes on the way (a destination, in full, once) but
+        never of an owned one, since a graph's own copies of the assets it
+        holds are what it writes, not the originals their source holds.
+
+        Args:
+            instance: The component just written or just built.
+        """
+        self.components.setdefault(instance.id, instance)
+        if not self.closed:
+            for child in instance.owned:
+                self.components.setdefault(child.id, child)
+
+    def carried(self, components: Iterable[Component]) -> list[Component]:
+        """The instances a writer should write for some owned components.
+
+        A closed context writes only the owned components it carries, and
+        writes its own instance of each (a graph's copy of an asset, flagged
+        read-only, rather than the source's original). An open context writes
+        every one, as given.
+
+        Args:
+            components: The owned components as their owner holds them.
+
+        Returns:
+            The instances to write, in the given order.
+        """
+        if not self.closed:
+            return list(components)
+        return [self.components[component.id] for component in components if component.id in self.components]
+
+    # -- Writing ---------------------------------------------------------------
+    def emit(self, target: Component) -> dict[str, Any] | None:
+        """Write one bound target: in full, as a reference, or not at all.
+
+        The manifest rule in one place. A target that has an owner travels
+        inside that owner's spec, so it is always a reference; a closed
+        context that does not carry it drops it instead, since nothing in
+        the document would answer the reference. A target without an owner
+        is written in full the first time the traversal reaches it and as a
+        reference afterwards.
+
+        Args:
+            target: The bound component to write.
+
+        Returns:
+            The target's spec as a JSON-able mapping, the ``{"ref": id}``
+            standing in for it, or ``None`` when the document cannot carry
+            it.
+        """
+        if target.parent is not None:
+            if self.closed and target.id not in self.components:
+                return None
+            return Spec.reference(target.id)
+        if target.id in self.components:
+            return Spec.reference(target.id)
+        return target.to_spec(context=self).model_dump(mode="json", exclude_defaults=True)
+
+    # -- Reading ---------------------------------------------------------------
     def hold(self, init: dict[str, Any]) -> dict[str, Any]:
         """Take the references out of a loaded init, at every depth.
 
@@ -363,27 +448,17 @@ class Document:
             self._owed.extend((owner, name, entries) for name, entries in held.items())
         return kept
 
-    def add(self, instance: Component) -> None:
-        """Register a built component and the children that travelled inside its spec.
-
-        Args:
-            instance: The component :meth:`Spec.reconstruct` just built.
-        """
-        self.components[instance.id] = instance
-        for child in instance._children():
-            self.components[child.id] = child
-
     def bind(self) -> None:
         """Bind every held reference, then check each root.
 
-        The second pass. A reference resolves against the document first and
-        through *resolve* only when the document does not carry it.
+        The second pass of reading. A reference resolves against the context
+        first and through *resolve* only when the context does not carry it.
         Validation comes last, once nothing is missing, on every root: a
         parent cascades into the children it owns.
 
         Raises:
             SpecError: If a pinned init built no component, or a reference
-                names one that neither the document nor *resolve* supplies.
+                names one that neither the context nor *resolve* supplies.
         """
         from interloper.errors import SpecError
 
@@ -407,7 +482,7 @@ class Document:
             The referenced component.
 
         Raises:
-            SpecError: If neither the document nor *resolve* supplies it.
+            SpecError: If neither the context nor *resolve* supplies it.
         """
         from interloper.errors import SpecError
 
@@ -687,11 +762,9 @@ class Serializable(BaseModel):
     def _build_spec(self, *, init: dict[str, Any] | None) -> Spec:
         """Build the spec envelope an instance of this class serializes into.
 
-        The one construction :meth:`to_spec` and
-        :meth:`~interloper.component.base.Component._to_spec` both build
-        from, so neither writes ``Spec(path=..., ...)`` by hand: a
-        ``Component`` also carries an ``id``, which it patches onto the
-        result afterwards.
+        The one construction every ``to_spec`` builds from, so none writes
+        ``Spec(path=..., ...)`` by hand: a ``Component`` also carries an
+        ``id``, which it patches onto the result afterwards.
 
         Args:
             init: The init payload to carry, or ``None`` for an instance
