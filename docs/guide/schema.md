@@ -59,8 +59,8 @@ Conform runs on every `run()` and `materialize()`, after the [normalizer](normal
 
 1. The data's [representation](../extending/representations.md) is resolved: rows, or a
    DataFrame when `interloper-pandas` is installed.
-2. The data is canonicalized (`dict`, models, generators become `list[dict]`). Non-tabular
-   data without a schema passes through untouched.
+2. Data no representation matches is not a table: without a schema it passes through untouched,
+   with one it is an error naming the type.
 3. Without a schema, one is inferred and becomes the effective schema. Inference never fails a
    materialization; on error the effective schema is `None`.
 4. With a schema, `STRICT` validates and `AUTO`/`RECONCILE` reconcile.

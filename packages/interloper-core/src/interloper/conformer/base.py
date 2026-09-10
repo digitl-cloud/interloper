@@ -22,27 +22,10 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from interloper.schema import Schema
-from interloper.utils.data import coerce_to_records
 
 
 class Conformer(ABC):
-    """Schema operations for one data representation.
-
-    ``prepare`` canonicalizes raw asset output into the representation the
-    other operations expect; it is called once per materialization, before
-    any schema operation.
-    """
-
-    @abstractmethod
-    def prepare(self, data: Any) -> Any:
-        """Canonicalize *data* into this conformer's representation.
-
-        Args:
-            data: Raw asset output, in whatever shape the asset returned.
-
-        Raises:
-            NormalizerError: If the data cannot be represented as a table.
-        """
+    """Schema operations for one data representation."""
 
     @abstractmethod
     def validate(self, data: Any, schema: type[Schema], *, strict: bool = False) -> None:
@@ -75,18 +58,6 @@ class Conformer(ABC):
 
 class RowsConformer(Conformer):
     """Schema operations on ``list[dict]`` records (pydantic row-wise)."""
-
-    def prepare(self, data: Any) -> list[dict[str, Any]]:
-        """Coerce dict / model / generator shapes to records.
-
-        Args:
-            data: Raw asset output (``dict``, ``list[dict]``, ``BaseModel``,
-                ``list[BaseModel]``, or a generator of those).
-
-        Returns:
-            Data as a list of row dicts.
-        """
-        return coerce_to_records(data)
 
     def validate(self, data: list[dict[str, Any]], schema: type[Schema], *, strict: bool = False) -> None:
         """Validate each row against the schema.

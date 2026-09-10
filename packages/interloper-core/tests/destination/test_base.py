@@ -211,12 +211,14 @@ class TestWriteDispatch:
             assert isinstance(data, pd.DataFrame)
             assert len(data) == 1
 
-    def test_window_write_passes_unsplittable_data_as_is(self):
+    def test_window_write_refuses_unsplittable_data(self):
+        from interloper.errors import RepresentationError
+
         destination = RecordingPartitions(id="d")
-        sentinel = object()
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 1))
-        destination.write(io_context(partitioned_asset(), window), sentinel)
-        assert destination.calls == [("write", "2024-01-01", sentinel)]
+        with pytest.raises(RepresentationError, match="object"):
+            destination.write(io_context(partitioned_asset(), window), object())
+        assert destination.calls == []
 
 
 class TestReadDispatch:

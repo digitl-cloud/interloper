@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
+from interloper.errors import NormalizerError
 from interloper.normalizer import Normalizer
 
 
@@ -31,23 +32,23 @@ class DataFrameNormalizer(Normalizer):
     def normalize(self, data: Any) -> pd.DataFrame:
         """Normalize *data* to a ``DataFrame`` with configured transformations.
 
-        If the input is already a ``DataFrame``, operates on it directly.
-        Otherwise, coerces to ``list[dict]`` first, then converts to
-        ``DataFrame``.
+        A ``DataFrame`` is operated on directly; rows are converted first.
 
         Args:
-            data: Raw asset output (``DataFrame`` or any type supported by
-                the base :class:`Normalizer`).
+            data: The rows or ``DataFrame`` to normalize.
 
         Returns:
             Normalized ``DataFrame``.
+
+        Raises:
+            NormalizerError: If *data* is neither a list of rows nor a ``DataFrame``.
         """
         if isinstance(data, pd.DataFrame):
             df = data
+        elif isinstance(data, list):
+            df = pd.DataFrame(data)
         else:
-            # Coerce to list[dict] using base class, then convert to DataFrame
-            rows = self._coerce(data)
-            df = pd.DataFrame(rows)
+            raise NormalizerError(f"DataFrameNormalizer expects list[dict] or a DataFrame, got {type(data).__name__}.")
 
         if df.empty:
             return df

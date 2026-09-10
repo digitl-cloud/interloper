@@ -35,9 +35,6 @@ class Partition(ABC):
     def slice(self, data: Any, column: str) -> Any:
         """Return this partition's slice of *data*, selecting by id equality on *column*.
 
-        Data no registered representation recognizes passes through unchanged
-        since it cannot be split.
-
         Args:
             data: The table to slice, in any registered representation's type.
             column: Name of the partition column to select on.
@@ -47,10 +44,7 @@ class Partition(ABC):
         """
         from interloper.representation import Representation
 
-        view = Representation.of(data)
-        if not view.representation.matches(data):
-            return data
-        return view.filter_eq(column, self.id)
+        return Representation.of(data).filter_eq(column, self.id)
 
 
 @dataclass(frozen=True)

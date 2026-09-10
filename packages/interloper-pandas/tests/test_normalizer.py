@@ -2,7 +2,7 @@
 
 import pandas as pd
 import pytest
-from pydantic import BaseModel
+from interloper.errors import NormalizerError
 
 from interloper_pandas.normalizer import DataFrameNormalizer
 
@@ -39,38 +39,18 @@ class TestDataFrameNormalize:
         assert isinstance(result, pd.DataFrame)
         assert result["a"].tolist() == [1, 2]
 
-    def test_single_dict_coerced(self):
-        n = DataFrameNormalizer(normalize_columns_names=False, fill_missing=False)
-        result = n.normalize({"a": 1, "b": 2})
-        assert isinstance(result, pd.DataFrame)
-        assert result["a"].tolist() == [1]
-
-    def test_pydantic_model_coerced(self):
-        class User(BaseModel):
-            name: str
-            age: int
-
-        n = DataFrameNormalizer(normalize_columns_names=False, fill_missing=False)
-        result = n.normalize(User(name="alice", age=30))
-        assert isinstance(result, pd.DataFrame)
-        assert result["name"].tolist() == ["alice"]
-
-    def test_none_returns_empty_df(self):
-        n = DataFrameNormalizer()
-        result = n.normalize(None)
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-
     def test_empty_list_returns_empty_df(self):
         n = DataFrameNormalizer()
         result = n.normalize([])
         assert isinstance(result, pd.DataFrame)
         assert result.empty
 
-    def test_unsupported_type_raises(self):
+    def test_anything_but_rows_or_a_frame_is_an_explicit_error(self):
         n = DataFrameNormalizer()
-        with pytest.raises(TypeError, match="does not support type"):
-            n.normalize(42)
+        with pytest.raises(NormalizerError, match="expects list\\[dict\\] or a DataFrame.*dict"):
+            n.normalize({"a": 1})
+        with pytest.raises(NormalizerError):
+            n.normalize(None)
 
     def test_all_disabled(self):
         n = DataFrameNormalizer(

@@ -88,7 +88,11 @@ class SchemaError(InterloperError, ValueError):
 
 
 class NormalizerError(InterloperError, TypeError):
-    """The normalizer received data it cannot coerce to ``list[dict]``."""
+    """The normalizer received data that is not ``list[dict]``."""
+
+
+class RepresentationError(InterloperError, TypeError):
+    """No registered representation matches the data's type."""
 
 
 class DestinationError(InterloperError):

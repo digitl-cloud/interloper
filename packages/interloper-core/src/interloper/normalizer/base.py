@@ -7,18 +7,18 @@ from typing import Any
 
 from pydantic import Field
 
+from interloper.errors import NormalizerError
 from interloper.serializable import Serializable
-from interloper.utils.data import coerce_to_records
 from interloper.utils.text import to_snake_case
 
 
 class Normalizer(Serializable):
     """Type-native normalizer for ``list[dict]`` asset data.
 
-    Accepts arbitrary return types (``dict``, ``list[dict]``, ``BaseModel``,
-    ``list[BaseModel]``, ``Generator``), coerces to ``list[dict]``, then
-    applies optional transformations (column-name normalization, nested-dict
-    flattening, missing-column fill).
+    Applies optional transformations to rows (column-name normalization,
+    nested-dict flattening, missing-column fill). The shapes an asset may
+    return besides rows (a generator, models, a lone dict) are unwrapped by
+    the asset before normalization, so a normalizer only ever reshapes rows.
 
     Normalizer is :class:`Serializable` so instances round-trip through
     ``Spec`` with their concrete subclass intact — e.g. across the
@@ -63,18 +63,22 @@ class Normalizer(Serializable):
     # -- Public API ------------------------------------------------------------
 
     def normalize(self, data: Any) -> list[dict[str, Any]]:
-        """Normalize *data* to ``list[dict]`` with configured transformations.
+        """Normalize rows with the configured transformations.
 
-        Coerces the input to ``list[dict]``, then applies flatten, column
-        rename, and fill-missing in order.
+        Applies flatten, column rename, and fill-missing in order.
 
         Args:
-            data: Raw asset output (any supported type).
+            data: The rows to normalize.
 
         Returns:
             Normalized list of row dicts.
+
+        Raises:
+            NormalizerError: If *data* is not a list of rows.
         """
-        rows = self._coerce(data)
+        if not isinstance(data, list):
+            raise NormalizerError(f"Normalizer expects list[dict], got {type(data).__name__}.")
+        rows = data
 
         if self.replace_empty_dicts:
             rows = [{k: (None if isinstance(v, dict) and not v else v) for k, v in row.items()} for row in rows]
@@ -115,20 +119,6 @@ class Normalizer(Serializable):
         if self.snake_case_digits:
             name = re.sub(r"([a-z])(\d)", r"\1_\2", name)
         return name
-
-    # -- Type coercion ---------------------------------------------------------
-
-    def _coerce(self, data: Any) -> list[dict[str, Any]]:
-        """Coerce arbitrary data to ``list[dict]`` (raises ``NormalizerError`` when unsupported).
-
-        Args:
-            data: Raw asset output (``dict``, ``list[dict]``, ``BaseModel``,
-                ``list[BaseModel]``, or a generator of those).
-
-        Returns:
-            The coerced list of row dicts.
-        """
-        return coerce_to_records(data)
 
     # -- Transformations -------------------------------------------------------
 

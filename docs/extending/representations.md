@@ -62,14 +62,13 @@ and has a single load path.
 
 ```py
 class ArrowConformer(Conformer):
-    def prepare(self, data): ...                          # canonicalize raw output; NormalizerError if not tabular
     def validate(self, data, schema, *, strict=False): ...  # SchemaError on mismatch
     def reconcile(self, data, schema): ...                # align columns, coerce values
     def infer(self, data) -> type[il.Schema]: ...         # a Schema from the data
 ```
 
-The [conform step](../guide/schema.md#the-conform-step) calls `prepare` once, then `validate`,
-`reconcile` or `infer` depending on the materialization strategy. `il.Schema.field_specs()`
+The [conform step](../guide/schema.md#the-conform-step) calls `validate`, `reconcile` or
+`infer` depending on the materialization strategy. `il.Schema.field_specs()`
 gives the type contract to map onto the library's dtypes.
 
 ## Registering
@@ -80,8 +79,11 @@ arrow = "my_package.arrow:ARROW_REPRESENTATION"
 ```
 
 The entry may point at an instance or a class. The registry keys it by the representation's own
-`key`. `Representation.of(data)` checks every non-rows representation first and falls back to
-rows, whose record coercion rejects non-tabular data with a clear error.
+`key`. `Representation.of(data)` returns the first registered representation whose `matches`
+accepts the data, and raises `RepresentationError` naming the type and the registered keys when
+none does. Nothing falls back silently: the shapes an asset may return besides a table
+(generators, models, a lone dict) are unwrapped by the asset before the data reaches a
+representation.
 
 ## Where it is used
 

@@ -28,8 +28,8 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from interloper.conformer import ROWS_CONFORMER, Conformer
+from interloper.errors import RepresentationError
 from interloper.registry import Registry
-from interloper.utils.data import coerce_to_records
 
 
 def _adopt_representation(_name: str, loaded: Any) -> tuple[str, Representation]:
@@ -151,22 +151,26 @@ class Representation(ABC):
     def of(cls, data: Any) -> View:
         """Resolve the representation matching *data* and bind it to the data.
 
-        Non-rows representations are checked first; everything unmatched
-        falls back to rows, whose record coercion rejects non-tabular data
-        with a clear error.
-
         Args:
-            data: The table whose representation to resolve, of any type.
+            data: The table whose representation to resolve.
 
         Returns:
             The data viewed through its representation: ``.records``,
             ``.columns``, ``.conformer``, the partition filters, and
             ``.to(key)`` to convert it to any registered representation.
+
+        Raises:
+            RepresentationError: If no registered representation matches the
+                data's type, naming the type and the registered keys.
         """
-        for key, instance in REPRESENTATIONS.items():
-            if key != RowsRepresentation.key and instance.matches(data):
+        for instance in REPRESENTATIONS.values():
+            if instance.matches(data):
                 return View(instance, data)
-        return View(REPRESENTATIONS[RowsRepresentation.key], data)
+        keys = ", ".join(sorted(REPRESENTATIONS))
+        raise RepresentationError(
+            f"No representation matches {type(data).__name__}; registered: {keys}. "
+            "Return list[dict] or a registered table type, or register a representation."
+        )
 
 
 @dataclass(frozen=True)
@@ -262,7 +266,7 @@ class View:
             The data in the target representation.
         """
         target = REPRESENTATIONS[key]
-        if target is self.representation and target.matches(self.data):
+        if target is self.representation:
             return self.data
         return target.from_records(self.records)
 
@@ -283,16 +287,16 @@ class RowsRepresentation(Representation):
         """
         return isinstance(data, list)
 
-    def to_records(self, data: Any) -> list[dict[str, Any]]:
-        """Coerce dict / model / generator shapes to records.
+    def to_records(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Rows are already records.
 
         Args:
             data: The table to view, in this representation's own type.
 
         Returns:
-            Data as a list of row dicts.
+            The rows unchanged.
         """
-        return coerce_to_records(data)
+        return data
 
     def from_records(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Records are already rows.
