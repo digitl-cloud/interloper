@@ -2244,7 +2244,7 @@ DAG, and a hydrated one is never overwritten by construction.</p>
 travels inside its own source's document. See <a href="../specs/">Specs</a>.</p>
 <h2 id="reading-upstream-data">Reading upstream data<a class="headerlink" href="#reading-upstream-data" title="Permanent link">&para;</a></h2>
 <p>Each leg is read from the upstream's <code>default_destination_key</code> destination, or its first, scoped
-to the partition the run consumes. <code>il.Upstream</code> carries two attributes:</p>
+to the partition the run consumes. <code>il.Upstream</code> carries the asset and its data, plus one accessor:</p>
 <table>
 <thead>
 <tr>
@@ -2259,7 +2259,11 @@ to the partition the run consumes. <code>il.Upstream</code> carries two attribut
 </tr>
 <tr>
 <td><code>data</code></td>
-<td>Whatever that destination's <code>read()</code> yields: rows for the built-in destinations, a DataFrame for DataFrame-native ones.</td>
+<td>Whatever that destination's <code>read()</code> yields: rows for the built-in destinations, a DataFrame for BigQuery; <code>None</code> when nothing is materialized for the partition.</td>
+</tr>
+<tr>
+<td><code>records</code></td>
+<td>The data as <code>list[dict]</code> whatever the destination handed back, <code>[]</code> when nothing is materialized. The one line a consumer needs to be indifferent to where its upstream is stored.</td>
 </tr>
 </tbody>
 </table>

@@ -2206,10 +2206,10 @@ and coverage tooling call it.</p>
 wholesale. <code>DatabaseDestination</code> below does that for writes: rows carry the partition column, so
 a window clears every partition it covers and inserts the whole batch once.</p>
 <h3 id="database-destinations">Database destinations<a class="headerlink" href="#database-destinations" title="Permanent link">&para;</a></h3>
-<p><code>DatabaseDestination</code> (imported from <code>interloper.destination</code>, together with
-<code>WriteDisposition</code>) targets stores addressed by table and schema. Its <code>write_partition</code> clears one
-partition and inserts; its <code>write</code> batches a window into one insert. Reads and writes reduce to a
-small set of row operations:</p>
+<p><code>DatabaseDestination</code> (imported from <code>interloper.destination</code>, together with <code>PartitionFilter</code>)
+is a destination whose partitions are rows selected by a filter in a table. A backend writes its
+SQL dialect and nothing else, in four hooks that all start with the table and the dataset the
+asset resolves to:</p>
 <table>
 <thead>
 <tr>
@@ -2219,50 +2219,36 @@ small set of row operations:</p>
 </thead>
 <tbody>
 <tr>
-<td><code>_insert(table, schema, rows)</code></td>
-<td>writing records</td>
+<td><code>insert(table, dataset, data, context)</code></td>
+<td>writing; the data arrives in its native representation, <code>Representation.of(data).to_records(data)</code> views it as rows. The one hook that gets the whole context, since a table created on first write takes its columns from <code>context.schema</code> and its partitioning and description from <code>context.asset</code></td>
 </tr>
 <tr>
-<td><code>_delete_all(table, schema)</code></td>
-<td>replacing an unpartitioned asset</td>
+<td><code>delete(table, dataset, where)</code></td>
+<td>replacing; <code>where</code> is a <code>PartitionFilter</code> or <code>None</code> for the whole table</td>
 </tr>
 <tr>
-<td><code>_delete_partition(table, schema, column, value)</code></td>
-<td>replacing a non-time partition</td>
+<td><code>select(table, dataset, where)</code></td>
+<td>reading; returns whatever table type the backend produces natively</td>
 </tr>
 <tr>
-<td><code>_delete_partition_range(table, schema, column, start, end)</code></td>
-<td>replacing a time partition, by half-open bounds</td>
-</tr>
-<tr>
-<td><code>_select_all(table, schema)</code></td>
-<td>reading an unpartitioned asset</td>
-</tr>
-<tr>
-<td><code>_select_partition(table, schema, column, value)</code></td>
-<td>reading a non-time partition</td>
-</tr>
-<tr>
-<td><code>_select_partition_range(table, schema, column, start, end)</code></td>
-<td>reading a time partition</td>
-</tr>
-<tr>
-<td><code>_count_by_partition(table, schema, column)</code></td>
-<td><code>partition_row_counts</code></td>
+<td><code>count(table, dataset, column)</code></td>
+<td><code>partition_row_counts</code>; rows grouped by the column's values</td>
 </tr>
 </tbody>
 </table>
-<p>Optional overrides: <code>_transaction()</code> (a context manager around each write, a no-op by
-default), and <code>_insert_data(table, schema, data, context)</code> for backends that load a native
-representation directly (a DataFrame into a Parquet load job) using <code>context.schema</code>.</p>
+<p>A <code>PartitionFilter</code> is a column and either a <code>value</code> (a partition matched by its id) or half-open
+<code>bounds</code> (a time partition, whose rows may carry any date inside the period). The base resolves
+it from the partition, so a backend only renders <code>column = value</code> or
+<code>column &gt;= start AND column &lt; end</code> in its dialect. <code>transaction()</code> is an optional context
+manager around each delete-then-insert, a no-op by default.</p>
 <p>Behaviour the base class owns:</p>
 <ul>
-<li><strong>Write disposition</strong>: <code>write_disposition = WriteDisposition.REPLACE</code> (default) deletes the
-  matching partition before inserting; <code>APPEND</code> never deletes. A class attribute, not a field.</li>
+<li><strong>Replacing</strong>: a partition's rows are deleted before its data is inserted; a window deletes
+  every partition it covers and inserts the batch once.</li>
 <li><strong>Time partitions are scoped by bounds</strong>, not by equality, because rows of a monthly partition
   carry daily dates.</li>
-<li><strong>Read representation</strong>: rows are materialized into the representation named by
-  <code>read_representation</code> (<code>"rows"</code> by default; <code>"dataframe"</code> for pandas-native backends).</li>
+<li><strong>Reads are native</strong>: <code>read</code> hands back what <code>select</code> returned, a DataFrame from BigQuery, rows
+  from a row store. A consumer indifferent to the destination reads <code>il.Upstream.records</code>.</li>
 <li><strong>Write-time strategy</strong>: the <code>materialization_strategy</code> field lets a backend demand
   schema-shaped data: <code>STRICT</code> validates against the effective schema before writing,
   <code>RECONCILE</code> coerces, <code>AUTO</code> trusts the conformed data. It is set as a default via the decorator
