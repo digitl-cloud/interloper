@@ -7,6 +7,7 @@ import inspect
 import traceback
 import warnings
 from collections.abc import Iterator
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel, Field, PrivateAttr
@@ -44,7 +45,7 @@ from interloper.utils import concurrency
 from interloper.utils.concurrency import invoke
 from interloper.utils.data import is_empty
 from interloper.utils.imports import get_object_path
-from interloper.utils.text import to_identifier, to_label
+from interloper.utils.text import to_identifier
 
 if TYPE_CHECKING:
     from interloper.dag import DAG
@@ -297,35 +298,16 @@ class Asset(Component, Operation):
     def definition(cls) -> AssetDefinition:
         """Produce a structured definition of this asset class.
 
-        Uses :meth:`classpath` so that source-owned assets get the correct
-        ``"module.Source:asset_kind"`` path.
+        The path comes from :meth:`classpath`, so a source-owned asset gets
+        the composite ``"module.Source:asset_kind"`` form.
 
         Returns:
-            An AssetDefinition with metadata derived from the class.
+            An AssetDefinition with the output schema and partitioning inlined.
         """
-        schema_dict: dict[str, Any] | None = None
-        if cls.schema is not None and hasattr(cls.schema, "json_schema"):
-            schema_dict = cls.schema.json_schema()
-
-        partitioning_dict: dict[str, Any] | None = None
-        if cls.partitioning is not None:
-            from dataclasses import asdict
-
-            partitioning_dict = asdict(cls.partitioning)
-
-        return AssetDefinition(
-            kind=cls.kind,
-            key=cls.key,
-            path=cls.classpath(),
-            name=cls.name or to_label(cls.__name__),
-            icon=cls.icon,
-            description=cls.__doc__ or "",
-            tags=list(cls.tags),
-            config_schema=cls.config_schema(),
-            relations=dict(cls.relations),
-            asset_schema=schema_dict,
-            partitioning=partitioning_dict,
-        )
+        has_schema = cls.schema is not None and hasattr(cls.schema, "json_schema")
+        asset_schema = cls.schema.json_schema() if has_schema else None
+        partitioning = asdict(cls.partitioning) if cls.partitioning is not None else None
+        return AssetDefinition(**dict(super().definition()), asset_schema=asset_schema, partitioning=partitioning)
 
     # -- Reconfiguration -------------------------------------------------------
 

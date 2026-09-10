@@ -22,7 +22,6 @@ from interloper.dag import DAG
 from interloper.destination import (
     CSVDestination,
     Destination,
-    DestinationDefinition,
     FileDestination,
     IOContext,
     MemoryDestination,
@@ -99,7 +98,6 @@ __all__ = [
     "CronField",
     "CronJob",
     "Destination",
-    "DestinationDefinition",
     "Event",
     "EventBus",
     "EventType",

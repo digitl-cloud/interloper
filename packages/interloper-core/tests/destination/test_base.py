@@ -11,7 +11,6 @@ import pytest
 
 import interloper as il
 from interloper.destination import IOContext
-from interloper.destination.base import DestinationDefinition
 from interloper.partitioning.base import Partition
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 
@@ -50,8 +49,10 @@ class TestDefinition:
         assert il.Destination.kind == "destination"
         assert il.KINDS.get("destination") is il.Destination
 
-    def test_definition_returns_destination_definition(self):
-        assert isinstance(FakeDestination.definition(), DestinationDefinition)
+    def test_definition_is_the_plain_component_definition(self):
+        # A destination adds nothing to what every component describes.
+        assert type(FakeDestination.definition()) is il.ComponentDefinition
+        assert not hasattr(il, "DestinationDefinition")
 
     def test_anchor_declares_no_relation(self):
         assert il.Destination.relations == {}
